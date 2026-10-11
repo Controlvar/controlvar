@@ -10,6 +10,13 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.28.1](https://github.com/getexperimently/experimently/compare/v0.28.0...v0.28.1) (2026-10-11)
+
+
+### Bug Fixes
+
+* **power:** the runtime estimate uses the unrounded users per variant per day ([#1122](https://github.com/getexperimently/experimently/issues/1122)) ([25c803d](https://github.com/getexperimently/experimently/commit/25c803d19a7f655d6714629ae763508ff89889a9))
+
 ## [0.28.0](https://github.com/getexperimently/experimently/compare/v0.27.0...v0.28.0) (2026-10-10)
 
 

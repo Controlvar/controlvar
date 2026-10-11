@@ -75,7 +75,7 @@ services:
 
   # ---------------------------------------------------------------------------
   api:
-    image: ghcr.io/getexperimently/experimently:${EXPERIMENTLY_PROFILE:-core}-0.28.0 # x-release-please-version
+    image: ghcr.io/getexperimently/experimently:${EXPERIMENTLY_PROFILE:-core}-0.28.1 # x-release-please-version
     environment:
       ENVIRONMENT: production
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -118,7 +118,7 @@ services:
 
   # ---------------------------------------------------------------------------
   web:
-    image: ghcr.io/getexperimently/experimently-web:${EXPERIMENTLY_PROFILE:-core}-0.28.0 # x-release-please-version
+    image: ghcr.io/getexperimently/experimently-web:${EXPERIMENTLY_PROFILE:-core}-0.28.1 # x-release-please-version
     environment:
       # The dashboard serves the static app and proxies /api, /ws and /health
       # to the api service: one origin, PUBLIC_BASE_URL.
