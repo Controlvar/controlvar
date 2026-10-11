@@ -1,5 +1,5 @@
 """
-Experiment targeting answers every rule the way flag targeting does (#1144).
+Experiment targeting answers a rule the way flag targeting does (#1144).
 
 An experiment is targeted by ``RulesEvaluationService``, through
 ``AssignmentService._evaluate_experiment_targeting``; a flag by the rules
@@ -21,6 +21,16 @@ stored rules, user and context, and asserts the same answer, over:
 
 ``time_window`` is left out of all three: the two evaluators read its value
 differently, and that is #1145.
+
+The parity holds for conditions without ``attribute_type``, which is every
+condition the dashboard stores, and no case here sets one. A native condition
+that sets ``attribute_type`` is a separate, known difference: the experiment
+path checks the context value against it before any operator runs
+(``RulesEvaluationService.validate_user_context``), and a value that fails the
+check refuses the whole ruleset, where a flag still evaluates it. A
+``geo_distance`` with ``"attribute_type": "geo_coordinate"`` refuses a
+``{"lat", "lon"}`` location, and a ``semantic_version`` with
+``"attribute_type": "semantic_version"`` refuses ``"v3.0.0"``.
 
 The rules both evaluators are given have every rule-level
 ``rollout_percentage`` at 100. A partial rollout is not an operator: an
