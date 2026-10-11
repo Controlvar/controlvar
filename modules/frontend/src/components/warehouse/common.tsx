@@ -10,6 +10,7 @@ import Link from 'next/link';
 import type { Connection, CredentialsStatus } from '@modules/services/warehouse';
 import { warehouseName } from '@modules/services/warehouse';
 import { MODULES } from '@/services/modules';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 /** What `withModule` shows on a deployment without the warehouse module. */
 export const WAREHOUSE_MODULE_NOTICE = {
@@ -362,7 +363,7 @@ export function notAvailableText(connection: Pick<Connection, 'warehouse_type'>)
 /** An absolute UTC time, in a `<time>` element. */
 export function UtcTime({ value }: { value: string | null | undefined }) {
   if (!value) return <span>—</span>;
-  const date = new Date(value);
+  const date = parseApiTimestamp(value);
   if (Number.isNaN(date.getTime())) return <span>—</span>;
   const text = `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
   return <time dateTime={date.toISOString()}>{text}</time>;

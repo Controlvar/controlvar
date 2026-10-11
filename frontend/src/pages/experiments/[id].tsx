@@ -23,6 +23,7 @@ import {
 } from '@/types/experiments';
 import { canChangeExperiment } from '@/utils/experimentPermissions';
 import { correctionName, formatConfidence } from '@/components/results/shared/analysisSettings';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 /** Lifecycle transitions exposed per status (mirrors the backend guards). */
 export type LifecycleAction = 'start' | 'pause' | 'complete' | 'archive';
@@ -65,7 +66,7 @@ const ACTION_META: Record<
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return '—';
-  const d = new Date(value);
+  const d = parseApiTimestamp(value);
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }
 

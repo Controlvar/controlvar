@@ -7,12 +7,13 @@ import { useRouter } from 'next/router';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { LOGIN_PATH, isApiError } from '@/services/api';
 import { WorkspaceInvite, workspaceService } from '@modules/services/workspaces';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 /** The typed code of the API's 403 when the signed-in account is not the invitee. */
 const INVITE_EMAIL_MISMATCH_CODE = 'invite_email_mismatch';
 
 function isTokenExpired(invite: WorkspaceInvite): boolean {
-  return new Date(invite.expires_at) < new Date();
+  return parseApiTimestamp(invite.expires_at) < new Date();
 }
 
 /**
@@ -221,7 +222,7 @@ function AcceptInvitePage() {
                   <span className="font-medium">{invite.workspace_name}</span> has expired.
                 </p>
                 <p className="text-xs text-slate-500 mb-6">
-                  Expired on {new Date(invite.expires_at).toLocaleDateString()}
+                  Expired on {parseApiTimestamp(invite.expires_at).toLocaleDateString()}
                 </p>
                 <p className="text-sm text-slate-500 mb-6">
                   Please ask a workspace admin to send you a new invitation.
@@ -329,7 +330,7 @@ function AcceptInvitePage() {
                     </button>
 
                     <p className="mt-3 text-xs text-slate-500">
-                      Invitation expires {new Date(invite.expires_at).toLocaleDateString()}
+                      Invitation expires {parseApiTimestamp(invite.expires_at).toLocaleDateString()}
                     </p>
                   </>
                 )}

@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { AuditLog } from '@/types/admin';
 import { JsonDiffViewer } from './JsonDiffViewer';
 import { actionLabel, actorLabel, entityLabel } from './actionLabels';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 interface AuditLogDetailPanelProps {
   log: AuditLog;
@@ -10,7 +11,7 @@ interface AuditLogDetailPanelProps {
 
 function formatTimestamp(ts: string): string {
   try {
-    return new Date(ts).toLocaleString();
+    return parseApiTimestamp(ts).toLocaleString();
   } catch {
     return ts;
   }

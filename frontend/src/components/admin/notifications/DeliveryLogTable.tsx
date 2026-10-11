@@ -1,5 +1,6 @@
 import React from 'react';
 import { NotificationDeliveryLog } from '@/types/admin';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 interface DeliveryLogTableProps {
   logs: NotificationDeliveryLog[];
@@ -40,7 +41,7 @@ export function DeliveryLogTable({ logs, loading = false }: DeliveryLogTableProp
                 </span>
               </td>
               <td className="py-2 text-slate-500">
-                {new Date(log.created_at).toLocaleString()}
+                {parseApiTimestamp(log.created_at).toLocaleString()}
               </td>
             </tr>
           ))}

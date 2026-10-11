@@ -10,6 +10,7 @@ import {
   WorkspaceMember,
   workspaceService,
 } from '@modules/services/workspaces';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 const ROLE_BADGE: Record<WorkspaceMember['role'], { label: string; className: string }> = {
   OWNER: { label: 'Owner', className: 'bg-purple-100 text-purple-700' },
@@ -32,7 +33,7 @@ interface InviteModalProps {
 
 /** `5 Oct 2026`, in the reader's locale order. */
 function formatExpiry(expiresAt: string): string {
-  return new Date(expiresAt).toLocaleDateString(undefined, {
+  return parseApiTimestamp(expiresAt).toLocaleDateString(undefined, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -455,7 +456,7 @@ function WorkspaceMembersPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-slate-500 text-xs">
-                        {new Date(member.joined_at).toLocaleDateString()}
+                        {parseApiTimestamp(member.joined_at).toLocaleDateString()}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="relative inline-block">

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { BanditService } from '@/services/bandit';
 import { BanditStatus } from '@/types/bandit';
 import { Experiment } from '@/types/experiments';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 /**
  * Fixed copy. Nothing the server sends in an error is shown: a refusal or a
@@ -37,7 +38,7 @@ function formatCount(value: number): string {
 }
 
 function formatWhen(value: string): string {
-  const d = new Date(value);
+  const d = parseApiTimestamp(value);
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }
 

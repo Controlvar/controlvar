@@ -1,5 +1,6 @@
 import React from 'react';
 import { RollbackRecord } from '@/types/admin';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 interface RollbackHistoryTableProps {
   rollbacks: RollbackRecord[];
@@ -7,7 +8,7 @@ interface RollbackHistoryTableProps {
 
 function formatTimestamp(ts: string): string {
   try {
-    return new Date(ts).toLocaleString();
+    return parseApiTimestamp(ts).toLocaleString();
   } catch {
     return ts;
   }
