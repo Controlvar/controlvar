@@ -13,7 +13,6 @@ This service provides advanced rule evaluation capabilities with:
 import hashlib
 import json
 import logging
-import math
 import re
 import time
 from collections import defaultdict, deque
@@ -516,16 +515,16 @@ class RulesEvaluationService:
         expected_value: Any,
         additional_value: Optional[Any] = None,
     ) -> bool:
-        """Apply enhanced operators including new custom attribute operators."""
+        """Apply an operator for experiment targeting.
+
+        Only the operators below are this service's own. Every other one,
+        ``semantic_version`` and ``geo_distance`` among them, is
+        ``rules_engine.apply_operator``, which also answers flag targeting, so
+        an experiment and a flag answer those rules alike (#1144).
+        """
 
         # Handle new custom operators
-        if operator == OperatorType.SEMANTIC_VERSION:
-            return self._compare_semantic_versions(actual_value, expected_value)
-        elif operator == OperatorType.GEO_DISTANCE:
-            return self._evaluate_geo_distance(
-                actual_value, expected_value, additional_value
-            )
-        elif operator == OperatorType.TIME_WINDOW:
+        if operator == OperatorType.TIME_WINDOW:
             return self._evaluate_time_window(actual_value, expected_value)
         elif operator == OperatorType.PERCENTAGE_BUCKET:
             return self._evaluate_percentage_bucket(actual_value, expected_value)
@@ -540,64 +539,6 @@ class RulesEvaluationService:
         return base_apply_operator(
             operator, actual_value, expected_value, additional_value
         )
-
-    def _compare_semantic_versions(
-        self, actual_version: str, expected_version: str
-    ) -> bool:
-        """Compare semantic versions."""
-        try:
-
-            def parse_version(version: str) -> Tuple[int, int, int]:
-                # Simple semantic version parsing
-                parts = version.split("-")[0].split("+")[0].split(".")
-                return tuple(int(x) for x in parts[:3])
-
-            actual_parts = parse_version(str(actual_version))
-            expected_parts = parse_version(str(expected_version))
-
-            return actual_parts >= expected_parts
-        except (ValueError, TypeError):
-            logger.debug(
-                "Cannot compare %s with %s as semantic versions",
-                type(actual_version).__name__,
-                type(expected_version).__name__,
-            )
-            return False
-
-    def _evaluate_geo_distance(
-        self, actual_coords: Any, target_coords: Any, max_distance_km: Any
-    ) -> bool:
-        """Evaluate if coordinates are within distance."""
-        try:
-            if not isinstance(actual_coords, (list, tuple)) or len(actual_coords) != 2:
-                return False
-            if not isinstance(target_coords, (list, tuple)) or len(target_coords) != 2:
-                return False
-
-            lat1, lon1 = float(actual_coords[0]), float(actual_coords[1])
-            lat2, lon2 = float(target_coords[0]), float(target_coords[1])
-            max_dist = float(max_distance_km)
-
-            # Haversine formula for distance calculation
-            R = 6371  # Earth's radius in kilometers
-
-            dlat = math.radians(lat2 - lat1)
-            dlon = math.radians(lon2 - lon1)
-
-            a = (
-                math.sin(dlat / 2) ** 2
-                + math.cos(math.radians(lat1))
-                * math.cos(math.radians(lat2))
-                * math.sin(dlon / 2) ** 2
-            )
-            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-            distance = R * c
-
-            return distance <= max_dist
-
-        except (ValueError, TypeError):
-            logger.debug("Failed to evaluate geo distance")
-            return False
 
     def _evaluate_time_window(self, actual_time: Any, time_window: Any) -> bool:
         """Evaluate if time falls within window."""

@@ -229,8 +229,6 @@ ENGINE_CASES = {
 
 #: The operators RulesEvaluationService implements itself (experiment targeting).
 SERVICE_OPERATORS = {
-    OperatorType.SEMANTIC_VERSION,
-    OperatorType.GEO_DISTANCE,
     OperatorType.TIME_WINDOW,
     OperatorType.PERCENTAGE_BUCKET,
     OperatorType.JSON_PATH,
@@ -238,8 +236,6 @@ SERVICE_OPERATORS = {
 }
 
 SERVICE_CASES = {
-    OperatorType.SEMANTIC_VERSION: [Case(MARKER, "1.0.0")],
-    OperatorType.GEO_DISTANCE: [Case([MARKER, 1], [0, 0], 10)],
     OperatorType.TIME_WINDOW: [
         Case(MARKER, {"start": "2024-01-01", "end": "2024-12-31"})
     ],

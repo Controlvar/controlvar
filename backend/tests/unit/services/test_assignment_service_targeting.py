@@ -318,6 +318,7 @@ class TestAssignmentServiceTargeting:
                                         "attribute": "app_version",
                                         "operator": "semantic_version",
                                         "value": "1.2.0",
+                                        "additional_value": "gte",
                                     }
                                 ],
                             },
