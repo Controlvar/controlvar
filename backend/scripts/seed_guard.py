@@ -1,16 +1,15 @@
 # SPDX-FileCopyrightText: 2026 Experimently contributors
 # SPDX-License-Identifier: Apache-2.0
-"""The demo seeds are development-only.
+"""The seeds are development-only.
 
 ``seed_demo_data.py``, ``seed_shoplab.py`` and ``seed_streampulse.py`` fill a
-database with sample users, experiments and flags for the demo apps. They run
-when ``ENVIRONMENT`` is ``development`` or ``test`` and stop at once, before
-touching the database, anywhere else. ``backend/docker-entrypoint.sh`` makes
-the same check on ``SEED=`` before it waits for the database; this is the same
-rule for someone who runs a script by hand.
-
-``seed_sdk_contract.py`` is not covered: it creates only the fixtures the SDK
-contract suites assert on.
+database with sample users, experiments and flags for the demo apps, and
+``seed_sdk_contract.py`` creates the demo accounts, the fixtures and the API
+keys the SDK contract suites assert on. They run when ``ENVIRONMENT`` is
+``development`` or ``test`` and stop at once, before touching the database,
+anywhere else. ``backend/docker-entrypoint.sh`` makes the same check on
+``SEED=`` before it waits for the database; this is the same rule for someone
+who runs a script by hand.
 """
 
 from __future__ import annotations

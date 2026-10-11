@@ -110,7 +110,9 @@ export LOAD_TEST_API_KEY_FILE=tests/sdk-contract/live/.api_key
 <!-- expect: Done. -->
 
 It names the experiment, the flag and the key it created, or found from an earlier
-run, and ends with `Done.`.
+run, and ends with `Done.`. Like the demo seeds, it runs only when `ENVIRONMENT` is
+`development` (the default) or `test`; with `staging` or `production` it stops before it
+touches the database.
 
 ### Rate limits
 

@@ -120,10 +120,10 @@ variants, `blue_button` and `green_button`. The whole snapshot has the shape bel
       "key": "variant_b",
       "name": "Variant B",
       "participant_count": 500,
-      "conversion_count": 65,
-      "conversion_rate": 0.13,
-      "relative_lift": 0.30,
-      "p_value": 0.031,
+      "conversion_count": 72,
+      "conversion_rate": 0.144,
+      "relative_lift": 0.44,
+      "p_value": 0.033531,
       "is_control": false
     }
   ],
@@ -132,6 +132,12 @@ variants, `blue_button` and `green_button`. The whole snapshot has the shape bel
   "is_significant": true
 }
 ```
+
+`p_value` is an unadjusted, two-sided pooled two-proportion z-test of the variant
+against the control, computed from each arm's own participants and conversions (the
+arms need not be the same size). It is `null` for the control, and for a variant
+whose test is undefined (a control with no participants, fewer than 5 variant
+participants, or no conversions at all in the two arms together).
 
 ### HTTP Companion Endpoints
 
