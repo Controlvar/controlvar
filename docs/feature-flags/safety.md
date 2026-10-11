@@ -298,8 +298,8 @@ When the monitor finds a flag unhealthy and `enable_automatic_rollbacks` is on, 
    the threshold's `comparison_type`: `above` and `>` for `greater_than`, `below` and `<` for
    `less_than`, `equal to` and `=` for `equal_to`. Such as
    `Automatic rollback due to error_rate above threshold (10% > 5%)`, or, for a `less_than`
-   threshold on a custom metric,
-   `Automatic rollback due to checkout_success below threshold (0.9 < 0.95)`. Its `new_value` holds
+   threshold of 100 on `total_evaluations` and a flag evaluated 40 times,
+   `Automatic rollback due to total_evaluations below threshold (40 < 100)`. Its `new_value` holds
    `trigger_type` (`automatic`), `previous_percentage`, `new_percentage`, `deactivated` and
    `paused_schedules` (see [Audit Logging](../api/audit-logging.md#changes-the-platform-makes-on-its-own))
 4. Sends a Slack alert to `SLACK_DEFAULT_CHANNEL` and a `safety_rollback` event to

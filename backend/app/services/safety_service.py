@@ -215,8 +215,9 @@ def describe_breach(status: Any) -> str:
     Worded by the threshold's ``comparison_type`` (``details`` of the
     ``MetricStatus``, ``greater_than`` when it is absent) and written in the
     metric's unit (``format_metric_reading``): 1 error in 14 evaluations
-    against ``0.05`` reads ``above threshold (7.143% > 5%)``; a custom metric
-    at 0.9 against a 0.95 floor reads ``below threshold (0.9 < 0.95)``.
+    against ``0.05`` reads ``above threshold (7.143% > 5%)``; 40
+    ``total_evaluations`` against a ``less_than`` floor of 100 reads
+    ``below threshold (40 < 100)``.
 
     ``SafetyService.should_rollback`` and the safety scheduler both build
     their reason from this, and the rollback alert takes its word from
