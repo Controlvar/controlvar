@@ -28,6 +28,7 @@ from backend.app.schemas.targeting_rule import (
     LogicalOperator,
     OperatorType,
     RuleGroup,
+    TargetingRule,
 )
 from backend.app.services.rules_evaluation_service import RulesEvaluationService
 
@@ -79,13 +80,19 @@ def _example() -> Dict[str, Any]:
     return kwargs
 
 
-def _answers(condition: Condition, moment: str) -> Tuple[bool, bool]:
-    """(flag targeting, experiment targeting) for a user whose attribute is *moment*."""
-    context = {condition.attribute: moment}
-    flag = rules_engine.evaluate_condition(condition, context)
-    experiment = RulesEvaluationService()._evaluate_condition_enhanced(
-        condition, context
+def _answers(
+    condition: Condition,
+    moment: str,
+    group_operator: LogicalOperator = LogicalOperator.AND,
+) -> Tuple[bool, bool]:
+    """(flag targeting, experiment targeting): does a rule holding *condition*
+    match a user whose attribute is *moment*?"""
+    rule = TargetingRule(
+        id="doc", rule=RuleGroup(operator=group_operator, conditions=[condition])
     )
+    context = {condition.attribute: moment}
+    flag = rules_engine.evaluate_rule(rule, context)
+    experiment = RulesEvaluationService()._evaluate_rule_enhanced(rule, context)
     return flag, experiment
 
 
@@ -108,8 +115,10 @@ def test_the_example_does_not_match_outside_its_window(moment):
 
 
 def test_iso_start_and_end_match_nobody_in_either_shape():
-    """The example this page used to give, in the native and the dashboard shape."""
+    """The example this page used to give, in the native and the dashboard
+    shape, alone and inside a NOT: the rule it is in does not match."""
     assert "ISO datetimes in `start` and `end` match nobody" in _prose()
+    assert "the rule it is in does not match" in _prose()
     window = {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"}
     native = Condition(
         attribute="current_time", operator=OperatorType.TIME_WINDOW, value=window
@@ -118,8 +127,12 @@ def test_iso_start_and_end_match_nobody_in_either_shape():
         {"attribute": "current_time", "operator": "time_window", "value": window}
     )
     for condition in (native, dashboard):
-        for moment in INSIDE + OUTSIDE:
-            assert _answers(condition, moment) == (False, False), (condition, moment)
+        for group_operator in (LogicalOperator.AND, LogicalOperator.NOT):
+            for moment in INSIDE + OUTSIDE:
+                assert _answers(condition, moment, group_operator) == (
+                    False,
+                    False,
+                ), (condition, group_operator, moment)
 
 
 def test_after_and_before_make_a_window_between_two_moments():

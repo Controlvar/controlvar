@@ -372,10 +372,11 @@ timezone. Without it, the moment's own clock time is compared.
 does not read them. A rule saved from the dashboard stores `start` and `end` as
 `HH:MM`, and those are read as `start_time` and `end_time`. In the native shape,
 give `start_time` and `end_time` (or the other keys) as well, as the example
-does. A window with none of those keys matches nobody, and a warning is logged
-once. So ISO datetimes in `start` and `end` match nobody, in either shape
-(accepting them is #1156). For a window between two moments, use `after` and
-`before` (below) in an `AND` group.
+does. A window with none of those keys, or with one that cannot be read (`days`
+not 0-6, a time that is not `HH:MM`, an unknown timezone), matches nobody: the
+rule it is in does not match, and a warning is logged once. So ISO datetimes in
+`start` and `end` match nobody, in either shape (accepting them is #1156). For a
+window between two moments, use `after` and `before` (below) in an `AND` group.
 
 Flag targeting and experiment targeting read a window the same way.
 

@@ -16,6 +16,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from backend.app.core.rule_validation import RuleValidator, ValidationSeverity
+from backend.app.core.rules_engine import TimeWindowUnreadable
 from backend.app.schemas.targeting_rule import (
     AttributeType,
     Condition,
@@ -148,12 +149,14 @@ class TestAdvancedOperators:
         assert window(moment.timestamp(), january) is True
         assert window((moment + timedelta(days=40)).timestamp(), january) is False
 
-        # ISO start/end, what this test used to pin as a match (#1156)
+        # ISO start/end, what this test used to pin as a match (#1156): the
+        # engine cannot read it, and its rule does not match
         iso = {
             "start": (moment - timedelta(hours=1)).isoformat(),
             "end": (moment + timedelta(hours=1)).isoformat(),
         }
-        assert window(moment.isoformat(), iso) is False
+        with pytest.raises(TimeWindowUnreadable):
+            window(moment.isoformat(), iso)
 
     def test_percentage_bucket_operator(self):
         """Test percentage bucket operator."""

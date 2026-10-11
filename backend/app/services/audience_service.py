@@ -30,7 +30,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
-from backend.app.core.rules_engine import evaluate_condition
+from backend.app.core.rules_engine import TimeWindowUnreadable, evaluate_condition
 from backend.app.core.targeting_adapter import (
     TargetingRulesError,
     convert_dashboard_condition,
@@ -137,7 +137,7 @@ def _collect_matched_rules(raw_rules: Any, context: Dict[str, Any]) -> List[str]
                         f"{condition.get('attribute', '')} "
                         f"{condition.get('operator', '')} {condition.get('value', '')}"
                     )
-            except PatternUnevaluable:
+            except (PatternUnevaluable, TimeWindowUnreadable):
                 continue
     return matched
 

@@ -218,7 +218,10 @@ ENGINE_CASES = {
         Case(DATE, {"start_date": "2024-02-01", "end_date": "2024-01-01"}, expect=ONCE),
         Case(DATE, {}, expect=ONCE),
         Case(DATE, {"start": "2024-01-01", "end": "2024-12-31"}, expect=ONCE),
-        Case(MARKER, {"start": "2024-01-01", "end": "2024-12-31"}),
+        Case(DATE, {"days": [0], "timezone": "Nowhere/Atlantis"}, expect=ONCE),
+        # The window is read before the value, so a window that cannot be read
+        # is reported whatever the user sends, and the value is still not logged.
+        Case(MARKER, {"start": "2024-01-01", "end": "2024-12-31"}, expect=ONCE),
     ],
     # Not implemented on the flag path: the condition never matches.
     OperatorType.PERCENTAGE_BUCKET: [Case(MARKER, 50, expect=ONCE)],
@@ -298,7 +301,10 @@ def _rules(op: OperatorType, case: Case) -> TargetingRules:
 
 
 def _via_engine(op, case):
-    apply_operator(op, case.actual, case.expected, case.additional)
+    try:
+        apply_operator(op, case.actual, case.expected, case.additional)
+    except rules_engine.TimeWindowUnreadable:
+        pass  # its rule does not match; the report is what is checked here
 
 
 def _via_service(op, case):

@@ -19,8 +19,10 @@ stored rules, user and context, and asserts the same answer, over:
   adapter can evaluate;
 * a battery for each operator the adapter supports
   (``targeting_adapter.DASHBOARD_OPERATORS``), plus the native
-  ``semantic_version`` and ``geo_distance`` spellings;
-* the cases of #1144 and #1145, with their expected answers.
+  ``semantic_version``, ``geo_distance`` and ``time_window`` spellings;
+* the cases of #1144 and #1145, with their expected answers, including a
+  ``time_window`` the engine cannot read, alone and inside a ``NOT``: its rule
+  does not match.
 
 The parity holds for conditions without ``attribute_type``, which is every
 condition the dashboard stores, and no case here sets one. A native condition
@@ -171,17 +173,23 @@ def at_full_rollout(raw: Dict[str, Any]) -> Dict[str, Any]:
     return raw
 
 
-def dashboard(attribute: str, operator: str, value: Any) -> Dict[str, Any]:
+def dashboard(
+    attribute: str, operator: str, value: Any, group_operator: str = "AND"
+) -> Dict[str, Any]:
     """One condition in the shape the dashboard stores."""
     condition = {"attribute": attribute, "operator": operator, "value": value}
     return {
         "logical_operator": "AND",
-        "groups": [{"logical_operator": "AND", "conditions": [condition]}],
+        "groups": [{"logical_operator": group_operator, "conditions": [condition]}],
     }
 
 
 def native(
-    attribute: str, operator: str, value: Any, additional_value: Any = None
+    attribute: str,
+    operator: str,
+    value: Any,
+    additional_value: Any = None,
+    group_operator: str = "and",
 ) -> Dict[str, Any]:
     """One condition in the native ``TargetingRules`` shape."""
     condition: Dict[str, Any] = {
@@ -196,7 +204,7 @@ def native(
         "rules": [
             {
                 "id": "native",
-                "rule": {"operator": "and", "conditions": [condition]},
+                "rule": {"operator": group_operator, "conditions": [condition]},
                 "rollout_percentage": 100,
             }
         ],
@@ -520,6 +528,16 @@ TIME_WINDOW_CASES = [
         True,
     ),
     (
+        "NOT around an HH:MM window including now",
+        dashboard("now", "time_window", {"start": "11:00", "end": "13:00"}, "NOT"),
+        False,
+    ),
+    (
+        "NOT around an HH:MM window excluding now",
+        dashboard("now", "time_window", {"start": "14:00", "end": "15:00"}, "NOT"),
+        True,
+    ),
+    (
         "native start_date/end_date including now",
         native(
             "now",
@@ -549,7 +567,9 @@ def test_the_time_window_cases(label, raw, enrolled):
     assert (flag_answer(raw, USER, context) is not None) is enrolled
 
 
-def constructed(value: Any) -> TargetingRules:
+def constructed(
+    value: Any, group_operator: LogicalOperator = LogicalOperator.AND
+) -> TargetingRules:
     """A ``time_window`` rule the schema would refuse, built as stored data can be.
 
     Stored rules are not re-validated on evaluation, so the engine must answer
@@ -564,7 +584,7 @@ def constructed(value: Any) -> TargetingRules:
         validation_schema=None,
     )
     group = RuleGroup.model_construct(
-        operator=LogicalOperator.AND, conditions=[condition], groups=[]
+        operator=group_operator, conditions=[condition], groups=[]
     )
     rule = TargetingRule.model_construct(
         id="constructed",
@@ -594,27 +614,118 @@ UNREADABLE_WINDOWS = [
 ]
 
 
+NO_KEY = "no days, start_time/end_time or start_date/end_date"
+NOT_HH_MM = "start_time or end_time is not HH:MM"
+#: An ISO window around MOMENT, and one in 2000.
+ISO_NOW = {"start": "2026-01-05T11:00:00+00:00", "end": "2026-01-05T13:00:00+00:00"}
+ISO_2000 = {"start": "2000-01-01T00:00:00", "end": "2000-01-02T00:00:00"}
+
+#: (label, rules, reason): a window the engine cannot read, alone or inside a
+#: NOT, in each shape that reaches it. Inside a NOT, a refusal answered as a
+#: plain "no match" for the condition would make the rule match everyone.
+UNREADABLE_RULES = [
+    *[
+        (f"{wrapper.value} {value!r}", constructed(value, wrapper), reason)
+        for value, reason in UNREADABLE_WINDOWS
+        for wrapper in (LogicalOperator.AND, LogicalOperator.NOT)
+    ],
+    (
+        "native NOT ISO including now",
+        native("now", "time_window", ISO_NOW, group_operator="not"),
+        NO_KEY,
+    ),
+    (
+        "native NOT ISO in 2000",
+        native("now", "time_window", ISO_2000, group_operator="not"),
+        NO_KEY,
+    ),
+    (
+        "native NOT HH:MM start/end",
+        native(
+            "now",
+            "time_window",
+            {"start": "11:00", "end": "13:00"},
+            group_operator="not",
+        ),
+        NO_KEY,
+    ),
+    (
+        "dashboard ISO including now",
+        dashboard("now", "time_window", ISO_NOW),
+        NOT_HH_MM,
+    ),
+    (
+        "dashboard NOT ISO including now",
+        dashboard("now", "time_window", ISO_NOW, "NOT"),
+        NOT_HH_MM,
+    ),
+    (
+        "dashboard NOT ISO in 2000",
+        dashboard("now", "time_window", ISO_2000, "NOT"),
+        NOT_HH_MM,
+    ),
+    (
+        "dashboard NOT a days value that is not a list",
+        dashboard(
+            "now",
+            "time_window",
+            {"start": "11:00", "end": "13:00", "days": "monday"},
+            "NOT",
+        ),
+        "days is not a list",
+    ),
+]
+
+
 @pytest.mark.regression
 @pytest.mark.parametrize(
-    "value, reason", UNREADABLE_WINDOWS, ids=[repr(v) for v, _ in UNREADABLE_WINDOWS]
+    "label, rules, reason", UNREADABLE_RULES, ids=[case[0] for case in UNREADABLE_RULES]
 )
 def test_an_unreadable_window_matches_nobody_and_is_reported(
-    monkeypatch, value, reason
+    monkeypatch, label, rules, reason
 ):
-    """Both evaluators refuse it, through the engine's ``_note_rule_problem``."""
+    """Both evaluators refuse its rule, through the engine's ``_note_rule_problem``.
+
+    A NOT around the condition does not turn the refusal into a match, and
+    neither a value that is not a time nor a missing attribute hides it.
+    """
     notes: List[Any] = []
     monkeypatch.setattr(
         rules_engine,
         "_note_rule_problem",
         lambda operator, why: notes.append((operator, why)),
     )
-    rules = constructed(value)
-    context = {"now": MOMENT}
-    assert flag_answer(rules, USER, context) is None
-    assert notes == [(OperatorType.TIME_WINDOW, reason)]
-    notes.clear()
-    assert experiment_answer(rules, USER, context) is None
-    assert notes == [(OperatorType.TIME_WINDOW, reason)]
+    for context in ({"now": MOMENT}, {"now": "not a time"}, {}):
+        notes.clear()
+        assert flag_answer(rules, USER, context) is None, context
+        assert notes == [(OperatorType.TIME_WINDOW, reason)], context
+        notes.clear()
+        assert experiment_answer(rules, USER, context) is None, context
+        assert notes == [(OperatorType.TIME_WINDOW, reason)], context
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("group_operator", ["and", "not"])
+def test_an_unreadable_window_refuses_its_rule_only(group_operator):
+    """The next rule is still evaluated, by both evaluators."""
+    raw = native("now", "time_window", ISO_NOW, group_operator=group_operator)
+    raw["rules"].append(
+        {
+            "id": "next",
+            "priority": 2,
+            "rule": {
+                "operator": "and",
+                "conditions": [
+                    {"attribute": "country", "operator": "eq", "value": "FR"}
+                ],
+            },
+            "rollout_percentage": 100,
+        }
+    )
+    for country, expected in (("FR", "next"), ("US", None)):
+        context = {"now": MOMENT, "country": country}
+        assert experiment_answer(raw, USER, context) == expected, country
+        assert flag_answer(raw, USER, context) == expected, country
 
 
 @pytest.mark.regression

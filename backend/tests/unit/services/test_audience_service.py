@@ -289,6 +289,43 @@ class TestEvaluateMembership:
         assert result.is_member is False
         assert result.matched_rules == []
 
+    @pytest.mark.regression
+    @pytest.mark.parametrize("country", ["US", "CA"])
+    def test_a_time_window_that_cannot_be_read_grants_no_membership(self, country):
+        """A NOT around it does not make every user a member (#1145).
+
+        The segment's rules are one rule; a ``time_window`` the engine cannot
+        read (ISO datetimes here) refuses it, whatever the other groups say.
+        """
+        rules = {
+            "logical_operator": "OR",
+            "groups": [
+                {"logical_operator": "AND", "conditions": [_eq("country", "US")]},
+                {
+                    "logical_operator": "NOT",
+                    "conditions": [
+                        {
+                            "attribute": "now",
+                            "operator": "time_window",
+                            "value": {
+                                "start": "2024-01-01T00:00:00",
+                                "end": "2024-12-31T00:00:00",
+                            },
+                        }
+                    ],
+                },
+            ],
+        }
+        mock_seg = _make_mock_segment(rules=rules)
+        db = _make_mock_db(segment=mock_seg)
+
+        result = AudienceService.evaluate_membership(
+            db, str(mock_seg.id), {"country": country, "now": "2026-01-05T12:00:00"}
+        )
+
+        assert result.is_member is False
+        assert result.matched_rules == []
+
     def test_evaluate_membership_raises_value_error_for_non_existent_segment(self):
         """evaluate_membership raises ValueError when segment doesn't exist."""
         db = _make_mock_db(segment=None)

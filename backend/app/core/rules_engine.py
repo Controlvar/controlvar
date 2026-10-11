@@ -94,6 +94,24 @@ class SegmentMembershipUnavailable(Exception):
         super().__init__("segment membership could not be decided")
 
 
+class TimeWindowUnreadable(Exception):
+    """A ``time_window`` value the engine cannot read: its rule does not match.
+
+    Raised by :func:`check_time_window`, after ``_note_rule_problem`` has
+    reported the reason, instead of answering ``False`` for the condition: a
+    ``NOT`` around the condition would turn ``False`` into a match (#1145).
+    Both condition evaluators call it before looking the attribute up, so a
+    user who does not send the attribute is refused too. Like
+    ``PatternUnevaluable`` it is caught above the recursive group evaluator,
+    in ``evaluate_rule`` and in the experiment evaluator's
+    ``_evaluate_rule_enhanced``; there the rule does not match, and the next
+    rule is still evaluated. It carries no part of the rule or the context.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("a time_window value could not be read")
+
+
 def segment_condition_holds(condition: Condition, user_context: UserContext):
     """The answer to a segment condition, or ``None`` for any other condition.
 
@@ -156,7 +174,12 @@ def evaluate_rule(rule: TargetingRule, user_context: UserContext) -> bool:
     Returns:
         True if the rule matches, False otherwise
     """
-    return evaluate_rule_group(rule.rule, user_context)
+    try:
+        return evaluate_rule_group(rule.rule, user_context)
+    except TimeWindowUnreadable:
+        # Already reported; the rule does not match, whatever groups enclose
+        # the condition.
+        return False
 
 
 def evaluate_rule_group(rule_group: RuleGroup, user_context: UserContext) -> bool:
@@ -228,6 +251,11 @@ def evaluate_condition(condition: Condition, user_context: UserContext) -> bool:
     segment_answer = segment_condition_holds(condition, user_context)
     if segment_answer is not None:
         return segment_answer
+
+    # A time_window that cannot be read refuses its rule for a user who does
+    # not send the attribute too.
+    if condition.operator == OperatorType.TIME_WINDOW:
+        check_time_window(condition.operator, condition.value)
 
     attribute = condition.attribute
     operator = condition.operator
@@ -302,11 +330,71 @@ def _substring_of(item: Any, text: str) -> bool:
 
 
 #: The keys of a ``time_window`` value that say when it is open; ``timezone``
-#: only changes how they are read. A window with none of them matches nobody
-#: and is reported once (#1145). It used to match at every moment, so a
-#: ``{"start": ..., "end": ...}`` window, the two keys the ``Condition`` schema
-#: asks for and which the engine does not read, was always open.
+#: only changes how they are read. A window with none of them cannot be read
+#: (#1145). It used to match at every moment, so a ``{"start": ..., "end": ...}``
+#: window, the two keys the ``Condition`` schema asks for and which the engine
+#: does not read, was always open.
 TIME_WINDOW_KEYS = ("days", "start_time", "end_time", "start_date", "end_date")
+
+
+def check_time_window(operator: Any, window: Any) -> None:
+    """Raise :class:`TimeWindowUnreadable` when ``window`` cannot be read.
+
+    Called before the user's value is looked at, so that neither that value nor
+    an earlier key that does not match can hide a key that cannot be read.
+    """
+    if not isinstance(window, dict):
+        _note_rule_problem(operator, "the value is not an object")
+        raise TimeWindowUnreadable()
+    if not any(key in window for key in TIME_WINDOW_KEYS):
+        _note_rule_problem(
+            operator, "no days, start_time/end_time or start_date/end_date"
+        )
+        raise TimeWindowUnreadable()
+
+    timezone_name = window.get("timezone")
+    if timezone_name:
+        if not HAS_PYTZ:
+            _note_rule_problem(operator, "a timezone needs pytz, not installed")
+            raise TimeWindowUnreadable()
+        try:
+            pytz.timezone(timezone_name)
+        except Exception:
+            _note_rule_problem(operator, "the timezone is not known")
+            raise TimeWindowUnreadable() from None
+
+    if "days" in window:
+        days = window["days"]
+        if not isinstance(days, list):
+            _note_rule_problem(operator, "days is not a list")
+            raise TimeWindowUnreadable()
+        if not all(isinstance(d, int) and 0 <= d <= 6 for d in days):
+            _note_rule_problem(operator, "days must be 0-6")
+            raise TimeWindowUnreadable()
+
+    if "start_time" in window or "end_time" in window:
+        if "start_time" not in window or "end_time" not in window:
+            _note_rule_problem(operator, "start_time without end_time")
+            raise TimeWindowUnreadable()
+        if (
+            _parse_time(window["start_time"]) is None
+            or _parse_time(window["end_time"]) is None
+        ):
+            _note_rule_problem(operator, "start_time or end_time is not HH:MM")
+            raise TimeWindowUnreadable()
+
+    if "start_date" in window or "end_date" in window:
+        if "start_date" not in window or "end_date" not in window:
+            _note_rule_problem(operator, "start_date without end_date")
+            raise TimeWindowUnreadable()
+        start_date = _parse_date(window["start_date"])
+        end_date = _parse_date(window["end_date"])
+        if start_date is None or end_date is None:
+            _note_rule_problem(operator, "start_date or end_date is not YYYY-MM-DD")
+            raise TimeWindowUnreadable()
+        if start_date > end_date:
+            _note_rule_problem(operator, "start_date is after end_date")
+            raise TimeWindowUnreadable()
 
 
 def apply_operator(
@@ -845,6 +933,9 @@ def apply_operator(
 
     # Time window operator
     elif operator == OperatorType.TIME_WINDOW:
+        # A window that cannot be read raises TimeWindowUnreadable here, before
+        # the user's value is read: its rule does not match (see the class).
+        check_time_window(operator, expected_value)
         try:
             # Parse actual_value to datetime
             dt = _parse_datetime(actual_value)
@@ -858,21 +949,9 @@ def apply_operator(
                 )
                 return False
 
-            # Validate expected_value is a dict
-            if not isinstance(expected_value, dict):
-                _note_rule_problem(operator, "the value is not an object")
-                return False
-
-            # A window with no key that says when it is open matches nobody.
-            if not any(key in expected_value for key in TIME_WINDOW_KEYS):
-                _note_rule_problem(
-                    operator, "no days, start_time/end_time or start_date/end_date"
-                )
-                return False
-
             # Apply timezone conversion if specified
             timezone_str = expected_value.get("timezone")
-            if timezone_str and HAS_PYTZ:
+            if timezone_str:
                 try:
                     tz = pytz.timezone(timezone_str)
 
@@ -893,53 +972,18 @@ def apply_operator(
                         type(e).__name__,
                     )
                     return False
-            elif timezone_str and not HAS_PYTZ:
-                _note_rule_problem(operator, "a timezone needs pytz, not installed")
+            elif dt is None:
+                # Use current time if no value provided
+                dt = datetime.now()
+
+            # Check day of week if specified (Monday = 0, Sunday = 6)
+            if "days" in expected_value and dt.weekday() not in expected_value["days"]:
                 return False
-            else:
-                # No timezone specified
-                if dt is None:
-                    # Use current time if no value provided
-                    dt = datetime.now()
-
-            # Safety check: ensure dt is not None
-            if dt is None:
-                logger.debug("%s: no date and time to compare", operator)
-                return False
-
-            # Check day of week if specified
-            if "days" in expected_value:
-                days = expected_value["days"]
-                if not isinstance(days, list):
-                    _note_rule_problem(operator, "days is not a list")
-                    return False
-
-                # Validate day numbers (0-6)
-                if not all(isinstance(d, int) and 0 <= d <= 6 for d in days):
-                    _note_rule_problem(operator, "days must be 0-6")
-                    return False
-
-                # Check if current day matches
-                current_day = dt.weekday()  # Monday = 0, Sunday = 6
-                if current_day not in days:
-                    return False
 
             # Check time range if specified
-            if "start_time" in expected_value or "end_time" in expected_value:
-                if (
-                    "start_time" not in expected_value
-                    or "end_time" not in expected_value
-                ):
-                    _note_rule_problem(operator, "start_time without end_time")
-                    return False
-
+            if "start_time" in expected_value:
                 start_time = _parse_time(expected_value["start_time"])
                 end_time = _parse_time(expected_value["end_time"])
-
-                if start_time is None or end_time is None:
-                    _note_rule_problem(operator, "start_time or end_time is not HH:MM")
-                    return False
-
                 current_time = dt.time()
 
                 # Helper function for inclusive time comparison
@@ -968,32 +1012,11 @@ def apply_operator(
                     ):
                         return False
 
-            # Check date range if specified
-            if "start_date" in expected_value or "end_date" in expected_value:
-                if (
-                    "start_date" not in expected_value
-                    or "end_date" not in expected_value
-                ):
-                    _note_rule_problem(operator, "start_date without end_date")
-                    return False
-
+            # Check date range if specified (date only, ignore time)
+            if "start_date" in expected_value:
                 start_date = _parse_date(expected_value["start_date"])
                 end_date = _parse_date(expected_value["end_date"])
-
-                if start_date is None or end_date is None:
-                    _note_rule_problem(
-                        operator, "start_date or end_date is not YYYY-MM-DD"
-                    )
-                    return False
-
-                # Validate date range (start must be before or equal to end)
-                if start_date > end_date:
-                    _note_rule_problem(operator, "start_date is after end_date")
-                    return False
-
-                # Check if current date is in range (date only, ignore time)
-                current_date = dt.date()
-                if not (start_date <= current_date <= end_date):
+                if not (start_date <= dt.date() <= end_date):
                     return False
 
             # All checks passed

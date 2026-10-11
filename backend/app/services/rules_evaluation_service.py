@@ -27,7 +27,9 @@ from backend.app.core.rule_compiler import RuleCompiler
 from backend.app.core.rules_engine import (
     SEGMENT_OPERATORS,
     SegmentMembershipUnavailable,
+    TimeWindowUnreadable,
     UserContext,
+    check_time_window,
     segment_condition_holds,
 )
 from backend.app.core.rules_engine import (
@@ -426,7 +428,12 @@ class RulesEvaluationService:
         self, rule: TargetingRule, user_context: UserContext
     ) -> bool:
         """Evaluate a rule with enhanced operators."""
-        return self._evaluate_rule_group_enhanced(rule.rule, user_context)
+        try:
+            return self._evaluate_rule_group_enhanced(rule.rule, user_context)
+        except TimeWindowUnreadable:
+            # Already reported by the rules engine; the rule does not match,
+            # whatever groups enclose the condition (#1145).
+            return False
 
     def _evaluate_rule_group_enhanced(
         self, rule_group: RuleGroup, user_context: UserContext
@@ -484,6 +491,11 @@ class RulesEvaluationService:
         segment_answer = segment_condition_holds(condition, user_context)
         if segment_answer is not None:
             return segment_answer
+
+        # As on the flag path: a time_window that cannot be read refuses its
+        # rule for a user who does not send the attribute too.
+        if condition.operator == OperatorType.TIME_WINDOW:
+            check_time_window(condition.operator, condition.value)
 
         attribute = condition.attribute
         operator = condition.operator
