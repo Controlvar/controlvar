@@ -1,0 +1,206 @@
+# Video 2, Your first experiment: guided setup, sized before it starts, started,
+# the SDK calls an app makes, shoppers arriving, and the result with its
+# significance. The UX draft's V2 storyboard (#1066), on the `demo` seed.
+#
+# * The SDK step is a card of lines quoted from the JavaScript SDK's quick start
+#   (docs/sdk/javascript.md), checked against the recorded release's docs, and
+#   never its `apiUrl` line, which names a host and port (plan ruling R4). The
+#   experiment page's "Assign a user from your app" panel is never in view.
+# * Shoppers arriving are filmed on the Live tab with Refresh, the one way new
+#   users show at once (the server pushes only every 30 s). The rest arrive off
+#   camera, behind the card that says so.
+# * The traffic: 63,000 shoppers from the data generator (#1064) at seed 40,
+#   converting at 5.0% in Control and 5.6% with the sticky bar. At that seed the
+#   server's assignment hash puts 31,309 users in Control (1,569 buy, 5.01%) and
+#   31,691 in Sticky bar (1,781 buy, 5.62%): both past the 31,234 a variant the
+#   estimate asks for, a 12.1% lift, p = 0.0007 (Fisher's exact, the results
+#   API's test). backend/tests/unit/showcase/test_showcase_first_experiment.py
+#   pins these numbers, and gate 10 holds the platform to them.
+slug: 02-first-experiment
+title: Your first experiment
+seed: demo
+seed_counts: {experiments: 3, feature_flags: 2, users: 4}
+never_show:
+  - Assign a user from your app
+traffic:
+  experiment: Sticky add-to-cart bar
+  users: 63000
+  seed: 40
+  control_rate: 0.05
+  treatment_rate: 0.056
+  event: purchase
+  first: 500
+  workers: 2
+end_state:
+  signed_in_as: admin@demo.com
+  experiment:
+    name: Sticky add-to-cart bar
+    key: sticky_add_to_cart_bar
+    status: active
+    winner: Sticky bar
+    shown: recommendation
+
+scenes:
+  - id: setup
+    open: /experiments
+    signed_in: true
+    beats:
+      - cue: Create an experiment in five guided steps.
+        focus: {testid: new-experiment-btn}
+        steps:
+          - move: {testid: new-experiment-btn}
+        exit:
+          - click: {testid: new-experiment-btn}
+          - wait_for: {testid: wizard-step-heading}
+          - click: {testid: wizard-next}
+
+      - before:
+          - wait_for: {role: heading, name: Name it and choose what to measure}
+        cue: Name it, and say what you expect to happen.
+        focus: {testid: experiment-name}
+        steps:
+          - type: {testid: experiment-name}
+            text: Sticky add-to-cart bar
+          - look: {testid: experiment-key}
+            ms: 1000
+          - type: {testid: experiment-hypothesis}
+            text: A sticky bar raises purchases
+
+      - cue: Pick the event that counts as a win.
+        focus: {testid: metric-row-0}
+        steps:
+          - type: {testid: metric-event-0}
+            text: purchase
+            clear: true
+        exit:
+          - click: {testid: wizard-next}
+
+      - before:
+          - wait_for: {role: heading, name: Set up the versions users will see}
+        cue: Two variants, split evenly between users.
+        focus: {testid: variant-row-1}
+        steps:
+          - type: {testid: variant-name-1}
+            text: Sticky bar
+            clear: true
+          - look: {testid: allocation-total}
+            ms: 1000
+        exit:
+          - click: {testid: wizard-next}
+
+      - before:
+          - wait_for: {testid: estimate-baseline}
+        cue: "Size it first: how many users do you need?"
+        focus: {testid: estimate-baseline}
+        steps:
+          - type: {testid: estimate-baseline}
+            text: "5"
+          - type: {testid: estimate-mde}
+            text: "10"
+          - type: {testid: estimate-daily-users}
+            text: "10000"
+          - type: {testid: estimate-share}
+            text: "50"
+        exit:
+          - click: {testid: estimate-calculate}
+
+      - before:
+          - wait_for: {testid: estimate-duration}
+        cue: 31,234 users per variant, about 13 days here.
+        focus: {testid: estimate-result}
+        steps:
+          - look: {testid: estimate-per-variant}
+            ms: 1200
+        exit:
+          - click: {testid: wizard-next}
+
+      - before:
+          - wait_for: {testid: wizard-review}
+        cue: Review it, then create it.
+        focus: {testid: wizard-review}
+        steps:
+          - look: {testid: review-variants}
+            ms: 1000
+        exit:
+          - click: {testid: wizard-create}
+
+      - before:
+          - wait_for: {testid: action-start}
+        cue: Start it, and it is ready for shoppers.
+        focus: {testid: experiment-status}
+        steps:
+          - click: {testid: action-start}
+          - wait_for: {css: "[data-testid=experiment-status][data-status=active]"}
+          - move: {testid: experiment-status}
+          - look: {testid: experiment-status}
+            ms: 1000
+
+  - id: sdk
+    traffic: start
+    card:
+      label: "From the JavaScript SDK quick start"
+      code:
+        doc: docs/sdk/javascript.md
+        section: Quick start
+        lines:
+          - "const user = { userId: 'user-123', attributes: { country: 'US', plan: 'pro' } };"
+          - ""
+          - "// Sticky experiment assignment (POST /api/v1/tracking/assign); attributes are sent as `context`"
+          - "const assignment = await client.getAssignment('checkout_button_color', user);"
+          - "assignment.variantName;     // 'control' | 'treatment'"
+          - ""
+          - "// Track a conversion for one experiment (POST /api/v1/tracking/track)"
+          - "await client.track('user-123', 'purchase', { value: 49.99, experimentKey: 'checkout_button_color' });"
+      note: >-
+        As the docs give it. Your app passes its own experiment's key; the
+        shoppers in this video are sent the same way.
+    beats:
+      - cue: Your app asks the SDK for a variant, then tracks purchases.
+        focus: {css: "#code"}
+
+  - id: arriving
+    results_of: Sticky add-to-cart bar
+    beats:
+      - cue: Open its results as shoppers arrive.
+        focus: {role: tab, name: Live}
+        steps:
+          - move: {role: tab, name: Live}
+
+      - before:
+          - click: {role: tab, name: Live}
+          - wait_for: {testid: live-indicator}
+        cue: Each refresh shows more shoppers, split evenly.
+        focus: {testid: live-results-panel}
+        steps:
+          - look: {testid: variants-table}
+            ms: 1000
+          - click: {testid: refresh-button}
+          - look: {testid: variants-table}
+            ms: 1200
+
+  - id: later
+    traffic: finish
+    card:
+      label: Off camera
+      headline: 63,000 shoppers later
+      note: >-
+        About two weeks of traffic at 10,000 visitors a day with half of them in
+        the test, sent by the tool in minutes.
+    beats:
+      - cue: About two weeks of shoppers, simulated in minutes.
+        focus: {css: "#headline"}
+
+  - id: result
+    results_of: Sticky add-to-cart bar
+    warm_results: [Sticky add-to-cart bar]
+    beats:
+      - cue: "Sticky bar wins: 12.1% more purchases, significant at 95%."
+        focus: {testid: experiment-summary}
+        record:
+          recommendation: {testid: recommendation-reason}
+        payoff: true
+        steps:
+          - look: {testid: winner-indicator}
+            ms: 1200
+          - look: {testid: recommendation-reason}
+            ms: 1800

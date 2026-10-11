@@ -29,9 +29,13 @@ stand-in pages where Playwright is not installed. What it does, in order:
 * At every cue start: the page's text and fields are read (``DRAWN_JS``) and
   no needle may be drawn (gate 6); no forbidden text in the viewport (U4); the
   header's links are one line each and its user chip is not cut off (U1); the
-  focus is inside the page area and on top at its centre (gate 9); no Next.js
-  error overlay and no unexpected role=alert (gate 11). After every step the
-  needle check runs again; at every cue end the focus check does.
+  focus is inside the page area and on top at its centre (gate 9); every
+  number the caption states is in the focus's text (U2); no Next.js error
+  overlay and no unexpected role=alert (gate 11). After every step the needle
+  check runs again; at every cue end the focus check does.
+* A scene marked ``signed_in`` signs the demo admin in off camera first, through
+  the login page; a ``results_of`` scene opens that experiment's results page,
+  its id looked up off camera.
 * While recording: any response >= 500 from the stack, any page error and any
   request the guard refused fails the video (gate 11, gate 15c).
 
@@ -47,7 +51,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import numpy as np
@@ -244,6 +248,9 @@ class Tally:
 
     needle_checks: int = 0
     header_checks: int = 0
+    #: U2: cues whose numbers were looked for in the focus, and how many said any.
+    number_checks: int = 0
+    numbered_cues: int = 0
     forbidden_checks: int = 0
     focus_checks: int = 0
     broken_checks: int = 0
@@ -381,6 +388,7 @@ class Director:
         redactor: redaction.Redactor,
         forbidden: Tuple[str, ...],
         work: guard.WorkRoot,
+        resolve: Optional[Callable[[str], str]] = None,
     ):
         self.context = context
         self.page = page
@@ -403,6 +411,11 @@ class Director:
         self.listed_rows: Optional[int] = None
         #: Card scenes: a still page is their point (gate 11's freeze and black).
         self.still_spans: List[Tuple[int, int]] = []
+        #: An experiment's id by its name, for ``results_of`` scenes (off camera).
+        self.resolve = resolve
+        #: Texts a beat's ``record`` kept at its cue's start, by name (gate 10).
+        self.readings: Dict[str, str] = {}
+        self.signed_in = False
 
     # -- the guard and the listeners ------------------------------------------
 
@@ -686,7 +699,7 @@ class Director:
                 f"{self.where}: a kept value is drawn in {where}; recording dropped",
             )
 
-    def check_page(self, focus: Box, found: Locator) -> None:
+    def check_page(self, focus: Box, found: Locator, cue: str = "") -> None:
         """Every check a cue start makes, after the needles."""
         self.tally.header_checks += 1
         header = self.page.evaluate(HEADER_JS)
@@ -715,6 +728,17 @@ class Director:
                 "gate 11", f"{self.where}: an alert is shown: {unexpected[0]!r}"
             )
         self.check_focus(focus, found, "start")
+        self.check_numbers(cue, found)
+
+    def check_numbers(self, cue: str, found: Locator) -> None:
+        """U2: the numbers the caption states are in the focus's text."""
+        self.tally.number_checks += 1
+        if not storyboard.numbers_in(cue):
+            return
+        self.tally.numbered_cues += 1
+        ok, _numbers, why = judge.caption_numbers(cue, found.inner_text())
+        if not ok:
+            raise CaptureFailed("U2", f"{self.where}: {why}")
 
     def check_focus(self, focus: Box, found: Locator, when: str) -> Box:
         self.tally.focus_checks += 1
@@ -808,6 +832,8 @@ class Director:
                 )
             self.move_to(box.x + min(40.0, box.w / 2), box.y + box.h / 2)
             self.page.mouse.click(box.x + min(40.0, box.w / 2), box.y + box.h / 2)
+            if step.clear:
+                found.fill("")
             found.press_sequentially(step.text, delay=config.TYPE_DELAY_MS)
             self.page.wait_for_timeout(config.FIELD_PAUSE_MS)
         elif isinstance(step, storyboard.Look):
@@ -859,8 +885,10 @@ class Director:
             self.draw_cursor()
         found, focus = self._visible_box(beat.focus)
         self.check_needles()
-        self.check_page(focus, found)
+        self.check_page(focus, found, beat.cue)
         self.check_events()
+        for name, spec in beat.record.items():
+            self.readings[name] = self.locate(spec).inner_text()
         if urlparse(self.page.url).path.rstrip("/") == "/experiments":
             self.listed_rows = self.page.evaluate(
                 "() => document.querySelectorAll('table tbody tr').length"
@@ -905,10 +933,35 @@ class Director:
         self.page.set_content(card_html(card))
         self.page.wait_for_timeout(300)
 
+    def sign_in(self) -> None:
+        """Off camera: the demo admin signs in through the login page."""
+        email, password = config.DEMO_ADMIN
+        self.page.goto(self.dashboard + "/login")
+        self.settle()
+        self.page.get_by_label("Email").fill(email)
+        self.page.get_by_role("textbox", name="Password").fill(password)
+        self.page.get_by_role("button", name="Sign in", exact=True).click()
+        try:
+            self.page.wait_for_url("**/experiments", timeout=15000)
+        except PlaywrightError as error:
+            self.check_events()
+            raise CaptureFailed(
+                "gate 12",
+                f"{self.where}: signing in off camera failed ({str(error).splitlines()[0]})",
+            ) from None
+        self.signed_in = True
+
     def scene(self, scene: Scene) -> None:
         self.where = f"scene {scene.id}"
+        if scene.signed_in and not self.signed_in:
+            self.sign_in()
         if scene.card is not None:
             self.card(scene.card)
+        elif scene.results_of is not None:
+            if self.resolve is None:
+                raise CaptureFailed("gate 12", f"{self.where}: no experiment lookup")
+            self.page.goto(f"{self.dashboard}/results/{self.resolve(scene.results_of)}")
+            self.settle()
         else:
             assert scene.open is not None
             self.page.goto(self.dashboard + scene.open)
@@ -933,25 +986,42 @@ class Director:
 
 
 def card_html(card: storyboard.Card) -> str:
-    """The stack card: the documented command, labelled as shown, not recorded.
+    """A card: the documented command (``#command``), quoted lines of code
+    (``#code``) or a headline (``#headline``), labelled, with one sentence.
 
     Light, like the dashboard: a dark full frame outside the title and end
     cards reads as a black screen to the render's gate 11.
     """
     import html
 
+    if card.command is not None:
+        body = (
+            '<div class="term" id="command"><span class="prompt">$</span>'
+            f"{html.escape(card.command)}</div>"
+        )
+        width = 1040
+    elif card.code is not None:
+        lines = "\n".join(html.escape(line) for line in card.code.lines)
+        body = f'<pre class="code" id="code">{lines}</pre>'
+        width = 1600
+    else:
+        body = f'<div class="headline" id="headline">{html.escape(card.headline or "")}</div>'
+        width = 1040
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
 html body {{ zoom:1 !important; }}
 body {{ margin:0; height:100vh; display:flex; align-items:center; justify-content:center;
   background:#F8FAFC; color:#0F172A; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }}
-.card {{ width:1040px; }}
+.card {{ width:{width}px; }}
 .label {{ font-size:22px; letter-spacing:.12em; text-transform:uppercase; color:#475569; margin-bottom:28px; }}
 .term {{ background:#0F172A; border-radius:14px; padding:34px 40px;
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:40px; color:#F8FAFC; }}
 .prompt {{ color:#38BDF8; margin-right:18px; }}
+.code {{ margin:0; background:#0F172A; border-radius:14px; padding:30px 36px; white-space:pre;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:24px; line-height:1.55; color:#F8FAFC; }}
+.headline {{ font-size:72px; font-weight:700; letter-spacing:-.01em; color:#0F172A; }}
 .note {{ margin-top:30px; font-size:26px; line-height:1.45; color:#334155; }}
 </style></head><body><div class="card" id="card">
 <div class="label">{html.escape(card.label)}</div>
-<div class="term" id="command"><span class="prompt">$</span>{html.escape(card.command)}</div>
+{body}
 <div class="note">{html.escape(card.note)}</div>
 </div></body></html>"""

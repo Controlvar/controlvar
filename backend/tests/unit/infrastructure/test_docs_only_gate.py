@@ -166,6 +166,9 @@ DOCS_TESTS = (
     # Reads docs/auth/sso.md and the SSO code through `ast`; imports no module
     # code, and passes with backend/requirements.txt alone (checked).
     "modules/backend/tests/unit/services/test_sso_docs_messages.py",
+    # Video 2's SDK card quotes docs/sdk/javascript.md's quick start line for
+    # line (#1066); passes with backend/requirements.txt alone (checked).
+    "backend/tests/unit/showcase/test_showcase_quoted_docs.py",
 )
 
 #: Python tests that name docs/ but are deliberately NOT in DOCS_TESTS.

@@ -195,3 +195,133 @@ def allowed_env_keys() -> Set[str]:
     )
     keys |= set(guard.dashboard_settings(api_port=1, profile="core"))
     return keys
+
+
+def caption_numbers(caption: str, shown: str) -> Verdict:
+    """U2: every number a caption states is one the page shows in its focus.
+
+    Compared as written (``31,234`` is not ``31234``), number for number, so a
+    caption's ``13`` is not found inside ``31,234``.
+    """
+    from showcase.capture.storyboard import numbers_in
+
+    said = numbers_in(caption)
+    seen = numbers_in(shown)
+    missing = [n for n in said if n not in seen]
+    numbers = {"caption": said, "page": seen[:20]}
+    if missing:
+        return (
+            False,
+            numbers,
+            f"the caption says {missing[0]}; the page shows {', '.join(seen[:12]) or 'no number'}",
+        )
+    return True, numbers, ""
+
+
+def _arms(variants: Sequence[Mapping[str, Any]]) -> Dict[str, Dict[str, int]]:
+    """A results API metric's variants as ``{arm: {users, converting_users}}``."""
+    arms: Dict[str, Dict[str, int]] = {}
+    for variant in variants:
+        arm = "control" if variant.get("is_control") else "treatment"
+        arms[arm] = {
+            "users": int(variant.get("sample_size") or 0),
+            "converting_users": int(variant.get("conversions") or 0),
+        }
+    return arms
+
+
+def experiment_end(
+    end: Any,
+    *,
+    named: Sequence[Mapping[str, Any]],
+    results: Optional[Mapping[str, Any]],
+    planned: Mapping[str, Mapping[str, int]],
+    report: Mapping[str, Mapping[str, int]],
+    oracle_p: Optional[float],
+    shown: Optional[str],
+) -> Verdict:
+    """Gate 10 for an experiment the video made (``storyboard.ExperimentEnd``).
+
+    * exactly one experiment has the name, with the storyboard's key, running;
+    * its users and converting users per variant are the same three times:
+      as planned from the seed, as the server answered the traffic, and as the
+      results API counts them;
+    * the results API's p-value is Fisher's exact test on those counts
+      (*oracle_p*), and it recommends shipping the storyboard's winner;
+    * the page showed the API's recommendation, word for word.
+    """
+    numbers: Dict[str, Any] = {
+        "experiments_named": len(named),
+        "planned": dict(planned),
+        "answered": dict(report),
+    }
+    if len(named) != 1:
+        return False, numbers, f"{len(named)} experiments are named {end.name!r}"
+    found = named[0]
+    numbers.update(key=found.get("key"), status=found.get("status"))
+    if found.get("key") != end.key or str(found.get("status")).lower() != end.status:
+        return (
+            False,
+            numbers,
+            f"{end.name!r} has key {found.get('key')!r} and status"
+            f" {found.get('status')!r}, not {end.key!r} and {end.status!r}",
+        )
+    if results is None:
+        return False, numbers, "the results API gave no answer"
+    metrics = results.get("metrics") or []
+    primary = next((m for m in metrics if m.get("is_primary")), None)
+    if primary is None:
+        return False, numbers, "the results have no primary metric"
+    counted = _arms(primary.get("variants") or [])
+    numbers["counted"] = counted
+    if not (dict(planned) == dict(report) == counted):
+        return (
+            False,
+            numbers,
+            f"users and conversions differ: planned {dict(planned)}, answered"
+            f" {dict(report)}, counted by the results API {counted}",
+        )
+    treatment = next(
+        (v for v in primary.get("variants") or [] if not v.get("is_control")), {}
+    )
+    p_value = treatment.get("p_value")
+    numbers.update(p_value=p_value, oracle_p_value=oracle_p)
+    if (
+        p_value is None
+        or oracle_p is None
+        or abs(float(p_value) - oracle_p) > 1e-9 * max(1.0, oracle_p)
+    ):
+        return (
+            False,
+            numbers,
+            f"the API's p-value {p_value} is not Fisher's {oracle_p} on these counts",
+        )
+    summary = results.get("summary") or {}
+    winner = next(
+        (
+            v.get("variant_name")
+            for v in primary.get("variants") or []
+            if v.get("variant_id") == summary.get("winning_variant_id")
+        ),
+        None,
+    )
+    reason = str(summary.get("recommendation_reason") or "")
+    numbers.update(
+        recommendation=summary.get("recommendation"), winner=winner, reason=reason
+    )
+    if summary.get("recommendation") != "SHIP_VARIANT" or winner != end.winner:
+        return (
+            False,
+            numbers,
+            f"the API recommends {summary.get('recommendation')} with winner"
+            f" {winner!r}; the storyboard ends on {end.winner!r} shipped",
+        )
+    on_page = " ".join((shown or "").split())
+    numbers["shown"] = on_page
+    if not reason or on_page != " ".join(reason.split()):
+        return (
+            False,
+            numbers,
+            f"the page showed {on_page!r}; the API says {reason!r}",
+        )
+    return True, numbers, ""

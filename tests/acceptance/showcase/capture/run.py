@@ -10,9 +10,11 @@ Order, and what must be true before each step:
 3. The tree, once per invocation (``build``).
 4. Per video, the disk floor first; below it the video is refused and no work
    directory is made. Then the stack, gate 14 (the seed's counts), the
-   browser, the overlay self-test (C1), the scenes, gate 10 (the end state),
-   and the capture directory (``write_capture``). The stack comes down in a
-   ``finally``, and nothing labelled may be left.
+   browser, the overlay self-test (C1), the code cards against the recorded
+   tree, the scenes (with the storyboard's traffic and its results warmed off
+   camera between them), gate 10 (the end state), and the capture directory
+   (``write_capture``). The stack comes down in a ``finally``, and nothing
+   labelled may be left.
 
 The capture directory is ``<work root>/<slug>/capture/`` (contract.py):
 ``frames/`` and ``frames.jsonl``, ``cues.json``, ``needles.txt`` (mode 0600,
@@ -36,7 +38,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from showcase import contract
-from showcase.capture import build, config, guard, storyboard
+from showcase.capture import build, config, guard, storyboard, traffic
 from showcase.capture.procs import Children
 from showcase.capture.stack import (
     Ports,
@@ -96,8 +98,31 @@ def _api(url: str, token: Optional[str] = None, body: Optional[dict] = None) -> 
         headers["Authorization"] = f"Bearer {token}"
     data = json.dumps(body).encode() if body is not None else None
     request = urllib.request.Request(url, data=data, headers=headers)
-    with urllib.request.urlopen(request, timeout=60) as answer:
+    with guard.http_opener().open(request, timeout=60) as answer:
         return json.load(answer)
+
+
+def forbidden_text(board: storyboard.Storyboard, ports: Ports) -> Tuple[str, ...]:
+    """What no cue may show (U4, checked at every cue start): the fixed list,
+    the storyboard's ``never_show`` and the tool's own ports."""
+    return (
+        config.FORBIDDEN_TEXT
+        + tuple(board.never_show)
+        + tuple(str(p) for p in (ports.api, ports.dashboard, ports.postgres))
+    )
+
+
+def experiments_named(api_url: str, token: str, name: str) -> List[Dict[str, Any]]:
+    """The experiments the API lists under *name* (there are a handful)."""
+    items = _api(f"{api_url}/api/v1/experiments/?limit=100", token)["items"]
+    return [item for item in items if item.get("name") == name]
+
+
+def experiment_id(api_url: str, token: str, name: str) -> str:
+    match = experiments_named(api_url, token, name)
+    if len(match) != 1:
+        raise StackError(f"{len(match)} experiments named {name!r}")
+    return str(match[0]["id"])
 
 
 def seed_counts(api_url: str, token: str) -> Dict[str, int]:
@@ -354,9 +379,7 @@ def record(
     redactor = redaction.Redactor()
     redactor.add(token)
     ports = options.ports
-    forbidden = config.FORBIDDEN_TEXT + tuple(
-        str(p) for p in (ports.api, ports.dashboard, ports.postgres)
-    )
+    forbidden = forbidden_text(board, ports)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(env=guard.tool_env())
         try:
@@ -374,6 +397,7 @@ def record(
                 redactor=redactor,
                 forbidden=forbidden,
                 work=work,
+                resolve=lambda name: experiment_id(stack.api_url, token, name),
             )
             director.install()
             # Gate 3: the page is the frame's size at scale 1, before anything is recorded.
@@ -399,36 +423,54 @@ def record(
                 zoom_target=directing.ZOOM_TARGET,
             )
             log("overlay self-test passed")
-            warm = [name for scene in board.scenes for name in scene.warm_results]
-            for name in warm:
-                warm_results(stack.api_url, token, name)
-            for scene in board.scenes:
-                log(f"scene {scene.id}")
-                director.scene(scene)
+            refuse_unquoted_code(board, stack.tree)
+            users = Users(board.traffic, stack.api_url, token, redactor, log)
+            TEARDOWN.append(users.stop)
+            try:
+                for scene in board.scenes:
+                    if scene.traffic == "start":
+                        users.start()
+                    elif scene.traffic == "finish":
+                        users.finish()
+                    for name in scene.warm_results:
+                        warm_results(stack.api_url, token, name)
+                    log(f"scene {scene.id}")
+                    director.scene(scene)
+            finally:
+                users.stop()
+                TEARDOWN.remove(users.stop)
             director.check_events()
             gates["12"] = gate(
                 director.tally.scenes_run == [s.id for s in board.scenes],
                 ran=director.tally.scenes_run,
                 storyboard=[s.id for s in board.scenes],
             )
-            # Gate 10/1: the end state, through the API.
+            # Gate 10: the end state, through the API.
             who = page.evaluate(WHO_JS)
-            listed = director.listed_rows
-            total = int(_api(f"{stack.api_url}/api/v1/experiments/", token)["total"])
             end = board.end_state
-            ok = who == end.signed_in_as and listed == total == end.experiments_listed
-            gates["10"] = gate(
-                ok,
-                signed_in_as=who,
-                experiments_listed=listed,
-                experiments_in_api=total,
-                storyboard=end.model_dump(),
-            )
-            if not ok:
+            numbers: Dict[str, Any] = {
+                "signed_in_as": who,
+                "storyboard": end.model_dump(),
+            }
+            why = [] if who == end.signed_in_as else [f"signed in as {who!r}"]
+            if end.experiments_listed is not None:
+                listed = director.listed_rows
+                total = int(
+                    _api(f"{stack.api_url}/api/v1/experiments/", token)["total"]
+                )
+                numbers.update(experiments_listed=listed, experiments_in_api=total)
+                if not listed == total == end.experiments_listed:
+                    why.append(f"{listed} experiments listed, {total} in the API")
+            if end.experiment is not None:
+                ok, made, reason = users.end_state(end.experiment, director.readings)
+                numbers["experiment"] = made
+                if not ok:
+                    why.append(reason)
+            gates["10"] = gate(not why, **numbers)
+            if why:
                 raise directing.CaptureFailed(
                     "gate 10",
-                    f"signed in as {who!r}, {listed} experiments listed, {total} in the API;"
-                    f" the storyboard ends with {end.model_dump()}",
+                    "; ".join(why) + f"; the storyboard ends with {end.model_dump()}",
                 )
         finally:
             browser.close()
@@ -462,6 +504,11 @@ def record(
         ),
         "9": (True, {"checks": tally.focus_checks, "cues": len(director.cues)}, ""),
         "U1": (True, {"checks": tally.header_checks}, ""),
+        "U2": (
+            tally.number_checks == len(director.cues),
+            {"checks": tally.number_checks, "numbered_cues": tally.numbered_cues},
+            "a cue's numbers were not checked",
+        ),
         "U4": (True, {"checks": tally.forbidden_checks, "texts": list(forbidden)}, ""),
         "11": eleven(
             (
@@ -512,13 +559,122 @@ def _merge(verdict, extra):
     return ok, {**numbers, **extra}, why
 
 
+def refuse_unquoted_code(board: storyboard.Storyboard, tree: Path) -> None:
+    """A code card shows the recorded release's docs, line for line (C10)."""
+    from showcase.capture import director as directing
+
+    for scene in board.scenes:
+        code = scene.card.code if scene.card is not None else None
+        if code is None:
+            continue
+        page = tree / code.doc
+        problems = (
+            storyboard.quoted_lines(page.read_text(encoding="utf-8"), code)
+            if page.is_file()
+            else [f"{code.doc} is not in the recorded tree"]
+        )
+        if problems:
+            raise directing.CaptureFailed(
+                "C10 copy", f"scene {scene.id}: {'; '.join(problems)}"
+            )
+
+
+#: The longest the storyboard's traffic may take (video 2's card says "minutes";
+#: 63,000 users took 6 minutes on a local stack).
+TRAFFIC_MAX_S = 1200.0
+
+
+class Users:
+    """The storyboard's simulated users (``traffic``), off camera, between scenes.
+
+    ``start``: look up the experiment the video made, make an API key for it
+    (its value is a needle from then on), and send until the first users are
+    in. ``finish``: wait for the last. ``end_state``: gate 10's half for the
+    experiment. Nothing at all for a storyboard without traffic.
+    """
+
+    def __init__(
+        self,
+        plan: Optional[storyboard.Traffic],
+        api_url: str,
+        token: str,
+        redactor: Any,
+        log: Callable[[str], None],
+    ):
+        self.traffic = plan
+        self.api_url = api_url
+        self.token = token
+        self.redactor = redactor
+        self.log = log
+        self.sender: Optional[traffic.Sender] = None
+        self.report: Optional[traffic.Report] = None
+
+    def start(self) -> None:
+        assert self.traffic is not None
+        named = experiments_named(self.api_url, self.token, self.traffic.experiment)
+        if len(named) != 1 or not named[0].get("key"):
+            raise StackError(
+                f"traffic: {len(named)} experiments named {self.traffic.experiment!r}"
+            )
+        made = traffic.plan(self.traffic, str(named[0]["key"]))
+        key = _api(
+            f"{self.api_url}/api/v1/api-keys",
+            self.token,
+            body={"name": "Showcase traffic"},
+        )["key"]
+        self.redactor.add(key)
+        self.sender = traffic.Sender(
+            made, api_url=self.api_url, api_key=key, workers=self.traffic.workers
+        )
+        self.log(f"traffic: {len(made.users)} users for {made.key}, off camera")
+        self.sender.start()
+        self.sender.wait_for(self.traffic.first, timeout=120)
+
+    def finish(self) -> None:
+        assert self.sender is not None
+        total = len(self.sender.plan.users)
+        self.report = self.sender.finish(
+            # The card says the traffic took minutes: refused past twenty.
+            timeout=TRAFFIC_MAX_S,
+            progress=lambda sent: self.log(f"traffic: {sent} of {total} users in"),
+        )
+        self.log(f"traffic: all {total} users in")
+
+    def stop(self) -> None:
+        if self.sender is not None:
+            self.sender.stop()
+
+    def end_state(
+        self, end: storyboard.ExperimentEnd, readings: Mapping[str, str]
+    ) -> Tuple[bool, Dict[str, Any], str]:
+        from showcase.capture import gates as judge
+
+        if self.sender is None or self.report is None:
+            return False, {}, "the traffic never finished"
+        named = experiments_named(self.api_url, self.token, end.name)
+        results = None
+        if len(named) == 1:
+            results = _api(
+                f"{self.api_url}/api/v1/results/{named[0]['id']}", self.token
+            )
+        made = self.sender.plan
+        ok, numbers, why = judge.experiment_end(
+            end,
+            named=named,
+            results=results,
+            planned=made.split,
+            report=self.report.by_arm,
+            oracle_p=traffic.generator().fisher_p_value(self.report.by_arm),
+            shown=readings.get(end.shown),
+        )
+        numbers["traffic"] = self.report.as_numbers()
+        numbers["planned_p_value"] = made.p_value
+        return ok, numbers, why
+
+
 def warm_results(api_url: str, token: str, name: str) -> None:
     """Ask for an experiment's results off camera, so the page loads them warm."""
-    items = _api(f"{api_url}/api/v1/experiments/?limit=100", token)["items"]
-    match = [item for item in items if item.get("name") == name]
-    if len(match) != 1:
-        raise StackError(f"warm_results: {len(match)} experiments named {name!r}")
-    ident = match[0]["id"]
+    ident = experiment_id(api_url, token, name)
     for path in (
         f"/api/v1/results/{ident}?correction_method=benjamini_hochberg&confidence_level=0.95",
         f"/api/v1/results/{ident}/daily",

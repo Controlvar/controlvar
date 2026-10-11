@@ -123,7 +123,13 @@ STATIC_NEEDLES: Tuple[str, ...] = (
 #: The demo seed's administrator, whom every video signs in as.
 DEMO_ADMIN = ("admin@demo.com", "Demo1234!")
 
+#: The SDK paths' rate limit on the tool's API. Video 2's traffic sends about
+#: 180 users a second through them (measured on a local stack), and the
+#: default 6,000 a minute would answer 429 from the 101st in a second.
+SDK_RATE_LIMIT_PER_MINUTE = 60_000
+
 #: The videos, by slug, in the order ``all`` records them.
 VIDEOS: Dict[str, str] = {
     "01-getting-started": "storyboards/01-getting-started.yaml",
+    "02-first-experiment": "storyboards/02-first-experiment.yaml",
 }
