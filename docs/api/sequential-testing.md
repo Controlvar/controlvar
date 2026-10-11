@@ -260,11 +260,22 @@ difference in rates, treatment minus control:
 
 For example, 10% against 13% and 10% against 7% at 10,000 users per arm both answer
 `stop_for_effect` with `strong_for_effect`. The first has a `confidence_sequence` of
-about 0.0173 to 0.0427, the second about -0.0427 to -0.0173. With a higher-is-better
+0.0157 to 0.0443, the second -0.0427 to -0.0173 (at the default α and τ²; they are not
+mirror images, because the variance is larger at 13%). With a higher-is-better
 metric the first is a win and the second is a harm. The dashboard's banner follows this
-table: it reads "Ready to stop" in green only for a change in the better direction,
-"Stop — the variant is significantly worse" in red for the other, and a neutral message
-when the interval includes 0.
+table for a conversion metric: it reads "Ready to stop" in green only for a change in the
+better direction, "Stop — the variant is significantly worse" in red for the other, and a
+neutral message when the interval includes 0.
+
+**Only for conversion metrics.** The analysis counts the users who sent the metric's
+event (the same count the results use for a conversion), whatever the metric's
+`metric_type`, so the `confidence_sequence` is always a difference in the share of users
+who sent the event. For a conversion metric that share is the metric. For a `duration`,
+`count`, `revenue` or `custom` metric it is not: with a lower-is-better metric such as a
+page load time, fewer treatment users sending the event can mean the page broke, not that
+it got faster. The table above therefore does not apply to those metrics, and the
+dashboard's banner does not judge their direction: it shows "Significant change detected
+— direction unknown" and leaves the call to you.
 
 ### In the results response
 

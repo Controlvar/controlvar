@@ -746,11 +746,11 @@ describe('the sequential block (#919)', () => {
       recommended_action: 'stop_for_effect',
     });
     const worse = stopBlock(-0.0427, -0.0173);
-    const metric = (is_primary: boolean, lower_is_better?: boolean) => ({
+    const metric = (is_primary: boolean, lower_is_better?: boolean, metric_type = 'conversion') => ({
       id: is_primary ? 'm1' : 'm2',
       name: is_primary ? 'Conversion Rate' : 'Bounce',
       event_name: 'e',
-      metric_type: 'conversion',
+      metric_type,
       is_primary,
       ...(lower_is_better === undefined ? {} : { lower_is_better }),
     });
@@ -797,6 +797,38 @@ describe('the sequential block (#919)', () => {
     it('takes a metric without the field as higher-is-better, the API default', async () => {
       const banner = await bannerFor(worse, [metric(true)]);
       expect(banner).toHaveAttribute('data-direction', 'worse');
+    });
+
+    // The analysis counts the users who sent the metric's event, whatever the
+    // metric_type. For a duration metric that is lower-is-better (page load
+    // time), a drop in that share can mean the page broke and stopped sending
+    // the event, so the banner must not call it an improvement.
+    it.each(['duration', 'count', 'revenue', 'custom'])(
+      'does not judge direction for a %s metric that is lower-is-better, with a negative interval',
+      async (type) => {
+        const banner = await bannerFor(worse, [metric(true, true, type)]);
+        expect(screen.getByTestId('action-label')).not.toHaveTextContent(/ready to stop/i);
+        expect(banner.className).not.toContain('bg-green-50');
+        expect(banner).toHaveAttribute('data-direction', 'unknown');
+        expect(screen.getByTestId('action-label')).toHaveTextContent(/direction unknown/i);
+      }
+    );
+
+    it('does not judge a non-conversion metric that is higher-is-better either', async () => {
+      const banner = await bannerFor(worse, [metric(true, false, 'duration')]);
+      expect(banner).toHaveAttribute('data-direction', 'unknown');
+      expect(banner.className).not.toContain('bg-red-50');
+    });
+
+    it('goes by the type of the metric the analysis ran on, the primary one', async () => {
+      const banner = await bannerFor(worse, [metric(false, true, 'conversion'), metric(true, true, 'duration')]);
+      expect(banner).toHaveAttribute('data-direction', 'unknown');
+    });
+
+    it('keeps judging a conversion metric, whatever other metrics the experiment has', async () => {
+      const banner = await bannerFor(worse, [metric(false, false, 'duration'), metric(true, true, 'conversion')]);
+      expect(banner).toHaveAttribute('data-direction', 'better');
+      expect(banner.className).toContain('bg-green-50');
     });
 
     it('does not call the change an improvement when the experiment has no metric to read', async () => {

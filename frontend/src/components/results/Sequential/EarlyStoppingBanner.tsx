@@ -17,7 +17,9 @@ interface EarlyStoppingBannerProps {
   confidenceSequence?: ConfidenceSequence | null;
   /**
    * Whether a lower value is the better one for the metric the analysis ran
-   * on (the primary metric). Undefined when the metric could not be read.
+   * on (the primary metric). Undefined when the metric could not be read, or
+   * is not a conversion: the analysis then compares the share of users who
+   * sent the event, and the banner does not judge direction.
    */
   lowerIsBetter?: boolean;
 }
@@ -30,8 +32,9 @@ interface EarlyStoppingBannerProps {
  * - `unclear`: the interval is missing or includes zero. The test is
  *   two-sided and 0 lies outside its interval whenever it stops, so this
  *   should not happen; it is shown as neutral rather than guessed at.
- * - `unknown`: the interval is one-sided but whether higher or lower is
- *   better could not be read.
+ * - `unknown`: the interval is one-sided but the banner cannot judge its
+ *   direction: whether higher or lower is better could not be read, or the
+ *   metric is not a conversion.
  */
 export type ChangeDirection = 'better' | 'worse' | 'unclear' | 'unknown';
 
@@ -89,7 +92,7 @@ const STOP_FOR_EFFECT_CONFIG: Record<ChangeDirection, BannerConfig> = {
   unknown: {
     label: 'Significant change detected — direction unknown',
     detail:
-      'Whether a higher or a lower value is better for this metric could not be read, so this cannot say if the change is an improvement. Check the confidence interval below.',
+      'The banner cannot say if this change is an improvement: it could not read whether a higher or a lower value is better for this metric, or the metric is not a conversion, where the test compares the share of users who sent the event, not the metric\'s value. Check the confidence interval below.',
     colorClass: 'bg-slate-50 border-slate-400 text-slate-800',
   },
 };

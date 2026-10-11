@@ -46,7 +46,8 @@ interface ExperimentReading {
   /**
    * Whether a lower value is better for the primary metric, the one the
    * sequential analysis runs on. Undefined when the experiment could not be
-   * read or has no metric.
+   * read, has no metric, or the metric is not a conversion (the analysis then
+   * compares the share of users who sent the event, not the metric's value).
    */
   lowerIsBetter: boolean | undefined;
 }
@@ -69,9 +70,18 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
     // The same metric the server picks for the sequential analysis: the
     // primary one, else the first. The API always sends `lower_is_better`; a
     // missing value is its default, false.
+    //
+    // The analysis counts the users who sent the metric's event, whatever the
+    // metric_type, so its interval is a difference in the share of users. Only
+    // for a conversion metric is that share the metric itself; for a duration,
+    // count, revenue or custom metric a drop in it can mean the event stopped
+    // firing, so the direction is left unknown and the banner does not judge.
     const metrics = experiment?.metrics ?? [];
     const sequentialMetric = metrics.find((m) => m.is_primary) ?? metrics[0];
-    const lowerIsBetter = sequentialMetric ? (sequentialMetric.lower_is_better ?? false) : undefined;
+    const lowerIsBetter =
+      sequentialMetric && sequentialMetric.metric_type === 'conversion'
+        ? (sequentialMetric.lower_is_better ?? false)
+        : undefined;
     if (experiment?.correction_method && typeof experiment.confidence_level === 'number') {
       return {
         settings: {

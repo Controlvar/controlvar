@@ -178,7 +178,7 @@ describe('SequentialMonitor', () => {
   it('tells a worse variant from a better one using the confidence sequence', () => {
     const worse: SequentialTestingResponse = {
       ...fullData,
-      confidence_sequence: { lower: -0.0427, upper: -0.0173, width: 0.0254, sample_size: 20000 },
+      confidence_sequence: { lower: -0.0427, upper: -0.0173, width: 0.0253, sample_size: 20000 },
     };
     const { rerender } = render(<SequentialMonitor data={worse} lowerIsBetter={false} />);
     expect(screen.getByTestId('early-stopping-banner')).toHaveAttribute('data-direction', 'worse');

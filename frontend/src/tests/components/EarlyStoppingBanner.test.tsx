@@ -11,18 +11,20 @@ const mockMSPRT: MSPRTResult = {
   boundary: 20.0,
 };
 
-// 10% -> 13% and 10% -> 7% at 10,000 users per arm: the same decision from the
-// mSPRT (a two-sided test), opposite sides of zero in the confidence sequence.
+// 10% -> 13% and 10% -> 7% at 10,000 users per arm, alpha 0.05, tau^2 0.001
+// (run_sequential_analysis): both stop_for_effect / strong_for_effect, with
+// confidence sequences 0.0157 to 0.0443 and -0.0427 to -0.0173 -- opposite
+// sides of zero, and not mirror images, because the variance is larger at 13%.
 const CS_UP: ConfidenceSequence = {
-  lower: 0.0173,
-  upper: 0.0427,
-  width: 0.0254,
+  lower: 0.0157,
+  upper: 0.0443,
+  width: 0.0287,
   sample_size: 20000,
 };
 const CS_DOWN: ConfidenceSequence = {
   lower: -0.0427,
   upper: -0.0173,
-  width: 0.0254,
+  width: 0.0253,
   sample_size: 20000,
 };
 const CS_STRADDLE: ConfidenceSequence = {
@@ -203,6 +205,8 @@ describe('EarlyStoppingBanner', () => {
       expect(el.className).toContain('bg-slate-50');
       expect(screen.getByTestId('action-label')).toHaveTextContent(/direction unknown/i);
       expect(screen.getByTestId('action-label')).not.toHaveTextContent(/ready to stop/i);
+      expect(screen.getByTestId('action-detail')).toHaveTextContent(/not a conversion/i);
+      expect(screen.getByTestId('action-detail')).toHaveTextContent(/share of users/i);
     });
 
     it('leaves the other actions as they were, whatever the direction', () => {
