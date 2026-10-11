@@ -117,6 +117,9 @@ WRONG_ROUTE_GRACE_POLLS = 6
 
 #: How much of CodeDeploy's error message the copy quotes.
 MESSAGE_LIMIT = 200
+# How much of CodeDeploy's message is searched for alarm names; the printed copy
+# stays at MESSAGE_LIMIT.
+ALARM_SCAN_LIMIT = 4096
 
 
 class AwsError(Exception):
@@ -219,8 +222,13 @@ def _alarm(
 ) -> int:
     """CodeDeploy stopped this deployment for an alarm (#148 W1)."""
     error = info.get("errorInformation") or {}
-    message = _one_line(error.get("message") or "")
-    names = alarm_names(message, alarms)
+    raw = str(error.get("message") or "")
+    message = _one_line(raw)
+    # The names are looked for in the whole message (bounded, flattened), not in
+    # the copy truncated to MESSAGE_LIMIT: CodeDeploy lists every activated alarm,
+    # and a second one, or one with a longer name, comes after the first 200
+    # characters (the captured staging stop d-F797PV8AL is 240).
+    names = alarm_names(" ".join(raw[:ALARM_SCAN_LIMIT].split()), alarms)
     said = f" CodeDeploy said: {message}" if message else ""
     rollback = info.get("rollbackInfo") or {}
     rollback_id = rollback.get("rollbackDeploymentId")

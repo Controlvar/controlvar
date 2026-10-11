@@ -189,13 +189,10 @@ def test_the_captured_canary_stop_is_an_alarm_with_its_rollback(aws):
     assert not [c for c in calls if "stop-deployment" in c]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="the copy looks for the alarm names in the first 200 characters of "
-    "CodeDeploy's message (MESSAGE_LIMIT), and this message names the green "
-    "alarm after them",
-)
+@pytest.mark.regression
 def test_the_captured_canary_stop_names_both_alarms(aws):
+    """The captured staging stop names the green alarm after character 200; the
+    names are found in the whole message, not the copy cut to MESSAGE_LIMIT."""
     _, _, _, outputs = _shift(aws, [tick("Ready"), alarm_tick(captured=CANARY_STOP)])
     assert outputs["alarms"] == f"{BLUE_ALARM}, {GREEN_ALARM}"
 
