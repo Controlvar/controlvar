@@ -124,6 +124,19 @@ class Report:
         }
 
 
+def direct_session() -> Any:
+    """A ``requests`` session that takes no proxy settings from the environment.
+
+    By default a session sends through ``HTTP_PROXY`` or ``ALL_PROXY`` when the
+    caller set one; the users go to the tool's own API only, directly.
+    """
+    import requests
+
+    session = requests.Session()
+    session.trust_env = False
+    return session
+
+
 class Sender:
     """Sends a plan's users from ``workers`` threads; ``finish`` waits for the last.
 
@@ -144,11 +157,7 @@ class Sender:
         self.api_url = api_url.rstrip("/")
         self.api_key = api_key
         self.workers = workers
-        if session is None:
-            import requests
-
-            session = requests.Session
-        self._session = session
+        self._session = session if session is not None else direct_session
         self.report = Report()
         self.failure: Optional[str] = None
         self._lock = threading.Lock()

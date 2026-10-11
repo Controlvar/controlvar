@@ -98,8 +98,18 @@ def _api(url: str, token: Optional[str] = None, body: Optional[dict] = None) -> 
         headers["Authorization"] = f"Bearer {token}"
     data = json.dumps(body).encode() if body is not None else None
     request = urllib.request.Request(url, data=data, headers=headers)
-    with urllib.request.urlopen(request, timeout=60) as answer:
+    with guard.http_opener().open(request, timeout=60) as answer:
         return json.load(answer)
+
+
+def forbidden_text(board: storyboard.Storyboard, ports: Ports) -> Tuple[str, ...]:
+    """What no cue may show (U4, checked at every cue start): the fixed list,
+    the storyboard's ``never_show`` and the tool's own ports."""
+    return (
+        config.FORBIDDEN_TEXT
+        + tuple(board.never_show)
+        + tuple(str(p) for p in (ports.api, ports.dashboard, ports.postgres))
+    )
 
 
 def experiments_named(api_url: str, token: str, name: str) -> List[Dict[str, Any]]:
@@ -369,11 +379,7 @@ def record(
     redactor = redaction.Redactor()
     redactor.add(token)
     ports = options.ports
-    forbidden = (
-        config.FORBIDDEN_TEXT
-        + tuple(board.never_show)
-        + tuple(str(p) for p in (ports.api, ports.dashboard, ports.postgres))
-    )
+    forbidden = forbidden_text(board, ports)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(env=guard.tool_env())
         try:

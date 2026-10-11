@@ -10,9 +10,12 @@ assigns by the server's hash.
 
 from __future__ import annotations
 
+import http.server
+import json
 import math
 import re
 import threading
+import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -466,7 +469,7 @@ class Found:
         return self.text
 
 
-def a_director(tmp_path):
+def a_director(tmp_path, forbidden=()):
     from showcase.capture import director, guard
 
     return director.Director(
@@ -477,7 +480,7 @@ def a_director(tmp_path):
         api_port=28400,
         dashboard_port=28401,
         redactor=director.redaction.Redactor(),
-        forbidden=(),
+        forbidden=forbidden,
         work=guard.WorkRoot(tmp_path / "work"),
     )
 
@@ -499,3 +502,182 @@ def test_the_director_refuses_a_caption_number_its_focus_does_not_show(tmp_path)
     )
     made.check_numbers("Review it, then create it.", Found("no number at all"))
     assert (made.tally.number_checks, made.tally.numbered_cues) == (3, 2)
+
+
+# --- never_show: the experiment page's "assign a user" panel stays off camera ----
+
+PANEL = "Assign a user from your app"
+
+
+class Page:
+    """A page whose viewport shows *drawn*, with a clean header and no alert."""
+
+    def __init__(self, drawn: str):
+        self.drawn = drawn
+
+    def evaluate(self, script, *args):
+        from showcase.capture import director
+
+        if script == director.HEADER_JS:
+            return {"wrapped": [], "cut": []}
+        if script == director.VIEWPORT_TEXT_JS:
+            return self.drawn
+        if script == director.BROKEN_JS:
+            return {"overlay": False, "alerts": []}
+        raise AssertionError("an unexpected script")
+
+
+class Focus(Found):
+    """A located element inside the page area, on top at its centre."""
+
+    def bounding_box(self):
+        return {"x": 100.0, "y": 100.0, "width": 200.0, "height": 40.0}
+
+    def evaluate(self, script, *args):
+        return True
+
+
+def test_never_show_keeps_the_assign_panel_out_of_every_cue(tmp_path):
+    from showcase.capture import director, run
+    from showcase.capture.stack import Ports
+
+    page_source = REPO / "frontend" / "src" / "pages" / "experiments" / "[id].tsx"
+    assert PANEL in page_source.read_text(encoding="utf-8"), "the panel's heading moved"
+    assert PANEL in board().never_show
+    forbidden = run.forbidden_text(board(), Ports(28400, 28401, 28402))
+    assert PANEL in forbidden
+
+    made = a_director(tmp_path, forbidden=forbidden)
+    made.where = "scene setup beat 8"
+    made.page = Page(f"Sticky add-to-cart bar Active {PANEL} curl -X POST")
+    with pytest.raises(
+        director.CaptureFailed,
+        match=f"U4: scene setup beat 8: the page shows '{PANEL}'",
+    ):
+        made.check_page(
+            made_box(), Focus("Active"), "Start it, and it is ready for shoppers."
+        )
+    # Without the panel the cue passes, and U4 ran in the same check as U2,
+    # whose count gate U2 holds equal to the number of cues.
+    made.page = Page("Sticky add-to-cart bar Active")
+    made.check_page(
+        made_box(), Focus("Active"), "Start it, and it is ready for shoppers."
+    )
+    assert (made.tally.forbidden_checks, made.tally.number_checks) == (2, 1)
+
+
+def made_box():
+    from showcase.capture import director
+
+    return director.Box(100.0, 100.0, 200.0, 40.0)
+
+
+# --- The tool's HTTP clients take no proxy settings from the environment ----------
+
+
+def serve(answer):
+    """A local HTTP server answering *answer(path)* as JSON (502 when None); its requests."""
+    seen = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def _reply(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            if length:
+                self.rfile.read(length)
+            seen.append((self.command, self.path, dict(self.headers)))
+            body = answer(self.path)
+            data = json.dumps(body).encode()
+            self.send_response(502 if body is None else 200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        do_GET = do_POST = _reply
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, seen
+
+
+@pytest.fixture
+def proxy(monkeypatch):
+    """A listener named by HTTP_PROXY and ALL_PROXY; what it was sent."""
+    server, seen = serve(lambda path: None)
+    address = f"http://127.0.0.1:{server.server_address[1]}"
+    for name in ("HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"):
+        monkeypatch.setenv(name, address)
+    for name in ("NO_PROXY", "no_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    # urlopen keeps the first opener it builds; a new process reads the environment.
+    monkeypatch.setattr(urllib.request, "_opener", None)
+    yield seen
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.fixture
+def api():
+    """The stand-in API: assigns every user to Control, answers any other call."""
+
+    def answer(path):
+        if path == "/api/v1/tracking/assign":
+            return {"assigned": True, "is_control": True, "variant_name": "Control"}
+        return {"total": 3}
+
+    server, seen = serve(answer)
+    yield f"http://127.0.0.1:{server.server_address[1]}", seen
+    server.shutdown()
+    server.server_close()
+
+
+def outcome(call):
+    try:
+        return call()
+    except Exception as error:  # what the call raised, compared below
+        return error
+
+
+@pytest.mark.regression
+def test_the_traffic_goes_to_the_api_with_a_proxy_in_the_environment(proxy, api):
+    url, seen = api
+    made = traffic.Plan(
+        key="sticky_add_to_cart_bar",
+        event="purchase",
+        users=[SimpleNamespace(user_id="user-1", variant_name="control")],
+        events_for=lambda user, arm: [],
+        split={},
+        p_value=None,
+    )
+    sender = traffic.Sender(made, api_url=url, api_key="key-1", workers=1)
+    sender.start()
+    got = outcome(lambda: sender.finish(timeout=30))
+    assert proxy == [], f"the proxy was sent {[(m, p) for m, p, _ in proxy]}"
+    assert isinstance(got, traffic.Report), got
+    assert got.by_arm == {"control": {"users": 1, "converting_users": 0}}
+    assert [(m, p, h.get("X-API-Key")) for m, p, h in seen] == [
+        ("POST", "/api/v1/tracking/assign", "key-1")
+    ]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("client", ["run._api", "stack._get"])
+def test_the_tools_own_calls_go_to_the_stack_with_a_proxy_in_the_environment(
+    proxy, api, client
+):
+    from showcase.capture import run, stack
+
+    url, seen = api
+    if client == "run._api":
+        got = outcome(lambda: run._api(f"{url}/api/v1/users/", "token-1"))
+        assert proxy == [], f"the proxy was sent {[(m, p) for m, p, _ in proxy]}"
+        assert got == {"total": 3}
+        assert seen[0][2].get("Authorization") == "Bearer token-1"
+    else:
+        got = outcome(lambda: stack._get(f"{url}/health"))
+        assert proxy == [], f"the proxy was sent {[(m, p) for m, p, _ in proxy]}"
+        assert got == b'{"total": 3}'
+    assert len(seen) == 1

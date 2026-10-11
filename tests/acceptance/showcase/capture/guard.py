@@ -16,6 +16,8 @@ and none of it needs a browser, so all of it is unit tested
   a path outside the work root, and a work root inside a git checkout.
 * ``RunLock``: one run per work root. A second refuses before it touches Docker.
 * ``free_bytes`` / ``refuse_low_disk``: the 4 GiB floor.
+* ``http_opener``: the tool's own HTTP calls take no proxy settings from the
+  environment, as its child processes take none (``PASSED``).
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ import os
 import re
 import shutil
 import socket
+import urllib.request
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
@@ -201,6 +204,15 @@ def child_env(
     env = {key: parent[key] for key in passed if key in parent}
     env.update(settings)
     return env
+
+
+def http_opener() -> urllib.request.OpenerDirector:
+    """urllib's opener for the tool's own HTTP calls: no proxy from the environment.
+
+    ``urlopen`` sends a request through ``HTTP_PROXY`` (and its kind) when the
+    caller set one; the tool's calls go to its own stack only, directly.
+    """
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def tool_env() -> Dict[str, str]:

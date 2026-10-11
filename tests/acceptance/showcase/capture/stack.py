@@ -22,7 +22,6 @@ import json
 import subprocess
 import time
 import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Mapping, Optional
@@ -46,7 +45,7 @@ class Ports:
 
 
 def _get(url: str, timeout: float = 10) -> bytes:
-    with urllib.request.urlopen(url, timeout=timeout) as answer:
+    with guard.http_opener().open(url, timeout=timeout) as answer:
         return answer.read()
 
 
