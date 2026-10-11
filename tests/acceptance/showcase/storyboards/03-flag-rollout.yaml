@@ -13,8 +13,11 @@
 #   under the caption before.
 # * Rollout schedules are made through the API (/api/v1/rollout-schedules);
 #   the flag page says so in its own words, and no caption shows a builder.
-#   Nothing here says the change reaches users at once: the SDKs keep an
-#   answer for up to five minutes.
+#   No caption claims the change reaches users at once (the SDKs keep an
+#   answer for up to five minutes). The page's own card text does say "The
+#   rollout percentage below applies immediately": it is product copy
+#   (frontend/src/pages/feature-flags/[id].tsx), on screen in cues 6-10 and
+#   ringed in cue 9, and this video shows it as the page draws it.
 slug: 03-flag-rollout
 title: Roll out a feature flag
 seed: demo
