@@ -4,7 +4,9 @@ The repository ships one development compose file, `docker-compose.yml` at the r
 header comment is the reference for every variable and profile; this page summarises it.
 Every host port below is published on `127.0.0.1` only. For a server, use
 [`deploy/compose/compose.yml`](https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml),
-described in [Releases, images and verification](../self-hosting/releases.md).
+whose header comment lists its commands and settings; see
+[Releases, images and verification](../self-hosting/releases.md) for the versions and
+how to verify the images.
 
 ## Services
 

@@ -7,13 +7,14 @@ server is ``deploy/compose/compose.yml``, which runs the published images.
 The navigation had the development guide under ``Self-Hosting -> Docker
 Compose``, so a reader who followed it set up the wrong thing.
 
-These read ``mkdocs.yml`` and two pages as text; no Docker, no git, so they run
+These read ``mkdocs.yml`` and pages as text; no Docker, no git, so they run
 in the docs-only gate's "Docs content tests" (this directory) and in
 ``scripts/core_build.sh``'s copy.
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -115,9 +116,67 @@ def test_the_docker_guide_says_it_is_for_local_development():
         "127.0.0.1",
         "short `SECRET_KEY`",
         "demo administrator",
-        "deploy/compose/compose.yml",
+        SELF_HOSTING_STACK,
+        "header comment",
     ):
         assert phrase in opening, f"the guide's opening does not say {phrase!r}"
+
+
+def test_the_pages_that_send_a_reader_to_the_stack_say_only_what_is_true():
+    """releases.md names compose.yml in a table row and has no run procedure;
+    the commands and settings are the file's header comment. A sentence that
+    says the page "describes" the stack is the claim this pins against."""
+    releases = (DOCS / "self-hosting" / "releases.md").read_text(encoding="utf-8")
+    assert "deploy/compose/compose.yml" in releases
+    for relative in (
+        "getting-started/docker-guide.md",
+        "getting-started/docker-compose-file.md",
+        "getting-started/quick-start.md",
+    ):
+        text = (DOCS / relative).read_text(encoding="utf-8")
+        assert SELF_HOSTING_STACK in text, f"{relative} does not link the stack"
+        assert "described in [Releases" not in text, relative
+        assert "cannot reach it" not in text, relative
+
+
+def test_no_page_starts_a_development_server_on_all_interfaces():
+    """`uvicorn ... --host 0.0.0.0` and `next dev -H 0.0.0.0` in a page or a
+    slash command are what a reader runs next to the development stack."""
+    sources = sorted(DOCS.rglob("*.md")) + sorted(
+        (REPO_ROOT / ".claude" / "commands").glob("*.md")
+    )
+    assert len(sources) > 100, "the scan found almost nothing: it is broken"
+    found: List[str] = []
+    for path in sources:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        for index in range(len(lines)):
+            if listens_on_all_interfaces(lines[index]):
+                where = path.relative_to(REPO_ROOT).as_posix()
+                found.append(f"{where}:{index + 1}: {lines[index].strip()}")
+    assert found == []
+
+
+def listens_on_all_interfaces(line: str) -> bool:
+    """A command line that starts uvicorn or next on 0.0.0.0 (not a CIDR)."""
+    return bool(
+        re.search(r"\b(uvicorn|next dev|npm run dev)\b", line)
+        and re.search(r"(?:--host|--hostname|-H)[ =]+0\.0\.0\.0(?![\w./])", line)
+    )
+
+
+@pytest.mark.parametrize(
+    "line, expected",
+    [
+        ("uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000", True),
+        ("npm run dev -- -H 0.0.0.0", True),
+        ("next dev --hostname=0.0.0.0", True),
+        ("uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000", False),
+        ("ALB: Ingress 443 from 0.0.0.0/0", False),
+        ("uvicorn backend.app.main:app --host 0.0.0.0/0", False),
+    ],
+)
+def test_a_planted_all_interfaces_command_is_seen(line, expected):
+    assert listens_on_all_interfaces(line) is expected
 
 
 # ---------------------------------------------------------------------------

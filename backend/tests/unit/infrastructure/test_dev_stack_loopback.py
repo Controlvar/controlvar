@@ -13,7 +13,12 @@ each is read here without Docker, so this runs in the unit job:
 * ``tests/alb/docker-compose.alb.yml``, the override that adds the ``alb``
   service to the development stack in the Docker Smoke job;
 * ``demo/setup-local.sh``, which starts the API with uvicorn and the dashboard
-  and two demo apps with ``next dev`` (whose default host is ``0.0.0.0``).
+  and two demo apps with ``next dev`` (whose default host is ``0.0.0.0``);
+* the ``dev`` script of ``frontend/``, ``demo/shoplab`` and ``demo/streampulse``
+  (``npm run dev``, ``make web``): ``next dev`` with ``-H 127.0.0.1``. Their
+  ``start`` scripts and the images' ``next start`` are deliberately not read:
+  inside a container the server must listen on every interface for the
+  published port to reach it.
 
 The checks are written as functions of the parsed text, and each is planted
 against a small offender below, so a check that stops firing fails here and
@@ -22,6 +27,7 @@ not only when the real file regresses.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
@@ -151,7 +157,7 @@ def test_loopback_entries_pass():
 # ---------------------------------------------------------------------------
 #: What starts a server in the script: each must name the loopback address.
 SERVER_START = re.compile(r"\b(uvicorn|npm run dev|next dev|next start)\b")
-HOST_FLAG = re.compile(r"(?:--host|--hostname|-H)[ =]+127\.0\.0\.1\b")
+HOST_FLAG = re.compile(r"(?:--host|--hostname|-H)[ =]+127\.0\.0\.1(?![\w.])")
 
 
 def logical_lines(script: str) -> List[str]:
@@ -203,6 +209,10 @@ PLANTED_SCRIPT = {
         "npm run dev -- -H 0.0.0.0\n",
         "names 0.0.0.0",
     ),
+    "a host that only begins 127.0.0.1": (
+        "npm run dev -- -H 127.0.0.10\n",
+        "starts a server without a 127.0.0.1 host flag",
+    ),
     "a host flag in a comment does not count": (
         "# uvicorn --host 127.0.0.1\nuvicorn backend.app.main:app --port 8000\n",
         "starts a server without a 127.0.0.1 host flag",
@@ -226,3 +236,65 @@ def test_loopback_listeners_pass():
         "# 0.0.0.0 only appears in this comment\n"
     )
     assert listens_beyond_loopback(script) == []
+
+
+# ---------------------------------------------------------------------------
+# The dev scripts of the three Next.js apps
+# ---------------------------------------------------------------------------
+DEV_SCRIPT_PACKAGES = (
+    "frontend/package.json",
+    "demo/shoplab/package.json",
+    "demo/streampulse/package.json",
+)
+
+
+def dev_script_problems(package: Mapping[str, Any]) -> List[str]:
+    """What is wrong with ``scripts.dev``: missing, 0.0.0.0, or no loopback flag."""
+    script = (package.get("scripts") or {}).get("dev")
+    if not script:
+        return ["has no dev script"]
+    if "0.0.0.0" in script:
+        return [f"dev script names 0.0.0.0: {script}"]
+    if not HOST_FLAG.search(script):
+        return [f"dev script has no {LOOPBACK} host flag: {script}"]
+    return []
+
+
+@pytest.mark.parametrize("relative", DEV_SCRIPT_PACKAGES)
+def test_every_dev_script_listens_on_loopback(relative):
+    package = json.loads((REPO_ROOT / relative).read_text(encoding="utf-8"))
+    assert package["scripts"]["dev"].startswith("next dev"), package["scripts"]["dev"]
+    assert dev_script_problems(package) == []
+
+
+PLANTED_DEV_SCRIPT = {
+    "next dev on its default host": (
+        {"scripts": {"dev": "next dev -p 3100"}},
+        "dev script has no 127.0.0.1 host flag",
+    ),
+    "next dev on 0.0.0.0, short flag": (
+        {"scripts": {"dev": "next dev -p 3100 -H 0.0.0.0"}},
+        "dev script names 0.0.0.0",
+    ),
+    "next dev on 0.0.0.0, long flag": (
+        {"scripts": {"dev": "next dev --hostname=0.0.0.0"}},
+        "dev script names 0.0.0.0",
+    ),
+    "a host that only begins 127.0.0.1": (
+        {"scripts": {"dev": "next dev -H 127.0.0.10"}},
+        "dev script has no 127.0.0.1 host flag",
+    ),
+    "no dev script": ({"scripts": {"build": "next build"}}, "has no dev script"),
+}
+
+
+@pytest.mark.parametrize(
+    "package, expected", PLANTED_DEV_SCRIPT.values(), ids=list(PLANTED_DEV_SCRIPT)
+)
+def test_a_planted_dev_script_is_named(package, expected):
+    problems = dev_script_problems(package)
+    assert any(expected in p for p in problems), problems
+
+
+def test_a_loopback_dev_script_passes():
+    assert dev_script_problems({"scripts": {"dev": "next dev -p 1 -H 127.0.0.1"}}) == []

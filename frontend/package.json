@@ -4,7 +4,7 @@
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3100",
+    "dev": "next dev -p 3100 -H 127.0.0.1",
     "build": "next build",
     "start": "next start",
     "lint": "cd .. && eslint --config frontend/eslint.config.mjs --no-error-on-unmatched-pattern --max-warnings 0 frontend/src modules/frontend/src",
