@@ -27,6 +27,9 @@ STATS = "backend/tests/unit/stats_validation"
 #: The seeded realistic scenarios (backend/tests/realistic/scenarios). They run
 #: in the Unit Tests job and need no platform, so a skip there is a lost test.
 REALISTIC = "backend/tests/realistic"
+#: The showcase tool's unit tests (#1066): meant to need no ffmpeg, browser or
+#: aws, so a skip there is a test that did not run.
+SHOWCASE = "backend/tests/unit/showcase"
 
 
 def _report(tmp_path: Path, cases: str) -> Path:
@@ -108,6 +111,7 @@ def _job_steps(workflow: str, job_name: str) -> list[dict]:
         ("pr-qa-gate.yml", "Unit Tests", UNIT),
         ("pr-qa-gate.yml", "Unit Tests", STATS),
         ("pr-qa-gate.yml", "Unit Tests", REALISTIC),
+        ("pr-qa-gate.yml", "Unit Tests", SHOWCASE),
         ("infrastructure-tests.yml", "CDK Stack Tests (Python)", CDK),
     ],
 )

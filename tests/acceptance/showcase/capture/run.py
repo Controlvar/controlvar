@@ -923,7 +923,11 @@ def install_stop_handlers() -> None:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    # The children are built from this copy, through the allow-lists in guard.
     environ = dict(os.environ)
+    # Nothing from the caller's shell reaches anything this process starts,
+    # Playwright's own driver included (as the render, showcase/render/__main__.py).
+    guard.strip_environment(os.environ)
     install_stop_handlers()
 
     def log(line: str) -> None:

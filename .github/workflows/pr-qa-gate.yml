@@ -130,10 +130,13 @@ jobs:
       # The statistical gates (stats_validation) must all run: a skipped gate
       # looks exactly like a passing one. So must the seeded realistic
       # scenarios (backend/tests/realistic): they need no running platform,
-      # and until they joined this job no workflow ran them. On this full
-      # checkout nothing under any of the three directories skips.
-      - name: No workflow, statistical-gate or realistic-scenario test was skipped
-        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic
+      # and until they joined this job no workflow ran them. So must the
+      # showcase tests (backend/tests/unit/showcase, #1066): they are meant to
+      # need no ffmpeg, browser or aws, and one that skipped for want of
+      # one of them would read as a pass. On this full checkout nothing under
+      # any of the four directories skips.
+      - name: No workflow, statistical-gate, realistic-scenario or showcase test was skipped
+        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic backend/tests/unit/showcase
 
       # The Lambda functions (event processor, flag evaluation) and their
       # shared package carry tests of their own (240 collected) that ran

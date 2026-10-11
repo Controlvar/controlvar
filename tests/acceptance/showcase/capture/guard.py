@@ -12,6 +12,9 @@ and none of it needs a browser, so all of it is unit tested
 * ``child_env``: a child's environment is built from an allow-list, never
   copied from the caller's. ``AWS_PROFILE``, a developer's ``POSTGRES_PORT``
   and anything else the caller has set do not reach it.
+* ``strip_environment``: the process's own environment is cut to the same list
+  when it starts, as the render does, so the Playwright driver (which
+  ``sync_playwright()`` starts from it) gets what the other children get.
 * ``WorkRoot``: every deletion goes through ``WorkRoot.remove``, which refuses
   a path outside the work root, and a work root inside a git checkout.
 * ``RunLock``: one run per work root. A second refuses before it touches Docker.
@@ -30,7 +33,16 @@ import shutil
 import socket
 import urllib.request
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import (
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 from showcase import contract
 from showcase.capture import config
@@ -218,6 +230,24 @@ def http_opener() -> urllib.request.OpenerDirector:
 def tool_env() -> Dict[str, str]:
     """For the tool's own helpers (git, cp, ps, ffmpeg): ``PASSED`` and nothing else."""
     return child_env({}, parent=os.environ)
+
+
+def strip_environment(
+    environ: MutableMapping[str, str], keep: Sequence[str] = PASSED
+) -> List[str]:
+    """Delete from *environ* every key not in *keep*; return the names removed, sorted.
+
+    ``main`` calls it on ``os.environ`` before anything else starts, as the
+    render does (``showcase/render/__main__.py``). A program started without an
+    ``env=`` of its own inherits the process's environment, and
+    ``sync_playwright()`` starts Playwright's driver that way; after this it
+    holds ``PASSED`` and nothing else, the environment ``tool_env`` gives the
+    helpers and the browser.
+    """
+    removed = sorted(key for key in environ if key not in keep)
+    for key in removed:
+        del environ[key]
+    return removed
 
 
 # ---------------------------------------------------------------------------
