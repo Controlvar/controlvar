@@ -103,7 +103,7 @@ python tests/sdk-contract/live/run_live_contract.py
 python tests/sdk-contract/live/run_live_contract.py --sdk go --sdk python --strict
 ```
 
-- `python backend/scripts/seed_sdk_contract.py`: experiment sdk_contract_ab, flag sdk_contract_flag, API keys -> live/.api_key, live/.api_key_local (sdk:ruleset)
+- `python backend/scripts/seed_sdk_contract.py`: experiment sdk_contract_ab, flag sdk_contract_flag, API keys -> live/.api_key, live/.api_key_local (sdk:ruleset); runs only with ENVIRONMENT development or test, like the demo seeds
 - `uvicorn backend.app.main:app --port 8000 &`: or ./demo/setup-local.sh
 - `python tests/sdk-contract/live/run_live_contract.py`: all SDKs whose toolchain is installed
 
