@@ -5,7 +5,10 @@
 # fuzz arm) and `make fuzz` install the two files with --no-deps and then run
 # `pip check`, which fails when a package one of them needs is missing here.
 # So a Schemathesis or Hypothesis bump that brings a new dependency fails the
-# install until the dependency is pinned here, in the same pull request.
+# install until the dependency is pinned here, in the same pull request. The
+# same goes for a pin one package refuses (hypothesis-graphql needs
+# graphql-core below 3.3): every pull request runs the install, so it is red
+# there rather than on the nightly run.
 #
 # pytest, PyYAML and requests are pinned in backend/requirements.txt too, and
 # scripts/check_requirements_lock.py fails the lint job unless both files

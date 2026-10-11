@@ -184,12 +184,13 @@ updates:
   # and tests/fuzz/unreached.toml: a 5xx no longer found reads as a stale
   # entry, a new one as unlisted, and the night turns red for a reason that is
   # not the API. So these pull requests are NOT merged automatically
-  # (dependabot-automerge.yml leaves /tests/fuzz alone), and no check on the
-  # pull request runs the fuzzer. Judge one by dispatching fuzz.yml on its
-  # branch (`gh workflow run fuzz.yml --ref <branch>`): green on all three
-  # passes, merge it; a list moved, rebuild it with `make fuzz` in the same
-  # pull request; the install failed `pip check`, pin the new dependency in
-  # constraints.txt. pytest, PyYAML and requests are pinned in
+  # (dependabot-automerge.yml leaves /tests/fuzz alone). Every pull request
+  # installs the pins and runs `pip check` (Base Requirements Only, through
+  # scripts/check_fuzz_install.sh), but no check on it runs the fuzzer. Judge
+  # one by dispatching fuzz.yml on its branch (`gh workflow run fuzz.yml
+  # --ref <branch>`): green on all three passes, merge it; a list moved,
+  # rebuild it with `make fuzz` in the same pull request; the install failed
+  # `pip check`, pin the new dependency in constraints.txt. pytest, PyYAML and requests are pinned in
   # backend/requirements.txt as well and move with the `/backend` entry above
   # (the lock check fails until constraints.txt follows), so they are ignored
   # here.

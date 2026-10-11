@@ -5,7 +5,9 @@
 # different version makes different requests from the same seed, and `make
 # fuzz FUZZ_SEED=<seed>` would no longer repeat a CI run. Everything the two
 # pull in is pinned in constraints.txt (named below), and both files are
-# installed with --no-deps and checked with `pip check`.
+# installed with --no-deps and checked with `pip check`, by
+# scripts/check_fuzz_install.sh: the fuzz run, `make fuzz` and every pull
+# request (the Base Requirements Only check) call that one script.
 #
 # A bump of either moves the requests the nightly run sends, and so can move
 # tests/fuzz/known-5xx.toml and tests/fuzz/unreached.toml. Such a pull request

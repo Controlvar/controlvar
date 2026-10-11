@@ -42,11 +42,13 @@ name: Dependabot auto-merge
 #                                    Hypothesis and what they pull in). A
 #                                    bump changes the requests the nightly
 #                                    fuzz run sends, which can move its
-#                                    known-5xx and unreached lists, and no
-#                                    check on the pull request runs the
-#                                    fuzzer. Someone dispatches fuzz.yml on
-#                                    the branch and rebuilds a list that
-#                                    moved, in the same pull request.
+#                                    known-5xx and unreached lists. Every
+#                                    pull request installs the pins and runs
+#                                    `pip check` (Base Requirements Only),
+#                                    but no check on it runs the fuzzer.
+#                                    Someone dispatches fuzz.yml on the
+#                                    branch and rebuilds a list that moved,
+#                                    in the same pull request.
 #                                    A pip update whose directory came
 #                                    through empty is left too: it may be
 #                                    one of these.

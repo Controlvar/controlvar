@@ -225,7 +225,8 @@ jobs:
     # collection and pytest exited 3 having collected zero tests -- and no
     # developer could reproduce it, because their venv has every package.
     #
-    # ~90 seconds: one pip install, one import, the smoke suite.
+    # ~90 seconds: one pip install, one import, the smoke suite, and the
+    # fuzzer's pins installed into a venv of their own (the last step).
     name: Base Requirements Only
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -282,6 +283,17 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         run: python -m pytest backend/tests/smoke -p no:cov -q --tb=short
+
+      # Every pull request installs the API fuzzer's pins the way a fuzz run
+      # does (the script is the one _platform.yml's fuzz arm calls) and runs
+      # `pip check`, so a pin pair that cannot install together is red here and
+      # not on the scheduled run after it merged (#1128). Here because
+      # this job already does a bare pip install on the Python the fuzz arm
+      # uses (3.11), and the fuzzer's venv is a separate one, built in a
+      # temporary directory: the interpreter the steps above tested is not
+      # touched. The fuzz run itself is not part of any pull request check.
+      - name: The fuzzer's pins install and pass pip check
+        run: bash scripts/check_fuzz_install.sh
 
   smoke-tests:
     needs: changes

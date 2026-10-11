@@ -242,14 +242,13 @@ jobs:
       # installing it next to the backend would move packages the API under
       # test imports (tests/fuzz/requirements.txt pins it).
       # --no-deps and `pip check`: the venv holds exactly the two files' pins,
-      # and a dependency neither pins fails here rather than floating.
+      # and a dependency neither pins fails here rather than floating. The
+      # commands are scripts/check_fuzz_install.sh's, which every pull request
+      # also runs (pr-qa-gate.yml, "Base Requirements Only"), so the install a
+      # pull request is judged on is this one.
       - name: Install the fuzzer
         if: ${{ !inputs.skip && inputs.suite == 'fuzz' }}
-        run: |
-          set -euo pipefail
-          python -m venv "$RUNNER_TEMP/fuzz-venv"
-          "$RUNNER_TEMP/fuzz-venv/bin/pip" install --quiet --disable-pip-version-check --no-deps -r tests/fuzz/requirements.txt -r tests/fuzz/constraints.txt
-          "$RUNNER_TEMP/fuzz-venv/bin/pip" check --disable-pip-version-check
+        run: bash scripts/check_fuzz_install.sh "$RUNNER_TEMP/fuzz-venv"
 
       # ── boot ────────────────────────────────────────────────────────────────
       # Everything runs from the repository root: the code imports backend.app.*
