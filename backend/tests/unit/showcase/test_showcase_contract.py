@@ -45,7 +45,7 @@ def test_the_frame_is_1080p_with_the_band_under_the_page():
 def test_cards_are_whole_frames_and_the_length_bounds_are_the_plans():
     assert contract.TITLE_FRAMES * 1000 == contract.TITLE_CARD_MS * contract.FPS
     assert contract.END_FRAMES * 1000 == contract.END_CARD_MS * contract.FPS
-    assert (contract.MIN_VIDEO_MS, contract.MAX_VIDEO_MS) == (55_000, 75_000)
+    assert (contract.MIN_VIDEO_MS, contract.MAX_VIDEO_MS) == (55_000, 90_000)
     assert contract.DISK_FLOOR_BYTES == 4 * 1024**3
 
 
@@ -207,7 +207,7 @@ def test_the_video_length_counts_the_cards(tmp_path):
     cues = default_cues()[:9]
     # 45.8 s of recording + 7 s of cards = 52.8 s: under 55 s
     text = refusal(make_capture(tmp_path / "c", cues=cues, duration_ms=45_800))
-    assert "the video would be 52.800 s with its cards; a showcase is 55-75 s" in text
+    assert "the video would be 52.800 s with its cards; a showcase is 55-90 s" in text
 
 
 def test_needles_must_be_private_present_and_long_enough(tmp_path):
@@ -344,6 +344,8 @@ def test_the_contract_module_needs_only_the_standard_library():
         and not line.startswith("from __future__")
     }
     assert imported <= {
+        "fractions",
+        "hashlib",
         "json",
         "math",
         "re",

@@ -112,7 +112,7 @@ def test_gate_2_refuses_each_planted_format_defect(change, message):
 def test_gate_1_refuses_a_short_video():
     info = planted(lambda i: i["format"].update(duration="40.000000"))
     problems, numbers = probe.length_problems(info, "01-getting-started.mp4", 1200)
-    assert problems == ["01-getting-started.mp4 is 40.0 s; a showcase is 55-75 s"]
+    assert problems == ["01-getting-started.mp4 is 40.0 s; a showcase is 55-90 s"]
     assert numbers["duration_s"] == 40.0
 
 

@@ -53,7 +53,7 @@ def ffprobe(path: Path) -> Dict[str, Any]:
 def length_problems(
     info: Dict[str, Any], name: str, expected_frames: int
 ) -> Tuple[List[str], Dict[str, Any]]:
-    """Gate 1: the finished file is 55-75 s, and exactly as long as its frames."""
+    """Gate 1: the finished file is 55-90 s, and exactly as long as its frames."""
     duration = float(info.get("format", {}).get("duration", "nan"))
     numbers = {"duration_s": duration, "expected_s": expected_frames / contract.FPS}
     problems: List[str] = []
