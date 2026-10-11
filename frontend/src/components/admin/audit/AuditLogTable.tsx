@@ -5,6 +5,7 @@ import { AuditLogDetailPanel } from './AuditLogDetailPanel';
 import { AuditLogFilters } from './AuditLogFilter';
 import { localDayRange } from '@/utils/auditDates';
 import { actionLabel, actorLabel, entityLabel } from './actionLabels';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 interface AuditLogTableProps {
   filters?: AuditLogFilters;
@@ -14,7 +15,7 @@ const PAGE_LIMIT = 50;
 
 function formatTimestamp(ts: string): string {
   try {
-    return new Date(ts).toLocaleString();
+    return parseApiTimestamp(ts).toLocaleString();
   } catch {
     return ts;
   }

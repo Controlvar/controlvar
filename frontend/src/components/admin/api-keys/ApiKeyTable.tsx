@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ApiKey } from '@/types/admin';
 import { apiFetch } from '@/services/api';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 interface ApiKeyTableProps {
   onCreateKey: () => void;
@@ -11,7 +12,7 @@ interface ApiKeyTableProps {
 function formatDate(isoString?: string | null): string {
   if (!isoString) return '—';
   try {
-    return new Date(isoString).toLocaleString();
+    return parseApiTimestamp(isoString).toLocaleString();
   } catch {
     return isoString;
   }
@@ -22,7 +23,7 @@ export type KeyState = 'active' | 'expired' | 'inactive';
 /** Derive the display state from the fields the API actually returns. */
 export function keyState(key: ApiKey, now: Date = new Date()): KeyState {
   if (!key.is_active) return 'inactive';
-  if (key.expires_at && new Date(key.expires_at).getTime() <= now.getTime()) return 'expired';
+  if (key.expires_at && parseApiTimestamp(key.expires_at).getTime() <= now.getTime()) return 'expired';
   return 'active';
 }
 

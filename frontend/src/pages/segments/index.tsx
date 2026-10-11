@@ -7,6 +7,7 @@ import { ROLE_NOTE, segmentErrorCopy } from '@/utils/segmentErrors';
 import { canChangeSegments } from '@/utils/segmentPermissions';
 import { segmentRulesAreValid } from '@/utils/segmentRules';
 import { KIND_LABELS, STATUS_COLORS, STATUS_LABELS } from '@/components/segments/segmentLabels';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 type Filter = SegmentStatus | 'all';
 
@@ -18,7 +19,7 @@ const FILTERS: Array<{ label: string; value: Filter }> = [
 ];
 
 function formatDate(value: string): string {
-  const d = new Date(value);
+  const d = parseApiTimestamp(value);
   return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString();
 }
 

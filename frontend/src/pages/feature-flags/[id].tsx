@@ -33,6 +33,7 @@ import { PageTitle } from '@/components/PageTitle';
 import { FlagToggle } from '@/components/feature-flags/FlagToggle';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { FLAG_ROLE_NOTE, canChangeFeatureFlags } from '@/utils/experimentPermissions';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 const SCHEDULE_STATUS_COLORS: Record<string, string> = {
   draft: 'bg-slate-100 text-slate-700',
@@ -57,7 +58,7 @@ const TRIGGER_LABELS: Record<string, string> = {
 
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return '—';
-  const d = new Date(value);
+  const d = parseApiTimestamp(value);
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }
 
@@ -102,7 +103,7 @@ export function pickSchedule(items: RolloutSchedule[]): RolloutSchedule | null {
   return [...items].sort((a, b) => {
     const r = (rank[a.status] ?? 9) - (rank[b.status] ?? 9);
     if (r !== 0) return r;
-    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    return parseApiTimestamp(b.updated_at).getTime() - parseApiTimestamp(a.updated_at).getTime();
   })[0];
 }
 

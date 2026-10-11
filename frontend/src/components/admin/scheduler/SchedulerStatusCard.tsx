@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SchedulerHealth } from '@/types/admin';
 import { SchedulerRunHistory } from './SchedulerRunHistory';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 interface SchedulerStatusCardProps {
   scheduler: SchedulerHealth;
@@ -8,7 +9,7 @@ interface SchedulerStatusCardProps {
 
 function formatDate(isoString: string): string {
   try {
-    return new Date(isoString).toLocaleString();
+    return parseApiTimestamp(isoString).toLocaleString();
   } catch {
     return isoString;
   }

@@ -14,6 +14,7 @@
  * object at the bottom.
  */
 import { apiFetch, ApiError, isApiError, Role } from '@/services/api';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 // ---------------------------------------------------------------------------
 // Shapes (modules/backend/app/schemas/responses_warehouse.py)
@@ -390,7 +391,7 @@ function detailRecord(err: ApiError): Record<string, unknown> {
 
 /** Hours and minutes from `now` until `iso`, e.g. `5 h 12 min`. */
 export function untilText(iso: string, now: Date = new Date()): string | null {
-  const at = Date.parse(iso);
+  const at = parseApiTimestamp(iso).getTime();
   if (Number.isNaN(at)) return null;
   const minutes = Math.max(0, Math.ceil((at - now.getTime()) / 60000));
   const h = Math.floor(minutes / 60);
@@ -401,7 +402,7 @@ export function untilText(iso: string, now: Date = new Date()): string | null {
 /** `2026-09-28 00:00 UTC` */
 export function utcText(iso: string | null | undefined): string {
   if (!iso) return '—';
-  const d = new Date(iso);
+  const d = parseApiTimestamp(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const pad = (n: number) => String(n).padStart(2, '0');
   return (
@@ -535,7 +536,7 @@ export function costText(run: Pick<WarehouseRun, 'warehouse_type' | 'job_metadat
 
 export function durationText(run: Pick<WarehouseRun, 'started_at' | 'finished_at'>): string | null {
   if (!run.started_at || !run.finished_at) return null;
-  const ms = Date.parse(run.finished_at) - Date.parse(run.started_at);
+  const ms = parseApiTimestamp(run.finished_at).getTime() - parseApiTimestamp(run.started_at).getTime();
   return Number.isFinite(ms) && ms >= 0 ? secondsText(ms) : null;
 }
 

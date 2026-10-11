@@ -20,6 +20,8 @@ const moduleTargets = full
 
 module.exports = {
   testEnvironment: 'jsdom',
+  // Pins the process zone to America/Los_Angeles; see the file for why.
+  globalSetup: '<rootDir>/jest.global-setup.js',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   roots: full ? ['<rootDir>', MODULES_DIR] : ['<rootDir>'],
   // Searched after the normal node_modules walk-up (like NODE_PATH), so the

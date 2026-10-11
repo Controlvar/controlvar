@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AdminService } from '@/services/admin';
 import { SchedulerRun } from '@/types/admin';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 interface SchedulerRunHistoryProps {
   schedulerName: string;
@@ -8,7 +9,7 @@ interface SchedulerRunHistoryProps {
 
 function formatDate(isoString: string): string {
   try {
-    return new Date(isoString).toLocaleString();
+    return parseApiTimestamp(isoString).toLocaleString();
   } catch {
     return isoString;
   }

@@ -10,6 +10,7 @@ import {
   FeatureFlagsService,
   isFlagOn,
 } from '@/services/featureFlags';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 const STATUS_FILTERS: Array<{ label: string; value: FeatureFlagStatus | 'all' }> = [
   { label: 'All', value: 'all' },
@@ -18,7 +19,7 @@ const STATUS_FILTERS: Array<{ label: string; value: FeatureFlagStatus | 'all' }>
 ];
 
 function formatDate(value: string): string {
-  const d = new Date(value);
+  const d = parseApiTimestamp(value);
   return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString();
 }
 

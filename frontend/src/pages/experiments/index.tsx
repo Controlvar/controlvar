@@ -13,6 +13,7 @@ import { PageTitle } from '@/components/PageTitle';
 import { FirstRunChecklist } from '@/components/experiments/FirstRunChecklist';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { canCreateExperiment } from '@/utils/experimentPermissions';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 const STATUS_FILTERS: Array<{ label: string; value: ExperimentStatus | 'all' }> = [
   { label: 'All', value: 'all' },
@@ -171,7 +172,7 @@ export default function ExperimentsPage() {
                       {exp.variants?.length ?? 0}
                     </td>
                     <td className="px-4 py-3 text-slate-500">
-                      {new Date(exp.created_at).toLocaleDateString()}
+                      {parseApiTimestamp(exp.created_at).toLocaleDateString()}
                     </td>
                   </tr>
                 ))}

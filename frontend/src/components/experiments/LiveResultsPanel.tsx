@@ -17,6 +17,7 @@ import {
   formatSignedPct,
   isFiniteNumber,
 } from '@/components/results/shared/resultFormat';
+import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -201,7 +202,7 @@ export function LiveResultsPanel({ experimentId }: LiveResultsPanelProps) {
   }, [status]);
 
   const lastUpdated = snapshot?.timestamp
-    ? new Date(snapshot.timestamp).toLocaleTimeString()
+    ? parseApiTimestamp(snapshot.timestamp).toLocaleTimeString()
     : null;
 
   return (
