@@ -169,7 +169,7 @@ scenes:
       - before:
           - click: {role: tab, name: Live}
           - wait_for: {testid: live-indicator}
-        cue: Each refresh shows more shoppers, split evenly.
+        cue: Each refresh shows more shoppers, split about evenly.
         focus: {testid: live-results-panel}
         steps:
           - look: {testid: variants-table}
@@ -194,7 +194,7 @@ scenes:
     results_of: Sticky add-to-cart bar
     warm_results: [Sticky add-to-cart bar]
     beats:
-      - cue: "Sticky bar wins: 12.1% more purchases, significant at 95%."
+      - cue: "Sticky bar wins: a 12.1% lift, significant at 95%."
         focus: {testid: experiment-summary}
         record:
           recommendation: {testid: recommendation-reason}
