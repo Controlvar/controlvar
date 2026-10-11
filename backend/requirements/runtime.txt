@@ -45,7 +45,7 @@ sendgrid==6.12.5
 # ANTHROPIC_API_KEY / OPENAI_API_KEY themselves; with no key set, nothing calls
 # a provider. Google (google.generativeai) is not here: that provider is
 # tracked separately in #196.
-anthropic==1.12.0
+anthropic==1.12.1
 openai==3.26.0
 
 # Statistics
