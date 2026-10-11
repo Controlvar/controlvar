@@ -275,12 +275,12 @@ These are the dashboard's **build-time** dependencies. The dashboard image runs 
 |---|---|
 | `@img/sharp-linux-x64` | 0.35.5 |
 | `@img/sharp-linuxmusl-x64` | 0.35.5 |
-| `@playwright/test` | 1.63.0 |
+| `@playwright/test` | 1.64.0 |
 | `@swc/helpers` | 0.5.23 |
 | `baseline-browser-mapping` | 2.11.21 |
 | `detect-libc` | 2.1.2 |
-| `playwright` | 1.63.0 |
-| `playwright-core` | 1.63.0 |
+| `playwright` | 1.64.0 |
+| `playwright-core` | 1.64.0 |
 | `sharp` | 0.35.5 |
 
 #### BSD-3-Clause (2)
