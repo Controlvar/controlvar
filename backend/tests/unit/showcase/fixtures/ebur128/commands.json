@@ -1,0 +1,27 @@
+{
+  "_about": "Captured from the real ffmpeg on 2026-10-11 by the commands below (stderr, verbatim). The signals are ffmpeg's own pink noise, not speech: the voice step only reads the summary's format and numbers. No audio file is kept.",
+  "ffmpeg": "ffmpeg version 8.0.1 Copyright (c) 2000-2025 the FFmpeg developers",
+  "typical.txt": {
+    "signal": "ffmpeg -nostdin -v error -y -f lavfi -i anoisesrc=color=pink:amplitude=0.36:seed=7:sample_rate=48000:duration=3 -ac 1 -c:a pcm_s16le -bitexact typical.wav",
+    "measure": "ffmpeg -nostdin -hide_banner -nostats -i typical.wav -af ebur128=peak=true -f null -",
+    "integrated_lufs": -23.4,
+    "true_peak_dbtp": -10.5
+  },
+  "hot.txt": {
+    "signal": "ffmpeg -nostdin -v error -y -f lavfi -i anoisesrc=color=pink:amplitude=0.36:seed=7:sample_rate=48000:duration=3 -f lavfi -i \"aevalsrc=exprs='if(between(t\\,1.5\\,1.5004)\\,0.75\\,0)':sample_rate=48000:duration=3\" -filter_complex \"[0:a][1:a]amix=inputs=2:normalize=0\" -ac 1 -c:a pcm_s16le -bitexact hot.wav",
+    "measure": "ffmpeg -nostdin -hide_banner -nostats -i hot.wav -af ebur128=peak=true -f null -",
+    "integrated_lufs": -23.4,
+    "true_peak_dbtp": -1.5
+  },
+  "quiet.txt": {
+    "signal": "ffmpeg -nostdin -v error -y -f lavfi -i anoisesrc=color=pink:amplitude=0.12:seed=7:sample_rate=48000:duration=3 -ac 1 -c:a pcm_s16le -bitexact quiet.wav",
+    "measure": "ffmpeg -nostdin -hide_banner -nostats -i quiet.wav -af ebur128=peak=true -f null -",
+    "integrated_lufs": -33.0,
+    "true_peak_dbtp": -20.0
+  },
+  "v-error.txt": {
+    "signal": "typical.wav, as above",
+    "measure": "ffmpeg -nostdin -hide_banner -nostats -v error -i typical.wav -af ebur128=peak=true -f null -",
+    "note": "empty: ebur128 logs its summary at the info level"
+  }
+}

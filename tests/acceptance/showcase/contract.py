@@ -41,11 +41,13 @@ in the CI unit job, which installs neither Playwright nor ffmpeg.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
 import stat
 from dataclasses import dataclass
+from fractions import Fraction
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -65,9 +67,10 @@ FPS = 30
 
 TITLE_CARD_MS = 3000
 END_CARD_MS = 4000
-#: The finished video, cards included, is 55 to 75 seconds long (inclusive).
+#: The finished video, cards included, is 55 to 90 seconds long (inclusive):
+#: 90 s since the videos are narrated (D71), which holds each beat longer.
 MIN_VIDEO_MS = 55_000
-MAX_VIDEO_MS = 75_000
+MAX_VIDEO_MS = 90_000
 
 # --- Captions --------------------------------------------------------------
 
@@ -563,6 +566,180 @@ def read_needles(path: Path) -> List[str]:
     if problems:
         raise CaptureRefused(path.parent, problems)
     return _needle_lines(path)
+
+
+# --- Narration (the voice step's clips) -------------------------------------
+#
+# A storyboard's ``say:`` sentences are spoken by Amazon Polly, one clip a
+# sentence, made by ``python -m showcase.voice`` before any capture and kept in
+# a cache outside every repository. What follows is what the voice step, and
+# later the capture and the render, must agree on about a clip: how it is asked
+# for, how it is named, its pace, its length and its level.
+
+#: Amazon Polly's generative engine, voice Ruth (D71). Another voice is a plan
+#: change, not an option.
+VOICES: Tuple[str, ...] = ("Ruth",)
+VOICE_ENGINE = "generative"
+#: What Polly is asked for: MP3 at the generative engine's own rate.
+VOICE_FORMAT = "mp3"
+POLLY_RATE = "24000"
+POLLY_REGION = "us-west-2"
+#: The 90% pace (D71): one ffmpeg ``atempo`` after synthesis, because the
+#: generative engine accepts SSML prosody and ignores it (measured).
+TEMPO = "0.9"
+#: Every clip in the cache: 48 kHz, mono, 16-bit PCM; 1,600 samples a frame.
+VOICE_RATE = 48_000
+SAMPLES_PER_FRAME = VOICE_RATE // FPS
+#: Changed whenever anything that makes a clip changes, so no old clip is reused.
+VOICE_RECIPE = 1
+#: Up to four sentences a beat, each one caption.
+MAX_SAY_SENTENCES = 4
+#: A sentence's slot is the longer of its clip and its reading time, plus this
+#: (frame rounding; Polly's own trailing silence is the pause between sentences).
+VOICE_GUARD_MS = 50
+
+#: G9: one 0.9 stretch makes a clip raw/0.9 long, less 24-31 ms on Ruth's clips
+#: (measured). Outside this window the clip was stretched twice, not at all, or
+#: by another amount.
+STRETCH_SHORT_MS = 45
+STRETCH_LONG_MS = 5
+
+#: G10: the fixed gain the render applies (in ffmpeg, in floating point, never to
+#: the samples here), and what the voice step requires of the clips with it
+#: applied, before any capture: no clip's true peak above -1.3 dBTP, and the
+#: clips' mean loudness within -19 +-0.7 LUFS.
+VOICE_GAIN_DB = 4.5
+PRECHECK_PEAK_DBTP = -1.3
+LOUDNESS_TARGET_LUFS = -19.0
+PRECHECK_LOUDNESS_LU = 0.7
+
+#: G18: the billable characters one run may send to Polly. Above it nothing is sent.
+VOICE_CHARACTER_CAP = 10_000
+#: The generative engine's price, for the estimate the voice step prints.
+DOLLARS_PER_MILLION_CHARACTERS = 30
+#: The voice step refuses a video projected above this share of MAX_VIDEO_MS:
+#: the length estimate runs about 3.5% short of a recording.
+PROJECTION_SHARE = 0.97
+
+#: How a written word is said: applied only to the text sent to Polly, whole
+#: words, in this order. The captions and the cache's ``text`` stay as written
+#: on screen. Each entry keeps its written form's letters, in order, and exactly
+#: its digits (``spoken_problems``).
+SPOKEN: Tuple[Tuple[str, str], ...] = (
+    ("SDKs", "S.D.K.s"),
+    ("SDK", "S.D.K."),
+    ("getexperimently.com", "get experimently dot com"),
+)
+
+
+def spoken_problems(table: Sequence[Tuple[str, str]] = SPOKEN) -> List[str]:
+    """What is wrong with a pronunciation table: an entry that changes a digit,
+    drops or reorders a letter, or adds markup."""
+    problems: List[str] = []
+    for written, said in table:
+        if re.sub(r"[^0-9]", "", written) != re.sub(r"[^0-9]", "", said):
+            problems.append(f"{written!r} -> {said!r} changes its digits")
+        remaining = iter(c.lower() for c in said if c.isalpha())
+        if not all(c.lower() in remaining for c in written if c.isalpha()):
+            problems.append(f"{written!r} -> {said!r} drops or reorders a letter")
+        if any(c in said for c in "<>&{}\\"):
+            problems.append(f"{written!r} -> {said!r} holds markup")
+    return problems
+
+
+def polly_text(sentence: str, table: Sequence[Tuple[str, str]] = SPOKEN) -> str:
+    """The text Polly is sent for *sentence*: the table applied, whole words only."""
+    text = sentence
+    for written, said in table:
+        pattern = re.compile(
+            r"(?<![A-Za-z0-9])" + re.escape(written) + r"(?![A-Za-z0-9])"
+        )
+        text = pattern.sub(lambda _match, said=said: said, text)
+    return text
+
+
+def clip_key_fields(voice: str, request_text: str) -> Dict[str, Any]:
+    """Everything a clip is made from: the request and what is done to its answer."""
+    return {
+        "recipe": VOICE_RECIPE,
+        "engine": VOICE_ENGINE,
+        "voice": voice,
+        "format": VOICE_FORMAT,
+        "polly_rate": POLLY_RATE,
+        "tempo": TEMPO,
+        "rate": VOICE_RATE,
+        "text": request_text,
+    }
+
+
+def clip_key(voice: str, request_text: str) -> str:
+    """A clip's cache key: the sha256 of ``clip_key_fields`` as canonical JSON."""
+    canonical = json.dumps(
+        clip_key_fields(voice, request_text),
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def clip_ms(samples: int) -> int:
+    """A clip's length in whole milliseconds, rounded up, from its sample count."""
+    return math.ceil(samples * 1000 / VOICE_RATE)
+
+
+def sentence_slot_ms(sentence: str, samples: int) -> int:
+    """How long a sentence's caption stays up: its clip or its reading time,
+    whichever is longer, plus ``VOICE_GUARD_MS``."""
+    return max(clip_ms(samples), reading_time_ms(sentence)) + VOICE_GUARD_MS
+
+
+def stretch_problem(raw_samples: int, samples: int) -> Optional[str]:
+    """G9: why a stretched clip is not one 0.9 stretch of its raw speech, or None.
+
+    Both counts are at ``VOICE_RATE``. The window is absolute: from raw/0.9 less
+    ``STRETCH_SHORT_MS`` to raw/0.9 plus ``STRETCH_LONG_MS``.
+    """
+    if raw_samples <= 0:
+        return f"its raw speech is {raw_samples} samples long"
+    expected = Fraction(raw_samples) / Fraction(TEMPO)
+    low = expected - Fraction(STRETCH_SHORT_MS * VOICE_RATE, 1000)
+    high = expected + Fraction(STRETCH_LONG_MS * VOICE_RATE, 1000)
+    if low <= samples <= high:
+        return None
+    return (
+        f"is {samples / VOICE_RATE:.3f} s from {raw_samples / VOICE_RATE:.3f} s of"
+        f" speech ({samples / raw_samples:.4f}x); one {TEMPO} stretch makes"
+        f" {float(expected) / VOICE_RATE:.3f} s, from {STRETCH_SHORT_MS} ms shorter"
+        f" to {STRETCH_LONG_MS} ms longer"
+    )
+
+
+def loudness_problems(
+    clips: Sequence[Tuple[str, float, float]], gain_db: float = VOICE_GAIN_DB
+) -> List[str]:
+    """G10: each clip's true peak, and the clips' mean loudness, with *gain_db* applied.
+
+    *clips* holds ``(label, integrated LUFS, true peak dBTP)`` for one video.
+    """
+    problems: List[str] = []
+    for label, _lufs, peak in clips:
+        with_gain = round(peak + gain_db, 3)
+        if with_gain > PRECHECK_PEAK_DBTP:
+            problems.append(
+                f"{label}: true peak {peak:.1f} dBTP is {with_gain:.1f} dBTP with the"
+                f" {gain_db:g} dB gain; at most {PRECHECK_PEAK_DBTP:g}"
+            )
+    if clips:
+        mean = sum(lufs for _label, lufs, _peak in clips) / len(clips)
+        with_gain = round(mean + gain_db, 3)
+        if abs(round(with_gain - LOUDNESS_TARGET_LUFS, 3)) > PRECHECK_LOUDNESS_LU:
+            problems.append(
+                f"the clips' mean loudness {mean:.1f} LUFS is {with_gain:.1f} LUFS with"
+                f" the {gain_db:g} dB gain; the target is {LOUDNESS_TARGET_LUFS:g}"
+                f" +-{PRECHECK_LOUDNESS_LU:g}"
+            )
+    return problems
 
 
 # --- Output names ------------------------------------------------------------

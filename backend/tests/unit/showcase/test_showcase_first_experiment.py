@@ -93,7 +93,7 @@ def test_the_storyboard_loads_its_captions_are_fixed_and_it_fits_the_video():
     length = (
         storyboard.estimate_ms(made) + contract.TITLE_CARD_MS + contract.END_CARD_MS
     )
-    # Scrolling is not in the estimate: leave room for it under 75 s.
+    # Scrolling is not in the estimate: leave room for it under the cap.
     assert contract.MIN_VIDEO_MS + 5_000 <= length <= contract.MAX_VIDEO_MS - 5_000
 
 
