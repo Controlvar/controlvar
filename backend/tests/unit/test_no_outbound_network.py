@@ -206,12 +206,28 @@ def test_boto3_stops_at_the_first_attempt(session):
         ("backend/lambda/event_processor/tests/test_lambda_handler.py", True),
         ("backend/lambda/shared/tests/test_utils.py", True),
         ("modules/lambda/example/tests/test_x.py", True),
+        ("backend/tests/unit/showcase/test_showcase_contract.py", True),
+        ("backend/tests/unit/showcase/capture_dirs.py", True),
         ("backend/tests/unit/test_no_outbound_network.py", False),
+        ("backend/tests/unit/showcase_other/test_x.py", False),
         ("modules/backend/tests/test_x.py", False),
     ],
 )
-def test_only_the_lambda_directories_are_guarded(relative, expected):
+def test_only_the_lambda_and_showcase_directories_are_guarded(relative, expected):
     assert guard.is_guarded(REPO_ROOT / relative) is expected
+
+
+def test_each_guarded_directory_exists():
+    """A directory renamed away would leave the guard covering nothing, silently.
+
+    ``modules/lambda`` is absent from a core build, so it is not asked for.
+    """
+    missing = [
+        str(d.relative_to(REPO_ROOT))
+        for d in guard.GUARDED_DIRS
+        if d.parts[-2] != "modules" and not d.is_dir()
+    ]
+    assert missing == []
 
 
 def test_a_lambda_directory_elsewhere_is_not_guarded(tmp_path):

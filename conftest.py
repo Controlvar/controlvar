@@ -11,11 +11,12 @@ It carries four plugins, and must stay importable with only pytest installed
 the real ``aws`` binary (backend/tests/no_real_aws.py), and a test marked
 ``benchmark`` -- an absolute wall-clock check -- is skipped unless
 ``RUN_BENCHMARKS=1`` (backend/tests/benchmark_gate.py). A third plugin acts only
-on the Lambda suites: a test under backend/lambda/ or modules/lambda/ that
-opens a connection to anything but loopback fails
-(backend/tests/no_outbound_network.py). The fourth does nothing unless
-``EXPERIMENTLY_TEST_SHARD`` is set: it then runs one slice of the session and
-records what ran, for scripts/check_test_shards.py (backend/tests/shard.py).
+on the Lambda suites and the showcase tests: a test under backend/lambda/,
+modules/lambda/ or backend/tests/unit/showcase/ that opens a connection to
+anything but loopback fails (backend/tests/no_outbound_network.py). The fourth
+does nothing unless ``EXPERIMENTLY_TEST_SHARD`` is set: it then runs one slice
+of the session and records what ran, for scripts/check_test_shards.py
+(backend/tests/shard.py).
 """
 
 import sys

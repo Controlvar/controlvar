@@ -1,12 +1,15 @@
-"""No Lambda test may open a network connection to anything but loopback.
+"""No Lambda or showcase test may open a network connection to anything but loopback.
 
 A pytest plugin, loaded for every session rooted at the repository root by
 ``conftest.py`` there (``pytest_plugins``), like ``no_real_aws``. Its fixture
-is autouse but acts only on tests whose file lies under ``backend/lambda/`` or
-``modules/lambda/``: every Lambda suite, including one added later, is covered
-without its conftest having to opt in -- and the Lambda packages could not
-import it anyway, since ``backend/lambda/.importlinter`` forbids them to import
-``backend``.
+is autouse but acts only on tests whose file lies under ``backend/lambda/``,
+``modules/lambda/`` or ``backend/tests/unit/showcase/``: every Lambda suite,
+including one added later, is covered without its conftest having to opt in --
+and the Lambda packages could not import it anyway, since
+``backend/lambda/.importlinter`` forbids them to import ``backend``. The
+showcase tests (#1066) cover a tool that starts a browser and a local stack;
+they check its logic against stand-ins and must not reach any network service
+themselves.
 
 Why: the Lambda functions build real boto3 clients on a cold start. A test
 that forgets to stub one of them does not fail. ``no_real_aws`` gives it dummy
@@ -15,7 +18,7 @@ credentials, the request goes to the real AWS endpoint, AWS answers
 (#433: the event processor's handler tests sent ``PutObject`` to S3 on every
 run). The test stays green; it is merely slower, and depends on the network.
 
-What it does, for the duration of each Lambda test: ``socket.socket.connect``
+What it does, for the duration of each guarded test: ``socket.socket.connect``
 and ``connect_ex`` refuse an ``AF_INET``/``AF_INET6`` address that is not
 loopback. The call raises :class:`OutboundNetworkBlocked`, so nothing leaves
 the machine and the test fails there and then; it is a ``BaseException`` so
@@ -24,9 +27,10 @@ absorb it. The attempt is also recorded and the test fails at teardown with
 the address it tried to reach, so even code that catches ``BaseException``
 cannot turn it into a pass.
 
-Loopback stays allowed (moto's server mode, LocalStack on 127.0.0.1), as do
-Unix-domain sockets. ``backend/tests`` is deliberately not covered: its
-integration tests reach PostgreSQL and Redis by service host name in CI.
+Loopback stays allowed (moto's server mode, LocalStack on 127.0.0.1, the
+showcase tests' own local listeners), as do Unix-domain sockets. The rest of
+``backend/tests`` is deliberately not covered: its integration tests reach
+PostgreSQL and Redis by service host name in CI.
 
 What it cannot see: a connection made below Python's ``socket`` module (a C
 library such as libpq opening its own socket), a DNS lookup (it blocks the
@@ -46,7 +50,11 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-GUARDED_DIRS = (_REPO_ROOT / "backend" / "lambda", _REPO_ROOT / "modules" / "lambda")
+GUARDED_DIRS = (
+    _REPO_ROOT / "backend" / "lambda",
+    _REPO_ROOT / "modules" / "lambda",
+    _REPO_ROOT / "backend" / "tests" / "unit" / "showcase",
+)
 
 _LOOPBACK_NAMES = {"localhost", "localhost.localdomain", "ip6-localhost"}
 
@@ -96,7 +104,7 @@ def install_guard(monkeypatch: pytest.MonkeyPatch, attempts: list[str]) -> None:
             return
         attempts.append(repr(address))
         raise OutboundNetworkBlocked(
-            f"no_outbound_network: a Lambda test tried to connect to {address!r}. "
+            f"no_outbound_network: a guarded test tried to connect to {address!r}. "
             "Tests must not reach AWS or any other network service; stub the "
             "client (unittest.mock or moto) instead."
         )
@@ -117,10 +125,10 @@ def install_guard(monkeypatch: pytest.MonkeyPatch, attempts: list[str]) -> None:
 def _no_outbound_network(
     request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[list[str]]:
-    """Per Lambda test: refuse and record every non-loopback connection.
+    """Per guarded test: refuse and record every non-loopback connection.
 
     Yields the list of refused addresses; the test fails at teardown if it is
-    not empty. Outside the Lambda directories it does nothing.
+    not empty. Outside the guarded directories it does nothing.
     """
     attempts: list[str] = []
     if is_guarded(Path(str(request.node.path))):
@@ -132,7 +140,7 @@ def _no_outbound_network(
         pytest.fail(
             "no_outbound_network: this test attempted "
             f"{len(attempts)} outbound connection(s), to {shown}. "
-            "The code under test may have caught the error, but a Lambda test "
+            "The code under test may have caught the error, but a guarded test "
             "must not reach the network at all.",
             pytrace=False,
         )

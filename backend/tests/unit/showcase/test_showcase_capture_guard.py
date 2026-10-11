@@ -6,6 +6,7 @@ network: a stand-in ``docker`` on ``PATH`` where a program has to run.
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 import subprocess
@@ -192,6 +193,96 @@ def test_a_real_child_sees_none_of_the_callers_variables(tmp_path):
         check=True,
     ).stdout
     assert "AWS_PROFILE" not in shown and "SHOWCASE_PARENT_SENTINEL" not in shown
+
+
+# The capture process's own environment, cut to the allow-list when it starts, as the
+# render's is: Playwright's driver is started from it and takes no other.
+
+STARTS_AS_MAIN = """
+import json, os, subprocess, sys
+sys.path.insert(0, sys.argv[1])
+from showcase.capture import run
+
+
+def parse(argv, environ):
+    return object()
+
+
+def go(options, environ, log):
+    # A program started without an env= inherits the process's own environment,
+    # which is how sync_playwright() starts the driver.
+    inherited = subprocess.run(
+        ["/usr/bin/env"], capture_output=True, text=True, check=True
+    ).stdout
+    print(json.dumps({
+        "own": sorted(os.environ),
+        "inherited": sorted(line.split("=", 1)[0] for line in inherited.splitlines()),
+        "copy_kept_the_caller": "EXPERIMENTLY_SENTINEL" in environ,
+    }))
+    return {}
+
+
+run.parse_args = parse
+run.run = go
+sys.exit(run.main([]))
+"""
+
+
+def test_the_process_keeps_exactly_path_home_and_tmpdir():
+    assert guard.PASSED == ("PATH", "HOME", "TMPDIR")
+    environ = {
+        **PARENT,
+        "EXPERIMENTLY_SENTINEL": "x",
+        "AWS_PROFILE": "does-not-exist",
+        "DOCKER_HOST": "tcp://127.0.0.1:9",
+        "LANG": "en_US.UTF-8",
+    }
+    removed = guard.strip_environment(environ)
+    assert environ == {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/Users/someone",
+        "TMPDIR": "/tmp/x",
+    }
+    assert removed == sorted(
+        [
+            "AWS_PROFILE",
+            "DATABASE_URL",
+            "DOCKER_HOST",
+            "EXPERIMENTLY_SENTINEL",
+            "LANG",
+            "POSTGRES_PORT",
+            "SHOWCASE_PARENT_SENTINEL",
+        ]
+    )
+
+
+def test_main_strips_the_process_environment_before_it_starts_anything(tmp_path):
+    """Run as ``main`` runs: what the process holds, and what a program started
+    without an ``env=`` inherits, is ``PASSED`` and nothing the caller's shell set."""
+    parent = {
+        "PATH": os.environ["PATH"],
+        "HOME": str(tmp_path),
+        "TMPDIR": str(tmp_path),
+        "EXPERIMENTLY_SENTINEL": "x",
+        "AWS_PROFILE": "does-not-exist",
+        "AWS_REGION": "us-west-2",
+        "DOCKER_HOST": "tcp://127.0.0.1:9",
+        "LANG": "en_US.UTF-8",
+    }
+    done = subprocess.run(
+        [sys.executable, "-c", STARTS_AS_MAIN, str(REPO_ROOT / "tests" / "acceptance")],
+        capture_output=True,
+        text=True,
+        env=parent,
+        check=False,
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+    seen = json.loads(done.stdout.strip().splitlines()[-1])
+    assert seen["own"] == sorted(guard.PASSED), seen
+    assert set(seen["inherited"]) <= set(guard.PASSED), seen
+    # The children are still built from the caller's own settings (a Docker
+    # context, say): the copy main takes before the strip is untouched.
+    assert seen["copy_kept_the_caller"] is True
 
 
 # --- Deletions and the work root (EM condition 7e) -------------------------------
