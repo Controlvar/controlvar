@@ -1,16 +1,16 @@
 # SPDX-FileCopyrightText: 2026 Experimently contributors
 # SPDX-License-Identifier: Apache-2.0
-"""The demo seeds run only in development and test.
+"""The seeds run only in development and test.
 
 Two paths start them, and each is checked on its own:
 
-* ``backend/docker-entrypoint.sh`` with ``SEED=demo,shoplab,streampulse`` --
-  refused before anything else runs, including the database wait;
+* ``backend/docker-entrypoint.sh`` with ``SEED=demo,shoplab,streampulse,sdk-contract``
+  -- refused before anything else runs, including the database wait;
 * the scripts themselves (``seed_demo_data.py``, ``seed_shoplab.py``,
-  ``seed_streampulse.py``) -- refused at the top of ``main()``, before the
-  first database session.
+  ``seed_streampulse.py``, ``seed_sdk_contract.py``) -- refused at the top of
+  ``main()``, before the first database session.
 
-``sdk-contract`` is not a demo seed; Docker Smoke runs
+``sdk-contract`` is under the same rule as the demo seeds; Docker Smoke runs
 ``ENVIRONMENT=development SEED=demo,sdk-contract`` and that keeps working.
 """
 
@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -33,6 +34,7 @@ SCRIPTS = [
     ("backend.scripts.seed_demo_data", "demo"),
     ("backend.scripts.seed_shoplab", "shoplab"),
     ("backend.scripts.seed_streampulse", "streampulse"),
+    ("backend.scripts.seed_sdk_contract", "sdk-contract"),
 ]
 
 REFUSED_ENVIRONMENTS = ["staging", "production"]
@@ -106,6 +108,79 @@ def test_script_refuses_outside_development(
 
 @pytest.mark.unit
 @pytest.mark.regression
+@pytest.mark.parametrize("environment", REFUSED_ENVIRONMENTS)
+def test_contract_seed_creates_no_user_and_no_key_outside_development(
+    monkeypatch, tmp_path, capsys, environment
+):
+    """The contract seed under production or staging writes nothing at all.
+
+    Every step that writes is replaced by a recorder, and the session itself
+    is a recorder, so a run that got past the guard shows up as a call. On the
+    code before the guard, ``seed_users`` (the four demo accounts) and both
+    ``seed_api_key`` calls (the two API keys) ran.
+    """
+    from backend.scripts import seed_sdk_contract as module
+
+    calls: list[str] = []
+
+    class _Session:
+        def __enter__(self):
+            calls.append("session")
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+    def _recorder(name, result=None):
+        def _record(*_args, **_kwargs):
+            calls.append(name)
+            return result
+
+        return _record
+
+    admin = SimpleNamespace(email="admin@demo.com")
+    key_file = tmp_path / ".api_key"
+    local_key_file = tmp_path / ".api_key_local"
+    monkeypatch.setattr(module, "SessionLocal", _Session)
+    monkeypatch.setattr(module, "KEY_FILE", key_file)
+    monkeypatch.setattr(module, "LOCAL_KEY_FILE", local_key_file)
+    monkeypatch.setattr(module, "ensure_schema", _recorder("ensure_schema"))
+    monkeypatch.setattr(module, "ensure_tables", _recorder("ensure_tables"))
+    monkeypatch.setattr(
+        module, "seed_users", _recorder("seed_users", {"admin@demo.com": admin})
+    )
+    monkeypatch.setattr(module, "seed_experiment", _recorder("seed_experiment"))
+    monkeypatch.setattr(module, "seed_flag", _recorder("seed_flag"))
+
+    def _write_key(db, user, **kwargs):
+        calls.append("seed_api_key")
+        (kwargs.get("key_file") or key_file).write_text("plaintext\n")
+        return "plaintext"
+
+    monkeypatch.setattr(module, "seed_api_key", _write_key)
+    monkeypatch.setattr(
+        module,
+        "seed_local_api_key",
+        lambda db, user: _write_key(db, user, key_file=local_key_file),
+    )
+    monkeypatch.delenv("APP_ENV", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", environment)
+
+    with pytest.raises(SystemExit) as exc:
+        module.main([])
+
+    assert exc.value.code == 78
+    assert calls == []
+    assert not key_file.exists()
+    assert not local_key_file.exists()
+    assert (
+        f"[seed] the 'sdk-contract' seed is for development and is refused when "
+        f"ENVIRONMENT={environment}." in capsys.readouterr().err
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.parametrize("module_name,seed", SCRIPTS)
 def test_script_refuses_the_legacy_app_env_spelling(
     monkeypatch, capsys, module_name, seed
@@ -164,6 +239,7 @@ def test_script_run_as_a_program_refuses_production(module_name, seed, tmp_path)
         AWS_SHARED_CREDENTIALS_FILE=os.devnull,
         SHOPLAB_DEMO_DIR=str(tmp_path),
         STREAMPULSE_DEMO_DIR=str(tmp_path),
+        SDK_CONTRACT_KEY_DIR=str(tmp_path),
     )
     result = subprocess.run(
         [sys.executable, str(script)],
@@ -249,6 +325,9 @@ entrypoint_only = pytest.mark.skipif(
         ("demo", {"ENVIRONMENT": "staging"}, "staging"),
         ("shoplab", {"ENVIRONMENT": "production"}, "production"),
         ("streampulse", {"ENVIRONMENT": "staging"}, "staging"),
+        ("sdk-contract", {"ENVIRONMENT": "production"}, "production"),
+        ("sdk-contract", {"ENVIRONMENT": "staging"}, "staging"),
+        ("sdk-contract", {"APP_ENV": "prod"}, "prod"),
         ("sdk-contract,demo", {"ENVIRONMENT": "production"}, "production"),
         ("demo, shoplab", {"ENVIRONMENT": "Production"}, "Production"),
         ("demo", {"ENVIRONMENT": "prod"}, "prod"),
@@ -285,8 +364,7 @@ def test_entrypoint_refuses_demo_seeds_outside_development(
         ),
         ("demo", {"ENVIRONMENT": "dev"}, ["seed_demo_data.py"]),
         ("demo", {}, ["seed_demo_data.py"]),  # unset means development
-        # sdk-contract is not a demo seed.
-        ("sdk-contract", {"ENVIRONMENT": "production"}, ["seed_sdk_contract.py"]),
+        ("sdk-contract", {"ENVIRONMENT": "development"}, ["seed_sdk_contract.py"]),
     ],
 )
 def test_entrypoint_allows_the_seeds_it_should(

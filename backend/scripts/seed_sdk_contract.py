@@ -23,6 +23,10 @@ Usage:
     source venv/bin/activate
     python backend/scripts/seed_sdk_contract.py [--reset]
 
+Development and test only, like the demo seeds: with any other ENVIRONMENT
+(staging, production) it stops before touching the database
+(backend/scripts/seed_guard.py).
+
 Environment: the same POSTGRES_* variables as the other seed scripts.
 ``SDK_CONTRACT_API_KEY`` and ``SDK_CONTRACT_LOCAL_API_KEY`` fix the plaintext
 keys (otherwise they are generated); ``SDK_CONTRACT_KEY_DIR`` redirects the key
@@ -69,6 +73,7 @@ from backend.scripts.seed_demo_data import (
     now_utc,
     seed_users,
 )
+from backend.scripts.seed_guard import require_development_environment
 
 EXPERIMENT_KEY = "sdk_contract_ab"
 FLAG_KEY = "sdk_contract_flag"
@@ -267,6 +272,7 @@ def reset(db) -> None:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    require_development_environment("sdk-contract")
     parser = argparse.ArgumentParser(description="Seed the live SDK contract fixtures.")
     parser.add_argument(
         "--reset", action="store_true", help="remove everything this script created"
