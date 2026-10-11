@@ -43,6 +43,12 @@ interface ExperimentReading {
   bayesianEnabled: boolean | undefined;
   /** Undefined when the experiment could not be read. */
   sequentialEnabled: boolean | undefined;
+  /**
+   * Whether a lower value is better for the primary metric, the one the
+   * sequential analysis runs on. Undefined when the experiment could not be
+   * read or has no metric.
+   */
+  lowerIsBetter: boolean | undefined;
 }
 
 /**
@@ -60,6 +66,12 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
       typeof experiment?.sequential_testing_enabled === 'boolean'
         ? experiment.sequential_testing_enabled
         : undefined;
+    // The same metric the server picks for the sequential analysis: the
+    // primary one, else the first. The API always sends `lower_is_better`; a
+    // missing value is its default, false.
+    const metrics = experiment?.metrics ?? [];
+    const sequentialMetric = metrics.find((m) => m.is_primary) ?? metrics[0];
+    const lowerIsBetter = sequentialMetric ? (sequentialMetric.lower_is_better ?? false) : undefined;
     if (experiment?.correction_method && typeof experiment.confidence_level === 'number') {
       return {
         settings: {
@@ -68,13 +80,19 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
         },
         bayesianEnabled,
         sequentialEnabled,
+        lowerIsBetter,
       };
     }
-    return { settings: null, bayesianEnabled, sequentialEnabled };
+    return { settings: null, bayesianEnabled, sequentialEnabled, lowerIsBetter };
   } catch {
     // Fall through: the results request goes without settings.
   }
-  return { settings: null, bayesianEnabled: undefined, sequentialEnabled: undefined };
+  return {
+    settings: null,
+    bayesianEnabled: undefined,
+    sequentialEnabled: undefined,
+    lowerIsBetter: undefined,
+  };
 }
 
 export const RESULTS_LOAD_FAILED = 'The results could not be loaded.';
@@ -135,6 +153,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
   const [sampleSizeOverrides, setSampleSizeOverrides] = useState<SampleSizeOverrides>({});
   const sampleSizeRequest = useRef(0);
   const [sequential, setSequential] = useState<SequentialTestingResponse | null>(null);
+  const [lowerIsBetter, setLowerIsBetter] = useState<boolean | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -202,7 +221,8 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
       // an analysis that failed). When it is off, that route answers 404, and
       // asking it anyway logged a failed request on every results page (#919).
       // `readExperiment` never rejects, so this await is immediate.
-      const { sequentialEnabled } = await experimentRequest;
+      const { sequentialEnabled, lowerIsBetter: lower } = await experimentRequest;
+      setLowerIsBetter(lower);
       if (r.sequential_testing) {
         setSequential(r.sequential_testing);
       } else if (sequentialEnabled === true) {
@@ -422,7 +442,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
             <h3 className="text-base font-semibold text-slate-800 mb-4">
               Sequential Testing Monitor
             </h3>
-            <SequentialMonitor data={sequential} />
+            <SequentialMonitor data={sequential} lowerIsBetter={lowerIsBetter} />
           </section>
         )}
 

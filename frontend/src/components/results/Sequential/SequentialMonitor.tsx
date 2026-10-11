@@ -6,9 +6,15 @@ import { AnalysisNotice } from '@/components/results/shared/AnalysisNotice';
 
 interface SequentialMonitorProps {
   data: SequentialTestingResponse;
+  /**
+   * Whether a lower value is the better one for the primary metric, which the
+   * analysis ran on. The banner needs it to tell a better variant from a worse
+   * one; undefined when the metric could not be read.
+   */
+  lowerIsBetter?: boolean;
 }
 
-export function SequentialMonitor({ data }: SequentialMonitorProps) {
+export function SequentialMonitor({ data, lowerIsBetter }: SequentialMonitorProps) {
   const boundary = data.msprt_result?.boundary ?? 1 / 0.05; // default 20
 
   // `at_risk` is the top-level advisory flag; older responses carry only
@@ -23,6 +29,8 @@ export function SequentialMonitor({ data }: SequentialMonitorProps) {
       <EarlyStoppingBanner
         msprtResult={data.msprt_result}
         recommendedAction={data.recommended_action}
+        confidenceSequence={data.confidence_sequence}
+        lowerIsBetter={lowerIsBetter}
       />
 
       {/* Evidence ratio chart */}

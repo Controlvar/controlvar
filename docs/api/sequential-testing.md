@@ -22,7 +22,7 @@ Sequential testing lets you continuously monitor experiment results and stop as 
 
 The method the analysis uses. Computes a likelihood ratio (`lambda_ratio`) that accumulates evidence for an effect:
 
-- `lambda_ratio >= 1/alpha` → strong evidence for an effect, safe to stop (`stop_for_effect`)
+- `lambda_ratio >= 1/alpha` → strong evidence for an effect, in either direction (`stop_for_effect`); the direction decides whether to ship (see [Reading a stop decision](#reading-a-stop-decision))
 - Otherwise → continue collecting data (`continue`)
 
 The mSPRT has no futility boundary, so the analysis never tells you to stop for
@@ -230,8 +230,8 @@ experiment's method is stored as `always_valid`, the notice adds that it is an a
 
 | Value | Meaning |
 |-------|---------|
-| `strong_for_effect` | Clear effect detected — safe to stop and ship |
-| `moderate_for_effect` | Trending positive — consider continuing for confirmation |
+| `strong_for_effect` | Clear effect detected, better or worse: the sign of the `confidence_sequence` decides whether to ship (see [Reading a stop decision](#reading-a-stop-decision)) |
+| `moderate_for_effect` | Trending toward an effect, in either direction — consider continuing for confirmation |
 | `inconclusive` | Not enough data yet — continue |
 | `moderate_for_null` | Trending toward no effect |
 | `strong_for_null` | Evidence leans strongly toward no effect. Not a stopping rule |
@@ -240,9 +240,31 @@ experiment's method is stored as `always_valid`, the notice adds that it is an a
 
 | Value | Meaning |
 |-------|---------|
-| `stop_for_effect` | The mSPRT crossed its boundary (1/alpha): stop, there is an effect |
+| `stop_for_effect` | The mSPRT crossed its boundary (1/alpha): stop, there is an effect, which may be an improvement or a harm |
 | `continue` | Keep running — not enough evidence yet |
 | `stop_for_futility` | Kept in the value set, but not returned by the current analysis: the mSPRT has no futility boundary. A long-running experiment is flagged with `at_risk` instead |
+
+#### Reading a stop decision
+
+The mSPRT is a two-sided test: `stop_for_effect` and `strong_for_effect` mean the
+effect is not zero, whichever way it points. A treatment that is worse than the
+control crosses the boundary exactly as a better one does. The response has no separate
+"worse" value, so read the direction from the `confidence_sequence`, which is the
+difference in rates, treatment minus control:
+
+| `confidence_sequence` | Metric where higher is better | Metric where lower is better (`lower_is_better`) |
+|-----------------------|-------------------------------|---------------------------------------------------|
+| `lower` and `upper` both above 0 | Better: shipping is justified | Worse: do not ship |
+| `lower` and `upper` both below 0 | Worse: do not ship | Better: shipping is justified |
+| the interval includes 0 | The direction is not clear; this should not happen with `stop_for_effect` | Same |
+
+For example, 10% against 13% and 10% against 7% at 10,000 users per arm both answer
+`stop_for_effect` with `strong_for_effect`. The first has a `confidence_sequence` of
+about 0.0173 to 0.0427, the second about -0.0427 to -0.0173. With a higher-is-better
+metric the first is a win and the second is a harm. The dashboard's banner follows this
+table: it reads "Ready to stop" in green only for a change in the better direction,
+"Stop — the variant is significantly worse" in red for the other, and a neutral message
+when the interval includes 0.
 
 ### In the results response
 
