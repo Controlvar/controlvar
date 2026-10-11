@@ -103,8 +103,8 @@ Response from a safety check:
 The health status of a feature flag can be one of the following:
 
 - `healthy` - No issues detected
-- `warning` - Warning threshold exceeded but not critical
-- `critical` - Critical threshold exceeded
+- `warning` - Warning threshold breached but not critical
+- `critical` - Critical threshold breached
 - `unknown` - Unable to determine health status
 
 ## Rollback Operations

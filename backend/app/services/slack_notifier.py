@@ -191,6 +191,7 @@ class SlackNotifier:
         value: Optional[str] = None,
         threshold: Optional[str] = None,
         channel: Optional[str] = None,
+        relation: str = "above",
     ) -> bool:
         """
         Send a Slack alert when a feature flag has been automatically rolled back
@@ -202,6 +203,9 @@ class SlackNotifier:
             value:        Its measured value, formatted with its unit (``"7.143%"``,
                           ``"523.5 ms"``).
             threshold:    Its threshold, formatted the same way.
+            relation:     How the value stands to the threshold, as the alert's
+                          line words it: ``"above"`` (the default), ``"below"``
+                          or ``"equal to"``.
 
         Returns:
             True on success, False on any failure (exceptions swallowed).
@@ -217,7 +221,7 @@ class SlackNotifier:
             if metric_label:
                 text = (
                     f"Safety Rollback: '{flag_name}' rolled back — "
-                    f"{metric_label} {value} exceeded threshold {threshold}."
+                    f"{metric_label} {value} {relation} threshold {threshold}."
                 )
             else:
                 text = f"Safety Rollback: '{flag_name}' rolled back. Reason: {reason}"

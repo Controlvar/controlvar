@@ -526,12 +526,16 @@ def _capturing_notification_service():
     return service, slack_messages, webhook_payloads
 
 
-async def _run_rollback_with_real_alert(metric_name, current_value, threshold):
+async def _run_rollback_with_real_alert(
+    metric_name, current_value, threshold, comparison_type=None
+):
     """Drive the scheduler's rollback path for one breaching metric and return
     what Slack and the webhook were sent."""
     db, safety, _ = _unhealthy_scheduler_env(rollback_percentage=0)
     safety.check_feature_flag_safety = AsyncMock(
-        return_value=_one_breaching_metric(current_value, threshold, name=metric_name)
+        return_value=_one_breaching_metric(
+            current_value, threshold, name=metric_name, comparison_type=comparison_type
+        )
     )
     notifications, slack_messages, webhook_payloads = _capturing_notification_service()
 
@@ -577,14 +581,14 @@ async def test_automatic_rollback_alert_carries_the_measured_error_rate():
 
     assert text == (
         "Safety Rollback: 'streampulse_player_v2' rolled back — "
-        "error rate 7.143% exceeded threshold 5%."
+        "error rate 7.143% above threshold 5%."
     )
     assert "*Error Rate:*\n7.143%" in fields
     assert "*Threshold:*\n5%" in fields
     assert "0.0%" not in text + "".join(fields)
 
     assert payload["event_type"] == "safety_rollback"
-    assert "error rate 7.143% exceeded threshold 5%" in payload["message"]
+    assert "error rate 7.143% above threshold 5%" in payload["message"]
     assert payload["metadata"]["metric"] == "error_rate"
     assert payload["metadata"]["value"] == 1 / 14
     assert payload["metadata"]["threshold"] == 0.05
@@ -602,18 +606,125 @@ async def test_automatic_rollback_alert_shows_a_latency_in_ms():
 
     assert text == (
         "Safety Rollback: 'streampulse_player_v2' rolled back — "
-        "avg latency 523.5 ms exceeded threshold 500 ms."
+        "avg latency 523.5 ms above threshold 500 ms."
     )
     assert "*Avg Latency:*\n523.5 ms" in fields
     assert "*Threshold:*\n500 ms" in fields
     assert not any("Error Rate" in f for f in fields)
     assert "%" not in text + "".join(fields)
 
-    assert "avg latency 523.5 ms exceeded threshold 500 ms" in payload["message"]
+    assert "avg latency 523.5 ms above threshold 500 ms" in payload["message"]
     assert payload["metadata"]["metric"] == "avg_latency"
     assert payload["metadata"]["value"] == 523.4567
     assert payload["metadata"]["threshold"] == 500.0
     assert payload["metadata"]["error_rate"] is None
+
+
+# (comparison_type, metric, value, threshold, the alert's line)
+_ALERT_LINES = [
+    ("less_than", "error_rate", 0.01, 0.05, "error rate 1% below threshold 5%"),
+    ("equal_to", "error_rate", 0.05, 0.05, "error rate 5% equal to threshold 5%"),
+    (
+        "less_than",
+        "avg_latency",
+        40.0,
+        100.0,
+        "avg latency 40 ms below threshold 100 ms",
+    ),
+    (
+        "less_than",
+        "checkout_success",
+        0.9,
+        0.95,
+        "checkout success 0.9 below threshold 0.95",
+    ),
+    ("greater_than", "error_rate", 0.1, 0.05, "error rate 10% above threshold 5%"),
+]
+
+
+@pytest.mark.regression
+@pytest.mark.asyncio
+@pytest.mark.parametrize("comparison, name, value, limit, line", _ALERT_LINES)
+async def test_automatic_rollback_alert_words_the_breach_by_the_comparison(
+    comparison, name, value, limit, line
+):
+    """A ``less_than`` metric that fell below its floor was announced as
+    having ``exceeded`` it, in the Slack text and in the webhook message, next
+    to a reason that said ``below``."""
+    text, _, payload = await _run_rollback_with_real_alert(
+        name, value, limit, comparison_type=comparison
+    )
+
+    assert text == f"Safety Rollback: 'streampulse_player_v2' rolled back — {line}."
+    assert f"rolled back: {line}. Reason: " in payload["message"]
+    assert "exceeded" not in text + payload["message"]
+    # The alert's line and the reason word the breach alike.
+    word = {"less_than": "below", "equal_to": "equal to", "greater_than": "above"}
+    assert f" {word[comparison]} threshold (" in payload["metadata"]["reason"]
+
+
+@pytest.mark.regression
+@pytest.mark.asyncio
+async def test_scheduler_hands_the_comparison_to_the_notification():
+    db, service, _ = _unhealthy_scheduler_env(rollback_percentage=0)
+    service.check_feature_flag_safety = AsyncMock(
+        return_value=_one_breaching_metric(
+            0.9, 0.95, name="checkout_success", comparison_type="less_than"
+        )
+    )
+    with (
+        patch("backend.app.core.safety_scheduler.SessionLocal", return_value=db),
+        patch("backend.app.core.safety_scheduler.SafetyService", return_value=service),
+    ):
+        scheduler = SafetyScheduler()
+        scheduler._notification_service = MagicMock()
+        await scheduler.check_feature_flags_safety()
+
+    kwargs = scheduler._notification_service.notify_safety_rollback.call_args.kwargs
+    assert kwargs["comparison"] == "less_than"
+    assert (kwargs["value"], kwargs["threshold"]) == (0.9, 0.95)
+
+
+def test_alert_without_a_comparison_reads_as_greater_than():
+    """A caller that does not pass ``comparison`` (every caller before #1127)
+    gets the ``greater_than`` wording, in the notification and in Slack."""
+    notifications, slack_messages, webhook_payloads = _capturing_notification_service()
+    slack_client = MagicMock()
+    slack_client.chat_postMessage.side_effect = lambda **kw: slack_messages.append(kw)
+
+    def fake_post(url, json=None, timeout=None):
+        webhook_payloads.append(json)
+        return MagicMock(status_code=200)
+
+    with (
+        patch(
+            "backend.app.services.slack_notifier.WebClient", return_value=slack_client
+        ),
+        patch(
+            "backend.app.services.notification_service.httpx.post",
+            side_effect=fake_post,
+        ),
+    ):
+        notifications.notify_safety_rollback(
+            "flag-id",
+            "my-flag",
+            "reason",
+            metric_name="error_rate",
+            value=0.1,
+            threshold=0.05,
+        )
+        # The Slack notifier on its own, with no ``relation``.
+        notifications._slack.send_safety_rollback_alert(
+            flag_name="my-flag",
+            reason="reason",
+            metric_label="error rate",
+            value="10%",
+            threshold="5%",
+        )
+
+    assert "error rate 10% above threshold 5%" in webhook_payloads[0]["message"]
+    assert slack_messages[0]["text"].endswith("error rate 10% above threshold 5%.")
+    assert slack_messages[1]["text"].endswith("error rate 10% above threshold 5%.")
 
 
 @pytest.mark.regression

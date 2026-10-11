@@ -16,7 +16,7 @@ import httpx
 
 from backend.app.core.config import settings
 from backend.app.schemas.scheduler import NotificationEvent
-from backend.app.services.safety_service import format_metric_reading
+from backend.app.services.safety_service import breach_words, format_metric_reading
 
 logger = logging.getLogger(__name__)
 
@@ -242,24 +242,31 @@ class NotificationService:
         value: Optional[float] = None,
         threshold: Optional[float] = None,
         db=None,
+        comparison: Optional[str] = None,
     ) -> bool:
         """Notify all channels that a feature flag was automatically rolled back.
 
         ``metric_name``, ``value`` and ``threshold`` describe the metric that
         breached its threshold. The Slack alert and the webhook ``message``
         show them with the metric's unit (``format_metric_reading``: an error
-        rate as a percentage, a latency in ms); the webhook ``metadata``
-        carries the raw numbers, with ``error_rate`` set only when the metric
-        is ``error_rate``. Without a metric the alert gives only the reason.
+        rate as a percentage, a latency in ms) and say ``above``, ``below`` or
+        ``equal to`` the threshold by ``comparison``, the threshold's
+        ``comparison_type`` (``breach_words``; None reads as ``greater_than``).
+        The webhook ``metadata`` carries the raw numbers, with ``error_rate``
+        set only when the metric is ``error_rate``. Without a metric the alert
+        gives only the reason.
         """
         try:
-            label = value_text = threshold_text = None
+            label = value_text = threshold_text = relation = None
             summary = ""
             if metric_name and value is not None and threshold is not None:
                 label = metric_name.replace("_", " ")
                 value_text = format_metric_reading(metric_name, value)
                 threshold_text = format_metric_reading(metric_name, threshold)
-                summary = f": {label} {value_text} exceeded threshold {threshold_text}"
+                relation, _ = breach_words(comparison)
+                summary = (
+                    f": {label} {value_text} {relation} threshold {threshold_text}"
+                )
 
             event = NotificationEvent(
                 event_type="safety_rollback",
@@ -288,6 +295,7 @@ class NotificationService:
                     metric_label=label,
                     value=value_text,
                     threshold=threshold_text,
+                    relation=relation or "above",
                 )
             except Exception as exc:
                 logger.warning("Slack safety_rollback failed: %s", exc)

@@ -305,8 +305,9 @@ When the monitor finds a flag unhealthy and `enable_automatic_rollbacks` is on, 
 4. Sends a Slack alert to `SLACK_DEFAULT_CHANNEL` and a `safety_rollback` event to
    `NOTIFICATION_WEBHOOK_URL`, each when configured. Both name the first breaching metric with its
    measured value and threshold in the metric's unit: an error rate as a percentage (1 error in 14
-   evaluations against `0.05` reads `error rate 7.143% exceeded threshold 5%`), a latency in
-   milliseconds (`avg latency 523.5 ms exceeded threshold 500 ms`). The webhook's `metadata` carries
+   evaluations against `0.05` reads `error rate 7.143% above threshold 5%`), a latency in
+   milliseconds (`avg latency 523.5 ms above threshold 500 ms`). The line says `above`, `below` or
+   `equal to` by the threshold's `comparison_type`, as the reason does. The webhook's `metadata` carries
    the raw numbers as `metric`, `value` and `threshold`, and `error_rate` holds the value only when the
    metric is `error_rate` (otherwise `null`). An automatic rollback sends no email
 

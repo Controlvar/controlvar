@@ -17,6 +17,7 @@ from backend.app.models.safety import RollbackTriggerType
 from backend.app.services.notification_service import NotificationService
 from backend.app.services.safety_service import (
     SafetyService,
+    breach_comparison,
     describe_breach,
     rollback_change,
 )
@@ -244,6 +245,9 @@ class SafetyScheduler:
                                     metric_name=failing.name if failing else None,
                                     value=failing.current_value if failing else None,
                                     threshold=failing.threshold if failing else None,
+                                    comparison=(
+                                        breach_comparison(failing) if failing else None
+                                    ),
                                 )
                             except Exception as exc:
                                 logger.warning(
