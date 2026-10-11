@@ -10,6 +10,14 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.28.2](https://github.com/getexperimently/experimently/compare/v0.28.1...v0.28.2) (2026-10-11)
+
+
+### Bug Fixes
+
+* **dashboard:** times the API sends without a zone are shown as UTC converted to local time ([#1135](https://github.com/getexperimently/experimently/issues/1135)) ([988fd98](https://github.com/getexperimently/experimently/commit/988fd985d60822200d39fc92770df46ac6eb7091))
+* **safety:** the rollback reason says above or below by the threshold's comparison, in the metric's units ([#1129](https://github.com/getexperimently/experimently/issues/1129)) ([14af9dd](https://github.com/getexperimently/experimently/commit/14af9dd669e5f32ee0a752723beba494e1a459f6))
+
 ## [0.28.1](https://github.com/getexperimently/experimently/compare/v0.28.0...v0.28.1) (2026-10-11)
 
 
