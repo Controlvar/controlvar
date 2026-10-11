@@ -17,7 +17,7 @@ from backend.app.models.safety import RollbackTriggerType
 from backend.app.services.notification_service import NotificationService
 from backend.app.services.safety_service import (
     SafetyService,
-    format_metric_value,
+    describe_breach,
     rollback_change,
 )
 
@@ -201,9 +201,7 @@ class SafetyScheduler:
                         if failing is not None:
                             trigger_reason = (
                                 f"Automatic rollback due to {failing.name} "
-                                "exceeding threshold "
-                                f"({format_metric_value(failing.current_value)} > "
-                                f"{format_metric_value(failing.threshold)})"
+                                f"{describe_breach(failing)}"
                             )
 
                         # Roll back to the percentage configured for this flag

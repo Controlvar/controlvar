@@ -699,7 +699,7 @@ def test_the_safety_journey_holds_the_exact_rollback_facts():
     assert audit["0.user_id"] is None
     assert audit["0.action_type"] == "safety_rollback"
     assert audit["0.reason"] == (
-        "Automatic rollback due to error_rate exceeding threshold (0.1 > 0.05)"
+        "Automatic rollback due to error_rate above threshold (10% > 5%)"
     )
     assert json.loads(audit["0.new_value"]) == {
         "deactivated": True,
