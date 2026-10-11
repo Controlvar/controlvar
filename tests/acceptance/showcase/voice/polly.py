@@ -136,7 +136,11 @@ def synthesize(voice: str, text: str, out: Path, environ: Mapping[str, str]) -> 
         billed = answer["RequestCharacters"]
     except (ValueError, TypeError, KeyError):
         raise PollyFailed("Polly's answer could not be read") from None
-    if not isinstance(billed, int) or isinstance(billed, bool):
+    if (
+        not isinstance(billed, int)
+        or isinstance(billed, bool)
+        or not 0 <= billed < 10**6
+    ):
         raise PollyFailed("Polly's answer could not be read")
     if not out.is_file() or out.stat().st_size == 0:
         raise PollyFailed("Polly answered with no audio")

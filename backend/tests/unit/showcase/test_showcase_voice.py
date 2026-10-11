@@ -587,6 +587,10 @@ def test_a_failed_call_keeps_the_clips_already_made(voice, capsys):
     "sentence, reason",
     [
         ("The password is Demo1234!", "holds a secret value (static needle 1 of 4)"),
+        (
+            "Type Demo1234 as the password.",
+            "holds a secret value (static needle 1 of 4)",
+        ),
         ("Open localhost 3100 in your browser.", "names a host or a port"),
         ("About three weeks of shoppers.", "says 'three' as a word"),
         ("Results update live as shoppers arrive.", "says 'live'"),
@@ -850,6 +854,41 @@ def test_the_one_deletion_refuses_anything_but_an_unfinished_entry(tmp_path):
     (unfinished / "source.mp3").write_bytes(b"x")
     root.remove_unfinished(unfinished)
     assert not unfinished.exists()
+
+
+def test_a_second_publish_under_an_existing_key_leaves_the_first_entry_as_it_is(
+    tmp_path,
+):
+    root = cache.CacheRoot(tmp_path / "cache")
+    key = "d" * 64
+    first = root.path / key
+    first.mkdir()
+    for name, body in (("source.mp3", b"first"), ("clip.wav", b"first clip")):
+        (first / name).write_bytes(body)
+    (first / "entry.json").write_text('{"first": true}')
+    before = {p.name: p.read_bytes() for p in first.iterdir()}
+    second = root.unfinished(key)
+    for name in ("source.mp3", "clip.wav", "entry.json"):
+        (second / name).write_bytes(b"second")
+    with pytest.raises(cache.CacheRefused) as caught:
+        root.publish(second, key)
+    assert str(caught.value) == (
+        f"cache entry {key[:12]} appeared while it was being made; it is kept as it is"
+    )
+    assert {p.name: p.read_bytes() for p in first.iterdir()} == before
+    assert second.is_dir()
+
+
+def test_a_billed_count_that_is_not_a_plausible_number_is_not_read(voice, capsys):
+    voice.fakes.set("aws", {"extra_characters": 123456789012})
+    status, out = voice.run(capsys)
+    assert status == step.STOPPED
+    assert out.splitlines()[-1] == (
+        f"[voice] STOPPED {SLUG} later beat 1 line 1: Polly's answer could not be read."
+        " Nothing was cached for this line; the clips already made are kept"
+    )
+    no_account_details(out)
+    assert voice.entries() == [] and voice.others() == []
 
 
 def test_leftovers_of_a_stopped_run_are_removed_and_entries_kept(voice, capsys):

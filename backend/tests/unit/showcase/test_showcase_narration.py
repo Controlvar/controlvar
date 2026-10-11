@@ -165,6 +165,11 @@ def narrated(sentence: str, beat: int = 0) -> dict:
     [
         ("The password is Demo1234!", "holds a secret value (static needle 1 of 4)"),
         ("The password is demo 1234!", "holds a secret value (static needle 1 of 4)"),
+        ("The password is Demo1234.", "holds a secret value (static needle 1 of 4)"),
+        (
+            "Type Demo1234 as the password.",
+            "holds a secret value (static needle 1 of 4)",
+        ),
         ("Open localhost 3100 in your browser.", "names a host or a port"),
         ("The API answers on port 8000.", "names a host or a port"),
         ("It answers on port 9100.", "names a host or a port"),

@@ -11,7 +11,8 @@ step before it sends anything (``showcase.voice``), with the same function:
   port, address, ``localhost``, ``127.0.0.1`` or URL other than
   getexperimently.com; nothing from ``config.FORBIDDEN_TEXT`` or the
   storyboard's ``never_show``; no secret value (the static needles, compared
-  as the OCR scan compares them, and ``eptk_``); no template; "live" only as "the
+  as the OCR scan compares them with punctuation removed as well, and
+  ``eptk_``); no template; "live" only as "the
   Live tab", and only with a Refresh click in that beat or the next; never
   "real time", "instantly", "immediately" or "as it happens", nor the words the
   UX rules never say.
@@ -161,6 +162,13 @@ def number_key(number: str) -> str:
     return _ZERO_FRACTION.sub("", text)
 
 
+def _fixed_value_form(text: str) -> str:
+    """*text* as the narration check compares fixed values: ``contract.normalise``
+    with punctuation removed too, on both sides, so a value said without its
+    punctuation ("Demo1234.") is still found."""
+    return re.sub(r"[^0-9a-z]", "", contract.normalise(text))
+
+
 def _words_unclaimed(sentence: str, claimed: Sequence[str]) -> str:
     """*sentence* with every claimed phrase blanked out."""
     for phrase in claimed:
@@ -214,9 +222,9 @@ def sentence_problems(
     for text in forbidden:
         if text and text.lower() in lowered:
             problems.append(f"says {text!r}, which the video must never show")
-    squeezed = contract.normalise(sentence)
+    squeezed = _fixed_value_form(sentence)
     for number, needle in enumerate(config.STATIC_NEEDLES, start=1):
-        if contract.normalise(needle) in squeezed:
+        if _fixed_value_form(needle) in squeezed:
             problems.append(
                 f"holds a secret value (static needle {number} of {len(config.STATIC_NEEDLES)})"
             )
