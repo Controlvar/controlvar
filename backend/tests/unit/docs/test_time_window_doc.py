@@ -1,0 +1,151 @@
+"""The reference's ``time_window`` example is a window the engine reads (#1145).
+
+``docs/Enhanced_Rules_Engine_Reference.md`` used to give
+``{"start": <ISO>, "end": <ISO>}``, two keys the engine does not read, so on a
+flag that window was open at every moment. These tests read the example out of
+the page and run it through both evaluators, flag targeting
+(``rules_engine.evaluate_condition``) and experiment targeting
+(``RulesEvaluationService``), at fixed moments inside and outside the window.
+The moment is the attribute's value, so no clock is read.
+
+They also pin the two other claims the section makes about behaviour: ISO
+datetimes in ``start``/``end`` match nobody, and ``after`` with ``before`` in
+an ``AND`` group is a window between two moments.
+"""
+
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+from typing import Any, Dict, Tuple
+
+import pytest
+
+from backend.app.core import rules_engine
+from backend.app.core.targeting_adapter import convert_dashboard_condition
+from backend.app.schemas.targeting_rule import (
+    Condition,
+    LogicalOperator,
+    OperatorType,
+    RuleGroup,
+)
+from backend.app.services.rules_evaluation_service import RulesEvaluationService
+
+pytestmark = [pytest.mark.unit, pytest.mark.regression]
+
+REPO_ROOT = Path(__file__).resolve().parents[4]
+PAGE = REPO_ROOT / "docs" / "Enhanced_Rules_Engine_Reference.md"
+HEADING = "#### TIME_WINDOW (`time_window`)"
+
+#: Inside the example's window: 09:00-17:00, Monday to Friday, 1-31 January 2024.
+INSIDE = [
+    "2024-01-10T12:00:00",  # a Wednesday
+    "2024-01-01T09:00:00",  # the first minute (a Monday)
+    "2024-01-31T17:00:59",  # the end minute is included (a Wednesday)
+]
+OUTSIDE = [
+    "2024-01-10T08:59:00",  # before 09:00
+    "2024-01-10T17:01:00",  # after 17:00
+    "2024-01-13T12:00:00",  # a Saturday
+    "2024-02-07T12:00:00",  # a Wednesday in February
+    "2023-12-27T12:00:00",  # a Wednesday in December
+]
+
+
+def _section() -> str:
+    text = PAGE.read_text(encoding="utf-8")
+    start = text.index(HEADING)
+    end = text.index("\n### ", start)
+    return text[start:end]
+
+
+def _prose() -> str:
+    """The section with its line breaks folded, so rewrapping it changes nothing."""
+    return " ".join(_section().split())
+
+
+def _example() -> Dict[str, Any]:
+    """The example's ``Condition(...)`` keyword arguments, read without running it."""
+    code = _section().split("```python\n", 1)[1].split("```", 1)[0]
+    call = ast.parse(code, mode="eval").body
+    assert isinstance(call, ast.Call) and call.func.id == "Condition", code
+    kwargs: Dict[str, Any] = {}
+    for keyword in call.keywords:
+        if keyword.arg == "operator":
+            assert keyword.value.value.id == "OperatorType", code
+            kwargs["operator"] = OperatorType[keyword.value.attr]
+        else:
+            kwargs[keyword.arg] = ast.literal_eval(keyword.value)
+    return kwargs
+
+
+def _answers(condition: Condition, moment: str) -> Tuple[bool, bool]:
+    """(flag targeting, experiment targeting) for a user whose attribute is *moment*."""
+    context = {condition.attribute: moment}
+    flag = rules_engine.evaluate_condition(condition, context)
+    experiment = RulesEvaluationService()._evaluate_condition_enhanced(
+        condition, context
+    )
+    return flag, experiment
+
+
+def test_the_example_is_a_native_time_window_condition():
+    example = _example()
+    assert example["operator"] is OperatorType.TIME_WINDOW
+    # The schema accepts it, and it has keys the engine reads.
+    Condition(**example)
+    assert set(example["value"]) & set(rules_engine.TIME_WINDOW_KEYS)
+
+
+@pytest.mark.parametrize("moment", INSIDE)
+def test_the_example_matches_inside_its_window(moment):
+    assert _answers(Condition(**_example()), moment) == (True, True)
+
+
+@pytest.mark.parametrize("moment", OUTSIDE)
+def test_the_example_does_not_match_outside_its_window(moment):
+    assert _answers(Condition(**_example()), moment) == (False, False)
+
+
+def test_iso_start_and_end_match_nobody_in_either_shape():
+    """The example this page used to give, in the native and the dashboard shape."""
+    assert "ISO datetimes in `start` and `end` match nobody" in _prose()
+    window = {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"}
+    native = Condition(
+        attribute="current_time", operator=OperatorType.TIME_WINDOW, value=window
+    )
+    dashboard = convert_dashboard_condition(
+        {"attribute": "current_time", "operator": "time_window", "value": window}
+    )
+    for condition in (native, dashboard):
+        for moment in INSIDE + OUTSIDE:
+            assert _answers(condition, moment) == (False, False), (condition, moment)
+
+
+def test_after_and_before_make_a_window_between_two_moments():
+    assert "use `after` and `before` (below) in an `AND` group" in _prose()
+    group = RuleGroup(
+        operator=LogicalOperator.AND,
+        conditions=[
+            Condition(
+                attribute="current_time",
+                operator=OperatorType.AFTER,
+                value="2024-01-01T09:00:00",
+            ),
+            Condition(
+                attribute="current_time",
+                operator=OperatorType.BEFORE,
+                value="2024-01-31T17:00:00",
+            ),
+        ],
+    )
+    service = RulesEvaluationService()
+    for moment, inside in (
+        ("2024-01-13T12:00:00", True),  # a Saturday: no day rule here
+        ("2024-01-10T20:00:00", True),  # an evening: no time-of-day rule here
+        ("2024-01-01T08:00:00", False),
+        ("2024-02-01T12:00:00", False),
+    ):
+        context = {"current_time": moment}
+        assert rules_engine.evaluate_rule_group(group, context) is inside, moment
+        assert service._evaluate_rule_group_enhanced(group, context) is inside, moment

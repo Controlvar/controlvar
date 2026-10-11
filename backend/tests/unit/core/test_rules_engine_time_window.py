@@ -8,6 +8,7 @@ from datetime import datetime, time, timezone
 
 import pytest
 
+from backend.app.core import rules_engine
 from backend.app.core.rules_engine import apply_operator
 from backend.app.schemas.targeting_rule import OperatorType
 
@@ -425,13 +426,45 @@ class TestTimeWindowInvalidInputs:
         )
         assert result is True
 
-    def test_empty_window_config(self):
-        """Test empty window configuration."""
-        morning = datetime(2024, 1, 1, 10, 0, 0)
-
-        # Empty config should match everything
-        result = apply_operator(OperatorType.TIME_WINDOW, morning, {})
-        assert result is True
+    @pytest.mark.regression
+    @pytest.mark.parametrize(
+        "window",
+        [
+            {},
+            # ISO datetimes in the start/end the Condition schema asks for (#1156)
+            {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"},
+            {"start": "2000-01-01T00:00:00", "end": "2000-01-02T00:00:00"},
+            {"start": "2099-01-01T00:00:00", "end": "2099-01-02T00:00:00"},
+            {"start": "09:00", "end": "17:00"},
+            {"start": "09:00", "end": "17:00", "timezone": "UTC"},
+        ],
+    )
+    def test_a_window_with_no_key_the_engine_reads_matches_nobody(
+        self, monkeypatch, window
+    ):
+        """It used to match at every moment, the empty window included (#1145)."""
+        notes = []
+        monkeypatch.setattr(
+            rules_engine,
+            "_note_rule_problem",
+            lambda operator, reason: notes.append((operator, reason)),
+        )
+        for moment in (
+            datetime(2024, 1, 10, 12, 0, 0),
+            datetime(1999, 6, 1, 3, 0, 0),
+            None,  # now
+        ):
+            assert apply_operator(OperatorType.TIME_WINDOW, moment, window) is False
+        assert (
+            notes
+            == [
+                (
+                    OperatorType.TIME_WINDOW,
+                    "no days, start_time/end_time or start_date/end_date",
+                )
+            ]
+            * 3
+        )
 
     def test_invalid_actual_value_string(self):
         """Test invalid actual value (not a valid datetime string)."""

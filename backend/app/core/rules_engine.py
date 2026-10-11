@@ -301,6 +301,14 @@ def _substring_of(item: Any, text: str) -> bool:
     return isinstance(item, str) and item in text
 
 
+#: The keys of a ``time_window`` value that say when it is open; ``timezone``
+#: only changes how they are read. A window with none of them matches nobody
+#: and is reported once (#1145). It used to match at every moment, so a
+#: ``{"start": ..., "end": ...}`` window, the two keys the ``Condition`` schema
+#: asks for and which the engine does not read, was always open.
+TIME_WINDOW_KEYS = ("days", "start_time", "end_time", "start_date", "end_date")
+
+
 def apply_operator(
     operator: OperatorType,
     actual_value: Any,
@@ -855,9 +863,12 @@ def apply_operator(
                 _note_rule_problem(operator, "the value is not an object")
                 return False
 
-            # Empty config matches everything
-            if not expected_value:
-                return True
+            # A window with no key that says when it is open matches nobody.
+            if not any(key in expected_value for key in TIME_WINDOW_KEYS):
+                _note_rule_problem(
+                    operator, "no days, start_time/end_time or start_date/end_date"
+                )
+                return False
 
             # Apply timezone conversion if specified
             timezone_str = expected_value.get("timezone")

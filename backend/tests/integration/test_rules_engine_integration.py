@@ -381,9 +381,9 @@ class TestRealWorldScenarios:
         """Test targeting based on time windows."""
         service = RulesEvaluationService()
 
-        # Define a time window (Jan 1 9am to Jan 5 5pm)
-        start_time = datetime(2024, 1, 1, 9, 0, 0)
-        end_time = datetime(2024, 1, 5, 17, 0, 0)
+        # A time window from 1 to 5 January 2024. The engine reads start_date
+        # and end_date; start and end are what the Condition schema asks for,
+        # and ISO datetimes there alone would match nobody (#1145).
 
         rules = TargetingRules(
             rules=[
@@ -397,8 +397,10 @@ class TestRealWorldScenarios:
                                 attribute="current_time",
                                 operator=OperatorType.TIME_WINDOW,
                                 value={
-                                    "start": start_time.isoformat(),
-                                    "end": end_time.isoformat(),
+                                    "start": "2024-01-01",
+                                    "end": "2024-01-05",
+                                    "start_date": "2024-01-01",
+                                    "end_date": "2024-01-05",
                                 },
                             ),
                             # Active subscription

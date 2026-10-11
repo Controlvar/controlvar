@@ -108,33 +108,52 @@ class TestAdvancedOperators:
             geo({"lat": 34.0522, "lon": -118.2437}, ny_coords, {"radius": 1}) is False
         )
 
+    @pytest.mark.regression
     def test_time_window_operator(self):
-        """Test time window operator."""
-        # Create time window for business hours
-        now = datetime.now()
-        start_time = now - timedelta(hours=1)
-        end_time = now + timedelta(hours=1)
+        """time_window is the rules engine's, as on flags (#1145).
 
-        time_window = {"start": start_time.isoformat(), "end": end_time.isoformat()}
+        This test used to pin the service's own reading, ISO datetimes in
+        ``start``/``end``, which flags never read. A window with none of the
+        keys the engine reads now matches nobody, on experiments as on flags.
+        """
 
-        # Test current time within window
-        assert self.service._evaluate_time_window(now.isoformat(), time_window) is True
-
-        # Test time outside window
-        past_time = now - timedelta(hours=2)
-        assert (
-            self.service._evaluate_time_window(past_time.isoformat(), time_window)
-            is False
-        )
-
-        # Test with timestamps
-        assert (
-            self.service._evaluate_time_window(
-                now.timestamp(),
-                {"start": start_time.timestamp(), "end": end_time.timestamp()},
+        def window(moment, value):
+            return self.service._apply_operator_enhanced(
+                OperatorType.TIME_WINDOW, moment, value
             )
-            is True
+
+        moment = datetime(2024, 1, 2, 10, 0, 0)  # a Tuesday
+        business_hours = {
+            "start": "09:00",
+            "end": "17:00",
+            "start_time": "09:00",
+            "end_time": "17:00",
+        }
+
+        # Inside and outside the hours
+        assert window(moment.isoformat(), business_hours) is True
+        assert (
+            window((moment - timedelta(hours=2)).isoformat(), business_hours) is False
         )
+        assert window(moment, {**business_hours, "days": [1]}) is True
+        assert window(moment, {**business_hours, "days": [0]}) is False
+
+        # A timestamp, and a date range
+        january = {
+            "start": "x",
+            "end": "y",
+            "start_date": "2024-01-01",
+            "end_date": "2024-01-31",
+        }
+        assert window(moment.timestamp(), january) is True
+        assert window((moment + timedelta(days=40)).timestamp(), january) is False
+
+        # ISO start/end, what this test used to pin as a match (#1156)
+        iso = {
+            "start": (moment - timedelta(hours=1)).isoformat(),
+            "end": (moment + timedelta(hours=1)).isoformat(),
+        }
+        assert window(moment.isoformat(), iso) is False
 
     def test_percentage_bucket_operator(self):
         """Test percentage bucket operator."""
