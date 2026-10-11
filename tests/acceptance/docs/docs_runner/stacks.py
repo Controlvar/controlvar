@@ -121,8 +121,11 @@ SOURCE_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,99}")
 
 #: The compose variables of the two services a browser opens: the API and the dashboard.
 HTTP_PORT_VARIABLES = ("API_HOST_PORT", "FRONTEND_HOST_PORT")
-#: A ``ports`` entry whose host port is a variable with a default.
-DEFAULTED_PORT = re.compile(r"^\$\{(?P<variable>[A-Z_]+):-(?P<default>[0-9]{1,5})\}:")
+#: A ``ports`` entry whose host port is a variable with a default, with or
+#: without the ``127.0.0.1:`` the development compose file puts before it.
+DEFAULTED_PORT = re.compile(
+    r"^(?:127\.0\.0\.1:)?\$\{(?P<variable>[A-Z_]+):-(?P<default>[0-9]{1,5})\}:"
+)
 
 #: (our variable, the compose variable, the default host port)
 COMPOSE_PORTS: Tuple[Tuple[str, str, int], ...] = (

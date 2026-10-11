@@ -41,10 +41,13 @@ applies the `demo` seed (three experiments, two flags). Seeds run once per datab
 | API and interactive docs | http://localhost:8000 and http://localhost:8000/api/v1/docs |
 | Health | http://localhost:8000/health/ready |
 
-Default credentials: **admin@demo.com / Demo1234!**. Change `FIRST_SUPERUSER_PASSWORD`,
-`SECRET_KEY` and `POSTGRES_PASSWORD` in a `.env` file next to `docker-compose.yml` before
-exposing the stack to anyone. The header comment of `docker-compose.yml` lists every
-variable, the optional `demo`, `tools` and `aws` profiles, and the host-port overrides.
+Default credentials: **admin@demo.com / Demo1234!**. This is the development stack: it
+publishes its ports on `127.0.0.1` only, so other machines cannot reach it. Change
+`FIRST_SUPERUSER_PASSWORD`, `SECRET_KEY` and `POSTGRES_PASSWORD` in a `.env` file next to
+`docker-compose.yml` before anyone else uses it, and run a server from the published images
+in [`deploy/compose/compose.yml`](https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml)
+instead. The header comment of `docker-compose.yml` lists every variable, the optional
+`demo`, `tools` and `aws` profiles, and the host-port overrides.
 
 Verify:
 
@@ -263,7 +266,7 @@ The event's `event_name` must equal the metric's `event_name`, the experiment mu
 ## What's next
 
 - [SDK guide](../sdk-guide.md) — endpoint contract and per-SDK status
-- [Docker guide](docker-guide.md) — images, profiles, production notes
+- [Docker guide](docker-guide.md) — the local development stack: services, ports and profiles
 - [User guide](../guides/user-guide.md) — for experiment designers and analysts
 - [Testing guide](../development/testing-guide.md)
 - [Security policies](../security/security-policies.md) — access control and data protection

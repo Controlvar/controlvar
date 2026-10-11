@@ -2429,6 +2429,20 @@ def test_the_compose_files_default_ports_are_read_by_variable(tmp_path):
     assert set(stacks.HTTP_PORT_VARIABLES) <= set(real)
 
 
+def test_the_default_ports_are_read_through_a_loopback_binding(tmp_path):
+    """`"127.0.0.1:${VAR:-port}:target"` is how docker-compose.yml publishes them."""
+    from docs_runner import stacks
+
+    (tmp_path / "docker-compose.yml").write_text(
+        COMPOSE_FILE.replace('- "$', '- "127.0.0.1:$')
+    )
+    assert stacks.compose_default_ports(tmp_path / "docker-compose.yml") == {
+        "API_HOST_PORT": 8000,
+        "FRONTEND_HOST_PORT": 3000,
+        "POSTGRES_HOST_PORT": 5432,
+    }
+
+
 def test_a_compose_file_without_a_default_port_stops_before_docker(tmp_path):
     bin_dir = _fake_docker(tmp_path, 0)
     stacks, stack = _compose(

@@ -695,7 +695,7 @@ pages = [
     "self-hosting/releases.md",
     "self-hosting/cdk.md",
 ]
-note = "the production compose file (deploy/compose/compose.yml) has no page in the nav; the compose-production workflow boots it"
+note = "the production compose file (deploy/compose/compose.yml) is a link in the nav, not a page; the compose-production workflow boots it"
 
 [[flow]]
 text = "any other first-run flow the plan identifies"

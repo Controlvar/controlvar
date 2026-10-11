@@ -42,7 +42,7 @@ services:
     volumes:
       - ./tests/alb/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "${ALB_HOST_PORT:-8090}:8080"
+      - "127.0.0.1:${ALB_HOST_PORT:-8090}:8080"
     depends_on:
       api:
         condition: service_healthy

@@ -83,4 +83,13 @@ describe('/docs hub entries for methods that do not work yet', () => {
     expect(helm).toHaveLength(1);
     expect(helm[0].getAttribute('href')).toMatch(/self-hosting\/kubernetes/);
   });
+
+  it('leads Self-Hosting -> Docker Compose to the self-hosting stack, not the development guide (#1148)', () => {
+    const { getAllByRole } = render(<DocsIndex />);
+    const compose = getAllByRole('link').filter((a) => /^Docker Compose/.test(a.textContent ?? ''));
+    expect(compose).toHaveLength(1);
+    expect(compose[0].getAttribute('href')).toMatch(/self-hosting\/releases/);
+    expect(compose[0].getAttribute('href')).not.toMatch(/docker-guide/);
+    expect(compose[0].textContent ?? '').toMatch(/deploy\/compose\/compose\.yml/);
+  });
 });
