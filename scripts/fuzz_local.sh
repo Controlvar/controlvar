@@ -122,12 +122,9 @@ echo "make fuzz: building and starting the $project stack (logs in $work)"
   exit 1
 }
 
-# As the workflow installs it: exactly the pinned closure, then checked.
-"$python" -m venv "$work/venv"
-{
-  "$work/venv/bin/pip" install --quiet --disable-pip-version-check --no-deps -r tests/fuzz/requirements.txt -r tests/fuzz/constraints.txt &&
-    "$work/venv/bin/pip" check --disable-pip-version-check
-} > "$work/pip.log" 2>&1 || {
+# As the workflow installs it (the same script): exactly the pinned closure,
+# then checked.
+PYTHON="$python" scripts/check_fuzz_install.sh "$work/venv" > "$work/pip.log" 2>&1 || {
   echo "make fuzz: could not install tests/fuzz/requirements.txt; see $work/pip.log" >&2
   exit 1
 }

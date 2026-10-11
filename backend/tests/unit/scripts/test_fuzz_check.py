@@ -1193,9 +1193,15 @@ def test_the_arm_and_make_fuzz_pass_the_same_flags():
 
 
 def test_the_arm_and_make_fuzz_install_the_pinned_closure_and_check_it():
+    # One copy of the commands, scripts/check_fuzz_install.sh; the arm, `make
+    # fuzz` and the pull request check all call it (test_check_fuzz_install.py
+    # pins the third, and runs the script).
+    script = (SCRIPTS / "check_fuzz_install.sh").read_text()
+    assert INSTALL in script
+    assert 'pip" check --disable-pip-version-check' in script
     for text in (_arm(), _local()):
-        assert INSTALL in text
-        assert 'pip" check --disable-pip-version-check' in text
+        assert "scripts/check_fuzz_install.sh" in text
+        assert INSTALL not in text
 
 
 def test_the_arm_and_make_fuzz_resolve_routes_and_hand_them_to_the_evaluation():
