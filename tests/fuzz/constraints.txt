@@ -17,7 +17,7 @@ anyio==4.15.1
 certifi==2026.7.22
 charset-normalizer==3.5.2
 click==8.5.0
-graphql-core==3.2.13
+graphql-core==3.3.0
 harfile==0.5.0
 hypothesis-graphql==0.13.2
 idna==3.20
