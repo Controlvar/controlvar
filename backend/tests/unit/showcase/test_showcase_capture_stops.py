@@ -56,9 +56,14 @@ def test_main_installs_the_handler_for_every_stop_signal(monkeypatch):
     def stop_here(argv, environ):
         raise guard.Refused("stop after the handlers are in")
 
+    stripped = []
+    # main cuts os.environ to the allow-list first; here that would cut this
+    # pytest session's own (test_showcase_capture_guard.py runs main for real).
+    monkeypatch.setattr(guard, "strip_environment", lambda environ: stripped.append(1))
     monkeypatch.setattr(run, "parse_args", stop_here)
     try:
         assert run.main([]) == 2
+        assert stripped == [1]
         for signum in run.STOP_SIGNALS:
             assert signal.getsignal(signum) is run._stop_on_signal, signum
     finally:

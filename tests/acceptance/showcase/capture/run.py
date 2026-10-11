@@ -275,8 +275,22 @@ def refuse_missing_ffmpeg(*, run: Callable[..., Any] = subprocess.run) -> None:
         raise guard.Refused("ffmpeg is not installed (brew install ffmpeg)")
 
 
+#: Where Playwright looks for its browsers and its Node.js. ``main`` clears the
+#: process's environment before Playwright starts, so a run with either set
+#: would fail late, inside the browser launch, with the stack already up.
+PLAYWRIGHT_LOCATIONS = ("PLAYWRIGHT_BROWSERS_PATH", "PLAYWRIGHT_NODEJS_PATH")
+
+
 def preflight(options: Options, environ: Mapping[str, str]) -> None:
     """Every refusal that needs no Docker, npm or uvicorn."""
+    for name in PLAYWRIGHT_LOCATIONS:
+        if name in environ:
+            raise guard.Refused(
+                f"{name} is set; the capture clears its environment before Playwright"
+                " starts, so Playwright would not use it. Unset it, and install the"
+                " browser where Playwright looks by default"
+                " (python -m playwright install chromium)"
+            )
     unknown = [v for v in options.videos if v not in config.VIDEOS]
     if unknown:
         raise guard.Refused(

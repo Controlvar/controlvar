@@ -218,6 +218,55 @@ def caption_numbers(caption: str, shown: str) -> Verdict:
     return True, numbers, ""
 
 
+def spoken_numbers(sentence: str, at_start: str, before_exit: str) -> Verdict:
+    """G2: every number a narration sentence says is on the page at its beat's
+    start or at its end, before the exit (the page's visible text and field
+    values, as U4 reads them, at those two instants).
+
+    Compared by ``narration.number_key``: as written, except that ``15.0%`` is
+    ``15%`` and ``31,234`` is ``31234``. ``numbers["shown_at"]`` records which
+    instant showed each number, for the manifest.
+    """
+    from showcase.capture.narration import number_key
+    from showcase.capture.storyboard import numbers_in
+
+    start = {number_key(n) for n in numbers_in(at_start)}
+    end = {number_key(n) for n in numbers_in(before_exit)}
+    said = numbers_in(sentence)
+    shown_at: Dict[str, str] = {}
+    missing = []
+    for number in said:
+        key = number_key(number)
+        instants = [w for w, seen in (("start", start), ("end", end)) if key in seen]
+        if instants:
+            shown_at[number] = " and ".join(instants)
+        else:
+            missing.append(number)
+    numbers = {"said": said, "shown_at": shown_at}
+    if missing:
+        first = ", ".join(numbers_in(at_start)[:12]) or "no number"
+        last = ", ".join(numbers_in(before_exit)[:12]) or "no number"
+        return (
+            False,
+            numbers,
+            f"the narration says {missing[0]}; the page shows {first} at the beat's"
+            f" start and {last} before its exit",
+        )
+    return True, numbers, ""
+
+
+def narration_tally(checks: int, sentences: int) -> Verdict:
+    """G2's count: one number check for every narration sentence, exactly."""
+    numbers = {"narration_checks": checks, "sentences": sentences}
+    if checks != sentences:
+        return (
+            False,
+            numbers,
+            f"{checks} narration number checks for {sentences} sentences",
+        )
+    return True, numbers, ""
+
+
 def _arms(variants: Sequence[Mapping[str, Any]]) -> Dict[str, Dict[str, int]]:
     """A results API metric's variants as ``{arm: {users, converting_users}}``."""
     arms: Dict[str, Dict[str, int]] = {}

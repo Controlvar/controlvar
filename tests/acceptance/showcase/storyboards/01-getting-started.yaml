@@ -7,6 +7,11 @@
 # A beat's click that leaves the page is in its `exit`, so the caption stays up
 # while the next page opens: the capture directory allows at most a second
 # without one.
+#
+# `say` is the narration (#1066 voiceover): the UX draft's spoken script, with
+# every number in digits as the page prints it, and every number on the page
+# while it is said (the card's note says "3 experiments, 2 flags" to match).
+# `python -m showcase.voice` makes its clips; the capture does not use it yet.
 slug: 01-getting-started
 title: Get started
 seed: demo
@@ -22,12 +27,17 @@ scenes:
       command: "docker compose up -d --wait"
       note: >-
         The first start builds two images, starts Postgres 16 and Redis 7, and
-        applies the demo seed: three experiments, two flags.
+        applies the demo seed: 3 experiments, 2 flags.
     beats:
       - cue: One command starts the whole stack on your machine.
         focus: {css: "#command"}
+        say:
+          - "One command starts the whole stack on your machine: docker compose up."
       - cue: Postgres, Redis, the API and the dashboard, with demo data.
         focus: {css: "#card"}
+        say:
+          - Postgres, Redis, the API and the dashboard all come up.
+          - "With demo data: 3 experiments and 2 flags."
 
   - id: dashboard
     open: /
@@ -35,6 +45,8 @@ scenes:
     beats:
       - cue: Open the dashboard in your browser.
         focus: {role: link, name: Sign in, exact: true}
+        say:
+          - Open the dashboard in your browser, and choose Sign in.
         steps:
           - move: {role: link, name: Sign in, exact: true}
         exit:
@@ -45,6 +57,9 @@ scenes:
           - wait_for: {role: button, name: Sign in, exact: true}
         cue: Sign in with the demo admin account from the Quick Start.
         focus: {css: form}
+        say:
+          - Sign in as the demo admin.
+          - The email and password are in the Quick Start.
         steps:
           - type: {label: Email}
             text: admin@demo.com
@@ -60,6 +75,9 @@ scenes:
           - wait_for: {role: link, name: Homepage Hero Copy Test}
         cue: Your experiments, each with its status at a glance.
         focus: {css: table}
+        say:
+          - Here are your experiments, each with its status at a glance.
+          - Open the completed one.
         steps:
           - look: {role: columnheader, name: Status}
             ms: 2000
@@ -71,6 +89,8 @@ scenes:
           - wait_for: {role: link, name: View results}
         cue: Each one has its variants, its metric and a hypothesis.
         focus: {role: heading, name: Homepage Hero Copy Test}
+        say:
+          - It shows the variants, the metric it's judged on, and the hypothesis.
         steps:
           - look: {text: Variants, exact: true}
             ms: 1500
@@ -85,6 +105,9 @@ scenes:
         cue: Results give the lift, the p-value and a recommended winner.
         focus: {text: Winner, exact: true}
         payoff: true
+        say:
+          - Its results show the lift, the p-value, and a recommended winner.
+          - "Here, the new copy wins: a 15% lift in sign-ups."
         steps:
           - look: {text: "improvement on Signup Conversion"}
             ms: 2000
@@ -97,6 +120,8 @@ scenes:
           - wait_for: {role: link, name: New Dashboard UI}
         cue: Feature flags turn a feature on for some users, or all.
         focus: {role: link, name: New Dashboard UI}
+        say:
+          - Feature flags turn a feature on for some users, or for everyone.
         steps:
           - move: {role: link, name: New Dashboard UI}
         exit:
@@ -106,6 +131,8 @@ scenes:
           - wait_for: {text: Rollout schedule, exact: true}
         cue: Flags roll out in stages, with a safety check alongside.
         focus: {text: Rollout schedule, exact: true}
+        say:
+          - This flag rolls out in stages, with a safety check alongside.
         steps:
           - look: {text: Rollout schedule, exact: true}
             ms: 1800
@@ -114,12 +141,17 @@ scenes:
 
       - cue: Each stage raises the share of users who get the flag.
         focus: {text: Expand to 50%, exact: true}
+        say:
+          - "Each stage raises the share of users: 10%, then 25%, now 50%."
         steps:
           - look: {text: Expand to 50%, exact: true}
             ms: 2500
 
       - cue: The safety check watches the error rate as it rolls out.
         focus: {text: Error rate, exact: true}
+        say:
+          - And the safety check watches the error rate as it rolls out.
+          - Right now, it's healthy.
         steps:
           - look: {text: Error rate, exact: true}
             ms: 2000

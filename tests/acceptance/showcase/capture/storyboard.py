@@ -17,7 +17,13 @@ browser and recorded like a page). A scene is a list of beats; a beat is
 * ``exit``: run after the cue's end check, with the caption still up: the
   click that leaves the page;
 * ``record``: elements whose text is read at the cue's start, for the end
-  state (gate 10) to compare with the API.
+  state (gate 10) to compare with the API;
+* ``say``: the narration, one to four sentences, each a caption of its own
+  (``showcase.capture.narration`` says what a sentence may say), and
+  ``claims``: any number it says as a word, with the page of the docs that
+  states it. A storyboard narrates every beat or none, and the cue list
+  (``compile_cues``) and so the capture are the same either way: the voice
+  step (``python -m showcase.voice``) makes the clips.
 
 A scene opens a page (``open``), an experiment's results page by the
 experiment's name (``results_of``, its id looked up off camera), or draws a
@@ -39,8 +45,9 @@ holding a template (``{``) or anything but plain text, a ``type`` of a
 credential into a step not marked secret, an on-camera step that opens the API
 keys page, a locator naming nothing, a scene with no beats, a code line that
 names a host and port, traffic finished before it starts, a ``choose`` or
-``slide`` in ``before`` (cut, so never seen), and a flag's end state naming a
-segment the setup does not make or a reading no beat records. Caption text
+``slide`` in ``before`` (cut, so never seen), a flag's end state naming a
+segment the setup does not make or a reading no beat records, and a narration
+``narration.board_problems`` refuses (every problem at once). Caption text
 never comes from the page or the run: ``compile_cues`` is a pure function of
 the file, so the cue list is the same on every run (gate 13a).
 """
@@ -50,7 +57,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple, Union
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -165,6 +172,14 @@ class Slide(_Strict):
 Step = Union[Click, Move, Type, Look, ScrollTo, WaitFor, Choose, Slide]
 
 
+class Claim(_Strict):
+    """A number the narration says as a word, and the page of the docs that
+    states it. A person checks it (U6): no page check can see a number word."""
+
+    says: str = Field(min_length=1, max_length=80)
+    source: str = Field(pattern=r"^docs/[A-Za-z0-9/_.-]+\.md(?::[0-9]{1,5})?$")
+
+
 class Beat(_Strict):
     before: List[Step] = Field(default_factory=list)
     cue: str
@@ -176,6 +191,10 @@ class Beat(_Strict):
     alerts: List[str] = Field(default_factory=list)
     #: Elements whose text is kept at the cue's start, by name, for gate 10.
     record: Dict[str, Locator] = Field(default_factory=dict)
+    #: The narration: up to four sentences, spoken in order (none: a silent beat).
+    say: List[str] = Field(default_factory=list, max_length=contract.MAX_SAY_SENTENCES)
+    #: Number words the narration says, each with its page of the docs.
+    claims: List[Claim] = Field(default_factory=list)
 
 
 #: The longest line a code card shows (it is drawn 1,600 px wide).
@@ -474,6 +493,15 @@ def parse(data: Any, *, source: str = "storyboard") -> Storyboard:
                 raise StoryboardError(
                     f"{where}: a choose or slide in before is cut from the video"
                 )
+    # G1 and G3, the narration's rules (the voice step runs them again).
+    from showcase.capture import narration
+
+    problems = narration.board_problems(board)
+    if problems:
+        raise StoryboardError(
+            f"{source}: the narration is refused:\n"
+            + "\n".join(f"- {p}" for p in problems)
+        )
     return board
 
 
@@ -654,6 +682,48 @@ def estimate_ms(board: Storyboard) -> int:
             held = max(min_cue_ms(beat.cue), sum(step_ms(s) for s in beat.steps))
             total += held + (config.PAYOFF_MS if beat.payoff else 0)
             total += sum(step_ms(s) for s in beat.exit) + config.CUE_GAP_MS
+    return total
+
+
+def narration_lines(board: Storyboard) -> List[Tuple[str, int, int, str]]:
+    """Every narration sentence in order: ``(scene id, beat, line, text)``,
+    beats and lines counted from 1. Empty for a storyboard without narration."""
+    return [
+        (scene.id, number, line, sentence)
+        for scene in board.scenes
+        for number, beat in enumerate(scene.beats, start=1)
+        for line, sentence in enumerate(beat.say, start=1)
+    ]
+
+
+def voiced_estimate_ms(
+    board: Storyboard, samples: Mapping[Tuple[str, int, int], int]
+) -> int:
+    """``estimate_ms`` for a narrated storyboard, from each sentence's clip.
+
+    *samples* gives each ``narration_lines`` entry's clip length in samples
+    (``contract.VOICE_RATE``). A beat is held for the longest of its headline's
+    reading time, its steps, and its sentences' slots
+    (``contract.sentence_slot_ms``) plus the cue margin; the narration may run
+    on over the beat's exit, so the exit's steps count towards it, except on a
+    payoff beat, whose narration ends before its silent hold.
+    """
+    total = 0
+    for scene in board.scenes:
+        total += SCENE_GAP_MS
+        for number, beat in enumerate(scene.beats, start=1):
+            spoken = sum(
+                contract.sentence_slot_ms(sentence, samples[(scene.id, number, line)])
+                for line, sentence in enumerate(beat.say, start=1)
+            )
+            steps = sum(step_ms(s) for s in beat.steps)
+            exit_ms = sum(step_ms(s) for s in beat.exit)
+            overlap = 0 if beat.payoff else exit_ms
+            held = max(
+                min_cue_ms(beat.cue), steps, spoken + config.CUE_MARGIN_MS - overlap
+            )
+            total += held + (config.PAYOFF_MS if beat.payoff else 0)
+            total += exit_ms + config.CUE_GAP_MS
     return total
 
 

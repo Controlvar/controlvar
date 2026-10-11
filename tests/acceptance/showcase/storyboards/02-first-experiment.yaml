@@ -16,6 +16,12 @@
 #   estimate asks for, a 12.1% lift, p = 0.0007 (Fisher's exact, the results
 #   API's test). backend/tests/unit/showcase/test_showcase_first_experiment.py
 #   pins these numbers, and gate 10 holds the platform to them.
+# * `say` is the narration (#1066 voiceover): the UX draft's spoken script, with
+#   every number in digits as the page prints it, and every number on the page
+#   while it is said. So the first beat names no step count (the wizard's 5
+#   steps open only in its exit), and the time card's note says "About 2 weeks"
+#   in digits. `python -m showcase.voice` makes its clips; the capture does not
+#   use it yet.
 slug: 02-first-experiment
 title: Your first experiment
 seed: demo
@@ -47,6 +53,8 @@ scenes:
     beats:
       - cue: Create an experiment in five guided steps.
         focus: {testid: new-experiment-btn}
+        say:
+          - "Choose New Experiment: a guided setup in short steps."
         steps:
           - move: {testid: new-experiment-btn}
         exit:
@@ -58,6 +66,9 @@ scenes:
           - wait_for: {role: heading, name: Name it and choose what to measure}
         cue: Name it, and say what you expect to happen.
         focus: {testid: experiment-name}
+        say:
+          - Name it, and the key your code uses fills itself in.
+          - Then say what you expect to happen.
         steps:
           - type: {testid: experiment-name}
             text: Sticky add-to-cart bar
@@ -68,6 +79,8 @@ scenes:
 
       - cue: Pick the event that counts as a win.
         focus: {testid: metric-row-0}
+        say:
+          - "Pick the event that counts as a win: here, a purchase."
         steps:
           - type: {testid: metric-event-0}
             text: purchase
@@ -79,6 +92,8 @@ scenes:
           - wait_for: {role: heading, name: Set up the versions users will see}
         cue: Two variants, split evenly between users.
         focus: {testid: variant-row-1}
+        say:
+          - Control and Sticky bar, split evenly between users.
         steps:
           - type: {testid: variant-name-1}
             text: Sticky bar
@@ -92,6 +107,9 @@ scenes:
           - wait_for: {testid: estimate-baseline}
         cue: "Size it first: how many users do you need?"
         focus: {testid: estimate-baseline}
+        say:
+          - Size it first.
+          - Enter today's conversion rate, the lift worth catching, and your traffic.
         steps:
           - type: {testid: estimate-baseline}
             text: "5"
@@ -108,6 +126,8 @@ scenes:
           - wait_for: {testid: estimate-duration}
         cue: 31,234 users per variant, about 13 days here.
         focus: {testid: estimate-result}
+        say:
+          - "That's 31,234 users per variant: about 13 days."
         steps:
           - look: {testid: estimate-per-variant}
             ms: 1200
@@ -118,6 +138,8 @@ scenes:
           - wait_for: {testid: wizard-review}
         cue: Review it, then create it.
         focus: {testid: wizard-review}
+        say:
+          - Review it all on one page, then create it.
         steps:
           - look: {testid: review-variants}
             ms: 1000
@@ -128,6 +150,8 @@ scenes:
           - wait_for: {testid: action-start}
         cue: Start it, and it is ready for shoppers.
         focus: {testid: experiment-status}
+        say:
+          - Choose Start, and it's ready for shoppers.
         steps:
           - click: {testid: action-start}
           - wait_for: {css: "[data-testid=experiment-status][data-status=active]"}
@@ -157,12 +181,17 @@ scenes:
     beats:
       - cue: Your app asks the SDK for a variant, then tracks purchases.
         focus: {css: "#code"}
+        say:
+          - In your app, the JavaScript SDK asks for each shopper's variant.
+          - Then it tracks their purchases.
 
   - id: arriving
     results_of: Sticky add-to-cart bar
     beats:
       - cue: Open its results as shoppers arrive.
         focus: {role: tab, name: Live}
+        say:
+          - Open its results as shoppers arrive, then the Live tab.
         steps:
           - move: {role: tab, name: Live}
 
@@ -171,6 +200,9 @@ scenes:
           - wait_for: {testid: live-indicator}
         cue: Each refresh shows more shoppers, split about evenly.
         focus: {testid: live-results-panel}
+        say:
+          - Each Refresh shows more shoppers, split about evenly.
+          - No winner yet.
         steps:
           - look: {testid: variants-table}
             ms: 1000
@@ -184,11 +216,13 @@ scenes:
       label: Off camera
       headline: 63,000 shoppers later
       note: >-
-        About two weeks of traffic at 10,000 visitors a day with half of them in
+        About 2 weeks of traffic at 10,000 visitors a day with half of them in
         the test, sent by the tool in minutes.
     beats:
       - cue: About two weeks of shoppers, simulated in minutes.
         focus: {css: "#headline"}
+        say:
+          - "63,000 shoppers later: about 2 weeks of traffic, simulated in minutes."
 
   - id: result
     results_of: Sticky add-to-cart bar
@@ -196,6 +230,9 @@ scenes:
     beats:
       - cue: "Sticky bar wins: a 12.1% lift, significant at 95%."
         focus: {testid: experiment-summary}
+        say:
+          - "Sticky bar wins: a 12.1% lift in purchases, significant at 95% confidence."
+          - "The recommendation: ship it."
         record:
           recommendation: {testid: recommendation-reason}
         payoff: true

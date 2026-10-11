@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from showcase.capture import config, gates, guard
+from showcase.capture import config, gates, guard, run
 from showcase.capture.procs import Children, python_argv
 from showcase.capture.stack import Ports, Stack, StackError
 
@@ -283,6 +283,46 @@ def test_main_strips_the_process_environment_before_it_starts_anything(tmp_path)
     # The children are still built from the caller's own settings (a Docker
     # context, say): the copy main takes before the strip is untouched.
     assert seen["copy_kept_the_caller"] is True
+
+
+class _PastTheEnvironmentChecks(Exception):
+    pass
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("name", ["PLAYWRIGHT_BROWSERS_PATH", "PLAYWRIGHT_NODEJS_PATH"])
+def test_a_playwright_location_in_the_callers_environment_is_refused_first(
+    tmp_path, monkeypatch, name
+):
+    """``main`` clears the process's environment before Playwright starts, so a
+    browser location set in the caller's shell never reached it: the run built
+    the tree and started the stack, then failed inside the browser launch with
+    Playwright's own "Executable doesn't exist". Preflight now refuses first,
+    naming the variable; without it, preflight goes on to the ports."""
+
+    def ports_reached(*_args, **_kwargs):
+        raise _PastTheEnvironmentChecks()
+
+    monkeypatch.setattr(guard, "refuse_ports", ports_reached)
+    options = run.Options(
+        videos=["01-getting-started"],
+        ref="v0.0.0",
+        repo=tmp_path,
+        work_dir=tmp_path / "work",
+        profile="core",
+        ports=Ports(28400, 28401, 28402),
+        out=tmp_path / "videos",
+    )
+    environ = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)}
+    with pytest.raises(guard.Refused) as caught:
+        run.preflight(options, {**environ, name: str(tmp_path / "browsers")})
+    assert str(caught.value) == (
+        f"{name} is set; the capture clears its environment before Playwright starts,"
+        " so Playwright would not use it. Unset it, and install the browser where"
+        " Playwright looks by default (python -m playwright install chromium)"
+    )
+    with pytest.raises(_PastTheEnvironmentChecks):
+        run.preflight(options, environ)
 
 
 # --- Deletions and the work root (EM condition 7e) -------------------------------

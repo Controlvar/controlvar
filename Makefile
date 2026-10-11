@@ -107,6 +107,17 @@ fuzz: ## Fuzz the API locally: make fuzz FUZZ_SEED=<seed> SHA=<commit> PASS=<sup
 showcase: ## Record a product walkthrough video locally: make showcase VIDEO=<slug|all> REF=<tag>
 	cd tests/acceptance && ../../$(PY) -m showcase.capture "$(VIDEO)" $(if $(REF),--ref "$(REF)",)
 
+.PHONY: showcase-voice
+# The narration's clips for the walkthrough videos (#1066): each storyboard
+# `say:` sentence spoken by Amazon Polly (generative, Ruth) and slowed to 90%,
+# into ~/.cache/experimently-showcase/voice, outside every repository. The only
+# target that calls AWS (`make showcase` never does), and only for a sentence
+# whose clip is not in that cache yet, with the profile in AWS_PROFILE from your
+# own environment: it is never written here. It prints each clip's length and
+# level, each video's projected length, and the characters sent.
+showcase-voice: ## Make the narration clips with Amazon Polly: AWS_PROFILE=<profile> make showcase-voice VIDEO=<slug|all>
+	cd tests/acceptance && ../../$(PY) -m showcase.voice "$(VIDEO)" --voice Ruth
+
 # ---------------------------------------------------------------------------
 # Test
 # ---------------------------------------------------------------------------
