@@ -1,0 +1,359 @@
+{
+  "captured": "staging, 2026-10-10, the #295 rehearsal: scripts/ecs_rolling_rollout.sh rolled experimentation-dashboard-staging out to a revision whose image digest does not exist, and ECS's deployment circuit breaker rolled it back",
+  "about": "What the script was given and what it printed. `reads` are describe-services of the service, read about every 15 s by a loop beside the script (not the script's own reads, which were not recorded): numbered from the read before the update-service call (1), trimmed to the fields the script reads, and a run of reads identical in those fields kept once (`reads` names the run). Only the read the script decided on keeps its events, the first 10, which is all the script prints; it printed exactly these. Reads 51 onward repeat read 50 in these fields and are left out. The account is replaced by 123456789012 inside each ARN and the ECR registry host; nothing else is changed.",
+  "target": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:14",
+  "before": {
+    "service": {
+      "status": "ACTIVE",
+      "desiredCount": 1,
+      "deploymentController": {
+        "type": "ECS"
+      },
+      "deployments": [
+        {
+          "id": "ecs-svc/1887248989712235828",
+          "status": "PRIMARY",
+          "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:13",
+          "rolloutState": "COMPLETED",
+          "desiredCount": 1,
+          "runningCount": 1,
+          "failedTasks": 0
+        }
+      ]
+    },
+    "source": "verbatim: read 1, before the update-service call; the script printed that it was serving experimentation-dashboard-staging:13"
+  },
+  "update": {
+    "service": {
+      "status": "ACTIVE",
+      "desiredCount": 1,
+      "deploymentController": {
+        "type": "ECS"
+      },
+      "deployments": [
+        {
+          "id": "ecs-svc/9375540487197225864",
+          "status": "PRIMARY",
+          "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:14",
+          "rolloutState": "IN_PROGRESS",
+          "desiredCount": 0,
+          "runningCount": 0,
+          "failedTasks": 0
+        },
+        {
+          "id": "ecs-svc/1887248989712235828",
+          "status": "ACTIVE",
+          "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:13",
+          "rolloutState": "COMPLETED",
+          "desiredCount": 1,
+          "runningCount": 1,
+          "failedTasks": 0
+        }
+      ]
+    },
+    "source": "reconstructed: update-service's answer was not recorded; read 2, the first after it, stands in (the script needs only its PRIMARY deployment of the target, whose id it printed)"
+  },
+  "image": {
+    "value": "123456789012.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:a0c07572f0a4b8e87c0de27ae46b63ab8ed4c79da360e70655168382e428aad7",
+    "source": "verbatim: the image of experimentation-dashboard-staging:13, read before the run"
+  },
+  "stopped": {
+    "arn": "arn:aws:ecs:us-west-2:123456789012:task/experimentation-staging/0751cae2d8bf4d149d1011e3e95a0716",
+    "td": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:14",
+    "reason": "CannotPullContainerError: pull image manifest has been retried 7 time(s): failed to resolve ref 123456789012.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: 123456789012.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: not found",
+    "source": "reconstructed from the line the script printed, which replaced the account with <account>; 123456789012 stands in, and the script replaces it again"
+  },
+  "reads": [
+    {
+      "reads": "2",
+      "service": {
+        "status": "ACTIVE",
+        "desiredCount": 1,
+        "deploymentController": {
+          "type": "ECS"
+        },
+        "deployments": [
+          {
+            "id": "ecs-svc/9375540487197225864",
+            "status": "PRIMARY",
+            "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:14",
+            "rolloutState": "IN_PROGRESS",
+            "desiredCount": 0,
+            "runningCount": 0,
+            "failedTasks": 0
+          },
+          {
+            "id": "ecs-svc/1887248989712235828",
+            "status": "ACTIVE",
+            "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:13",
+            "rolloutState": "COMPLETED",
+            "desiredCount": 1,
+            "runningCount": 1,
+            "failedTasks": 0
+          }
+        ]
+      }
+    },
+    {
+      "reads": "3-11",
+      "service": {
+        "status": "ACTIVE",
+        "desiredCount": 1,
+        "deploymentController": {
+          "type": "ECS"
+        },
+        "deployments": [
+          {
+            "id": "ecs-svc/9375540487197225864",
+            "status": "PRIMARY",
+            "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:14",
+            "rolloutState": "IN_PROGRESS",
+            "desiredCount": 1,
+            "runningCount": 0,
+            "failedTasks": 0
+          },
+          {
+            "id": "ecs-svc/1887248989712235828",
+            "status": "ACTIVE",
+            "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:13",
+            "rolloutState": "COMPLETED",
+            "desiredCount": 1,
+            "runningCount": 1,
+            "failedTasks": 0
+          }
+        ]
+      }
+    },
+    {
+      "reads": "12-19",
+      "service": {
+        "status": "ACTIVE",
+        "desiredCount": 1,
+        "deploymentController": {
+          "type": "ECS"
+        },
+        "deployments": [
+          {
+            "id": "ecs-svc/9375540487197225864",
+            "status": "PRIMARY",
+            "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:14",
+            "rolloutState": "IN_PROGRESS",
+            "desiredCount": 1,
+            "runningCount": 0,
+            "failedTasks": 1
+          },
+          {
+            "id": "ecs-svc/1887248989712235828",
+            "status": "ACTIVE",
+            "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:13",
+            "rolloutState": "COMPLETED",
+            "desiredCount": 1,
+            "runningCount": 1,
+            "failedTasks": 0
+          }
+        ]
+      }
+    },
+    {
+      "reads": "20-44",
+      "service": {
+        "status": "ACTIVE",
+        "desiredCount": 1,
+        "deploymentController": {
+          "type": "ECS"
+        },
+        "deployments": [
+          {
+            "id": "ecs-svc/9375540487197225864",
+            "status": "PRIMARY",
+            "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:14",
+            "rolloutState": "IN_PROGRESS",
+            "desiredCount": 1,
+            "runningCount": 0,
+            "failedTasks": 2
+          },
+          {
+            "id": "ecs-svc/1887248989712235828",
+            "status": "ACTIVE",
+            "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:13",
+            "rolloutState": "COMPLETED",
+            "desiredCount": 1,
+            "runningCount": 1,
+            "failedTasks": 0
+          }
+        ]
+      }
+    },
+    {
+      "reads": "45",
+      "service": {
+        "status": "ACTIVE",
+        "desiredCount": 1,
+        "deploymentController": {
+          "type": "ECS"
+        },
+        "deployments": [
+          {
+            "id": "ecs-svc/1887248989712235828",
+            "status": "PRIMARY",
+            "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:13",
+            "rolloutState": "IN_PROGRESS",
+            "desiredCount": 1,
+            "runningCount": 1,
+            "failedTasks": 0
+          },
+          {
+            "id": "ecs-svc/9375540487197225864",
+            "status": "ACTIVE",
+            "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:14",
+            "rolloutState": "FAILED",
+            "desiredCount": 1,
+            "runningCount": 0,
+            "failedTasks": 3
+          }
+        ],
+        "events": [
+          {
+            "createdAt": "2026-10-10T12:28:53.224000-07:00",
+            "message": "(service experimentation-dashboard-staging) rolling back to deployment ecs-svc/1887248989712235828."
+          },
+          {
+            "createdAt": "2026-10-10T12:28:53.223000-07:00",
+            "message": "(service experimentation-dashboard-staging) (deployment ecs-svc/9375540487197225864) deployment failed: tasks failed to start."
+          },
+          {
+            "createdAt": "2026-10-10T12:28:43.881000-07:00",
+            "message": "(service experimentation-dashboard-staging) has started 1 tasks: (task 698d3ad956c74edb86028214b729ac2e)."
+          },
+          {
+            "createdAt": "2026-10-10T12:23:40.781000-07:00",
+            "message": "(service experimentation-dashboard-staging) was unable to place a task. Reason: CannotPullContainerError: pull image manifest has been retried 7 time(s): failed to resolve ref 123456789012.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: 123456789012.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: not found."
+          },
+          {
+            "createdAt": "2026-10-10T12:22:06.656000-07:00",
+            "message": "(service experimentation-dashboard-staging) has started 1 tasks: (task 2ab7bb7d11a3423ab56d7fd5654510dc)."
+          },
+          {
+            "createdAt": "2026-10-10T12:21:33.533000-07:00",
+            "message": "(service experimentation-dashboard-staging) was unable to place a task. Reason: CannotPullContainerError: pull image manifest has been retried 7 time(s): failed to resolve ref 123456789012.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: 123456789012.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: not found."
+          },
+          {
+            "createdAt": "2026-10-10T12:19:58.404000-07:00",
+            "message": "(service experimentation-dashboard-staging) has started 1 tasks: (task 0751cae2d8bf4d149d1011e3e95a0716)."
+          },
+          {
+            "createdAt": "2026-10-10T12:19:27.582000-07:00",
+            "message": "(service experimentation-dashboard-staging) was unable to place a task. Reason: CannotPullContainerError: pull image manifest has been retried 7 time(s): failed to resolve ref 123456789012.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: 123456789012.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: not found."
+          },
+          {
+            "createdAt": "2026-10-10T12:17:37.123000-07:00",
+            "message": "(service experimentation-dashboard-staging) has started 1 tasks: (task cedaf78a2c8d4470ab7648062cba10fe)."
+          },
+          {
+            "createdAt": "2026-10-10T08:05:15.636000-07:00",
+            "message": "(service experimentation-dashboard-staging) has reached a steady state."
+          }
+        ]
+      }
+    },
+    {
+      "reads": "46-48",
+      "service": {
+        "status": "ACTIVE",
+        "desiredCount": 1,
+        "deploymentController": {
+          "type": "ECS"
+        },
+        "deployments": [
+          {
+            "id": "ecs-svc/1887248989712235828",
+            "status": "PRIMARY",
+            "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:13",
+            "rolloutState": "IN_PROGRESS",
+            "desiredCount": 1,
+            "runningCount": 1,
+            "failedTasks": 0
+          },
+          {
+            "id": "ecs-svc/9375540487197225864",
+            "status": "DRAINING",
+            "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:14",
+            "rolloutState": "FAILED",
+            "desiredCount": 0,
+            "runningCount": 0,
+            "failedTasks": 3
+          }
+        ]
+      }
+    },
+    {
+      "reads": "49",
+      "service": {
+        "status": "ACTIVE",
+        "desiredCount": 1,
+        "deploymentController": {
+          "type": "ECS"
+        },
+        "deployments": [
+          {
+            "id": "ecs-svc/1887248989712235828",
+            "status": "PRIMARY",
+            "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:13",
+            "rolloutState": "IN_PROGRESS",
+            "desiredCount": 1,
+            "runningCount": 1,
+            "failedTasks": 0
+          }
+        ]
+      }
+    },
+    {
+      "reads": "50",
+      "service": {
+        "status": "ACTIVE",
+        "desiredCount": 1,
+        "deploymentController": {
+          "type": "ECS"
+        },
+        "deployments": [
+          {
+            "id": "ecs-svc/1887248989712235828",
+            "status": "PRIMARY",
+            "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:13",
+            "rolloutState": "COMPLETED",
+            "desiredCount": 1,
+            "runningCount": 1,
+            "failedTasks": 0
+          }
+        ]
+      }
+    }
+  ],
+  "exit": 1,
+  "stdout": [
+    "--- experimentation-dashboard-staging: last service events ---",
+    "2026-10-10T12:28:53.224000-07:00  (service experimentation-dashboard-staging) rolling back to deployment ecs-svc/1887248989712235828.",
+    "2026-10-10T12:28:53.223000-07:00  (service experimentation-dashboard-staging) (deployment ecs-svc/9375540487197225864) deployment failed: tasks failed to start.",
+    "2026-10-10T12:28:43.881000-07:00  (service experimentation-dashboard-staging) has started 1 tasks: (task 698d3ad956c74edb86028214b729ac2e).",
+    "2026-10-10T12:23:40.781000-07:00  (service experimentation-dashboard-staging) was unable to place a task. Reason: CannotPullContainerError: pull image manifest has been retried 7 time(s): failed to resolve ref <account>.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: <account>.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: not found.",
+    "2026-10-10T12:22:06.656000-07:00  (service experimentation-dashboard-staging) has started 1 tasks: (task 2ab7bb7d11a3423ab56d7fd5654510dc).",
+    "2026-10-10T12:21:33.533000-07:00  (service experimentation-dashboard-staging) was unable to place a task. Reason: CannotPullContainerError: pull image manifest has been retried 7 time(s): failed to resolve ref <account>.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: <account>.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: not found.",
+    "2026-10-10T12:19:58.404000-07:00  (service experimentation-dashboard-staging) has started 1 tasks: (task 0751cae2d8bf4d149d1011e3e95a0716).",
+    "2026-10-10T12:19:27.582000-07:00  (service experimentation-dashboard-staging) was unable to place a task. Reason: CannotPullContainerError: pull image manifest has been retried 7 time(s): failed to resolve ref <account>.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: <account>.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: not found.",
+    "2026-10-10T12:17:37.123000-07:00  (service experimentation-dashboard-staging) has started 1 tasks: (task cedaf78a2c8d4470ab7648062cba10fe).",
+    "2026-10-10T08:05:15.636000-07:00  (service experimentation-dashboard-staging) has reached a steady state.",
+    "--- one stopped task of experimentation-dashboard-staging:14 ---",
+    "arn:aws:ecs:us-west-2:<account>:task/experimentation-staging/0751cae2d8bf4d149d1011e3e95a0716\tCannotPullContainerError: pull image manifest has been retried 7 time(s): failed to resolve ref <account>.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: <account>.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:0000000000000000000000000000000000000000000000000000000000000000: not found",
+    "---",
+    "::error title=experimentation-dashboard-staging rolled back by ECS::experimentation-dashboard-staging did not start on experimentation-dashboard-staging:14, and ECS's circuit breaker put experimentation-dashboard-staging:13 (experimentation-platform/web@sha256:a0c07572f0a4b8e87c0de27ae46b63ab8ed4c79da360e70655168382e428aad7) back. Nothing else was undone. The service events and a stopped task's reason are printed above."
+  ],
+  "stderr": [
+    "experimentation-dashboard-staging: serving before this run: experimentation-dashboard-staging:13",
+    "experimentation-dashboard-staging: update-service started deployment ecs-svc/9375540487197225864 of experimentation-dashboard-staging:14",
+    "experimentation-dashboard-staging: PRIMARY experimentation-dashboard-staging:14 IN_PROGRESS, 0/0 running, 0 failed, 2 deployment(s)",
+    "experimentation-dashboard-staging: PRIMARY experimentation-dashboard-staging:14 IN_PROGRESS, 0/1 running, 0 failed, 2 deployment(s)",
+    "experimentation-dashboard-staging: PRIMARY experimentation-dashboard-staging:14 IN_PROGRESS, 0/1 running, 1 failed, 2 deployment(s)",
+    "experimentation-dashboard-staging: PRIMARY experimentation-dashboard-staging:14 IN_PROGRESS, 0/1 running, 2 failed, 2 deployment(s)"
+  ],
+  "printed_source": "verbatim: the script's exit status, stdout and stderr in that run"
+}

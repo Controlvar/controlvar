@@ -1068,11 +1068,25 @@ def _captured(name: str) -> dict:
     return json.loads((RUNS / name).read_text())
 
 
+#: The stop step's outputs, by the name the summary's env gives each. A run's
+#: header carries those it had; the older runs' predate `stopped`/`stop_wait`.
+STOP_ENV = {
+    "ALREADY_SERVING": "already_serving",
+    "REFUSED": "refused",
+    "REFUSED_ID": "refused_id",
+    "REFUSED_PRIMARY": "primary",
+    "STOPPED": "stopped",
+    "STOP_WAIT": "stop_wait",
+}
+
+
 def _outputs_of(run: dict) -> tuple[dict, dict]:
     env = {k: v["value"] for k, v in run["summary"]["env"].items()}
+    stop = dict(run["outputs"])
+    stop.update({name: env[key] for key, name in STOP_ENV.items() if env.get(key)})
     outputs = {
         "target": {"arn": env["TARGET_ARN"]},
-        "stop": dict(run["outputs"]),
+        "stop": stop,
         "codedeploy": {"deployment-id": env["DEPLOYMENT_ID"]},
         "api-verify": {"__outcome__": env["API_VERIFY"]},
         "dashboard-target": {"arn": env["DASHBOARD_TARGET_ARN"]},
@@ -1081,6 +1095,14 @@ def _outputs_of(run: dict) -> tuple[dict, dict]:
             "result": env["DASHBOARD_RESULT"],
         },
     }
+    # Inputs a later rollback.yml added; the older runs' headers predate them.
+    if "DASHBOARD_SERVING_ARN" in env:
+        outputs["dashboard-target"].update(
+            serving_arn=env["DASHBOARD_SERVING_ARN"],
+            serving_image=env["DASHBOARD_SERVING_IMAGE"],
+        )
+    if "ACCOUNT_CHECK" in env:
+        outputs["account"] = {"__outcome__": env["ACCOUNT_CHECK"]}
     return env, outputs
 
 
@@ -1150,9 +1172,51 @@ def test_the_run_whose_verify_failed_on_counts_reads_api_back(summary_runner):
     )
 
 
+@pytest.mark.regression
+def test_the_rehearsal_run_gives_its_own_lines_and_the_verified_headline(
+    summary_runner,
+):
+    """Run 38098724258 (the #295 rehearsal, staging, green): its summary's
+    inputs, verbatim from the step's env header, give the two lines that run
+    printed, and row 3's literal; the step exits 0 and reads nothing. Its
+    STOPPED and STOP_WAIT are the outputs that run wrote: none."""
+    run = _captured("run-38098724258.json")
+    env, outputs = _outputs_of(run)
+    assert outputs["stop"] == {}
+    summary_runner.scenario([])
+    code, log, written, _ = summary_runner.run(
+        ROLLBACK,
+        _step(ROLLBACK, "Run summary"),
+        outputs,
+        {
+            "dashboard_task_definition_arn": env["DASHBOARD_INPUT"],
+            "job.status": env["JOB_STATUS"],
+        },
+    )
+    assert code == 0, log
+    assert log.splitlines() == run["summary"]["printed"]
+    assert log.splitlines() == [
+        "the stop step stopped: nothing; its wait ended: not recorded",
+        "verdict: ROLLED BACK (this step exits 0)",
+    ]
+    assert written["slack"] == (
+        "staging: ROLLED BACK: API rolled back to experimentation-backend-staging:12 "
+        "(CodeDeploy deployment d-QB1QX42FL, verified); dashboard rolled back to "
+        "experimentation-dashboard-staging:12. Do not dispatch Rollback again while "
+        "deployment d-QB1QX42FL is active: a new Rollback stops any deployment that "
+        "is not CodeDeploy's own rollback, with auto-rollback, which reverts what "
+        "it shifted, and it refuses while CodeDeploy's own rollback is active."
+    )
+    assert summary_runner.calls() == []
+
+
 def test_the_captured_summary_inputs_say_what_is_verbatim():
     """C8, for the summary's inputs: each says where it came from."""
-    for name in ("run-37217043185.json", "run-37176250648.json"):
+    for name in (
+        "run-37217043185.json",
+        "run-37176250648.json",
+        "run-38098724258.json",
+    ):
         summary = _captured(name)["summary"]
         for value in summary["env"].values():
             assert value["source"].startswith("verbatim"), (name, value)

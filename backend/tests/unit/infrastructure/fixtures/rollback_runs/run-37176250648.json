@@ -73,7 +73,7 @@
     "stopped": "d-1J9383JAL",
     "stop_wait": "ok"
   },
-  "outputs_source": "expected, not captured: the run predates these outputs (#759); they are what the step writes for the printed lines above",
+  "outputs_source": "expected, not captured: the run predates these outputs (#759); they are what the step writes for the printed lines above. The one captured run that has them, run-38098724258.json, found nothing in flight and wrote neither, so what a stop writes is still not captured",
   "summary": {
     "about": "The Run summary step's inputs in the same run, from its env header, and the one read it made. The verify step is the one from before #816 (T120), which failed this run on the service's counts. The deployment group's active list was not read then; its answer here is inferred.",
     "env": {

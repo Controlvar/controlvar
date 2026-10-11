@@ -37,6 +37,7 @@ from backend.tests.unit.infrastructure.test_ecs_rolling_rollout import (
     DONE,
     IN_PROGRESS,
     UPDATED,
+    breaker_read,
     dep,
     svc,
 )
@@ -891,12 +892,10 @@ def test_a_whole_successful_tail_is_green_and_says_so(runner):
     [
         ([IN_PROGRESS, DONE], None, "completed"),
         (
+            # The breaker's rollback as captured on staging (2026-10-10).
             [
                 IN_PROGRESS,
-                svc(
-                    dep(DASH_OLD, "ecs-svc/6667", state="IN_PROGRESS", running=0),
-                    dep(DASH_NEW, "ecs-svc/7777", status="ACTIVE", state="FAILED"),
-                ),
+                breaker_read(DASH_OLD, "ecs-svc/6666", DASH_NEW, "ecs-svc/7777"),
             ],
             None,
             "rolled back by ECS's circuit breaker; serving experimentation-dashboard-staging:6",
@@ -1845,12 +1844,9 @@ ROLLED_TO_OLD = {
     [
         ([svc(dep(DASH_THIRD, "ecs-svc/8888"))], None, "Dashboard not rolled back"),
         (
-            [
-                svc(
-                    dep(DASH_NEW, "ecs-svc/7778", state="IN_PROGRESS", running=0),
-                    dep(DASH_OLD, "ecs-svc/6000", status="ACTIVE", state="FAILED"),
-                )
-            ],
+            # The breaker's rollback as captured on staging (2026-10-10), with
+            # the rollback's revision as the one that failed to start.
+            [breaker_read(DASH_NEW, "ecs-svc/7777", DASH_OLD, "ecs-svc/6000")],
             ROLLED_TO_OLD,
             "Dashboard rollback did not take",
         ),
