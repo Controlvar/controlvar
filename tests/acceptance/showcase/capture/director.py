@@ -36,6 +36,12 @@ stand-in pages where Playwright is not installed. What it does, in order:
 * A scene marked ``signed_in`` signs the demo admin in off camera first, through
   the login page; a ``results_of`` scene opens that experiment's results page,
   its id looked up off camera.
+* A native <select> is never clicked (C9): its list would open, and a
+  screencast never draws it. A ``choose`` step moves the cursor to it, presses,
+  sets the option without opening it, and holds the closed select on the new
+  text for ``config.SETTLE_MS``; a ``click`` on a select is refused. A
+  ``slide`` step glides the cursor along a range input's track while the value
+  follows it to the storyboard's number.
 * While recording: any response >= 500 from the stack, any page error and any
   request the guard refused fails the video (gate 11, gate 15c).
 
@@ -198,6 +204,14 @@ BROKEN_JS = """() => {
   return {overlay: !!document.querySelector('nextjs-portal'), alerts};
 }"""
 
+#: C9: the text a closed <select> shows (its selected option's).
+SELECTED_TEXT_JS = "el => el.selectedIndex < 0 ? '' : el.options[el.selectedIndex].text"
+#: Where a closed <select>'s arrow is, from its right edge (frame px).
+SELECT_ARROW_PX = 22
+#: A range input's kind and numbers, for ``slide``.
+RANGE_JS = """el => [el.tagName, String(el.type || '').toLowerCase(),
+  Number(el.min || 0), Number(el.max || 100), Number(el.value)]"""
+
 #: Gate 9: is the element on top at this point (or something inside it)?
 ON_TOP_JS = """(el, point) => {
   const top = document.elementFromPoint(point[0], point[1]);
@@ -265,6 +279,8 @@ class Tally:
     scenes_run: List[str] = field(default_factory=list)
     focus_boxes: List[Dict[str, Any]] = field(default_factory=list)
     holds_ms: List[int] = field(default_factory=list)
+    #: C9: each ``choose`` step, the text its closed select showed and how long.
+    choices: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def decode_rgb(jpeg: bytes, width: int, height: int) -> np.ndarray:
@@ -815,6 +831,12 @@ class Director:
             self.move_to(*box.centre)
         elif isinstance(step, storyboard.Click):
             found, box = self._visible_box(step.click)
+            if str(found.evaluate("el => el.tagName")).upper() == "SELECT":
+                raise CaptureFailed(
+                    "C9",
+                    f"{self.where}: {step.click.describe()} is a native select; a click"
+                    " opens a list no screencast draws (choose its option instead)",
+                )
             self.move_to(*box.centre)
             self.page.wait_for_timeout(config.POINTER_REST_MS)
             if not found.evaluate(ON_TOP_JS, list(box.centre)):
@@ -844,8 +866,84 @@ class Director:
         elif isinstance(step, storyboard.ScrollTo):
             found = self.locate(step.scroll_to)
             self.scroll_into_view(found)
+        elif isinstance(step, storyboard.Choose):
+            self.choose(step)
+        elif isinstance(step, storyboard.Slide):
+            found, box = self._visible_box(step.slide)
+            self.slide(found, box, step.value, step.slide.describe())
         self.check_needles()
         self.check_events()
+
+    def choose(self, step: storyboard.Choose) -> None:
+        """C9: the cursor presses the select, the option is set without the list
+        opening, and the closed select holds its new text."""
+        found, box = self._visible_box(step.choose)
+        what = step.choose.describe()
+        if str(found.evaluate("el => el.tagName")).upper() != "SELECT":
+            raise CaptureFailed("gate 12", f"{self.where}: {what} is not a select")
+        # Pressed by its arrow, as a person would, so the cursor leaves the text clear.
+        press = (max(box.centre[0], box.x + box.w - SELECT_ARROW_PX), box.centre[1])
+        self.move_to(*press)
+        self.page.wait_for_timeout(config.POINTER_REST_MS)
+        self.click_pulse(*press)
+        try:
+            found.select_option(label=step.option, timeout=15000)
+        except PlaywrightError as error:
+            self.check_events()
+            raise CaptureFailed(
+                "gate 12",
+                f"{self.where}: {what} has no option {step.option!r}"
+                f" ({str(error).splitlines()[0]})",
+            ) from None
+        changed = self.recorder.now()
+        shown = found.evaluate(SELECTED_TEXT_JS)
+        self.page.wait_for_timeout(config.SETTLE_MS)
+        held = found.evaluate(SELECTED_TEXT_JS)
+        ok, numbers, why = judge.select_hold(
+            step.option, shown, held, self.recorder.now() - changed
+        )
+        self.tally.choices.append({"where": self.where, "ok": ok, **numbers})
+        if not ok:
+            raise CaptureFailed("C9", f"{self.where}: {what}: {why}")
+
+    def slide(self, found: Locator, box: Box, value: int, what: str) -> None:
+        """Move a range input to *value*: the drawn cursor rides the thumb, eased
+        over ``config.SLIDE_MS``, and the value follows it a step at a time."""
+        tag, kind, low, high, start = found.evaluate(RANGE_JS)
+        if str(tag).upper() != "INPUT" or kind != "range":
+            raise CaptureFailed("gate 12", f"{self.where}: {what} is not a slider")
+        if not low <= value <= high or high <= low:
+            raise CaptureFailed(
+                "gate 12",
+                f"{self.where}: {what} runs from {low:g} to {high:g}, not to {value}",
+            )
+        thumb = config.RANGE_THUMB_CSS_PX * config.ZOOM
+
+        def x_at(v: float) -> float:
+            return box.x + thumb / 2 + (box.w - thumb) * (v - low) / (high - low)
+
+        y = box.y + box.h / 2
+        self.move_to(x_at(start), y)
+        self.page.wait_for_timeout(config.POINTER_REST_MS)
+        began = _now_ms()
+        current = int(start)
+        while True:
+            t = min(1.0, (_now_ms() - began) / config.SLIDE_MS)
+            now = int(round(start + (value - start) * ease(t)))
+            if now != current:
+                found.fill(str(now))
+                current = now
+            self.cursor = (x_at(now), y)
+            self.draw_cursor()
+            if t >= 1.0:
+                break
+            self.page.wait_for_timeout(15)
+        landed = found.evaluate("el => Number(el.value)")
+        if landed != value:
+            raise CaptureFailed(
+                "gate 12", f"{self.where}: {what} stopped at {landed:g}, not {value}"
+            )
+        self.page.wait_for_timeout(config.SETTLE_MS)
 
     def _wait(self, step: storyboard.WaitFor) -> None:
         try:

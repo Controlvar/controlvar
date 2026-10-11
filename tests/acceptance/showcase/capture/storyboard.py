@@ -30,13 +30,23 @@ experiment's name (``results_of``, its id looked up off camera), or draws a
 card: one documented command, lines quoted from a page of the docs (``code``,
 checked against the recorded tree), or one headline. ``traffic`` starts or
 finishes the storyboard's simulated users off camera before the scene.
+``setup`` makes what the video uses but does not film being made (a segment),
+through the API, off camera, after gate 14 and before the first scene.
+
+Two steps work a form control the way a person would be seen to: ``choose``
+changes a native <select> to one of its options without opening it (a
+screencast never draws a native list, so an open one would film a select
+changing by itself; C9), and ``slide`` moves a range input to a value, the
+drawn cursor on its thumb.
 
 Refused at load (``StoryboardError``), before any stack starts: an unknown key,
 a cue with no focus, a caption ``contract.caption_problems`` refuses, a caption
 holding a template (``{``) or anything but plain text, a ``type`` of a
 credential into a step not marked secret, an on-camera step that opens the API
 keys page, a locator naming nothing, a scene with no beats, a code line that
-names a host and port, traffic finished before it starts, and a narration
+names a host and port, traffic finished before it starts, a ``choose`` or
+``slide`` in ``before`` (cut, so never seen), a flag's end state naming a
+segment the setup does not make or a reading no beat records, and a narration
 ``narration.board_problems`` refuses (every problem at once). Caption text
 never comes from the page or the run: ``compile_cues`` is a pure function of
 the file, so the cue list is the same on every run (gate 13a).
@@ -141,7 +151,25 @@ class WaitFor(_Strict):
         return self
 
 
-Step = Union[Click, Move, Type, Look, ScrollTo, WaitFor]
+class Choose(_Strict):
+    """A native <select> set to the option whose text is ``option``, never opened.
+
+    The cursor goes to the select and presses it; the value changes; the
+    closed select is held on its new text (C9).
+    """
+
+    choose: Locator
+    option: str = Field(min_length=1, max_length=80)
+
+
+class Slide(_Strict):
+    """A range input moved to ``value``, the drawn cursor on its thumb."""
+
+    slide: Locator
+    value: int = Field(ge=0, le=100_000)
+
+
+Step = Union[Click, Move, Type, Look, ScrollTo, WaitFor, Choose, Slide]
 
 
 class Claim(_Strict):
@@ -262,6 +290,30 @@ class ExperimentEnd(_Strict):
     shown: str
 
 
+#: The audit action types a flag's end state may name.
+FlagAction = Literal[
+    "feature_flag_create", "feature_flag_update", "toggle_enable", "toggle_disable"
+]
+
+
+class FlagEnd(_Strict):
+    """Gate 10 for a flag the video made: it exists once, with its key, its one
+    rule naming the setup's segment, at the rollout and status the video left
+    it, and the audit log holds the video's changes to it, each by the
+    signed-in user, as the page showed them."""
+
+    name: str
+    key: str
+    #: The segment the flag's only rule (``is in segment``) names.
+    segment: str
+    rollout_percentage: int = Field(ge=0, le=100)
+    status: Literal["active", "inactive"]
+    #: The audit entries on the flag, oldest first: all of them, exactly.
+    audit: List[FlagAction] = Field(min_length=1)
+    #: The ``record`` name of the audit log's rows as the page showed them.
+    shown: str
+
+
 class EndState(_Strict):
     """Gate 10: what is true after the last scene, checked through the API."""
 
@@ -269,12 +321,34 @@ class EndState(_Strict):
     #: The experiments page's rows the video showed == the API's experiments.
     experiments_listed: Optional[int] = None
     experiment: Optional[ExperimentEnd] = None
+    flag: Optional[FlagEnd] = None
 
     @model_validator(mode="after")
     def _something(self) -> "EndState":
-        if self.experiments_listed is None and self.experiment is None:
-            raise ValueError("an end state names experiments_listed or an experiment")
+        if (
+            self.experiments_listed is None
+            and self.experiment is None
+            and self.flag is None
+        ):
+            raise ValueError(
+                "an end state names experiments_listed, an experiment or a flag"
+            )
         return self
+
+
+class SegmentSetup(_Strict):
+    """A rules segment, made through ``POST /api/v1/segments``."""
+
+    name: str = Field(min_length=2, max_length=128)
+    description: str = Field(max_length=512)
+    rules: Dict[str, Any]
+
+
+class Setup(_Strict):
+    """What the video uses but does not film being made, made through the API
+    off camera, after gate 14 (the seed's counts) and before the first scene."""
+
+    segments: List[SegmentSetup] = Field(min_length=1)
 
 
 class Traffic(_Strict):
@@ -308,6 +382,7 @@ class Storyboard(_Strict):
     #: Text this video must never show, on top of ``config.FORBIDDEN_TEXT`` (U4).
     never_show: List[str] = Field(default_factory=list)
     traffic: Optional[Traffic] = None
+    setup: Optional[Setup] = None
     scenes: List[Scene] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -321,6 +396,18 @@ class Storyboard(_Strict):
             )
         if self.end_state.experiment is not None and self.traffic is None:
             raise ValueError("an experiment's end state needs the storyboard's traffic")
+        flag = self.end_state.flag
+        if flag is not None:
+            made = [s.name for s in self.setup.segments] if self.setup else []
+            if flag.segment not in made:
+                raise ValueError(
+                    f"the flag's rule names {flag.segment!r}, which the setup does not make"
+                )
+            recorded = [name for s in self.scenes for b in s.beats for name in b.record]
+            if flag.shown not in recorded:
+                raise ValueError(
+                    f"the flag's end state compares {flag.shown!r}, which no beat records"
+                )
         return self
 
 
@@ -337,6 +424,8 @@ _STEP_KEYS = {
     "scroll_to": ScrollTo,
     "wait_for": WaitFor,
     "url": WaitFor,
+    "choose": Choose,
+    "slide": Slide,
 }
 
 
@@ -400,6 +489,10 @@ def parse(data: Any, *, source: str = "storyboard") -> Storyboard:
                 raise StoryboardError(f"{where}: {problem}")
             for step in [*beat.before, *beat.steps, *beat.exit]:
                 _refuse_step(step, where)
+            if any(isinstance(step, (Choose, Slide)) for step in beat.before):
+                raise StoryboardError(
+                    f"{where}: a choose or slide in before is cut from the video"
+                )
     # G1 and G3, the narration's rules (the voice step runs them again).
     from showcase.capture import narration
 
@@ -433,7 +526,16 @@ def _refuse_step(step: Any, where: str) -> None:
 
 
 def _locators(step: Any) -> List[Locator]:
-    for key in ("click", "move", "type", "look", "scroll_to", "wait_for"):
+    for key in (
+        "click",
+        "move",
+        "type",
+        "look",
+        "scroll_to",
+        "wait_for",
+        "choose",
+        "slide",
+    ):
         value = getattr(step, key, None)
         if isinstance(value, Locator):
             return [value]
@@ -546,6 +648,20 @@ def step_ms(step: Any) -> int:
         ms = step.ms
     elif isinstance(step, ScrollTo):
         ms = config.SCROLL_MS
+    elif isinstance(step, Choose):
+        ms = (
+            config.POINTER_MS
+            + config.POINTER_REST_MS
+            + config.CLICK_RING_MS
+            + config.SETTLE_MS
+        )
+    elif isinstance(step, Slide):
+        ms = (
+            config.POINTER_MS
+            + config.POINTER_REST_MS
+            + config.SLIDE_MS
+            + config.SETTLE_MS
+        )
     else:  # a wait on camera: the element is there, then it paints
         ms = config.PAINT_MS
     return ms + STEP_OVERHEAD_MS

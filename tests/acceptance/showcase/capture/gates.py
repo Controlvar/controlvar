@@ -374,3 +374,168 @@ def experiment_end(
             f"the page showed {on_page!r}; the API says {reason!r}",
         )
     return True, numbers, ""
+
+
+def select_hold(option: str, shown: str, held: str, held_ms: int) -> Verdict:
+    """C9: a ``choose`` step's closed select showed the option at once, and still
+    showed it ``config.SETTLE_MS`` later."""
+    numbers = {"option": option, "shown": shown, "held": held, "held_ms": held_ms}
+    if shown != option:
+        return False, numbers, f"the select shows {shown!r}, not {option!r}"
+    if held != option:
+        return False, numbers, f"the select went back to {held!r} during its hold"
+    if held_ms < config.SETTLE_MS:
+        return (
+            False,
+            numbers,
+            f"the select was held {held_ms} ms on {option!r}; at least"
+            f" {config.SETTLE_MS} ms",
+        )
+    return True, numbers, ""
+
+
+#: How the audit log page names the actions a flag's end state checks
+#: (frontend/src/components/admin/audit/actionLabels.ts; a unit test keeps
+#: them equal).
+AUDIT_LABELS: Dict[str, str] = {
+    "feature_flag_create": "Flag created",
+    "feature_flag_update": "Flag changed",
+    "toggle_enable": "Flag turned on",
+    "toggle_disable": "Flag turned off",
+}
+#: ...and the entity a flag is.
+FLAG_ENTITY_LABEL = "Feature flag"
+
+
+def audit_rows(text: str) -> List[List[str]]:
+    """The audit table's body text as rows of cells (tab-separated, as drawn)."""
+    return [
+        [cell.strip() for cell in line.split("\t")]
+        for line in text.splitlines()
+        if line.strip()
+    ]
+
+
+def flag_end(
+    end: Any,
+    *,
+    named: Sequence[Mapping[str, Any]],
+    segments: Sequence[Mapping[str, Any]],
+    audit: Sequence[Mapping[str, Any]],
+    actor: Mapping[str, Any],
+    shown: Optional[str],
+) -> Verdict:
+    """Gate 10 for a flag the video made (``storyboard.FlagEnd``).
+
+    * exactly one flag has the name, with the storyboard's key;
+    * its rules are one group of one condition, ``segment`` ``in_segment`` the
+      id of the one active segment with the storyboard's segment name;
+    * its rollout percentage and status are the ones the video left it at;
+    * its audit entries, oldest first, are exactly the storyboard's, every one
+      by the signed-in user (*actor*: their email and id);
+    * the page showed them: the audit table's top rows are those entries,
+      newest first, each with the user, the action and the flag's name.
+    """
+    numbers: Dict[str, Any] = {"flags_named": len(named)}
+    if len(named) != 1:
+        return False, numbers, f"{len(named)} flags are named {end.name!r}"
+    flag = named[0]
+    numbers.update(
+        key=flag.get("key"),
+        status=flag.get("status"),
+        rollout_percentage=flag.get("rollout_percentage"),
+        targeting_rules=flag.get("targeting_rules"),
+    )
+    if flag.get("key") != end.key:
+        return (
+            False,
+            numbers,
+            f"{end.name!r} has key {flag.get('key')!r}, not {end.key!r}",
+        )
+    matching = [
+        s
+        for s in segments
+        if s.get("name") == end.segment and str(s.get("status")).lower() == "active"
+    ]
+    numbers["segments_named"] = len(matching)
+    if len(matching) != 1:
+        return (
+            False,
+            numbers,
+            f"{len(matching)} active segments are named {end.segment!r}",
+        )
+    segment_id = str(matching[0].get("id"))
+    rules = flag.get("targeting_rules") or {}
+    groups = rules.get("groups") if isinstance(rules, dict) else None
+    conditions = (
+        groups[0].get("conditions")
+        if isinstance(groups, list) and len(groups) == 1 and isinstance(groups[0], dict)
+        else None
+    )
+    if not (isinstance(conditions, list) and len(conditions) == 1):
+        return (
+            False,
+            numbers,
+            f"the flag's rules are not one group of one condition: {rules!r}",
+        )
+    condition = conditions[0]
+    said = (
+        condition.get("attribute"),
+        condition.get("operator"),
+        str(condition.get("value")),
+    )
+    if said != ("segment", "in_segment", segment_id):
+        return (
+            False,
+            numbers,
+            f"the flag's rule is {said[0]!r} {said[1]!r} {said[2]!r}, not 'segment'"
+            f" 'in_segment' {end.segment!r} ({segment_id})",
+        )
+    if flag.get("rollout_percentage") != end.rollout_percentage:
+        return (
+            False,
+            numbers,
+            f"the flag is at {flag.get('rollout_percentage')}%, not"
+            f" {end.rollout_percentage}%",
+        )
+    if str(flag.get("status")).lower() != end.status:
+        return (
+            False,
+            numbers,
+            f"the flag is {flag.get('status')!r}, not {end.status!r}",
+        )
+    oldest_first = list(reversed(list(audit)))
+    actions = [str(e.get("action_type")) for e in oldest_first]
+    numbers["audit"] = actions
+    if actions != list(end.audit):
+        return (
+            False,
+            numbers,
+            f"the flag's audit entries are {actions}, not {list(end.audit)}",
+        )
+    email, ident = actor.get("email"), str(actor.get("id"))
+    others = [
+        f"{e.get('action_type')} by {e.get('user_email')!r}"
+        for e in oldest_first
+        if e.get("user_email") != email or str(e.get("user_id")) != ident
+    ]
+    if others:
+        return (
+            False,
+            numbers,
+            f"not every entry is by the signed-in {email!r}: {others[0]}",
+        )
+    rows = audit_rows(shown or "")
+    wanted = [
+        [email, AUDIT_LABELS[action], FLAG_ENTITY_LABEL, end.name]
+        for action in reversed(list(end.audit))
+    ]
+    drawn = [row[1:5] for row in rows[: len(wanted)]]
+    numbers["shown_rows"] = drawn
+    if drawn != wanted:
+        return (
+            False,
+            numbers,
+            f"the audit log's top rows showed {drawn}; the API says {wanted}",
+        )
+    return True, numbers, ""
