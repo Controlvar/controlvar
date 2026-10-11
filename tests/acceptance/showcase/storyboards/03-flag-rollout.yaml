@@ -1,0 +1,155 @@
+# Video 3, Roll out a feature flag: a flag made in the dashboard, a rule for a
+# segment, a rollout percentage for everyone else, switched on, raised, and
+# switched off again, then the audit log's record of it. The UX draft's V3
+# storyboard (#1066), on the `demo` seed.
+#
+# * The segment, Beta testers, is made through the API off camera before the
+#   first scene (`setup`): the video is about the flag, not the segments page.
+# * The rule's operator and segment are native selects: each is set without
+#   its list opening and held on its new text (C9), because a screencast never
+#   draws an open list.
+# * Each caption that states a number is put up when the page shows that
+#   number (U2 reads the focus at the cue's start), so the slider is moved
+#   under the caption before.
+# * Rollout schedules are made through the API (/api/v1/rollout-schedules);
+#   the flag page says so in its own words, and no caption shows a builder.
+#   Nothing here says the change reaches users at once: the SDKs keep an
+#   answer for up to five minutes.
+slug: 03-flag-rollout
+title: Roll out a feature flag
+seed: demo
+seed_counts: {experiments: 3, feature_flags: 2, users: 4}
+setup:
+  segments:
+    - name: Beta testers
+      description: Shoppers who asked to try new features first
+      rules:
+        logical_operator: AND
+        groups:
+          - logical_operator: AND
+            conditions:
+              - {attribute: beta_tester, operator: equals, value: "true"}
+end_state:
+  signed_in_as: admin@demo.com
+  flag:
+    name: Express checkout
+    key: express_checkout
+    segment: Beta testers
+    rollout_percentage: 50
+    status: inactive
+    audit: [feature_flag_create, toggle_enable, feature_flag_update, toggle_disable]
+    shown: audit
+
+scenes:
+  - id: flag
+    open: /feature-flags
+    signed_in: true
+    beats:
+      - cue: Wrap a new feature in a flag.
+        focus: {testid: new-flag-btn}
+        steps:
+          - move: {testid: new-flag-btn}
+        exit:
+          - click: {testid: new-flag-btn}
+
+      - before:
+          - wait_for: {testid: flag-name-input}
+        cue: Name it. Your code checks this key.
+        focus: {testid: flag-key-input}
+        steps:
+          - type: {testid: flag-name-input}
+            text: Express checkout
+          - look: {testid: flag-key-input}
+            ms: 1200
+          - type: {label: Description, exact: true}
+            text: One-tap checkout for returning shoppers
+
+      - cue: Add a rule for the Beta testers segment.
+        focus: {testid: flag-targeting-section}
+        steps:
+          - scroll_to: {testid: flag-targeting-section}
+          - click: {testid: add-group}
+          - type: {testid: condition-attribute}
+            text: segment
+          - choose: {testid: condition-operator}
+            option: is in segment
+          - choose: {testid: condition-segment}
+            option: "Beta testers · Rules"
+
+      - cue: They get it at any rollout percentage.
+        focus: {testid: condition-row}
+        steps:
+          - look: {testid: condition-row}
+            ms: 1500
+        exit:
+          - slide: {testid: rollout-percentage}
+            value: 10
+
+      - cue: Everyone else starts at 10%.
+        focus: {css: "section:has(#rollout-percentage)"}
+        steps:
+          - look: {css: "section:has(#rollout-percentage)"}
+            ms: 1500
+        exit:
+          - click: {testid: submit-flag}
+
+      - before:
+          - wait_for: {testid: flag-toggle}
+        cue: "It starts off: not serving anyone yet."
+        focus: {testid: flag-status}
+        steps:
+          - look: {testid: flag-status}
+            ms: 1500
+
+      - cue: Switch it on when your code ships.
+        focus: {testid: flag-toggle}
+        steps:
+          - click: {testid: flag-toggle}
+          - wait_for: {css: "[data-testid=flag-status][data-status=active]"}
+          - look: {testid: flag-status}
+            ms: 1200
+
+      - cue: Going well? Raise the rollout and save.
+        focus: {css: "section:has(#rollout-percentage)"}
+        steps:
+          - slide: {testid: rollout-percentage}
+            value: 50
+          - click: {testid: save-flag}
+          - wait_for: {testid: save-success}
+          - look: {testid: rollout-value}
+            ms: 1000
+
+      - cue: Or schedule the stages through the API.
+        focus: {testid: rollout-schedule-section}
+        steps:
+          - look: {testid: rollout-schedule-empty}
+            ms: 2000
+
+      - cue: Problem? Switch it off in one click.
+        focus: {testid: flag-toggle}
+        payoff: true
+        steps:
+          - click: {testid: flag-toggle}
+          - wait_for: {css: "[data-testid=flag-status][data-status=inactive]"}
+          - look: {testid: flag-status}
+            ms: 1200
+        exit:
+          - click: {testid: nav-audit-log}
+
+      - before:
+          - url: "**/admin/audit"
+          - wait_for: {css: "[data-testid=audit-log-table] tbody tr"}
+        cue: "Every change is logged: who, what, when."
+        focus: {css: "[data-testid=audit-log-table] tbody tr"}
+        record:
+          audit: {css: "[data-testid=audit-log-table] tbody"}
+        payoff: true
+        steps:
+          - look: {css: "[data-testid=audit-log-table] tbody tr"}
+            ms: 900
+          - look: {css: "[data-testid=audit-log-table] tbody tr", nth: 1}
+            ms: 900
+          - look: {css: "[data-testid=audit-log-table] tbody tr", nth: 2}
+            ms: 900
+          - look: {css: "[data-testid=audit-log-table] tbody tr", nth: 3}
+            ms: 900

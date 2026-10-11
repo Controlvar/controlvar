@@ -10,6 +10,7 @@ Order, and what must be true before each step:
 3. The tree, once per invocation (``build``).
 4. Per video, the disk floor first; below it the video is refused and no work
    directory is made. Then the stack, gate 14 (the seed's counts), the
+   storyboard's ``setup`` made through the API off camera, the
    browser, the overlay self-test (C1), the code cards against the recorded
    tree, the scenes (with the storyboard's traffic and its results warmed off
    camera between them), gate 10 (the end state), and the capture directory
@@ -131,6 +132,80 @@ def seed_counts(api_url: str, token: str) -> Dict[str, int]:
         "feature_flags": int(_api(f"{api_url}/api/v1/feature-flags/", token)["total"]),
         "users": int(_api(f"{api_url}/api/v1/users/", token)["total"]),
     }
+
+
+def make_setup(
+    board: storyboard.Storyboard,
+    api_url: str,
+    token: str,
+    *,
+    call: Optional[Callable[..., Any]] = None,
+) -> Dict[str, Any]:
+    """The storyboard's ``setup``, made through the API off camera after gate 14.
+
+    Each segment is made once, as a rules segment; an answer that is not that
+    segment, active, refuses the video. Nothing for a storyboard without one.
+    """
+    if board.setup is None:
+        return {}
+    call = call or _api
+    made = []
+    for segment in board.setup.segments:
+        answer = call(
+            f"{api_url}/api/v1/segments",
+            token,
+            body={
+                "name": segment.name,
+                "description": segment.description,
+                "kind": "rules",
+                "rules": segment.rules,
+            },
+        )
+        if (
+            not isinstance(answer, dict)
+            or answer.get("name") != segment.name
+            or str(answer.get("status")).lower() != "active"
+            or not answer.get("id")
+        ):
+            got = answer.get("name") if isinstance(answer, dict) else answer
+            raise StackError(
+                f"setup: segment {segment.name!r} was answered with {got!r}"
+            )
+        made.append({"segment": segment.name, "id": str(answer["id"])})
+    return {"segments": made}
+
+
+def flag_state(
+    end: storyboard.FlagEnd,
+    api_url: str,
+    token: str,
+    readings: Mapping[str, str],
+) -> Tuple[bool, Dict[str, Any], str]:
+    """Gate 10's half for a flag the video made: the API's answers, judged."""
+    from urllib.parse import quote
+
+    from showcase.capture import gates as judge
+
+    listed = _api(
+        f"{api_url}/api/v1/feature-flags/?search={quote(end.name)}&limit=100", token
+    )["items"]
+    named = [item for item in listed if item.get("name") == end.name]
+    audit: List[Dict[str, Any]] = []
+    if len(named) == 1:
+        audit = _api(
+            f"{api_url}/api/v1/audit-logs/?entity_type=feature_flag"
+            f"&entity_id={named[0]['id']}&limit=100",
+            token,
+        )["items"]
+    me = _api(f"{api_url}/api/v1/auth/me", token)
+    return judge.flag_end(
+        end,
+        named=named,
+        segments=_api(f"{api_url}/api/v1/segments?limit=200", token),
+        audit=audit,
+        actor={"email": me.get("email"), "id": me.get("id")},
+        shown=readings.get(end.shown),
+    )
 
 
 def write_private(path: Path, text: str) -> None:
@@ -314,6 +389,13 @@ def capture_video(
                     "gate 14",
                     f"the stack holds {counts}, the seed makes {wanted}: not a fresh stack",
                 )
+            setup = make_setup(board, stack.api_url, token)
+            if setup:
+                gates["14"]["numbers"]["setup"] = setup
+                log(
+                    "setup, off camera: "
+                    + ", ".join(s["segment"] for s in setup["segments"])
+                )
             try:
                 facts = record(
                     board, stack, options, token, frames_dir, gates, log, work
@@ -466,6 +548,13 @@ def record(
                 numbers["experiment"] = made
                 if not ok:
                     why.append(reason)
+            if end.flag is not None:
+                ok, made, reason = flag_state(
+                    end.flag, stack.api_url, token, director.readings
+                )
+                numbers["flag"] = made
+                if not ok:
+                    why.append(reason)
             gates["10"] = gate(not why, **numbers)
             if why:
                 raise directing.CaptureFailed(
@@ -525,6 +614,17 @@ def record(
             judge.black(entries, lumas, duration, still),
         ),
         "15c": (not tally.refused, {"refused": tally.refused}, "a refused request"),
+        # C9: a click on a select and a choice not held are refused at the
+        # step; this is their count, and the choices as held.
+        "C9": (
+            all(choice["ok"] for choice in tally.choices),
+            {
+                "choices": len(tally.choices),
+                "options": [choice["option"] for choice in tally.choices],
+                "held_ms": [choice["held_ms"] for choice in tally.choices],
+            },
+            "a select was not held on its option",
+        ),
         "U5": judge.payoff_still(entries, tally.payoffs),
     }
     failed = []

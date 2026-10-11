@@ -74,6 +74,11 @@ SETTLE_MS = 1000
 PAINT_MS = 300
 PAYOFF_MS = 2500
 SCROLL_MS = 750
+#: A slider's thumb travels for this long, eased, whatever the distance.
+SLIDE_MS = 1200
+#: Chromium's range thumb is about this wide (CSS px, before the zoom): the
+#: drawn cursor rides its centre.
+RANGE_THUMB_CSS_PX = 16
 #: Freeze (gate 11): no new frame for longer than the longest hold plus this.
 FREEZE_SLACK_MS = 1000
 #: Black (gate 11): a frame this dark (mean luma 0-255) for this long.
@@ -132,4 +137,5 @@ SDK_RATE_LIMIT_PER_MINUTE = 60_000
 VIDEOS: Dict[str, str] = {
     "01-getting-started": "storyboards/01-getting-started.yaml",
     "02-first-experiment": "storyboards/02-first-experiment.yaml",
+    "03-flag-rollout": "storyboards/03-flag-rollout.yaml",
 }
