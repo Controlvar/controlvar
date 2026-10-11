@@ -73,7 +73,7 @@
     "stopped": "d-LPIWVZUAL",
     "stop_wait": "ok"
   },
-  "outputs_source": "expected, not captured: the run predates these outputs (#759); they are what the step writes for the printed lines above",
+  "outputs_source": "expected, not captured: the run predates these outputs (#759); they are what the step writes for the printed lines above. The one captured run that has them, run-38098724258.json, found nothing in flight and wrote neither, so what a stop writes is still not captured",
   "summary": {
     "about": "The Run summary step's inputs in the same run, from its env header. The two outputs it does not show (the run predates them) are the stop step's, above; the step made no read, because its verify step succeeded.",
     "env": {

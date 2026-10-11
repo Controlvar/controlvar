@@ -20,9 +20,11 @@ call (``Runner.snapshots()``), which is the only way to tell a write before
 the call from a write after it, and ``Runner.raw_outputs`` keeps the file as
 written, which is the only way to see a key written twice.
 
-The two captured runs are fixtures under ``fixtures/rollback_runs/``; each
-says which of its answers are verbatim from the log and which are
-reconstructed from the step's own messages.
+The captured runs are fixtures under ``fixtures/rollback_runs/``; each says
+which of its answers are verbatim from the log and which are reconstructed
+from the step's own messages. 37217043185 and 37176250648 each stopped a
+deployment, and predate these outputs. 38098724258, from the #295 rehearsal,
+has them, and found nothing in flight, so it wrote neither.
 """
 
 from __future__ import annotations
@@ -326,6 +328,41 @@ def test_a_captured_runs_stop_step_replays_line_for_line(stop_runner, name):
     _closed(written)
 
 
+@pytest.mark.regression
+def test_the_captured_run_with_nothing_in_flight_writes_neither(stop_runner):
+    """Run 38098724258 (the #295 rehearsal): nothing was in flight and the API
+    was on another revision, so the step printed the real lines, wrote no
+    output and went on to roll back. Its Run summary's env header shows
+    STOPPED and STOP_WAIT empty: the outputs the run wrote, not expected ones."""
+    run = _run_fixture("run-38098724258.json")
+    stop_runner.scenario(
+        [rule(*a["match"], answers=a["answers"]) for a in run["answers"]]
+    )
+    code, log, written, _ = stop_runner.run(
+        ROLLBACK,
+        _step(ROLLBACK, STEP),
+        {"target": {"arn": run["env"]["TARGET_ARN"]["value"]}},
+    )
+    raw = stop_runner.raw_outputs["stop"]
+    assert code == 0, log
+    # The run's log has stdout and stderr in time order; this runner gives
+    # stdout, then stderr, where scripts/api_serving.py prints NOT YET.
+    nothing, not_yet, rolling_back = run["printed"]
+    assert log.splitlines() == [nothing, rolling_back, not_yet]
+    assert written == run["outputs"] == {}
+    assert raw == "", raw
+    assert "deploy stop-deployment" not in _ops(stop_runner)
+    summary = {k: v["value"] for k, v in run["summary"]["env"].items()}
+    assert (summary["STOPPED"], summary["STOP_WAIT"]) == ("", "")
+    # Written out, so a regenerated fixture cannot move the replay.
+    assert run["printed"] == [
+        "no deployment in flight",
+        "NOT YET: the PRIMARY task set runs experimentation-backend-staging:13, "
+        "not experimentation-backend-staging:12",
+        "the API is not on experimentation-backend-staging:12: rolling back",
+    ]
+
+
 def test_the_green_runs_fixture_names_what_it_stopped():
     """Pinned literally, so a regenerated fixture cannot move the replay."""
     assert _run_fixture("run-37217043185.json")["outputs"] == {
@@ -335,9 +372,13 @@ def test_the_green_runs_fixture_names_what_it_stopped():
 
 
 def test_every_captured_answer_says_whether_it_is_verbatim():
-    """C8: each answer is marked, and the stop call's answer is the verbatim one."""
+    """C8: each answer is marked, and a stop call's answer is the verbatim one."""
     names = sorted(p.name for p in RUNS.iterdir())
-    assert names == ["run-37176250648.json", "run-37217043185.json"], names
+    assert names == [
+        "run-37176250648.json",
+        "run-37217043185.json",
+        "run-38098724258.json",
+    ], names
     for name in names:
         run = _run_fixture(name)
         sources = [a["source"] for a in run["answers"]]
@@ -345,10 +386,11 @@ def test_every_captured_answer_says_whether_it_is_verbatim():
             name,
             sources,
         )
-        (stop,) = [
-            a for a in run["answers"] if a["match"][0] == "deploy stop-deployment"
-        ]
-        assert stop["source"].startswith("verbatim"), stop
+        stops = [a for a in run["answers"] if a["match"][0] == "deploy stop-deployment"]
+        # The rehearsal run stopped nothing; each older one stopped one.
+        assert len(stops) == (0 if name == "run-38098724258.json" else 1), name
+        for stop in stops:
+            assert stop["source"].startswith("verbatim"), stop
         assert run["printed_source"].startswith("verbatim")
 
 

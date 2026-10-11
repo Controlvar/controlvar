@@ -50,7 +50,18 @@ NEW = f"{TD}:7"
 THIRD = f"{TD}:8"
 OURS = "ecs-svc/7777"
 PRIOR = "ecs-svc/6666"
-ROLLBACK = "ecs-svc/6667"
+
+#: A circuit-breaker rollback captured on staging: what the script was given and
+#: printed, and the service's deployments read beside it (the fixture says which
+#: values are verbatim and which reconstructed).
+BREAKER = json.loads(
+    (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "dashboard_breaker"
+        / "2026-10-10.json"
+    ).read_text()
+)
 
 FAKE_AWS = r"""#!{python}
 import json, os, sys
@@ -94,7 +105,7 @@ elif (service, verb) == ("ecs", "update-service"):
         sys.exit(254)
     print(canned("update.json"))
 elif (service, verb) == ("ecs", "describe-task-definition"):
-    print("123456789012.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:" + "b" * 64)
+    print(canned("image", "123456789012.dkr.ecr.us-west-2.amazonaws.com/experimentation-platform/web@sha256:" + "b" * 64))
 elif (service, verb) == ("ecs", "list-tasks"):
     print("\t".join(t["arn"] for t in json.loads(canned("stopped.json"))) or "None")
 elif (service, verb) == ("ecs", "describe-tasks"):
@@ -176,6 +187,44 @@ IN_PROGRESS = svc(
 )
 DONE = svc(dep(NEW, OURS))
 
+
+def breaker_read(serving: str, prior: str, target: str, ours: str) -> dict:
+    """The captured read that first shows the circuit breaker's rollback, renamed.
+
+    The revision that was serving and its deployment id become `serving` and
+    `prior`; this run's revision and deployment id become `target` and `ours`.
+    Nothing else changes: ECS made the PRIOR deployment PRIMARY again (no new
+    one), IN_PROGRESS with its task still running, and left ours ACTIVE and
+    FAILED with its failed tasks counted.
+    """
+    (before,) = BREAKER["before"]["service"]["deployments"]
+    (update,) = [
+        d
+        for d in BREAKER["update"]["service"]["deployments"]
+        if d["status"] == "PRIMARY"
+    ]
+    names = {
+        before["taskDefinition"]: serving,
+        before["id"]: prior,
+        update["taskDefinition"]: target,
+        update["id"]: ours,
+    }
+    read = next(
+        r["service"]
+        for r in BREAKER["reads"]
+        if any(
+            d["status"] == "PRIMARY" and d["taskDefinition"] == before["taskDefinition"]
+            for d in r["service"]["deployments"]
+        )
+    )
+    return svc(
+        *(
+            {k: names.get(v, v) if isinstance(v, str) else v for k, v in d.items()}
+            for d in read["deployments"]
+        )
+    )
+
+
 #: Every run polls at --interval 0. The deadline is short, so a classifier that
 #: never decides runs into it and fails on an ASSERTION (the outcome and the
 #: bounded describe-services count) within seconds; a case that must reach the
@@ -211,8 +260,11 @@ def rollout(tmp_path):
         target: str = NEW,
         describe_fail: dict | None = None,
         stopped: list | None = None,
+        image: str | None = None,
     ):
         (state / "services.json").write_text(json.dumps([before, *polls]))
+        if image is not None:
+            (state / "image").write_text(image)
         (state / "update.json").write_text(json.dumps(update or UPDATED))
         (state / "describe_fail.json").write_text(json.dumps(describe_fail or {}))
         (state / "stopped.json").write_text(
@@ -299,29 +351,52 @@ def test_r1_a_completed_rollout_of_this_revision_succeeds(rollout):
 
 @pytest.mark.regression
 def test_a_circuit_breaker_rollback_is_not_a_success(rollout):
-    """R2. The breaker marks ours FAILED and makes the OLD revision PRIMARY.
+    """R2, replayed from staging. The breaker marks ours FAILED and makes the
+    PRIOR deployment PRIMARY again.
 
-    The last answer -- one deployment, the old revision, COMPLETED, 1/1 -- is
-    what `services-stable` accepts. The script must fail at the first poll that
+    The reads are the service's, captured beside the script on 2026-10-10;
+    stdout, stderr and the exit status are what the script printed then. The
+    last read -- one deployment, the old revision, COMPLETED, 1/1 -- is what
+    `services-stable` accepts. The script must fail at the first read that
     shows the old revision PRIMARY, not wait for it to settle.
     """
-    rolled_back = svc(
-        dep(OLD, ROLLBACK, state="IN_PROGRESS", running=0),
-        dep(NEW, OURS, status="ACTIVE", state="FAILED", running=0, failed=2),
+    stopped = BREAKER["stopped"]
+    code, out, err, calls = rollout(
+        [r["service"] for r in BREAKER["reads"]],
+        before=BREAKER["before"]["service"],
+        update={"service": BREAKER["update"]["service"]},
+        target=BREAKER["target"],
+        stopped=[{k: stopped[k] for k in ("arn", "td", "reason")}],
+        image=BREAKER["image"]["value"],
     )
-    settled = svc(dep(OLD, ROLLBACK))
-    code, out, err, calls = rollout([IN_PROGRESS, rolled_back, settled])
-    assert code == 1, out + err
-    assert "circuit breaker" in out
-    assert "put experimentation-dashboard-staging:6 (" in out
-    assert "title=experimentation-dashboard-staging rolled back by ECS::" in out
-    assert len(updates(calls)) == 1
-    # It stopped at the rollback's first appearance: 1 pre-read + 2 polls.
-    describes = [c for c in calls if c[1] == "describe-services"]
-    assert len(describes) == 3
-    # The events and a stopped task's reason are printed before the verdict.
-    assert out.index("last service events") < out.index("::error")
-    assert "Essential container in task exited" in out
+    assert code == BREAKER["exit"] == 1, out + err
+    assert out.splitlines() == BREAKER["stdout"]
+    assert err.splitlines() == BREAKER["stderr"]
+    # Written out, so a regenerated fixture cannot move the verdict.
+    assert out.splitlines()[-1] == (
+        "::error title=experimentation-dashboard-staging rolled back by ECS::"
+        "experimentation-dashboard-staging did not start on "
+        "experimentation-dashboard-staging:14, and ECS's circuit breaker put "
+        "experimentation-dashboard-staging:13 (experimentation-platform/web@sha256:"
+        "a0c07572f0a4b8e87c0de27ae46b63ab8ed4c79da360e70655168382e428aad7) back. "
+        "Nothing else was undone. The service events and a stopped task's reason "
+        "are printed above."
+    )
+    (update,) = updates(calls)
+    assert update[update.index("--task-definition") + 1] == BREAKER["target"]
+    # It stopped at the rollback's first appearance (captured read 45): the
+    # pre-read and 5 polls; the three reads after it were never asked for.
+    assert [r["reads"] for r in BREAKER["reads"]] == [
+        "2",
+        "3-11",
+        "12-19",
+        "20-44",
+        "45",
+        "46-48",
+        "49",
+        "50",
+    ]
+    assert describes(calls) == 6
 
 
 # --- R3, R4, R6: not finished at the deadline --------------------------------------
@@ -622,10 +697,7 @@ def test_polls_that_keep_failing_end_at_the_deadline(rollout):
 
 @pytest.mark.regression
 def test_an_older_revisions_stopped_task_is_not_reported(rollout):
-    rolled_back = svc(
-        dep(OLD, ROLLBACK, state="IN_PROGRESS", running=0),
-        dep(NEW, OURS, status="ACTIVE", state="FAILED", running=0, failed=2),
-    )
+    rolled_back = breaker_read(OLD, PRIOR, NEW, OURS)
     stopped = [
         {"arn": f"{TASK}/old", "td": OLD, "reason": "an old OutOfMemoryError"},
         {

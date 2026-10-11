@@ -8,17 +8,40 @@ rule was put back a moment before the status changed, as `wrong-route`, whose
 copy sends the operator to Rollback: a second rollback of a release CodeDeploy
 is already rolling back.
 
-The fixtures here are INVENTED: the shape of errorInformation, rollbackInfo and
-the order in which CodeDeploy reverts the rule, PRIMARY and the status on an
-alarm stop have not been observed in a real account yet. They are to be
-replaced with captured output from the first staging rehearsal.
+The alarm stops are captured, not invented. `fixtures/alarm_stops/` holds what
+`aws deploy get-deployment` printed for two real ones on staging, with the
+account replaced by 123456789012 inside the ARNs and nothing else changed:
 
-The fake `aws`, the ticks and the fixtures are test_forward_deploy_completes'.
+* d-F797PV8AL (2026-10-03, a 10%-for-5-minutes canary): stopped about four
+  minutes after it was created, before the hour CodeDeploy keeps the old task
+  set, with both API alarms in ALARM; CodeDeploy's rollback was d-ND25699AL.
+* d-GD9HNI2FL (2026-10-10, the #295 rehearsal): stopped in the hour CodeDeploy
+  keeps the old task set, by the blue alarm, forced into ALARM; CodeDeploy's
+  rollback was d-FRS33Q3FL.
+
+Both are `Stopped` with `errorInformation.code` `ALARM_ACTIVE`, and both name
+their rollback in `rollbackInfo`. The tests take the deployment's status,
+errorInformation and rollbackInfo from a capture; the services and the rule
+around it are test_forward_deploy_completes' ticks.
+
+Still not observed, so still made up where a test needs it: an alarm stop
+whose status is `Failed` (the test sets it), one without `rollbackInfo` (the
+test removes it), messages other than the two captured (the test sets them),
+and the order in which CodeDeploy puts back the rule and the PRIMARY task set
+relative to the status during a traffic shift. In the 2026-10-10 rehearsal (a
+stop in that hour, after the shift), read every 10 seconds, the first read
+that said `Stopped` already showed the old revision PRIMARY; the rule was not
+read.
+
+The fake `aws` and the ticks are test_forward_deploy_completes'.
 """
 
 from __future__ import annotations
 
+import copy
 import importlib.util
+import json
+from pathlib import Path
 
 import pytest
 
@@ -40,32 +63,48 @@ from .test_forward_deploy_completes import (
 
 BLUE_ALARM = "experimentation-api-5xx-blue-staging"
 GREEN_ALARM = "experimentation-api-5xx-green-staging"
-ROLLBACK_ID = "d-ROLLBACK42"
-#: What the tests assume CodeDeploy's message looks like. Invented (see above).
+
+STOPS = Path(__file__).resolve().parent / "fixtures" / "alarm_stops"
+#: Stopped by the blue alarm alone, in the hour CodeDeploy keeps the old task set.
+BLUE_STOP = json.loads((STOPS / "d-GD9HNI2FL.json").read_text())
+#: Stopped before that hour, with both alarms in ALARM.
+CANARY_STOP = json.loads((STOPS / "d-F797PV8AL.json").read_text())
+#: The rollback each capture's rollbackInfo names, and d-GD9HNI2FL's message,
+#: written out rather than read back, so a changed fixture fails a test.
+ROLLBACK_ID = "d-FRS33Q3FL"
+CANARY_ROLLBACK_ID = "d-ND25699AL"
 MESSAGE = (
-    f"One or more alarms have been activated according to the Amazon CloudWatch "
-    f"metrics you selected, and the affected deployments have been stopped. "
-    f"Activated alarms: <{GREEN_ALARM}>"
+    "One or more alarms have been activated according to the Amazon CloudWatch "
+    "metrics you selected, and the affected deployments have been stopped. "
+    f"Activated alarms: <{BLUE_ALARM}>"
 )
 
 
 def alarm_tick(
-    status: str = "Stopped",
+    status: str | None = None,
     *,
     services: dict = BEFORE,
     rules: dict = RULES_BLUE,
-    message: str = MESSAGE,
+    message: str | None = None,
     rollback: bool = True,
+    captured: dict = BLUE_STOP,
 ) -> dict:
-    """A deployment CodeDeploy stopped for an alarm."""
-    answer = tick(status, services, rules)
-    info = answer["deploy get-deployment"]["deploymentInfo"]
-    info["errorInformation"] = {"code": "ALARM_ACTIVE", "message": message}
-    if rollback:
-        info["rollbackInfo"] = {
-            "rollbackDeploymentId": ROLLBACK_ID,
-            "rollbackMessage": f"Deployment rolled back by {ROLLBACK_ID}",
-        }
+    """A tick whose get-deployment is a captured alarm stop.
+
+    `status`, `message` and `rollback=False` change the capture, for what has
+    not been observed (see above); by default it is the capture as printed.
+    It keeps its own deploymentId: the script reports the id it was given.
+    """
+    answer = tick("Stopped", services, rules)
+    stop = copy.deepcopy(captured)
+    info = stop["deploymentInfo"]
+    if status is not None:
+        info["status"] = status
+    if message is not None:
+        info["errorInformation"]["message"] = message
+    if not rollback:
+        del info["rollbackInfo"]
+    answer["deploy get-deployment"] = stop
     return answer
 
 
@@ -100,10 +139,10 @@ def _polls(calls) -> int:
 
 
 @pytest.mark.regression
-@pytest.mark.parametrize("status", ["Stopped", "Failed"])
+@pytest.mark.parametrize("status", [None, "Failed"], ids=["Stopped", "Failed"])
 def test_an_alarm_stop_after_approval_names_the_alarm_and_the_rollback(aws, status):
     """P9a/P9b, UX W1/C1: `alarm`, the alarm's name, the rollback deployment,
-    and no advice to use Rollback."""
+    and no advice to use Rollback. The capture is Stopped; Failed is set."""
     code, out, calls, outputs = _shift(
         aws,
         [
@@ -113,16 +152,49 @@ def test_an_alarm_stop_after_approval_names_the_alarm_and_the_rollback(aws, stat
         ],
     )
     assert code == 1, out
-    assert outputs == {"approved": "true", "result": "alarm", "alarms": GREEN_ALARM}
+    assert outputs == {"approved": "true", "result": "alarm", "alarms": BLUE_ALARM}
     assert "::error title=Rolled back by an alarm::" in out
-    assert f"because {GREEN_ALARM} went into ALARM" in out
-    assert ROLLBACK_ID in out
+    assert f"CodeDeploy stopped deployment {DEPLOYMENT} ({status or 'Stopped'})" in out
+    assert f"because {BLUE_ALARM} went into ALARM" in out
+    assert f"(rollback deployment {ROLLBACK_ID})" in out
+    # CodeDeploy's own words end the line, whole: this message is 200 characters.
+    (error,) = [line for line in out.splitlines() if line.startswith("::error")]
+    assert error.endswith(f" CodeDeploy said: {MESSAGE}"), error
     assert "This run stopped nothing" in out
     assert "Do not dispatch Rollback for this" in out
     assert "docs/deployment/rollback-runbook.md#an-alarm-rolled-the-api-back" in out
     assert "rollback line" not in out and "Roll back with" not in out
     assert "override" not in out.lower()
     assert not [c for c in calls if "stop-deployment" in c]
+
+
+@pytest.mark.regression
+def test_the_captured_canary_stop_is_an_alarm_with_its_rollback(aws):
+    """d-F797PV8AL, stopped with both alarms in ALARM: `alarm`, CodeDeploy's
+    rollback by its id, and no advice to use Rollback."""
+    code, out, calls, outputs = _shift(
+        aws,
+        [
+            tick("Ready"),
+            tick("InProgress", BEFORE, _split(90, 10)),
+            alarm_tick(captured=CANARY_STOP),
+        ],
+    )
+    assert code == 1, out
+    assert outputs["result"] == "alarm", out
+    assert BLUE_ALARM in outputs["alarms"]
+    assert f"CodeDeploy stopped deployment {DEPLOYMENT} (Stopped)" in out
+    assert f"(rollback deployment {CANARY_ROLLBACK_ID})" in out
+    assert "Do not dispatch Rollback for this" in out
+    assert not [c for c in calls if "stop-deployment" in c]
+
+
+@pytest.mark.regression
+def test_the_captured_canary_stop_names_both_alarms(aws):
+    """The captured staging stop names the green alarm after character 200; the
+    names are found in the whole message, not the copy cut to MESSAGE_LIMIT."""
+    _, _, _, outputs = _shift(aws, [tick("Ready"), alarm_tick(captured=CANARY_STOP)])
+    assert outputs["alarms"] == f"{BLUE_ALARM}, {GREEN_ALARM}"
 
 
 @pytest.mark.regression
@@ -137,7 +209,7 @@ def test_a_route_reverted_by_an_alarm_rollback_is_not_a_wrong_route(aws):
             tick("Ready"),
             tick("InProgress", AFTER, _split(10, 90)),
             *reverted,
-            alarm_tick("Stopped"),
+            alarm_tick(),
         ],
     )
     assert code == 1, out
@@ -182,7 +254,7 @@ def test_a_grace_of_one_read_is_the_old_behaviour(aws):
             tick("Ready"),
             tick("InProgress", AFTER, _split(10, 90)),
             *reverted,
-            alarm_tick("Stopped"),
+            alarm_tick(),
         ],
         "--wrong-route-grace-polls",
         "1",
@@ -196,7 +268,7 @@ def test_no_rollback_is_claimed_without_rollback_info(aws):
     """P9d: CodeDeploy reported no rollback, so the copy does not claim one."""
     code, out, _, outputs = _shift(
         aws,
-        [tick("Ready"), alarm_tick("Stopped", rollback=False)],
+        [tick("Ready"), alarm_tick(rollback=False)],
     )
     assert code == 1
     assert outputs["result"] == "alarm"
@@ -211,10 +283,10 @@ def test_no_rollback_is_claimed_without_rollback_info(aws):
 def test_an_alarm_before_the_approval_says_nothing_shifted(aws):
     """P9e, UX C2: never approved, so nothing shifted and nothing rolls back."""
     code, out, calls, outputs = _shift(
-        aws, [tick("InProgress"), alarm_tick("Stopped", rollback=False)]
+        aws, [tick("InProgress"), alarm_tick(rollback=False)]
     )
     assert code == 1
-    assert outputs == {"result": "alarm", "alarms": GREEN_ALARM}
+    assert outputs == {"result": "alarm", "alarms": BLUE_ALARM}
     assert not _continues(calls)
     assert "before any traffic shifted" in out
     assert "the previous revision keeps serving" in out
@@ -266,7 +338,7 @@ def test_the_alarm_is_never_an_empty_name(aws, message, alarms, expected):
             "0",
             *alarms,
         ],
-        {"ticks": [tick("Ready"), alarm_tick("Stopped", message=message)]},
+        {"ticks": [tick("Ready"), alarm_tick(message=message)]},
     )
     assert code == 1
     assert outputs["alarms"] == expected
@@ -289,9 +361,7 @@ def test_a_stop_for_another_reason_is_still_failed(aws):
 
 def test_a_long_or_multiline_message_is_one_bounded_line(aws):
     long = "line one\nline two " + "x" * 1000
-    code, out, _, outputs = _shift(
-        aws, [tick("Ready"), alarm_tick("Stopped", message=long)]
-    )
+    code, out, _, outputs = _shift(aws, [tick("Ready"), alarm_tick(message=long)])
     (error,) = [line for line in out.splitlines() if line.startswith("::error")]
     assert "line one line two" in error
     assert "x" * 300 not in error

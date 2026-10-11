@@ -1,0 +1,93 @@
+{
+    "deploymentInfo": {
+        "applicationName": "experimentation-platform-staging",
+        "deploymentGroupName": "experimentation-staging",
+        "deploymentConfigName": "CodeDeployDefault.ECSCanary10Percent15Minutes",
+        "deploymentId": "d-GD9HNI2FL",
+        "previousRevision": {
+            "revisionType": "AppSpecContent",
+            "appSpecContent": {
+                "sha256": "15abe2b953bcfd178601fbca9b0b2622c746e53abba712f9074f81bbb50ae949"
+            }
+        },
+        "revision": {
+            "revisionType": "AppSpecContent",
+            "appSpecContent": {
+                "sha256": "7178c1e2060f237e3e6f143be485d27b72a561e869b67529a9f9343027aedc24"
+            }
+        },
+        "status": "Stopped",
+        "errorInformation": {
+            "code": "ALARM_ACTIVE",
+            "message": "One or more alarms have been activated according to the Amazon CloudWatch metrics you selected, and the affected deployments have been stopped. Activated alarms: <experimentation-api-5xx-blue-staging>"
+        },
+        "createTime": "2026-10-10T18:52:08.313000-07:00",
+        "completeTime": "2026-10-10T19:14:12.613000-07:00",
+        "deploymentOverview": {
+            "Pending": 0,
+            "InProgress": 0,
+            "Succeeded": 1,
+            "Failed": 0,
+            "Skipped": 0,
+            "Ready": 0
+        },
+        "description": "deploy v0.27.0 (full)",
+        "creator": "user",
+        "ignoreApplicationStopFailures": false,
+        "autoRollbackConfiguration": {
+            "enabled": true,
+            "events": [
+                "DEPLOYMENT_STOP_ON_ALARM",
+                "DEPLOYMENT_FAILURE",
+                "DEPLOYMENT_STOP_ON_REQUEST"
+            ]
+        },
+        "updateOutdatedInstancesOnly": false,
+        "rollbackInfo": {
+            "rollbackDeploymentId": "d-FRS33Q3FL",
+            "rollbackMessage": "Deployment d-GD9HNI2FL terminated. Automatic rollback is triggered with a DeploymentId d-FRS33Q3FL."
+        },
+        "deploymentStyle": {
+            "deploymentType": "BLUE_GREEN",
+            "deploymentOption": "WITH_TRAFFIC_CONTROL"
+        },
+        "instanceTerminationWaitTimeStarted": true,
+        "blueGreenDeploymentConfiguration": {
+            "terminateBlueInstancesOnDeploymentSuccess": {
+                "action": "TERMINATE",
+                "terminationWaitTimeInMinutes": 60
+            },
+            "deploymentReadyOption": {
+                "actionOnTimeout": "STOP_DEPLOYMENT",
+                "waitTimeInMinutes": 30
+            }
+        },
+        "loadBalancerInfo": {
+            "targetGroupPairInfoList": [
+                {
+                    "targetGroups": [
+                        {
+                            "name": "experi-BlueT-0LXDSHOPLSDW"
+                        },
+                        {
+                            "name": "experi-Green-NHLWY9NZVAPG"
+                        }
+                    ],
+                    "prodTrafficRoute": {
+                        "listenerArns": [
+                            "arn:aws:elasticloadbalancing:us-west-2:123456789012:listener/app/experimentation-staging/95bd6c47aba913b1/83089a6bb6b93f29"
+                        ]
+                    },
+                    "testTrafficRoute": {
+                        "listenerArns": [
+                            "arn:aws:elasticloadbalancing:us-west-2:123456789012:listener/app/experimentation-staging/95bd6c47aba913b1/7bbd07733ce6c792"
+                        ]
+                    }
+                }
+            ]
+        },
+        "fileExistsBehavior": "DISALLOW",
+        "deploymentStatusMessages": [],
+        "computePlatform": "ECS"
+    }
+}

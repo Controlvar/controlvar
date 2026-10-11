@@ -1,0 +1,130 @@
+{
+  "run": "https://github.com/getexperimently/experimently/actions/runs/38098724258",
+  "tooling_sha": "82e2195e26595ffb634867a6bc140991f1e0b6f2",
+  "step": "Stop any deployment already in flight",
+  "about": "One staging rollback's stop step, from the #295 rehearsal: nothing was in flight, so it stopped nothing. Its env, the AWS answers it was given, in call order, and every line it printed. Each value says whether it is verbatim from the run's log or reconstructed from the step's own messages. The log masks the account inside each ARN; the mask is replaced by 123456789012 inside the ARN's account field only. No other text is changed.",
+  "env": {
+    "TARGET_ARN": {
+      "value": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-backend-staging:12",
+      "source": "verbatim from the step's env header, the masked account replaced"
+    }
+  },
+  "answers": [
+    {
+      "match": [
+        "deploy list-deployments"
+      ],
+      "answers": [
+        ""
+      ],
+      "source": "reconstructed: 'no deployment in flight'; the listing printed nothing"
+    },
+    {
+      "match": [
+        "ecs describe-services",
+        "experimentation-backend-staging"
+      ],
+      "answers": [
+        {
+          "services": [
+            {
+              "taskSets": [
+                {
+                  "status": "PRIMARY",
+                  "taskDefinition": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-backend-staging:13"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "source": "reconstructed: scripts/api_serving.py's 'NOT YET: the PRIMARY task set runs experimentation-backend-staging:13'; only the PRIMARY task set is given, which is all it reads before that verdict"
+    }
+  ],
+  "printed": [
+    "no deployment in flight",
+    "NOT YET: the PRIMARY task set runs experimentation-backend-staging:13, not experimentation-backend-staging:12",
+    "the API is not on experimentation-backend-staging:12: rolling back"
+  ],
+  "printed_source": "verbatim, with the runner's timestamps stripped",
+  "outputs": {},
+  "outputs_source": "captured: the run has these outputs (#759), and its Run summary's env header shows STOPPED and STOP_WAIT empty; nothing was in flight, so the step wrote neither",
+  "summary": {
+    "about": "The Run summary step's inputs in the same run, from its env header, and the lines it printed. It made no read, because its verify step succeeded.",
+    "env": {
+      "TARGET_ARN": {
+        "value": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-backend-staging:12",
+        "source": "verbatim from the Run summary step's env header, the masked account replaced inside the ARN's account field"
+      },
+      "DEPLOYMENT_ID": {
+        "value": "d-QB1QX42FL",
+        "source": "verbatim from the Run summary step's env header"
+      },
+      "DASHBOARD_INPUT": {
+        "value": "experimentation-dashboard-staging:12",
+        "source": "verbatim from the Run summary step's env header"
+      },
+      "DASHBOARD_TARGET_ARN": {
+        "value": "arn:aws:ecs:us-west-2:123456789012:task-definition/experimentation-dashboard-staging:12",
+        "source": "verbatim from the Run summary step's env header, the masked account replaced inside the ARN's account field"
+      },
+      "DASHBOARD_SERVING_ARN": {
+        "value": "",
+        "source": "verbatim from the Run summary step's env header"
+      },
+      "DASHBOARD_SERVING_IMAGE": {
+        "value": "",
+        "source": "verbatim from the Run summary step's env header"
+      },
+      "DASHBOARD_RESULT": {
+        "value": "rolled back to experimentation-dashboard-staging:12",
+        "source": "verbatim from the Run summary step's env header"
+      },
+      "DASHBOARD_OUTCOME": {
+        "value": "success",
+        "source": "verbatim from the Run summary step's env header"
+      },
+      "API_VERIFY": {
+        "value": "success",
+        "source": "verbatim from the Run summary step's env header"
+      },
+      "ALREADY_SERVING": {
+        "value": "",
+        "source": "verbatim from the Run summary step's env header"
+      },
+      "REFUSED": {
+        "value": "",
+        "source": "verbatim from the Run summary step's env header"
+      },
+      "REFUSED_ID": {
+        "value": "",
+        "source": "verbatim from the Run summary step's env header"
+      },
+      "REFUSED_PRIMARY": {
+        "value": "",
+        "source": "verbatim from the Run summary step's env header"
+      },
+      "STOPPED": {
+        "value": "",
+        "source": "verbatim from the Run summary step's env header"
+      },
+      "STOP_WAIT": {
+        "value": "",
+        "source": "verbatim from the Run summary step's env header"
+      },
+      "JOB_STATUS": {
+        "value": "success",
+        "source": "verbatim from the Run summary step's env header"
+      },
+      "ACCOUNT_CHECK": {
+        "value": "success",
+        "source": "verbatim from the Run summary step's env header"
+      }
+    },
+    "printed": [
+      "the stop step stopped: nothing; its wait ended: not recorded",
+      "verdict: ROLLED BACK (this step exits 0)"
+    ],
+    "printed_source": "verbatim, with the runner's timestamps stripped"
+  }
+}
