@@ -537,7 +537,7 @@ steps:
         0.action_type: safety_rollback
         0.user_email: system:safety-monitor
         0.user_id: null
-        0.reason: Automatic rollback due to error_rate exceeding threshold (0.1 > 0.05)
+        0.reason: Automatic rollback due to error_rate above threshold (10% > 5%)
         0.new_value: '{"deactivated": true, "new_percentage": 0, "paused_schedules": [], "previous_percentage": 5, "trigger_type": "automatic"}'
       after:
         0.timestamp: quiet-at

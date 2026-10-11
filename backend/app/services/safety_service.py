@@ -179,6 +179,56 @@ def format_metric_reading(name: str, value: float) -> str:
     return format_metric_value(value)
 
 
+# comparison_type -> (the word a reason uses, the symbol between value and
+# threshold). Anything else reads as "greater_than", as ``_breaches`` does.
+_COMPARISON_WORDS = {
+    "greater_than": ("above", ">"),
+    "less_than": ("below", "<"),
+    "equal_to": ("equal to", "="),
+}
+
+
+def breach_comparison(status: Any) -> Optional[str]:
+    """The ``comparison_type`` a ``MetricStatus`` carries in its ``details``.
+
+    None when it carries none (or something that is not a string); the wording
+    helpers read None as ``greater_than``.
+    """
+    details = getattr(status, "details", None)
+    comparison = details.get("comparison_type") if isinstance(details, dict) else None
+    return comparison if isinstance(comparison, str) else None
+
+
+def breach_words(comparison_type: Optional[str]) -> Tuple[str, str]:
+    """The word and the symbol for a ``comparison_type``.
+
+    ``greater_than`` is (``above``, ``>``), ``less_than`` (``below``, ``<``),
+    ``equal_to`` (``equal to``, ``=``). None and anything unknown read as
+    ``greater_than``, as ``_breaches`` does.
+    """
+    return _COMPARISON_WORDS.get(comparison_type, _COMPARISON_WORDS["greater_than"])
+
+
+def describe_breach(status: Any) -> str:
+    """How a failing metric breached its threshold, for a rollback reason.
+
+    Worded by the threshold's ``comparison_type`` (``details`` of the
+    ``MetricStatus``, ``greater_than`` when it is absent) and written in the
+    metric's unit (``format_metric_reading``): 1 error in 14 evaluations
+    against ``0.05`` reads ``above threshold (7.143% > 5%)``; 40
+    ``total_evaluations`` against a ``less_than`` floor of 100 reads
+    ``below threshold (40 < 100)``.
+
+    ``SafetyService.should_rollback`` and the safety scheduler both build
+    their reason from this, and the rollback alert takes its word from
+    ``breach_words``, so none of them can word the same breach differently.
+    """
+    word, symbol = breach_words(breach_comparison(status))
+    value = format_metric_reading(status.name, status.current_value)
+    limit = format_metric_reading(status.name, status.threshold)
+    return f"{word} threshold ({value} {symbol} {limit})"
+
+
 class SafetyService:
     """Service for safety monitoring and rollback functionality."""
 
@@ -726,11 +776,7 @@ class SafetyService:
 
         failing = next((m for m in safety_check.metrics if not m.is_healthy), None)
         if failing:
-            reason = (
-                f"Metric '{failing.name}' exceeded threshold "
-                f"({format_metric_value(failing.current_value)} vs "
-                f"{format_metric_value(failing.threshold)})"
-            )
+            reason = f"Metric '{failing.name}' is {describe_breach(failing)}"
             trigger_type = _metric_to_trigger(failing.name)
             trigger_value, threshold_value = failing.current_value, failing.threshold
         else:
