@@ -380,6 +380,32 @@ lists every route with its own limit. Over a limit the API answers `429` with a
 
 ### Request Size Limits
 - Maximum request body size: 5 MiB (5,242,880 bytes); a larger body is answered `413`, with or without a `Content-Length` header
+- A targeting `context` has limits of its own, below
+
+### Targeting Context Limits
+The routes that take a targeting `context` hold it to two limits before it is matched against
+any rule: `GET` and `POST /api/v1/feature-flags/evaluate/{flag_key}`,
+`GET /api/v1/feature-flags/user/{user_id}`, `POST /api/v1/tracking/assign`, and each user's
+`context` in `POST /api/v1/tracking/assign/batch`.
+
+| Limit | At most | `detail` of the 422 |
+|---|---|---|
+| Depth: every JSON object and array is a level, the context itself the first (`{"a": 1}` is 1 level, `{"a": [1]}` and `{"a": {"b": 1}}` are 2) | 10 levels | `Targeting context nested more than 10 levels deep` |
+| Size: the context as compact JSON (no spaces) in UTF-8 | 8,192 bytes | `Targeting context larger than 8192 bytes` |
+
+- Depth is checked first, so a context over both limits answers the depth `detail`.
+- On a `GET`, the `context` parameter is held to 8,192 bytes as sent (its JSON text after URL
+  decoding, spaces included) before it is parsed, and a parameter nested too deeply to parse
+  answers the depth 422.
+- In the batch, every user's context is checked before the first user is assigned. One over a limit
+  refuses the whole request with 422, its `detail` prefixed with the user's position
+  (`users[3]: Targeting context larger than 8192 bytes`), and nobody is assigned.
+- A refused request is not evaluated or assigned, and nothing is recorded for it.
+- A `POST` body nested too deeply to parse at all answers 400 (`There was an error parsing
+  the body`), as before.
+
+Every context in the SDKs' shared test vectors is a few hundred bytes at most and no more than
+three levels deep.
 
 ### Pagination
 - List endpoints that page take `skip` and `limit` parameters
@@ -833,7 +859,8 @@ response.
 - **Path Parameters**:
   - user_id: string
 - **Query Parameters**:
-  - context: object (optional)
+  - context: object (optional), URL-encoded JSON; at most 8,192 bytes and 10 levels deep
+    ([Targeting Context Limits](#targeting-context-limits))
 - **Response**: 200 OK
   ```json
   {
@@ -883,7 +910,8 @@ public `key`. They share the per-IP `SDK_RATE_LIMIT_PER_MINUTE` ceiling (default
   200 OK with the control variant, `assigned: false` and `reason` set to `holdout`, `mutual_exclusion` or
   `targeting`; nothing is recorded for them. A user who already has an assignment keeps it.
 - **Headers**: X-API-Key: {api_key}
-- **Body**: `{"experiment_key": string, "user_id": string, "context": object?}`
+- **Body**: `{"experiment_key": string, "user_id": string, "context": object?}`; `context` at most
+  8,192 bytes and 10 levels deep ([Targeting Context Limits](#targeting-context-limits))
 - **Response**: 200 OK
   ```json
   {
@@ -899,7 +927,8 @@ public `key`. They share the per-IP `SDK_RATE_LIMIT_PER_MINUTE` ceiling (default
   ```
   `assigned` is `false` when the user was not enrolled; `reason` is `assigned`, `holdout`,
   `mutual_exclusion` or `targeting`.
-- **Errors**: 404 when no ACTIVE experiment has that key
+- **Errors**: 404 when no ACTIVE experiment has that key; 422 when `context` is over a
+  [limit](#targeting-context-limits)
 
 ### Assign a List of Users to an Experiment (beta)
 - **Endpoint**: `POST /api/v1/tracking/assign/batch`
@@ -920,6 +949,8 @@ public `key`. They share the per-IP `SDK_RATE_LIMIT_PER_MINUTE` ceiling (default
   - `users`: 1 to 1,000 entries; each `user_id` 1 to 255 characters and different from every other
     in the request.
   - Unknown fields are refused, in the body and in each user.
+  - Each user's `context`: at most 8,192 bytes and 10 levels deep
+    ([Targeting Context Limits](#targeting-context-limits)).
 - **Response**: 200 OK
   ```json
   {
@@ -960,6 +991,7 @@ public `key`. They share the per-IP `SDK_RATE_LIMIT_PER_MINUTE` ceiling (default
 | 422 | more than 1,000 users | loc `["body","users"]`, msg `at most 1,000 users per request; split the list` |
 | 422 | a `user_id` appears twice | loc `["body","users",4,"user_id"]`, msg `duplicate user_id; each user may appear once per request (first seen at users[1])` |
 | 422 | a `user_id` empty or over 255 characters, an unknown field, or text the database cannot store | pydantic's message at the field's loc |
+| 422 | a user's `context` over a [limit](#targeting-context-limits) | `users[3]: Targeting context nested more than 10 levels deep` or `users[3]: Targeting context larger than 8192 bytes`, with that user's position |
 | 429 | over 60 requests a minute | `Too Many Requests. Please slow down and retry after a moment.`, with `Retry-After` |
 | 500 | anything else | `Could not assign the users to the experiment (request ID: <id>).` |
 
