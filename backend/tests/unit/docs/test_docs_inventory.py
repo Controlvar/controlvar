@@ -17,7 +17,8 @@ what verifies it. The file's header is the contract; this test holds it:
   request that writes it (one of ``PLANNED``; only on a pending journey, so
   the run summary can say where each journey not yet written comes from);
 * an ``exec`` page is enrolled in ``scripts/doc_examples.toml`` with at least
-  one exec block;
+  one exec block, and a ``reference`` page is not: steps that Doc Examples
+  runs are not "no steps to follow";
 * a ``workflow`` page names a workflow whose ``on.<event>.paths`` lists the
   page's own path, ``docs/<page>``, as a literal entry. The workflow file is
   parsed, not searched: a comment or a step name that mentions the page does
@@ -429,6 +430,13 @@ def _entry_problems(
             found.append(
                 f"{key}: class exec, but scripts/doc_examples.toml enrols no exec"
                 " block of it"
+            )
+    elif family == "reference":
+        if exec_count >= 1:
+            found.append(
+                f"{key}: class reference, but scripts/doc_examples.toml enrols"
+                f" {path} with exec = {exec_count}: Doc Examples runs its steps,"
+                " so it is class exec"
             )
     elif family == "workflow":
         workflow = entry.get("workflow")
@@ -1111,6 +1119,14 @@ PLANTS = [
     pytest.param(
         GOOD + _flows(),
         NAV,
+        {"enrolled": {"b.md": 3, "e.md": 1}},
+        "e.md: class reference, but scripts/doc_examples.toml enrols docs/e.md with"
+        " exec = 1: Doc Examples runs its steps, so it is class exec",
+        id="reference-page-with-exec-blocks",
+    ),
+    pytest.param(
+        GOOD + _flows(),
+        NAV,
         {"workflows": {}},
         "c.md: workflow 'chart-kind' is not a file",
         id="workflow-missing",
@@ -1765,6 +1781,15 @@ DOC_PLANTS = [
         {"enrolled": {}},
         "README.md: class exec, but scripts/doc_examples.toml enrols no exec block",
         id="exec-document-not-enrolled",
+    ),
+    pytest.param(
+        DOCS_GOOD.replace('class = "exec"', 'class = "reference"'),
+        WALKED,
+        None,
+        {},
+        "README.md: class reference, but scripts/doc_examples.toml enrols README.md"
+        " with exec = 2: Doc Examples runs its steps, so it is class exec",
+        id="reference-document-with-exec-blocks",
     ),
     pytest.param(
         DOCS_GOOD.replace(

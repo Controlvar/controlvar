@@ -29,7 +29,9 @@
 #   reference           nothing is walked: it has no steps to follow, or the
 #                       reason says why its steps are not walked. The docs-site
 #                       journey checks that it answers on the published site
-#                       with its source heading, like every nav page.
+#                       with its source heading, like every nav page. A page
+#                       doc_examples.toml enrols with an exec block is refused
+#                       here: its steps run, so it is exec.
 #   aws                 needs an AWS account; to be reported NOT RUN.
 #                       `exercised_by` names the steps that exercise the page,
 #                       each one of: a step of #295 (the first deploy to a real
@@ -810,8 +812,8 @@ reason = "the StreamPulse simulator's scripts, run as the page says"
 
 [documents."docs/api/README.md"]
 scope = "in"
-class = "reference"
-reason = "an index of the API pages; no steps to follow"
+class = "exec"
+reason = "an index of the API pages, with a quick start whose sign-in and experiment-list calls run in Doc Examples"
 
 [documents."docs/architecture/README.md"]
 scope = "in"
