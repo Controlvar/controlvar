@@ -10,6 +10,11 @@ server it started running, holding its port: the demo job's stop check
 The real script runs here in a temporary checkout, with a fake ``docker`` and a
 tracked process that, like npm, starts a child and exits on SIGTERM without
 stopping it. Local processes only (``sleep``), each one reaped at the end.
+
+A pid file can outlive its process, and its pid can then belong to another
+program. The script stops a pid only when the process's command line holds
+what setup-local.sh started under that file's name; a pid file naming an
+unrelated process leaves that process, and everything under it, running.
 """
 
 from __future__ import annotations
@@ -87,12 +92,27 @@ def checkout(tmp_path: Path):
             pass
 
 
+def _teardown(root: Path, bin_dir: Path, home: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["bash", str(root / "demo" / "teardown-local.sh")],
+        cwd=root,
+        env={
+            "PATH": f"{bin_dir}{os.pathsep}/usr/bin{os.pathsep}/bin",
+            "HOME": str(home),
+        },
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+
 @pytest.mark.regression
 def test_the_stop_command_stops_the_process_a_tracked_one_started(checkout, tmp_path):
     root, bin_dir, started = checkout
     child_file = tmp_path / "child.pid"
+    # Its command line ends "run dev", as `npm run dev -- -H 127.0.0.1` does.
     parent = subprocess.Popen(
-        [sys.executable, "-c", PARENT, str(child_file)],
+        [sys.executable, "-c", PARENT, str(child_file), "run", "dev"],
         start_new_session=True,
     )
     started.append(parent.pid)
@@ -100,17 +120,7 @@ def test_the_stop_command_stops_the_process_a_tracked_one_started(checkout, tmp_
     started.append(child)
     (root / "demo" / ".pids" / "frontend.pid").write_text(f"{parent.pid}\n")
 
-    done = subprocess.run(
-        ["bash", str(root / "demo" / "teardown-local.sh")],
-        cwd=root,
-        env={
-            "PATH": f"{bin_dir}{os.pathsep}/usr/bin{os.pathsep}/bin",
-            "HOME": str(tmp_path),
-        },
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
+    done = _teardown(root, bin_dir, tmp_path)
     parent.wait(timeout=10)
     assert done.returncode == 0, done.stdout + done.stderr
     assert "frontend stopped." in done.stdout
@@ -122,3 +132,42 @@ def test_the_stop_command_stops_the_process_a_tracked_one_started(checkout, tmp_
         " stopping the tracked pid alone leaves its children"
     )
     assert not (root / "demo" / ".pids").exists()
+
+
+@pytest.mark.parametrize("pid_file", ["frontend", "backend", "simulator", "unknown"])
+def test_a_pid_file_naming_an_unrelated_process_leaves_it_running(
+    checkout, tmp_path, pid_file
+):
+    """The plant: a pid file holding the pid of a process setup-local.sh did not
+    start (here a ``sleep`` with a child of its own). Both must survive."""
+    root, bin_dir, started = checkout
+    child_file = tmp_path / "child.pid"
+    unrelated = subprocess.Popen(
+        [sys.executable, "-c", PARENT, str(child_file)],
+        start_new_session=True,
+    )
+    started.append(unrelated.pid)
+    child = _wait_for(child_file)
+    started.append(child)
+    (root / "demo" / ".pids" / f"{pid_file}.pid").write_text(f"{unrelated.pid}\n")
+
+    done = _teardown(root, bin_dir, tmp_path)
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert (
+        f"{pid_file} (PID {unrelated.pid}) is not the process setup-local.sh"
+        " started; leaving it running."
+    ) in done.stdout
+    assert unrelated.poll() is None, "the unrelated process was stopped"
+    assert _alive(child), "a process under the unrelated one was stopped"
+    # The pid file is the demo's, and goes with demo/.pids.
+    assert not (root / "demo" / ".pids").exists()
+
+
+def test_a_pid_file_naming_no_process_is_skipped(checkout, tmp_path):
+    root, bin_dir, _ = checkout
+    gone = subprocess.Popen(["true"])
+    gone.wait(timeout=10)
+    (root / "demo" / ".pids" / "backend.pid").write_text(f"{gone.pid}\n")
+    done = _teardown(root, bin_dir, tmp_path)
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert f"backend (PID {gone.pid}) not running, skipping." in done.stdout

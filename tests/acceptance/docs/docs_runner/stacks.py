@@ -111,7 +111,7 @@ first step rather than ending the session.
   What it prints, and when the stack comes down each log ``demo/.logs`` holds,
   is written to ``stacks/demo-local.log`` and ``stacks/demo-local/`` with the
   values the stack registers taken out: the administrator's password the
-  script sets (``FIRST_SUPERUSER_PASSWORD``) and the API keys the seeds and
+  script sets (``FIRST_SUPERUSER_PASSWORD``) and every API key the seeds and
   the script write (``DEMO_KEY_FILES``). The same values go to the runner's
   redactor and to the end-of-run scan (``Running.secrets``). Coming down,
   the stop command must exit 0 and leave no port of ``DEMO_PORTS``
@@ -828,11 +828,15 @@ DEMO_STOP = Path("demo") / "teardown-local.sh"
 #: The host ports ``setup-local.sh`` binds: PostgreSQL, Redis, the API, the
 #: dashboard, ShopLab and StreamPulse.
 DEMO_PORTS: Tuple[int, ...] = (5432, 6379, 8000, 3100, 3200, 3300)
-#: The files the seeds and the script write an API key to.
+#: The files the seeds and the script write an API key to: every ``*KEY_FILE``
+#: constant of the seeds setup-local.sh runs, and the script's own. A unit test
+#: (``test_docs_journey_demo.py``) reads them out of the seeds and the script,
+#: so a key file added there and not here fails it.
 DEMO_KEY_FILES: Tuple[Path, ...] = (
     Path("demo") / ".demo_api_key",
     Path("demo") / "shoplab" / ".api_key",
     Path("demo") / "streampulse" / ".api_key",
+    Path("demo") / "streampulse" / ".api_key_server",
 )
 #: Where the script's processes write their logs.
 DEMO_LOGS = Path("demo") / ".logs"

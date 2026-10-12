@@ -16,6 +16,9 @@ fake script, and fake addresses served on free ports. What is checked:
 * the stop: the guide's command must exit 0, leave no port answering and
   remove what the guide says it removes;
 * the parsers against the real script: its box and its password export;
+* every key file the seeds setup-local.sh runs and the script itself write
+  (the seeds' ``*KEY_FILE`` constants, read with ``ast``) is in the list the
+  stack reads, and a key file added to a seed is found;
 * a journey whose guide is a document (``[documents]``), and the session's
   choice of stacks (``DOCS_JOURNEY_STACKS``);
 * the end-of-run scan looks for the values a stack keeps, not only the
@@ -26,11 +29,13 @@ Temporary files and loopback sockets only; no git, no network, no docker.
 
 from __future__ import annotations
 
+import ast
 import copy
 import datetime
 import http.server
 import importlib.util
 import os
+import re
 import shutil
 import socket
 import stat
@@ -38,7 +43,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
-from typing import Any, Dict, Iterator, List
+from typing import Any, Dict, Iterator, List, Set, Tuple
 
 import pytest
 import yaml
@@ -59,6 +64,7 @@ KEYS = {
     "demo/.demo_api_key": "eptk_demo_simulator_key_0123456789",
     "demo/shoplab/.api_key": "eptk_shoplab_storefront_key_0123456789",
     "demo/streampulse/.api_key": "eptk_streampulse_app_key_0123456789",
+    "demo/streampulse/.api_key_server": "eptk_streampulse_second_key_0123456789",
 }
 
 
@@ -131,8 +137,8 @@ def _checkout(
         f"printf 'backend started with {KEYS['demo/.demo_api_key']}\\n' > demo/.logs/backend.log\n"
         "printf 'seeded\\n' > demo/.logs/simulator.log\n"
         "printf '1\\n' > demo/.pids/backend.pid\n"
-        f"printf 'key {KEYS['demo/shoplab/.api_key']}\\n'\n"
-        "export FIRST_SUPERUSER_PASSWORD='Demo1234!'\n"
+        + "".join(f"printf 'key {value}\\n'\n" for value in KEYS.values())
+        + "export FIRST_SUPERUSER_PASSWORD='Demo1234!'\n"
         + (_box(ports) if box else "printf 'done\\n'\n")
         + f"exit {exit_code}\n",
     )
@@ -420,6 +426,143 @@ def test_the_password_export_is_read_as_bash_reads_it(line, value):
 
 def test_a_box_from_before_the_last_ready_is_not_read():
     assert stacks.ready_addresses("Frontend: http://localhost:1\nno box\n") == {}
+
+
+# ---------------------------------------------------------------------------
+# Every key file the seeds and the script write is one the stack reads
+# ---------------------------------------------------------------------------
+#: A seed setup-local.sh runs: ``python backend/scripts/seed_<name>.py``.
+SEED_RUN = re.compile(r"^\s*python (backend/scripts/seed_[a-z_]{1,40}\.py)\b", re.M)
+#: A file setup-local.sh itself writes a key to: ``> "$DEMO_DIR/<name>"``.
+SCRIPT_KEY = re.compile(r'>\s*"\$DEMO_DIR/([\w.-]{0,60}key[\w.-]{0,60})"')
+
+
+def _literal_chain(node: ast.AST):
+    """``NAME / "a" / "b"`` as ("NAME", ["a", "b"]), or None."""
+    parts: List[str] = []
+    while (
+        isinstance(node, ast.BinOp)
+        and isinstance(node.op, ast.Div)
+        and isinstance(node.right, ast.Constant)
+        and isinstance(node.right.value, str)
+    ):
+        parts.insert(0, node.right.value)
+        node = node.left
+    if isinstance(node, ast.Name) and parts:
+        return node.id, parts
+    return None
+
+
+def seed_key_files(source: str) -> Tuple[Set[str], Set[str]]:
+    """The repository paths a seed's module-level ``*KEY_FILE`` constants name,
+    and the names of those it cannot resolve.
+
+    A constant is ``<place> / "<literal>" ...`` where the place is
+    ``PROJECT_ROOT`` (the repository's root) or a constant resolved before it;
+    an environment override around it (``os.environ.get(...) or ...``) is the
+    default the demo uses.
+    """
+    places: Dict[str, str] = {"PROJECT_ROOT": ""}
+    found: Set[str] = set()
+    unresolved: Set[str] = set()
+    for statement in ast.parse(source).body:
+        if not (
+            isinstance(statement, ast.Assign)
+            and len(statement.targets) == 1
+            and isinstance(statement.targets[0], ast.Name)
+        ):
+            continue
+        name = statement.targets[0].id
+        chains = [
+            chain
+            for chain in (_literal_chain(node) for node in ast.walk(statement.value))
+            if chain is not None and chain[0] in places
+        ]
+        if not chains:
+            if name.endswith("KEY_FILE"):
+                unresolved.add(name)
+            continue
+        root, parts = max(chains, key=lambda chain: len(chain[1]))
+        path = "/".join(part for part in (places[root], *parts) if part)
+        places[name] = path
+        if name.endswith("KEY_FILE"):
+            found.add(path)
+    return found, unresolved
+
+
+def key_files_written(repo_root: Path) -> Tuple[Set[str], List[str], Set[str]]:
+    """Every key file setup-local.sh's seeds and the script write, the seeds
+    read, and the constants that could not be resolved."""
+    script = (repo_root / stacks.DEMO_SCRIPT).read_text(encoding="utf-8")
+    seeds = sorted(set(SEED_RUN.findall(script)))
+    found = {f"demo/{name}" for name in SCRIPT_KEY.findall(script)}
+    unresolved: Set[str] = set()
+    for seed in seeds:
+        paths, missed = seed_key_files((repo_root / seed).read_text(encoding="utf-8"))
+        found |= paths
+        unresolved |= {f"{seed}:{name}" for name in missed}
+    return found, seeds, unresolved
+
+
+def test_the_stack_keeps_every_key_file_the_seeds_and_the_script_write():
+    found, seeds, unresolved = key_files_written(REPO_ROOT)
+    assert seeds == [
+        "backend/scripts/seed_demo_data.py",
+        "backend/scripts/seed_shoplab.py",
+        "backend/scripts/seed_streampulse.py",
+    ]
+    assert not unresolved, unresolved
+    assert "demo/streampulse/.api_key_server" in found
+    listed = {path.as_posix() for path in stacks.DEMO_KEY_FILES}
+    assert found == listed, (
+        f"written but not kept out: {sorted(found - listed)};"
+        f" listed but written by nothing: {sorted(listed - found)}"
+    )
+
+
+def _seeds_copy(tmp_path: Path) -> Path:
+    root = tmp_path / "tree"
+    (root / "demo").mkdir(parents=True)
+    shutil.copy(REPO_ROOT / stacks.DEMO_SCRIPT, root / stacks.DEMO_SCRIPT)
+    (root / "backend" / "scripts").mkdir(parents=True)
+    for seed in ("seed_demo_data.py", "seed_shoplab.py", "seed_streampulse.py"):
+        shutil.copy(
+            REPO_ROOT / "backend" / "scripts" / seed, root / "backend" / "scripts"
+        )
+    return root
+
+
+def test_a_key_file_a_seed_adds_is_found(tmp_path):
+    """The plant: a new ``*KEY_FILE`` constant in a seed. The list the stack
+    reads no longer matches, and the difference names the new file."""
+    root = _seeds_copy(tmp_path)
+    seed = root / "backend" / "scripts" / "seed_streampulse.py"
+    seed.write_text(
+        seed.read_text(encoding="utf-8")
+        + '\nEXTRA_KEY_FILE = STREAMPULSE_DIR / ".api_key_extra"\n',
+        encoding="utf-8",
+    )
+    found, _, unresolved = key_files_written(root)
+    assert not unresolved
+    listed = {path.as_posix() for path in stacks.DEMO_KEY_FILES}
+    assert found - listed == {"demo/streampulse/.api_key_extra"}
+
+
+def test_a_key_file_the_script_adds_is_found(tmp_path):
+    root = _seeds_copy(tmp_path)
+    script = root / stacks.DEMO_SCRIPT
+    script.write_text(
+        script.read_text(encoding="utf-8")
+        + 'printf \'%s\\n\' "$KEY" > "$DEMO_DIR/.another_api_key"\n',
+        encoding="utf-8",
+    )
+    found, _, _ = key_files_written(root)
+    assert "demo/.another_api_key" in found
+
+
+def test_a_key_file_constant_the_reader_cannot_place_is_reported():
+    _, unresolved = seed_key_files('NEW_KEY_FILE = somewhere() / ".key"\n')
+    assert unresolved == {"NEW_KEY_FILE"}
 
 
 # ---------------------------------------------------------------------------
