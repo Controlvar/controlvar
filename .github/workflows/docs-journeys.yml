@@ -64,8 +64,24 @@ name: Docs journeys
 # carries the FAIL, whenever the record exists. A run that stopped before its
 # scan uploads nothing.
 #
-# The `report` job keeps one rolling `docs-journey-failure` issue per failing
-# guide: opened when the guide has failed in 2 scheduled runs in a row,
+# The `demo` job walks the demo's documents (demo/DEMO_GUIDE.md and the
+# ShopLab and StreamPulse READMEs) on the demo-local stack: the runner runs
+# ./demo/setup-local.sh from the checkout's root, as the guide tells a reader
+# to, then the journeys in sequence, then the guide's stop command,
+# ./demo/teardown-local.sh, and checks what it left
+# (tests/acceptance/docs/docs_runner/stacks.py). The script binds fixed host
+# ports (5432, 6379, 8000, 3100, 3200 and 3300) and installs into the
+# checkout, so it runs in a job of its own, with Python 3.11 and the Node of
+# .nvmrc as the guide's prerequisites say, and the stack refuses to start
+# anywhere but here (DOCS_JOURNEY_DEMO_LOCAL with GITHUB_ACTIONS). The
+# journeys job never runs a demo-local journey; this job runs nothing else
+# (DOCS_JOURNEY_STACKS). Its run directory is scanned like the journeys
+# job's, for the administrator's password the script sets and the API keys
+# the seeds write too, and its verdicts are uploaded as
+# docs-journeys-demo-verdicts.
+#
+# The `report` job reads both jobs' verdicts, and keeps one rolling
+# `docs-journey-failure` issue per failing guide: opened when the guide has failed in 2 scheduled runs in a row,
 # commented when its failing step changes, closed by the first run in which it
 # passes. Only a scheduled run on main posts; any other run prints what it
 # would post. Every text it posts is rendered from .github/qa-templates/ by
@@ -212,10 +228,107 @@ jobs:
         if: always() && steps.scanned.outputs.recorded == 'true' && (github.event_name == 'schedule' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || inputs.record_video)
         run: python3 scripts/docs_journeys_report.py recordings --run-dir "$RUNNER_TEMP/docs-journeys-run"
 
+  demo:
+    name: Demo journeys
+    runs-on: ubuntu-latest
+    # Measured on the dispatched runs of #1169: the whole job took 4 min 56 s
+    # with every journey passing (run 38211112995), and setup-local.sh itself
+    # 196 s, 228 s and 238 s in three runs (the stack writes the time to
+    # stacks/demo-local.log). 25 minutes is five times the job; the script
+    # alone stops at DOCS_JOURNEY_DEMO_TIMEOUT (900 s), inside it.
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    outputs:
+      verdicts: ${{ steps.verdicts.outputs.written }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The demo guide's prerequisites: Python 3.11 (setup-local.sh makes its
+      # venv with python3) and the Node of .nvmrc (it runs npm install and
+      # npm run dev for the dashboard, ShopLab and StreamPulse).
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install the runner and Chromium
+        run: |
+          set -euo pipefail
+          python -m pip install -r tests/acceptance/requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Walk the demo journeys
+        env:
+          DOCS_JOURNEY_RUN_DIR: ${{ runner.temp }}/docs-journeys-run
+          DOCS_JOURNEY_STACKS: demo-local
+          DOCS_JOURNEY_DEMO_LOCAL: '1'
+          DOCS_JOURNEY_RECORD_VIDEO: '0'
+          DOCS_JOURNEY_TIMEOUT_MS: '30000'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -m pytest -c tests/acceptance/docs/pytest.ini tests/acceptance/docs
+
+      - name: Run directory scanned
+        id: scanned
+        if: always()
+        run: |
+          set -euo pipefail
+          RECORD="$RUNNER_TEMP/docs-journeys-run/secret-scan.json"
+          if [ ! -f "$RECORD" ]; then
+            printf '%s\n' '::warning title=Docs journeys::the run directory was not scanned, so it is not uploaded'
+            exit 0
+          fi
+          printf 'recorded=true\n' >> "$GITHUB_OUTPUT"
+          if python3 -c 'import json, sys; sys.exit(0 if json.load(open(sys.argv[1]))["removed"] == [] else 1)' "$RECORD"; then
+            printf 'clean=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf '%s\n' '::warning title=Docs journeys::a file of the run held a value the run kept, so the run directory is not uploaded'
+          fi
+
+      - name: Step summary
+        if: always() && steps.scanned.outputs.clean == 'true'
+        run: |
+          set -euo pipefail
+          if [ -f "$RUNNER_TEMP/docs-journeys-run/summary.md" ]; then
+            cat "$RUNNER_TEMP/docs-journeys-run/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Verdicts written
+        id: verdicts
+        if: always() && steps.scanned.outputs.recorded == 'true'
+        run: |
+          set -euo pipefail
+          if [ -f "$RUNNER_TEMP/docs-journeys-run/verdicts.json" ]; then
+            printf 'written=true\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload the verdicts
+        if: always() && steps.verdicts.outputs.written == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: docs-journeys-demo-verdicts
+          path: ${{ runner.temp }}/docs-journeys-run/verdicts.json
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Upload the run directory
+        if: always() && steps.scanned.outputs.clean == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: docs-journeys-demo-${{ github.run_id }}
+          path: ${{ runner.temp }}/docs-journeys-run
+          retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && 90 || 14 }}
+          if-no-files-found: warn
+
   report:
     name: Docs journeys issues
-    needs: journeys
-    if: always() && needs.journeys.outputs.verdicts == 'true'
+    needs: [journeys, demo]
+    if: always() && (needs.journeys.outputs.verdicts == 'true' || needs.demo.outputs.verdicts == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -231,9 +344,16 @@ jobs:
             .github/qa-templates
 
       - uses: actions/download-artifact@v8
+        if: needs.journeys.outputs.verdicts == 'true'
         with:
           name: docs-journeys-verdicts
-          path: ${{ runner.temp }}/verdicts
+          path: ${{ runner.temp }}/verdicts/journeys
+
+      - uses: actions/download-artifact@v8
+        if: needs.demo.outputs.verdicts == 'true'
+        with:
+          name: docs-journeys-demo-verdicts
+          path: ${{ runner.temp }}/verdicts/demo
 
       - name: Decide and render
         env:
@@ -242,7 +362,7 @@ jobs:
           REF: ${{ github.ref }}
         run: >-
           python3 scripts/docs_journeys_report.py report
-          --verdicts "$RUNNER_TEMP/verdicts/verdicts.json"
+          --verdicts-dir "$RUNNER_TEMP/verdicts"
           --event "$EVENT" --ref "$REF" --out "$RUNNER_TEMP/docs-issues"
 
       - name: Post to the docs-journey-failure issues

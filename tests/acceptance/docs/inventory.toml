@@ -703,31 +703,26 @@ scope = "in"
 class = "reference"
 reason = "how to report a problem privately and which versions are supported; no steps to follow"
 
-# The demo, walked by journeys that are not written yet.
+# The demo, walked on the stack demo/setup-local.sh starts (demo-local), in the
+# demo job of docs-journeys.yml.
 
 [documents."demo/DEMO_GUIDE.md"]
 scope = "in"
 class = "journey"
 journey = "demo-guide"
-pending = true
-planned = "D73"
 reason = "the demo walkthrough: demo/setup-local.sh, then the dashboard, ShopLab and StreamPulse"
 
 [documents."demo/shoplab/README.md"]
 scope = "in"
 class = "journey"
 journey = "demo-shoplab"
-pending = true
-planned = "D73"
-reason = "the ShopLab storefront and its traffic simulator, run as the page says"
+reason = "the ShopLab storefront, its panel, its seeded experiments and flags, and the kill switch, on the stack setup-local.sh starts"
 
 [documents."demo/streampulse/README.md"]
 scope = "in"
 class = "journey"
 journey = "demo-streampulse"
-pending = true
-planned = "D73"
-reason = "the StreamPulse demo app, run as the page says"
+reason = "the StreamPulse app's device targeting, mutual exclusion, holdout and kill switch, on the stack setup-local.sh starts"
 
 [documents."demo/streampulse/simulator/README.md"]
 scope = "in"

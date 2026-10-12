@@ -1,4 +1,4 @@
-"""The five stacks a journey runs against. ``conftest.py`` makes each a fixture.
+"""The six stacks a journey runs against. ``conftest.py`` makes each a fixture.
 
 * ``compose-dev``: the Docker guide's ``docker compose up -d --wait`` at the
   repository root, under its own compose project, with its own host ports, and
@@ -90,6 +90,33 @@ first step rather than ending the session.
   its ``node_modules``), then ``frontend/out`` served like docs-local
   (``DOCS_JOURNEY_MARKETING_PORT``, else a free port). The build writes Next's
   own output under ``frontend/`` (``.next/``, ``out/``, both ignored by git).
+
+* ``demo-local``: ``./demo/setup-local.sh`` run from the checkout's root, as
+  ``demo/DEMO_GUIDE.md`` tells a reader to run it, then the guide's own stop
+  command, ``./demo/teardown-local.sh``. The script binds fixed host ports
+  (``DEMO_PORTS``) and installs into the checkout (``venv/``, each app's
+  ``node_modules``, ``.env``, ``demo/.logs`` and the API key files), so the
+  stack runs only on a CI runner: it refuses to start unless
+  ``GITHUB_ACTIONS`` is ``true`` and ``DOCS_JOURNEY_DEMO_LOCAL`` is ``1``
+  (the ``demo`` job of ``docs-journeys.yml`` sets it), and refuses when any of
+  those ports already answers, so it never starts over something running.
+  The script must exit 0 having printed its "Ready!" box; the addresses that
+  box lists are the stack's (the dashboard is its base URL, the API docs'
+  origin its API, and each address is where an ``open`` of it goes), and each
+  must answer before the first journey (``DOCS_JOURNEY_DEMO_WAIT`` seconds,
+  default 600, which also covers each development server's first compile).
+  The script may take ``DOCS_JOURNEY_DEMO_TIMEOUT`` seconds (default 900,
+  about four times what it took on a GitHub-hosted runner, 196-238 s); the
+  time it took is written to the log. Its accounts are the demo seed's.
+  What it prints, and when the stack comes down each log ``demo/.logs`` holds,
+  is written to ``stacks/demo-local.log`` and ``stacks/demo-local/`` with the
+  values the stack registers taken out: the administrator's password the
+  script sets (``FIRST_SUPERUSER_PASSWORD``) and every API key the seeds and
+  the script write (``DEMO_KEY_FILES``). The same values go to the runner's
+  redactor and to the end-of-run scan (``Running.secrets``). Coming down,
+  the stop command must exit 0 and leave no port of ``DEMO_PORTS``
+  answering and none of ``DEMO_REMOVED`` behind; otherwise ``down`` raises
+  StackError and the run fails.
 
 What each command prints goes to ``stacks/<stack>.log`` in the run directory,
 never to the console.
@@ -208,6 +235,10 @@ class Running:
     #: The browser accepts any certificate: only compose-sso, whose identity
     #: provider's certificate is signed by the run's own CA.
     ignore_https_errors: bool = False
+    #: Values the stack made or set that no file of the run may hold
+    #: (demo-local's administrator password and API keys): the runner's
+    #: redactor takes them out of what it writes, and the scan looks for them.
+    secrets: Tuple[str, ...] = ()
 
 
 def free_port() -> int:
@@ -791,10 +822,327 @@ class MarketingLocal:
         self.server = self.running = None
 
 
+#: demo-local: the guide's start and stop commands, from the checkout's root.
+DEMO_SCRIPT = Path("demo") / "setup-local.sh"
+DEMO_STOP = Path("demo") / "teardown-local.sh"
+#: The host ports ``setup-local.sh`` binds: PostgreSQL, Redis, the API, the
+#: dashboard, ShopLab and StreamPulse.
+DEMO_PORTS: Tuple[int, ...] = (5432, 6379, 8000, 3100, 3200, 3300)
+#: The files the seeds and the script write an API key to: every ``*KEY_FILE``
+#: constant of the seeds setup-local.sh runs, and the script's own. A unit test
+#: (``test_docs_journey_demo.py``) reads them out of the seeds and the script,
+#: so a key file added there and not here fails it.
+DEMO_KEY_FILES: Tuple[Path, ...] = (
+    Path("demo") / ".demo_api_key",
+    Path("demo") / "shoplab" / ".api_key",
+    Path("demo") / "streampulse" / ".api_key",
+    Path("demo") / "streampulse" / ".api_key_server",
+)
+#: Where the script's processes write their logs.
+DEMO_LOGS = Path("demo") / ".logs"
+#: What the guide says the stop command removes.
+DEMO_REMOVED: Tuple[Path, ...] = (
+    Path("demo") / ".pids",
+    DEMO_LOGS,
+    Path("demo") / ".demo_api_key",
+)
+#: The line of the script's box that says it finished.
+DEMO_READY = "Ready!"
+#: An address in the script's "Ready!" box: ``<label>: http://localhost:<port>``.
+DEMO_ADDRESS = re.compile(
+    r"(?P<label>[A-Za-z][A-Za-z ]{0,30}):\s+(?P<url>http://localhost:(?P<port>[0-9]{1,5})(?:/[\w./~-]{0,200})?)"
+)
+#: The administrator's password the script exports for the bootstrap.
+DEMO_PASSWORD = re.compile(
+    r"^\s*export\s+FIRST_SUPERUSER_PASSWORD=(?:'([^'\n]{1,72})'|\"([^\"\n]{1,72})\"|(\S{1,72}))\s*$",
+    re.MULTILINE,
+)
+#: Terminal colours the script prints.
+ANSI = re.compile(r"\x1b\[[0-9;]{0,20}m")
+#: The environment that lets demo-local start: a CI runner's, in the demo job.
+DEMO_ALLOWED = {"GITHUB_ACTIONS": "true", "DOCS_JOURNEY_DEMO_LOCAL": "1"}
+
+
+def port_answers(port: int, host: str = "127.0.0.1") -> bool:
+    """True when something accepts a TCP connection on *host*:*port*."""
+    try:
+        with socket.create_connection((host, port), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
+def demo_refusal(environ: Mapping[str, str]) -> str:
+    """Why demo-local may not start in *environ*, or ""."""
+    missing = [
+        f"{name}={value}"
+        for name, value in DEMO_ALLOWED.items()
+        if environ.get(name) != value
+    ]
+    if not missing:
+        return ""
+    ports = ", ".join(str(port) for port in DEMO_PORTS)
+    return (
+        f"demo-local runs ./{DEMO_SCRIPT.as_posix()}, which binds host ports {ports}"
+        " and installs into the checkout, so it runs only on a CI runner, in the"
+        f" docs-journeys demo job; this environment lacks {' and '.join(missing)}"
+    )
+
+
+def ready_addresses(output: str) -> Dict[str, str]:
+    """Each ``<label>: http://localhost:<port>`` the script's "Ready!" box lists."""
+    plain = ANSI.sub("", output)
+    at = plain.rfind(DEMO_READY)
+    if at < 0:
+        return {}
+    found: Dict[str, str] = {}
+    for line in plain[at:].splitlines():
+        match = DEMO_ADDRESS.search(line)
+        if match:
+            found[match["label"].strip()] = match["url"]
+    return found
+
+
+def demo_password(script: str) -> str:
+    """The ``FIRST_SUPERUSER_PASSWORD`` the script exports, or ""."""
+    match = DEMO_PASSWORD.search(script)
+    if not match:
+        return ""
+    return next(group for group in match.groups() if group is not None)
+
+
+class DemoLocal:
+    """``./demo/setup-local.sh`` and ``./demo/teardown-local.sh``, on a CI runner only."""
+
+    NAME = "demo-local"
+    #: How long the stop command's processes may take to let go of their ports.
+    STOP_WAIT = 30.0
+
+    def __init__(self, repo_root: Path, logs: Path, environ: Mapping[str, str]):
+        self.repo_root = repo_root
+        self.logs = logs
+        self.environ = dict(environ)
+        self.timeout = float(environ.get("DOCS_JOURNEY_DEMO_TIMEOUT", "900"))
+        self.wait = float(environ.get("DOCS_JOURNEY_DEMO_WAIT", "600"))
+        #: The values no file of the run may hold, as soon as they are known
+        #: (also after a start that failed part-way).
+        self.secrets: List[str] = []
+        self.started = False
+        self.running: Optional[Running] = None
+        #: Why the start failed: every later journey on the stack fails the same way.
+        self.failed = ""
+
+    @property
+    def log(self) -> Path:
+        return self.logs / f"{self.NAME}.log"
+
+    def _redact(self, text: str) -> str:
+        for value in sorted(self.secrets, key=len, reverse=True):
+            text = text.replace(value, "(redacted)")
+        return text
+
+    def _append(self, text: str) -> None:
+        self.log.parent.mkdir(parents=True, exist_ok=True)
+        with self.log.open("a", encoding="utf-8") as handle:
+            handle.write(self._redact(text))
+
+    def _run(self, script: Path, timeout: float) -> Tuple[Optional[int], str]:
+        """Run *script* from the checkout's root; its status (None on timeout) and output."""
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as output:
+            try:
+                done = subprocess.run(
+                    [f"./{script.as_posix()}"],
+                    cwd=self.repo_root,
+                    env=self.environ,
+                    stdout=output,
+                    stderr=subprocess.STDOUT,
+                    timeout=timeout,
+                    check=False,
+                )
+                status: Optional[int] = done.returncode
+            except subprocess.TimeoutExpired:
+                status = None
+            except OSError as error:
+                self._append(f"$ ./{script.as_posix()}\n(could not start: {error})\n")
+                raise StackError(
+                    f"./{script.as_posix()} could not be started"
+                    f" ({type(error).__name__}); see stacks/{self.log.name}"
+                ) from None
+            output.seek(0)
+            return status, output.read()
+
+    def _register(self) -> None:
+        """The password the script sets and every API key file it left."""
+        try:
+            script = (self.repo_root / DEMO_SCRIPT).read_text(encoding="utf-8")
+        except OSError as error:
+            raise StackError(
+                f"{DEMO_SCRIPT.as_posix()} cannot be read: {error}"
+            ) from None
+        password = demo_password(script)
+        if not password:
+            raise StackError(
+                f"{DEMO_SCRIPT.as_posix()} exports no FIRST_SUPERUSER_PASSWORD, so"
+                " the stack cannot keep the administrator's password out of the run"
+            )
+        found = [password]
+        for path in DEMO_KEY_FILES:
+            try:
+                value = (self.repo_root / path).read_text(encoding="utf-8").strip()
+            except OSError:
+                continue
+            if value:
+                found.append(value)
+        for value in found:
+            if len(value) < 8:
+                raise StackError(
+                    "a value the stack must keep out of the run is shorter than 8"
+                    " characters, which the scan cannot look for"
+                )
+            if value not in self.secrets:
+                self.secrets.append(value)
+
+    def _copy_logs(self) -> None:
+        """Each log the script's processes wrote, values taken out, into stacks/demo-local/."""
+        source = self.repo_root / DEMO_LOGS
+        if not source.is_dir():
+            return
+        target = self.logs / self.NAME
+        target.mkdir(parents=True, exist_ok=True)
+        for path in sorted(source.glob("*.log")):
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            (target / path.name).write_text(self._redact(text), encoding="utf-8")
+
+    def up(self, profile: str = "") -> Running:
+        if self.running is not None:
+            if profile and self.running.profile != profile:
+                raise StackError(
+                    f"demo-local serves the {self.running.profile} profile, not {profile}"
+                )
+            return self.running
+        if self.failed:
+            raise StackError(self.failed)
+        try:
+            return self._up(profile)
+        except StackError as error:
+            self.failed = str(error)
+            raise
+
+    def _up(self, profile: str) -> Running:
+        refusal = demo_refusal(self.environ)
+        if refusal:
+            raise StackError(refusal)
+        busy = [str(port) for port in DEMO_PORTS if port_answers(port)]
+        if busy:
+            raise StackError(
+                f"port {', '.join(busy)} already answers on this machine; demo-local"
+                " starts nothing over what is running"
+            )
+        self.started = True
+        started = time.monotonic()
+        status, output = self._run(DEMO_SCRIPT, self.timeout)
+        took = time.monotonic() - started
+        try:
+            self._register()
+        finally:
+            self._append(f"$ ./{DEMO_SCRIPT.as_posix()}\n{output}")
+            self._append(
+                f"(./{DEMO_SCRIPT.as_posix()} "
+                + ("timed out" if status is None else f"exited {status}")
+                + f" after {took:.0f} s)\n"
+            )
+        if status != 0:
+            self._copy_logs()
+            raise StackError(
+                f"./{DEMO_SCRIPT.as_posix()} "
+                + ("timed out" if status is None else f"exited {status}")
+                + f" after {took:.0f} s; its output is in stacks/{self.log.name}"
+            )
+        addresses = ready_addresses(output)
+        if not addresses:
+            raise StackError(
+                f"./{DEMO_SCRIPT.as_posix()} exited 0 without its {DEMO_READY!r} box;"
+                f" its output is in stacks/{self.log.name}"
+            )
+        dashboard = addresses.get("Frontend", "")
+        api_docs = addresses.get("API docs", "")
+        if not dashboard or not api_docs:
+            raise StackError(
+                f"the {DEMO_READY!r} box names no Frontend or no API docs address"
+            )
+        published: Dict[int, str] = {}
+        for url in addresses.values():
+            match = DEMO_ADDRESS.search(f"x: {url}")
+            published[int(match["port"])] = f"http://localhost:{match['port']}"
+        for port, url in sorted(published.items()):
+            wait_until_answering(url + "/", self.wait)
+        api_url = published[int(DEMO_ADDRESS.search(f"x: {api_docs}")["port"])]
+        served = ComposeDev._served_profile(api_url)
+        if profile and served != profile:
+            raise StackError(f"the stack serves the {served} profile, not {profile}")
+        self.running = Running(
+            name=self.NAME,
+            base_url=dashboard.rstrip("/") + "/",
+            api_url=api_url,
+            profile=served,
+            accounts=DEMO_ACCOUNTS,
+            published=published,
+            up_seconds=took,
+            secrets=tuple(self.secrets),
+        )
+        return self.running
+
+    def stop_problems(self, status: Optional[int]) -> List[str]:
+        """What the stop command left that the guide says it does not."""
+        found: List[str] = []
+        if status != 0:
+            found.append(
+                f"./{DEMO_STOP.as_posix()} "
+                + ("timed out" if status is None else f"exited {status}")
+            )
+        deadline = time.monotonic() + self.STOP_WAIT
+        answering = list(DEMO_PORTS)
+        while answering and time.monotonic() < deadline:
+            answering = [port for port in answering if port_answers(port)]
+            if answering:
+                time.sleep(1)
+        if answering:
+            found.append(
+                "port " + ", ".join(str(port) for port in answering) + " still answers"
+            )
+        left = [
+            path.as_posix() for path in DEMO_REMOVED if (self.repo_root / path).exists()
+        ]
+        if left:
+            found.append(f"{', '.join(left)} still there")
+        return found
+
+    def down(self) -> None:
+        if not self.started:
+            return
+        self.started = False
+        self.running = None
+        self._copy_logs()
+        status, output = self._run(DEMO_STOP, 300)
+        self._append(f"$ ./{DEMO_STOP.as_posix()}\n{output}")
+        problems = self.stop_problems(status)
+        if problems:
+            self._append("(the stop command left: " + "; ".join(problems) + ")\n")
+            raise StackError(
+                f"the guide's stop command, ./{DEMO_STOP.as_posix()}, left: "
+                + "; ".join(problems)
+                + f"; see stacks/{self.log.name}"
+            )
+
+
 STACK_CLASSES = {
     "compose-dev": ComposeDev,
     "compose-sso": ComposeSso,
     "docs-local": DocsLocal,
     "docs-published": DocsPublished,
     "marketing-local": MarketingLocal,
+    "demo-local": DemoLocal,
 }

@@ -1,0 +1,466 @@
+# StreamPulse (demo/streampulse/README.md), as its reader runs it (#1142): the
+# README says demo/setup-local.sh does steps 1 to 4 of "Running it", so the
+# journey runs on the stack that script starts (demo-local,
+# docs_runner/stacks.py) and walks the demo script's device-targeting scenes:
+# the targeting rule on Search, the mutual exclusion group on Profile, the
+# global holdout, and the kill switch on Home.
+#
+# The app evaluates every flag and assigns every experiment with the device's
+# attributes as context, through the public API and the app's own key. The
+# journey picks the README's presets in the app and reads what the panel
+# says, and asks the API the same questions with a key made for the run, with
+# each preset's attributes as the app sends them (demo/streampulse/src/lib/
+# devices.ts). The key never reaches the browser, so the journey is not
+# recorded. The kill switch is turned off in the dashboard and back on.
+#
+# Expectations written on 2026-10-11 from the README, the seed
+# (backend/scripts/seed_streampulse.py) and the app's source, before the first
+# run.
+guide: demo/streampulse/README.md
+stack: demo-local
+profile: full
+video: false
+written: 2026-10-11
+steps:
+  - id: app
+    doc: running-it
+    do:
+      open: http://localhost:3300
+    expect:
+      status: 200
+      aria: |
+        - heading "StreamPulse" [level=1]
+    fail: StreamPulse does not answer at the address the README gives
+  - id: api-key
+    doc: running-it
+    do:
+      api:
+        method: POST
+        path: /api/v1/api-keys
+        as: admin
+        body:
+          name: Docs journey StreamPulse
+    expect:
+      status: 201
+      json:
+        name: Docs journey StreamPulse
+    save:
+      sdk-key:
+        path: key
+        secret: true
+    fail: no API key can be made to ask the API what the app asks it
+  - id: premium-iphone
+    doc: demo-script-what-to-show
+    do:
+      click:
+        role: radio
+        name: iPhone 15 · iOS 17.4 · US · premium
+    expect:
+      aria: |
+        - main:
+          - region "Device":
+            - group "Presets":
+              - radio "iPhone 15 · iOS 17.4 · US · premium" [checked]
+          - region "Powered by Experimently":
+            - region "Feature flags":
+              - list:
+                - listitem:
+                  - text: AI search · targeting rules
+                  - code: streampulse_ai_search
+                  - text: "on: matched a targeting rule on"
+    fail: the panel does not say a targeting rule turned streampulse_ai_search on for the iPhone 15 · iOS 17.4 · US · premium device
+  - id: ai-search
+    doc: demo-script-what-to-show
+    do:
+      click:
+        role: tab
+        name: Search
+    expect:
+      aria: |
+        - tabpanel "Search":
+          - region "AI search ✨":
+            - heading "AI search ✨" [level=2]
+    fail: the Search screen is not AI search ✨ for the premium iPhone
+  - id: rule-matches-the-premium-iphone
+    doc: demo-script-what-to-show
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/streampulse_ai_search?user_id=sp-iphone-15-us-premium&context=%7B%22os%22%3A%22iOS%22%2C%22os_version%22%3A%2217.4.0%22%2C%22region%22%3A%22US%22%2C%22tier%22%3A%22premium%22%7D
+        as: anonymous
+        key: sdk-key
+    expect:
+      status: 200
+      json:
+        key: streampulse_ai_search
+        enabled: true
+        reason: targeting_rule
+    fail: streampulse_ai_search is not on by its rule for iOS 17.4.0, US, premium
+  - id: gb-iphone
+    doc: demo-script-what-to-show
+    do:
+      click:
+        role: radio
+        name: iPhone 14 · iOS 16.7 · GB · free
+    expect:
+      aria: |
+        - main:
+          - region "Device":
+            - group "Presets":
+              - radio "iPhone 14 · iOS 16.7 · GB · free" [checked]
+          - region "Powered by Experimently":
+            - region "Feature flags":
+              - list:
+                - listitem:
+                  - text: AI search · targeting rules
+                  - code: streampulse_ai_search
+                  - text: "off: outside the rollout % off"
+    fail: the panel does not say the iPhone 14 · iOS 16.7 · GB · free device is outside streampulse_ai_search's rollout
+  - id: keyword-search
+    doc: demo-script-what-to-show
+    do:
+      click:
+        role: tab
+        name: Search
+    expect:
+      aria: |
+        - tabpanel "Search":
+          - region "Search":
+            - heading "Search" [level=2]
+            - paragraph: Keyword search
+    fail: the Search screen is not keyword search for the GB iPhone
+  - id: rule-leaves-out-the-gb-iphone
+    doc: demo-script-what-to-show
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/streampulse_ai_search?user_id=sp-iphone-14-gb-free&context=%7B%22os%22%3A%22iOS%22%2C%22os_version%22%3A%2216.7.0%22%2C%22region%22%3A%22GB%22%2C%22tier%22%3A%22free%22%7D
+        as: anonymous
+        key: sdk-key
+    expect:
+      status: 200
+      json:
+        enabled: false
+        reason: rollout
+    fail: streampulse_ai_search is on for iOS 16.7.0, GB, free, or not by the 0% rollout
+  - id: rule-boundary
+    doc: demo-script-what-to-show
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/streampulse_ai_search?user_id=docs-journey-boundary&context=%7B%22os%22%3A%22iOS%22%2C%22os_version%22%3A%2217.0.0%22%2C%22region%22%3A%22US%22%2C%22tier%22%3A%22premium%22%7D
+        as: anonymous
+        key: sdk-key
+    expect:
+      status: 200
+      json:
+        enabled: true
+        reason: targeting_rule
+    fail: OS version 17.0.0 with region US and tier premium, the README's boundary, does not match the rule
+  - id: below-the-boundary
+    doc: demo-script-what-to-show
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/streampulse_ai_search?user_id=docs-journey-boundary&context=%7B%22os%22%3A%22iOS%22%2C%22os_version%22%3A%2216.9.9%22%2C%22region%22%3A%22US%22%2C%22tier%22%3A%22premium%22%7D
+        as: anonymous
+        key: sdk-key
+    expect:
+      status: 200
+      json:
+        enabled: false
+        reason: rollout
+    fail: OS version 16.9.9 matches the rule that needs 17.0.0 or later
+  - id: profile
+    doc: demo-script-what-to-show
+    do:
+      click:
+        role: tab
+        name: Profile
+    expect:
+      text: "excluded: mutual exclusion group streampulse-profile (control shown)"
+      aria: |
+        - tab "Profile" [selected]
+    fail: the panel does not show one Profile experiment excluded by the mutual exclusion group
+  - id: holdout-id
+    doc: demo-script-what-to-show
+    do:
+      fill:
+        label: Device id (SDK user id)
+        value: sp-holdout-15
+        quote: false
+        reason: the Device panel's id field; the README says to type a custom device id
+    expect:
+      aria: |
+        - textbox "Device id (SDK user id)": sp-holdout-15
+    fail: the Device panel has no device id field to type into
+  - id: holdout
+    doc: demo-script-what-to-show
+    do:
+      click:
+        role: button
+        name: Apply device
+    expect:
+      text: in global holdout streampulse-holdout (control shown)
+      aria: |
+        - textbox "Device id (SDK user id)": sp-holdout-15
+    fail: sp-holdout-15 is not shown in the global holdout
+  - id: holdout-push-frequency
+    doc: demo-script-what-to-show
+    do:
+      api:
+        method: POST
+        path: /api/v1/tracking/assign
+        as: anonymous
+        key: sdk-key
+        body:
+          experiment_key: streampulse_push_frequency
+          user_id: sp-holdout-15
+    expect:
+      status: 200
+      json:
+        assigned: false
+        reason: holdout
+    fail: sp-holdout-15 is enrolled in streampulse_push_frequency
+  - id: holdout-wrapped
+    doc: demo-script-what-to-show
+    do:
+      api:
+        method: POST
+        path: /api/v1/tracking/assign
+        as: anonymous
+        key: sdk-key
+        body:
+          experiment_key: streampulse_wrapped
+          user_id: sp-holdout-15
+    expect:
+      status: 200
+      json:
+        assigned: false
+        reason: holdout
+    fail: sp-holdout-15 is enrolled in streampulse_wrapped
+  - id: holdout-profile-badges
+    doc: demo-script-what-to-show
+    do:
+      api:
+        method: POST
+        path: /api/v1/tracking/assign
+        as: anonymous
+        key: sdk-key
+        body:
+          experiment_key: streampulse_profile_badges
+          user_id: sp-holdout-15
+    expect:
+      status: 200
+      json:
+        assigned: false
+        reason: holdout
+    fail: sp-holdout-15 is enrolled in streampulse_profile_badges
+  - id: holdout-onboarding
+    doc: demo-script-what-to-show
+    do:
+      api:
+        method: POST
+        path: /api/v1/tracking/assign
+        as: anonymous
+        key: sdk-key
+        body:
+          experiment_key: streampulse_onboarding_steps
+          user_id: sp-holdout-15
+    expect:
+      status: 200
+      json:
+        assigned: false
+        reason: holdout
+    fail: sp-holdout-15 is enrolled in streampulse_onboarding_steps
+  - id: holdout-upsell
+    doc: demo-script-what-to-show
+    do:
+      api:
+        method: POST
+        path: /api/v1/tracking/assign
+        as: anonymous
+        key: sdk-key
+        body:
+          experiment_key: streampulse_upsell_modal
+          user_id: sp-holdout-15
+    expect:
+      status: 200
+      json:
+        assigned: false
+        reason: holdout
+    fail: sp-holdout-15 is enrolled in streampulse_upsell_modal
+  - id: for-you
+    doc: demo-script-what-to-show
+    do:
+      open: http://localhost:3300
+    expect:
+      status: 200
+      text: For you
+      aria: |
+        - heading "StreamPulse" [level=1]
+    fail: the Home screen is not the For you feed while streampulse_recs_v2 is on
+  - id: sign-in-page
+    doc: demo-script-what-to-show
+    do:
+      goto: /login
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - heading "Sign in" [level=1]
+    fail: the dashboard the README points at does not answer
+  - id: email
+    doc: demo-script-what-to-show
+    do:
+      fill:
+        label: Email
+        value: admin@demo.com
+        quote: false
+        reason: the sign-in form's field; the demo administrator
+    expect:
+      aria: |
+        - textbox "Email": admin@demo.com
+    fail: there is no Email field to fill
+  - id: password
+    doc: demo-script-what-to-show
+    do:
+      fill:
+        label: Password
+        value: Demo1234!
+        quote: false
+        reason: the sign-in form's field; the demo administrator's documented password
+    expect:
+      aria: |
+        - textbox "Password"
+    fail: there is no Password field to fill
+  - id: signed-in
+    doc: demo-script-what-to-show
+    do:
+      click:
+        role: button
+        name: Sign in
+        quote: false
+        reason: the sign-in form's button
+    expect:
+      url: /experiments
+      aria: |
+        - main:
+          - heading "Experiments" [level=1]
+    fail: the demo administrator cannot sign in to the dashboard
+  - id: flags
+    doc: demo-script-what-to-show
+    do:
+      goto: /feature-flags
+    expect:
+      url: /feature-flags
+      aria: |
+        - main:
+          - heading "Feature Flags" [level=1]
+    fail: the dashboard's flags list does not open
+  - id: recs-off
+    doc: demo-script-what-to-show
+    do:
+      click:
+        role: switch
+        name: Turn streampulse_recs_v2 off
+        quote: false
+        reason: the list's on/off switch for the flag; the README says to toggle it off in the dashboard
+    expect:
+      visible:
+        - role: switch
+          name: Turn streampulse_recs_v2 on
+          quote: false
+          reason: the same switch, now offering to turn the flag back on
+      aria: |
+        - main:
+          - heading "Feature Flags" [level=1]
+          - table:
+            - rowgroup:
+              - 'row /^streampulse_recs_v2 StreamPulse: Recommendations v2 .* Off /':
+                - cell "Turn streampulse_recs_v2 on":
+                  - switch "Turn streampulse_recs_v2 on" [disabled=false]
+    fail: streampulse_recs_v2 cannot be turned off from the dashboard
+  - id: recs-off-evaluated
+    doc: demo-script-what-to-show
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/streampulse_recs_v2?user_id=sp-iphone-15-us-premium
+        as: anonymous
+        key: sdk-key
+    expect:
+      status: 200
+      json:
+        enabled: false
+        reason: inactive
+    fail: the app's next evaluation still serves streampulse_recs_v2 after it is turned off
+  - id: classic-feed
+    doc: demo-script-what-to-show
+    do:
+      open: http://localhost:3300
+    expect:
+      status: 200
+      text: "off: flag is inactive"
+      aria: |
+        - heading "StreamPulse" [level=1]
+    fail: "with the flag off, the panel does not read: off: flag is inactive"
+  - id: classic
+    doc: demo-script-what-to-show
+    do:
+      click:
+        role: tab
+        name: Home
+        quote: false
+        reason: the phone's Home tab; the README names the screen Home
+    expect:
+      text: Classic
+      aria: |
+        - tab "Home" [selected]
+    fail: with the flag off, the Home screen is not the Classic feed
+  - id: dashboard-again
+    doc: demo-script-what-to-show
+    do:
+      goto: /feature-flags
+    expect:
+      url: /feature-flags
+      aria: |
+        - main:
+          - heading "Feature Flags" [level=1]
+    fail: the dashboard's flags list does not open again
+  - id: recs-on
+    doc: demo-script-what-to-show
+    do:
+      click:
+        role: switch
+        name: Turn streampulse_recs_v2 on
+        quote: false
+        reason: the list's on/off switch for the flag; the README says to toggle it back on
+    expect:
+      visible:
+        - role: switch
+          name: Turn streampulse_recs_v2 off
+          quote: false
+          reason: the same switch, now offering to turn the flag off again
+      aria: |
+        - main:
+          - heading "Feature Flags" [level=1]
+          - table:
+            - rowgroup:
+              - 'row /^streampulse_recs_v2 StreamPulse: Recommendations v2 .* On /':
+                - cell "Turn streampulse_recs_v2 off":
+                  - switch "Turn streampulse_recs_v2 off" [checked] [disabled=false]
+    fail: streampulse_recs_v2 cannot be turned back on
+  - id: recs-on-evaluated
+    doc: demo-script-what-to-show
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/streampulse_recs_v2?user_id=sp-iphone-15-us-premium
+        as: anonymous
+        key: sdk-key
+    expect:
+      status: 200
+      json:
+        enabled: true
+    fail: streampulse_recs_v2 is not served again once it is turned back on

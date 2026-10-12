@@ -18,7 +18,10 @@ YAML, or not a mapping, stops at that. Refused, besides what ``model`` refuses:
 * a step without ``fail``: what failure looks like is written before the run;
 * an unknown stack;
 * a ``guide`` the inventory does not classify ``journey`` with this file's
-  name as its id, or classifies ``pending = true``;
+  name as its id, or classifies ``pending = true``: a nav page under
+  ``[pages]`` (its path from ``docs/``), or a document under ``[documents]``
+  (its path from the repository's root, ``scope = "in"``), such as
+  ``demo/DEMO_GUIDE.md``;
 * a ``doc`` anchor the guide does not have;
 * an accessible name or label the guide's text does not contain, unless it says
   ``quote: false`` with a reason, so a label renamed in the UI or in the guide
@@ -34,7 +37,8 @@ YAML, or not a mapping, stops at that. Refused, besides what ``model`` refuses:
 * a journey none of whose steps this runner runs (every step is
   ``ref: doc-examples`` or declares ``not_run``);
 * ``ref: doc-examples`` on a section with no shell block Doc Examples runs, or
-  on a guide ``scripts/doc_examples.toml`` does not enrol;
+  on a guide ``scripts/doc_examples.toml`` does not enrol, or on a document
+  (only a page's enrolment under ``docs/`` is read here);
 * an ``api`` step on a stack with no API (every stack but compose-dev and
   compose-sso);
 * an oracle not in ``docs_runner.oracles.ORACLES``;
@@ -480,11 +484,31 @@ def _expect_problems(label: str, step: Step, stack: Optional[str]) -> List[str]:
     return found
 
 
+def guide_root(context: Context, guide: str) -> Path:
+    """Where *guide*'s path starts: ``docs/`` for a nav page (``[pages]``), the
+    repository's root for a document (``[documents]``). A key both tables hold
+    (``README.md``: the docs home page, and the repository's own) is the nav
+    page's."""
+    if guide not in context.inventory.get("pages", {}) and guide in (
+        context.inventory.get("documents", {})
+    ):
+        return context.docs_root.parent
+    return context.docs_root
+
+
 def _guide_problems(guide: str, stem: str, context: Context) -> List[str]:
     found: List[str] = []
     entry = context.inventory.get("pages", {}).get(guide)
     if entry is None:
-        found.append(f"guide {guide!r} is not a page in inventory.toml")
+        entry = context.inventory.get("documents", {}).get(guide)
+        if entry is not None and entry.get("scope") != "in":
+            found.append(
+                f"guide {guide!r} is a document inventory.toml puts out of scope;"
+                " a journey walks a page or an in-scope document"
+            )
+            return found
+    if entry is None:
+        found.append(f"guide {guide!r} is not a page in inventory.toml, nor a document")
     elif entry.get("class") != "journey":
         found.append(
             f"guide {guide!r} is classified {entry.get('class')!r} in"
@@ -552,7 +576,12 @@ def _step_problems(
                 f" {step.do.api.method} again would repeat its change"
             )
     if step.do.kind == "ref" and guide_path is not None:
-        if context.doc_examples.get(guide_path, 0) < 1:
+        if guide_root(context, guide_path) != context.docs_root:
+            found.append(
+                f"{label}: ref: doc-examples is for a page under docs/ (the"
+                f" enrolment this runner reads); {guide_path} is a document"
+            )
+        elif context.doc_examples.get(guide_path, 0) < 1:
             found.append(
                 f"{label}: ref: doc-examples, but scripts/doc_examples.toml"
                 f" enrols no exec block of {guide_path}"
@@ -889,10 +918,13 @@ def semantic_problems(
     guide: Optional[guides.Guide] = None
     if guide_path is not None:
         found.extend(_guide_problems(guide_path, stem, context))
-        if (context.docs_root / guide_path).is_file():
-            guide = guides.load(context.docs_root, guide_path)
-        else:
+        root = guide_root(context, guide_path)
+        if (root / guide_path).is_file():
+            guide = guides.load(root, guide_path)
+        elif root == context.docs_root:
             found.append(f"guide {guide_path!r} is not a file under docs/")
+        else:
+            found.append(f"guide {guide_path!r} is not a file in the repository")
     if written is not None and written > context.today:
         found.append(f"written {written} is after today ({context.today})")
     for index, step in steps:

@@ -20,9 +20,12 @@ Two commands read with ``gh`` only, and one reads the run directory:
 
 ``report``
     Run after the journeys. It reads this run's
-``verdicts.json`` (written by the runner, ``tests/acceptance/docs``), the
-verdicts of the scheduled runs before it on ``main`` (each run uploads its own
-as the artifact ``docs-journeys-verdicts``) and the open ``docs-journey-failure``
+``verdicts.json`` files (written by the runner, ``tests/acceptance/docs``: one
+from the ``journeys`` job and one from the ``demo`` job, each a ``--verdicts``
+file or a ``<dir>/*/verdicts.json`` under ``--verdicts-dir``; a journey in two
+of them is refused), the verdicts of the scheduled runs before it on ``main``
+(each run uploads its own as the artifacts ``ARTIFACTS`` name, read together the
+same way) and the open ``docs-journey-failure``
 issues, decides what to post for each guide, renders the text with
 ``qa_render`` and writes it under ``--out``: one directory per post under
 ``posts/`` holding ``action`` (``open``, ``comment`` or ``close``), ``issue``
@@ -97,6 +100,8 @@ WORKFLOW = "docs-journeys.yml"
 BRANCH = "main"
 LABEL = "docs-journey-failure"
 ARTIFACT = "docs-journeys-verdicts"
+#: Each job's verdicts artifact: the journeys job's, then the demo job's.
+ARTIFACTS = (ARTIFACT, "docs-journeys-demo-verdicts")
 ISSUE = "docs-journey-issue.tmpl"
 #: Scheduled runs in a row in which a guide failed that open its issue.
 OPEN_AFTER = 2
@@ -221,6 +226,27 @@ def read_verdicts(path: Path) -> Dict[str, Verdict]:
     return found
 
 
+def merge_verdicts(parts: Sequence[Mapping[str, Verdict]]) -> Dict[str, Verdict]:
+    """One run's verdicts from each job's file; VerdictsError for a journey in two."""
+    merged: Dict[str, Verdict] = {}
+    for part in parts:
+        for journey, verdict in part.items():
+            if journey in merged:
+                raise VerdictsError(f"journey {journey!r} is in two verdicts files")
+            merged[journey] = verdict
+    return merged
+
+
+def verdict_paths(files: Sequence[Path], directory: Optional[Path]) -> List[Path]:
+    """The ``--verdicts`` files, then each ``<directory>/*/verdicts.json``."""
+    found = list(files)
+    if directory is not None:
+        found += sorted(directory.glob("*/verdicts.json"))
+    if not found:
+        raise VerdictsError("no verdicts.json to read")
+    return found
+
+
 class Run(NamedTuple):
     run_id: int
     status: str
@@ -264,7 +290,8 @@ def scheduled_runs(gh: Gh, repo: str, limit: int = HISTORY_LIMIT) -> List[Run]:
 def run_verdicts(
     gh: Gh, repo: str, run: Run, scratch: Path
 ) -> Optional[Dict[str, Verdict]]:
-    """A finished run's verdicts, or None when it left none (or is unfinished)."""
+    """A finished run's verdicts, every job's together, or None when it left
+    none (or is unfinished, or one of them cannot be read)."""
     if run.status != "completed":
         return None
     listing = gh_json(
@@ -275,24 +302,31 @@ def run_verdicts(
         for artifact in (listing or {}).get("artifacts", [])
         if not artifact.get("expired")
     }
-    if ARTIFACT not in names:
+    present = [name for name in ARTIFACTS if name in names]
+    if not present:
         return None
-    target = scratch / str(run.run_id)
-    gh(
-        [
-            "run",
-            "download",
-            str(run.run_id),
-            "--repo",
-            repo,
-            "--name",
-            ARTIFACT,
-            "--dir",
-            str(target),
-        ]
-    )
+    parts = []
+    for name in present:
+        target = scratch / str(run.run_id) / name
+        gh(
+            [
+                "run",
+                "download",
+                str(run.run_id),
+                "--repo",
+                repo,
+                "--name",
+                name,
+                "--dir",
+                str(target),
+            ]
+        )
+        try:
+            parts.append(read_verdicts(target / "verdicts.json"))
+        except VerdictsError:
+            return None
     try:
-        return read_verdicts(target / "verdicts.json")
+        return merge_verdicts(parts)
     except VerdictsError:
         return None
 
@@ -494,7 +528,12 @@ def report(args: argparse.Namespace, env: Mapping[str, str], gh: Gh = run_gh) ->
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
     (out / "posts").mkdir(exist_ok=True)
-    current = read_verdicts(args.verdicts)
+    files = args.verdicts if isinstance(args.verdicts, list) else [args.verdicts]
+    paths = verdict_paths(
+        [path for path in files if path is not None],
+        getattr(args, "verdicts_dir", None),
+    )
+    current = merge_verdicts([read_verdicts(path) for path in paths])
     history: List[Optional[Dict[str, Verdict]]] = []
     if any(verdict.word == FAIL for verdict in current.values()):
         with tempfile.TemporaryDirectory() as scratch:
@@ -732,7 +771,8 @@ def main(
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     commands = parser.add_subparsers(dest="command", required=True)
     rep = commands.add_parser("report")
-    rep.add_argument("--verdicts", required=True, type=Path)
+    rep.add_argument("--verdicts", type=Path, action="append", default=[])
+    rep.add_argument("--verdicts-dir", type=Path)
     rep.add_argument("--event", required=True)
     rep.add_argument("--ref", required=True)
     rep.add_argument("--out", required=True, type=Path)

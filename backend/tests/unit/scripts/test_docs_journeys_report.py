@@ -608,3 +608,140 @@ def test_a_planted_threshold_of_one_would_open_on_the_first_night(
     gh = FakeGh(runs=[run(1)], artifacts={1: {"docs-site": verdict("PASS")}})
     djr.report(args_for(tmp_path, current), ENV, gh)
     assert [p["action"] for p in posts(tmp_path)] == ["open\n"]
+
+
+# ---------------------------------------------------------------------------
+# Two jobs: the journeys job's verdicts and the demo job's, read together
+# ---------------------------------------------------------------------------
+class TwoJobGh(FakeGh):
+    """A fake whose earlier runs left each job's verdicts as its own artifact."""
+
+    def __init__(self, *args: Any, demo: Dict[int, Dict[str, Any]], **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.demo = demo
+
+    def __call__(self, args: List[str]) -> str:
+        if args[0] == "api" and "/artifacts" in args[1]:
+            self.calls.append(args)
+            run_id = int(args[1].split("/runs/")[1].split("/")[0])
+            names = ["docs-journeys-verdicts"] if run_id in self.artifacts else []
+            names += ["docs-journeys-demo-verdicts"] if run_id in self.demo else []
+            return json.dumps(
+                {"artifacts": [{"name": n, "expired": False} for n in names]}
+            )
+        if args[:2] == ["run", "download"] and "docs-journeys-demo-verdicts" in args:
+            self.calls.append(args)
+            target = Path(args[args.index("--dir") + 1])
+            target.mkdir(parents=True, exist_ok=True)
+            (target / "verdicts.json").write_text(
+                json.dumps({"journeys": self.demo[int(args[2])]})
+            )
+            return ""
+        return super().__call__(args)
+
+
+def demo_verdict(word: str) -> Dict[str, Any]:
+    entry = verdict(word)
+    entry["guide"] = "demo/DEMO_GUIDE.md"
+    entry["values"] = {**entry["values"], "guide_path": "demo/DEMO_GUIDE.md"}
+    return entry
+
+
+def test_both_jobs_verdicts_are_read_from_the_directory(tmp_path, capsys):
+    verdicts_file(tmp_path / "verdicts", "journeys", docs_site=verdict("PASS"))
+    verdicts_file(tmp_path / "verdicts", "demo", demo_guide=demo_verdict("PASS"))
+    args = argparse.Namespace(
+        verdicts=[],
+        verdicts_dir=tmp_path / "verdicts",
+        event="schedule",
+        ref="refs/heads/main",
+        out=tmp_path / "out",
+    )
+    assert djr.report(args, ENV, FakeGh()) == 0
+    assert "guides in this run: 2;" in capsys.readouterr().out
+
+
+def test_a_journey_in_both_jobs_verdicts_is_refused(tmp_path):
+    verdicts_file(tmp_path / "verdicts", "journeys", docs_site=verdict("PASS"))
+    verdicts_file(tmp_path / "verdicts", "demo", docs_site=verdict("PASS"))
+    args = argparse.Namespace(
+        verdicts=[],
+        verdicts_dir=tmp_path / "verdicts",
+        event="schedule",
+        ref="refs/heads/main",
+        out=tmp_path / "out",
+    )
+    with pytest.raises(djr.VerdictsError, match="'docs-site' is in two"):
+        djr.report(args, ENV, FakeGh())
+
+
+def test_no_verdicts_at_all_is_refused(tmp_path):
+    (tmp_path / "verdicts").mkdir()
+    code = djr.main(
+        [
+            "report",
+            "--verdicts-dir",
+            str(tmp_path / "verdicts"),
+            "--event",
+            "schedule",
+            "--ref",
+            "refs/heads/main",
+            "--out",
+            str(tmp_path / "out"),
+        ],
+        ENV,
+        FakeGh(),
+    )
+    assert code == 1
+
+
+def test_the_demo_jobs_history_counts_toward_its_issue(tmp_path):
+    """The second red night of a demo journey opens its issue: the history
+    reads the demo job's artifact as well as the journeys job's."""
+    verdicts_file(tmp_path / "verdicts", "journeys", docs_site=verdict("PASS"))
+    verdicts_file(tmp_path / "verdicts", "demo", demo_guide=demo_verdict("FAIL"))
+    args = argparse.Namespace(
+        verdicts=[],
+        verdicts_dir=tmp_path / "verdicts",
+        event="schedule",
+        ref="refs/heads/main",
+        out=tmp_path / "out",
+    )
+    gh = TwoJobGh(
+        runs=[run(1)],
+        artifacts={1: {"docs-site": verdict("PASS")}},
+        demo={1: {"demo-guide": demo_verdict("FAIL")}},
+    )
+    assert djr.report(args, ENV, gh) == 0
+    opened = posts(tmp_path)
+    assert [post["action"] for post in opened] == ["open\n"]
+    assert "demo/DEMO_GUIDE.md" in opened[0]["title.txt"]
+    downloaded = [
+        call[call.index("--name") + 1]
+        for call in gh.calls
+        if call[:2] == ["run", "download"]
+    ]
+    assert downloaded == ["docs-journeys-verdicts", "docs-journeys-demo-verdicts"]
+
+
+def test_a_history_that_reads_only_the_journeys_artifact_would_open_nothing(
+    tmp_path, monkeypatch
+):
+    """The plant: with the demo artifact left out of the history, the same
+    second red night opens nothing."""
+    monkeypatch.setattr(djr, "ARTIFACTS", (djr.ARTIFACT,))
+    verdicts_file(tmp_path / "verdicts", "demo", demo_guide=demo_verdict("FAIL"))
+    args = argparse.Namespace(
+        verdicts=[],
+        verdicts_dir=tmp_path / "verdicts",
+        event="schedule",
+        ref="refs/heads/main",
+        out=tmp_path / "out",
+    )
+    gh = TwoJobGh(
+        runs=[run(1)],
+        artifacts={1: {"docs-site": verdict("PASS")}},
+        demo={1: {"demo-guide": demo_verdict("FAIL")}},
+    )
+    assert djr.report(args, ENV, gh) == 0
+    assert posts(tmp_path) == []

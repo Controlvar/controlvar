@@ -30,7 +30,8 @@ Environment:
   ``stacks/``, and last ``secret-scan.json``). Refused inside the
   repository, so the runner writes nothing into the tree (Python's own
   ``__pycache__`` aside: ``PYTHONDONTWRITEBYTECODE=1`` keeps that out too;
-  marketing-local's build is the other exception, see ``stacks.py``). Unset, a
+  marketing-local's build and what demo-local's script installs are the other
+  exceptions, see ``stacks.py``). Unset, a
   new temporary directory, made when a journey first runs and named at the end
   of the run; a session that runs no journey then writes nothing.
 * ``DOCS_JOURNEY_RUN_ID``, ``DOCS_JOURNEY_SHA``: written on every log line;
@@ -41,6 +42,14 @@ Environment:
   ``GITHUB_RUN_ID``. The headers are the QA templates only when the commit and
   the link are ones they accept (a run in this repository's Actions);
   otherwise a plain line (``docs_runner/report.py``).
+* ``DOCS_JOURNEY_STACKS``: the stacks whose journeys this session runs, a
+  comma-separated list of names from ``stacks.STACK_CLASSES``. Unset, every
+  stack but demo-local, which binds fixed host ports and runs only in the
+  ``demo`` job of ``docs-journeys.yml`` (``DOCS_JOURNEY_STACKS=demo-local``).
+  A journey file whose stack cannot be read is run with the default set, so
+  its refusal is reported there. An unknown name stops the session, and a
+  selection that leaves no journey fails it (an empty parameter set is a
+  skip, and nothing here may skip).
 * ``DOCS_JOURNEY_TIMEOUT_MS`` (10000), ``DOCS_JOURNEY_RECORD_VIDEO`` (``1``;
   ``0`` records no video and no walkthrough), ``DOCS_JOURNEY_HEADED`` (``1``
   shows the browser),
@@ -83,7 +92,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from docs_runner import guide as guides
 from docs_runner import redaction, report
-from docs_runner.loader import Refused, context_for, load
+from docs_runner.loader import Refused, context_for, guide_root, load
 from docs_runner.log import FAIL, Log, run_directory
 from docs_runner.stacks import STACK_CLASSES, StackError
 
@@ -96,7 +105,10 @@ STACK_FIXTURES = {
     "docs-local": "docs_local_stack",
     "docs-published": "docs_published_stack",
     "marketing-local": "marketing_local_stack",
+    "demo-local": "demo_local_stack",
 }
+#: The stacks a session runs only when ``DOCS_JOURNEY_STACKS`` names them.
+OWN_JOB_STACKS = ("demo-local",)
 
 RUNS = pytest.StashKey[List[report.GuideRun]]()
 SKIPPED = pytest.StashKey[List[str]]()
@@ -109,6 +121,10 @@ RECORDED = pytest.StashKey[Dict[str, Dict[str, Any]]]()
 SCAN = pytest.StashKey[Dict[str, Any]]()
 #: One line per step that polled (``JourneyRunner.polls``): numbers only.
 POLLS = pytest.StashKey[List[str]]()
+#: Every stack this session made, for the values it keeps out of the run.
+STACKS_MADE = pytest.StashKey[List[Any]]()
+#: What a stack's ``down`` found wrong (demo-local's stop check): the run fails.
+STACK_PROBLEMS = pytest.StashKey[List[str]]()
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -126,6 +142,12 @@ def pytest_configure(config: pytest.Config) -> None:
     config.stash[RECORDED] = {}
     config.stash[SCAN] = {}
     config.stash[POLLS] = []
+    config.stash[STACKS_MADE] = []
+    config.stash[STACK_PROBLEMS] = []
+    try:
+        selected_stacks(os.environ)
+    except ValueError as error:
+        raise pytest.UsageError(str(error)) from None
     if os.environ.get("DOCS_JOURNEY_RUN_DIR"):
         try:
             config.stash[RUN_DIR] = run_directory(os.environ, REPO_ROOT)
@@ -159,9 +181,41 @@ def _order(path: Path) -> tuple:
     return (str(data.get("stack", "")), str(data.get("profile", "")), path.name)
 
 
+def selected_stacks(environ) -> tuple:
+    """The stacks ``DOCS_JOURNEY_STACKS`` names, or every one but ``OWN_JOB_STACKS``."""
+    raw = environ.get("DOCS_JOURNEY_STACKS", "")
+    if not raw.strip():
+        return tuple(name for name in STACK_CLASSES if name not in OWN_JOB_STACKS)
+    names = tuple(name.strip() for name in raw.split(",") if name.strip())
+    unknown = [name for name in names if name not in STACK_CLASSES]
+    if unknown or not names:
+        raise ValueError(
+            f"DOCS_JOURNEY_STACKS={raw!r} names {unknown or 'no'} stack; a stack is"
+            f" one of {', '.join(STACK_CLASSES)}"
+        )
+    return names
+
+
+def selected(path: Path, stacks: tuple, environ) -> bool:
+    """True when *path*'s journey runs in this session.
+
+    A file whose stack cannot be read runs in the default session, which
+    reports its refusal.
+    """
+    stack = _order(path)[0]
+    if stack in STACK_CLASSES:
+        return stack in stacks
+    return not environ.get("DOCS_JOURNEY_STACKS", "").strip()
+
+
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     if "journey_file" in metafunc.fixturenames:
-        files = sorted(JOURNEYS.glob("*.yaml"), key=_order)
+        stacks = selected_stacks(os.environ)
+        files = [
+            path
+            for path in sorted(JOURNEYS.glob("*.yaml"), key=_order)
+            if selected(path, stacks, os.environ)
+        ]
         metafunc.parametrize("journey_file", files, ids=[path.stem for path in files])
 
 
@@ -212,13 +266,17 @@ def run_settings(pytestconfig: pytest.Config) -> RunSettings:
 
 def _stack_fixture(stack: str):
     @pytest.fixture(scope="session", name=STACK_FIXTURES[stack])
-    def fixture(run_settings: RunSettings):
+    def fixture(run_settings: RunSettings, pytestconfig: pytest.Config):
         instance = STACK_CLASSES[stack](
             REPO_ROOT, run_settings.run_dir / "stacks", os.environ
         )
+        pytestconfig.stash[STACKS_MADE].append(instance)
         yield instance
         if not run_settings.keep_stacks:
-            instance.down()
+            try:
+                instance.down()
+            except StackError as error:
+                pytestconfig.stash[STACK_PROBLEMS].append(f"{stack}: {error}")
 
     return fixture
 
@@ -228,6 +286,7 @@ compose_sso_stack = _stack_fixture("compose-sso")
 docs_local_stack = _stack_fixture("docs-local")
 docs_published_stack = _stack_fixture("docs-published")
 marketing_local_stack = _stack_fixture("marketing-local")
+demo_local_stack = _stack_fixture("demo-local")
 
 
 @pytest.fixture(scope="session")
@@ -277,9 +336,20 @@ def journey_runner(
 # ---------------------------------------------------------------------------
 def _title(guide_path: str) -> str:
     try:
-        return guides.load(REPO_ROOT / "docs", guide_path).title
+        return guides.load(
+            guide_root(context_for(REPO_ROOT), guide_path), guide_path
+        ).title
     except OSError:
         return guide_path
+
+
+def stack_secrets(config: pytest.Config) -> Set[str]:
+    """Every value a stack of this session keeps out of the run's files."""
+    return {
+        value
+        for instance in config.stash[STACKS_MADE]
+        for value in getattr(instance, "secrets", ())
+    }
 
 
 def walk(journey_file: Path, request: pytest.FixtureRequest) -> report.GuideRun:
@@ -300,7 +370,9 @@ def walk(journey_file: Path, request: pytest.FixtureRequest) -> report.GuideRun:
         )
         runs.append(outcome)
         pytest.fail(str(refused), pytrace=False)
-    guide = guides.load(REPO_ROOT / "docs", journey.guide)
+    guide = guides.load(
+        guide_root(context_for(REPO_ROOT), journey.guide), journey.guide
+    )
     try:
         stack = request.getfixturevalue(STACK_FIXTURES[journey.stack])
         running = stack.up(journey.profile)
@@ -315,6 +387,8 @@ def walk(journey_file: Path, request: pytest.FixtureRequest) -> report.GuideRun:
         runs.append(outcome)
         pytest.fail(f"{journey_id}: {error}", pytrace=False)
     runner = request.getfixturevalue("journey_runner")
+    for value in running.secrets:
+        runner.redactor.add(value)
     records = runner.run(journey, journey_id, running, guide)
     outcome = report.GuideRun(
         journey=journey_id,
@@ -413,7 +487,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         problem = write_reports(runs, run_dir, sha, date, link, recorded)
         if problem is not None:
             config.stash[REPORT_PROBLEMS].append(problem)
-        values = config.stash[SECRET_VALUES]
+        values = set(config.stash[SECRET_VALUES]) | stack_secrets(config)
         scan = redaction.clear(run_dir, values, owners=owners)
         if scan["removed"]:
             # The journeys whose files held a value fail, in the reports and in
@@ -438,7 +512,12 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
             scan = redaction.clear(run_dir, values, earlier=scan, owners=owners)
         config.stash[SCAN] = scan
     removed = config.stash[SCAN].get("removed")
-    if config.stash[SKIPPED] or config.stash[REPORT_PROBLEMS] or removed:
+    if (
+        config.stash[SKIPPED]
+        or config.stash[REPORT_PROBLEMS]
+        or config.stash[STACK_PROBLEMS]
+        or removed
+    ):
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 
@@ -470,6 +549,8 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:
         )
     for problem in config.stash[REPORT_PROBLEMS]:
         terminalreporter.write_line(f"docs journeys: report refused: {problem}")
+    for problem in config.stash[STACK_PROBLEMS]:
+        terminalreporter.write_line(f"docs journeys: stack {problem}; the run fails")
     for nodeid in config.stash[SKIPPED]:
         terminalreporter.write_line(
             f"docs journeys: {nodeid} was skipped; nothing here may skip, so the"
