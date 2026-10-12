@@ -13794,7 +13794,7 @@
   "info": {
     "description": "API for managing experiments and feature flags in test environment",
     "title": "Experimently",
-    "version": "0.28.2"
+    "version": "0.29.0"
   },
   "openapi": "3.1.0",
   "paths": {
