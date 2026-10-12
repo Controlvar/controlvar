@@ -143,6 +143,45 @@ def test_the_script_uses_the_standard_library_only():
     assert not outside, f"scripts/doc_claims.py imports {outside}"
 
 
+@pytest.fixture(scope="module")
+def real_context():
+    documents, _ = dc.inventory_documents(REPO_ROOT)
+    return documents, dc.Context(REPO_ROOT, documents, dc.MECHANISMS)
+
+
+def test_a_test_that_reads_documentation_is_not_a_target(real_context):
+    """QA's own example: a deploy-docs wording pin offered for an unrelated
+    sentence. It reads docs/, so the docs-only gate lists it; refused."""
+    documents, ctx = real_context
+    target = (
+        "test:backend/tests/unit/infrastructure/test_deploy_docs.py"
+        "::test_the_docs_say_what_has_run_against_aws"
+    )
+    entry = {"text": "Workspaces do not issue API keys.", "by": [target]}
+    problem = dc.target_problem(
+        ctx, documents["docs/workspaces/quickstart.md"], entry, target
+    )
+    assert problem and "reads documentation" in problem, problem
+
+
+def test_a_mechanism_holds_only_the_sentences_it_checks(real_context):
+    """Any sentence of docs/sdk/python.md citing sdk-doc-versions is refused;
+    the sentence that quotes the package version is held."""
+    documents, ctx = real_context
+    page = documents["docs/sdk/python.md"]
+    target = "mechanism:sdk-doc-versions"
+    unrelated = {"text": "Install the SDK from PyPI.", "by": [target]}
+    problem = dc.target_problem(ctx, page, unrelated, target)
+    assert problem and "does not check this unit" in problem, problem
+    quoted = [
+        u.text
+        for u in dc.units((REPO_ROOT / page.path).read_text(encoding="utf-8"))
+        if u.text.startswith("experimently (v")
+    ]
+    assert quoted, "docs/sdk/python.md no longer quotes its version this way"
+    assert dc.target_problem(ctx, page, {"text": quoted[0]}, target) is None
+
+
 def test_pending_and_deferred_are_sorted_lists_of_documents():
     for listed in (dc.CLAIMS_PENDING, dc.CLAIMS_DEFERRED):
         assert list(listed) == sorted(set(listed))
@@ -264,6 +303,13 @@ SPLITS = [
         ["See the guide, a chart, docs and https://example.com/x."],
     ),
     (
+        "a [label]: line with text after it renders, so it is a unit",
+        "[Note]: Workspaces limit which feature flags a member can see.\n\n"
+        '[a]: https://example.com/y "Title"\n[b]: <https://example.com/a b>\n'
+        "[c]: /path (Title)\n",
+        ["[Note]: Workspaces limit which feature flags a member can see."],
+    ),
+    (
         "escapes resolved, backticks and stars removed",
         "Set \\*not bold\\* and `CODE` with **bold** text.\n",
         ["Set not bold and CODE with bold text."],
@@ -301,6 +347,55 @@ def test_a_unit_keeps_the_line_its_block_starts_on():
         ("Two.", 3),
         ("Three.", 6),
     ]
+
+
+#: Pages built to make a super-linear splitter take minutes; each is split in a
+#: child process. Sizes in MB: a linear splitter takes about a second on each.
+PATHOLOGICAL = {
+    "spaces inside a heading": '"# a" + " " * (8 * MB) + "b\\n"',
+    "spaces after a heading": '"#" + " " * (8 * MB) + "x\\n"',
+    "blockquote markers": '">" * (8 * MB) + "\\n"',
+    "setext headings": '"a\\n=\\n" * (MB // 4)',
+    "comments on one line": '"<!--a-->" * (2 * MB) + "x\\n"',
+    "open brackets": '"[" * (8 * MB) + "\\n"',
+    "link openers": '"[a](" * (2 * MB) + "\\n"',
+    "one long table row": '"| a " * (MB // 4) + "|\\n|---|---|\\n"',
+    "sentences": '"a. " * (MB // 3) + "\\n"',
+    "angle brackets": '"<" * (8 * MB) + "\\n"',
+    "email openers": '"<a@" * (2 * MB) + "\\n"',
+    "a long underline": '"a\\n" + "=" * (8 * MB) + "\\n"',
+    "a reference-like line": '"[a]: " + "b " * (4 * MB) + "\\n"',
+}
+_SPLIT_ONE = (
+    "import importlib.util, sys\n"
+    "spec = importlib.util.spec_from_file_location('dc', sys.argv[1])\n"
+    "dc = importlib.util.module_from_spec(spec)\n"
+    "sys.modules['dc'] = dc\n"
+    "spec.loader.exec_module(dc)\n"
+    "print(len(dc.units(eval(sys.argv[2], {'MB': 1 << 20}))))\n"
+)
+#: A hang guard, not a measurement: at least ten times what any page takes.
+HANG_GUARD_SECONDS = 60
+
+
+@pytest.mark.parametrize("page", list(PATHOLOGICAL.values()), ids=list(PATHOLOGICAL))
+def test_a_pathological_page_is_split_in_linear_time(page):
+    """A quadratic or worse pattern or loop (a heading's spaces matched three
+    ways, a list rebuilt per setext heading, a line re-sliced per quote marker)
+    takes minutes to hours here; a linear one about a second."""
+    try:
+        done = subprocess.run(
+            [sys.executable, "-c", _SPLIT_ONE, str(SCRIPT), page],
+            capture_output=True,
+            text=True,
+            timeout=HANG_GUARD_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail(
+            f"not split within {HANG_GUARD_SECONDS} s: the splitter is not linear"
+        )
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert done.stdout.strip().isdigit(), done.stdout
 
 
 def test_the_split_is_byte_identical_across_runs_and_hash_seeds():
@@ -479,6 +574,10 @@ def base() -> Dict[str, Any]:
             "sdk/js/tests/client.test.ts": "it('caches a flag', () => {});\n",
             "modules/tests/test_mod.py": "def test_m():\n    pass\n",
             f"{dc.JOURNEYS}/demo.yaml": JOURNEY,
+            dc.DOCS_GATE: 'DOCS_TESTS = ("backend/tests/unit/docs/",)\n'
+            'NOT_DOCS_TESTS = {"tests/test_listed.py": "a reason"}\n',
+            "tests/test_listed.py": "def test_x():\n    pass\n",
+            "tests/test_page_text.py": 'PAGE = "docs/guide.md"\n\n\ndef test_x():\n    pass\n',
         },
         "registries": {
             "docs/guide.md": [
@@ -486,13 +585,12 @@ def base() -> Dict[str, Any]:
                 unit(
                     "The service answers 200 for a healthy check.",
                     "test:tests/test_things.py::test_alpha",
+                    "test:tests/test_things.py::TestBeta::test_gamma",
                 ),
                 unit("A flag can be archived.", "journey:demo#archive", count=2),
                 unit("Run the check:", 'docex:docs/guide.md#"ok"'),
-                unit("Setting | Default", "mechanism:reads-guide"),
-                unit(
-                    "TIMEOUT | 30 s", "test:tests/test_things.py::TestBeta::test_gamma"
-                ),
+                unit("Setting | Default", "exempt:label"),
+                unit("TIMEOUT | 30 s", "mechanism:reads-guide"),
                 unit("Retries stop after three attempts.", "untested:T"),
             ],
             "docs/ops.md": [
@@ -513,7 +611,7 @@ def base() -> Dict[str, Any]:
         "mechanisms": {
             "reads-guide": dc.Mechanism(
                 "backend/tests/unit/docs/test_wording.py::test_reads",
-                reads=("docs/guide.md",),
+                holds=(("docs/guide.md", r"^[A-Z_]{1,40} \| [0-9]{1,4} s$"),),
             ),
             "quotes": dc.Mechanism(
                 "backend/tests/unit/docs/test_wording.py::test_quotes", quotes=True
@@ -691,7 +789,29 @@ PLANTED = [
             GUIDE_TEXT,
             "test:backend/tests/unit/docs/test_wording.py::test_reads",
         ),
-        "reads the page's wording",
+        "reads documentation (the docs-only gate classes it so)",
+    ),
+    (
+        "a test that reads docs/",
+        retarget("docs/guide.md", GUIDE_TEXT, "test:tests/test_page_text.py::test_x"),
+        "tests/test_page_text.py reads documentation",
+    ),
+    (
+        "a test the docs-only gate lists",
+        retarget("docs/guide.md", GUIDE_TEXT, "test:tests/test_listed.py::test_x"),
+        "tests/test_listed.py reads documentation",
+    ),
+    (
+        "the docs-only gate's lists unreadable",
+        lambda t: t["files"].update(
+            {dc.DOCS_GATE: "DOCS_TESTS = tuple(())\nNOT_DOCS_TESTS = {}\n"}
+        ),
+        "DOCS_TESTS is not a literal",
+    ),
+    (
+        "the docs-only gate gone",
+        lambda t: t["files"].pop(dc.DOCS_GATE),
+        "is gone: the tests that read docs are unknown",
     ),
     (
         "not a test file",
@@ -799,9 +919,34 @@ PLANTED = [
         "not one of MECHANISMS",
     ),
     (
-        "mechanism reads another page",
+        "mechanism holds nothing of this page",
         retarget("docs/run.md", "The chart installs.", "mechanism:reads-guide"),
-        "reads docs/guide.md, not docs/run.md",
+        "reads-guide holds no unit of docs/run.md",
+    ),
+    (
+        "an unrelated sentence on a page the mechanism reads",
+        retarget("docs/guide.md", GUIDE_TEXT, "mechanism:reads-guide"),
+        "reads-guide does not check this unit",
+    ),
+    (
+        "a mechanism pattern that matches nothing",
+        lambda t: t["mechanisms"].update(
+            empty=dc.Mechanism(
+                "backend/tests/unit/docs/test_wording.py::test_reads",
+                holds=(("docs/guide.md", r"^never on the page$"),),
+            )
+        ),
+        "matches no unit of docs/guide.md: it holds nothing",
+    ),
+    (
+        "a mechanism pattern that does not compile",
+        lambda t: t["mechanisms"].update(
+            broken=dc.Mechanism(
+                "backend/tests/unit/docs/test_wording.py::test_reads",
+                holds=(("docs/guide.md", r"("),),
+            )
+        ),
+        "does not compile",
     ),
     (
         "mechanism does not quote it",
@@ -812,7 +957,8 @@ PLANTED = [
         "mechanism's test gone",
         lambda t: t["mechanisms"].update(
             gone=dc.Mechanism(
-                "backend/tests/unit/docs/test_wording.py::test_gone", reads=("x",)
+                "backend/tests/unit/docs/test_wording.py::test_gone",
+                holds=(("docs/guide.md", "TIMEOUT"),),
             )
         ),
         "MECHANISMS['gone']: ",
@@ -822,11 +968,11 @@ PLANTED = [
         lambda t: t["mechanisms"].update(
             both=dc.Mechanism(
                 "backend/tests/unit/docs/test_wording.py::test_reads",
-                reads=("x",),
+                holds=(("docs/guide.md", "TIMEOUT"),),
                 quotes=True,
             )
         ),
-        "either quotes or reads",
+        "either quotes or holds patterns",
     ),
     # evidence:
     (
@@ -1094,6 +1240,10 @@ NEW_CLAIMS = [
         "the paraphrase",
         "Each experiment gets its own Jira ticket, and its results appear on the ticket.",
     ),
+    (
+        "a [label]: line, which renders",
+        "[Note]: Workspaces limit which feature flags a member can see.",
+    ),
 ]
 
 
@@ -1200,6 +1350,8 @@ def test_an_intent_tagged_x_may_stand_on_any_page(tmp_path):
     ]
     result = build(tmp_path, tree)
     assert not result.problems, "\n".join(result.problems)
+    assert result.counts["tagged X"] == 1
+    assert "  of which exempt:intent tagged X: 1" in dc.report_lines(result.counts)
 
 
 def test_the_counts_add_up(tmp_path):
@@ -1208,11 +1360,12 @@ def test_the_counts_add_up(tmp_path):
     assert counts["units"] == 12  # 8 on the guide (one twice), 2, 1, 1
     assert counts["dispositions"] == {
         "exempt:intent": 1,
-        "exempt:label": 1,
+        "exempt:label": 2,
         "exempt:policy": 1,
         "untested:T": 1,
-        "verified": 8,
+        "verified": 7,
     }
+    assert counts["tagged X"] == 0
     assert counts["ledger"] == {"untested:T": 1}
     assert counts["out of scope"] == {"CONTRIBUTING.md": "contributor"}
     assert collections.Counter(counts["targets"]) == collections.Counter(
@@ -1235,7 +1388,7 @@ def test_a_whole_file_target_is_counted_apart(tmp_path):
     result = build(tmp_path, tree)
     assert not result.problems, "\n".join(result.problems)
     assert result.counts["targets"]["test-file"] == 1
-    assert result.counts["targets"]["test"] == 1
+    assert "test" not in result.counts["targets"], "counted as a function too"
     assert "  test-file: 1" in dc.report_lines(result.counts)
 
 

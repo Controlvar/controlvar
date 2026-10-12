@@ -82,7 +82,11 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Alice can accept the invite once she is logged into the platform with alice@example.com (in any case); any other account gets 403 with code invite_email_mismatch:"
-by = ["journey:workspaces-quickstart#other-account-refused", "journey:workspaces-quickstart#accept"]
+by = [
+    "journey:workspaces-quickstart#other-account-refused",
+    "journey:workspaces-quickstart#accept",
+    "test:modules/backend/tests/integration/api/test_workspace_invite_binding.py::test_the_address_is_compared_without_case",
+]
 
 [[unit]]
 text = "Option B — Add existing user directly"

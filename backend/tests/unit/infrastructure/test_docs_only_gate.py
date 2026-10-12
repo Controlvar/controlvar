@@ -507,6 +507,19 @@ class TestBuildJobSteps:
         )
 
 
+def _doc_claims():
+    """scripts/doc_claims.py, loaded by path (it is standard library only)."""
+    name = "doc_claims_for_the_gate"
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            name, REPO_ROOT / "scripts" / "doc_claims.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module  # dataclasses looks its module up
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
 def _classified(rel: str) -> bool:
     return rel in NOT_DOCS_TESTS or any(
         rel == t or (t.endswith("/") and rel.startswith(t)) for t in DOCS_TESTS
@@ -520,19 +533,26 @@ def test_every_claims_mechanism_is_classified():
     (DOCS_TESTS) or is excused with its reason (NOT_DOCS_TESTS). The scan above
     finds a reader by the path it names; this finds a mechanism by name, so one
     that builds its path another way is still classified."""
-    spec = importlib.util.spec_from_file_location(
-        "doc_claims_for_the_gate", REPO_ROOT / "scripts" / "doc_claims.py"
-    )
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module  # dataclasses looks its module up
-    spec.loader.exec_module(module)
-    files = sorted({m.test.split("::")[0] for m in module.MECHANISMS.values()})
+    files = sorted({m.test.split("::")[0] for m in _doc_claims().MECHANISMS.values()})
     assert files, "MECHANISMS is empty: this check would pass on nothing"
     unclassified = [f for f in files if not _classified(f)]
     assert not unclassified, (
         "these claims mechanisms are neither in DOCS_TESTS nor in NOT_DOCS_TESTS:"
         f" {unclassified}"
     )
+
+
+def test_the_claims_registry_refuses_what_this_gate_classes_as_reading_docs():
+    """scripts/doc_claims.py refuses a test: target that reads documentation:
+    one this file lists in DOCS_TESTS or NOT_DOCS_TESTS, or whose file matches
+    DOCS_READER. It reads the lists from this file and keeps its own copy of
+    the pattern, so both must stay readable and equal."""
+    module = _doc_claims()
+    assert module.DOCS_READER.pattern == DOCS_READER.pattern
+    files, dirs, problem = module.Context(REPO_ROOT, {}, {}).gate_lists()
+    assert problem is None, problem
+    assert files == {t for t in DOCS_TESTS if not t.endswith("/")} | set(NOT_DOCS_TESTS)
+    assert set(dirs) == {t for t in DOCS_TESTS if t.endswith("/")}
 
 
 def test_the_dashboard_and_api_gate_runs_on_a_docs_only_change():

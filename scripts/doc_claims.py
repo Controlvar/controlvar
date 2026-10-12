@@ -14,9 +14,10 @@ THE SPLITTER (``units``; pure, so the same text gives the same units)
 1. Dropped: YAML front matter; fenced blocks (``` or ~~~, three or more, at any
    indentation, closed by a line of the same character at least as long: a
    four-backtick fence holding a three-backtick line is one fence); HTML
-   comments, inline or over several lines; link reference definitions
-   (``[name]: url``, which do not render); thematic breaks. An unclosed fence or
-   comment is an error, not a guess.
+   comments, inline or over several lines; a link reference definition (a
+   line that is only ``[name]: destination``, with an optional quoted title,
+   which does not render: ``[Note]: Some text.`` renders, so it is a unit);
+   thematic breaks. An unclosed fence or comment is an error, not a guess.
 2. A heading is one unit: a line starting with ``#`` in the first column (the
    renderer's rule, space or no space), its ``#`` marks and a trailing
    ``{...}`` attribute list removed; or a setext heading, the line above a
@@ -38,7 +39,11 @@ THE SPLITTER (``units``; pure, so the same text gives the same units)
    ``text``; ``<https://...>`` and ``<name@host>`` the address; backslash
    escapes resolved; backticks and ``*`` removed; whitespace collapsed. So a
    markup-only edit (backticks, bold, a link added) is not an edit, and
-   rewrapping is not either. The link and tag patterns are bounded.
+   rewrapping is not either.
+8. Linear time: every pattern is anchored or bounded with no two quantifiers
+   competing for the same characters, and the rest is plain string methods, so
+   a pathological page of megabytes is split in seconds
+   (``test_a_pathological_page_is_split_in_linear_time`` holds it).
 7. A unit with no letter or digit is dropped. Nothing else is: no keyword or
    shape decides that a unit is not a claim; the registry does.
 
@@ -63,9 +68,11 @@ THE TARGETS (a closed list; anything else is refused)
 
 ``test:<path>::<name>`` or ``test:<path>::<Class>::<name>``
     a test file (``test_*.py``, ``*_test.go``, ``*.test.ts`` and the other
-    SDKs' shapes), never under ``backend/app/``, ``modules/backend/app/``,
-    ``scripts/`` or ``backend/tests/unit/docs/`` (a test there reads the page's
-    wording: name it through ``mechanism:``). In Python the function, or the
+    SDKs' shapes), never under ``backend/app/``, ``modules/backend/app/`` or
+    ``scripts/``, and never a test that reads documentation: one the docs-only
+    gate lists (``DOCS_TESTS``, ``NOT_DOCS_TESTS`` in ``DOCS_GATE``) or whose
+    file matches that gate's ``DOCS_READER``. Such a test is reached only
+    through ``mechanism:``, which says which units it holds. In Python the function, or the
     class and method, is found by parsing the file, its name starts with
     ``test`` (a class with ``Test``), and one marked ``benchmark`` is refused
     (skipped unless RUN_BENCHMARKS=1, so it would hold nothing). In another
@@ -84,8 +91,10 @@ THE TARGETS (a closed list; anything else is refused)
     (``test_docs_inventory.py`` holds the workflow to the document's path).
 ``mechanism:<name>``
     one of ``MECHANISMS``: a test that reads the page and compares it with the
-    product. A mechanism that *quotes* holds only the units it quotes word for
-    word (after normalising); one that *reads* holds the documents it names.
+    product. A mechanism that *quotes* holds only the units its file quotes word
+    for word (after normalising); any other holds only the units that match one
+    of its ``holds`` patterns, on the documents that pattern names, and each
+    pattern must match a unit somewhere, or it holds nothing.
 ``evidence:<GitHub run or issue comment URL>``
     only on a document of class ``aws``, and the unit is dated (below).
 ``exempt:<category>``
@@ -173,20 +182,22 @@ class Unit:
 _FENCE = re.compile(r"^(?P<indent>[ \t]*)(?P<marker>`{3,}|~{3,})(?P<info>.*)$")
 _LIST = re.compile(r"^(?:[-*+]|[0-9]{1,9}[.)])(?:[ \t]+|$)")
 _OPENER = re.compile(r"^(?:!!!|\?\?\?\+?|===)(?:[ \t]+(?P<rest>.*))?$")
-_TITLE = re.compile(r'"(?P<title>[^"\n]{0,300})"')
-_BREAK = re.compile(r"^(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$")
-_UNDERLINE = re.compile(r"^(?:={1,500}|-{1,500})[ \t]*$")
+_QUOTE = re.compile(r"(?:>[ \t]*)*")
 _SEPARATOR = re.compile(
     r"^\|?[ \t]*:?-{1,200}:?[ \t]*(?:\|[ \t]*:?-{1,200}:?[ \t]*){0,100}\|?$"
 )
 _PIPE = re.compile(r"(?<!\\)\|")
-_REFERENCE = re.compile(r"^\[[^\]\n]{1,200}\]:[ \t]*\S")
+#: A link reference definition: only a destination and an optional title.
+_REFERENCE = re.compile(
+    r"\[[^\[\]\n]{1,200}\]:[ \t]{0,40}(?:<[^<>\n]{0,400}>|[^\s<]{1,400})"
+    r"(?:[ \t]{1,40}(?:\"[^\"\n]{0,300}\"|'[^'\n]{0,300}'|\([^()\n]{0,300}\)))?"
+    r"[ \t]{0,40}"
+)
 _HTML_START = re.compile(r"^<[A-Za-z/!?]")
 _TAG = re.compile(r"<[^<>\n]{0,500}>")
-_HEADING_TAIL = re.compile(r"(?:[ \t]+#{1,6})?[ \t]*(?:\{[^{}\n]{0,200}\})?[ \t]*$")
-_IMAGE = re.compile(r"!\[([^\]\n]{0,200})\]\([^)\n]{0,400}\)")
-_LINK = re.compile(r"\[([^\]\n]{0,200})\]\([^)\n]{0,400}\)")
-_REF_LINK = re.compile(r"\[([^\]\n]{1,200})\]\[[^\]\n]{0,200}\]")
+_IMAGE = re.compile(r"!\[([^\[\]\n]{0,200})\]\([^()\n]{0,400}\)")
+_LINK = re.compile(r"\[([^\[\]\n]{0,200})\]\([^()\n]{0,400}\)")
+_REF_LINK = re.compile(r"\[([^\[\]\n]{1,200})\]\[[^\[\]\n]{0,200}\]")
 _AUTOLINK = re.compile(r"<((?:https?|mailto):[^<>\s]{1,400})>")
 _EMAIL = re.compile(r"<([^<>\s@]{1,200}@[^<>\s@]{1,200})>")
 _ESCAPE = re.compile(r"\\([\\`*_{}\[\]()#+\-.!|<>~])")
@@ -210,16 +221,17 @@ def normalise(text: str) -> str:
 def _strip_comments(line: str) -> Tuple[str, bool]:
     """The line without its HTML comments, and whether one is still open."""
     out = []
+    position = 0
     while True:
-        start = line.find("<!--")
+        start = line.find("<!--", position)
         if start < 0:
-            out.append(line)
+            out.append(line[position:])
             return "".join(out), False
-        out.append(line[:start])
+        out.append(line[position:start])
         end = line.find("-->", start + 4)
         if end < 0:
             return "".join(out), True
-        line = line[end + 3 :]
+        position = end + 3
 
 
 def visible_lines(text: str) -> List[str]:
@@ -277,11 +289,8 @@ class _Block:
 
 def _quote(line: str) -> Tuple[int, str]:
     """The blockquote depth of a stripped line, and the text inside it."""
-    depth = 0
-    while line.startswith(">"):
-        depth += 1
-        line = line[1:].lstrip()
-    return depth, line
+    prefix = _QUOTE.match(line).group()
+    return prefix.count(">"), line[len(prefix) :]
 
 
 def _row(text: str) -> str:
@@ -294,7 +303,33 @@ def _row(text: str) -> str:
 
 
 def _heading(text: str) -> str:
-    return normalise(_HEADING_TAIL.sub("", text.lstrip("#")))
+    """A heading's text: its # marks, closing #s and {...} attribute list removed."""
+    text = text.lstrip("#").strip()
+    if text.endswith("}"):
+        start = text.rfind("{")
+        if start >= 0 and "}" not in text[start:-1]:
+            text = text[:start].rstrip()
+    bare = text.rstrip("#")
+    if bare != text and (not bare or bare[-1] in " \t"):
+        text = bare.rstrip()
+    return normalise(text)
+
+
+def _title(rest: str) -> Optional[str]:
+    """An opener's quoted title, or None."""
+    first = rest.find('"')
+    last = rest.find('"', first + 1) if first >= 0 else -1
+    return rest[first + 1 : last] if last > first else None
+
+
+def _underline(body: str) -> bool:
+    line = body.rstrip(" \t")
+    return bool(line) and (not line.strip("=") or not line.strip("-"))
+
+
+def _is_break(body: str) -> bool:
+    compact = body.replace(" ", "").replace("\t", "")
+    return len(compact) >= 3 and compact[0] in "*-_" and not compact.strip(compact[0])
 
 
 def _blocks(lines: Sequence[str]) -> List[_Block]:
@@ -320,27 +355,26 @@ def _blocks(lines: Sequence[str]) -> List[_Block]:
             continue
         opener = _OPENER.match(body)
         if opener:
-            title = _TITLE.search(opener.group("rest") or "")
-            if title:
+            title = _title(opener.group("rest") or "")
+            if title is not None:
                 blocks.append(
-                    _Block(
-                        "heading", number, depth, [(number, normalise(title["title"]))]
-                    )
+                    _Block("heading", number, depth, [(number, normalise(title))])
                 )
             current = None
             continue
-        if _REFERENCE.match(body):
+        if _REFERENCE.fullmatch(body):
             current = None
             continue
         if (
-            _UNDERLINE.match(body)
+            _underline(body)
             and current is not None
             and current.kind == "para"
             and current.depth == depth
         ):
             heading_line, heading_text = current.parts.pop()
             if not current.parts:
-                blocks = [b for b in blocks if b is not current]
+                assert blocks[-1] is current, "an open block is the last one"
+                blocks.pop()
             blocks.append(
                 _Block(
                     "heading",
@@ -351,7 +385,7 @@ def _blocks(lines: Sequence[str]) -> List[_Block]:
             )
             current = None
             continue
-        if _BREAK.match(body):
+        if _is_break(body):
             current = None
             continue
         if _PIPE.search(body) and index < len(lines):
@@ -456,6 +490,10 @@ TEST_FILE = re.compile(
 NOT_TESTS: Tuple[str, ...] = ("backend/app/", "modules/backend/app/", "scripts/")
 #: Tests that read a page's wording. A claim reaches one only as a mechanism.
 WORDING_TESTS = "backend/tests/unit/docs/"
+#: The docs-only gate, whose DOCS_TESTS and NOT_DOCS_TESTS list every test that
+#: reads documentation, and its detector of one (held equal to it there).
+DOCS_GATE = "backend/tests/unit/infrastructure/test_docs_only_gate.py"
+DOCS_READER = re.compile(r"""["']docs["']|["']docs/|mkdocs\.yml""")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -463,44 +501,75 @@ class Mechanism:
     """A test that reads documents and compares them with the product.
 
     ``quotes``: it holds the units its file quotes word for word (normalised).
-    Otherwise ``reads``: the documents (``fnmatch`` patterns) it holds.
+    Otherwise ``holds``: (document ``fnmatch`` pattern, unit pattern) pairs, the
+    sentences the test checks; it holds a unit of a matching document that the
+    unit pattern finds (``re.search``), and nothing else.
     """
 
     test: str
-    reads: Tuple[str, ...] = ()
+    holds: Tuple[Tuple[str, str], ...] = ()
     quotes: bool = False
 
 
+_VERSION = r"\(?v?[0-9]{1,4}(?:\.[0-9]{1,4}){1,2}"
+_TARBALL = r"getexperimently-[A-Za-z0-9-]{1,60}-[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}\.tgz"
+
+
 MECHANISMS: Dict[str, Mechanism] = {
+    # The table's rows: capability | Dashboard or API only | guide.
     "dashboard-and-api": Mechanism(
         "backend/tests/unit/docs/test_dashboard_and_api.py"
         "::test_the_table_and_the_dashboard_agree",
-        reads=("docs/guides/dashboard-and-api.md",),
+        holds=(
+            (
+                "docs/guides/dashboard-and-api.md",
+                r"^[^|]{1,300} \| (?:Dashboard|API only|Where you do it) \| [^|]{1,300}$",
+            ),
+        ),
     ),
     "integrations-claims": Mechanism(
         "backend/tests/unit/docs/test_integrations_docs_claims.py"
         "::test_every_claim_about_what_the_platform_does_is_on_the_list",
         quotes=True,
     ),
-    "mcp-routes": Mechanism(
-        "backend/tests/unit/docs/test_mcp_page_routes.py"
-        "::test_every_request_the_page_documents_is_served",
-        reads=("docs/mcp-server.md",),
-    ),
+    # A quoted package version (a bare `experimently` only on the Python page).
     "sdk-doc-versions": Mechanism(
         "backend/tests/unit/docs/test_sdk_doc_versions.py"
         "::test_quoted_sdk_versions_match_the_manifests",
-        reads=("docs/sdk/*.md", "docs/sdk-guide.md"),
+        holds=(
+            (
+                "docs/sdk/*.md",
+                r"(?:@getexperimently/[A-Za-z0-9_-]{1,60}|experimently-openfeature) "
+                + _VERSION,
+            ),
+            ("docs/sdk/*.md", _TARBALL),
+            ("docs/sdk-guide.md", _TARBALL),
+            ("docs/sdk/python.md", r"(?<![\w@/-])experimently " + _VERSION),
+        ),
     ),
+    # The one sentence per SDK page about the live contract job.
     "sdk-live-contract-sentence": Mechanism(
         "backend/tests/unit/docs/test_sdk_live_contract_sentence.py"
         "::test_every_sdk_page_says_what_ci_runs_and_agrees_with_the_gate",
-        reads=("docs/sdk/*.md",),
+        holds=(
+            (
+                "docs/sdk/*.md",
+                r"^CI (?:runs|does not run) this SDK's contract smoke against a real"
+                r" API: [a-z0-9-]{1,40} (?:is|is not) in the sdks: list of the SDK Live"
+                r" Contract job in pr-qa-gate\.yml\.$",
+            ),
+        ),
     ),
+    # Which warehouses the page says are available.
     "warehouse-availability": Mechanism(
         "modules/backend/tests/unit/test_warehouse_docs_availability.py"
-        "::test_the_page_says_no_warehouse_is_available_exactly_while_none_is",
-        reads=("docs/api/warehouse-analytics.md",),
+        "::test_the_page_says_a_warehouse_is_available_exactly_while_it_is",
+        holds=(
+            (
+                "docs/api/warehouse-analytics.md",
+                r"\b(?:BigQuery|Snowflake|Amazon Athena) is available\b",
+            ),
+        ),
     ),
 }
 
@@ -761,6 +830,53 @@ class Context:
         self._quoted: Dict[str, Set[str]] = {}
         self._enrolled: Optional[Any] = None
         self._blocks: Dict[str, Any] = {}
+        self._gate: Optional[Tuple[Set[str], Tuple[str, ...], Optional[str]]] = None
+
+    def gate_lists(self) -> Tuple[Set[str], Tuple[str, ...], Optional[str]]:
+        """The files and directories the docs-only gate lists as reading docs,
+        and what is wrong with reading them (None when they were read)."""
+        if self._gate is None:
+            files: Set[str] = set()
+            dirs: List[str] = []
+            problem: Optional[str] = None
+            tree = self.tree(DOCS_GATE)
+            if tree is None:
+                problem = f"{DOCS_GATE} is gone: the tests that read docs are unknown"
+            elif isinstance(tree, str):
+                problem = f"{DOCS_GATE} {tree}"
+            else:
+                found = set()
+                for node in tree.body:
+                    if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+                        continue
+                    targets = (
+                        node.targets if isinstance(node, ast.Assign) else [node.target]
+                    )
+                    names = {t.id for t in targets if isinstance(t, ast.Name)}
+                    for name in names & {"DOCS_TESTS", "NOT_DOCS_TESTS"}:
+                        try:
+                            listed = list(ast.literal_eval(node.value))
+                        except (ValueError, TypeError, SyntaxError):
+                            problem = f"{DOCS_GATE}: {name} is not a literal"
+                            continue
+                        found.add(name)
+                        for path in listed:
+                            if path.endswith("/"):
+                                dirs.append(path)
+                            else:
+                                files.add(path)
+                if problem is None and found != {"DOCS_TESTS", "NOT_DOCS_TESTS"}:
+                    problem = f"{DOCS_GATE} no longer has DOCS_TESTS and NOT_DOCS_TESTS"
+            self._gate = (files, tuple(sorted(dirs)), problem)
+        return self._gate
+
+    def reads_docs(self, path: str) -> bool:
+        """True for a test the docs-only gate classes as reading documentation."""
+        files, dirs, _ = self.gate_lists()
+        if path in files or path.startswith((WORDING_TESTS, *dirs)):
+            return True
+        text = self.text(path)
+        return text is not None and bool(DOCS_READER.search(text))
 
     def text(self, rel: str) -> Optional[str]:
         if rel not in self._text:
@@ -942,10 +1058,11 @@ def test_problem(
         return "the path must be repository-relative"
     if path.startswith(NOT_TESTS):
         return f"{path} is not a test (application code or a script)"
-    if path.startswith(WORDING_TESTS) and not mechanism:
+    if not mechanism and ctx.reads_docs(path):
         return (
-            f"{path} reads the page's wording; a claim reaches it only as a"
-            " mechanism:<name> (MECHANISMS in scripts/doc_claims.py)"
+            f"{path} reads documentation (the docs-only gate classes it so); a"
+            " claim reaches it only as mechanism:<name> (MECHANISMS in"
+            " scripts/doc_claims.py)"
         )
     if not TEST_FILE.search(path):
         return f"{path} is not a test file (test_*.py, *_test.go, *.test.ts, ...)"
@@ -971,13 +1088,39 @@ def mechanism_problems(ctx: Context) -> List[str]:
         problem = test_problem(ctx, "test:" + mechanism.test, mechanism=True)
         if problem is None and "::" not in mechanism.test:
             problem = "a mechanism names one test function"
-        if problem is None and mechanism.quotes == bool(mechanism.reads):
-            problem = (
-                "a mechanism either quotes or reads documents, not both or neither"
-            )
+        if problem is None and mechanism.quotes == bool(mechanism.holds):
+            problem = "a mechanism either quotes or holds patterns, not both or neither"
+        if problem is None:
+            problem = _holds_problem(ctx, mechanism)
         if problem:
             found.append(f"MECHANISMS[{name!r}]: {problem}")
+    gate_problem = ctx.gate_lists()[2]
+    if gate_problem:
+        found.append(gate_problem)
     return found
+
+
+def _holds_problem(ctx: Context, mechanism: Mechanism) -> Optional[str]:
+    """A holds pattern that does not compile, or matches no unit of its pages."""
+    for pages, pattern in mechanism.holds:
+        try:
+            compiled = re.compile(pattern)
+        except re.error as error:
+            return f"{pattern!r} does not compile: {error}"
+        matched = False
+        for path in sorted(ctx.documents):
+            text = ctx.text(path) if fnmatch.fnmatchcase(path, pages) else None
+            if text is None or not path.endswith(".md"):
+                continue
+            try:
+                if any(compiled.search(u.text) for u in units(text)):
+                    matched = True
+                    break
+            except SplitError:
+                continue
+        if not matched:
+            return f"{pattern!r} matches no unit of {pages}: it holds nothing"
+    return None
 
 
 def target_problem(
@@ -1041,8 +1184,18 @@ def target_problem(
             if text not in ctx.quoted(path):
                 return f"{path} does not quote this unit word for word"
             return None
-        if not any(fnmatch.fnmatchcase(document.path, p) for p in mechanism.reads):
-            return f"{match.group('name')} reads {', '.join(mechanism.reads)}, not {document.path}"
+        patterns = [
+            pattern
+            for pages, pattern in mechanism.holds
+            if fnmatch.fnmatchcase(document.path, pages)
+        ]
+        if not patterns:
+            return f"{match.group('name')} holds no unit of {document.path}"
+        if not any(re.search(pattern, text) for pattern in patterns):
+            return (
+                f"{match.group('name')} does not check this unit (it holds units"
+                f" matching {' or '.join(patterns)})"
+            )
         return None
     if kind == "evidence":
         if not EVIDENCE.fullmatch(target[len("evidence:") :]):
@@ -1219,6 +1372,7 @@ def check(
 
     targets: collections.Counter = collections.Counter()
     dispositions: collections.Counter = collections.Counter()
+    tagged = 0
     want_ledger: Set[Tuple[str, str, str]] = set()
     unit_total = 0
     for path, rel in sorted(registered.items()):
@@ -1231,6 +1385,7 @@ def check(
             for target in by:
                 targets[kind_of(target)] += 1
             head = by[0]
+            tagged += count if entry.get("tag") == "X" else 0
             if kind_of(head) in ("exempt", "untested", "baseline"):
                 dispositions[head] += count
             else:
@@ -1264,6 +1419,7 @@ def check(
         "targets": {k: targets[k] for k in VERIFYING if targets[k]},
         "ledger": dict(sorted(collections.Counter(k for k, _, _ in lines).items())),
         "form only": len(ctx.form_only),
+        "tagged X": tagged,
     }
     return Result(problems, counts)
 
@@ -1375,6 +1531,7 @@ def report_lines(counts: Mapping[str, Any]) -> List[str]:
     lines += [f"  {path} ({category})" for path, category in out.items()]
     lines.append(f"units registered: {counts.get('units', 0)}")
     lines += [f"  {k}: {v}" for k, v in counts.get("dispositions", {}).items()]
+    lines.append(f"  of which exempt:intent tagged X: {counts.get('tagged X', 0)}")
     lines.append("verifying targets:")
     lines += [f"  {k}: {v}" for k, v in counts.get("targets", {}).items()]
     lines.append("ledger lines:")
