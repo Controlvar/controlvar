@@ -42,6 +42,27 @@ def _eq(attribute, value):
 
 US_RULES = _rules(_eq("country", "US"))
 
+#: A segment: US users, or a time_window the engine cannot read (ISO datetimes).
+UNREADABLE_WINDOW_RULES = {
+    "logical_operator": "OR",
+    "groups": [
+        {"logical_operator": "AND", "conditions": [_eq("country", "US")]},
+        {
+            "logical_operator": "NOT",
+            "conditions": [
+                {
+                    "attribute": "now",
+                    "operator": "time_window",
+                    "value": {
+                        "start": "2024-01-01T00:00:00",
+                        "end": "2024-12-31T00:00:00",
+                    },
+                }
+            ],
+        },
+    ],
+}
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -289,6 +310,22 @@ class TestEvaluateMembership:
         assert result.is_member is False
         assert result.matched_rules == []
 
+    @pytest.mark.regression
+    @pytest.mark.parametrize("country", ["US", "CA"])
+    def test_a_time_window_that_cannot_be_read_grants_no_membership(self, country):
+        """A ``time_window`` the engine cannot read (ISO datetimes here) makes
+        no user a member, whatever the other groups say (#1145)."""
+        rules = UNREADABLE_WINDOW_RULES
+        mock_seg = _make_mock_segment(rules=rules)
+        db = _make_mock_db(segment=mock_seg)
+
+        result = AudienceService.evaluate_membership(
+            db, str(mock_seg.id), {"country": country, "now": "2026-01-05T12:00:00"}
+        )
+
+        assert result.is_member is False
+        assert result.matched_rules == []
+
     def test_evaluate_membership_raises_value_error_for_non_existent_segment(self):
         """evaluate_membership raises ValueError when segment doesn't exist."""
         db = _make_mock_db(segment=None)
@@ -472,6 +509,20 @@ class TestPreviewAudienceSize:
         chain = db.query.return_value.filter.return_value.limit.return_value
         chain.all.return_value = [(c,) for c in contexts]
         return db
+
+    @pytest.mark.regression
+    def test_a_time_window_that_cannot_be_read_counts_nobody(self):
+        """A user is not counted, and the preview does not fail (#1145)."""
+        contexts = [{"country": "US", "now": "2026-01-05T12:00:00"}, {"country": "CA"}]
+        result = AudienceService.preview_audience_size(
+            self._db(contexts), UNREADABLE_WINDOW_RULES, sample_size=10
+        )
+
+        assert result.model_dump() == {
+            "estimated_percentage": 0.0,
+            "sample_size": 2,
+            "matched": 0,
+        }
 
     def test_preview_returns_dict_with_required_keys(self):
         """preview_audience_size returns AudiencePreviewResponse with required fields."""

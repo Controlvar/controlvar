@@ -438,6 +438,7 @@ WIZARD_SUBMIT = (
     "payload itself is returned alongside"
 )
 PATTERN = "PatternUnevaluable's str() is a fixed sentence with no pattern or value"
+TIME_WINDOW = "TimeWindowUnreadable's str() is a fixed sentence with no rule or value"
 HIPAA_CONFIG = "RuntimeError: the HIPAA service's configuration sentence (503)"
 HIPAA_DECRYPT = "ValueError: the HIPAA service's decryption-refused sentence"
 RERAISE = "re-raises an HTTPException the route itself raised, unchanged"
@@ -640,6 +641,16 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
         "RulesEvaluationService.evaluate_rules_with_validation",
         "PatternUnevaluable",
     ): (1, PATTERN),
+    (
+        "backend/app/services/rules_evaluation_service.py",
+        "RulesEvaluationService.evaluate",
+        "TimeWindowUnreadable",
+    ): (1, TIME_WINDOW),
+    (
+        "backend/app/services/rules_evaluation_service.py",
+        "RulesEvaluationService.evaluate_rules_with_validation",
+        "TimeWindowUnreadable",
+    ): (1, TIME_WINDOW),
     (f"{M}/hipaa.py", "decrypt_phi", "RuntimeError"): (1, HIPAA_CONFIG),
     (f"{M}/hipaa.py", "decrypt_phi", "ValueError"): (1, HIPAA_DECRYPT),
     (f"{M}/hipaa.py", "encrypt_phi", "RuntimeError"): (1, HIPAA_CONFIG),

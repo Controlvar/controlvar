@@ -1,5 +1,5 @@
 """
-Experiment targeting answers a rule the way flag targeting does (#1144).
+Experiment targeting answers a rule the way flag targeting does (#1144, #1145).
 
 An experiment is targeted by ``RulesEvaluationService``, through
 ``AssignmentService._evaluate_experiment_targeting``; a flag by the rules
@@ -7,7 +7,10 @@ engine, through ``FeatureFlagService._match_targeting_rule``. Both read the
 same stored rules through the targeting adapter. Until #1144 they answered
 some of them differently: every ``semver_*`` comparison meant ">=" for an
 experiment, so ``semver_lt 2.0.0`` enrolled 3.0.0 and refused 1.5.0, and
-``geo_within_radius`` never matched an experiment's user.
+``geo_within_radius`` never matched an experiment's user. Until #1145
+``time_window`` was read two ways: an experiment read ISO datetimes in
+``start``/``end`` and never matched an ``HH:MM`` window, while a flag read
+``HH:MM`` and treated a window with no key it reads as always open.
 
 This file drives both real evaluators (neither is rebuilt here) with the same
 stored rules, user and context, and asserts the same answer, over:
@@ -16,11 +19,11 @@ stored rules, user and context, and asserts the same answer, over:
   adapter can evaluate;
 * a battery for each operator the adapter supports
   (``targeting_adapter.DASHBOARD_OPERATORS``), plus the native
-  ``semantic_version`` and ``geo_distance`` spellings;
-* the cases of #1144, with their expected answers.
-
-``time_window`` is left out of all three: the two evaluators read its value
-differently, and that is #1145.
+  ``semantic_version``, ``geo_distance`` and ``time_window`` spellings;
+* the cases of #1144 and #1145, with their expected answers, including a
+  ``time_window`` the engine cannot read: the whole ruleset is abandoned, as
+  for a pattern that cannot be evaluated (the flag is off with reason
+  ``error``, the user is not eligible, a segment is unavailable).
 
 The parity holds for conditions without ``attribute_type``, which is every
 condition the dashboard stores, and no case here sets one. A native condition
@@ -43,22 +46,38 @@ from __future__ import annotations
 
 import copy
 import json
+import uuid
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 from unittest import mock
 from unittest.mock import MagicMock, Mock
 
 import pytest
 
+from backend.app.core import rules_engine
 from backend.app.core.targeting_adapter import (
     DASHBOARD_OPERATORS,
     normalise_targeting_rules,
 )
 from backend.app.models.experiment import ExperimentStatus
-from backend.app.schemas.targeting_rule import OperatorType, RuleGroup, TargetingRules
-from backend.app.services import assignment_service, feature_flag_service
+from backend.app.models.feature_flag import FeatureFlagStatus
+from backend.app.models.segment import SegmentStatus
+from backend.app.schemas.targeting_rule import (
+    Condition,
+    LogicalOperator,
+    OperatorType,
+    RuleGroup,
+    TargetingRule,
+    TargetingRules,
+)
+from backend.app.services import (
+    assignment_service,
+    feature_flag_service,
+    segment_membership,
+)
 from backend.app.services.assignment_service import AssignmentService
 from backend.app.services.feature_flag_service import FeatureFlagService
+from backend.app.services.rules_evaluation_service import RulesEvaluationService
 from backend.scripts import generate_ruleset_vectors as generator
 
 pytestmark = pytest.mark.unit
@@ -66,10 +85,6 @@ pytestmark = pytest.mark.unit
 USER = generator.USER
 #: Not a member of the vectors' segment (``generator.VECTOR_SEGMENT_MEMBERS``).
 OTHER_USER = "user-7"
-
-#: The operator whose two readings differ; #1145 makes them one.
-TIME_WINDOW_ISSUE = "#1145"
-
 
 # ---------------------------------------------------------------------------
 # The two evaluators, driven as the services drive them
@@ -167,17 +182,23 @@ def at_full_rollout(raw: Dict[str, Any]) -> Dict[str, Any]:
     return raw
 
 
-def dashboard(attribute: str, operator: str, value: Any) -> Dict[str, Any]:
+def dashboard(
+    attribute: str, operator: str, value: Any, group_operator: str = "AND"
+) -> Dict[str, Any]:
     """One condition in the shape the dashboard stores."""
     condition = {"attribute": attribute, "operator": operator, "value": value}
     return {
         "logical_operator": "AND",
-        "groups": [{"logical_operator": "AND", "conditions": [condition]}],
+        "groups": [{"logical_operator": group_operator, "conditions": [condition]}],
     }
 
 
 def native(
-    attribute: str, operator: str, value: Any, additional_value: Any = None
+    attribute: str,
+    operator: str,
+    value: Any,
+    additional_value: Any = None,
+    group_operator: str = "and",
 ) -> Dict[str, Any]:
     """One condition in the native ``TargetingRules`` shape."""
     condition: Dict[str, Any] = {
@@ -192,7 +213,7 @@ def native(
         "rules": [
             {
                 "id": "native",
-                "rule": {"operator": "and", "conditions": [condition]},
+                "rule": {"operator": group_operator, "conditions": [condition]},
                 "rollout_percentage": 100,
             }
         ],
@@ -221,27 +242,26 @@ def disagreements(cases) -> List[str]:
 def vector_cases():
     vectors = json.loads(generator.VECTORS_PATH.read_text(encoding="utf-8"))
     stored = {flag["key"]: flag for flag in vectors["stored_flags"]}
-    cases, skipped_time_window = [], 0
+    cases, with_time_window = [], 0
     for case in vectors["cases"]:
         raw = stored[case["flag"]]["targeting_rules"]
         rules = evaluable(raw)
         if rules is None:
             continue
         if OperatorType.TIME_WINDOW in operators_in(rules):
-            skipped_time_window += 1  # #1145
-            continue
+            with_time_window += 1
         cases.append(
             (case["id"], at_full_rollout(raw), case["user_id"], case["context"])
         )
-    return cases, skipped_time_window
+    return cases, with_time_window
 
 
 def test_the_vectors_get_the_same_answer_from_both_evaluators():
-    cases, skipped_time_window = vector_cases()
-    # Not vacuous: most of the 2181 cases have rules to evaluate, and the
-    # time_window flag's cases are the only ones left out for #1145.
+    cases, with_time_window = vector_cases()
+    # Not vacuous: most of the 2181 cases have rules to evaluate, the
+    # time_window flag's among them (it was left out until #1145).
     assert len(cases) > 1500, len(cases)
-    assert 0 < skipped_time_window <= 2, skipped_time_window
+    assert with_time_window > 0, with_time_window
     found = disagreements(cases)
     assert not found, f"{len(found)} of {len(cases)} cases disagree:\n" + "\n".join(
         found[:25]
@@ -279,6 +299,21 @@ LOCATIONS = [
     {"lat": "x", "lon": 2.35},
 ]
 
+#: A Monday, 12:00 UTC: the moment a ``time_window`` case is evaluated at. It is
+#: the attribute's value, so no case reads the clock.
+MOMENT = "2026-01-05T12:00:00+00:00"
+MOMENTS = [
+    MOMENT,
+    "2026-01-05T10:00:00+00:00",
+    "2026-01-05T13:00:30Z",  # the end minute is included
+    "2026-01-05T14:00:00+00:00",
+    "2026-01-05T12:00:00",
+    "2026-01-10T12:00:00+00:00",  # a Saturday
+    "2026-02-02T12:00:00+00:00",  # a Monday in February
+    "not a time",
+    5,
+]
+
 #: Dashboard operator -> (attribute, stored value, context values). Every
 #: context value is also tried absent (``{}``) and for two users.
 BATTERY: Dict[str, Any] = {
@@ -307,9 +342,12 @@ BATTERY: Dict[str, Any] = {
     "semver_lte": ("app_version", "2.0.0", SEMVER_ACTUALS),
     "in_segment": ("segment", generator.VECTOR_SEGMENT, []),
     "not_in_segment": ("segment", generator.VECTOR_SEGMENT, []),
+    "time_window": ("now", {"start": "11:00", "end": "13:00"}, MOMENTS),
 }
 
-#: The native spellings of the two operators #1144 is about.
+#: The native spellings of the operators #1144 and #1145 are about. A native
+#: ``time_window`` must carry ``start`` and ``end`` (the schema asks for them),
+#: which neither evaluator reads.
 NATIVE_BATTERY: Dict[str, Any] = {
     **{
         f"semantic_version/{comparison}": (
@@ -329,6 +367,23 @@ NATIVE_BATTERY: Dict[str, Any] = {
         "location",
         LOCATIONS,
     ),
+    **{
+        f"time_window/{spelling}": (
+            native("now", "time_window", {"start": "x", "end": "y", **keys}),
+            "now",
+            MOMENTS,
+        )
+        for spelling, keys in {
+            "start_time": {"start_time": "11:00", "end_time": "13:00"},
+            "days": {"days": [0]},
+            "dates": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
+            "timezone": {
+                "start_time": "12:30",
+                "end_time": "13:30",
+                "timezone": "Europe/Paris",
+            },
+        }.items()
+    },
 }
 
 
@@ -343,9 +398,7 @@ def battery_cases(label, raw, attribute, values):
 
 def test_every_operator_the_adapter_supports_is_compared():
     """A new dashboard operator fails here until it has a battery."""
-    assert set(BATTERY) | {"time_window"} == set(DASHBOARD_OPERATORS), (
-        "time_window is compared by " + TIME_WINDOW_ISSUE
-    )
+    assert set(BATTERY) == set(DASHBOARD_OPERATORS)
 
 
 @pytest.mark.regression
@@ -402,6 +455,464 @@ def test_the_issue_cases(operator, attribute, value, context, enrolled):
     raw = dashboard(attribute, operator, value)
     assert (experiment_answer(raw, USER, context) is not None) is enrolled
     assert (flag_answer(raw, USER, context) is not None) is enrolled
+
+
+# ---------------------------------------------------------------------------
+# 4. The cases of #1145
+# ---------------------------------------------------------------------------
+
+#: (label, stored rules, enrolled) at MOMENT. Each answer used to differ
+#: between the two evaluators, or be "always open" on flags, unless marked.
+TIME_WINDOW_CASES = [
+    # The issue's three rows.
+    (
+        "dashboard ISO now-1h..now+1h (#1156 would read it)",
+        dashboard(
+            "now",
+            "time_window",
+            {"start": "2026-01-05T11:00:00+00:00", "end": "2026-01-05T13:00:00+00:00"},
+        ),
+        False,
+    ),
+    (
+        "dashboard HH:MM including now",
+        dashboard("now", "time_window", {"start": "11:00", "end": "13:00"}),
+        True,
+    ),
+    (
+        "dashboard HH:MM excluding now (unchanged)",
+        dashboard("now", "time_window", {"start": "14:00", "end": "15:00"}),
+        False,
+    ),
+    (
+        "native start/end in 2000",
+        native(
+            "now",
+            "time_window",
+            {"start": "2000-01-01T00:00:00", "end": "2000-01-02T00:00:00"},
+        ),
+        False,
+    ),
+    (
+        "native start/end in 2099",
+        native(
+            "now",
+            "time_window",
+            {"start": "2099-01-01T00:00:00", "end": "2099-01-02T00:00:00"},
+        ),
+        False,
+    ),
+    # No key the engine reads: these match nobody.
+    (
+        "native ISO start/end including now",
+        native(
+            "now",
+            "time_window",
+            {"start": "2026-01-05T11:00:00+00:00", "end": "2026-01-05T13:00:00+00:00"},
+        ),
+        False,
+    ),
+    (
+        "native HH:MM start/end",
+        native("now", "time_window", {"start": "11:00", "end": "13:00"}),
+        False,
+    ),
+    (
+        "native start/end with a timezone only",
+        native(
+            "now",
+            "time_window",
+            {"start": "11:00", "end": "13:00", "timezone": "UTC"},
+        ),
+        False,
+    ),
+    # The keys the engine reads, in the native shape.
+    (
+        "native start_time/end_time including now",
+        native(
+            "now",
+            "time_window",
+            {"start": "x", "end": "y", "start_time": "11:00", "end_time": "13:00"},
+        ),
+        True,
+    ),
+    (
+        "NOT around an HH:MM window including now",
+        dashboard("now", "time_window", {"start": "11:00", "end": "13:00"}, "NOT"),
+        False,
+    ),
+    (
+        "NOT around an HH:MM window excluding now",
+        dashboard("now", "time_window", {"start": "14:00", "end": "15:00"}, "NOT"),
+        True,
+    ),
+    (
+        "native start_date/end_date including now",
+        native(
+            "now",
+            "time_window",
+            {
+                "start": "x",
+                "end": "y",
+                "start_date": "2026-01-01",
+                "end_date": "2026-01-31",
+            },
+        ),
+        True,
+    ),
+]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "label, raw, enrolled",
+    TIME_WINDOW_CASES,
+    ids=[case[0] for case in TIME_WINDOW_CASES],
+)
+def test_the_time_window_cases(label, raw, enrolled):
+    context = {"now": MOMENT}
+    assert evaluable(raw) is not None
+    assert (experiment_answer(raw, USER, context) is not None) is enrolled
+    assert (flag_answer(raw, USER, context) is not None) is enrolled
+
+
+def constructed(
+    value: Any, group_operator: LogicalOperator = LogicalOperator.AND
+) -> TargetingRules:
+    """A ``time_window`` rule the schema would refuse, built as stored data can be.
+
+    Stored rules are not re-validated on evaluation, so the engine must answer
+    a value no form or API accepts today: an empty object, or not an object.
+    """
+    condition = Condition.model_construct(
+        attribute="now",
+        operator=OperatorType.TIME_WINDOW,
+        value=value,
+        additional_value=None,
+        attribute_type=None,
+        validation_schema=None,
+    )
+    group = RuleGroup.model_construct(
+        operator=group_operator, conditions=[condition], groups=[]
+    )
+    rule = TargetingRule.model_construct(
+        id="constructed",
+        name=None,
+        description=None,
+        rule=group,
+        rollout_percentage=100,
+    )
+    return TargetingRules.model_construct(
+        version="1.0", rules=[rule], default_rule=None
+    )
+
+
+UNREADABLE_WINDOWS = [
+    ({}, "no days, start_time/end_time or start_date/end_date"),
+    (
+        {"start": "11:00", "end": "13:00"},
+        "no days, start_time/end_time or start_date/end_date",
+    ),
+    (
+        {"begin": "11:00", "until": "13:00"},
+        "no days, start_time/end_time or start_date/end_date",
+    ),
+    ("11:00-13:00", "the value is not an object"),
+    (["11:00", "13:00"], "the value is not an object"),
+    (None, "the value is not an object"),
+]
+
+
+NO_KEY = "no days, start_time/end_time or start_date/end_date"
+NOT_HH_MM = "start_time or end_time is not HH:MM"
+#: An ISO window around MOMENT, and one in 2000.
+ISO_NOW = {"start": "2026-01-05T11:00:00+00:00", "end": "2026-01-05T13:00:00+00:00"}
+ISO_2000 = {"start": "2000-01-01T00:00:00", "end": "2000-01-02T00:00:00"}
+
+#: (label, rules, reason): a window the engine cannot read, alone or inside a
+#: NOT, in each shape that reaches it.
+UNREADABLE_RULES = [
+    *[
+        (f"{wrapper.value} {value!r}", constructed(value, wrapper), reason)
+        for value, reason in UNREADABLE_WINDOWS
+        for wrapper in (LogicalOperator.AND, LogicalOperator.NOT)
+    ],
+    (
+        "native NOT ISO including now",
+        native("now", "time_window", ISO_NOW, group_operator="not"),
+        NO_KEY,
+    ),
+    (
+        "native NOT ISO in 2000",
+        native("now", "time_window", ISO_2000, group_operator="not"),
+        NO_KEY,
+    ),
+    (
+        "native NOT HH:MM start/end",
+        native(
+            "now",
+            "time_window",
+            {"start": "11:00", "end": "13:00"},
+            group_operator="not",
+        ),
+        NO_KEY,
+    ),
+    (
+        "dashboard ISO including now",
+        dashboard("now", "time_window", ISO_NOW),
+        NOT_HH_MM,
+    ),
+    (
+        "dashboard NOT ISO including now",
+        dashboard("now", "time_window", ISO_NOW, "NOT"),
+        NOT_HH_MM,
+    ),
+    (
+        "dashboard NOT ISO in 2000",
+        dashboard("now", "time_window", ISO_2000, "NOT"),
+        NOT_HH_MM,
+    ),
+    (
+        "dashboard NOT a days value that is not a list",
+        dashboard(
+            "now",
+            "time_window",
+            {"start": "11:00", "end": "13:00", "days": "monday"},
+            "NOT",
+        ),
+        "days is not a list",
+    ),
+]
+
+
+DISABLED_BY_ERROR = {"enabled": False, "reason": "error", "rule_id": None}
+
+
+def flag_detailed(
+    raw: Any, context: Dict[str, Any], rollout: int = 100, db: Any = None
+) -> Dict[str, Any]:
+    """The flag service's whole answer (``evaluate_flag_detailed``), as an SDK
+    gets it. Metrics are not written, and no error-log row may be."""
+    flag = SimpleNamespace(
+        id="00000000-0000-0000-0000-000000001145",
+        key="parity",
+        status=FeatureFlagStatus.ACTIVE,
+        rollout_percentage=rollout,
+        targeting_rules=copy.deepcopy(raw),
+    )
+    with mock.patch.object(feature_flag_service, "MetricsService") as metrics:
+        answer = FeatureFlagService(db=db or MagicMock()).evaluate_flag_detailed(
+            flag, USER, context
+        )
+    metrics.log_error.assert_not_called()
+    return answer
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "label, rules, reason", UNREADABLE_RULES, ids=[case[0] for case in UNREADABLE_RULES]
+)
+def test_an_unreadable_window_matches_nobody_and_is_reported(
+    monkeypatch, label, rules, reason
+):
+    """The whole ruleset is abandoned, reported through ``_note_rule_problem``.
+
+    The flag answers off with reason ``error`` and the user is not eligible
+    for the experiment, whatever groups enclose the condition, and neither a
+    value that is not a time nor a missing attribute hides it.
+    """
+    notes: List[Any] = []
+    monkeypatch.setattr(
+        rules_engine,
+        "_note_rule_problem",
+        lambda operator, why: notes.append((operator, why)),
+    )
+    for context in ({"now": MOMENT}, {"now": "not a time"}, {}):
+        notes.clear()
+        assert flag_detailed(rules, context) == DISABLED_BY_ERROR, context
+        assert notes == [(OperatorType.TIME_WINDOW, reason)], context
+        notes.clear()
+        assert experiment_answer(rules, USER, context) is None, context
+        assert notes == [(OperatorType.TIME_WINDOW, reason)], context
+
+
+def two_rules(window: Any, group_operator: str = "and") -> Dict[str, Any]:
+    """Rule 1 at 0% leaves out the users in ``window``; rule 2 admits US users."""
+    return {
+        "version": "1.0",
+        "rules": [
+            {
+                "id": "excl",
+                "priority": 1,
+                "rollout_percentage": 0,
+                "rule": {
+                    "operator": group_operator,
+                    "conditions": [
+                        {"attribute": "now", "operator": "time_window", "value": window}
+                    ],
+                },
+            },
+            {
+                "id": "us",
+                "priority": 2,
+                "rollout_percentage": 100,
+                "rule": {
+                    "operator": "and",
+                    "conditions": [
+                        {"attribute": "country", "operator": "eq", "value": "US"}
+                    ],
+                },
+            },
+        ],
+    }
+
+
+def exclusion(window: Any) -> Dict[str, Any]:
+    """Only rule 1 of :func:`two_rules`: a 0% rule, with the flag at 100%."""
+    raw = two_rules(window)
+    raw["rules"] = raw["rules"][:1]
+    return raw
+
+
+#: Rule 1's window as the engine reads it, and as it cannot.
+READABLE = {
+    "start": "09:00",
+    "end": "17:00",
+    "start_time": "09:00",
+    "end_time": "17:00",
+}
+UNREADABLE = {"start": "09:00", "end": "17:00"}
+EVENING = "2026-01-05T20:00:00+00:00"
+
+
+@pytest.mark.regression
+def test_an_unreadable_window_in_a_zero_percent_rule_turns_the_flag_off():
+    """A rule written to leave users out does not let them through to the
+    global rollout when its window cannot be read."""
+    for context in ({"now": MOMENT}, {"now": EVENING}, {}):
+        assert flag_detailed(exclusion(UNREADABLE), context) == DISABLED_BY_ERROR
+        assert experiment_answer(exclusion(UNREADABLE), USER, context) is None
+
+
+def test_a_zero_percent_rule_with_a_readable_window_still_decides():
+    raw = exclusion(READABLE)
+    assert flag_detailed(raw, {"now": MOMENT}) == {
+        "enabled": False,
+        "reason": "targeting_rule",
+        "rule_id": "excl",
+    }
+    assert flag_detailed(raw, {"now": EVENING}) == {
+        "enabled": True,
+        "reason": "rollout",
+        "rule_id": None,
+    }
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("group_operator", ["and", "not"])
+def test_an_unreadable_window_abandons_the_whole_ruleset(group_operator):
+    """A later rule does not answer instead, on flags or experiments."""
+    raw = two_rules(UNREADABLE, group_operator)
+    for country in ("US", "FR"):
+        context = {"now": MOMENT, "country": country}
+        assert flag_detailed(raw, context) == DISABLED_BY_ERROR, country
+        assert flag_answer(raw, USER, context) is None, country
+        assert experiment_answer(raw, USER, context) is None, country
+
+
+def test_a_readable_window_lets_the_next_rule_answer():
+    raw = two_rules({**READABLE, "start_time": "14:00", "end_time": "15:00"})
+    context = {"now": MOMENT, "country": "US"}
+    assert flag_detailed(raw, context) == {
+        "enabled": True,
+        "reason": "targeting_rule",
+        "rule_id": "us",
+    }
+    assert experiment_answer(raw, USER, context) == "us"
+
+
+SEGMENT = "5e9a1c00-0000-4000-8000-000000001145"
+
+
+def not_in_segment_answers(
+    segment_window: Any, context: Dict[str, Any]
+) -> Tuple[Dict[str, Any], bool]:
+    """(the flag's answer, experiment eligibility) for ``not_in_segment`` over a
+    rules segment holding ``segment_window``, resolved by the real
+    ``resolve_segment_memberships`` on a stub database. The flag is at 0%."""
+    row = SimpleNamespace(
+        id=uuid.UUID(SEGMENT),
+        kind="rules",
+        status=SegmentStatus.ACTIVE,
+        rules=dashboard("now", "time_window", segment_window),
+    )
+    db = MagicMock()
+    db.query.return_value.filter.return_value.all.return_value = [row]
+    raw = dashboard("segment", "not_in_segment", SEGMENT)
+    flag = flag_detailed(raw, context, rollout=0, db=db)
+    targeting = AssignmentService(db)._evaluate_experiment_targeting(
+        SimpleNamespace(id="parity", targeting_rules=copy.deepcopy(raw)),
+        AssignmentService._build_targeting_context(USER, context),
+        user_id=USER,
+    )
+    return flag, targeting["eligible"]
+
+
+@pytest.mark.regression
+def test_not_in_segment_over_a_segment_whose_window_cannot_be_read():
+    """The segment's membership is unavailable, so the flag is off with reason
+    ``error`` and the user is not eligible."""
+    for window in (ISO_NOW, {"start": "11:00", "end": "13:00", "days": "monday"}):
+        assert not_in_segment_answers(window, {"now": MOMENT}) == (
+            DISABLED_BY_ERROR,
+            False,
+        ), window
+
+
+@pytest.mark.regression
+def test_a_segment_whose_window_cannot_be_read_is_unavailable():
+    """``resolve_segment_memberships`` answers it, as for a pattern that cannot
+    be evaluated: unavailable, not "not a member"."""
+    row = SimpleNamespace(
+        id=uuid.UUID(SEGMENT),
+        kind="rules",
+        status=SegmentStatus.ACTIVE,
+        rules=dashboard("now", "time_window", ISO_NOW),
+    )
+    db = MagicMock()
+    db.query.return_value.filter.return_value.all.return_value = [row]
+    memberships = segment_membership.resolve_segment_memberships(
+        db, USER, {"now": MOMENT}, [SEGMENT]
+    )
+    assert memberships.unavailable == frozenset({SEGMENT})
+    assert memberships.members == frozenset()
+
+
+@pytest.mark.regression
+def test_the_cached_experiment_entry_point_abandons_the_ruleset_too():
+    """``RulesEvaluationService.evaluate`` answers no match with the fixed
+    refusal text, and counts no evaluation error."""
+    service = RulesEvaluationService()
+    result = service.evaluate(
+        constructed({}, LogicalOperator.NOT), {"now": MOMENT}, skip_cache=True
+    )
+    assert result.matched is False
+    assert result.error == str(rules_engine.TimeWindowUnreadable())
+    assert service.metrics.total_errors == 0
+
+
+def test_not_in_segment_over_a_segment_whose_window_can_be_read():
+    window = {"start": "11:00", "end": "13:00"}
+    # A member: not_in_segment does not hold; the flag is at 0%.
+    assert not_in_segment_answers(window, {"now": MOMENT}) == (
+        {"enabled": False, "reason": "rollout", "rule_id": None},
+        False,
+    )
+    # Not a member: not_in_segment holds.
+    assert not_in_segment_answers(window, {"now": EVENING}) == (
+        {"enabled": True, "reason": "targeting_rule", "rule_id": "dashboard"},
+        True,
+    )
 
 
 @pytest.mark.regression

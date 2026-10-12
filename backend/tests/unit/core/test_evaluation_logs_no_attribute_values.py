@@ -4,7 +4,7 @@ Evaluating targeting rules never logs a user's attribute values, at any level.
 Every operator's failure branches are driven with a marker in the user's
 attributes, through both dispatchers -- ``rules_engine.apply_operator`` and
 ``RulesEvaluationService.evaluate_rules_with_validation`` (which has its own
-implementations of six operators) -- and once end to end through
+implementations of three operators) -- and once end to end through
 ``FeatureFlagService.evaluate_flag_detailed``. For every case:
 
 * no record, at any level, contains the marker;
@@ -216,6 +216,12 @@ ENGINE_CASES = {
         Case(DATE, {"start_date": "2024-01-01"}, expect=ONCE),
         Case(DATE, {"start_date": "first", "end_date": "last"}, expect=ONCE),
         Case(DATE, {"start_date": "2024-02-01", "end_date": "2024-01-01"}, expect=ONCE),
+        Case(DATE, {}, expect=ONCE),
+        Case(DATE, {"start": "2024-01-01", "end": "2024-12-31"}, expect=ONCE),
+        Case(DATE, {"days": [0], "timezone": "Nowhere/Atlantis"}, expect=ONCE),
+        # The window is read before the value, so a window that cannot be read
+        # is reported whatever the user sends, and the value is still not logged.
+        Case(MARKER, {"start": "2024-01-01", "end": "2024-12-31"}, expect=ONCE),
     ],
     # Not implemented on the flag path: the condition never matches.
     OperatorType.PERCENTAGE_BUCKET: [Case(MARKER, 50, expect=ONCE)],
@@ -229,16 +235,12 @@ ENGINE_CASES = {
 
 #: The operators RulesEvaluationService implements itself (experiment targeting).
 SERVICE_OPERATORS = {
-    OperatorType.TIME_WINDOW,
     OperatorType.PERCENTAGE_BUCKET,
     OperatorType.JSON_PATH,
     OperatorType.ARRAY_LENGTH,
 }
 
 SERVICE_CASES = {
-    OperatorType.TIME_WINDOW: [
-        Case(MARKER, {"start": "2024-01-01", "end": "2024-12-31"})
-    ],
     OperatorType.PERCENTAGE_BUCKET: [Case(MARKER, "half")],
     OperatorType.JSON_PATH: [Case([MARKER], "$.5", "x")],
     OperatorType.ARRAY_LENGTH: [Case([MARKER], "three")],
@@ -299,7 +301,10 @@ def _rules(op: OperatorType, case: Case) -> TargetingRules:
 
 
 def _via_engine(op, case):
-    apply_operator(op, case.actual, case.expected, case.additional)
+    try:
+        apply_operator(op, case.actual, case.expected, case.additional)
+    except rules_engine.TimeWindowUnreadable:
+        pass  # the evaluation is refused; the report is what is checked here
 
 
 def _via_service(op, case):

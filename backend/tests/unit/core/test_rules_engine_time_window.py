@@ -8,8 +8,21 @@ from datetime import datetime, time, timezone
 
 import pytest
 
-from backend.app.core.rules_engine import apply_operator
-from backend.app.schemas.targeting_rule import OperatorType
+from backend.app.core import rules_engine
+from backend.app.core.rules_engine import (
+    TimeWindowUnreadable,
+    apply_operator,
+    evaluate_rule,
+)
+from backend.app.core.targeting_adapter import match_targeting_rule
+from backend.app.schemas.targeting_rule import (
+    Condition,
+    LogicalOperator,
+    OperatorType,
+    RuleGroup,
+    TargetingRule,
+    TargetingRules,
+)
 
 
 class TestTimeWindowDayOfWeek:
@@ -361,34 +374,34 @@ class TestTimeWindowInvalidInputs:
         """Test invalid day number (must be 0-6)."""
         monday = datetime(2024, 1, 1, 10, 0, 0)
 
-        result = apply_operator(
-            OperatorType.TIME_WINDOW,
-            monday,
-            {"days": [7, 8]},  # Invalid day numbers
-        )
-        assert result is False
+        with pytest.raises(TimeWindowUnreadable):
+            apply_operator(
+                OperatorType.TIME_WINDOW,
+                monday,
+                {"days": [7, 8]},  # Invalid day numbers
+            )
 
     def test_invalid_time_format(self):
         """Test invalid time format."""
         morning = datetime(2024, 1, 1, 10, 0, 0)
 
-        result = apply_operator(
-            OperatorType.TIME_WINDOW,
-            morning,
-            {"start_time": "9am", "end_time": "5pm"},  # Invalid format
-        )
-        assert result is False
+        with pytest.raises(TimeWindowUnreadable):
+            apply_operator(
+                OperatorType.TIME_WINDOW,
+                morning,
+                {"start_time": "9am", "end_time": "5pm"},  # Invalid format
+            )
 
     def test_invalid_date_format(self):
         """Test invalid date format."""
         mid_date = datetime(2024, 6, 15, 10, 0, 0)
 
-        result = apply_operator(
-            OperatorType.TIME_WINDOW,
-            mid_date,
-            {"start_date": "January 1, 2024", "end_date": "December 31, 2024"},
-        )
-        assert result is False
+        with pytest.raises(TimeWindowUnreadable):
+            apply_operator(
+                OperatorType.TIME_WINDOW,
+                mid_date,
+                {"start_date": "January 1, 2024", "end_date": "December 31, 2024"},
+            )
 
     def test_end_before_start_time(self):
         """Test end time before start time (should be treated as overnight)."""
@@ -406,12 +419,12 @@ class TestTimeWindowInvalidInputs:
         """Test end date before start date (should be invalid)."""
         mid_date = datetime(2024, 6, 15, 10, 0, 0)
 
-        result = apply_operator(
-            OperatorType.TIME_WINDOW,
-            mid_date,
-            {"start_date": "2024-12-31", "end_date": "2024-01-01"},
-        )
-        assert result is False
+        with pytest.raises(TimeWindowUnreadable):
+            apply_operator(
+                OperatorType.TIME_WINDOW,
+                mid_date,
+                {"start_date": "2024-12-31", "end_date": "2024-01-01"},
+            )
 
     def test_missing_both_time_bounds(self):
         """Test missing both start and end time."""
@@ -425,13 +438,119 @@ class TestTimeWindowInvalidInputs:
         )
         assert result is True
 
-    def test_empty_window_config(self):
-        """Test empty window configuration."""
-        morning = datetime(2024, 1, 1, 10, 0, 0)
+    @pytest.mark.regression
+    @pytest.mark.parametrize(
+        "window",
+        [
+            {},
+            # ISO datetimes in the start/end the Condition schema asks for (#1156)
+            {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"},
+            {"start": "2000-01-01T00:00:00", "end": "2000-01-02T00:00:00"},
+            {"start": "2099-01-01T00:00:00", "end": "2099-01-02T00:00:00"},
+            {"start": "09:00", "end": "17:00"},
+            {"start": "09:00", "end": "17:00", "timezone": "UTC"},
+        ],
+    )
+    def test_a_window_with_no_key_the_engine_reads_matches_nobody(
+        self, monkeypatch, window
+    ):
+        """It used to match at every moment, the empty window included (#1145).
 
-        # Empty config should match everything
-        result = apply_operator(OperatorType.TIME_WINDOW, morning, {})
-        assert result is True
+        Now the evaluation is refused: the engine raises TimeWindowUnreadable,
+        and the caller that owns the ruleset abandons it.
+        """
+        notes = []
+        monkeypatch.setattr(
+            rules_engine,
+            "_note_rule_problem",
+            lambda operator, reason: notes.append((operator, reason)),
+        )
+        for moment in (
+            datetime(2024, 1, 10, 12, 0, 0),
+            datetime(1999, 6, 1, 3, 0, 0),
+            None,  # now
+            "not a time",  # the window is read first
+        ):
+            with pytest.raises(TimeWindowUnreadable):
+                apply_operator(OperatorType.TIME_WINDOW, moment, window)
+        assert (
+            notes
+            == [
+                (
+                    OperatorType.TIME_WINDOW,
+                    "no days, start_time/end_time or start_date/end_date",
+                )
+            ]
+            * 4
+        )
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize(
+        "group_operator", [LogicalOperator.AND, LogicalOperator.OR, LogicalOperator.NOT]
+    )
+    @pytest.mark.parametrize(
+        "window",
+        [
+            {"start": "2024-01-01T00:00:00", "end": "2024-12-31T00:00:00"},
+            {"start": "09:00", "end": "17:00", "start_time": "9am", "end_time": "5pm"},
+        ],
+    )
+    def test_a_window_that_cannot_be_read_raises_through_any_group(
+        self, group_operator, window
+    ):
+        """The refusal reaches the caller that owns the ruleset (#1145).
+
+        Neither ``evaluate_rule`` nor ``match_targeting_rule`` answers it, so
+        no group can turn it into a match and no later rule or default rule
+        answers instead: the flag, experiment and segment callers abandon the
+        ruleset, as for a pattern that cannot be evaluated.
+        """
+        rule = TargetingRule(
+            id="r",
+            rule=RuleGroup(
+                operator=group_operator,
+                conditions=[
+                    Condition(
+                        attribute="now", operator=OperatorType.TIME_WINDOW, value=window
+                    )
+                ],
+            ),
+        )
+        everyone = TargetingRule(id="all", rule=RuleGroup(conditions=[]))
+        rules = TargetingRules(rules=[rule], default_rule=everyone)
+        for context in (
+            {"now": "2024-06-03T12:00:00"},
+            {"now": "2026-01-05T12:00:00"},
+            {"now": "not a time"},
+            {},  # the attribute not sent
+        ):
+            with pytest.raises(TimeWindowUnreadable):
+                evaluate_rule(rule, context)
+            with pytest.raises(TimeWindowUnreadable):
+                match_targeting_rule(rules, context)
+
+    def test_the_refusal_carries_no_part_of_the_rule(self):
+        """Its text is a fixed sentence (responses and logs may carry it)."""
+        assert str(TimeWindowUnreadable()) == "a time_window value could not be read"
+        assert TimeWindowUnreadable().args == ("a time_window value could not be read",)
+
+    def test_a_not_around_a_window_that_can_be_read(self):
+        """The control: a NOT still negates a window the engine reads."""
+        rule = TargetingRule(
+            id="r",
+            rule=RuleGroup(
+                operator=LogicalOperator.NOT,
+                conditions=[
+                    Condition(
+                        attribute="now",
+                        operator=OperatorType.TIME_WINDOW,
+                        value={"start": "x", "end": "y", "days": [0]},
+                    )
+                ],
+            ),
+        )
+        assert evaluate_rule(rule, {"now": "2024-01-01T12:00:00"}) is False  # Monday
+        assert evaluate_rule(rule, {"now": "2024-01-02T12:00:00"}) is True  # Tuesday
 
     def test_invalid_actual_value_string(self):
         """Test invalid actual value (not a valid datetime string)."""
@@ -442,16 +561,16 @@ class TestTimeWindowInvalidInputs:
         """Test invalid timezone name."""
         utc_time = datetime(2024, 1, 1, 15, 0, 0, tzinfo=timezone.utc)
 
-        result = apply_operator(
-            OperatorType.TIME_WINDOW,
-            utc_time,
-            {
-                "start_time": "14:00",
-                "end_time": "16:00",
-                "timezone": "Invalid/Timezone",
-            },
-        )
-        assert result is False
+        with pytest.raises(TimeWindowUnreadable):
+            apply_operator(
+                OperatorType.TIME_WINDOW,
+                utc_time,
+                {
+                    "start_time": "14:00",
+                    "end_time": "16:00",
+                    "timezone": "Invalid/Timezone",
+                },
+            )
 
 
 class TestTimeWindowEdgeCases:

@@ -30,7 +30,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
-from backend.app.core.rules_engine import evaluate_condition
+from backend.app.core.rules_engine import TimeWindowUnreadable, evaluate_condition
 from backend.app.core.targeting_adapter import (
     TargetingRulesError,
     convert_dashboard_condition,
@@ -115,7 +115,7 @@ def _is_member(rules: TargetingRules, context: Dict[str, Any]) -> bool:
     """Membership: the flag engine on the expanded context.
 
     ``context`` must already be expanded (:func:`expand_context`).
-    :class:`PatternUnevaluable` propagates.
+    :class:`PatternUnevaluable` and :class:`TimeWindowUnreadable` propagate.
     """
     return match_targeting_rule(rules, context) is not None
 
@@ -137,7 +137,7 @@ def _collect_matched_rules(raw_rules: Any, context: Dict[str, Any]) -> List[str]
                         f"{condition.get('attribute', '')} "
                         f"{condition.get('operator', '')} {condition.get('value', '')}"
                     )
-            except PatternUnevaluable:
+            except (PatternUnevaluable, TimeWindowUnreadable):
                 continue
     return matched
 
@@ -450,6 +450,10 @@ class AudienceService:
             # A pattern condition could not be evaluated: not a member.
             report_unevaluable(exc, f"segment:{segment.id}")
             is_member = False
+        except TimeWindowUnreadable:
+            # The same for a time_window the engine cannot read (#1145),
+            # already reported by the rules engine.
+            is_member = False
         if is_member:
             matched_rules = _collect_matched_rules(segment.rules, context)
 
@@ -743,7 +747,7 @@ class AudienceService:
             try:
                 if _is_member(engine_rules, expand_context(context)):
                     matched += 1
-            except PatternUnevaluable:
+            except (PatternUnevaluable, TimeWindowUnreadable):
                 # Not counted, like any user the rules do not match.
                 pass
 

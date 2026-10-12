@@ -336,28 +336,59 @@ Condition(
 - Accounts for Earth's curvature
 
 #### TIME_WINDOW (`time_window`)
-Tests if timestamp falls within a time window.
+Tests if a moment falls within a time window. The moment is the attribute's
+value: an ISO 8601 string, a Unix timestamp or a `datetime`. An attribute sent
+as `null` means the current time; an attribute that is not sent does not match.
 
 ```python
 Condition(
     attribute="current_time",
     operator=OperatorType.TIME_WINDOW,
     value={
-        "start": "2024-01-01T09:00:00",
-        "end": "2024-01-31T17:00:00"
+        "start": "09:00",
+        "end": "17:00",
+        "start_time": "09:00",
+        "end_time": "17:00",
+        "days": [0, 1, 2, 3, 4],
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-31"
     }
 )
 ```
+
+This window is open from 09:00 to 17:00, Monday to Friday, from 1 to 31 January
+2024.
+
+**Keys that say when the window is open** (every key given must hold):
+- `start_time`, `end_time`: `HH:MM` or `HH:MM:SS`, both or neither. The end
+  minute is included; a start after the end spans midnight (`22:00` to `02:00`).
+- `days`: day numbers, 0 = Monday to 6 = Sunday.
+- `start_date`, `end_date`: `YYYY-MM-DD`, both or neither; both days are included.
+
+`timezone` (optional), a name such as `Europe/Paris`, reads the moment in that
+timezone. Without it, the moment's own clock time is compared.
+
+**`start` and `end`:** the `Condition` schema requires them, but the engine
+does not read them. A rule saved from the dashboard stores `start` and `end` as
+`HH:MM`, and those are read as `start_time` and `end_time`. In the native shape,
+give `start_time` and `end_time` (or the other keys) as well, as the example
+does. A window with none of those keys, or with one that cannot be read (`days`
+not 0-6, a time that is not `HH:MM`, an unknown timezone, a date that is not
+`YYYY-MM-DD`), is refused, and a warning is logged once. For a user whose
+evaluation reaches the window, the evaluation is abandoned: the flag answers off
+for that user, with reason `error`, the experiment does not enrol them, and a
+segment that holds the window cannot be decided for them. A user decided by an
+earlier rule never reaches it, and a window in `default_rule` is never read. So
+a window with ISO datetimes in `start` and `end` is refused, in either shape
+(accepting them is #1156). For a window between two moments, use `after` and
+`before` (below) in an `AND` group.
+
+Flag targeting and experiment targeting read a window the same way.
 
 **Use Cases:**
 - Campaign windows: "January promotion"
 - Business hours: "9am-5pm weekdays"
 - Limited-time offers: "Holiday sale"
-
-**Time Formats Supported:**
-- ISO 8601 strings: `"2024-01-01T09:00:00"`
-- Timestamps: Unix timestamp
-- datetime objects: Converted automatically
 
 ### Segment Operators
 

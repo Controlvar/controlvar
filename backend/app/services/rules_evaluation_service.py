@@ -27,7 +27,9 @@ from backend.app.core.rule_compiler import RuleCompiler
 from backend.app.core.rules_engine import (
     SEGMENT_OPERATORS,
     SegmentMembershipUnavailable,
+    TimeWindowUnreadable,
     UserContext,
+    check_time_window,
     segment_condition_holds,
 )
 from backend.app.core.rules_engine import (
@@ -237,6 +239,18 @@ class RulesEvaluationService:
             # enclosing NOT can never turn it into a match.
             matched_rule = None
             report_unevaluable(exc, owner)
+            if track_metrics:
+                metrics = RuleEvaluationMetrics(
+                    rule_id="error",
+                    evaluation_time_ms=(time.time() - start_time) * 1000,
+                    matched=False,
+                    error=str(exc),
+                )
+
+        except TimeWindowUnreadable as exc:
+            # The same for a time_window the engine cannot read (#1145),
+            # already reported by the rules engine.
+            matched_rule = None
             if track_metrics:
                 metrics = RuleEvaluationMetrics(
                     rule_id="error",
@@ -485,6 +499,12 @@ class RulesEvaluationService:
         if segment_answer is not None:
             return segment_answer
 
+        # As on the flag path: a time_window that cannot be read refuses the
+        # evaluation (the whole ruleset, as PatternUnevaluable does), for a
+        # user who does not send the attribute too.
+        if condition.operator == OperatorType.TIME_WINDOW:
+            check_time_window(condition.operator, condition.value)
+
         attribute = condition.attribute
         operator = condition.operator
         expected_value = condition.value
@@ -518,15 +538,14 @@ class RulesEvaluationService:
         """Apply an operator for experiment targeting.
 
         Only the operators below are this service's own. Every other one,
-        ``semantic_version`` and ``geo_distance`` among them, is
-        ``rules_engine.apply_operator``, which also answers flag targeting, so
-        an experiment and a flag answer those rules alike (#1144).
+        ``semantic_version``, ``geo_distance`` (#1144) and ``time_window``
+        (#1145) among them, is ``rules_engine.apply_operator``, which also
+        answers flag targeting, so an experiment and a flag answer those rules
+        alike.
         """
 
         # Handle new custom operators
-        if operator == OperatorType.TIME_WINDOW:
-            return self._evaluate_time_window(actual_value, expected_value)
-        elif operator == OperatorType.PERCENTAGE_BUCKET:
+        if operator == OperatorType.PERCENTAGE_BUCKET:
             return self._evaluate_percentage_bucket(actual_value, expected_value)
         elif operator == OperatorType.JSON_PATH:
             return self._evaluate_json_path(
@@ -539,41 +558,6 @@ class RulesEvaluationService:
         return base_apply_operator(
             operator, actual_value, expected_value, additional_value
         )
-
-    def _evaluate_time_window(self, actual_time: Any, time_window: Any) -> bool:
-        """Evaluate if time falls within window."""
-        try:
-            if not isinstance(time_window, dict):
-                return False
-
-            start_time = time_window.get("start")
-            end_time = time_window.get("end")
-
-            if isinstance(actual_time, str):
-                actual_dt = datetime.fromisoformat(actual_time.replace("Z", "+00:00"))
-            elif isinstance(actual_time, (int, float)):
-                actual_dt = datetime.fromtimestamp(actual_time)
-            elif isinstance(actual_time, datetime):
-                actual_dt = actual_time
-            else:
-                return False
-
-            # Parse time window bounds
-            if isinstance(start_time, str):
-                start_dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
-            else:
-                start_dt = datetime.fromtimestamp(start_time)
-
-            if isinstance(end_time, str):
-                end_dt = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
-            else:
-                end_dt = datetime.fromtimestamp(end_time)
-
-            return start_dt <= actual_dt <= end_dt
-
-        except (ValueError, TypeError):
-            logger.debug("Failed to evaluate time window")
-            return False
 
     def _evaluate_percentage_bucket(self, user_id: Any, percentage: Any) -> bool:
         """Evaluate if user falls within percentage bucket."""
@@ -783,6 +767,14 @@ class RulesEvaluationService:
         except PatternUnevaluable as exc:
             # Same ruleset-level abandonment as evaluate_rules_with_validation.
             report_unevaluable(exc, "targeting rules")
+            return EvaluationResult(
+                matched=False,
+                error=str(exc),
+                evaluation_time_ms=(time.time() - start_time) * 1000,
+            )
+
+        except TimeWindowUnreadable as exc:
+            # The same for a time_window the engine cannot read (#1145).
             return EvaluationResult(
                 matched=False,
                 error=str(exc),

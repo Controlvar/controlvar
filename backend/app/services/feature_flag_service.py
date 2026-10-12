@@ -12,7 +12,10 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
-from backend.app.core.rules_engine import SegmentMembershipUnavailable
+from backend.app.core.rules_engine import (
+    SegmentMembershipUnavailable,
+    TimeWindowUnreadable,
+)
 from backend.app.core.targeting_adapter import (
     expand_context,
     match_targeting_rule,
@@ -451,7 +454,9 @@ class FeatureFlagService:
         encodable), the whole ruleset is abandoned: the flag is disabled with
         reason ``error``. Neither the global rollout nor a ``default_rule`` is
         consulted, and no error-log row is written, so the safety monitor does
-        not count it.
+        not count it. The same holds when the evaluation reaches a
+        ``time_window`` condition the engine cannot read
+        (``TimeWindowUnreadable``, #1145).
 
         A rule that uses a segment (``in_segment``/``not_in_segment``, #440)
         is matched on membership resolved from the database for ``user_id``
@@ -512,6 +517,14 @@ class FeatureFlagService:
             # Abandon the whole ruleset: falling through to the global rollout
             # would serve the flag to users a rule was written to leave out.
             report_unevaluable(exc, f"flag:{flag.key}")
+            targeting_rule_id = None
+            result = False
+            reason = REASON_ERROR
+
+        except TimeWindowUnreadable:
+            # The same for a time_window the engine cannot read (#1145),
+            # already reported by the rules engine. No error-log row: the
+            # rule, not the flag's behaviour, is at fault.
             targeting_rule_id = None
             result = False
             reason = REASON_ERROR

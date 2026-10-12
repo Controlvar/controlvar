@@ -37,7 +37,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
-from backend.app.core.rules_engine import SEGMENT_MEMBERSHIP_KEY
+from backend.app.core.rules_engine import SEGMENT_MEMBERSHIP_KEY, TimeWindowUnreadable
 from backend.app.core.targeting_adapter import (
     TargetingRulesError,
     _is_dashboard_rules_shape,
@@ -140,8 +140,9 @@ def resolve_segment_memberships(
     * an id list: a member when the request's ``user_id`` (never one in the
       context) is stored in it.
 
-    Unknown, inactive or archived segments, rules that are not valid and a
-    pattern that cannot be evaluated are ``unavailable``. A database error
+    Unknown, inactive or archived segments, rules that are not valid, a
+    pattern that cannot be evaluated and a ``time_window`` that cannot be read
+    are ``unavailable``. A database error
     is rolled back and makes every requested id unavailable.
     """
     requested = frozenset(segment_ids)
@@ -181,6 +182,9 @@ def resolve_segment_memberships(
                         members.add(sid)
                 except PatternUnevaluable as exc:
                     report_unevaluable(exc, f"segment:{sid}")
+                    unavailable.add(sid)
+                except TimeWindowUnreadable:
+                    # Already reported by the rules engine (#1145).
                     unavailable.add(sid)
             if id_lists and _storable_member_id(user_id):
                 hits = (
