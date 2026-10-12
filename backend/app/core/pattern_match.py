@@ -25,6 +25,11 @@ evaluation (a flag is disabled with reason ``error``, a user is ineligible for
 an experiment, a user is not a segment member). It is never reduced to
 ``False`` inside a group, where an enclosing ``NOT`` would turn it into a
 match.
+
+The rules engine raises the same :class:`PatternUnevaluable`, with reason
+``out_of_range``, when a comparison's value is out of range for it: an
+integer too large for a float, or a timestamp no date can hold. The owner of
+the ruleset abandons it in the same way.
 """
 
 from __future__ import annotations
@@ -81,13 +86,16 @@ class PatternResult(Enum):
 
 
 class UnevaluableReason(str, Enum):
-    """Why a pattern condition could not be evaluated (never the pattern or value)."""
+    """Why a condition could not be evaluated (never the pattern or value)."""
 
     REFUSED = "refused"
     INPUT_LENGTH = "input_length"
     INPUT_ENCODING = "input_encoding"
     NOT_A_STRING = "not_a_string"
     ERROR = "error"
+    #: A comparison's value is out of range for it (rules engine; the digest
+    #: is the operator's, see :func:`report_unevaluable`).
+    OUT_OF_RANGE = "out_of_range"
 
 
 _UNEVALUABLE_MESSAGE = "pattern condition could not be evaluated"
@@ -103,6 +111,10 @@ class PatternUnevaluable(Exception):
     carry neither the pattern nor the value: the generic handlers that may see
     it log ``str(exc)``. ``digest`` is a short hash of the pattern, for
     correlating log lines with the upgrade check's output.
+
+    The rules engine also raises it, with reason
+    :attr:`UnevaluableReason.OUT_OF_RANGE`, when a comparison's value is out
+    of range for it; ``digest`` is then the hash of the operator's name.
     """
 
     def __init__(self, reason: UnevaluableReason, digest: str) -> None:
@@ -236,6 +248,16 @@ _once = OnceLog(limit=_REPORTED_LIMIT)
 _reported = _once.seen
 
 
+def _operator_named_by(digest: str) -> str:
+    """The rules-engine operator whose name hashes to ``digest`` (``OUT_OF_RANGE``)."""
+    from backend.app.schemas.targeting_rule import OperatorType
+
+    for operator in OperatorType:
+        if pattern_digest(operator.value) == digest:
+            return operator.value
+    return "unknown"
+
+
 def report_unevaluable(exc: PatternUnevaluable, where: str) -> None:
     """
     Log a warning the first time a pattern is unevaluable at ``where``.
@@ -243,8 +265,20 @@ def report_unevaluable(exc: PatternUnevaluable, where: str) -> None:
     ``where`` names the ruleset owner (``flag:<key>``, ``experiment:<id>``,
     ``segment:<id>``). The pattern and the value are never logged; the digest
     matches the upgrade check's output.
+
+    For :attr:`UnevaluableReason.OUT_OF_RANGE` the warning names the owner and
+    the operator, once per pair, and never the value.
     """
     if not _once.first(where, (exc.digest, exc.reason.value)):
+        return
+    if exc.reason is UnevaluableReason.OUT_OF_RANGE:
+        logger.warning(
+            "Targeting rules for %s were not applied: a value was out of range "
+            "for the %s operator (reason=%s).",
+            where,
+            _operator_named_by(exc.digest),
+            exc.reason.value,
+        )
         return
     logger.warning(
         "Targeting rules for %s were not applied: a pattern condition could not "
