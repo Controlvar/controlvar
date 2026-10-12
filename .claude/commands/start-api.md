@@ -12,7 +12,7 @@ For local development (default):
 3. Ensure PostgreSQL is running (check with: docker ps | grep postgres)
 4. Start uvicorn from the repository root (the package is `backend.app`; running from `backend/` stops
    with `ModuleNotFoundError: No module named 'backend'`):
-   uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+   uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
    (`make dev` does the same after starting the database and running the bootstrap.)
 5. Report server status and URLs:
    - API: http://localhost:8000

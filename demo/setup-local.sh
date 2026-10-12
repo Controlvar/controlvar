@@ -183,7 +183,7 @@ fi
 log "Starting backend API on port 8000..."
 cd "$REPO_ROOT"
 nohup python -m uvicorn backend.app.main:app \
-    --host 0.0.0.0 --port 8000 \
+    --host 127.0.0.1 --port 8000 \
     > "$DEMO_DIR/.logs/backend.log" 2>&1 &
 echo $! > "$DEMO_DIR/.pids/backend.pid"
 log "Backend PID: $(cat "$DEMO_DIR/.pids/backend.pid")"
@@ -246,7 +246,7 @@ cd "$REPO_ROOT/frontend"
 npm install --silent
 
 log "Starting frontend on port 3100..."
-nohup npm run dev \
+nohup npm run dev -- -H 127.0.0.1 \
     > "$REPO_ROOT/demo/.logs/frontend.log" 2>&1 &
 echo $! > "$REPO_ROOT/demo/.pids/frontend.pid"
 log "Frontend PID: $(cat "$REPO_ROOT/demo/.pids/frontend.pid")"
@@ -266,7 +266,7 @@ else
     npm install --silent
 
     log "Starting ShopLab storefront on port 3200..."
-    nohup npm run dev \
+    nohup npm run dev -- -H 127.0.0.1 \
         > "$DEMO_DIR/.logs/shoplab.log" 2>&1 &
     echo $! > "$DEMO_DIR/.pids/shoplab.pid"
     log "ShopLab PID: $(cat "$DEMO_DIR/.pids/shoplab.pid")"
@@ -300,7 +300,7 @@ else
     npm install --silent
 
     log "Starting StreamPulse on port 3300..."
-    nohup npm run dev \
+    nohup npm run dev -- -H 127.0.0.1 \
         > "$DEMO_DIR/.logs/streampulse.log" 2>&1 &
     echo $! > "$DEMO_DIR/.pids/streampulse.pid"
     log "StreamPulse PID: $(cat "$DEMO_DIR/.pids/streampulse.pid")"

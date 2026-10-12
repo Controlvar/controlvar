@@ -83,6 +83,8 @@ nav:
   - Architecture Overview: getting-started/architecture.md
   - FAQ: getting-started/faq.md
   - Modules & Profiles: getting-started/modules.md
+  - Local Development with Docker: getting-started/docker-guide.md
+  - The Development Compose File: getting-started/docker-compose-file.md
 - Feature Flags:
   - Creating Feature Flags: feature-flags/create.md
   - Targeting & Rules: Enhanced_Rules_Engine_Reference.md
@@ -141,8 +143,7 @@ nav:
 - Self-Hosting:
   - AWS CDK Deployment: self-hosting/cdk.md
   - Kubernetes (Helm): self-hosting/kubernetes.md
-  - Docker Compose: getting-started/docker-guide.md
-  - The Compose File: getting-started/docker-compose-file.md
+  - Docker Compose (self-hosting stack): https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml
   - Environment Variables: getting-started/environment-setup.md
   - Database Migrations: self-hosting/migrations.md
   - Releases & Image Verification: self-hosting/releases.md

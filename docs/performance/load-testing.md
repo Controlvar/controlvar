@@ -93,7 +93,7 @@ them. The Quick Start stack is all three. With `make db` instead (PostgreSQL and
 Redis only), start the API from the checkout, in a separate terminal:
 
 ```{.bash skip reason="server: runs the API until you stop it"}
-ENVIRONMENT=development uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+ENVIRONMENT=development uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Seed what the locustfiles call: the experiment `sdk_contract_ab`, the flag

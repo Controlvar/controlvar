@@ -1,5 +1,7 @@
 # Docker Local Development
 
+**This guide runs the local development stack, for your own machine. It is not for a server.** The stack publishes its ports on `127.0.0.1` only, `ENVIRONMENT=development` accepts a short `SECRET_KEY`, and the first start creates the demo administrator `admin@demo.com` with the demo password shown in this guide. To run Experimently on a server, use the published images in [`deploy/compose/compose.yml`](https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml); the header comment of that file lists its commands and settings, and [Releases, images and verification](../self-hosting/releases.md) covers the versions and how to verify the images.
+
 ## Overview
 
 This guide runs Experimently locally with Docker Compose and shows how to reach each
@@ -87,7 +89,7 @@ docker compose exec postgres psql -U postgres -d experimentation -tAc "select em
 
 It prints `admin@demo.com`.
 
-PostgreSQL is also published on `localhost:5432` for tools on your machine. With the
+PostgreSQL is also published on `localhost:5432` for tools on your machine, on `127.0.0.1` only. With the
 `tools` profile, pgAdmin runs at http://localhost:5050:
 
 ```{.bash skip reason="server: starts pgAdmin, which pulls its own image"}

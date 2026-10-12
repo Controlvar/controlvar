@@ -5,7 +5,7 @@
   "private": true,
   "description": "StreamPulse \u2014 a simulated mobile streaming app showing feature-flag rollouts on the Experimently platform",
   "scripts": {
-    "dev": "next dev -p 3300",
+    "dev": "next dev -p 3300 -H 127.0.0.1",
     "build": "next build",
     "start": "next start -p 3300",
     "lint": "eslint .",

@@ -1,5 +1,11 @@
 # =============================================================================
-# Experimently — local / self-hosted stack.
+# Experimently — the LOCAL DEVELOPMENT stack, built from this checkout.
+#
+# It is for one machine: every port below is published on 127.0.0.1 only.
+# ENVIRONMENT=development accepts a short or placeholder SECRET_KEY, and the
+# first start creates a demo administrator with a documented password. To run
+# Experimently on a server, use the published images in
+# deploy/compose/compose.yml instead.
 #
 #   docker compose up -d --wait            # postgres + redis + api + dashboard
 #   docker compose --profile demo up -d    # + ShopLab (:3200), StreamPulse (:3300)
@@ -11,14 +17,14 @@
 # Every ${VAR:-default} below can be set in a `.env` file next to this file
 # (compose reads it automatically) or in the shell. Defaults are for a local
 # development stack: change SECRET_KEY, FIRST_SUPERUSER_PASSWORD and
-# POSTGRES_PASSWORD before exposing the stack to anyone.
+# POSTGRES_PASSWORD before you ever put the stack in front of anyone else.
 #
 # First start: the api container waits for Postgres, creates the schema
 # (RUN_MIGRATIONS=true -> python -m backend.app.db.bootstrap) and applies the
 # seeds in SEED (default `demo`: admin@demo.com / Demo1234!, three experiments,
 # two flags). Seeds run once per database (seed_markers table).
 #
-# Ports on the host (override with *_HOST_PORT):
+# Ports on the host, 127.0.0.1 only (override the number with *_HOST_PORT):
 #   dashboard http://localhost:3000   api http://localhost:8000
 #   postgres  localhost:5432          redis localhost:6379
 # =============================================================================
@@ -38,7 +44,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-experimentation}
     ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -53,7 +59,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "${REDIS_HOST_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -121,7 +127,7 @@ services:
     volumes:
       - demo_keys:/data/demo
     ports:
-      - "${API_HOST_PORT:-8000}:8000"
+      - "127.0.0.1:${API_HOST_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -154,7 +160,7 @@ services:
       # connect-src of the CSP; add the API origin when NEXT_PUBLIC_API_URL is absolute.
       CSP_CONNECT_SRC: "${CSP_CONNECT_SRC:-'self' ws: wss:}"
     ports:
-      - "${FRONTEND_HOST_PORT:-3000}:8080"
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-3000}:8080"
     depends_on:
       api:
         condition: service_healthy
@@ -182,7 +188,7 @@ services:
         NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:${FRONTEND_HOST_PORT:-3000}}
     image: experimently-shoplab:${EXPERIMENTLY_IMAGE_TAG:-${EXPERIMENTLY_PROFILE:-core}}
     ports:
-      - "${SHOPLAB_HOST_PORT:-3200}:3200"
+      - "127.0.0.1:${SHOPLAB_HOST_PORT:-3200}:3200"
     depends_on:
       api:
         condition: service_healthy
@@ -226,7 +232,7 @@ services:
         NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:${FRONTEND_HOST_PORT:-3000}}
     image: experimently-streampulse:${EXPERIMENTLY_IMAGE_TAG:-${EXPERIMENTLY_PROFILE:-core}}
     ports:
-      - "${STREAMPULSE_HOST_PORT:-3300}:3300"
+      - "127.0.0.1:${STREAMPULSE_HOST_PORT:-3300}:3300"
     depends_on:
       api:
         condition: service_healthy
@@ -268,7 +274,7 @@ services:
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
       PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
-      - "${PGADMIN_HOST_PORT:-5050}:80"
+      - "127.0.0.1:${PGADMIN_HOST_PORT:-5050}:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:
@@ -292,7 +298,7 @@ services:
       DEBUG: "0"
       PERSISTENCE: "1"
     ports:
-      - "${LOCALSTACK_HOST_PORT:-4566}:4566"
+      - "127.0.0.1:${LOCALSTACK_HOST_PORT:-4566}:4566"
     volumes:
       - localstack_data:/var/lib/localstack
     healthcheck:
