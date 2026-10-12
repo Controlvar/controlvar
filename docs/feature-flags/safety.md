@@ -38,8 +38,9 @@ a server-side key, an API key with the `sdk:ruleset` scope whose owner can chang
 (ADMIN, DEVELOPER or a superuser). Error reports sent with any other key, such as the key in a
 browser or mobile app, are stored and counted separately in the check
 (`details.uncounted_error_count`), but do not count toward the error rate or a rollback. The same
-goes for an `sdk:ruleset` key whose owner has since lost the role. To have app errors count, send them to your server and forward them from there
-with a server-side key; see [Reporting client-side errors](create.md#reporting-client-side-errors).
+goes for an `sdk:ruleset` key whose owner has since lost the role. To have app errors count, send
+them to your server and forward them from there with a server-side key; see
+[Reporting client-side errors](create.md#reporting-client-side-errors).
 
 ---
 
@@ -351,9 +352,10 @@ target; use a target of `0` for such a flag
 ([#718](https://github.com/getexperimently/experimently/issues/718)).
 
 Error metrics count both server-side evaluation failures and the error reports sent through
-`POST /api/v1/tracking/errors` with a server-side key (see [Which errors count](#which-errors-count) and
-[Creating Feature Flags](create.md#reporting-client-side-errors)), so a crash behind a flag in a mobile app
-triggers the same rollback once your server forwards the app's report.
+`POST /api/v1/tracking/errors` with a server-side key (see
+[Which errors count](#which-errors-count) and
+[Creating Feature Flags](create.md#reporting-client-side-errors)), so a crash behind a flag in a
+mobile app triggers the same rollback once your server forwards the app's report.
 
 ### What Triggers a Rollback
 
