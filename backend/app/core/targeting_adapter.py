@@ -264,6 +264,8 @@ def match_targeting_rule(
     :class:`backend.app.core.pattern_match.PatternUnevaluable` propagates
     unchanged: when a pattern condition cannot be evaluated the caller abandons
     the whole ruleset, and neither a later rule nor ``default_rule`` applies.
+    :class:`backend.app.core.rules_engine.TimeWindowUnreadable` (a
+    ``time_window`` that cannot be read) propagates in the same way.
     """
     if rules is None:
         return None

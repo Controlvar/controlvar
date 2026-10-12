@@ -14,12 +14,14 @@ from backend.app.core.rules_engine import (
     apply_operator,
     evaluate_rule,
 )
+from backend.app.core.targeting_adapter import match_targeting_rule
 from backend.app.schemas.targeting_rule import (
     Condition,
     LogicalOperator,
     OperatorType,
     RuleGroup,
     TargetingRule,
+    TargetingRules,
 )
 
 
@@ -493,13 +495,15 @@ class TestTimeWindowInvalidInputs:
             {"start": "09:00", "end": "17:00", "start_time": "9am", "end_time": "5pm"},
         ],
     )
-    def test_a_window_that_cannot_be_read_refuses_its_rule(
+    def test_a_window_that_cannot_be_read_raises_through_any_group(
         self, group_operator, window
     ):
-        """Its rule does not match, inside a NOT too (#1145).
+        """The refusal reaches the caller that owns the ruleset (#1145).
 
-        Answered as a plain "no match" for the condition, a NOT around it
-        would match every user.
+        Neither ``evaluate_rule`` nor ``match_targeting_rule`` answers it, so
+        no group can turn it into a match and no later rule or default rule
+        answers instead: the flag, experiment and segment callers abandon the
+        ruleset, as for a pattern that cannot be evaluated.
         """
         rule = TargetingRule(
             id="r",
@@ -512,13 +516,23 @@ class TestTimeWindowInvalidInputs:
                 ],
             ),
         )
+        everyone = TargetingRule(id="all", rule=RuleGroup(conditions=[]))
+        rules = TargetingRules(rules=[rule], default_rule=everyone)
         for context in (
             {"now": "2024-06-03T12:00:00"},
             {"now": "2026-01-05T12:00:00"},
             {"now": "not a time"},
             {},  # the attribute not sent
         ):
-            assert evaluate_rule(rule, context) is False, context
+            with pytest.raises(TimeWindowUnreadable):
+                evaluate_rule(rule, context)
+            with pytest.raises(TimeWindowUnreadable):
+                match_targeting_rule(rules, context)
+
+    def test_the_refusal_carries_no_part_of_the_rule(self):
+        """Its text is a fixed sentence (responses and logs may carry it)."""
+        assert str(TimeWindowUnreadable()) == "a time_window value could not be read"
+        assert TimeWindowUnreadable().args == ("a time_window value could not be read",)
 
     def test_a_not_around_a_window_that_can_be_read(self):
         """The control: a NOT still negates a window the engine reads."""

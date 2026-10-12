@@ -247,6 +247,18 @@ class RulesEvaluationService:
                     error=str(exc),
                 )
 
+        except TimeWindowUnreadable as exc:
+            # The same for a time_window the engine cannot read (#1145),
+            # already reported by the rules engine.
+            matched_rule = None
+            if track_metrics:
+                metrics = RuleEvaluationMetrics(
+                    rule_id="error",
+                    evaluation_time_ms=(time.time() - start_time) * 1000,
+                    matched=False,
+                    error=str(exc),
+                )
+
         except Exception as e:
             logger.error(
                 "Error evaluating targeting rules for %s (%s)", owner, type(e).__name__
@@ -428,12 +440,7 @@ class RulesEvaluationService:
         self, rule: TargetingRule, user_context: UserContext
     ) -> bool:
         """Evaluate a rule with enhanced operators."""
-        try:
-            return self._evaluate_rule_group_enhanced(rule.rule, user_context)
-        except TimeWindowUnreadable:
-            # Already reported by the rules engine; the rule does not match,
-            # whatever groups enclose the condition (#1145).
-            return False
+        return self._evaluate_rule_group_enhanced(rule.rule, user_context)
 
     def _evaluate_rule_group_enhanced(
         self, rule_group: RuleGroup, user_context: UserContext
@@ -759,6 +766,14 @@ class RulesEvaluationService:
         except PatternUnevaluable as exc:
             # Same ruleset-level abandonment as evaluate_rules_with_validation.
             report_unevaluable(exc, "targeting rules")
+            return EvaluationResult(
+                matched=False,
+                error=str(exc),
+                evaluation_time_ms=(time.time() - start_time) * 1000,
+            )
+
+        except TimeWindowUnreadable as exc:
+            # The same for a time_window the engine cannot read (#1145).
             return EvaluationResult(
                 matched=False,
                 error=str(exc),

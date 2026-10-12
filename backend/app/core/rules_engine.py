@@ -95,17 +95,17 @@ class SegmentMembershipUnavailable(Exception):
 
 
 class TimeWindowUnreadable(Exception):
-    """A ``time_window`` value the engine cannot read: its rule does not match.
+    """A ``time_window`` value the engine cannot read; the ruleset is abandoned.
 
     Raised by :func:`check_time_window`, after ``_note_rule_problem`` has
-    reported the reason, instead of answering ``False`` for the condition: a
-    ``NOT`` around the condition would turn ``False`` into a match (#1145).
-    Both condition evaluators call it before looking the attribute up, so a
-    user who does not send the attribute is refused too. Like
-    ``PatternUnevaluable`` it is caught above the recursive group evaluator,
-    in ``evaluate_rule`` and in the experiment evaluator's
-    ``_evaluate_rule_enhanced``; there the rule does not match, and the next
-    rule is still evaluated. It carries no part of the rule or the context.
+    reported the reason, instead of answering ``False`` for the condition
+    (#1145). Both condition evaluators call it before looking the attribute
+    up, so a user who does not send the attribute is refused too. It is
+    handled exactly where ``PatternUnevaluable`` is: the whole ruleset is
+    abandoned, so a flag answers off with reason ``error``, a user is not
+    eligible for an experiment, and a segment's membership is unavailable;
+    neither a later rule nor ``default_rule`` applies. It carries no part of
+    the rule or the context.
     """
 
     def __init__(self) -> None:
@@ -174,12 +174,7 @@ def evaluate_rule(rule: TargetingRule, user_context: UserContext) -> bool:
     Returns:
         True if the rule matches, False otherwise
     """
-    try:
-        return evaluate_rule_group(rule.rule, user_context)
-    except TimeWindowUnreadable:
-        # Already reported; the rule does not match, whatever groups enclose
-        # the condition.
-        return False
+    return evaluate_rule_group(rule.rule, user_context)
 
 
 def evaluate_rule_group(rule_group: RuleGroup, user_context: UserContext) -> bool:

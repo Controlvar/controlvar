@@ -12,7 +12,10 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
-from backend.app.core.rules_engine import SegmentMembershipUnavailable
+from backend.app.core.rules_engine import (
+    SegmentMembershipUnavailable,
+    TimeWindowUnreadable,
+)
 from backend.app.core.targeting_adapter import (
     expand_context,
     match_targeting_rule,
@@ -512,6 +515,14 @@ class FeatureFlagService:
             # Abandon the whole ruleset: falling through to the global rollout
             # would serve the flag to users a rule was written to leave out.
             report_unevaluable(exc, f"flag:{flag.key}")
+            targeting_rule_id = None
+            result = False
+            reason = REASON_ERROR
+
+        except TimeWindowUnreadable:
+            # The same for a time_window the engine cannot read (#1145),
+            # already reported by the rules engine. No error-log row: the
+            # rule, not the flag's behaviour, is at fault.
             targeting_rule_id = None
             result = False
             reason = REASON_ERROR

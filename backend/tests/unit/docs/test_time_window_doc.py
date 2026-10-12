@@ -4,32 +4,40 @@
 ``{"start": <ISO>, "end": <ISO>}``, two keys the engine does not read, so on a
 flag that window was open at every moment. These tests read the example out of
 the page and run it through both evaluators, flag targeting
-(``rules_engine.evaluate_condition``) and experiment targeting
+(``rules_engine.evaluate_rule``) and experiment targeting
 (``RulesEvaluationService``), at fixed moments inside and outside the window.
 The moment is the attribute's value, so no clock is read.
 
-They also pin the two other claims the section makes about behaviour: ISO
-datetimes in ``start``/``end`` match nobody, and ``after`` with ``before`` in
-an ``AND`` group is a window between two moments.
+They also pin the two other claims the section makes about behaviour: a window
+with ISO datetimes in ``start``/``end`` is refused (the flag answers off with
+reason ``error``, and no user is eligible for the experiment), and ``after``
+with ``before`` in an ``AND`` group is a window between two moments.
 """
 
 from __future__ import annotations
 
 import ast
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, Tuple
+from unittest import mock
+from unittest.mock import MagicMock
 
 import pytest
 
 from backend.app.core import rules_engine
 from backend.app.core.targeting_adapter import convert_dashboard_condition
+from backend.app.models.feature_flag import FeatureFlagStatus
 from backend.app.schemas.targeting_rule import (
     Condition,
     LogicalOperator,
     OperatorType,
     RuleGroup,
     TargetingRule,
+    TargetingRules,
 )
+from backend.app.services import feature_flag_service
+from backend.app.services.feature_flag_service import FeatureFlagService
 from backend.app.services.rules_evaluation_service import RulesEvaluationService
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
@@ -114,11 +122,44 @@ def test_the_example_does_not_match_outside_its_window(moment):
     assert _answers(Condition(**_example()), moment) == (False, False)
 
 
-def test_iso_start_and_end_match_nobody_in_either_shape():
+def _refused(condition: Condition, moment: str, group_operator: LogicalOperator):
+    """(the flag's answer, the experiment's matched rule) for a ruleset whose
+    one rule holds *condition*, through the entry points flags and experiments
+    use."""
+    rules = TargetingRules(
+        rules=[
+            TargetingRule(
+                id="doc",
+                rule=RuleGroup(operator=group_operator, conditions=[condition]),
+            )
+        ]
+    )
+    context = {condition.attribute: moment}
+    flag = SimpleNamespace(
+        id="00000000-0000-0000-0000-000000001145",
+        key="doc",
+        status=FeatureFlagStatus.ACTIVE,
+        rollout_percentage=100,
+        targeting_rules=rules,
+    )
+    with mock.patch.object(feature_flag_service, "MetricsService"):
+        answer = FeatureFlagService(db=MagicMock()).evaluate_flag_detailed(
+            flag, "user-1", context
+        )
+    matched, _ = RulesEvaluationService().evaluate_rules_with_validation(rules, context)
+    return answer, matched
+
+
+def test_iso_start_and_end_are_refused_in_either_shape():
     """The example this page used to give, in the native and the dashboard
-    shape, alone and inside a NOT: the rule it is in does not match."""
-    assert "ISO datetimes in `start` and `end` match nobody" in _prose()
-    assert "the rule it is in does not match" in _prose()
+    shape: the flag answers off with reason ``error``, and no user is
+    eligible."""
+    prose = _prose()
+    assert (
+        "a flag that uses it answers off for every user, with reason `error`" in prose
+    )
+    assert "no user is eligible for an experiment that uses it" in prose
+    assert "So a window with ISO datetimes in `start` and `end` is refused" in prose
     window = {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"}
     native = Condition(
         attribute="current_time", operator=OperatorType.TIME_WINDOW, value=window
@@ -126,13 +167,15 @@ def test_iso_start_and_end_match_nobody_in_either_shape():
     dashboard = convert_dashboard_condition(
         {"attribute": "current_time", "operator": "time_window", "value": window}
     )
+    off = {"enabled": False, "reason": "error", "rule_id": None}
     for condition in (native, dashboard):
         for group_operator in (LogicalOperator.AND, LogicalOperator.NOT):
             for moment in INSIDE + OUTSIDE:
-                assert _answers(condition, moment, group_operator) == (
-                    False,
-                    False,
-                ), (condition, group_operator, moment)
+                assert _refused(condition, moment, group_operator) == (off, None), (
+                    condition,
+                    group_operator,
+                    moment,
+                )
 
 
 def test_after_and_before_make_a_window_between_two_moments():
