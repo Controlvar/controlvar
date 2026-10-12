@@ -9,13 +9,17 @@
 # reason inactive; turning it on again brings it back at 0%, and raising it to
 # 5% serves exactly the users the documented rollout hash puts below 5%. A
 # second flag, the control, is configured the same way and evaluated 100
-# times with no error, so it is healthy. Then 25 errors reported with an API
-# key against the first flag's 250 evaluations make its error rate 0.1, above
-# the 0.05 critical threshold, and the check and the dashboard's Safety page
-# say so. The safety monitor's next pass turns that flag off (inactive, 0%),
-# every user then gets enabled: false with reason inactive, the flag's audit
-# history names the monitor as who did it, and the healthy control is still
-# on at 50%.
+# times; 25 errors are reported against it with the app's key (sdk-key, no
+# scope, the key a browser or mobile app holds), which the guide says are
+# stored but do not count, so it is still healthy with an error rate of 0.0
+# and 25 reports not counted. Then 25 errors reported with a server-side key
+# (server-key, scope sdk:ruleset) against the first flag's 250 evaluations
+# make its error rate 0.1, above the 0.05 critical threshold, and the check
+# and the dashboard's Safety page say so. The safety monitor's next pass turns
+# that flag off (inactive, 0%), every user then gets enabled: false with
+# reason inactive, the flag's audit history names the monitor as who did it,
+# and the control, whose only errors came with the app's key, is still on at
+# 50%: the same pass read both flags.
 #
 # The monitor runs at the Docker guide's own interval: every 5 minutes
 # (SAFETY_CHECK_INTERVAL_MINUTES, which the stack does not set; nothing here
@@ -183,7 +187,26 @@ steps:
       sdk-key:
         path: key
         secret: true
-    fail: no API key can be created to evaluate the flag and report errors with
+    fail: no API key can be created to evaluate the flag with
+  # The server-side key: the scope sdk:ruleset, created by a superuser, so the
+  # errors reported with it count (step report-errors).
+  - id: server-key
+    doc: which-errors-count
+    do:
+      api:
+        method: POST
+        path: /api/v1/api-keys
+        as: admin
+        body:
+          name: Docs journey safety server
+          scopes: [sdk:ruleset]
+    expect:
+      status: 201
+    save:
+      server-key:
+        path: key
+        secret: true
+    fail: no API key with the sdk:ruleset scope can be created to report errors with
   - id: off-for-everyone
     doc: what-a-rollback-changes
     do:
@@ -294,6 +317,50 @@ steps:
         reason: rollout
         rollout: 50
     fail: at 50% a user gets the control flag other than the documented rollout hash decides
+  # Errors reported with the app's key: stored, not counted. Were they
+  # counted, 25 in 100 evaluations (0.25) would make the control unhealthy,
+  # and the monitor's deciding pass would turn it off (step control-stays-on).
+  - id: control-app-errors
+    doc: which-errors-count
+    do:
+      api:
+        method: POST
+        path: /api/v1/tracking/errors/batch
+        as: anonymous
+        key: sdk-key
+        body:
+          errors:
+            - &app-crash {feature_flag_key: docs-journey-safety-control, user_id: safety-control-user-00001, error_type: crash, message: Docs journey crash reported by the app}
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+            - *app-crash
+    expect:
+      status: 200
+      json:
+        success_count: 25
+        failure_count: 0
+    fail: errors reported with the app's key against the control flag are not all accepted and stored
   - id: control-healthy
     doc: running-a-check
     do:
@@ -309,8 +376,9 @@ steps:
         metrics.0.current_value: 0.0
         metrics.0.is_healthy: true
         details.error_count: 0
+        details.uncounted_error_count: 25
         details.total_evaluations: 100
-    fail: the control flag, with 100 evaluations and no error, is not healthy
+    fail: the control flag, with 100 evaluations and only the 25 errors sent with the app's key, is not healthy with those 25 shown as not counted
   # The check before the errors: healthy, with the 250 evaluations the error
   # rate will be divided by. Its last_checked, on the stack's clock, is before
   # the errors are reported: the audit entry must be later. A check only
@@ -339,13 +407,13 @@ steps:
         path: last_checked
     fail: with 250 evaluations and no error the flag is not healthy
   - id: report-errors
-    doc: what-a-rollback-changes
+    doc: which-errors-count
     do:
       api:
         method: POST
         path: /api/v1/tracking/errors/batch
         as: anonymous
-        key: sdk-key
+        key: server-key
         body:
           errors:
             - &crash {feature_flag_key: docs-journey-safety, user_id: safety-user-00001, error_type: crash, message: Docs journey crash behind the flag}
@@ -378,7 +446,7 @@ steps:
       json:
         success_count: 25
         failure_count: 0
-    fail: errors reported with the API key against the flag are not all stored
+    fail: errors reported with the server-side key against the flag are not all stored
   - id: unhealthy
     doc: running-a-check
     do:
@@ -394,6 +462,7 @@ steps:
         metrics.0.current_value: 0.1
         metrics.0.is_healthy: false
         details.error_count: 25
+        details.uncounted_error_count: 0
         details.total_evaluations: 250
       after:
         last_checked: quiet-at
@@ -402,7 +471,7 @@ steps:
       # the stack's clock: the monitor's pass that decides started after it.
       errors-at:
         path: last_checked
-    fail: 25 errors in 250 evaluations (0.1, above 0.05) do not make the check unhealthy
+    fail: 25 errors reported with the server-side key in 250 evaluations (0.1, above 0.05) do not make the check unhealthy
   - id: sign-in-page
     doc: running-a-check
     do:
@@ -554,4 +623,4 @@ steps:
       json:
         status: active
         rollout_percentage: 50
-    fail: the safety monitor turned off the healthy control flag
+    fail: the safety monitor turned off the control flag, whose only errors were sent with the app's key

@@ -25,9 +25,11 @@ extra:
     name: Experimently on GitHub
 docs_dir: docs
 site_dir: site
-exclude_docs: 'planning/
-
-  '
+# _claims/ holds the claims registries (scripts/doc_claims.py): data the
+# checker reads, not pages; without this MkDocs would publish them.
+exclude_docs: |
+  planning/
+  _claims/
 strict: true
 theme:
   name: material

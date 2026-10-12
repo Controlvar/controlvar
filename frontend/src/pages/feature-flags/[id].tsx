@@ -88,6 +88,23 @@ export function unmeasuredErrorRate(
 }
 
 /**
+ * Error reports in the check's window that were stored but do not count toward
+ * the error rate or automatic rollback: they were sent with a key without the
+ * `sdk:ruleset` scope, or one whose owner can no longer change flags. Returns
+ * the counts to show, or null when there are none.
+ */
+export function uncountedErrorReports(
+  check: SafetyCheckResponse | null,
+): { reports: number; minutes: number } | null {
+  const details = check?.details;
+  if (!details) return null;
+  const reports = details.uncounted_error_count;
+  if (typeof reports !== 'number' || reports <= 0) return null;
+  const minutes = typeof details.timeframe_minutes === 'number' ? details.timeframe_minutes : 15;
+  return { reports, minutes };
+}
+
+/**
  * The flag's stored `targeting_rules` exactly as the API returned them, under
  * either key the detail and list shapes use. Unlike `flagRules`, a value that
  * is not an object is kept, so it is shown rather than read as "no rules".
@@ -178,6 +195,7 @@ export default function FeatureFlagDetailPage() {
   const [safetyError, setSafetyError] = useState<string | null>(null);
   const [safetyLoading, setSafetyLoading] = useState(false);
   const unmeasured = unmeasuredErrorRate(safety);
+  const uncounted = uncountedErrorReports(safety);
 
   const loadSafety = useCallback(async (flagId: string) => {
     setSafetyLoading(true);
@@ -530,6 +548,13 @@ export default function FeatureFlagDetailPage() {
                     {unmeasured.errors} {unmeasured.errors === 1 ? 'error' : 'errors'} reported, but no
                     evaluations reported in the last {unmeasured.minutes} minutes: the error rate cannot be
                     computed.
+                  </p>
+                )}
+                {uncounted && (
+                  <p className="text-sm text-slate-700 mb-3" role="status" data-testid="safety-uncounted-reports">
+                    {uncounted.reports === 1
+                      ? `1 error report in the last ${uncounted.minutes} minutes was sent with a key that does not count toward automatic rollback (no sdk:ruleset scope, or the key's owner can no longer change flags). It is stored, but does not count toward the error rate.`
+                      : `${uncounted.reports} error reports in the last ${uncounted.minutes} minutes were sent with keys that do not count toward automatic rollback (no sdk:ruleset scope, or the key's owner can no longer change flags). They are stored, but do not count toward the error rate.`}
                   </p>
                 )}
                 {safety.metrics.length === 0 ? (
