@@ -24,7 +24,14 @@ presented key's own ``user_id``, read from the database, not whatever
 Refusals: no or unknown key -> 401 (from ``get_api_key``); a valid key without
 the scope -> 403; a scoped key whose owner cannot change feature flags -> 403.
 The two 403 texts are the same on every route.
+
+:func:`presented_key_is_server_key` applies the same two rules without
+refusing anything: the error report routes (``POST /api/v1/tracking/errors``
+and ``/errors/batch``) accept every valid key and use it only to decide
+whether a report counts toward automatic rollback.
 """
+
+from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -49,6 +56,45 @@ OWNER_ROLE_DETAIL = (
 )
 
 
+def scope_refusal(db: Session, api_key: APIKey) -> Optional[str]:
+    """Why ``api_key`` may not act as a server-side key, or ``None`` if it may.
+
+    The scope first (:data:`MISSING_SCOPE_DETAIL`), then its owner, read from
+    the database by the key's own ``user_id`` (:data:`OWNER_ROLE_DETAIL`:
+    missing, inactive, or unable to change feature flags).
+    """
+    if not has_scope(api_key.scopes, SDK_RULESET_SCOPE):
+        return MISSING_SCOPE_DETAIL
+    owner = db.query(User).filter(User.id == api_key.user_id).first()
+    if (
+        owner is None
+        or not owner.is_active
+        or not check_permission(owner, ResourceType.FEATURE_FLAG, Action.UPDATE)
+    ):
+        return OWNER_ROLE_DETAIL
+    return None
+
+
+def presented_key_is_server_key(db: Session, api_key_header: Optional[str]) -> bool:
+    """Whether the presented ``X-API-Key`` is a server-side key right now.
+
+    True only when the header's key exists, is valid, carries ``sdk:ruleset``
+    and its owner can change feature flags (:func:`scope_refusal` returns
+    ``None``). It re-hashes the header and reads that one ``APIKey`` row, so
+    another key of the same owner grants nothing. It refuses nothing: a
+    missing header, an unknown or invalid key and any refusal all answer
+    False, and the caller decides what that means.
+    """
+    if not api_key_header:
+        return False
+    api_key = (
+        db.query(APIKey).filter(APIKey.key == hash_api_key(api_key_header)).first()
+    )
+    if api_key is None or not api_key.is_valid:
+        return False
+    return scope_refusal(db, api_key) is None
+
+
 def require_sdk_ruleset_key(
     db: Session = Depends(deps.get_db),
     api_key_header: str = Depends(deps.API_KEY_HEADER),
@@ -70,17 +116,7 @@ def require_sdk_ruleset_key(
             detail="Invalid API Key",
             headers={"WWW-Authenticate": "APIKey"},
         )
-    if not has_scope(api_key.scopes, SDK_RULESET_SCOPE):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=MISSING_SCOPE_DETAIL
-        )
-    owner = db.query(User).filter(User.id == api_key.user_id).first()
-    if (
-        owner is None
-        or not owner.is_active
-        or not check_permission(owner, ResourceType.FEATURE_FLAG, Action.UPDATE)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=OWNER_ROLE_DETAIL
-        )
+    refusal = scope_refusal(db, api_key)
+    if refusal is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=refusal)
     return api_key

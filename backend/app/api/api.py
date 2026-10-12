@@ -70,8 +70,9 @@ def register_core_routers(router: APIRouter) -> APIRouter:
         experiments.router, prefix="/experiments", tags=["Experiments"]
     )
     router.include_router(tracking.router, prefix="/tracking", tags=["Tracking"])
-    # Client-side error reports (POST /tracking/errors, /tracking/errors/batch) feed
-    # feature flag safety monitoring; same prefix and API-key auth as event tracking.
+    # Error reports (POST /tracking/errors, /tracking/errors/batch) feed feature flag
+    # safety monitoring; same prefix and API-key auth as event tracking. Only reports
+    # sent with an sdk:ruleset key count toward automatic rollback.
     router.include_router(client_errors.router, prefix="/tracking", tags=["Tracking"])
     # Locally evaluated flag counts (POST /tracking/evaluations, beta): the safety
     # denominator for SDKs that evaluate flags in-process; needs sdk:ruleset.

@@ -2,12 +2,26 @@
 Client error reporting endpoints (``POST /api/v1/tracking/errors``).
 
 SDKs and demo simulators use these API-key endpoints to report errors that
-happened *in the client* while a feature flag or experiment was active (a
-crash in a redesigned screen, a failed request behind a flag, ...). Each report
-becomes an :class:`~backend.app.models.metrics.metric.ErrorLog` row attached to
-the flag, which is exactly what safety monitoring divides by the flag's
-evaluation count to compute ``error_rate`` — so client-side errors can trigger
-the same automatic rollback as server-side evaluation failures.
+happened while a feature flag or experiment was active (a crash in a
+redesigned screen, a failed request behind a flag, ...). Each report becomes
+an :class:`~backend.app.models.metrics.metric.ErrorLog` row attached to the
+flag.
+
+Which reports count toward the flag's ``error_rate`` (errors divided by
+evaluations) and so toward automatic rollback depends on the key that sent
+them, decided once per request by :func:`report_source`:
+
+* a server-side key -- one with the ``sdk:ruleset`` scope whose owner can
+  change feature flags (:func:`backend.app.api.sdk_scope.presented_key_is_server_key`)
+  -- stores ``request_data["source"] = "server"``, and the report counts, like
+  a flag evaluation that fails on the server;
+* any other key, such as the key in a browser or mobile app, stores
+  ``"client"``: the report is accepted and stored as before, but safety
+  monitoring does not count it (``uncounted_error_count`` on the flag's check).
+
+An app whose errors should count sends them to its own server, which forwards
+them with a server-side key. Every valid key is accepted: neither route
+answers 403.
 
 Stored rows are timed by the server on receipt; a ``timestamp`` sent by the
 client is kept in the row's metadata as ``client_timestamp``. ``stack_trace``
@@ -29,10 +43,16 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.sdk_scope import presented_key_is_server_key
 from backend.app.core.logger import failure_detail
 from backend.app.models.experiment import Experiment
 from backend.app.models.feature_flag import FeatureFlag
-from backend.app.models.metrics.metric import ErrorLog
+from backend.app.models.metrics.metric import (
+    REPORT_SOURCE_CLIENT,
+    REPORT_SOURCE_SERVER,
+    ErrorLog,
+)
+from backend.app.models.user import User
 from backend.app.schemas.metrics import ErrorLogCreate
 from backend.app.schemas.storable_text import StorableTextModel
 from backend.app.services.metrics_service import MetricsService
@@ -213,11 +233,31 @@ def _stored_metadata(report: ClientErrorRequest) -> Optional[Dict[str, Any]]:
     return metadata
 
 
+def report_source(
+    db: Session = Depends(deps.get_db),
+    api_key_header: Optional[str] = Depends(deps.API_KEY_HEADER),
+    _owner: User = Depends(deps.get_api_key),
+) -> str:
+    """``"server"`` or ``"client"``: what this request's reports are stamped with.
+
+    Layered on ``deps.get_api_key``, so a missing or invalid key is still a 401
+    and nothing else is refused. The value comes from the presented key alone
+    (never from the body) and covers every report in a batch.
+    """
+    if presented_key_is_server_key(db, api_key_header):
+        return REPORT_SOURCE_SERVER
+    return REPORT_SOURCE_CLIENT
+
+
 def _request_data(
-    report: ClientErrorRequest, experiment_id: Optional[UUID]
+    report: ClientErrorRequest, experiment_id: Optional[UUID], source: str
 ) -> Dict[str, Any]:
-    """The ``request_data`` JSON stored with the row (what the client told us)."""
-    data: Dict[str, Any] = {"source": "client"}
+    """The ``request_data`` JSON stored with the row.
+
+    ``source`` is set here, from the presented key (:func:`report_source`);
+    the request body has no way to set it.
+    """
+    data: Dict[str, Any] = {"source": source}
     if report.feature_flag_key:
         data["feature_flag_key"] = report.feature_flag_key
     if report.experiment_key:
@@ -231,6 +271,7 @@ def _to_error_log_create(
     report: ClientErrorRequest,
     feature_flag_id: Optional[UUID],
     experiment_id: Optional[UUID],
+    source: str,
 ) -> ErrorLogCreate:
     return ErrorLogCreate(
         error_type=report.error_type[:_ERROR_TYPE_MAX],
@@ -238,7 +279,7 @@ def _to_error_log_create(
         user_id=report.user_id,
         message=report.message[:_MESSAGE_MAX],
         stack_trace=_truncate_utf8(report.stack_trace, STACK_TRACE_MAX_BYTES),
-        request_data=_request_data(report, experiment_id),
+        request_data=_request_data(report, experiment_id, source),
         metadata=_stored_metadata(report),
         # Server receive time (naive UTC, like the column).
         timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
@@ -272,15 +313,21 @@ async def report_client_error(
     report: ClientErrorRequest = Body(..., description="Error report"),
     db: Session = Depends(deps.get_db),
     api_key_info: Dict[str, Any] = Depends(deps.get_api_key),
+    source: str = Depends(report_source),
 ) -> ClientErrorResponse:
     """
-    Record an error that happened in a client while a feature flag or
-    experiment was active.
+    Record an error that happened while a feature flag or experiment was
+    active.
 
-    The row is attached to the feature flag resolved from ``feature_flag_key``
-    so safety monitoring counts it towards that flag's ``error_rate``
-    (errors / flag evaluations in the monitoring window). ``experiment_key``
-    is resolved and stored in ``request_data``.
+    The row is attached to the feature flag resolved from ``feature_flag_key``.
+    ``experiment_key`` is resolved and stored in ``request_data``.
+
+    Only a report sent with a server-side key (an API key with the
+    ``sdk:ruleset`` scope, whose owner can change feature flags) counts toward
+    the flag's ``error_rate`` (errors / flag evaluations in the monitoring
+    window) and automatic rollback. A report sent with any other key is stored
+    the same way and answers 201, but is not counted; the flag's safety check
+    shows it as ``uncounted_error_count``.
 
     **Authentication**: Requires a valid API key in the X-API-Key header.
 
@@ -296,7 +343,8 @@ async def report_client_error(
 
     try:
         row = MetricsService.log_error(
-            db=db, data=_to_error_log_create(report, feature_flag_id, experiment_id)
+            db=db,
+            data=_to_error_log_create(report, feature_flag_id, experiment_id, source),
         )
     except Exception as exc:
         db.rollback()
@@ -319,12 +367,19 @@ async def report_client_errors_batch(
     request: ClientErrorBatchRequest = Body(..., description="Batch of error reports"),
     db: Session = Depends(deps.get_db),
     api_key_info: Dict[str, Any] = Depends(deps.get_api_key),
+    source: str = Depends(report_source),
 ) -> ClientErrorBatchResponse:
     """
-    Record up to 100 client-side errors in one request.
+    Record up to 100 error reports in one request.
 
     Reports whose keys cannot be resolved are skipped and listed in ``errors``
     (with their index); the rest are stored in a single transaction.
+
+    As for a single report, only reports sent with a server-side key (an API
+    key with the ``sdk:ruleset`` scope, whose owner can change feature flags)
+    count toward a flag's ``error_rate`` and automatic rollback. Reports sent
+    with any other key are stored and counted in ``success_count``, but not
+    toward the error rate.
 
     **Authentication**: Requires a valid API key in the X-API-Key header.
 
@@ -347,7 +402,7 @@ async def report_client_errors_batch(
     for index, report in enumerate(request.errors):
         try:
             feature_flag_id, experiment_id = _resolve_targets(db, report)
-            data = _to_error_log_create(report, feature_flag_id, experiment_id)
+            data = _to_error_log_create(report, feature_flag_id, experiment_id, source)
             rows.append(
                 ErrorLog(
                     error_type=data.error_type,

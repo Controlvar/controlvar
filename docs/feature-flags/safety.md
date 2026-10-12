@@ -28,10 +28,18 @@ it:
    (see [What a rollback changes](#what-a-rollback-changes)). It also pauses the flag's active rollout
    schedule, records a `SafetyRollbackRecord`, and sends the Slack alert and webhook event.
 
-Automatic rollback acts on the error reports that clients send with an API key, as well as on
-server-side evaluation failures, so enable it knowingly.
-
 You can run the same check on demand with `GET /api/v1/safety/feature-flags/{flag_id}/check`.
+
+### Which errors count
+
+A flag's error metrics, and so automatic rollback, count two kinds of error: flag evaluations that
+fail on the server, and error reports sent to `POST /api/v1/tracking/errors` or `/errors/batch` with
+a server-side key, an API key with the `sdk:ruleset` scope whose owner can change feature flags
+(ADMIN, DEVELOPER or a superuser). Error reports sent with any other key, such as the key in a
+browser or mobile app, are stored and counted separately in the check
+(`details.uncounted_error_count`), but do not count toward the error rate or a rollback. The same
+goes for an `sdk:ruleset` key whose owner has since lost the role. To have app errors count, send them to your server and forward them from there
+with a server-side key; see [Reporting client-side errors](create.md#reporting-client-side-errors).
 
 ---
 
@@ -39,8 +47,8 @@ You can run the same check on demand with `GET /api/v1/safety/feature-flags/{fla
 
 | Metric name | Source | Meaning |
 |-------------|--------|---------|
-| `error_rate` | `error_logs` ÷ flag evaluations | Fraction of evaluations that logged an error (0.0–1.0) |
-| `error_count` | `error_logs` | Number of errors in the window |
+| `error_rate` | `error_logs` ÷ flag evaluations | Fraction of evaluations that logged an error that counts (0.0–1.0; see [Which errors count](#which-errors-count)) |
+| `error_count` | `error_logs` | Number of errors that count, in the window |
 | `total_evaluations` | `raw_metrics` | Number of flag evaluations in the window |
 | `latency`, `avg_latency` | `raw_metrics` (`metric_type = latency`) | Average latency in ms |
 | `p95_latency` | `raw_metrics` | 95th percentile latency in ms |
@@ -270,14 +278,17 @@ The new flag has no traffic, so every value is `0.0` and the flag is healthy:
 
 Each metric's `details` holds its `warning_threshold`, `critical_threshold`, `comparison_type`
 and `warning` (whether the warning threshold is breached). The response also carries
-`feature_flag_id` and `last_checked`. When a metric breaches its critical threshold, that
-metric and the whole response read `"is_healthy": false`.
+`feature_flag_id`, `last_checked` and `details`, with the window's `error_count`,
+`total_evaluations` and `uncounted_error_count`: the error reports that were stored but do not
+count (see [Which errors count](#which-errors-count)). When a metric breaches its critical
+threshold, that metric and the whole response read `"is_healthy": false`.
 
 The dashboard shows the same check. The flag's page has a **Safety check** section that reads
 *Healthy* or *Unhealthy* (or *Error rate unknown* when errors were reported but no evaluations
-fall in the last 15 minutes), with each metric's value beside its threshold, and
-**Admin → Safety** (for superusers) lists the first 100 flags under **Flag Safety Status** as
-*healthy*, *warning* or *critical*, with its error rate.
+fall in the last 15 minutes), with each metric's value beside its threshold, and a line saying how
+many error reports in the window were sent with keys that do not count. **Admin → Safety** (for
+superusers) lists the first 100 flags under **Flag Safety Status** as *healthy*, *warning* or
+*critical*, with its error rate and how many reports were not counted.
 
 ---
 
@@ -339,9 +350,10 @@ and a flag that serves only rule-matched users (global `0%`) is never rolled bac
 target; use a target of `0` for such a flag
 ([#718](https://github.com/getexperimently/experimently/issues/718)).
 
-Error metrics count both server-side evaluation failures and errors reported by clients through
-`POST /api/v1/tracking/errors` (see [Creating Feature Flags](create.md#reporting-client-side-errors)), so a crash
-behind a flag in a mobile app can trigger the same rollback.
+Error metrics count both server-side evaluation failures and the error reports sent through
+`POST /api/v1/tracking/errors` with a server-side key (see [Which errors count](#which-errors-count) and
+[Creating Feature Flags](create.md#reporting-client-side-errors)), so a crash behind a flag in a mobile app
+triggers the same rollback once your server forwards the app's report.
 
 ### What Triggers a Rollback
 

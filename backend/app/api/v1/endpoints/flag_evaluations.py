@@ -3,7 +3,8 @@ Locally evaluated flag counts (``POST /api/v1/tracking/evaluations``, beta).
 
 A server-side SDK that evaluates flags in-process reports how many evaluations
 it made, per flag, so that safety monitoring still has a denominator for the
-errors reported through ``POST /api/v1/tracking/errors``.  See
+errors reported through ``POST /api/v1/tracking/errors`` with a server-side
+key.  See
 ``backend/app/services/sdk_evaluation_service.py`` for how the counts are
 stored and capped.
 
