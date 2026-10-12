@@ -112,9 +112,15 @@ def _run(*args: str) -> subprocess.CompletedProcess:
     )
 
 
-def _report(tmp_path: Path, head_changes: Dict[str, Optional[str]], **audit) -> str:
-    base = _tree(tmp_path / "base", BASE)
-    head_files = {**BASE, **head_changes}
+def _report(
+    tmp_path: Path,
+    head_changes: Dict[str, Optional[str]],
+    base_changes: Optional[Dict[str, Optional[str]]] = None,
+    **audit,
+) -> str:
+    base_files = {**BASE, **(base_changes or {})}
+    base = _tree(tmp_path / "base", base_files)
+    head_files = {**base_files, **head_changes}
     head = _tree(tmp_path / "head", head_files)
     result = _run(
         "--audit",
@@ -189,6 +195,27 @@ def test_an_excerpt_that_elides_is_matched_piece_by_piece(tmp_path):
     )
     assert "removed flow: where did it go?  docs/a.md:8 (audit)  [S]" in out
     assert "audit rows not found on their base page (not checked): 0" in out
+
+
+@pytest.mark.regression
+def test_a_short_elided_piece_does_not_hide_another_removed_line(tmp_path):
+    """At 35144ca4 any removed line that held one piece of a removed row was
+    taken for that row, so the piece "6000" hid an unrelated line about
+    retries. A line is the row's only when it is inside one of its pieces or
+    holds all of them, in order."""
+    page = PAGE_A + "Retries back off for 6000 ms.\n"
+    rows = [_row(4, "The default rate limit is ... 6000", tag="T")]
+    cut = page.replace("The default rate limit is 6000 a minute.\n", "").replace(
+        "Retries back off for 6000 ms.\n", ""
+    )
+    out = _report(
+        tmp_path, {"docs/a.md": cut}, base_changes={"docs/a.md": page}, rows=rows
+    )
+    assert "removed TRUE claim: where did it go?  docs/a.md:4 (audit)  [T]" in out
+    assert (
+        'removed, no audit row  docs/a.md:12  "Retries back off for 6000 ms."'
+    ) in out
+    assert "removed, no audit row  docs/a.md:4 " not in out
 
 
 def test_a_removed_line_with_no_audit_row_is_listed(tmp_path):
