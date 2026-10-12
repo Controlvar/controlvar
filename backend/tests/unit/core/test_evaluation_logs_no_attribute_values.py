@@ -304,7 +304,7 @@ def _via_engine(op, case):
     try:
         apply_operator(op, case.actual, case.expected, case.additional)
     except rules_engine.TimeWindowUnreadable:
-        pass  # its rule does not match; the report is what is checked here
+        pass  # the evaluation is refused; the report is what is checked here
 
 
 def _via_service(op, case):

@@ -123,9 +123,7 @@ def test_the_example_does_not_match_outside_its_window(moment):
 
 
 def _refused(condition: Condition, moment: str, group_operator: LogicalOperator):
-    """(the flag's answer, the experiment's matched rule) for a ruleset whose
-    one rule holds *condition*, through the entry points flags and experiments
-    use."""
+    """:func:`_answer` for a ruleset whose one rule holds *condition*."""
     rules = TargetingRules(
         rules=[
             TargetingRule(
@@ -134,7 +132,12 @@ def _refused(condition: Condition, moment: str, group_operator: LogicalOperator)
             )
         ]
     )
-    context = {condition.attribute: moment}
+    return _answer(rules, {condition.attribute: moment})
+
+
+def _answer(rules: TargetingRules, context: Dict[str, Any]):
+    """(the flag's answer, the id of the experiment's matched rule) through the
+    entry points flags and experiments use; the flag is at 100%."""
     flag = SimpleNamespace(
         id="00000000-0000-0000-0000-000000001145",
         key="doc",
@@ -147,18 +150,19 @@ def _refused(condition: Condition, moment: str, group_operator: LogicalOperator)
             flag, "user-1", context
         )
     matched, _ = RulesEvaluationService().evaluate_rules_with_validation(rules, context)
-    return answer, matched
+    return answer, (matched.id if matched is not None else None)
 
 
 def test_iso_start_and_end_are_refused_in_either_shape():
     """The example this page used to give, in the native and the dashboard
-    shape: the flag answers off with reason ``error``, and no user is
-    eligible."""
+    shape: for a user whose evaluation reaches it, the flag answers off with
+    reason ``error`` and the experiment does not enrol them."""
     prose = _prose()
     assert (
-        "a flag that uses it answers off for every user, with reason `error`" in prose
+        "For a user whose evaluation reaches the window, the evaluation is "
+        "abandoned: the flag answers off for that user, with reason `error`, "
+        "the experiment does not enrol them" in prose
     )
-    assert "no user is eligible for an experiment that uses it" in prose
     assert "So a window with ISO datetimes in `start` and `end` is refused" in prose
     window = {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"}
     native = Condition(
@@ -176,6 +180,42 @@ def test_iso_start_and_end_are_refused_in_either_shape():
                     group_operator,
                     moment,
                 )
+
+
+def test_a_user_decided_before_the_window_never_reaches_it():
+    """Rule 1 (``country eq US``) decides a US user before rule 2's window is
+    read; a FR user reaches it. A window in ``default_rule`` is never read."""
+    assert (
+        "A user decided by an earlier rule never reaches it, and a window in "
+        "`default_rule` is never read." in _prose()
+    )
+    window = Condition(
+        attribute="current_time",
+        operator=OperatorType.TIME_WINDOW,
+        value={"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"},
+    )
+    us = Condition(attribute="country", operator=OperatorType.EQUALS, value="US")
+    rules = TargetingRules(
+        rules=[
+            TargetingRule(id="us", priority=1, rule=RuleGroup(conditions=[us])),
+            TargetingRule(id="window", priority=2, rule=RuleGroup(conditions=[window])),
+        ]
+    )
+    moment = "2024-01-10T12:00:00"
+    on = {"enabled": True, "reason": "targeting_rule", "rule_id": "us"}
+    off = {"enabled": False, "reason": "error", "rule_id": None}
+    assert _answer(rules, {"country": "US", "current_time": moment}) == (on, "us")
+    assert _answer(rules, {"country": "FR", "current_time": moment}) == (off, None)
+
+    in_default = TargetingRules(
+        rules=[TargetingRule(id="us", rule=RuleGroup(conditions=[us]))],
+        default_rule=TargetingRule(id="default", rule=RuleGroup(conditions=[window])),
+    )
+    default = {"enabled": True, "reason": "targeting_rule", "rule_id": "default"}
+    assert _answer(in_default, {"country": "FR", "current_time": moment}) == (
+        default,
+        "default",
+    )
 
 
 def test_after_and_before_make_a_window_between_two_moments():

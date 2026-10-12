@@ -150,7 +150,7 @@ class TestAdvancedOperators:
         assert window((moment + timedelta(days=40)).timestamp(), january) is False
 
         # ISO start/end, what this test used to pin as a match (#1156): the
-        # engine cannot read it, and its rule does not match
+        # engine cannot read it, and the evaluation is refused
         iso = {
             "start": (moment - timedelta(hours=1)).isoformat(),
             "end": (moment + timedelta(hours=1)).isoformat(),

@@ -499,8 +499,9 @@ class RulesEvaluationService:
         if segment_answer is not None:
             return segment_answer
 
-        # As on the flag path: a time_window that cannot be read refuses its
-        # rule for a user who does not send the attribute too.
+        # As on the flag path: a time_window that cannot be read refuses the
+        # evaluation (the whole ruleset, as PatternUnevaluable does), for a
+        # user who does not send the attribute too.
         if condition.operator == OperatorType.TIME_WINDOW:
             check_time_window(condition.operator, condition.value)
 

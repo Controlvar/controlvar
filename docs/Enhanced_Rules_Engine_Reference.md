@@ -374,10 +374,12 @@ does not read them. A rule saved from the dashboard stores `start` and `end` as
 give `start_time` and `end_time` (or the other keys) as well, as the example
 does. A window with none of those keys, or with one that cannot be read (`days`
 not 0-6, a time that is not `HH:MM`, an unknown timezone, a date that is not
-`YYYY-MM-DD`), is refused, and a warning is logged once: a flag that uses it
-answers off for every user, with reason `error`; no user is eligible for an
-experiment that uses it; and a segment that holds it cannot be decided. So a
-window with ISO datetimes in `start` and `end` is refused, in either shape
+`YYYY-MM-DD`), is refused, and a warning is logged once. For a user whose
+evaluation reaches the window, the evaluation is abandoned: the flag answers off
+for that user, with reason `error`, the experiment does not enrol them, and a
+segment that holds the window cannot be decided for them. A user decided by an
+earlier rule never reaches it, and a window in `default_rule` is never read. So
+a window with ISO datetimes in `start` and `end` is refused, in either shape
 (accepting them is #1156). For a window between two moments, use `after` and
 `before` (below) in an `AND` group.
 

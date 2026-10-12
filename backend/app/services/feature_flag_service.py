@@ -454,7 +454,9 @@ class FeatureFlagService:
         encodable), the whole ruleset is abandoned: the flag is disabled with
         reason ``error``. Neither the global rollout nor a ``default_rule`` is
         consulted, and no error-log row is written, so the safety monitor does
-        not count it.
+        not count it. The same holds when the evaluation reaches a
+        ``time_window`` condition the engine cannot read
+        (``TimeWindowUnreadable``, #1145).
 
         A rule that uses a segment (``in_segment``/``not_in_segment``, #440)
         is matched on membership resolved from the database for ``user_id``

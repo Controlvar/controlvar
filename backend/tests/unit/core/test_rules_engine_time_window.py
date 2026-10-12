@@ -456,8 +456,8 @@ class TestTimeWindowInvalidInputs:
     ):
         """It used to match at every moment, the empty window included (#1145).
 
-        Now its rule does not match: the engine raises TimeWindowUnreadable,
-        which ``evaluate_rule`` turns into no match.
+        Now the evaluation is refused: the engine raises TimeWindowUnreadable,
+        and the caller that owns the ruleset abandons it.
         """
         notes = []
         monkeypatch.setattr(

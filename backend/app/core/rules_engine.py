@@ -247,8 +247,9 @@ def evaluate_condition(condition: Condition, user_context: UserContext) -> bool:
     if segment_answer is not None:
         return segment_answer
 
-    # A time_window that cannot be read refuses its rule for a user who does
-    # not send the attribute too.
+    # A time_window that cannot be read refuses the evaluation (the whole
+    # ruleset, as PatternUnevaluable does), for a user who does not send the
+    # attribute too.
     if condition.operator == OperatorType.TIME_WINDOW:
         check_time_window(condition.operator, condition.value)
 
@@ -929,7 +930,8 @@ def apply_operator(
     # Time window operator
     elif operator == OperatorType.TIME_WINDOW:
         # A window that cannot be read raises TimeWindowUnreadable here, before
-        # the user's value is read: its rule does not match (see the class).
+        # the user's value is read: the evaluation is refused (the whole
+        # ruleset, as PatternUnevaluable; see the class).
         check_time_window(operator, expected_value)
         try:
             # Parse actual_value to datetime
