@@ -371,9 +371,9 @@ Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API
 With a seeded backend (`python backend/scripts/seed_sdk_contract.py`):
 `python tests/sdk-contract/live/run_live_contract.py --sdk js --strict`. That also runs
 `examples/local_eval_smoke.mjs` with the seed's `sdk:ruleset` key (the `js (local)` row): 40
-evaluations answered locally, the counts sent on `close()`, then two client errors, and the runner
-checks in the database that no evaluate call was made and that the safety monitor's denominator
-grew by exactly 40.
+evaluations answered locally, the counts sent on `close()`, then two error reports sent with the
+same key, and the runner checks in the database that no evaluate call was made, that the safety
+monitor's denominator grew by exactly 40 and that both reports were counted.
 
 ---
 

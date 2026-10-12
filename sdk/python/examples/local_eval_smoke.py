@@ -5,15 +5,17 @@ Run by the live contract (tests/sdk-contract/live/run_live_contract.py), which c
 side of it: that these evaluations made no evaluate call, and that the counts sent on close()
 are the safety monitor's denominator for the errors reported afterwards.
 
+The errors are reported with the same sdk:ruleset key, the way a server forwards them: only
+reports sent with a server-side key count toward a flag's error rate and automatic rollback.
+
 Run from the repository root (no install needed):
 
-    EXPERIMENTLY_LOCAL_API_KEY=<sdk:ruleset key> EXPERIMENTLY_API_KEY=<any key> \\
-        python sdk/python/examples/local_eval_smoke.py
+    EXPERIMENTLY_LOCAL_API_KEY=<sdk:ruleset key> python sdk/python/examples/local_eval_smoke.py
 
 Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_LOCAL_API_KEY (a key
-with the sdk:ruleset scope, required), EXPERIMENTLY_API_KEY (any key, required: used for
-POST /api/v1/tracking/errors), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID
-(default local-smoke-<uuid>), LOCAL_EVALUATIONS (default 40), LOCAL_ERRORS (default 2).
+with the sdk:ruleset scope, required; also used for POST /api/v1/tracking/errors),
+CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default local-smoke-<uuid>),
+LOCAL_EVALUATIONS (default 40), LOCAL_ERRORS (default 2).
 
 Prints exactly one JSON line on stdout and exits 0; on failure prints one line to stderr and
 exits 1.
@@ -44,11 +46,8 @@ def fail(message: str) -> NoReturn:
 def main() -> None:
     api_url = os.environ.get("EXPERIMENTLY_API_URL", "http://localhost:8000").rstrip("/")
     local_key = os.environ.get("EXPERIMENTLY_LOCAL_API_KEY")
-    plain_key = os.environ.get("EXPERIMENTLY_API_KEY")
     if not local_key:
         fail("EXPERIMENTLY_LOCAL_API_KEY (a key with the sdk:ruleset scope) is required")
-    if not plain_key:
-        fail("EXPERIMENTLY_API_KEY is required")
     flag_key = os.environ.get("CONTRACT_FLAG_KEY", "sdk_contract_flag")
     user_id = os.environ.get("CONTRACT_USER_ID") or f"local-smoke-{uuid.uuid4()}"
     evaluations = int(os.environ.get("LOCAL_EVALUATIONS", "40"))
@@ -78,7 +77,8 @@ def main() -> None:
     if swallowed:
         fail(swallowed[0])
 
-    # Client errors against the same flag: the safety monitor divides these by the counts above.
+    # Errors against the same flag, reported with the server-side key: the safety monitor
+    # divides these by the counts above.
     for i in range(errors_to_post):
         body = json.dumps(
             {
@@ -91,7 +91,7 @@ def main() -> None:
         request = urllib.request.Request(
             f"{api_url}/api/v1/tracking/errors",
             data=body,
-            headers={"X-API-Key": plain_key, "Content-Type": "application/json"},
+            headers={"X-API-Key": local_key, "Content-Type": "application/json"},
             method="POST",
         )
         try:
