@@ -14,7 +14,11 @@ found under each directory (a scope that matches nothing is a vacuous pass).
 
 A directory is matched through the JUnit ``classname``, which pytest writes as
 the dotted module path (``backend.tests.unit.infrastructure.test_x.TestY``, or
-``infrastructure.tests.test_x`` under ``--import-mode=importlib``).
+``infrastructure.tests.test_x`` under ``--import-mode=importlib``). A module
+that skips itself while it is collected (``pytest.skip(...,
+allow_module_level=True)``) is written with an empty ``classname`` and the
+dotted module path as its ``name``, so a case with no classname is matched
+through its name: before #1142 such a skip was not seen at all.
 
 Exit status: 0 no skips; 1 skips, or nothing found; 2 unreadable report.
 """
@@ -30,6 +34,17 @@ def _prefix(directory: str) -> str:
     return directory.strip("/").replace("/", ".") + "."
 
 
+def _dotted(case: ET.Element) -> str:
+    """Where the case lives, as a dotted path: its classname, or for a module
+    skipped while it was collected (no classname) its name."""
+    return case.get("classname") or case.get("name", "")
+
+
+def _label(case: ET.Element) -> str:
+    classname, name = case.get("classname"), case.get("name", "")
+    return f"{classname}::{name}" if classname else name
+
+
 def check(report: Path, directories: list[str]) -> list[str]:
     """Return one message per problem; empty means the report is clean."""
     root = ET.parse(report).getroot()
@@ -37,7 +52,7 @@ def check(report: Path, directories: list[str]) -> list[str]:
     cases = list(root.iter("testcase"))
     for directory in directories:
         prefix = _prefix(directory)
-        scoped = [c for c in cases if c.get("classname", "").startswith(prefix)]
+        scoped = [c for c in cases if _dotted(c).startswith(prefix)]
         if not scoped:
             problems.append(
                 f"no test under {directory} is in {report}, so its zero-skip "
@@ -48,9 +63,7 @@ def check(report: Path, directories: list[str]) -> list[str]:
             skipped = case.find("skipped")
             if skipped is not None:
                 reason = skipped.get("message") or (skipped.text or "").strip()
-                problems.append(
-                    f"{case.get('classname')}::{case.get('name')} was skipped: {reason}"
-                )
+                problems.append(f"{_label(case)} was skipped: {reason}")
     return problems
 
 
