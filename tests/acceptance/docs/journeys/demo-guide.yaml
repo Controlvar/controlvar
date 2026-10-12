@@ -366,7 +366,11 @@ steps:
       aria: |
         - main:
           - heading "Feature Flags" [level=1]
-    fail: the dashboard has no Feature Flags page at /feature-flags
+          - table:
+            - rowgroup:
+              - row /^new_dashboard_ui New Dashboard UI .* On 50% /
+              - row /^beta_features Beta Features .* On 100% /
+    fail: the dashboard has no Feature Flags page at /feature-flags, or it does not show new_dashboard_ui on at 50% and beta_features on
   - id: beta-off
     doc: scene-1-feature-flags-3-min
     do:
@@ -384,6 +388,11 @@ steps:
       aria: |
         - main:
           - heading "Feature Flags" [level=1]
+          - table:
+            - rowgroup:
+              - row /^beta_features Beta Features .* Off /:
+                - cell "Turn beta_features on":
+                  - switch "Turn beta_features on" [disabled=false]
     fail: beta_features cannot be turned off from the list
   - id: beta-off-evaluated
     doc: scene-1-feature-flags-3-min
@@ -416,6 +425,11 @@ steps:
       aria: |
         - main:
           - heading "Feature Flags" [level=1]
+          - table:
+            - rowgroup:
+              - row /^beta_features Beta Features .* On /:
+                - cell "Turn beta_features off":
+                  - switch "Turn beta_features off" [checked] [disabled=false]
     fail: beta_features cannot be turned back on from the list
   - id: beta-on-evaluated
     doc: scene-1-feature-flags-3-min

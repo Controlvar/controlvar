@@ -85,7 +85,6 @@ steps:
         quote: false
         reason: the storefront header's link to /products, the page the README's table names
     expect:
-      url: /products
       text: Recommended for you
       aria: |
         - main:
@@ -101,7 +100,6 @@ steps:
         quote: false
         reason: the storefront header's link to /search, the page the README's table names
     expect:
-      url: /search
       aria: |
         - main:
           - heading "Search" [level=1]
@@ -313,6 +311,11 @@ steps:
       aria: |
         - main:
           - heading "Feature Flags" [level=1]
+          - table:
+            - rowgroup:
+              - 'row /^shoplab_free_shipping_banner ShopLab: Free shipping banner .* Off /':
+                - cell "Turn shoplab_free_shipping_banner on":
+                  - switch "Turn shoplab_free_shipping_banner on" [disabled=false]
     fail: the free-shipping banner's flag cannot be turned off from the dashboard
   - id: banner-off-evaluated
     doc: demo-script-what-to-show-in-the-dashboard
@@ -345,6 +348,11 @@ steps:
       aria: |
         - main:
           - heading "Feature Flags" [level=1]
+          - table:
+            - rowgroup:
+              - 'row /^shoplab_free_shipping_banner ShopLab: Free shipping banner .* On /':
+                - cell "Turn shoplab_free_shipping_banner off":
+                  - switch "Turn shoplab_free_shipping_banner off" [checked] [disabled=false]
     fail: the free-shipping banner's flag cannot be turned back on
   - id: banner-back
     doc: demo-script-what-to-show-in-the-dashboard

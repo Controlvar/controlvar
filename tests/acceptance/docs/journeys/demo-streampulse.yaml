@@ -375,6 +375,11 @@ steps:
       aria: |
         - main:
           - heading "Feature Flags" [level=1]
+          - table:
+            - rowgroup:
+              - 'row /^streampulse_recs_v2 StreamPulse: Recommendations v2 .* Off /':
+                - cell "Turn streampulse_recs_v2 on":
+                  - switch "Turn streampulse_recs_v2 on" [disabled=false]
     fail: streampulse_recs_v2 cannot be turned off from the dashboard
   - id: recs-off-evaluated
     doc: demo-script-what-to-show
@@ -440,6 +445,11 @@ steps:
       aria: |
         - main:
           - heading "Feature Flags" [level=1]
+          - table:
+            - rowgroup:
+              - 'row /^streampulse_recs_v2 StreamPulse: Recommendations v2 .* On /':
+                - cell "Turn streampulse_recs_v2 off":
+                  - switch "Turn streampulse_recs_v2 off" [checked] [disabled=false]
     fail: streampulse_recs_v2 cannot be turned back on
   - id: recs-on-evaluated
     doc: demo-script-what-to-show
