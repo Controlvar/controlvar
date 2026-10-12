@@ -266,7 +266,7 @@ def report(
         deleted += new is None
         old_flat, new_flat = normalise(old), normalise(new or "")
         lines: List[str] = []
-        covered_by_rows: List[str] = []
+        covered_by_rows: List[List[str]] = []
         for row in sorted(by_doc.get(doc, []), key=lambda r: r.line):
             parts = pieces(row.text)
             if not contains(old_flat, parts):
@@ -274,7 +274,7 @@ def report(
                 continue
             if contains(new_flat, parts):
                 continue
-            covered_by_rows.extend(parts)
+            covered_by_rows.append(parts)
             elsewhere = [
                 d
                 for d in sorted(head_texts)
@@ -295,7 +295,13 @@ def report(
             flat = normalise(line)
             if not HAS_TEXT.search(flat) or flat in new_flat:
                 continue
-            if any(flat in text or text in flat for text in covered_by_rows):
+            # The line is the row's when it is inside one of the row's pieces
+            # (a line of a wrapped excerpt) or holds all of them, in order. A
+            # line that merely contains one short piece ("6000") is not.
+            if any(
+                any(flat in piece for piece in parts) or contains(flat, parts)
+                for parts in covered_by_rows
+            ):
                 continue
             counts["removed, no audit row"] += 1
             lines.append(f'  removed, no audit row  {doc}:{number}  "{short(line)}"')
