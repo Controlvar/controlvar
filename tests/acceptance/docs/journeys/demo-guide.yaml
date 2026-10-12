@@ -1,0 +1,586 @@
+# The demo guide (demo/DEMO_GUIDE.md), as a presenter follows it (#1142):
+# ./demo/setup-local.sh from the checkout's root, then the scenes, then the
+# guide's stop command.
+#
+# The demo-local stack runs the script and the stop command itself
+# (docs_runner/stacks.py): the start must print the "Ready!" box, every address
+# the box lists must answer, and the stop must leave no port answering and
+# demo/.pids, demo/.logs and demo/.demo_api_key gone. It runs on a CI runner
+# only, in the demo job of docs-journeys.yml.
+#
+# The guide's quoted results are compared with the seed's output and nothing
+# else. Homepage Hero Copy Test is COMPLETED and nothing writes to it after the
+# seed (the live simulator streams to the two ACTIVE experiments only), so its
+# results are exactly what backend/scripts/seed_demo_data.py made: 25,000 users
+# per variant from its random.Random(42), of whom 1,836 (control) and 2,111
+# (new_copy) convert. Those counts were read off the seed's generator before
+# the run (the same draws, in the same order, without a database). They give
+# 7.34% and 8.44%, a relative lift of +15.0%, and Fisher's exact p of 5.5e-6
+# (oracles.fisher_exact_p), the numbers Scene 3 quotes. Checkout Button
+# Color's rates move with the live simulator, so no step here compares a quote
+# with them.
+#
+# The accounts table is checked by signing each account in through the API,
+# the flags of Scene 1 through the API and the dashboard, and an API key made
+# for the run evaluates beta_features as an SDK would; the key never reaches
+# the browser. The journey is not recorded (the key).
+#
+# Expectations written on 2026-10-11 from the guide, the seed scripts and the
+# dashboard's source, before the first run.
+guide: demo/DEMO_GUIDE.md
+stack: demo-local
+profile: full
+video: false
+written: 2026-10-11
+steps:
+  - id: dashboard-address
+    doc: local-recommended-2-min
+    do:
+      open: http://localhost:3100
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - heading "A/B testing and feature flags you run yourself." [level=1]
+    fail: the dashboard does not answer at the address the guide and the script's Ready box give
+  - id: health-address
+    doc: quick-reference-urls
+    do:
+      open: http://localhost:8000/health
+    expect:
+      status: 200
+    snapshot: false
+    snapshot_reason: the API answers JSON there, not a screen; the address and its status are the check
+    fail: the API's health check does not answer at the address the guide gives
+  - id: api-docs-address
+    doc: scene-5-modules-admin-5-min
+    do:
+      open: http://localhost:8000/api/v1/docs
+    expect:
+      status: 200
+    snapshot: false
+    snapshot_reason: the page draws itself with scripts it loads from a CDN; that the address answers is what the guide says
+    fail: the API's interactive docs do not answer at the address the guide gives
+  - id: admin-account
+    doc: credentials
+    do:
+      api:
+        method: GET
+        path: /api/v1/auth/me
+        as: admin
+    expect:
+      status: 200
+      json:
+        email: admin@demo.com
+        role: ADMIN
+    fail: admin@demo.com does not sign in with the guide's password, or is not an Admin
+  - id: developer-account
+    doc: credentials
+    do:
+      api:
+        method: GET
+        path: /api/v1/auth/me
+        as: developer
+    expect:
+      status: 200
+      json:
+        email: dev@demo.com
+        role: DEVELOPER
+    fail: dev@demo.com does not sign in with the guide's password, or is not a Developer
+  - id: analyst-account
+    doc: credentials
+    do:
+      api:
+        method: GET
+        path: /api/v1/auth/me
+        as: analyst
+    expect:
+      status: 200
+      json:
+        email: analyst@demo.com
+        role: ANALYST
+    fail: analyst@demo.com does not sign in with the guide's password, or is not an Analyst
+  - id: viewer-account
+    doc: credentials
+    do:
+      api:
+        method: GET
+        path: /api/v1/auth/me
+        as: viewer
+    expect:
+      status: 200
+      json:
+        email: viewer@demo.com
+        role: VIEWER
+    fail: viewer@demo.com does not sign in with the guide's password, or is not a Viewer
+  - id: shoplab-address
+    doc: scene-0-shoplab-storefront-experiments-in-a-real-app-4-min
+    do:
+      open: http://localhost:3200
+    expect:
+      status: 200
+      aria: |
+        - complementary "Experimently panel":
+          - button "Powered by Experimently"
+    fail: ShopLab does not answer at the address the guide gives, or has no Experimently panel
+  - id: streampulse-address
+    doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
+    do:
+      open: http://localhost:3300
+    expect:
+      status: 200
+      aria: |
+        - heading "StreamPulse" [level=1]
+    fail: StreamPulse does not answer at the address the guide gives
+  - id: premium-iphone
+    doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
+    do:
+      click:
+        role: radio
+        name: iPhone 15 · iOS 17.4 · US · premium
+    expect:
+      aria: |
+        - radio "iPhone 15 · iOS 17.4 · US · premium" [checked]
+    fail: the guide's iPhone preset cannot be picked
+  - id: search-tab
+    doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
+    do:
+      click:
+        role: tab
+        name: Search
+    expect:
+      aria: |
+        - tabpanel:
+          - heading "AI search ✨"
+    fail: the Search tab does not show AI search ✨ for the iPhone 15 · iOS 17.4 · US · premium device
+  - id: pixel
+    doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
+    do:
+      click:
+        role: radio
+        name: Pixel 7 · Android 14 · DE · free
+        quote: false
+        reason: the preset's full name; the guide shortens it to "Pixel 7 · Android 14 · DE"
+    expect:
+      aria: |
+        - radio "Pixel 7 · Android 14 · DE · free" [checked]
+    fail: the guide's Pixel preset cannot be picked
+  - id: keyword-search
+    doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
+    do:
+      click:
+        role: tab
+        name: Search
+    expect:
+      aria: |
+        - tabpanel:
+          - heading "Search"
+    fail: the Search tab does not fall back to keyword search for the Pixel 7 · Android 14 · DE device
+  - id: api-key
+    doc: scene-1-feature-flags-3-min
+    do:
+      api:
+        method: POST
+        path: /api/v1/api-keys
+        as: admin
+        body:
+          name: Docs journey demo guide
+    expect:
+      status: 201
+      json:
+        name: Docs journey demo guide
+    save:
+      sdk-key:
+        path: key
+        secret: true
+    fail: no API key can be made to evaluate the guide's flags as an application would
+  - id: new-dashboard-ui
+    doc: scene-1-feature-flags-3-min
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/?search=new_dashboard_ui
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: new_dashboard_ui
+        items.0.status: active
+        items.0.rollout_percentage: 50
+    save:
+      dashboard-flag-id:
+        path: items.0.id
+    fail: new_dashboard_ui is not seeded, not on, or not at the 50% rollout the guide says
+  - id: three-stage-schedule
+    doc: scene-1-feature-flags-3-min
+    do:
+      api:
+        method: GET
+        path: /api/v1/rollout-schedules/?feature_flag_id={{dashboard-flag-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.status: active
+        items.0.stages.0.target_percentage: 10
+        items.0.stages.0.status: completed
+        items.0.stages.1.target_percentage: 25
+        items.0.stages.1.status: completed
+        items.0.stages.2.target_percentage: 50
+        items.0.stages.2.status: in_progress
+    fail: new_dashboard_ui has no 3-stage schedule that went 10% then 25% and is now at 50%
+  - id: beta-role
+    doc: scene-1-feature-flags-3-min
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/beta_features?user_id=demo-guide-beta&context=%7B%22role%22%3A%22beta%22%7D
+        as: anonymous
+        key: sdk-key
+    expect:
+      status: 200
+      json:
+        key: beta_features
+        enabled: true
+        reason: targeting_rule
+    fail: a user with role beta does not get beta_features by its targeting rule
+  - id: beta-second-role
+    doc: scene-1-feature-flags-3-min
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/beta_features?user_id=demo-guide-second-role&context=%7B%22role%22%3A%22internal%22%7D
+        as: anonymous
+        key: sdk-key
+    expect:
+      status: 200
+      json:
+        enabled: true
+        reason: targeting_rule
+    fail: a user with the rule's second role does not get beta_features by it
+  - id: beta-acme
+    doc: scene-1-feature-flags-3-min
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/beta_features?user_id=demo-guide-acme&context=%7B%22email%22%3A%22pat%40acme.com%22%7D
+        as: anonymous
+        key: sdk-key
+    expect:
+      status: 200
+      json:
+        enabled: true
+        reason: targeting_rule
+    fail: a user with an @acme.com email does not get beta_features by its targeting rule
+  - id: beta-everyone-else
+    doc: scene-1-feature-flags-3-min
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/beta_features?user_id=demo-guide-other&context=%7B%22role%22%3A%22customer%22%2C%22email%22%3A%22pat%40example.com%22%7D
+        as: anonymous
+        key: sdk-key
+    expect:
+      status: 200
+      json:
+        enabled: true
+        reason: rollout
+    fail: a user the rule does not match is not given beta_features by its 100% rollout
+  - id: sign-in-page
+    doc: scene-1-feature-flags-3-min
+    do:
+      goto: /login
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - heading "Sign in" [level=1]
+    fail: the dashboard's sign-in page does not answer
+  - id: email
+    doc: credentials
+    do:
+      fill:
+        label: Email
+        value: admin@demo.com
+        quote: false
+        reason: the sign-in form's field; the guide gives the account
+    expect:
+      aria: |
+        - textbox "Email": admin@demo.com
+    fail: there is no Email field to fill
+  - id: password
+    doc: credentials
+    do:
+      fill:
+        label: Password
+        value: Demo1234!
+        quote: false
+        reason: the sign-in form's field; the guide gives the password
+    expect:
+      aria: |
+        - textbox "Password"
+    fail: there is no Password field to fill
+  - id: signed-in
+    doc: credentials
+    do:
+      click:
+        role: button
+        name: Sign in
+        quote: false
+        reason: the sign-in form's button
+    expect:
+      url: /experiments
+      aria: |
+        - main:
+          - heading "Experiments" [level=1]
+    fail: admin@demo.com cannot sign in to the dashboard with the guide's password
+  - id: feature-flags
+    doc: scene-1-feature-flags-3-min
+    do:
+      goto: /feature-flags
+    expect:
+      url: /feature-flags
+      aria: |
+        - main:
+          - heading "Feature Flags" [level=1]
+    fail: /feature-flags does not open the flags list
+  - id: beta-off
+    doc: scene-1-feature-flags-3-min
+    do:
+      click:
+        role: switch
+        name: Turn beta_features off
+        quote: false
+        reason: the list's on/off switch for beta_features; the guide says to toggle it
+    expect:
+      visible:
+        - role: switch
+          name: Turn beta_features on
+          quote: false
+          reason: the same switch, now offering to turn the flag back on
+      aria: |
+        - main:
+          - heading "Feature Flags" [level=1]
+    fail: beta_features cannot be turned off from the list
+  - id: beta-off-evaluated
+    doc: scene-1-feature-flags-3-min
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/beta_features?user_id=demo-guide-beta&context=%7B%22role%22%3A%22beta%22%7D
+        as: anonymous
+        key: sdk-key
+    expect:
+      status: 200
+      json:
+        enabled: false
+        reason: inactive
+    fail: the next evaluation after turning beta_features off still serves it
+  - id: beta-on
+    doc: scene-1-feature-flags-3-min
+    do:
+      click:
+        role: switch
+        name: Turn beta_features on
+        quote: false
+        reason: the list's on/off switch for beta_features; the guide says to toggle it back on
+    expect:
+      visible:
+        - role: switch
+          name: Turn beta_features off
+          quote: false
+          reason: the same switch, now offering to turn the flag off again
+      aria: |
+        - main:
+          - heading "Feature Flags" [level=1]
+    fail: beta_features cannot be turned back on from the list
+  - id: beta-on-evaluated
+    doc: scene-1-feature-flags-3-min
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/beta_features?user_id=demo-guide-beta&context=%7B%22role%22%3A%22beta%22%7D
+        as: anonymous
+        key: sdk-key
+    expect:
+      status: 200
+      json:
+        enabled: true
+        reason: targeting_rule
+    fail: the next evaluation after turning beta_features back on does not serve it by its rule
+  - id: experiments
+    doc: scene-2-running-ab-test-4-min
+    do:
+      goto: /experiments
+    expect:
+      url: /experiments
+      aria: |
+        - main:
+          - heading "Experiments" [level=1]
+    fail: /experiments does not open the experiments list
+  - id: checkout-button-color
+    doc: scene-2-running-ab-test-4-min
+    do:
+      click:
+        role: link
+        name: Checkout Button Color
+    expect:
+      aria: |
+        - main:
+          - heading "Checkout Button Color" [level=1]
+    fail: Checkout Button Color is not on the experiments list, or does not open
+  - id: checkout-api
+    doc: scene-2-running-ab-test-4-min
+    do:
+      api:
+        method: GET
+        path: /api/v1/experiments/?search=Checkout%20Button%20Color
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: checkout_button_color
+        items.0.status: active
+        items.0.variants.0.name: blue_button
+        items.0.variants.0.traffic_allocation: 50
+        items.0.variants.1.name: green_button
+        items.0.variants.1.traffic_allocation: 50
+        items.0.metrics.0.event_name: checkout_completed
+    fail: Checkout Button Color is not ACTIVE with blue 50% and green 50% on checkout_completed
+  - id: hero-api
+    doc: scene-3-statistical-results-5-min
+    do:
+      api:
+        method: GET
+        path: /api/v1/experiments/?search=Homepage%20Hero%20Copy%20Test
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: homepage_hero_copy
+        items.0.status: completed
+    save:
+      hero-id:
+        path: items.0.id
+    fail: Homepage Hero Copy Test is not seeded, or is not COMPLETED
+  - id: hero-results-api
+    doc: scene-3-statistical-results-5-min
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{hero-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        metrics.0.variants.0.variant_name: control
+        metrics.0.variants.0.sample_size: 25000
+        metrics.0.variants.0.conversions: 1836
+        metrics.0.variants.1.variant_name: new_copy
+        metrics.0.variants.1.sample_size: 25000
+        metrics.0.variants.1.conversions: 2111
+        metrics.0.variants.1.statistical_test_used: fisher_exact
+        metrics.0.variants.1.is_significant: true
+      computed:
+        metrics.0.variants.1.p_value:
+          oracle:
+            name: fisher_exact_p
+            args: {control_users: 25000, control_converted: 1836, treatment_users: 25000, treatment_converted: 2111}
+          rel: 1.0e-9
+    fail: the results are not the seed's counts, or the p-value is not Fisher's exact test's for them
+  - id: hero-experiment
+    doc: scene-3-statistical-results-5-min
+    do:
+      goto: /experiments/{{hero-id}}
+    expect:
+      aria: |
+        - main:
+          - heading "Homepage Hero Copy Test" [level=1]
+    fail: Homepage Hero Copy Test's page does not open
+  - id: hero-results
+    doc: scene-3-statistical-results-5-min
+    do:
+      click:
+        role: link
+        name: View results
+        quote: false
+        reason: the experiment page's link to its results; the guide says to show the results panel
+    expect:
+      visible:
+        - role: cell
+          name: 7.34%
+        - role: cell
+          name: 8.44%
+        - role: cell
+          name: +15.0%
+      cells:
+        - row: new_copy
+          column: p-value
+          quote: false
+          reason: the treatment's row and the p-value column; the guide says p-value < 0.001
+          oracle:
+            name: fisher_exact_p
+            args: {control_users: 25000, control_converted: 1836, treatment_users: 25000, treatment_converted: 2111}
+      aria: |
+        - main:
+          - heading "Homepage Hero Copy Test" [level=2]
+    fail: the results page does not show the seed's rates and lift that Scene 3 quotes, or a p-value below 0.001
+  - id: sequential-tab
+    doc: scene-3-statistical-results-5-min
+    do:
+      click:
+        role: tab
+        name: Sequential
+    expect:
+      aria: |
+        - tab "Sequential" [selected]
+    fail: the Sequential tab does not appear for an experiment with a sequential analysis
+  - id: bandit
+    doc: scene-4-multi-armed-bandit-3-min
+    do:
+      goto: /experiments
+    expect:
+      aria: |
+        - main:
+          - heading "Experiments" [level=1]
+    fail: the experiments list does not open again
+  - id: bandit-experiment
+    doc: scene-4-multi-armed-bandit-3-min
+    do:
+      click:
+        role: link
+        name: Recommendation Algorithm MAB
+    expect:
+      visible:
+        - role: heading
+          name: Current traffic weights
+        - role: button
+          name: Refresh
+      aria: |
+        - main:
+          - heading "Recommendation Algorithm MAB" [level=1]
+    fail: the bandit's page has no Current traffic weights panel with a Refresh button
+  - id: audit-log
+    doc: scene-5-modules-admin-5-min
+    do:
+      goto: /admin/audit
+    expect:
+      url: /admin/audit
+      aria: |
+        - main:
+          - heading "Audit Log" [level=1]
+    fail: /admin/audit does not open the audit log
+  - id: users
+    doc: scene-5-modules-admin-5-min
+    do:
+      goto: /admin/users
+    expect:
+      url: /admin/users
+      aria: |
+        - main:
+          - heading "User Management" [level=1]
+    fail: /admin/users does not open the user list

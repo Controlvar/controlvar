@@ -9,8 +9,8 @@ A journey (this one walked the docs home page on docs-local, 2026-10-06; it
 needs the inventory to classify ``README.md`` as the journey ``docs-site``,
 without ``pending``)::
 
-    guide: README.md                         # the nav path, as inventory.toml keys it
-    stack: docs-local                        # compose-dev | compose-sso | docs-local | docs-published | marketing-local
+    guide: README.md                         # the nav path, as inventory.toml keys it (a [documents] key for a document)
+    stack: docs-local                        # compose-dev | compose-sso | docs-local | docs-published | marketing-local | demo-local
     profile: core                            # core | full
     video: true
     written: 2026-10-06                      # the day the expectations were written
@@ -74,15 +74,17 @@ docs-local), whose source (``mkdocs.yml`` and ``docs/``) the stack names:
   itself, so a crawl step has no ``expect``.
 
 Three are for following a guide on the compose stack (``compose-dev``, and for
-``open`` also ``compose-sso``, the same stack brought up for SSO sign-in) as its
-reader does:
+``open`` also ``compose-sso``, the same stack brought up for SSO sign-in, and
+``demo-local``, the one ``demo/setup-local.sh`` starts) as its reader does:
 
 * ``open: <URL>`` opens an address the guide gives, such as
   ``http://localhost:3000``: the guide's text must contain the URL's origin
   (``http://localhost:<port>``), and the step fails unless the stack, started
   with ``docker-compose.yml``'s default host ports, serves something on that
   port. The stack runs on ports of its own, so the runner opens the same path
-  on the port that stands for it (``stacks.ComposeDev``). A screen step.
+  on the port that stands for it (``stacks.ComposeDev``). On demo-local the
+  ports are the script's own, and an address is served when the script's
+  "Ready!" box lists it (``stacks.DemoLocal``). A screen step.
 * ``passwords: [<name>, ...]`` (a journey field, not a step) makes up one
   fresh password per name when the journey starts, each meeting the account
   rules; ``fill: {label: ..., secret: <name>}`` types one instead of a
@@ -212,17 +214,25 @@ STACKS = (
     "docs-local",
     "docs-published",
     "marketing-local",
+    "demo-local",
 )
 Stack = Literal[
-    "compose-dev", "compose-sso", "docs-local", "docs-published", "marketing-local"
+    "compose-dev",
+    "compose-sso",
+    "docs-local",
+    "docs-published",
+    "marketing-local",
+    "demo-local",
 ]
 #: The stacks with an API and a dashboard: ``api`` and ``open`` steps run on
-#: these. compose-sso is compose-dev's stack brought up for SSO sign-in.
-COMPOSE_STACKS = ("compose-dev", "compose-sso")
+#: these. compose-sso is compose-dev's stack brought up for SSO sign-in;
+#: demo-local is the one ``demo/setup-local.sh`` starts (``stacks.py``).
+COMPOSE_STACKS = ("compose-dev", "compose-sso", "demo-local")
 Profile = Literal["core", "full"]
 
 #: Who an ``api`` step calls as: nobody, or one of the four role accounts the
-#: stack provides (on compose-dev and compose-sso, the ``demo`` seed's accounts).
+#: stack provides (on compose-dev, compose-sso and demo-local, the ``demo``
+#: seed's accounts).
 Caller = Literal["anonymous", "admin", "developer", "analyst", "viewer"]
 
 #: The ARIA roles Playwright's ``get_by_role`` accepts (playwright 1.63.0).

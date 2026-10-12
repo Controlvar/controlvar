@@ -119,7 +119,8 @@ See `demo/streampulse/README.md`.
   - "We started at 10%, expanded to 25%, and now we're at 50%. The schedule automates this — zero manual work."
   - Point to the safety config: "If the error rate exceeds 5%, it auto-rolls back. We never break production."
 - Click **beta_features** — show the targeting rule
-  - "This uses our 20+ targeting operators. Users with role 'beta' or 'internal', OR an @acme.com email, get this flag. Everyone else doesn't see it."
+  - "This uses our 20+ targeting operators. Users with role 'beta' or 'internal', OR an @acme.com email, match this rule."
+    The flag's rollout is 100%, so users the rule does not match get it too.
 - Toggle `beta_features` off and back on
   - "That change is live in milliseconds — no deploy needed."
 
@@ -155,7 +156,7 @@ See `demo/streampulse/README.md`.
 - Status: COMPLETED — this experiment ran for 35 days with 50K events
 - Show the results panel:
   - p-value < 0.001 — highly significant
-  - 12% relative lift in signup conversion (7.5% → 8.4%)
+  - +15.0% relative lift in signup conversion (7.34% → 8.44%)
   - "The platform made the decision: Ship It. No analyst needed to interpret this."
 - Click the **Sequential** tab (it appears when the experiment has a sequential analysis)
   - "mSPRT lets us peek at results without inflating false positives. No more waiting for a fixed sample size."

@@ -925,7 +925,7 @@ class JourneyRunner:
             served = ", ".join(str(p) for p in sorted(running.published)) or "none"
             raise StepFailed(
                 f"{url}: the stack serves nothing on port {port} by default"
-                f" (docker-compose.yml's default ports here: {served})"
+                f" (the ports it serves a guide's addresses on: {served})"
             )
         return running.published[port] + (match["path"] or "/")
 

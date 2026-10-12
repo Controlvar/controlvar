@@ -24,6 +24,16 @@ pinned rather than reviewed once:
 * in every run that records, the last step of the journeys job is the presence
   check of the launch walkthroughs (``docs_journeys_report.py recordings``),
   after the run directory's scan, so a counting run without R1-R8 is red;
+* the demo job walks only the demo-local stack's journeys
+  (``DOCS_JOURNEY_STACKS=demo-local``, ``DOCS_JOURNEY_DEMO_LOCAL=1``, which the
+  stack needs before it runs ``demo/setup-local.sh``), records nothing, with
+  Python 3.11 and the Node of ``.nvmrc`` installed as the demo guide's
+  prerequisites say, under a timeout; it holds only ``contents: read`` and
+  uploads its verdicts under a name of its own, and the journeys job's walk
+  sets neither variable, so it never runs a demo journey;
+* the report job waits for both jobs, runs when either wrote verdicts,
+  downloads each job's verdicts only when that job wrote them, and reads them
+  together (``--verdicts-dir``);
 * nothing from the run directory leaves the job unless the runner's scan of it
   for the values the run made up, kept or signed in for ran and removed
   nothing: its ``secret-scan.json`` is there and lists no removed file. Every
@@ -69,8 +79,11 @@ RECORDS = (
 SOURCE = "${{ runner.temp }}/published-source"
 JOB_PERMISSIONS = {
     "journeys": {"contents": "read", "deployments": "read"},
+    "demo": {"contents": "read"},
     "report": {"contents": "read", "issues": "write", "actions": "read"},
 }
+#: The jobs that walk journeys, each with its walk step's name.
+WALKING_JOBS = {"journeys": "Walk the journeys", "demo": "Walk the demo journeys"}
 WALK = "Walk the journeys"
 WALK_RUN = "python -m pytest -c tests/acceptance/docs/pytest.ini tests/acceptance/docs"
 WALK_ENV = {
@@ -80,6 +93,35 @@ WALK_ENV = {
     "DOCS_JOURNEY_RECORD_VIDEO": "${{ " + RECORDS + " && '1' || '0' }}",
     "PYTHONDONTWRITEBYTECODE": "1",
 }
+DEMO_WALK = "Walk the demo journeys"
+DEMO_WALK_ENV = {
+    "DOCS_JOURNEY_RUN_DIR": RUN_DIR,
+    "DOCS_JOURNEY_STACKS": "demo-local",
+    "DOCS_JOURNEY_DEMO_LOCAL": "1",
+    "DOCS_JOURNEY_RECORD_VIDEO": "0",
+    "DOCS_JOURNEY_TIMEOUT_MS": "30000",
+    "PYTHONDONTWRITEBYTECODE": "1",
+}
+#: What the demo job installs before the walk: the guide's prerequisites.
+DEMO_SETUP = [
+    ("actions/setup-python@v7", {"python-version": "3.11"}),
+    ("actions/setup-node@v7", {"node-version-file": ".nvmrc"}),
+]
+DEMO_VERDICTS = "docs-journeys-demo-verdicts"
+#: The report job's downloads: each job's verdicts, when that job wrote them.
+REPORT_DOWNLOADS = [
+    (
+        "needs.journeys.outputs.verdicts == 'true'",
+        "docs-journeys-verdicts",
+        "${{ runner.temp }}/verdicts/journeys",
+    ),
+    (
+        "needs.demo.outputs.verdicts == 'true'",
+        DEMO_VERDICTS,
+        "${{ runner.temp }}/verdicts/demo",
+    ),
+]
+REPORT_READS = '--verdicts-dir "$RUNNER_TEMP/verdicts"'
 SOURCE_STEP = "Check out the source of the published site"
 SOURCE_LINES = [
     "set -euo pipefail",
@@ -97,7 +139,10 @@ INSTALL_LINES = [
 ]
 POST = "Post to the docs-journey-failure issues"
 POST_IF = "github.event_name == 'schedule' && github.ref == 'refs/heads/main'"
-REPORT_IF = "always() && needs.journeys.outputs.verdicts == 'true'"
+REPORT_IF = (
+    "always() && (needs.journeys.outputs.verdicts == 'true' ||"
+    " needs.demo.outputs.verdicts == 'true')"
+)
 RENDERED_BODY = '"$DIR/body.md"'
 RENDERED_TITLE = '"$(head -n 1 "$DIR/title.txt")"'
 SUMMARY_LINE = (
@@ -198,6 +243,79 @@ def _named(doc, name):
     return next((s for s in steps_of(doc) if s.get("name") == name), None)
 
 
+def _in_job(doc, job: str, name: str):
+    steps = (doc["jobs"].get(job) or {}).get("steps") or []
+    return next((s for s in steps if s.get("name") == name), None)
+
+
+def _job_steps(doc, job: str) -> List[Dict[str, Any]]:
+    return list((doc["jobs"].get(job) or {}).get("steps") or [])
+
+
+def demo_problems(doc: Dict[Any, Any]) -> List[str]:
+    """The demo job's own rules, and the report job's reading of both jobs."""
+    found: List[str] = []
+    jobs = doc["jobs"]
+    demo = jobs.get("demo") or {}
+    if not isinstance(demo.get("timeout-minutes"), int):
+        found.append("the demo job has no timeout in minutes")
+    steps = _job_steps(doc, "demo")
+    walk = _in_job(doc, "demo", DEMO_WALK)
+    if walk is None or walk.get("run") != WALK_RUN or walk.get("env") != DEMO_WALK_ENV:
+        found.append(
+            "the demo journeys do not run the runner's pytest root on the"
+            " demo-local stack alone, unrecorded, with its run directory"
+        )
+    names = [step.get("name") for step in steps]
+    for uses, settings in DEMO_SETUP:
+        at = next((i for i, step in enumerate(steps) if step.get("uses") == uses), None)
+        if at is None or (steps[at].get("with") or {}) != settings:
+            found.append(f"the demo job does not install {uses} with {settings}")
+        elif DEMO_WALK in names and at > names.index(DEMO_WALK):
+            found.append(f"the demo job installs {uses} after the walk")
+    install = _in_job(doc, "demo", "Install the runner and Chromium")
+    if install is None or _lines(install) != INSTALL_LINES:
+        found.append(
+            "the demo job does not install the runner from"
+            " tests/acceptance/requirements.txt with Chromium"
+        )
+    for step in steps:
+        settings = step.get("with") or {}
+        if "upload-artifact" in str(step.get("uses") or ""):
+            if (
+                settings.get("path") == VERDICTS_PATH
+                and settings.get("name") != DEMO_VERDICTS
+            ):
+                found.append(
+                    f"the demo job's verdicts are not uploaded as {DEMO_VERDICTS}"
+                )
+    journeys_walk = _in_job(doc, "journeys", WALK) or {}
+    if any(
+        name in (journeys_walk.get("env") or {})
+        for name in ("DOCS_JOURNEY_STACKS", "DOCS_JOURNEY_DEMO_LOCAL")
+    ):
+        found.append("the journeys job may run a demo-local journey")
+    report = jobs.get("report") or {}
+    downloads = [
+        (
+            _condition(step),
+            (step.get("with") or {}).get("name"),
+            (step.get("with") or {}).get("path"),
+        )
+        for step in report.get("steps") or []
+        if "download-artifact" in str(step.get("uses") or "")
+    ]
+    if downloads != REPORT_DOWNLOADS:
+        found.append(
+            "the report job does not download each job's verdicts when that job"
+            f" wrote them: {downloads}"
+        )
+    decide = _in_job(doc, "report", "Decide and render") or {}
+    if REPORT_READS not in str(decide.get("run") or ""):
+        found.append("the report job does not read both jobs' verdicts together")
+    return found
+
+
 def workflow_problems(doc: Dict[Any, Any], text: str) -> List[str]:
     found: List[str] = []
     on = triggers(doc)
@@ -240,8 +358,9 @@ def workflow_problems(doc: Dict[Any, Any], text: str) -> List[str]:
             found.append(f"{job_id} is bound to an environment or calls a workflow")
     if _condition(jobs.get("report") or {}) != REPORT_IF:
         found.append("the report job does not run only after verdicts were written")
-    if (jobs.get("report") or {}).get("needs") != "journeys":
-        found.append("the report job does not wait for the journeys")
+    if (jobs.get("report") or {}).get("needs") != ["journeys", "demo"]:
+        found.append("the report job does not wait for the journeys and the demo")
+    found.extend(demo_problems(doc))
 
     install = _named(doc, "Install the runner and Chromium")
     if install is None or _lines(install) != INSTALL_LINES:
@@ -255,7 +374,7 @@ def workflow_problems(doc: Dict[Any, Any], text: str) -> List[str]:
             "the site's source is not the commit of its live deployment"
             " (docs_journeys_report.py deployed)"
         )
-    walk = _named(doc, WALK)
+    walk = _in_job(doc, "journeys", WALK)
     if walk is None or walk.get("run") != WALK_RUN or walk.get("env") != WALK_ENV:
         found.append(
             "the journeys do not run the runner's pytest root with its run directory,"
@@ -276,25 +395,35 @@ def workflow_problems(doc: Dict[Any, Any], text: str) -> List[str]:
         for name, value in (step.get("env") or {}).items():
             if name == "GH_TOKEN" and value != "${{ github.token }}":
                 found.append("GH_TOKEN is not the workflow's own token")
-    names = [step.get("name") for step in steps_of(doc)]
-    scanned = _named(doc, SCANNED)
-    if (
-        scanned is None
-        or scanned.get("id") != "scanned"
-        or _condition(scanned) != "always()"
-        or _lines(scanned) != SCANNED_LINES
-        or WALK not in names
-        or names.index(SCANNED) < names.index(WALK)
-    ):
-        found.append(
-            "the run directory's secret-scan.json is not checked after the walk"
-        )
-    for name, condition in AFTER_SCAN.items():
-        step = _named(doc, name)
-        if step is None or _condition(step) != condition:
-            found.append(f"{name} does not wait for the run directory's scan")
-        elif scanned is not None and names.index(name) < names.index(SCANNED):
-            found.append(f"{name} runs before the run directory's scan is checked")
+    for job, walk_name in WALKING_JOBS.items():
+        names = [step.get("name") for step in _job_steps(doc, job)]
+        scanned = _in_job(doc, job, SCANNED)
+        if (
+            scanned is None
+            or scanned.get("id") != "scanned"
+            or _condition(scanned) != "always()"
+            or _lines(scanned) != SCANNED_LINES
+            or walk_name not in names
+            or names.index(SCANNED) < names.index(walk_name)
+        ):
+            found.append(
+                f"{job}: the run directory's secret-scan.json is not checked after"
+                " the walk"
+            )
+        for name, condition in AFTER_SCAN.items():
+            if name == RECORDINGS and job != "journeys":
+                continue
+            step = _in_job(doc, job, name)
+            if step is None or _condition(step) != condition:
+                found.append(
+                    f"{job}: {name} does not wait for the run directory's scan"
+                )
+            elif scanned is not None and names.index(name) < names.index(SCANNED):
+                found.append(
+                    f"{job}: {name} runs before the run directory's scan is checked"
+                )
+    if _in_job(doc, "demo", RECORDINGS) is not None:
+        found.append("the demo job checks recordings it never makes")
     for index, step in enumerate(steps_of(doc)):
         settings = step.get("with") or {}
         name = step.get("name") or f"step {index + 1}"
@@ -319,7 +448,8 @@ def workflow_problems(doc: Dict[Any, Any], text: str) -> List[str]:
             + [str(value) for value in (step.get("env") or {}).values()]
         )
         reads = "docs-journeys-run" in text or "DOCS_JOURNEY_RUN_DIR" in text
-        if reads and name not in (SCANNED, *AFTER_SCAN) and step.get("name") != WALK:
+        walks = step.get("name") in WALKING_JOBS.values()
+        if reads and name not in (SCANNED, *AFTER_SCAN) and not walks:
             if _condition(step) != CLEAN_IF:
                 found.append(f"{name} reads the run directory without a clean scan")
     recordings = _named(doc, RECORDINGS)
@@ -473,6 +603,51 @@ def _text(old, new):
 def _dispatch_inputs(inputs):
     def plant(doc, text):
         triggers(doc)["workflow_dispatch"] = {"inputs": inputs}
+        return doc, text
+
+    return plant
+
+
+def _demo_env(key, value):
+    def plant(doc, text):
+        step = _in_job(doc, "demo", DEMO_WALK)
+        env = dict(step.get("env") or {})
+        if value is None:
+            env.pop(key, None)
+        else:
+            env[key] = value
+        step["env"] = env
+        return doc, text
+
+    return plant
+
+
+def _demo_uses(uses, settings):
+    def plant(doc, text):
+        step = next(s for s in _job_steps(doc, "demo") if s.get("uses") == uses)
+        step["with"] = settings
+        return doc, text
+
+    return plant
+
+
+def _demo_step(match, change):
+    def plant(doc, text):
+        step = next(s for s in _job_steps(doc, "demo") if match(s))
+        change(step)
+        return doc, text
+
+    return plant
+
+
+def _report_download(index, change):
+    def plant(doc, text):
+        downloads = [
+            s
+            for s in doc["jobs"]["report"]["steps"]
+            if "download-artifact" in str(s.get("uses") or "")
+        ]
+        change(doc["jobs"]["report"]["steps"], downloads[index])
         return doc, text
 
     return plant
@@ -899,6 +1074,105 @@ PLANTS: List[tuple] = [
         "scan-checked-only-on-success",
         _step_set(SCANNED, "if", "success()"),
         "secret-scan.json is not checked",
+    ),
+    (
+        "demo-runs-every-stack",
+        _demo_env("DOCS_JOURNEY_STACKS", None),
+        "demo-local stack alone",
+    ),
+    (
+        "demo-without-its-switch",
+        _demo_env("DOCS_JOURNEY_DEMO_LOCAL", None),
+        "demo-local stack alone",
+    ),
+    (
+        "demo-records",
+        _demo_env("DOCS_JOURNEY_RECORD_VIDEO", "1"),
+        "unrecorded",
+    ),
+    (
+        "journeys-run-the-demo",
+        _env(WALK, "DOCS_JOURNEY_STACKS", "demo-local,compose-dev"),
+        "may run a demo-local journey",
+    ),
+    (
+        "demo-on-python-3-12",
+        _demo_uses("actions/setup-python@v7", {"python-version": "3.12"}),
+        "setup-python@v7",
+    ),
+    (
+        "demo-node-not-from-nvmrc",
+        _demo_uses("actions/setup-node@v7", {"node-version": "20"}),
+        "setup-node@v7",
+    ),
+    (
+        "demo-without-a-timeout",
+        lambda doc, text: (doc["jobs"]["demo"].pop("timeout-minutes") and doc, text),
+        "no timeout",
+    ),
+    (
+        "demo-verdicts-under-the-journeys-name",
+        _demo_step(
+            lambda s: (s.get("with") or {}).get("path") == VERDICTS_PATH,
+            lambda s: s["with"].update({"name": "docs-journeys-verdicts"}),
+        ),
+        "not uploaded as docs-journeys-demo-verdicts",
+    ),
+    (
+        "demo-run-directory-unscanned",
+        _demo_step(
+            lambda s: (s.get("with") or {}).get("path") == RUN_DIR,
+            lambda s: s.update({"if": "always()"}),
+        ),
+        "uploaded without a clean scan",
+    ),
+    (
+        "demo-scan-dropped",
+        lambda doc, text: (
+            doc["jobs"]["demo"]["steps"].remove(_in_job(doc, "demo", SCANNED)) or doc,
+            text,
+        ),
+        "demo: the run directory's secret-scan.json is not checked",
+    ),
+    (
+        "demo-summary-unscanned",
+        _demo_step(
+            lambda s: s.get("name") == "Step summary",
+            lambda s: s.update({"if": "always()"}),
+        ),
+        "demo: Step summary does not wait",
+    ),
+    (
+        "report-waits-for-the-journeys-only",
+        _set(["jobs", "report", "needs"], "journeys"),
+        "wait for the journeys and the demo",
+    ),
+    (
+        "report-only-after-the-journeys-verdicts",
+        _set(
+            ["jobs", "report", "if"],
+            "always() && needs.journeys.outputs.verdicts == 'true'",
+        ),
+        "after verdicts",
+    ),
+    (
+        "report-drops-the-demo-verdicts",
+        _report_download(1, lambda steps, step: steps.remove(step)),
+        "download each job's verdicts",
+    ),
+    (
+        "report-downloads-the-demo-verdicts-unconditionally",
+        _report_download(1, lambda steps, step: step.pop("if")),
+        "download each job's verdicts",
+    ),
+    (
+        "report-reads-one-file",
+        _replace_in(
+            "Decide and render",
+            '--verdicts-dir "$RUNNER_TEMP/verdicts"',
+            '--verdicts "$RUNNER_TEMP/verdicts/journeys/verdicts.json"',
+        ),
+        "read both jobs' verdicts together",
     ),
     (
         "annotation-with-a-value",

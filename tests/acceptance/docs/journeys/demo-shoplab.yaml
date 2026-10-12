@@ -1,0 +1,321 @@
+# ShopLab (demo/shoplab/README.md), as its reader runs it (#1142): the README
+# says demo/setup-local.sh does everything "Running it" lists, so the journey
+# runs on the stack that script starts (demo-local, docs_runner/stacks.py) and
+# walks the storefront, the dashboard it points at, and the kill switch.
+#
+# The storefront's Experimently panel calls the public API with the
+# storefront's own key (the seed writes it to demo/shoplab/.env.local), so the
+# panel listing a variant for each experiment is the key and the seed working.
+# What the seed made is read through the API: the four experiments, each the
+# kind the README's table says, and the two flags with the search flag's
+# 10% -> 50% -> 100% schedule. The kill switch is turned off in the dashboard
+# and back on, and an API key made for the run evaluates the flag in between,
+# as the storefront does; the key never reaches the browser, so the journey is
+# not recorded.
+#
+# Expectations written on 2026-10-11 from the README, the seed
+# (backend/scripts/seed_shoplab.py) and the storefront's source, before the
+# first run.
+guide: demo/shoplab/README.md
+stack: demo-local
+profile: full
+video: false
+written: 2026-10-11
+steps:
+  - id: storefront
+    doc: running-it
+    do:
+      open: http://localhost:3200
+    expect:
+      status: 200
+      text: Free shipping on every order this week — no minimum.
+      aria: |
+        - complementary "Experimently panel":
+          - button "Powered by Experimently"
+    fail: the storefront does not answer at the address the README gives, or shows no free-shipping banner while its flag is on
+  - id: panel
+    doc: what-each-page-demonstrates
+    do:
+      click:
+        role: button
+        name: Powered by Experimently
+    expect:
+      visible:
+        - role: button
+          name: New visitor
+      aria: |
+        - complementary "Experimently panel":
+          - heading "Experiments" [level=2]
+          - heading "Feature flags" [level=2]
+    fail: the panel does not open with the experiments, the flags and a New visitor button
+  - id: products
+    doc: what-each-page-demonstrates
+    do:
+      open: http://localhost:3200/products
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - heading "All products" [level=1]
+    fail: the product list does not answer
+  - id: search
+    doc: what-each-page-demonstrates
+    do:
+      open: http://localhost:3200/search
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - heading "Search" [level=1]
+    fail: the search page does not answer
+  - id: hero-banner
+    doc: what-each-page-demonstrates
+    do:
+      api:
+        method: GET
+        path: /api/v1/experiments/?search=Hero%20banner
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: shoplab_hero_banner
+        items.0.status: active
+        items.0.experiment_type: a_b
+        items.0.sequential_testing_enabled: true
+    fail: shoplab_hero_banner is not an ACTIVE A/B test with sequential testing
+  - id: product-sort
+    doc: what-each-page-demonstrates
+    do:
+      api:
+        method: GET
+        path: /api/v1/experiments/?search=Product%20list%20default%20sort
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: shoplab_plp_sort
+        items.0.status: active
+        items.0.experiment_type: bandit
+        items.0.optimization_type: thompson_sampling
+    fail: shoplab_plp_sort is not an ACTIVE multi-armed bandit with Thompson sampling
+  - id: buy-button
+    doc: what-each-page-demonstrates
+    do:
+      api:
+        method: GET
+        path: /api/v1/experiments/?search=PDP%20buy%20button
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: shoplab_pdp_buy_button
+        items.0.status: active
+        items.0.experiment_type: mv
+    fail: shoplab_pdp_buy_button is not an ACTIVE multivariate test
+  - id: checkout-flow
+    doc: what-each-page-demonstrates
+    do:
+      api:
+        method: GET
+        path: /api/v1/experiments/?search=Checkout%20flow
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: shoplab_checkout_flow
+        items.0.status: active
+        items.0.experiment_type: a_b
+    fail: shoplab_checkout_flow is not an ACTIVE A/B test
+  - id: new-search
+    doc: what-each-page-demonstrates
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/?search=shoplab_new_search
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: shoplab_new_search
+        items.0.status: active
+        items.0.rollout_percentage: 10
+    save:
+      search-flag-id:
+        path: items.0.id
+    fail: shoplab_new_search is not on at 10%
+  - id: new-search-schedule
+    doc: demo-script-what-to-show-in-the-dashboard
+    do:
+      api:
+        method: GET
+        path: /api/v1/rollout-schedules/?feature_flag_id={{search-flag-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.stages.0.target_percentage: 10
+        items.0.stages.0.status: in_progress
+        items.0.stages.1.target_percentage: 50
+        items.0.stages.1.status: pending
+        items.0.stages.2.target_percentage: 100
+        items.0.stages.2.status: pending
+    fail: shoplab_new_search's schedule is not 10% in progress, then 50%, then 100%
+  - id: free-shipping
+    doc: what-each-page-demonstrates
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/?search=shoplab_free_shipping_banner
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: shoplab_free_shipping_banner
+        items.0.status: active
+        items.0.rollout_percentage: 100
+    fail: shoplab_free_shipping_banner is not on for everyone
+  - id: api-key
+    doc: demo-script-what-to-show-in-the-dashboard
+    do:
+      api:
+        method: POST
+        path: /api/v1/api-keys
+        as: admin
+        body:
+          name: Docs journey ShopLab
+    expect:
+      status: 201
+      json:
+        name: Docs journey ShopLab
+    save:
+      sdk-key:
+        path: key
+        secret: true
+    fail: no API key can be made to evaluate the kill switch as the storefront does
+  - id: sign-in-page
+    doc: demo-script-what-to-show-in-the-dashboard
+    do:
+      goto: /login
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - heading "Sign in" [level=1]
+    fail: the dashboard the README points at does not answer
+  - id: email
+    doc: demo-script-what-to-show-in-the-dashboard
+    do:
+      fill:
+        label: Email
+        value: admin@demo.com
+        quote: false
+        reason: the sign-in form's field; the demo administrator the seed owns its data with
+    expect:
+      aria: |
+        - textbox "Email": admin@demo.com
+    fail: there is no Email field to fill
+  - id: password
+    doc: demo-script-what-to-show-in-the-dashboard
+    do:
+      fill:
+        label: Password
+        value: Demo1234!
+        quote: false
+        reason: the sign-in form's field; the demo administrator's documented password
+    expect:
+      aria: |
+        - textbox "Password"
+    fail: there is no Password field to fill
+  - id: signed-in
+    doc: demo-script-what-to-show-in-the-dashboard
+    do:
+      click:
+        role: button
+        name: Sign in
+        quote: false
+        reason: the sign-in form's button
+    expect:
+      url: /experiments
+      text: shoplab_hero_banner
+      aria: |
+        - main:
+          - heading "Experiments" [level=1]
+    fail: the demo administrator cannot sign in, or the experiments list does not show shoplab_hero_banner
+  - id: flags
+    doc: demo-script-what-to-show-in-the-dashboard
+    do:
+      goto: /feature-flags
+    expect:
+      url: /feature-flags
+      aria: |
+        - main:
+          - heading "Feature Flags" [level=1]
+    fail: the dashboard's flags list does not open
+  - id: banner-off
+    doc: demo-script-what-to-show-in-the-dashboard
+    do:
+      click:
+        role: switch
+        name: Turn shoplab_free_shipping_banner off
+        quote: false
+        reason: the list's on/off switch for the flag; the README says to toggle it off in the dashboard
+    expect:
+      visible:
+        - role: switch
+          name: Turn shoplab_free_shipping_banner on
+          quote: false
+          reason: the same switch, now offering to turn the flag back on
+      aria: |
+        - main:
+          - heading "Feature Flags" [level=1]
+    fail: the free-shipping banner's flag cannot be turned off from the dashboard
+  - id: banner-off-evaluated
+    doc: demo-script-what-to-show-in-the-dashboard
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/shoplab_free_shipping_banner?user_id=docs-journey-visitor
+        as: anonymous
+        key: sdk-key
+    expect:
+      status: 200
+      json:
+        enabled: false
+        reason: inactive
+    fail: the storefront's next evaluation still serves the banner after the flag is turned off
+  - id: banner-on
+    doc: demo-script-what-to-show-in-the-dashboard
+    do:
+      click:
+        role: switch
+        name: Turn shoplab_free_shipping_banner on
+        quote: false
+        reason: the list's on/off switch for the flag; the README says to toggle it back on
+    expect:
+      visible:
+        - role: switch
+          name: Turn shoplab_free_shipping_banner off
+          quote: false
+          reason: the same switch, now offering to turn the flag off again
+      aria: |
+        - main:
+          - heading "Feature Flags" [level=1]
+    fail: the free-shipping banner's flag cannot be turned back on
+  - id: banner-back
+    doc: demo-script-what-to-show-in-the-dashboard
+    do:
+      open: http://localhost:3200
+    expect:
+      status: 200
+      text: Free shipping on every order this week — no minimum.
+      aria: |
+        - complementary "Experimently panel":
+          - button "Powered by Experimently"
+    fail: the reloaded storefront does not show the banner again once its flag is back on
