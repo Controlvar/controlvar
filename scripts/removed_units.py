@@ -25,7 +25,9 @@ The documents are the base's in-scope Markdown documents
 (``tests/acceptance/docs/inventory.toml``: every nav page and every
 ``[documents]`` entry with ``scope = "in"``), plus any file an audit row names.
 Text is compared with runs of whitespace made one space and backticks and
-asterisks dropped, so a reflow or a markup-only edit is not a cut.
+asterisks dropped, so a reflow or a markup-only edit is not a cut. An audit
+excerpt may elide with ``...``: then each piece around it has to be on the
+page, in order.
 
 The audit rows are JSON objects, one per line, with at least ``doc`` (a path
 from the repository root), ``kind`` (``claim`` or ``flow``), ``line``,
@@ -59,6 +61,7 @@ TAGS = ("T", "S", "A", "D", "X")
 MARKUP = re.compile(r"[`*]")
 SPACE = re.compile(r"\s+")
 HAS_TEXT = re.compile(r"[A-Za-z0-9]")
+ELISION = re.compile(r"\.\.\.|\u2026")
 EXCERPT_MAX = 160
 
 Read = Callable[[str], Optional[str]]
@@ -81,6 +84,26 @@ class Row:
 
 def normalise(text: str) -> str:
     return SPACE.sub(" ", MARKUP.sub("", text)).strip()
+
+
+def pieces(excerpt: str) -> List[str]:
+    """An excerpt's verbatim pieces, normalised: it may elide with ``...``."""
+    return [
+        piece.strip()
+        for piece in ELISION.split(normalise(excerpt))
+        if HAS_TEXT.search(piece)
+    ]
+
+
+def contains(flat: str, parts: Sequence[str]) -> bool:
+    """Every piece is in ``flat``, in order."""
+    at = 0
+    for part in parts:
+        at = flat.find(part, at)
+        if at < 0:
+            return False
+        at += len(part)
+    return bool(parts)
 
 
 def short(text: str) -> str:
@@ -245,15 +268,17 @@ def report(
         lines: List[str] = []
         covered_by_rows: List[str] = []
         for row in sorted(by_doc.get(doc, []), key=lambda r: r.line):
-            text = normalise(row.text)
-            if not text or text not in old_flat:
+            parts = pieces(row.text)
+            if not contains(old_flat, parts):
                 counts["not found at base"] += 1
                 continue
-            if text in new_flat:
+            if contains(new_flat, parts):
                 continue
-            covered_by_rows.append(text)
+            covered_by_rows.extend(parts)
             elsewhere = [
-                d for d in sorted(head_texts) if d != doc and text in head_texts[d]
+                d
+                for d in sorted(head_texts)
+                if d != doc and contains(head_texts[d], parts)
             ]
             if elsewhere:
                 what = f"moved to {elsewhere[0]}"

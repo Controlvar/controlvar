@@ -180,6 +180,17 @@ def test_a_claim_moved_to_another_page_says_where(tmp_path):
     assert "removed TRUE claim: 0" in out
 
 
+def test_an_excerpt_that_elides_is_matched_piece_by_piece(tmp_path):
+    rows = [_row(8, "curl ... /api/v1/experiments/", kind="flow", tag="S")]
+    out = _report(
+        tmp_path,
+        {"docs/a.md": PAGE_A.replace("curl localhost:8000/api/v1/experiments/\n", "")},
+        rows=rows,
+    )
+    assert "removed flow: where did it go?  docs/a.md:8 (audit)  [S]" in out
+    assert "audit rows not found on their base page (not checked): 0" in out
+
+
 def test_a_removed_line_with_no_audit_row_is_listed(tmp_path):
     out = _report(
         tmp_path,
