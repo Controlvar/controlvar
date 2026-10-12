@@ -2073,6 +2073,20 @@ def test_the_real_inventory_maps_every_flow_and_names_where_each_journey_waits()
     assert not any(row[3].startswith("verified by") for row in rows)
 
 
+def test_the_run_summary_reads_pages_and_flows_and_ignores_documents():
+    """inventory.toml's [documents] and [meta] (#1142) change nothing in the
+    run summary: it lists nav pages and flows only."""
+    inventory = loader.context_for(REPO_ROOT).inventory
+    assert inventory["documents"] and inventory["meta"]
+    pages_only = {key: inventory[key] for key in ("pages", "flow")}
+    assert report.summary_markdown(
+        [], inventory, date="2026-10-11", sha="abc"
+    ) == report.summary_markdown([], pages_only, date="2026-10-11", sha="abc")
+    assert [row[0] for row in report.not_covered(inventory, [])] == sorted(
+        inventory["pages"]
+    )
+
+
 @pytest.mark.regression
 def test_a_partial_journey_does_not_verify_its_flow():
     """A journey that ran with steps not run (PARTIAL) leaves its flow partly
