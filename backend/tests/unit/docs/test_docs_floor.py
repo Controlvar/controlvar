@@ -52,6 +52,9 @@ from backend.tests.unit.docs.test_docs_inventory import EXTRACTORS, SURFACES
 
 pytestmark = [pytest.mark.unit]
 
+# TAMPER for #1161: the module skips itself; the docs-only lane must go red.
+pytest.skip("planted: the floor skips itself", allow_module_level=True)
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
 FLOOR = REPO_ROOT / "tests" / "acceptance" / "docs" / "floor.toml"
 INVENTORY = REPO_ROOT / "tests" / "acceptance" / "docs" / "inventory.toml"
