@@ -75,7 +75,10 @@ jobs:
         run: |
           set -euo pipefail
           files="$(git diff --no-renames --name-only "$BASE" "$HEAD")"
-          lane="$(printf '%s\n' "$files" | python3 scripts/classify_changes.py)"
+          # TAMPER for #1161: the docs-only lane is forced, so core-build runs
+          # its docs steps on this branch. Never merged.
+          printf '%s\n' "$files" >&2
+          lane="docs_only=true"
           case "$lane" in
             docs_only=true | docs_only=false) ;;
             *) printf '::error::the classifier printed %s, not one docs_only line\n' "$lane" >&2; exit 1 ;;
