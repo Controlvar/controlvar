@@ -188,8 +188,10 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
                 data-testid="api-key-ruleset-scope-help"
                 className="mt-1 ml-6 text-sm text-slate-600"
               >
-                For server-side SDKs that evaluate flags locally. A key with this scope will be
-                able to download every flag&apos;s targeting rules, so keep it on a server.
+                For server-side SDKs that evaluate flags locally, and for a server that forwards
+                error reports: reports sent with this key count toward automatic rollback. A key
+                with this scope will be able to download every flag&apos;s targeting rules, so keep
+                it on a server.
               </p>
               {!rulesetAllowed && (
                 <p

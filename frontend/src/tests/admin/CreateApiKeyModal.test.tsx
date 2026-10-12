@@ -32,7 +32,7 @@ const ROLE_REASON =
   'Only users who can change feature flags (the ADMIN and DEVELOPER roles, or a superuser) can create a key with this scope.';
 
 const HELP_TEXT =
-  "For server-side SDKs that evaluate flags locally. A key with this scope will be able to download every flag's targeting rules, so keep it on a server.";
+  "For server-side SDKs that evaluate flags locally, and for a server that forwards error reports: reports sent with this key count toward automatic rollback. A key with this scope will be able to download every flag's targeting rules, so keep it on a server.";
 
 const defaultProps = {
   isOpen: true,

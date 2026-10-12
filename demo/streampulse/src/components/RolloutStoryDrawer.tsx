@@ -33,7 +33,7 @@ export const STORY_STEPS: StoryStep[] = [
   },
   {
     title: 'Crash rate spikes on Android 12',
-    action: 'The simulator runs with --incident android12: 40 % of Android 12 devices with the flag on report a crash through POST /tracking/errors. The flag\'s error rate crosses the 5 % critical threshold.',
+    action: 'The simulator runs with --incident android12: 40 % of Android 12 devices with the flag on crash, and each crash is reported through POST /tracking/errors. The simulator reports the crashes the way the StreamPulse server would forward them, with its server-side key. The flag\'s error rate crosses the 5 % critical threshold.',
     lookAt: 'Dashboard → Admin → Safety: the check for Player v2 turns unhealthy. Pick "Galaxy S10 · Android 12" in the app — that is the affected cohort.',
   },
   {

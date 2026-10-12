@@ -90,8 +90,11 @@ and sending the ETag back gets 304 (the `ruleset (server)` row; `EXPERIMENTLY_LO
 overrides the scoped key). After the SDKs, each SDK with a local mode runs its local smoke with that
 key (the `python (local)` and `js (local)` rows): the runner reads the database before and after, through the backend's own
 `SafetyService.get_error_metrics`, and requires no new per-user evaluation row (no evaluate call),
-the safety denominator grown by exactly the local evaluations, and the error count by exactly the
-errors the smoke posted. The runner therefore needs the backend's Python environment and `POSTGRES_*`.
+the safety denominator grown by exactly the local evaluations, and the counted error count by
+exactly the errors the smoke reported with the `sdk:ruleset` key. It then reports one error with the
+seed's plain key and requires that it is stored but not counted (`error_count` +0,
+`uncounted_error_count` +1): only reports sent with a server-side key count toward automatic
+rollback. The runner therefore needs the backend's Python environment and `POSTGRES_*`.
 
 ```bash
 source venv/bin/activate

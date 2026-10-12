@@ -13794,7 +13794,7 @@
   "info": {
     "description": "API for managing experiments and feature flags in test environment",
     "title": "Experimently",
-    "version": "0.28.2"
+    "version": "0.29.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -26059,7 +26059,7 @@
     },
     "/api/v1/tracking/errors": {
       "post": {
-        "description": "Record an error that happened in a client while a feature flag or\nexperiment was active.\n\nThe row is attached to the feature flag resolved from ``feature_flag_key``\nso safety monitoring counts it towards that flag's ``error_rate``\n(errors / flag evaluations in the monitoring window). ``experiment_key``\nis resolved and stored in ``request_data``.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If ``feature_flag_key`` or ``experiment_key`` is unknown\n    HTTPException 422: If neither key is given or the body is invalid",
+        "description": "Record an error that happened while a feature flag or experiment was\nactive.\n\nThe row is attached to the feature flag resolved from ``feature_flag_key``.\n``experiment_key`` is resolved and stored in ``request_data``.\n\nOnly a report sent with a server-side key (an API key with the\n``sdk:ruleset`` scope, whose owner can change feature flags) counts toward\nthe flag's ``error_rate`` (errors / flag evaluations in the monitoring\nwindow) and automatic rollback. A report sent with any other key is stored\nthe same way and answers 201, but is not counted; the flag's safety check\nshows it as ``uncounted_error_count``.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If ``feature_flag_key`` or ``experiment_key`` is unknown\n    HTTPException 422: If neither key is given or the body is invalid",
         "operationId": "report_client_error_api_v1_tracking_errors_post",
         "requestBody": {
           "content": {
@@ -26107,7 +26107,7 @@
     },
     "/api/v1/tracking/errors/batch": {
       "post": {
-        "description": "Record up to 100 client-side errors in one request.\n\nReports whose keys cannot be resolved are skipped and listed in ``errors``\n(with their index); the rest are stored in a single transaction.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 413: If more than 100 reports are sent\n    HTTPException 422: If the batch is malformed",
+        "description": "Record up to 100 error reports in one request.\n\nReports whose keys cannot be resolved are skipped and listed in ``errors``\n(with their index); the rest are stored in a single transaction.\n\nAs for a single report, only reports sent with a server-side key (an API\nkey with the ``sdk:ruleset`` scope, whose owner can change feature flags)\ncount toward a flag's ``error_rate`` and automatic rollback. Reports sent\nwith any other key are stored and counted in ``success_count``, but not\ntoward the error rate.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 413: If more than 100 reports are sent\n    HTTPException 422: If the batch is malformed",
         "operationId": "report_client_errors_batch_api_v1_tracking_errors_batch_post",
         "requestBody": {
           "content": {

@@ -270,6 +270,23 @@ def test_step_3_fails_loudly_when_traffic_exits_non_zero():
         s.step_3()
 
 
+def test_step_3_says_the_crashes_go_out_with_the_server_key_and_names_its_file_on_exit_2():
+    client = FakeStoryClient()
+    client.flag["rollout_percentage"] = 25
+
+    def run_traffic(args):
+        client.error_rate = 0.12
+        return 0
+
+    s, out = make_story(client, run_traffic=run_traffic)
+    assert s.step_3() is True
+    assert "the way the StreamPulse server would forward them, with its server-side key" in out.getvalue()
+
+    s, _ = make_story(client, run_traffic=lambda args: 2)
+    with pytest.raises(story.StoryError, match=r"code 2 .*demo/streampulse/\.api_key_server.*seed_streampulse\.py"):
+        s.step_3()
+
+
 def test_step_4_waits_for_the_safety_scheduler_when_automatic_rollbacks_are_on():
     client = FakeStoryClient()
     client.flag["rollout_percentage"] = 25

@@ -366,6 +366,38 @@ describe('FeatureFlagDetailPage', () => {
     }
   });
 
+  it('says how many error reports were stored but not counted, only when there are some', async () => {
+    const cases: Array<[Record<string, unknown>, string | null]> = [
+      [
+        { error_count: 0, uncounted_error_count: 12, total_evaluations: 300, timeframe_minutes: 15 },
+        "12 error reports in the last 15 minutes were sent with keys that do not count toward automatic rollback (no sdk:ruleset scope, or the key's owner can no longer change flags). They are stored, but do not count toward the error rate.",
+      ],
+      [
+        { error_count: 2, uncounted_error_count: 1, total_evaluations: 300, timeframe_minutes: 15 },
+        "1 error report in the last 15 minutes was sent with a key that does not count toward automatic rollback (no sdk:ruleset scope, or the key's owner can no longer change flags). It is stored, but does not count toward the error rate.",
+      ],
+      [{ error_count: 2, uncounted_error_count: 0, total_evaluations: 300, timeframe_minutes: 15 }, null],
+      [{ error_count: 2, total_evaluations: 300, timeframe_minutes: 15 }, null],
+    ];
+    for (const [details, text] of cases) {
+      install([
+        ...happyRoutes().filter((r) => !String(r.path).includes('/safety/')),
+        { path: '/api/v1/safety/feature-flags/flag-1/check', handler: () => safety({ details }) },
+      ]);
+      const { unmount } = render(<FeatureFlagDetailPage />);
+      expect(await screen.findByTestId('safety-status')).toHaveTextContent('Healthy');
+      if (text === null) {
+        expect(screen.queryByTestId('safety-uncounted-reports')).not.toBeInTheDocument();
+      } else {
+        const line = screen.getByTestId('safety-uncounted-reports');
+        expect(line).toHaveTextContent(text);
+        expect(line).toHaveAttribute('role', 'status');
+        expect(line.className).toContain('text-slate-700');
+      }
+      unmount();
+    }
+  });
+
   it('saves the rollout percentage through PUT /feature-flags/{id}, leaving untouched rules out', async () => {
     install([
       ...happyRoutes(),

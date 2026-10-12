@@ -577,8 +577,10 @@ class TestGetErrorMetricsAggregates:
         assert result["total_evaluations"] == 16
         assert result["error_rate"] == pytest.approx(0.5)
         assert result["error_types"] == {"crash": 5, "timeout": 2, "api_error": 1}
+        assert result["uncounted_error_count"] == 0
         assert set(result) == {
             "error_count",
+            "uncounted_error_count",
             "total_evaluations",
             "error_rate",
             "error_types",

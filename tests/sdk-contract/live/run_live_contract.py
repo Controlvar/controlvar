@@ -16,12 +16,15 @@ sending the ETag back gets 304.
 After the SDKs, each SDK with a local-evaluation mode (``LOCAL_MANIFEST``) runs
 its ``local_eval_smoke`` with the ``sdk:ruleset`` key: N evaluations of
 ``sdk_contract_flag`` answered in-process, the counts sent on close, then E
-client errors posted. The runner reads the database around it (the same
-``POSTGRES_*`` the backend uses, through the backend's own
+errors reported with the same key. The runner reads the database around it (the
+same ``POSTGRES_*`` the backend uses, through the backend's own
 ``SafetyService.get_error_metrics``) and requires that the step added no
 per-user server evaluation (no evaluate call was made), exactly N evaluations
-to the safety denominator and exactly E errors, so the flag's error rate is
-non-zero and computed over the local traffic.
+to the safety denominator and exactly E counted errors (``error_count``, the
+number automatic rollback acts on), so the flag's error rate is non-zero and
+computed over the local traffic. It then reports one error itself with the
+seed's unscoped key and requires that it is stored but not counted
+(``error_count`` +0, ``uncounted_error_count`` +1).
 
 Prerequisites
     1. A backend at ``$EXPERIMENTLY_API_URL`` (default http://localhost:8000)
@@ -180,10 +183,11 @@ def check_ruleset(api_url: str, plain_key: str, scoped_key: str, flag_key: str) 
 def _flag_counters(flag_key: str) -> dict[str, int]:
     """What the server has recorded for *flag_key*, read from the database.
 
-    ``total_evaluations`` and ``error_count`` come from the safety monitor's own
-    ``get_error_metrics`` (its 15-minute window), so a local evaluation that is
-    not counted there is invisible to automatic rollback. ``server_user_rows``
-    counts the per-user evaluation rows only the evaluate endpoints write.
+    ``total_evaluations``, ``error_count`` and ``uncounted_error_count`` come
+    from the safety monitor's own ``get_error_metrics`` (its 15-minute window),
+    so a local evaluation or an error that is not counted there is invisible to
+    automatic rollback. ``server_user_rows`` counts the per-user evaluation rows
+    only the evaluate endpoints write.
     """
     sys.path.insert(0, str(REPO_ROOT))
     from backend.app.db.session import SessionLocal
@@ -211,6 +215,7 @@ def _flag_counters(flag_key: str) -> dict[str, int]:
         return {
             "total_evaluations": int(metrics["total_evaluations"]),
             "error_count": int(metrics["error_count"]),
+            "uncounted_error_count": int(metrics["uncounted_error_count"]),
             "server_user_rows": int(server_user_rows),
         }
     finally:
@@ -243,16 +248,58 @@ def run_local(sdk: str, command: str, env: dict[str, str], timeout: int, flag_ke
         )
     if delta["error_count"] != errors:
         problems.append(f"the error count grew by {delta['error_count']}, expected {errors}")
+    if delta["uncounted_error_count"] != 0:
+        problems.append(f"{delta['uncounted_error_count']} of the sdk:ruleset key's error reports were not counted")
     if not after["total_evaluations"] or not after["error_count"]:
         problems.append(f"the error rate is not computable from {after}")
     if problems:
         return "FAIL", "; ".join(problems)
     rate = after["error_count"] / after["total_evaluations"]
+
+    # One report with the seed's unscoped key: stored, not counted.
+    report_status = _report_error(env["EXPERIMENTLY_API_URL"], env["EXPERIMENTLY_API_KEY"], flag_key, sdk)
+    if report_status != 201:
+        return "FAIL", f"POST /api/v1/tracking/errors with the unscoped key answered {report_status}, expected 201"
+    unscoped = _flag_counters(flag_key)
+    if unscoped["error_count"] != after["error_count"]:
+        problems.append(
+            f"a report sent with the unscoped key changed the error count by "
+            f"{unscoped['error_count'] - after['error_count']}, expected 0"
+        )
+    if unscoped["uncounted_error_count"] != after["uncounted_error_count"] + 1:
+        problems.append(
+            f"the uncounted reports grew by {unscoped['uncounted_error_count'] - after['uncounted_error_count']}, "
+            "expected 1"
+        )
+    if problems:
+        return "FAIL", "; ".join(problems)
     return (
         "PASS",
         f"{evaluations} local evaluations, 0 evaluate calls; denominator +{evaluations}, "
-        f"errors +{errors}, error rate {rate:.3f}",
+        f"errors +{errors}, error rate {rate:.3f}; an unscoped key's report stored, not counted",
     )
+
+
+def _report_error(api_url: str, key: str, flag_key: str, sdk: str) -> int:
+    """POST one error report for *flag_key* with *key*; the HTTP status."""
+    body = json.dumps(
+        {
+            "feature_flag_key": flag_key,
+            "error_type": "live_contract",
+            "message": f"live contract: a report sent with the unscoped key ({sdk})",
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        f"{api_url}/api/v1/tracking/errors",
+        data=body,
+        headers={"X-API-Key": key, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as resp:  # noqa: S310
+            return resp.status
+    except urllib.error.HTTPError as exc:
+        return exc.code
 
 
 def _run_command(command: str, env: dict[str, str], timeout: int) -> tuple[str, str, dict]:

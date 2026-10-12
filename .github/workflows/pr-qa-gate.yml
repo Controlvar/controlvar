@@ -133,10 +133,13 @@ jobs:
       # and until they joined this job no workflow ran them. So must the
       # showcase tests (backend/tests/unit/showcase, #1066): they are meant to
       # need no ffmpeg, browser or aws, and one that skipped for want of
-      # one of them would read as a pass. On this full checkout nothing under
-      # any of the four directories skips.
-      - name: No workflow, statistical-gate, realistic-scenario or showcase test was skipped
-        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic backend/tests/unit/showcase
+      # one of them would read as a pass. So must the docs tests
+      # (backend/tests/unit/docs, #1142): the page gate and the information
+      # floor are among them, and core-build's docs step checks the same
+      # directory on a docs-only change. On this full checkout nothing under
+      # any of the five directories skips.
+      - name: No workflow, statistical-gate, realistic-scenario, showcase or docs test was skipped
+        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic backend/tests/unit/showcase backend/tests/unit/docs
 
       # The Lambda functions (event processor, flag evaluation) and their
       # shared package carry tests of their own (240 collected) that ran
@@ -573,7 +576,7 @@ jobs:
       - name: Docs content tests
         if: needs.changes.outputs.docs_only == 'true'
         run: >-
-          python -m pytest -p no:cov -q --tb=short
+          python -m pytest -p no:cov -q --tb=short --junitxml=docs-content-junit.xml
           backend/tests/unit/scripts/test_doc_examples.py
           backend/tests/unit/scripts/test_guide_blocks.py
           backend/tests/unit/docs/
@@ -587,6 +590,15 @@ jobs:
           backend/tests/unit/db/test_alembic_plan.py
           modules/backend/tests/unit/services/test_sso_docs_messages.py
           backend/tests/unit/showcase/test_showcase_quoted_docs.py
+
+      # On a docs-only change this is where the docs tests run, Unit Tests
+      # being skipped, so a docs test that skipped would read as a pass on
+      # most of #1142's pull requests. Nothing under backend/tests/unit/docs
+      # skips on this full checkout; the Unit Tests job checks the same
+      # directory on every other change.
+      - name: No docs content test was skipped
+        if: needs.changes.outputs.docs_only == 'true'
+        run: python3 scripts/check_junit_skips.py docs-content-junit.xml backend/tests/unit/docs
 
       - name: Set up Node.js
         if: needs.changes.outputs.docs_only != 'true'

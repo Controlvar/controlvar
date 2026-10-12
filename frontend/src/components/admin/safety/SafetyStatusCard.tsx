@@ -25,6 +25,7 @@ export function SafetyStatusCard({ flag, onRollback }: SafetyStatusCardProps) {
   const badgeClass = STATUS_BADGE_CLASSES[flag.health];
   const showRollback = flag.is_on && (flag.health === 'warning' || flag.health === 'critical');
   const unmeasured = flag.check.details?.unmeasured_metrics;
+  const uncounted = flag.check.details?.uncounted_error_count;
   const disabled = flag.check.metrics.length === 0;
 
   return (
@@ -69,6 +70,11 @@ export function SafetyStatusCard({ flag, onRollback }: SafetyStatusCardProps) {
         {Array.isArray(unmeasured) && unmeasured.length > 0 && (
           <p data-testid="safety-unmeasured-note" className="text-xs text-slate-500">
             Not yet measured: {unmeasured.join(', ')}
+          </p>
+        )}
+        {typeof uncounted === 'number' && uncounted > 0 && (
+          <p data-testid="safety-uncounted-note" className="text-xs text-slate-500">
+            {uncounted} {uncounted === 1 ? 'report' : 'reports'} not counted
           </p>
         )}
       </div>

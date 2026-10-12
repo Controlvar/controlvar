@@ -53,7 +53,9 @@ class FakeClient:
     """Stands in for ApiClient: server-side flag rollout / rules, holdout + MEG, records calls."""
 
     def __init__(self, api_url: str = "", api_key: str = "", timeout: float = 5.0, *, seed: int = 1,
-                 player_percentage: int = 5, holdout_percentage: int = 2):
+                 player_percentage: int = 5, holdout_percentage: int = 2, server_api_key: str = ""):
+        self.api_key = api_key
+        self.server_api_key = server_api_key
         self.rng = random.Random(seed)
         self.player_percentage = player_percentage
         self.holdout_percentage = holdout_percentage
@@ -347,7 +349,7 @@ def test_help_lists_documented_arguments(capsys):
         traffic.main(["--help"])
     assert exc.value.code == 0
     text = capsys.readouterr().out
-    for flag in ("--api-url", "--api-key", "--rate", "--duration", "--seed", "--devices", "--incident", "--dry-run"):
+    for flag in ("--api-url", "--api-key", "--server-api-key", "--rate", "--duration", "--seed", "--devices", "--incident", "--dry-run"):
         assert flag in text
 
 
@@ -356,7 +358,7 @@ def test_fatal_api_errors_exit_non_zero_with_message(status, expected_rc, needle
     out = io.StringIO()
     rc = traffic.main(
         ["--api-key", "k", "--max-ticks", "1", "--rate", "1000", "--no-probe"],
-        client_factory=lambda url, key: FailingClient(status),
+        client_factory=lambda url, key, **kw: FailingClient(status),
         sleep=lambda s: None,
         out=out,
     )
@@ -368,7 +370,7 @@ def test_run_stops_after_max_ticks_and_reports_with_preset_probe():
     out = io.StringIO()
     made = []
 
-    def factory(url, key):
+    def factory(url, key, **kw):
         c = FakeClient(seed=5)
         made.append(c)
         return c
@@ -384,6 +386,55 @@ def test_run_stops_after_max_ticks_and_reports_with_preset_probe():
     assert "employee" in text and "player_v2=ON(targeting_rule)" in text
     probe_ids = {c[1] for c in made[0].evaluate_calls if c[1].startswith("preset-")}
     assert probe_ids == {d.device_id for d in devices.PRESET_DEVICES}
+
+
+def test_the_incident_needs_the_server_key(monkeypatch, capsys):
+    monkeypatch.setattr(traffic, "DEFAULT_SERVER_KEY_FILE", Path("/nonexistent/.api_key_server"))
+    made = []
+
+    def factory(url, key, **kw):
+        made.append(kw)
+        return FakeClient(seed=5)
+
+    rc = traffic.main(["--api-key", "k", "--incident", "android12", "--max-ticks", "1"], client_factory=factory)
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "server key" in err and "seed_streampulse.py" in err and ".api_key_server" in err
+    assert made == []
+
+    # Without the incident nothing is reported, so no server key is needed.
+    rc = traffic.main(
+        ["--api-key", "k", "--max-ticks", "1", "--rate", "1000", "--no-probe"],
+        client_factory=factory, sleep=lambda s: None, out=io.StringIO(),
+    )
+    assert rc == 0 and made == [{"server_api_key": ""}]
+
+
+def test_the_server_key_is_read_from_its_file_and_passed_to_the_client(monkeypatch, tmp_path):
+    server_file = tmp_path / ".api_key_server"
+    server_file.write_text("srv-key\n")
+    monkeypatch.setattr(traffic, "DEFAULT_SERVER_KEY_FILE", server_file)
+    made = []
+
+    def factory(url, key, **kw):
+        made.append((key, kw))
+        return FakeClient(seed=5)
+
+    rc = traffic.main(
+        ["--api-key", "app-key", "--incident", "android12", "--max-ticks", "1", "--rate", "1000", "--no-probe"],
+        client_factory=factory, sleep=lambda s: None, out=io.StringIO(),
+    )
+    assert rc == 0
+    assert made == [("app-key", {"server_api_key": "srv-key"})]
+
+    made.clear()
+    rc = traffic.main(
+        ["--api-key", "app-key", "--server-api-key", "flag-key", "--incident", "android12", "--max-ticks", "1",
+         "--rate", "1000", "--no-probe"],
+        client_factory=factory, sleep=lambda s: None, out=io.StringIO(),
+    )
+    assert rc == 0
+    assert made == [("app-key", {"server_api_key": "flag-key"})]
 
 
 def test_missing_api_key_is_an_error(monkeypatch, capsys):
@@ -418,7 +469,7 @@ def test_api_client_request_shape_and_error_mapping(monkeypatch):
         return Resp(b'{"key": "streampulse_player_v2", "enabled": true, "config": null, "reason": "targeting_rule"}')
 
     monkeypatch.setattr(traffic.urllib.request, "urlopen", fake_urlopen)
-    client = traffic.ApiClient("http://localhost:8000/", "secret")
+    client = traffic.ApiClient("http://localhost:8000/", "secret", server_api_key="server-secret")
     device = devices.PRESET_DEVICES[-1]
     resp = client.evaluate_flag(traffic.PLAYER_FLAG, device.device_id, device.attributes())
     assert resp["reason"] == "targeting_rule"
@@ -435,13 +486,26 @@ def test_api_client_request_shape_and_error_mapping(monkeypatch):
     assert captured["url"] == "http://localhost:8000/api/v1/tracking/assign"
     assert captured["body"] == {"experiment_key": traffic.PUSH_KEY, "user_id": "u-1", "context": {"os": "iOS"}}
 
+    assert captured["headers"]["x-api-key"] == "secret"
+
+    # Crash reports go out with the server key, the way the StreamPulse server forwards them.
     client.report_error({"feature_flag_key": traffic.PLAYER_FLAG, "error_type": "crash", "message": "m"})
     assert captured["url"] == "http://localhost:8000/api/v1/tracking/errors" and captured["method"] == "POST"
+    assert captured["headers"]["x-api-key"] == "server-secret"
     client.report_errors([{"error_type": "crash"}])
     assert captured["url"] == "http://localhost:8000/api/v1/tracking/errors/batch"
     assert captured["body"] == {"errors": [{"error_type": "crash"}]}
+    assert captured["headers"]["x-api-key"] == "server-secret"
     client.batch([{"event_type": "play"}])
     assert captured["url"] == "http://localhost:8000/api/v1/tracking/batch"
+    assert captured["headers"]["x-api-key"] == "secret"
+
+    # Without a server key a report is never sent with the app's key.
+    no_server = traffic.ApiClient("http://localhost:8000/", "secret")
+    with pytest.raises(ValueError, match="server key"):
+        no_server.report_error({"feature_flag_key": traffic.PLAYER_FLAG, "error_type": "crash", "message": "m"})
+    with pytest.raises(ValueError, match="server key"):
+        no_server.report_errors([{"error_type": "crash"}])
 
     def raise_401(req, timeout):
         raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, io.BytesIO(b'{"detail":"bad key"}'))

@@ -13,19 +13,24 @@ Per tick (one app session on one device):
   4. POST /api/v1/tracking/batch (≤100 events per call) with an explicit experiment_key or
      feature_flag_key on every event
   5. ``--incident android12``: a broken Player v2 build on Android 12.  40% of Android 12
-     devices that have ``streampulse_player_v2`` ON crash when the player opens and report it
-     with POST /api/v1/tracking/errors (``error_type: crash``).  Crashed apps get relaunched by
-     their users (crash loop: each relaunch re-evaluates the flag and crashes again), so
-     Android 12 devices dominate traffic while the incident lasts.  At rate ≥ 5 the flag's
-     error rate (crash reports ÷ flag evaluations, 15-minute window) crosses the 5% critical
-     threshold within a couple of minutes once the flag is past its 5% internal stage.
+     devices that have ``streampulse_player_v2`` ON crash when the player opens, and the crash
+     is reported with POST /api/v1/tracking/errors (``error_type: crash``).  The reports are
+     sent with the StreamPulse server key (``--server-api-key``, default
+     ``demo/streampulse/.api_key_server``, scope ``sdk:ruleset``), the way the StreamPulse
+     server would forward its devices' crash reports: only reports sent with a server-side
+     key count toward automatic rollback.  Crashed apps get relaunched by their users (crash
+     loop: each relaunch re-evaluates the flag and crashes again), so Android 12 devices
+     dominate traffic while the incident lasts.  At rate ≥ 5 the flag's error rate (crash
+     reports ÷ flag evaluations, 15-minute window) crosses the 5% critical threshold within a
+     couple of minutes once the flag is past its first stage (5%).
 
 Usage:
   python demo/streampulse/simulator/traffic.py --rate 6 --duration 300
   python demo/streampulse/simulator/traffic.py --incident android12 --rate 6 --duration 90
   python demo/streampulse/simulator/traffic.py --dry-run --seed 1
 
-Exit codes: 0 ok · 2 bad/missing API key · 3 catalogue not seeded · 4 API unreachable.
+Exit codes: 0 ok · 2 bad/missing API key (or ``--incident`` without the server key) ·
+3 catalogue not seeded · 4 API unreachable.
 """
 from __future__ import annotations
 
@@ -60,6 +65,8 @@ from devices import (  # noqa: E402
 
 DEFAULT_API_URL = "http://localhost:8000"
 DEFAULT_API_KEY_FILE = Path(__file__).resolve().parent.parent / ".api_key"
+# The StreamPulse server key (scope sdk:ruleset), written by the seed; crash reports use it.
+DEFAULT_SERVER_KEY_FILE = Path(__file__).resolve().parent.parent / ".api_key_server"
 BATCH_LIMIT = 100
 ERROR_BATCH_LIMIT = 100
 REPORT_INTERVAL_S = 10.0
@@ -359,12 +366,17 @@ def compact_json(value: Any) -> str:
 
 
 class ApiClient:
-    def __init__(self, api_url: str = DEFAULT_API_URL, api_key: str = "", timeout: float = 5.0):
+    """The device calls use ``api_key`` (the app's key); error reports use ``server_api_key``."""
+
+    def __init__(self, api_url: str = DEFAULT_API_URL, api_key: str = "", timeout: float = 5.0, server_api_key: str = ""):
         self.api_url = api_url.rstrip("/")
         self.api_key = api_key
+        self.server_api_key = server_api_key
         self.timeout = timeout
 
-    def request(self, method: str, path: str, body: Any = None, params: dict[str, str] | None = None) -> Any:
+    def request(
+        self, method: str, path: str, body: Any = None, params: dict[str, str] | None = None, api_key: str | None = None
+    ) -> Any:
         url = f"{self.api_url}/api/v1{path}"
         if params:
             url += "?" + urllib.parse.urlencode(params)
@@ -373,7 +385,7 @@ class ApiClient:
             url,
             data=data,
             method=method,
-            headers={"X-API-Key": self.api_key, "Content-Type": "application/json", "Accept": "application/json"},
+            headers={"X-API-Key": api_key or self.api_key, "Content-Type": "application/json", "Accept": "application/json"},
         )
         raw = b""
         for attempt in range(3):
@@ -419,13 +431,18 @@ class ApiClient:
             raise ValueError(f"batch too large: {len(events)} > {BATCH_LIMIT}")
         return self.request("POST", "/tracking/batch", {"events": events}) or {}
 
+    def _server_key(self) -> str:
+        if not self.server_api_key:
+            raise ValueError("error reports are sent with the server key: pass --server-api-key")
+        return self.server_api_key
+
     def report_error(self, report: dict[str, Any]) -> dict[str, Any]:
-        return self.request("POST", "/tracking/errors", report) or {}
+        return self.request("POST", "/tracking/errors", report, api_key=self._server_key()) or {}
 
     def report_errors(self, reports: list[dict[str, Any]]) -> dict[str, Any]:
         if len(reports) > ERROR_BATCH_LIMIT:
             raise ValueError(f"error batch too large: {len(reports)} > {ERROR_BATCH_LIMIT}")
-        return self.request("POST", "/tracking/errors/batch", {"errors": reports}) or {}
+        return self.request("POST", "/tracking/errors/batch", {"errors": reports}, api_key=self._server_key()) or {}
 
 
 def chunked(items: list[dict[str, Any]], size: int = BATCH_LIMIT) -> Iterator[list[dict[str, Any]]]:
@@ -720,6 +737,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--api-url", default=DEFAULT_API_URL, help="Experimently API origin")
     parser.add_argument("--api-key", default=None, help=f"X-API-Key value (default: contents of {DEFAULT_API_KEY_FILE})")
+    parser.add_argument(
+        "--server-api-key",
+        default=None,
+        help=f"X-API-Key for the crash reports: the StreamPulse server key, scope sdk:ruleset (default: contents of {DEFAULT_SERVER_KEY_FILE})",
+    )
     parser.add_argument("--rate", type=float, default=3.0, help="device sessions per second")
     parser.add_argument("--duration", type=float, default=0.0, help="seconds to run (0 = forever)")
     parser.add_argument("--seed", type=int, default=None, help="random seed for reproducible traffic")
@@ -778,7 +800,16 @@ def main(
         )
         return 2
 
-    client = client_factory(args.api_url, api_key)
+    server_api_key = args.server_api_key or read_api_key_file(DEFAULT_SERVER_KEY_FILE)
+    if args.incident != "off" and not server_api_key:
+        print(
+            "error: --incident sends crash reports with the StreamPulse server key, and there is none. "
+            f"Pass --server-api-key or run backend/scripts/seed_streampulse.py to create {DEFAULT_SERVER_KEY_FILE}.",
+            file=sys.stderr,
+        )
+        return 2
+
+    client = client_factory(args.api_url, api_key, server_api_key=server_api_key or "")
     population = Population(generate_devices(args.devices, args.population_seed))
     stats = Stats(incident=args.incident)
     interval = 1.0 / args.rate

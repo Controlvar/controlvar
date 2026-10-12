@@ -96,7 +96,8 @@ of devices through the same API, and a scripted "rollout story" walks the platfo
   the Home tab falls back to the classic feed.
 - The rollout story (drawer in the app, driven by `python demo/streampulse/simulator/rollout_story.py --auto`):
   1. player v2 at 5% + internal rule → 2. advance the schedule to 25% → 3. Android 12 devices start crashing (the simulator
-  reports errors through the API) → 4. the safety monitor sees the error rate cross 5% and rolls the flag back to 5%
+  reports the crashes through the API with the StreamPulse server key, the way the app's server would forward them)
+  → 4. the safety monitor sees the error rate cross 5% and rolls the flag back to 5%
   automatically → 5. a fix ships: rule `app_version ≥ 3.2.1` → 6. 50% → 7. 100%.
   - "Targeting, gradual rollout, safety monitoring, auto-rollback and lifecycle management, in one walkthrough."
 

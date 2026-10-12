@@ -56,6 +56,19 @@ def test_documentation_only(files):
     assert _run("\n".join(files) + "\n") == "docs_only=true\n"
 
 
+@pytest.mark.parametrize(
+    "path",
+    ["docs/_claims/docs/workspaces/quickstart.md.toml", "docs/_claims/_frozen.tsv"],
+)
+def test_the_claims_registry_is_documentation(path):
+    """``docs/_claims/`` holds what verifies each sentence of a page
+    (``scripts/doc_claims.py``). A pull request that changes a page and its
+    registry stays docs-only, and core-build's docs step runs the registry
+    test (it is under ``backend/tests/unit/docs/``)."""
+    assert cc.classify([path, "docs/workspaces/quickstart.md"]) == (True, [])
+    assert _run(path + "\n") == "docs_only=true\n"
+
+
 def test_mkdocs_yml_alone_is_documentation():
     """The chosen rule: the site configuration is documentation.
 
