@@ -430,11 +430,15 @@ class Story:
         pct = int(self.flag().get("rollout_percentage") or 0)
         self.say(f"  Player v2 is at {pct}%. A broken build crashes Player v2 on Android 12 devices — 40% of the Android 12")
         self.say(f"  devices that have the flag ON report a crash and relaunch (crash loop). Running {self.incident_duration:g}s of incident traffic:")
+        self.say("  The simulator reports the crashes the way the StreamPulse server would forward them, with its server-side key.")
         if pct < 25:
             self.say("  (note: below 25% the crash share is too small to cross the 5% critical threshold — run step 2 first)")
         rc = self.run_incident_traffic()
         if rc != 0:
-            raise StoryError(f"traffic.py exited with code {rc} (2 = bad API key, 3 = not seeded, 4 = API unreachable)")
+            raise StoryError(
+                f"traffic.py exited with code {rc} (2 = bad API key, or no server key in demo/streampulse/.api_key_server: "
+                "run backend/scripts/seed_streampulse.py; 3 = not seeded, 4 = API unreachable)"
+            )
         self.say("")
         check = self.print_safety()
         if check.get("is_healthy"):

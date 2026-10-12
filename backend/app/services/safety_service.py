@@ -33,7 +33,12 @@ from backend.app.models.feature_flag import (
     FeatureFlagStatus,
     flag_status_name,
 )
-from backend.app.models.metrics.metric import ErrorLog, MetricType, RawMetric
+from backend.app.models.metrics.metric import (
+    REPORT_SOURCE_CLIENT,
+    ErrorLog,
+    MetricType,
+    RawMetric,
+)
 from backend.app.models.rollout_schedule import RolloutSchedule, RolloutScheduleStatus
 from backend.app.models.safety import (
     FeatureFlagSafetyConfig,
@@ -418,12 +423,28 @@ class SafetyService:
     ) -> Dict[str, Any]:
         """Error counts and error rate for a flag over the last ``timeframe_minutes``.
 
-        The count and the per-type breakdown are computed by the database
-        (``COUNT`` and ``COUNT ... GROUP BY error_type``, filtered on
+        This is the only source of the safety monitor's error numbers (the
+        scheduler, ``should_rollback`` and ``GET .../check`` all read it).
+
+        Which rows count: every ``error_logs`` row of the flag in the window
+        except error reports sent with a key that is not a server-side key,
+        i.e. rows whose ``request_data->>'source'`` is ``'client'``
+        (``REPORT_SOURCE_CLIENT``). The test is ``IS DISTINCT FROM``, so rows
+        with no ``source`` count: flag evaluations that failed on the server
+        (``{"context": ...}``) and rows with no ``request_data``. A plain
+        ``!=`` would drop those, because it is NULL, not true, for them.
+        ``uncounted_error_count`` is the number of ``'client'`` rows: stored,
+        and shown on the check, but not counted.
+
+        ``error_count``, ``error_rate`` and ``error_types`` cover the counted
+        rows; ``total_evaluations`` is unchanged.
+
+        The counts and the per-type breakdown are computed by the database
+        (``COUNT ... FILTER`` and ``COUNT ... GROUP BY error_type``, filtered on
         ``feature_flag_id`` and ``timestamp``, the columns of the composite
         ``error_logs`` index); no ``ErrorLog`` row is loaded.
         ``error_types`` lists at most ``ERROR_TYPE_BREAKDOWN_LIMIT`` types, the
-        most frequent first; ``error_count`` always counts every error.
+        most frequent first; ``error_count`` is never limited by it.
         """
         end_time = datetime.utcnow()
         start_time = end_time - timedelta(minutes=timeframe_minutes)
@@ -435,8 +456,17 @@ class SafetyService:
             ErrorLog.feature_flag_id == feature_flag_id,
             ErrorLog.timestamp.between(start_time, end_time),
         )
-        error_count = int(
-            db.query(func.count(ErrorLog.id)).filter(*in_window).scalar() or 0
+        report_source = ErrorLog.request_data["source"].astext
+        counted = report_source.is_distinct_from(REPORT_SOURCE_CLIENT)
+        uncounted = report_source == REPORT_SOURCE_CLIENT
+        error_count, uncounted_error_count = (
+            int(n or 0)
+            for n in db.query(
+                func.count(ErrorLog.id).filter(counted),
+                func.count(ErrorLog.id).filter(uncounted),
+            )
+            .filter(*in_window)
+            .one()
         )
 
         per_type = func.count(ErrorLog.id)
@@ -445,7 +475,7 @@ class SafetyService:
             error_types = {
                 error_type: int(count)
                 for error_type, count in db.query(ErrorLog.error_type, per_type)
-                .filter(*in_window)
+                .filter(*in_window, counted)
                 .group_by(ErrorLog.error_type)
                 .order_by(per_type.desc(), ErrorLog.error_type)
                 .limit(ERROR_TYPE_BREAKDOWN_LIMIT)
@@ -466,6 +496,7 @@ class SafetyService:
 
         return {
             "error_count": error_count,
+            "uncounted_error_count": uncounted_error_count,
             "total_evaluations": int(total_evaluations),
             "error_rate": error_rate,
             "error_types": error_types,
@@ -522,10 +553,14 @@ class SafetyService:
         ``error_rate`` reads 0.0 when a flag has errors but no recorded
         evaluations (nothing to divide by), which is indistinguishable from a
         healthy flag without these counts; the dashboard shows that state.
+        ``uncounted_error_count`` is the number of error reports in the window
+        that were stored but do not count (sent without a server-side key);
+        the dashboard shows it too.
         """
         metrics = self.get_error_metrics(self.db, feature_flag_id)
         return {
             "error_count": metrics["error_count"],
+            "uncounted_error_count": metrics["uncounted_error_count"],
             "total_evaluations": metrics["total_evaluations"],
             "timeframe_minutes": metrics["timeframe_minutes"],
         }

@@ -3,6 +3,7 @@ node_modules
 out
 .env.local
 .api_key
+.api_key_server
 coverage
 tsconfig.tsbuildinfo
 __pycache__

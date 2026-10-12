@@ -4,14 +4,16 @@
  * evaluations made no evaluate call, and that the counts sent on close() are the safety
  * monitor's denominator for the errors reported afterwards.
  *
+ * The errors are reported with the same sdk:ruleset key, the way a server forwards them: only
+ * reports sent with a server-side key count toward a flag's error rate and automatic rollback.
+ *
  * Run from the repo root:
  *   cd sdk/js && npm run build --silent && node examples/local_eval_smoke.mjs
  *
  * Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_LOCAL_API_KEY (a key
- *      with the sdk:ruleset scope, required), EXPERIMENTLY_API_KEY (any key, required: used for
- *      POST /api/v1/tracking/errors), CONTRACT_FLAG_KEY (default sdk_contract_flag),
- *      CONTRACT_USER_ID (default local-smoke-<uuid>), LOCAL_EVALUATIONS (default 40),
- *      LOCAL_ERRORS (default 2).
+ *      with the sdk:ruleset scope, required; also used for POST /api/v1/tracking/errors),
+ *      CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default
+ *      local-smoke-<uuid>), LOCAL_EVALUATIONS (default 40), LOCAL_ERRORS (default 2).
  *
  * Prints exactly one JSON line on stdout and exits 0; on failure prints one line to stderr and exits 1.
  */
@@ -22,7 +24,6 @@ const { ExperimentationClient } = sdk;
 
 const apiUrl = (process.env.EXPERIMENTLY_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 const localKey = process.env.EXPERIMENTLY_LOCAL_API_KEY;
-const plainKey = process.env.EXPERIMENTLY_API_KEY;
 const flagKey = process.env.CONTRACT_FLAG_KEY || 'sdk_contract_flag';
 const userId = process.env.CONTRACT_USER_ID || `local-smoke-${randomUUID()}`;
 const evaluations = Number(process.env.LOCAL_EVALUATIONS || 40);
@@ -34,7 +35,6 @@ function fail(message) {
 }
 
 if (!localKey) fail('EXPERIMENTLY_LOCAL_API_KEY (a key with the sdk:ruleset scope) is required');
-if (!plainKey) fail('EXPERIMENTLY_API_KEY is required');
 
 const swallowed = [];
 const client = new ExperimentationClient({
@@ -60,11 +60,12 @@ try {
   await client.close();
   if (swallowed.length) fail(swallowed[0]);
 
-  // Client errors against the same flag: the safety monitor divides these by the counts above.
+  // Errors against the same flag, reported with the server-side key: the safety monitor
+  // divides these by the counts above.
   for (let i = 0; i < errorsToPost; i++) {
     const response = await fetch(`${apiUrl}/api/v1/tracking/errors`, {
       method: 'POST',
-      headers: { 'X-API-Key': plainKey, 'Content-Type': 'application/json' },
+      headers: { 'X-API-Key': localKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         feature_flag_key: flagKey,
         user_id: userId,

@@ -20,7 +20,12 @@ and its device simulator (``demo/streampulse/simulator``) rely on:
 - automatic rollbacks switched on in the global safety settings
 - the ``streampulse-app`` API key, written to ``demo/streampulse/.api_key`` and
   ``demo/streampulse/.env.local`` (both gitignored; ``STREAMPULSE_DEMO_DIR``
-  redirects the folder)
+  redirects the folder). The app ships it to the browser, so it has no scope.
+- the ``streampulse-server`` API key (scope ``sdk:ruleset``), written only to
+  ``demo/streampulse/.api_key_server`` (gitignored), never to ``.env.local``.
+  The device simulator sends crash reports with it, the way the StreamPulse
+  server would forward them: only reports sent with a server-side key count
+  toward automatic rollback.
 - 7 days of history (assignments, exposure and conversion events) per
   experiment using the same true rates as the live simulator
 
@@ -112,6 +117,12 @@ from backend.scripts.seed_guard import require_development_environment
 ADMIN_EMAIL = "admin@demo.com"
 API_KEY_NAME = "streampulse-app"
 ENV_KEY_NAME = "NEXT_PUBLIC_EXPERIMENTLY_API_KEY"
+#: The server-side key the simulator reports crashes with. It carries
+#: ``sdk:ruleset`` (its reports count toward automatic rollback, and it can
+#: download every flag's targeting rules), so it is kept out of ``.env.local``
+#: and the browser bundle.
+SERVER_KEY_NAME = "streampulse-server"
+SERVER_KEY_SCOPES = "sdk:ruleset"
 
 # STREAMPULSE_DEMO_DIR lets CI / verification runs redirect the generated key
 # files away from the checked-in demo app directory.
@@ -119,6 +130,7 @@ STREAMPULSE_DIR = Path(
     os.environ.get("STREAMPULSE_DEMO_DIR") or PROJECT_ROOT / "demo" / "streampulse"
 )
 API_KEY_FILE = STREAMPULSE_DIR / ".api_key"
+SERVER_KEY_FILE = STREAMPULSE_DIR / ".api_key_server"
 ENV_LOCAL_FILE = STREAMPULSE_DIR / ".env.local"
 
 HISTORY_DAYS = 7
@@ -974,52 +986,104 @@ def seed_audit_logs(db, admin_user, experiment: Experiment) -> int:
 # ---------------------------------------------------------------------------
 
 
-def seed_api_key(db, admin_user) -> str:
-    """
-    Ensure the ``streampulse-app`` API key exists and is written to disk.
+def _ensure_key(
+    db,
+    admin_user,
+    *,
+    name: str,
+    path: Path,
+    scopes: str,
+    description: str,
+    plaintext: Optional[str] = None,
+) -> tuple:
+    """Ensure the key ``name`` exists and its plaintext is in ``path`` (0600).
 
-    Keeps the existing row when ``demo/streampulse/.api_key`` still holds the
-    matching plaintext; otherwise the stale row is replaced by a fresh key.
-    Returns the plaintext key.
+    Keeps the existing row when ``path`` still holds the matching plaintext;
+    otherwise the stale row is replaced by a fresh key (``plaintext`` when
+    given). Returns ``(plaintext, created)``.
     """
-    print("  Seeding StreamPulse API key...")
     existing = (
         db.query(APIKey)
-        .filter(APIKey.name == API_KEY_NAME, APIKey.user_id == admin_user.id)
+        .filter(APIKey.name == name, APIKey.user_id == admin_user.id)
         .first()
     )
 
-    if existing is not None and API_KEY_FILE.exists():
-        plaintext = API_KEY_FILE.read_text().strip()
-        if plaintext and hash_api_key(plaintext) == existing.key:
-            _write_env_line(ENV_LOCAL_FILE, ENV_KEY_NAME, plaintext)
-            print(f"    Existing key kept ({_display(API_KEY_FILE)}).")
-            return plaintext
-        print(f"    {_display(API_KEY_FILE)} does not match the stored hash; rotating.")
+    if existing is not None and path.exists():
+        kept = path.read_text().strip()
+        if kept and hash_api_key(kept) == existing.key:
+            print(f"    Existing '{name}' key kept ({_display(path)}).")
+            return kept, False
+        print(f"    {_display(path)} does not match the stored hash; rotating.")
 
     if existing is not None:
         db.delete(existing)
         db.commit()
-        print(f"    Removed stale '{API_KEY_NAME}' key row.")
+        print(f"    Removed stale '{name}' key row.")
 
-    plaintext = os.environ.get("STREAMPULSE_API_KEY") or generate_api_key()
+    plaintext = plaintext or generate_api_key()
     db.add(
         APIKey(
             user_id=admin_user.id,
             key=hash_api_key(plaintext),
-            name=API_KEY_NAME,
-            description="StreamPulse demo app + device simulator",
-            scopes="read,write",
+            name=name,
+            description=description,
+            scopes=scopes,
             is_active=True,
         )
     )
     db.commit()
 
     STREAMPULSE_DIR.mkdir(parents=True, exist_ok=True)
-    API_KEY_FILE.write_text(plaintext + "\n")
-    os.chmod(API_KEY_FILE, 0o600)
+    path.write_text(plaintext + "\n")
+    os.chmod(path, 0o600)
+    print(f"    Created '{name}' key, written to {_display(path)}.")
+    return plaintext, True
+
+
+def seed_api_key(db, admin_user) -> str:
+    """
+    Ensure the ``streampulse-app`` API key exists and is written to disk.
+
+    The app's key: written to ``demo/streampulse/.api_key`` and, as
+    ``NEXT_PUBLIC_EXPERIMENTLY_API_KEY``, to ``.env.local``, from where it goes
+    into the browser bundle. It carries no scope. Keeps the existing row when
+    ``.api_key`` still holds the matching plaintext; otherwise the stale row is
+    replaced by a fresh key. Returns the plaintext key.
+    """
+    print("  Seeding StreamPulse API key...")
+    plaintext, _created = _ensure_key(
+        db,
+        admin_user,
+        name=API_KEY_NAME,
+        path=API_KEY_FILE,
+        scopes="read,write",
+        description="StreamPulse demo app + device simulator",
+        plaintext=os.environ.get("STREAMPULSE_API_KEY"),
+    )
     _write_env_line(ENV_LOCAL_FILE, ENV_KEY_NAME, plaintext)
-    print(f"    Created key, written to {_display(API_KEY_FILE)}.")
+    return plaintext
+
+
+def seed_server_api_key(db, admin_user) -> str:
+    """
+    Ensure the ``streampulse-server`` key exists and is written to disk.
+
+    It carries ``sdk:ruleset`` and is owned by the demo administrator, so the
+    error reports the simulator sends with it count toward automatic rollback.
+    It is written only to ``demo/streampulse/.api_key_server`` (0600), never
+    to ``.env.local``: a key with this scope can download every flag's
+    targeting rules, so it stays out of the browser bundle. Returns the
+    plaintext key.
+    """
+    print("  Seeding StreamPulse server key...")
+    plaintext, _created = _ensure_key(
+        db,
+        admin_user,
+        name=SERVER_KEY_NAME,
+        path=SERVER_KEY_FILE,
+        scopes=SERVER_KEY_SCOPES,
+        description="StreamPulse server: forwards the devices' crash reports",
+    )
     return plaintext
 
 
@@ -1290,14 +1354,15 @@ def reset_streampulse(db) -> Dict[str, int]:
 
     counts["api_keys"] = (
         db.query(APIKey)
-        .filter(APIKey.name == API_KEY_NAME)
+        .filter(APIKey.name.in_((API_KEY_NAME, SERVER_KEY_NAME)))
         .delete(synchronize_session=False)
     )
     db.commit()
 
-    if API_KEY_FILE.exists():
-        API_KEY_FILE.unlink()
-        print(f"    Removed {_display(API_KEY_FILE)}.")
+    for key_file in (API_KEY_FILE, SERVER_KEY_FILE):
+        if key_file.exists():
+            key_file.unlink()
+            print(f"    Removed {_display(key_file)}.")
     if ENV_LOCAL_FILE.exists():
         _write_env_line(ENV_LOCAL_FILE, ENV_KEY_NAME, None)
         print(f"    Removed {ENV_KEY_NAME} from {_display(ENV_LOCAL_FILE)}.")
@@ -1361,6 +1426,10 @@ def print_summary(
     print(f"  Holdout:       {holdout.name} at {holdout.holdout_percentage}% ({state})")
     print(f"  API key file:  {_display(API_KEY_FILE)}  (X-API-Key)")
     print(f"  Env file:      {_display(ENV_LOCAL_FILE)}  ({ENV_KEY_NAME})")
+    print(
+        f"  Server key:    {_display(SERVER_KEY_FILE)}  "
+        f"({SERVER_KEY_SCOPES}; crash reports; never in the app)"
+    )
     print(f"  Owner:         {ADMIN_EMAIL} / Demo1234!")
     print("=" * 72 + "\n")
 
@@ -1429,8 +1498,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("\n[6/8] Audit trail")
         seed_audit_logs(db, admin_user, experiments[UPSELL_KEY])
 
-        print("\n[7/8] API key")
+        print("\n[7/8] API keys")
         seed_api_key(db, admin_user)
+        seed_server_api_key(db, admin_user)
 
         print("\n[8/8] History")
         if args.no_history:

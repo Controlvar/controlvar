@@ -189,8 +189,12 @@ the 10-minute retry are not.
 
 The server cannot see local evaluations, so the SDK reports how many it made: per flag, every 60
 seconds and on `close()`, to `POST /api/v1/tracking/evaluations`. Safety monitoring divides the
-errors reported through `POST /api/v1/tracking/errors` by these counts, so automatic rollback keeps
-working for flags evaluated locally. Evaluations sent to the server are not counted twice.
+errors your server reports through `POST /api/v1/tracking/errors` with a server-side key (the same
+`sdk:ruleset` key), and the evaluations that fail on the server, by these counts, so automatic
+rollback keeps working for flags evaluated locally. Reports sent with a key without the scope are
+stored but not counted (see
+[Which errors count](../feature-flags/safety.md#which-errors-count)). Evaluations sent to the
+server are not counted twice.
 
 Two dashboard figures change as local evaluation is adopted, because a count carries no user and
 no rule:

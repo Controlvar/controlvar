@@ -519,12 +519,20 @@ and returns `{"flag-key": true|false, ...}`.
 ### Reporting client-side errors
 
 Safety monitoring computes a flag's error rate from `error_logs` rows divided by its
-evaluations. Clients can report the errors they see behind a flag (crashes, failed
-requests) with the API key:
+evaluations. The errors your applications see behind a flag (crashes, failed requests)
+count toward it when they are reported with a server-side key: an API key with the
+`sdk:ruleset` scope, created by a user who can change feature flags (ADMIN, DEVELOPER or a
+superuser). A browser or mobile app sends its errors to your server, and the server forwards
+them with that key. Keep the key on the server: it can also download every flag's targeting
+rules.
 
 ```{.bash exec}
+SERVER_KEY=$(curl -s -X POST localhost:8000/api/v1/api-keys \
+  -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"name":"flag-guide-server","scopes":["sdk:ruleset"]}' | jq -r .key)
+
 curl -s -X POST localhost:8000/api/v1/tracking/errors \
-  -H "X-API-Key: $KEY" \
+  -H "X-API-Key: $SERVER_KEY" \
   -H 'content-type: application/json' \
   -d '{
     "feature_flag_key": "new-checkout-flow",
@@ -537,6 +545,11 @@ curl -s -X POST localhost:8000/api/v1/tracking/errors \
 <!-- expect: "crash" -->
 
 It prints `"crash"`, the stored row's `error_type`.
+
+A report sent with `$KEY`, or with any other key without the `sdk:ruleset` scope, is accepted
+(`201`) and stored the same way, but does not count toward the error rate or automatic
+rollback: the flag's safety check shows it in `details.uncounted_error_count` (see
+[Which errors count](safety.md#which-errors-count)).
 
 `POST /api/v1/tracking/errors/batch` accepts `{"errors": [...]}` (up to 100) and returns
 `{"success_count", "failure_count", "errors"}`. At least one of `feature_flag_key` /

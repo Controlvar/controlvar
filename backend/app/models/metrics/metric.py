@@ -169,12 +169,30 @@ class AggregatedMetric(Base, BaseModel):
         return f"<AggregatedMetric {self.id}: {self.metric_type} for {self.period} starting {self.period_start}>"
 
 
+#: ``request_data["source"]`` of an error report sent to
+#: ``POST /api/v1/tracking/errors[/batch]`` with a server-side key: a key with
+#: the ``sdk:ruleset`` scope whose owner could change feature flags when the
+#: report arrived. These reports count toward the flag's error numbers.
+REPORT_SOURCE_SERVER = "server"
+
+#: ``request_data["source"]`` of an error report sent with any other key. The
+#: row is stored like any other, but safety monitoring does not count it
+#: (``SafetyService.get_error_metrics`` reports it as ``uncounted_error_count``).
+REPORT_SOURCE_CLIENT = "client"
+
+
 class ErrorLog(Base, BaseModel):
     """
     Detailed log of errors that occur during flag evaluation.
 
     This table stores detailed information about errors to enable
     debugging and monitoring of the system.
+
+    Rows come from flag evaluations that fail on the server
+    (``request_data = {"context": ...}``) and from error reports
+    (``request_data["source"]`` is :data:`REPORT_SOURCE_SERVER` or
+    :data:`REPORT_SOURCE_CLIENT`). Safety monitoring counts every row except
+    those stamped :data:`REPORT_SOURCE_CLIENT`.
     """
 
     __tablename__ = "error_logs"

@@ -3,7 +3,8 @@ Record flag evaluations that a server-side SDK made locally.
 
 An SDK evaluating flags in-process makes no ``/feature-flags/evaluate`` call,
 so the server writes no ``flag_evaluation`` row for it -- and safety
-monitoring divides a flag's reported errors by exactly those rows
+monitoring divides a flag's counted errors (evaluation failures and reports
+sent with a server-side key) by exactly those rows
 (``SafetyService.get_error_metrics``).  With no rows the error rate reads 0.0
 and no automatic rollback can fire.  ``POST /api/v1/tracking/evaluations``
 closes that gap: the SDK reports per-flag counts and this module turns each

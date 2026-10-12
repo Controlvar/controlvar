@@ -128,6 +128,34 @@ describe('SafetyStatusCard', () => {
     expect(screen.getByTestId('safety-unmeasured-note')).toHaveTextContent('latency');
   });
 
+  it('notes the error reports that were stored but not counted, only when there are some', () => {
+    const some = makeFlag({ check: check({ details: { uncounted_error_count: 3 } }) });
+    const { rerender } = render(<SafetyStatusCard flag={some} onRollback={jest.fn()} />);
+    const note = screen.getByTestId('safety-uncounted-note');
+    expect(note).toHaveTextContent('3 reports not counted');
+    // slate-500 on white is 4.76:1 (AA); slate-400 is about 2.6:1.
+    expect(note.className).toContain('text-slate-500');
+
+    rerender(
+      <SafetyStatusCard
+        flag={makeFlag({ check: check({ details: { uncounted_error_count: 1 } }) })}
+        onRollback={jest.fn()}
+      />,
+    );
+    expect(screen.getByTestId('safety-uncounted-note')).toHaveTextContent('1 report not counted');
+
+    rerender(
+      <SafetyStatusCard
+        flag={makeFlag({ check: check({ details: { uncounted_error_count: 0 } }) })}
+        onRollback={jest.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('safety-uncounted-note')).not.toBeInTheDocument();
+
+    rerender(<SafetyStatusCard flag={makeFlag()} onRollback={jest.fn()} />);
+    expect(screen.queryByTestId('safety-uncounted-note')).not.toBeInTheDocument();
+  });
+
   it('renders with data-testid="safety-status-card"', () => {
     render(<SafetyStatusCard flag={makeFlag()} onRollback={jest.fn()} />);
     expect(screen.getByTestId('safety-status-card')).toBeInTheDocument();
