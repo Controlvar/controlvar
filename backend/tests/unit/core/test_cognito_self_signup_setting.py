@@ -3,7 +3,7 @@
 The setting turns on ``POST /api/v1/auth/signup`` and ``/confirm`` under
 ``AUTH_PROVIDER=cognito``.  It is pydantic's default ``bool`` parsing, with no
 validator of its own, and these tests pin exactly what that accepts, because
-``docs/auth/auth-environment-variables.md`` is written from it:
+``docs/cognito_integration.md`` ("Self sign-up") is written from it:
 
 * P1 the field is on the base ``Settings`` (so every environment class has
   it), is a ``bool`` and defaults to ``False``;

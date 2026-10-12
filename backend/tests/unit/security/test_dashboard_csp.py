@@ -1,11 +1,10 @@
 """The dashboard's nginx sets its own Content-Security-Policy.
 
-docs/security/threat-model.md lists it as an implemented control (#125: the
-page used to recommend adding one). This pins what the page says: the header
-is set at server level with `always`, so every location that sets no
-`add_header` of its own inherits it; it starts from `default-src 'self'`,
-forbids framing, and takes `connect-src` from `CSP_CONNECT_SRC`, which
-frontend/docker-entrypoint.sh substitutes at start-up.
+This pins it (#125): the header is set at server level with `always`, so
+every location that sets no `add_header` of its own inherits it; it starts
+from `default-src 'self'`, forbids framing, and takes `connect-src` from
+`CSP_CONNECT_SRC`, which frontend/docker-entrypoint.sh substitutes at
+start-up.
 
 The two API reference pages are the exception (#817): `location =
 /api/v1/docs` and `location = /api/v1/redoc` proxy to the API and carry the

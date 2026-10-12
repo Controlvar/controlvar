@@ -4,9 +4,7 @@ This directory contains the security compliance documentation for Experimently.
 
 | Document | Description |
 |----------|-------------|
-| [Threat Model](threat-model.md) | System threats and mitigations |
 | [Responding to an incident on your deployment](incident-response.md) | Where to report a vulnerability, and how to roll back |
-| [Security Policies](security-policies.md) | Access control and data policies |
 | [Hardening Changes](hardening-changes.md) | Security controls implemented |
 
 ## Quick Reference
@@ -35,5 +33,3 @@ This directory contains the security compliance documentation for Experimently.
 5. Reduce JWT expiry from 8 days to 1 hour with refresh token rotation
 6. Enable AWS WAF with OWASP Core Rule Set
 7. Enable AWS GuardDuty in all regions
-
-See [Threat Model](threat-model.md) for full risk details and [Security Policies](security-policies.md) for controls.

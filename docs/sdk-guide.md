@@ -32,7 +32,7 @@ rules) still answers 200 with the control variant, `assigned: false` and `reason
 `reason` is `assigned`, and every call, sticky ones included, records that the user saw the experiment.
 
 Conversions are matched to experiment metrics by `event_name` (exposures excluded), whatever `event_type`
-an SDK sends. Full request/response examples: [API Specs](api/specs.md#tracking-api-sdk). Per-IP rate
+an SDK sends. Full request/response examples: [Tracking Endpoints](api/endpoints.md#tracking-endpoints). Per-IP rate
 limit for these paths: `SDK_RATE_LIMIT_PER_MINUTE` (default 6000/min).
 
 **Targeting context.** The user's attributes (`user.attributes` / `user_attributes`) are sent as `context`:

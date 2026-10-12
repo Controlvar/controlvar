@@ -18,7 +18,7 @@
 | Doc | Description |
 |-----|-------------|
 | [Endpoints](api/endpoints.md) | Complete REST API reference |
-| [API Specs](api/specs.md) | OpenAPI request/response schemas |
+| [Using the API Docs](api/api-docs-guide.md) | How to read the API documentation the server serves |
 | [RBAC](api/rbac.md) | Role-based access control API |
 | [Data Export](api/data-export.md) | CSV/JSON streaming export endpoints |
 
@@ -84,9 +84,7 @@
 
 ## Authentication
 
-- [Auth Developer Docs](auth/auth-developer-docs.md) — Cognito JWT, middleware, auth service
 - [Auth Flow Diagrams](auth/flow.md) — registration, login, password reset, token refresh
-- [Auth Environment Variables](auth/auth-environment-variables.md) — Cognito configuration
 - [Auth User Guide](auth/auth-user-guide.md) — registration, login, password policies
 - [Cognito Testing](auth/cognito-auth-testing.md) — testing auth locally
 - [SSO](auth/sso.md) — OIDC setup for Okta, Google and GitHub (the `sso` module). SAML 2.0 sign-in is not available yet; use OIDC
@@ -116,9 +114,6 @@
 
 ## Security
 
-- [Security Architecture](security-architecture.md) — system security design
-- [Threat Model](security/threat-model.md) — threat scenarios and countermeasures
-- [Security Policies](security/security-policies.md) — access control, data protection
 - [Hardening Changes](security/hardening-changes.md) — WAF, headers, rate limiting
 - [Incident Response](security/incident-response.md) — reporting a vulnerability, and rolling back your deployment
 
@@ -126,19 +121,14 @@
 
 ## Monitoring
 
-- [Monitoring Guide](monitoring/monitoring-guide.md) — Prometheus, structured logging, CloudWatch
-- [Setup Guide](monitoring/setup-guide.md) — initial monitoring setup
-- [Dashboard Reference](monitoring/dashboard-reference.md) — CloudWatch dashboard widgets
-- [Log Insights Queries](monitoring/log-insights-queries.md) — common query patterns
-- [Troubleshooting](monitoring/troubleshooting-guide.md) — missing metrics, slow queries, alerts
+- [Monitoring](self-hosting/monitoring.md) — CloudWatch dashboards, Prometheus metrics
+- [Logging Standards](logging_standards.md) — logging conventions
 
 ---
 
 ## Infrastructure
 
-- [Aurora PostgreSQL](infrastructure/aurora-postgres-readme.md) — RDS CDK stack
 - [DynamoDB](infrastructure/dynamodb-readme.md) — table schemas, access patterns
-- [Redis / ElastiCache](infrastructure/redis-summary.md) — caching strategy
 - [CloudWatch Setup](infrastructure/cloudwatch-setup.md) — log groups, agent config
 - [IAM Setup](infrastructure/aws-iam-setup.md) — roles and permissions
 - [Network Security](infrastructure/network-security-readme.md) — subnets, NAT, endpoints, security groups, ACLs

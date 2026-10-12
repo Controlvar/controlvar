@@ -12,7 +12,7 @@ Pinned without a database or the app (this runs on a docs-only pull request):
   executed, not only read;
 * every page under ``docs/`` that mentions the sign-up or confirmation route
   is one of two pinned sets, computed by scanning: a page that describes
-  registration names the setting, and three pages only list the route in a
+  registration names the setting, and two pages only list the route in a
   rate-limit table.  A new page that mentions the routes fails until it is
   classified here;
 * every link from any page under ``docs/`` to a section of
@@ -210,17 +210,15 @@ ROUTE_MENTION = re.compile(r"/signup\b|/auth/confirm(?![-\w])")
 #: Pages that describe registration; each must name the setting.
 DESCRIBES_REGISTRATION = {
     "docs/api/endpoints.md",
-    "docs/auth/auth-developer-docs.md",
-    "docs/auth/auth-environment-variables.md",
     "docs/auth/auth-user-guide.md",
     "docs/auth/cognito-auth-testing.md",
     "docs/auth/flow.md",
+    "docs/cognito_integration.md",
 }
 
 #: Pages that only list the sign-up route in a table of rate limits.
 RATE_LIMIT_TABLE_ONLY = {
     "docs/api/api-docs-guide.md",
-    "docs/api/specs.md",
     "docs/security/hardening-changes.md",
 }
 
@@ -258,7 +256,7 @@ def test_a_page_that_describes_registration_names_the_setting(page):
 
 
 def test_the_settings_page_lists_it_off_by_default():
-    text = (DOCS / "auth" / "auth-environment-variables.md").read_text(encoding="utf-8")
+    text = PAGE.read_text(encoding="utf-8")
     (row,) = [line for line in text.splitlines() if line.startswith(f"| `{SETTING}` |")]
     assert row.endswith("| No | `false` |"), row
 

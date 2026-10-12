@@ -1,8 +1,7 @@
 """The docs say which Lambda functions the CDK deploys, and that none serves requests (#125).
 
-`security/threat-model.md`, `integrations/aws.md` and
-`getting-started/architecture.md` described working assignment,
-event-processor and flag-evaluation Lambdas. The stacks deploy two
+`integrations/aws.md` and `getting-started/architecture.md` described working
+assignment, event-processor and flag-evaluation Lambdas. The stacks deploy two
 placeholders whose inline code returns 200 and the Glue ETL trigger; the code
 under backend/lambda/ is deployed by nothing. This synthesises prod (full
 profile) and checks that list, and that the pages still say so. Deploying a
@@ -23,7 +22,6 @@ DOCS = REPO_ROOT / "docs"
 PAGES = {
     "aws": DOCS / "integrations" / "aws.md",
     "architecture": DOCS / "getting-started" / "architecture.md",
-    "threat-model": DOCS / "security" / "threat-model.md",
     "faq": DOCS / "getting-started" / "faq.md",
     "technical-guide": DOCS / "architecture" / "technical-guide.md",
     "overview": DOCS / "architecture" / "overview.md",
@@ -91,7 +89,6 @@ def test_the_pages_say_no_lambda_serves_requests():
         "No Lambda function serves requests or processes events"
         in pages["architecture"]
     )
-    assert "No Lambda serves requests" in pages["threat-model"]
     assert "placeholder functions that do nothing" in pages["faq"]
     for key, text in pages.items():
         for gone in (

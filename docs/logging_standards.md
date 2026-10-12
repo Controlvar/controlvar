@@ -81,8 +81,8 @@ No credentials, API keys, tokens, password hashes, or PHI.
 response bodies through `backend/app/utils/masking.py`, which blanks
 `password`, `token`, `api_key`, `secret`, `credential`, `authorization`,
 `access_token`, `refresh_token`, `private_key` and friends, and partially
-masks emails, phone numbers, credit card numbers and IP addresses. See
-[Logging Middleware](middleware/logging.md).
+masks emails, phone numbers, credit card numbers and IP addresses. The
+middleware is `backend/app/middleware/logging_middleware.py`.
 
 That masking applies to what the **middleware** logs. A keyword you pass to
 `logger.info(...)` yourself does **not** go through it — it lands in CloudWatch

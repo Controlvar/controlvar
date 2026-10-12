@@ -93,11 +93,28 @@ it answers with the account, or `401` when the sign-in is refused.
 `GET /api/v1/auth/me` returns the user pool's record of the user and does not look at
 accounts, so it answers `200` for a sign-in that is refused everywhere else.
 
+## Self sign-up
+
+| Variable Name | Description | Required | Default |
+|---------------|-------------|----------|---------|
+| `COGNITO_SELF_SIGNUP_ENABLED` | Under `AUTH_PROVIDER=cognito`, lets anyone who can reach the API register with `POST /api/v1/auth/signup` and `/confirm`. Off: both answer 404 and an administrator creates users ([Adding a user](#adding-a-user)). Ignored under `local`, where both always answer 404. The user pool must also allow self sign-up; the reference pool does not. A self-registered user is in no Cognito group, so their first sign-in creates an account with the Viewer role. | No | `false` |
+
+`COGNITO_SELF_SIGNUP_ENABLED` takes `true` or `false`, in any letter case (`1`/`0`, `yes`/`no`,
+`on`/`off`, `t`/`f` and `y`/`n` are read the same way). An empty value, or any other value,
+stops the API from starting with an error naming the setting. The name must be in upper case: a lower-case
+`cognito_self_signup_enabled` is ignored and the setting stays `false`.
+
+**Upgrading from a release where sign-up was always on.** A user who signed up but never
+confirmed before this release can no longer confirm through the API while the setting is off.
+Confirm them in the user pool with
+`aws cognito-idp admin-confirm-sign-up --user-pool-id "$COGNITO_USER_POOL_ID" --username "<their Cognito username>"`,
+or delete them and add them again as in [Adding a user](#adding-a-user).
+
 ## Adding a user
 
 (Cognito onboarding by an administrator.) Users cannot register themselves unless
 `COGNITO_SELF_SIGNUP_ENABLED=true` (see
-[Authentication Environment Variables](auth/auth-environment-variables.md)). An administrator
+[Self sign-up](#self-sign-up)). An administrator
 creates each one in the user pool, with a permanent password, and their first sign-in creates
 their account on the platform.
 
