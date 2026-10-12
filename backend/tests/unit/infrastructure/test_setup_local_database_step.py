@@ -34,6 +34,9 @@ BOOTSTRAP = re.compile(r"(?:^|\s)-m\s+backend\.app\.db\.bootstrap(?:\s|$)")
 RAW_UPGRADE = re.compile(r"\balembic\b.*\bupgrade\b")
 #: The seed scripts, which need the schema to exist.
 SEED = re.compile(r"\bbackend/scripts/seed_\w+\.py\b")
+#: The administrator the demo guide (``demo/DEMO_GUIDE.md``) signs in with and
+#: the seeds (``backend/scripts/seed_demo_data.py``) create.
+DEMO_ADMIN = "admin@demo.com"
 
 
 def commands(script: str) -> List[str]:
@@ -53,6 +56,35 @@ def first_index(lines: List[str], pattern: "re.Pattern[str]") -> Optional[int]:
     return None
 
 
+def last_assignment(lines: List[str], name: str) -> Optional[str]:
+    """The value *name* last gets in *lines*, quotes removed, or None.
+
+    Only what a child process inherits counts: ``export NAME=value`` lines, and
+    *lines* may also carry the ``NAME=value`` prefix of a command. A bare
+    ``NAME=value`` line does not (the bootstrap would not see it), and neither
+    does a ``NAME=value`` line of a here-document, which is data: the script's
+    ``cat > .env <<'EOF'`` block lists ENVIRONMENT, FIRST_SUPERUSER and the
+    password, and the backend does not read that ``.env``. The name must stand
+    alone, so ``APP_ENV=...`` is not ``ENVIRONMENT`` and
+    ``FIRST_SUPERUSER_PASSWORD=...`` is not ``FIRST_SUPERUSER``.
+    """
+    value: Optional[str] = None
+    pattern = re.compile(rf"(?<![A-Za-z0-9_]){name}=(\"[^\"]*\"|'[^']*'|\S*)")
+    for line in lines:
+        for match in pattern.finditer(line):
+            value = match.group(1).strip("\"'")
+    return value
+
+
+def inherited_settings(lines: List[str], bootstrap: int) -> List[str]:
+    """What the bootstrap inherits: the ``export`` lines before it, then the
+    assignments written in front of the bootstrap command itself."""
+    exports = [line for line in lines[:bootstrap] if line.startswith("export ")]
+    match = BOOTSTRAP.search(lines[bootstrap])
+    assert match is not None
+    return exports + [lines[bootstrap][: match.start()]]
+
+
 def database_step_problems(script: str) -> List[str]:
     """One line for each way the script can meet an empty database and fail."""
     lines = commands(script)
@@ -70,13 +102,31 @@ def database_step_problems(script: str) -> List[str]:
     seed = first_index(lines, SEED)
     if bootstrap is not None and seed is not None and seed < bootstrap:
         problems.append(f"seeds the database before the bootstrap: {lines[seed]}")
-    # The bootstrap creates the administrator the demo guide signs in with; left
-    # to its defaults it creates a second one (admin@example.com).
     if bootstrap is not None:
-        before = "\n".join(lines[:bootstrap])
-        for name in ("FIRST_SUPERUSER", "FIRST_SUPERUSER_PASSWORD"):
-            if not re.search(rf"^export {name}=", before, re.MULTILINE):
-                problems.append(f"does not export {name} before the bootstrap")
+        upto = inherited_settings(lines, bootstrap)
+        # The bootstrap creates the first administrator with the demo password
+        # only when ENVIRONMENT was set to development: ENVIRONMENT is the
+        # supported spelling, APP_ENV the deprecated fallback.
+        environment = last_assignment(upto, "ENVIRONMENT")
+        if environment != "development":
+            problems.append(
+                "does not set ENVIRONMENT=development before the bootstrap "
+                f"(it is {environment!r})"
+            )
+        # The bootstrap creates the administrator the demo guide signs in with;
+        # left to its defaults it creates a second one (admin@example.com).
+        administrator = last_assignment(upto, "FIRST_SUPERUSER")
+        if administrator is None:
+            problems.append("does not set FIRST_SUPERUSER before the bootstrap")
+        elif administrator != DEMO_ADMIN:
+            problems.append(
+                f"FIRST_SUPERUSER is {administrator}, not {DEMO_ADMIN}: the "
+                "demo guide and the seeds use that account"
+            )
+        if last_assignment(upto, "FIRST_SUPERUSER_PASSWORD") is None:
+            problems.append(
+                "does not set FIRST_SUPERUSER_PASSWORD before the bootstrap"
+            )
     return problems
 
 
@@ -88,54 +138,111 @@ def test_setup_local_prepares_the_database_with_the_bootstrap():
     assert database_step_problems(script) == []
 
 
+#: What the script sets before the bootstrap: each plant below is wrong in one
+#: way only, so it is the one check that names it.
+SETTINGS = (
+    "export ENVIRONMENT=development\n"
+    "export FIRST_SUPERUSER=admin@demo.com\n"
+    "export FIRST_SUPERUSER_PASSWORD=x\n"
+)
+RAW = "python -m alembic -c backend/app/db/alembic.ini upgrade heads\n"
+BOOT = "python -m backend.app.db.bootstrap\n"
+SEED_LINE = "python backend/scripts/seed_demo_data.py\n"
+
 PLANTED_SCRIPT = {
     "the old line: a raw alembic upgrade and no bootstrap": (
-        "export FIRST_SUPERUSER=admin@demo.com\n"
-        "export FIRST_SUPERUSER_PASSWORD=x\n"
-        "python -m alembic -c backend/app/db/alembic.ini upgrade heads\n"
-        "python backend/scripts/seed_demo_data.py\n",
+        SETTINGS + RAW + SEED_LINE,
         "never runs python -m backend.app.db.bootstrap",
     ),
     "a raw alembic upgrade ahead of the bootstrap": (
-        "export FIRST_SUPERUSER=admin@demo.com\n"
-        "export FIRST_SUPERUSER_PASSWORD=x\n"
-        "python -m alembic -c backend/app/db/alembic.ini upgrade heads\n"
-        "python -m backend.app.db.bootstrap\n"
-        "python backend/scripts/seed_demo_data.py\n",
+        SETTINGS + RAW + BOOT + SEED_LINE,
         "runs a raw alembic upgrade before the bootstrap",
     ),
     "the short alembic spelling": (
-        "export FIRST_SUPERUSER=admin@demo.com\n"
-        "export FIRST_SUPERUSER_PASSWORD=x\n"
-        "alembic upgrade head\n"
-        "python -m backend.app.db.bootstrap\n",
+        SETTINGS + "alembic upgrade head\n" + BOOT,
         "runs a raw alembic upgrade before the bootstrap",
     ),
     "the upgrade continued over two lines": (
-        "export FIRST_SUPERUSER=admin@demo.com\n"
-        "export FIRST_SUPERUSER_PASSWORD=x\n"
-        "python -m alembic \\\n    -c backend/app/db/alembic.ini \\\n    upgrade heads\n"
-        "python -m backend.app.db.bootstrap\n",
+        SETTINGS
+        + "python -m alembic \\\n    -c backend/app/db/alembic.ini \\\n    upgrade heads\n"
+        + BOOT,
         "runs a raw alembic upgrade before the bootstrap",
     ),
     "a bootstrap that only appears in a comment": (
-        "export FIRST_SUPERUSER=admin@demo.com\n"
-        "export FIRST_SUPERUSER_PASSWORD=x\n"
-        "# python -m backend.app.db.bootstrap\n"
-        "python -m alembic -c backend/app/db/alembic.ini upgrade heads\n",
+        SETTINGS + "# " + BOOT + RAW,
         "never runs python -m backend.app.db.bootstrap",
     ),
     "seeds ahead of the bootstrap": (
-        "export FIRST_SUPERUSER=admin@demo.com\n"
-        "export FIRST_SUPERUSER_PASSWORD=x\n"
-        "python backend/scripts/seed_demo_data.py\n"
-        "python -m backend.app.db.bootstrap\n",
+        SETTINGS + SEED_LINE + BOOT,
         "seeds the database before the bootstrap",
     ),
     "no administrator set for the bootstrap": (
-        "python -m backend.app.db.bootstrap\n"
-        "python backend/scripts/seed_demo_data.py\n",
-        "does not export FIRST_SUPERUSER before the bootstrap",
+        "export ENVIRONMENT=development\n" + BOOT + SEED_LINE,
+        "does not set FIRST_SUPERUSER before the bootstrap",
+    ),
+    "no administrator password set for the bootstrap": (
+        "export ENVIRONMENT=development\nexport FIRST_SUPERUSER=admin@demo.com\n"
+        + BOOT
+        + SEED_LINE,
+        "does not set FIRST_SUPERUSER_PASSWORD before the bootstrap",
+    ),
+    "ENVIRONMENT never set": (
+        SETTINGS.replace("export ENVIRONMENT=development\n", "") + BOOT + SEED_LINE,
+        "does not set ENVIRONMENT=development before the bootstrap (it is None)",
+    ),
+    "only the deprecated APP_ENV set": (
+        "export APP_ENV=development\n"
+        + SETTINGS.replace("export ENVIRONMENT=development\n", "")
+        + BOOT
+        + SEED_LINE,
+        "does not set ENVIRONMENT=development before the bootstrap (it is None)",
+    ),
+    "ENVIRONMENT set to something else": (
+        SETTINGS.replace("=development", "=production") + BOOT + SEED_LINE,
+        "does not set ENVIRONMENT=development before the bootstrap (it is 'production')",
+    ),
+    "ENVIRONMENT changed after it was set": (
+        SETTINGS + "export ENVIRONMENT=staging\n" + BOOT + SEED_LINE,
+        "does not set ENVIRONMENT=development before the bootstrap (it is 'staging')",
+    ),
+    "ENVIRONMENT set only after the bootstrap": (
+        SETTINGS.replace("export ENVIRONMENT=development\n", "")
+        + BOOT
+        + "export ENVIRONMENT=development\n"
+        + SEED_LINE,
+        "does not set ENVIRONMENT=development before the bootstrap (it is None)",
+    ),
+    "a .env here-document is data, not settings": (
+        "cat > .env <<'EOF'\n"
+        "ENVIRONMENT=development\n"
+        "FIRST_SUPERUSER=admin@demo.com\n"
+        "FIRST_SUPERUSER_PASSWORD=x\n"
+        "EOF\n" + BOOT + SEED_LINE,
+        "does not set ENVIRONMENT=development before the bootstrap (it is None)",
+    ),
+    "a bare assignment is not exported": (
+        "ENVIRONMENT=development\n"
+        "export FIRST_SUPERUSER=admin@demo.com\n"
+        "export FIRST_SUPERUSER_PASSWORD=x\n" + BOOT + SEED_LINE,
+        "does not set ENVIRONMENT=development before the bootstrap (it is None)",
+    ),
+    "the bootstrap's default administrator": (
+        SETTINGS.replace("admin@demo.com", "admin@example.com") + BOOT + SEED_LINE,
+        "FIRST_SUPERUSER is admin@example.com, not admin@demo.com",
+    ),
+    "another administrator, quoted": (
+        SETTINGS.replace("=admin@demo.com", '="ops@demo.com"') + BOOT + SEED_LINE,
+        "FIRST_SUPERUSER is ops@demo.com, not admin@demo.com",
+    ),
+    "the administrator changed after it was set": (
+        SETTINGS + "export FIRST_SUPERUSER=admin@example.com\n" + BOOT + SEED_LINE,
+        "FIRST_SUPERUSER is admin@example.com, not admin@demo.com",
+    ),
+    "an administrator that only begins admin@demo.com": (
+        SETTINGS.replace("admin@demo.com", "admin@demo.com.evil.test")
+        + BOOT
+        + SEED_LINE,
+        "FIRST_SUPERUSER is admin@demo.com.evil.test, not admin@demo.com",
     ),
 }
 
@@ -148,12 +255,23 @@ def test_a_planted_database_step_is_named(script, expected):
     assert any(expected in p for p in problems), problems
 
 
-def test_a_raw_upgrade_after_the_bootstrap_is_not_a_problem():
-    script = (
-        "export FIRST_SUPERUSER=admin@demo.com\n"
-        "export FIRST_SUPERUSER_PASSWORD=x\n"
-        "python -m backend.app.db.bootstrap\n"
-        "python -m alembic -c backend/app/db/alembic.ini upgrade heads\n"
-        "python backend/scripts/seed_demo_data.py\n"
-    )
+ACCEPTED_SCRIPT = {
+    "the settings exported, then the bootstrap": SETTINGS + BOOT + SEED_LINE,
+    "a raw upgrade after the bootstrap": SETTINGS + BOOT + RAW + SEED_LINE,
+    "ENVIRONMENT on the bootstrap's own line": (
+        SETTINGS.replace("export ENVIRONMENT=development\n", "")
+        + "ENVIRONMENT=development python -m backend.app.db.bootstrap\n"
+        + SEED_LINE
+    ),
+    "quoted values": (
+        'export ENVIRONMENT="development"\n'
+        "export FIRST_SUPERUSER='admin@demo.com'\n"
+        "export FIRST_SUPERUSER_PASSWORD='Demo1234!'\n" + BOOT + SEED_LINE
+    ),
+    "APP_ENV beside ENVIRONMENT": "export APP_ENV=development\n" + SETTINGS + BOOT,
+}
+
+
+@pytest.mark.parametrize("script", ACCEPTED_SCRIPT.values(), ids=list(ACCEPTED_SCRIPT))
+def test_an_acceptable_database_step_is_not_a_problem(script):
     assert database_step_problems(script) == []
