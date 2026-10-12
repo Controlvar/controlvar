@@ -128,9 +128,9 @@ source "$REPO_ROOT/venv/bin/activate"
 pip install -r "$REPO_ROOT/backend/requirements.txt" -q
 
 # ---------------------------------------------------------------------------
-# 8. Database migrations
+# 8. Database schema
 # ---------------------------------------------------------------------------
-log "Running database migrations..."
+log "Preparing the database..."
 cd "$REPO_ROOT"
 export ENVIRONMENT=development
 export APP_ENV=development
@@ -144,9 +144,17 @@ export POSTGRES_SCHEMA=experimentation
 export POSTGRES_SERVER=localhost
 export POSTGRES_USER=postgres
 export POSTGRES_PASSWORD=postgres
+# The bootstrap creates this administrator while `users` is empty: the one the
+# demo guide signs in with, so the seed finds it rather than adding a second.
+export FIRST_SUPERUSER=admin@demo.com
+export FIRST_SUPERUSER_PASSWORD='Demo1234!'
 
-python -m alembic -c backend/app/db/alembic.ini upgrade heads
-ok "Migrations complete."
+# The bootstrap, not a bare `alembic upgrade heads`: the historical migration
+# chain cannot be replayed from an empty database, so a new database is built
+# from the models and stamped at the current heads, and an existing one is
+# upgraded with `alembic upgrade heads`.
+python -m backend.app.db.bootstrap
+ok "Database is up to date."
 
 # ---------------------------------------------------------------------------
 # 9. Seed demo data
