@@ -29,7 +29,9 @@
 #   reference           nothing is walked: it has no steps to follow, or the
 #                       reason says why its steps are not walked. The docs-site
 #                       journey checks that it answers on the published site
-#                       with its source heading, like every nav page.
+#                       with its source heading, like every nav page. A page
+#                       doc_examples.toml enrols with an exec block is refused
+#                       here: its steps run, so it is exec.
 #   aws                 needs an AWS account; to be reported NOT RUN.
 #                       `exercised_by` names the steps that exercise the page,
 #                       each one of: a step of #295 (the first deploy to a real
@@ -49,8 +51,8 @@
 # Fields: `class` and a one-line `reason` on every page; `journey` (a slug) and,
 # until its file exists, `pending = true` on a journey, with `planned` naming
 # the pull request of the QA plan (#897, #939) that writes it: "D2", "D3a",
-# "D3b", or "unassigned"; `workflow` on a workflow; `exercised_by` on an aws
-# page.
+# "D3b", or "unassigned"; or "D73", the plan of #1142; `workflow` on a
+# workflow; `exercised_by` on an aws page.
 #
 # [[flow]] maps each flow in the "Flows, at least" list of #939 to journeys, to
 # pages (whose class and reason are above) or to every page of a class. The test
@@ -59,7 +61,58 @@
 # The journeys' run summary (docs_runner/report.py) prints the #939 mapping, and
 # every nav page that is not a journey that ran with its class and reason, so
 # what is not walked is listed, never silent. A pending journey is shown as
-# planned in the pull request `planned` names, never as passed.
+# planned in the pull request `planned` names, never as passed. It reads [pages]
+# and [[flow]] only; [documents] and [meta] change nothing in it.
+#
+# [documents]: every other file the walk finds, and the named surfaces (#1142).
+# The walk is scripts/doc_examples.py:walk(), the one that keeps
+# scripts/doc_examples.toml's [meta] universe: every *.md under the repository
+# root except CLAUDE.md files, skipping directories named node_modules, venv
+# or site and dot-directories other than .github. Each file it finds is
+# classified exactly once: a nav page under [pages] (its path relative to
+# docs/), any other file under [documents] (its path from the repository
+# root). test_docs_inventory.py refuses a walked file with no entry, an entry
+# the walk does not find, a nav page under [documents], and a [meta] walked
+# that is not the exact number of files the walk finds. So a new Markdown file
+# anywhere in the repository needs an entry here, and walked moves with it, in
+# the same pull request.
+#
+# A document is one of:
+#
+#   scope = "in"    read by people who use or run the product: `class` and a
+#                   one-line `reason`, with the classes and fields a page has.
+#                   For a document, `exec` means doc_examples.toml enrols its
+#                   repository path with an exec block, and `workflow` means
+#                   the workflow's on.<event>.paths lists that path literally.
+#                   The docs-site journey checks nav pages only.
+#   scope = "out"   not for people who use or run the product: `out`, one of
+#                   contributor, legal, generated, template, in-code-note,
+#                   removed-code or test-harness, and a `reason` of 1-200
+#                   characters on one line.
+#
+# The named surfaces are text a user reads that is not Markdown, so the walk
+# cannot find it. They are a closed list, kept in the test, and an entry for
+# any other file that is not Markdown is refused. Each is scope = "in", and
+# names the extractor that reads its text:
+#
+#   charts/experimently/templates/NOTES.txt     "text": all of it
+#   deploy/compose/compose.yml#header           "leading-hash-comments": the
+#   deploy/compose/generate-env.sh#header         comment lines from the top
+#                                                 (after a #! line) to the first
+#                                                 line that is not a comment
+#   frontend/src/pages/docs/index.tsx#desc      "docs-hub-desc": every single- or
+#                                                 double-quoted desc: and
+#                                                 description: literal;
+#                                                 `literals` is how many, exactly
+#
+# and frontend/src/components/experiments/FirstRunChecklist.tsx has no
+# extractor: it is class journey, held by its journey. A surface whose file is
+# gone, an extractor that reads nothing, a hub key whose value the extractor
+# cannot read, and a number of hub literals other than `literals` are each
+# refused: a desc added to the hub or taken from it moves `literals` in the
+# same pull request.
+#
+# [meta] walked is the number of files the walk finds, exactly.
 
 [pages."README.md"]
 class = "journey"
@@ -701,3 +754,294 @@ note = "the production compose file (deploy/compose/compose.yml) is a link in th
 text = "any other first-run flow the plan identifies"
 journeys = ["onboarding-and-password", "api-key-first-assignment", "workspaces-quickstart"]
 note = "sign-in per role and a password change, a first API key used for an assignment, and the workspaces quickstart"
+
+# ---------------------------------------------------------------------------
+# Every other file the walk finds, and the named surfaces (#1142). The header
+# above says what each field means.
+# ---------------------------------------------------------------------------
+[meta]
+walked = 164
+
+# The front door, and the policy beside it.
+
+[documents."README.md"]
+scope = "in"
+class = "exec"
+reason = "the repository's front page on GitHub: its runnable blocks run in Doc Examples"
+
+[documents."SECURITY.md"]
+scope = "in"
+class = "reference"
+reason = "how to report a problem privately and which versions are supported; no steps to follow"
+
+# The demo, walked by journeys that are not written yet.
+
+[documents."demo/DEMO_GUIDE.md"]
+scope = "in"
+class = "journey"
+journey = "demo-guide"
+pending = true
+planned = "D73"
+reason = "the demo walkthrough: demo/setup-local.sh, then the dashboard, ShopLab and StreamPulse"
+
+[documents."demo/shoplab/README.md"]
+scope = "in"
+class = "journey"
+journey = "demo-shoplab"
+pending = true
+planned = "D73"
+reason = "the ShopLab storefront and its traffic simulator, run as the page says"
+
+[documents."demo/streampulse/README.md"]
+scope = "in"
+class = "journey"
+journey = "demo-streampulse"
+pending = true
+planned = "D73"
+reason = "the StreamPulse demo app, run as the page says"
+
+[documents."demo/streampulse/simulator/README.md"]
+scope = "in"
+class = "journey"
+journey = "demo-streampulse-simulator"
+pending = true
+planned = "D73"
+reason = "the StreamPulse simulator's scripts, run as the page says"
+
+# docs/ pages the nav does not list: built on the site and shown on GitHub.
+
+[documents."docs/api/README.md"]
+scope = "in"
+class = "exec"
+reason = "an index of the API pages, with a quick start whose sign-in and experiment-list calls run in Doc Examples"
+
+[documents."docs/architecture/README.md"]
+scope = "in"
+class = "reference"
+reason = "an index of the architecture pages; no steps to follow"
+
+[documents."docs/auth/README.md"]
+scope = "in"
+class = "reference"
+reason = "an index of the authentication pages; no steps to follow"
+
+[documents."docs/deployment/README.md"]
+scope = "in"
+class = "aws"
+exercised_by = [
+    "set up GitHub OIDC access for the deploy workflow",
+    "run the first stack deploy",
+    "migrate",
+    "smoke through the load balancer on a non-probe path",
+    "deploy a second release and roll back",
+    "production-deploy",
+]
+reason = "the deployment index and quick reference: the GitHub environments, then deploy, roll back and migrate through the workflows"
+
+[documents."docs/getting-started/README.md"]
+scope = "in"
+class = "reference"
+reason = "an index of the getting-started pages; no steps to follow"
+
+[documents."docs/monitoring/index.md"]
+scope = "in"
+class = "aws"
+exercised_by = ["none"]
+reason = "an index of the CloudWatch monitoring pages, with steps that create log groups and dashboards on AWS"
+
+[documents."docs/security/README.md"]
+scope = "in"
+class = "reference"
+reason = "an index of the hardening and incident pages, with a list of controls and a list of open items; no steps to follow"
+
+[documents."infrastructure/cdk/README.md"]
+scope = "in"
+class = "aws"
+exercised_by = ["run the first stack deploy"]
+reason = "the CDK app's README: prerequisites and the start of a local setup for deploying to AWS"
+
+# SDK READMEs. The published packages' READMEs are not walked: each SDK's
+# journey walks its page under docs/sdk/. The others belong to SDKs not on a
+# package registry yet, or that need a device; #1107 tests their flows.
+
+[documents."sdk/js/README.md"]
+scope = "in"
+class = "reference"
+reason = "the README the package carries to npm; not walked: the sdk-javascript journey walks docs/sdk/javascript.md"
+
+[documents."sdk/python/README.md"]
+scope = "in"
+class = "reference"
+reason = "the README the package carries to PyPI; not walked: the sdk-python journey walks docs/sdk/python.md"
+
+[documents."sdk/go/README.md"]
+scope = "in"
+class = "reference"
+reason = "the Go module's README; not walked: the sdk-go journey walks docs/sdk/go.md"
+
+[documents."sdk/openfeature-python/README.md"]
+scope = "in"
+class = "reference"
+reason = "not walked: the README says the Python OpenFeature provider is not on PyPI yet"
+
+[documents."sdk/java/README.md"]
+scope = "in"
+class = "reference"
+reason = "not walked: the README says the package is not on Maven Central yet; #1107 tests its flows"
+
+[documents."sdk/react/README.md"]
+scope = "in"
+class = "reference"
+reason = "not walked: the README says the package is not on npm yet; #1107 tests its flows"
+
+[documents."sdk/openfeature/README.md"]
+scope = "in"
+class = "reference"
+reason = "not walked: the README says the provider is not on npm yet; #1107 tests its flows"
+
+[documents."sdk/edge/README.md"]
+scope = "in"
+class = "reference"
+reason = "not walked: the package is not on npm yet (docs/sdk/edge.md says so); #1107 tests its flows"
+
+[documents."sdk/ruby/README.md"]
+scope = "in"
+class = "reference"
+reason = "not walked: the README says the gem is not on RubyGems yet; #1107 tests its flows"
+
+[documents."sdk/php/README.md"]
+scope = "in"
+class = "reference"
+reason = "not walked: the README says the package is not on Packagist yet; #1107 tests its flows"
+
+[documents."sdk/dotnet/README.md"]
+scope = "in"
+class = "reference"
+reason = "not walked: the README says the package is not on NuGet yet; #1107 tests its flows"
+
+[documents."sdk/elixir/README.md"]
+scope = "in"
+class = "reference"
+reason = "not walked: the README says the package is not on Hex yet; #1107 tests its flows"
+
+[documents."sdk/ios/README.md"]
+scope = "in"
+class = "device"
+reason = "needs Xcode and an iOS simulator or device; #1107 tests its flows"
+
+[documents."sdk/android/README.md"]
+scope = "in"
+class = "device"
+reason = "needs the Android SDK and an emulator or device; #1107 tests its flows"
+
+[documents."sdk/android/examples/ComposeExample/README.md"]
+scope = "in"
+class = "device"
+reason = "a Jetpack Compose example app; needs the Android SDK and an emulator or device; #1107 tests its flows"
+
+[documents."sdk/flutter/README.md"]
+scope = "in"
+class = "device"
+reason = "needs the Flutter SDK and a simulator, emulator or device; #1107 tests its flows"
+
+# Not for users of the product.
+
+[documents.".github/pull_request_template.md"]
+scope = "out"
+out = "template"
+reason = "the form a pull request's author fills in"
+
+[documents.".github/qa-templates/README.md"]
+scope = "out"
+out = "template"
+reason = "the fixed wording the QA workflows post, for whoever edits those templates"
+
+[documents."CHANGELOG.md"]
+scope = "out"
+out = "generated"
+reason = "written by release-please from merged pull request titles: dated records of past releases"
+
+[documents."CODE_OF_CONDUCT.md"]
+scope = "out"
+out = "contributor"
+reason = "the Contributor Covenant, for people taking part in the project"
+
+[documents."CONTRIBUTING.md"]
+scope = "out"
+out = "contributor"
+reason = "development setup and the sign-off rule, for contributors"
+
+[documents."THIRD_PARTY_LICENSES.md"]
+scope = "out"
+out = "generated"
+reason = "written by scripts/generate_third_party_licenses.py from the dependencies"
+
+[documents."backend/app/api/v1/endpoints/README_SAFETY.md"]
+scope = "out"
+out = "in-code-note"
+reason = "a note kept beside the endpoint code; not published on the docs site"
+
+[documents."backend/app/models/models_overview.md"]
+scope = "out"
+out = "in-code-note"
+reason = "a note kept beside the model code; not published on the docs site"
+
+[documents."backend/lambda/README.md"]
+scope = "out"
+out = "removed-code"
+reason = "describes Lambda code that no stack deploys; #1103 removes it"
+
+[documents."backend/lambda/event_processor/README.md"]
+scope = "out"
+out = "removed-code"
+reason = "describes Lambda code that no stack deploys; #1103 removes it"
+
+[documents."docs/development/README.md"]
+scope = "out"
+out = "contributor"
+reason = "the index of the contributor pages"
+
+[documents."frontend/README.md"]
+scope = "out"
+out = "contributor"
+reason = "how to develop and build the dashboard from a checkout"
+
+[documents."tests/sdk-contract/README.md"]
+scope = "out"
+out = "test-harness"
+reason = "describes the SDK contract tests: the golden vectors and the live contract"
+
+# The named surfaces: text a user reads that is not Markdown.
+
+[documents."charts/experimently/templates/NOTES.txt"]
+scope = "in"
+class = "reference"
+extractor = "text"
+reason = "printed by helm install; not walked as written: chart-kind installs the chart and runs helm test, but nothing reads this text"
+
+[documents."deploy/compose/compose.yml#header"]
+scope = "in"
+class = "reference"
+extractor = "leading-hash-comments"
+reason = "the production compose file's header; not walked as written: compose-production runs generate-env.sh and docker compose up --wait on this file, but nothing reads the header"
+
+[documents."deploy/compose/generate-env.sh#header"]
+scope = "in"
+class = "reference"
+extractor = "leading-hash-comments"
+reason = "the script's usage header; not walked as written: compose-production runs the script and checks that a second run refuses, but nothing reads the header"
+
+[documents."frontend/src/pages/docs/index.tsx#desc"]
+scope = "in"
+class = "reference"
+extractor = "docs-hub-desc"
+literals = 80
+reason = "the in-app docs hub's section and card descriptions; jest renders the page and refuses retired wording (docs-index.test.tsx)"
+
+[documents."frontend/src/components/experiments/FirstRunChecklist.tsx"]
+scope = "in"
+class = "journey"
+journey = "first-run"
+pending = true
+planned = "D73"
+reason = "the first-run card on the experiments page, walked on a stack with no seed data"
