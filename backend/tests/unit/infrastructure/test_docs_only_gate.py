@@ -71,6 +71,7 @@ CORE_BUILD_STEPS: Dict[str, Optional[str]] = {
     "Set up Python": None,
     "Install backend dependencies (docs tests)": DOCS,
     "Docs content tests": DOCS,
+    "No docs content test was skipped": DOCS,
     "Set up Node.js": NOT_DOCS,
     "Install backend dependencies": NOT_DOCS,
     "Install gitleaks": NOT_DOCS,
@@ -213,6 +214,9 @@ NOT_DOCS_TESTS = {
     # Gives storyboard narration claims a source STRING such as
     # "docs/getting-started/quick-start.md"; opens no file under docs/.
     "backend/tests/unit/showcase/test_showcase_narration.py": "fixture strings only",
+    # Builds its own base and head trees in tmp_path with pages such as
+    # "docs/a.md" for scripts/removed_units.py; opens no file under docs/.
+    "backend/tests/unit/scripts/test_removed_units.py": "fixture strings only",
     # Pins docs-journeys.yml's script lines, one of which names mkdocs.yml and
     # docs (the git archive of the published site's source); opens no file
     # under docs/.
