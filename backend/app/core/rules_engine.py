@@ -37,6 +37,22 @@ logger = logging.getLogger(__name__)
 # Type alias for user context
 UserContext = Dict[str, Any]
 
+
+def _out_of_range(operator: OperatorType) -> pattern_match.PatternUnevaluable:
+    """The condition's value is out of range for the comparison (``OUT_OF_RANGE``).
+
+    An integer too large for a float, or a timestamp no date can hold, cannot
+    be compared. Like a pattern condition that cannot be evaluated, the
+    condition is unevaluable and the caller that owns the ruleset abandons it:
+    it is never reduced to ``False`` inside a group, where an enclosing ``NOT``
+    would turn it into a match. The digest names the operator, never the value.
+    """
+    return pattern_match.PatternUnevaluable(
+        pattern_match.UnevaluableReason.OUT_OF_RANGE,
+        pattern_match.pattern_digest(operator.value),
+    )
+
+
 # Logging on the evaluation path. A user's attribute values are never logged,
 # at any level, and neither is the text of an exception raised while handling
 # one (a parse error repeats its input). Only type names, operators and fixed
@@ -435,11 +451,18 @@ def apply_operator(
         else:
             return False
 
-    # Simple equality operators
+    # Simple equality operators. _values_equal raises OverflowError for a
+    # number too large for a float: the condition is unevaluable.
     if operator == OperatorType.EQUALS:
-        return _values_equal(actual_value, expected_value)
+        try:
+            return _values_equal(actual_value, expected_value)
+        except OverflowError:
+            raise _out_of_range(operator) from None
     elif operator == OperatorType.NOT_EQUALS:
-        return not _values_equal(actual_value, expected_value)
+        try:
+            return not _values_equal(actual_value, expected_value)
+        except OverflowError:
+            raise _out_of_range(operator) from None
 
     # Collection operators
     elif operator == OperatorType.IN:
@@ -447,12 +470,18 @@ def apply_operator(
         if not isinstance(expected_value, (list, tuple, set)):
             _note_rule_problem(operator, "the value is not a list")
             return False
-        return any(_values_equal(actual_value, item) for item in expected_value)
+        try:
+            return any(_values_equal(actual_value, item) for item in expected_value)
+        except OverflowError:
+            raise _out_of_range(operator) from None
     elif operator == OperatorType.NOT_IN:
         if not isinstance(expected_value, (list, tuple, set)):
             _note_rule_problem(operator, "the value is not a list")
             return False
-        return not any(_values_equal(actual_value, item) for item in expected_value)
+        try:
+            return not any(_values_equal(actual_value, item) for item in expected_value)
+        except OverflowError:
+            raise _out_of_range(operator) from None
 
     # String operators
     elif operator == OperatorType.CONTAINS:
@@ -492,6 +521,8 @@ def apply_operator(
     elif operator == OperatorType.GREATER_THAN:
         try:
             return float(actual_value) > float(expected_value)
+        except OverflowError:
+            raise _out_of_range(operator) from None
         except (ValueError, TypeError):
             logger.debug(
                 "%s: cannot compare %s with %s as numbers",
@@ -503,6 +534,8 @@ def apply_operator(
     elif operator == OperatorType.GREATER_THAN_OR_EQUAL:
         try:
             return float(actual_value) >= float(expected_value)
+        except OverflowError:
+            raise _out_of_range(operator) from None
         except (ValueError, TypeError):
             logger.debug(
                 "%s: cannot compare %s with %s as numbers",
@@ -514,6 +547,8 @@ def apply_operator(
     elif operator == OperatorType.LESS_THAN:
         try:
             return float(actual_value) < float(expected_value)
+        except OverflowError:
+            raise _out_of_range(operator) from None
         except (ValueError, TypeError):
             logger.debug(
                 "%s: cannot compare %s with %s as numbers",
@@ -525,6 +560,8 @@ def apply_operator(
     elif operator == OperatorType.LESS_THAN_OR_EQUAL:
         try:
             return float(actual_value) <= float(expected_value)
+        except OverflowError:
+            raise _out_of_range(operator) from None
         except (ValueError, TypeError):
             logger.debug(
                 "%s: cannot compare %s with %s as numbers",
@@ -571,6 +608,11 @@ def apply_operator(
             else:  # AFTER
                 return actual_date > expected_date
 
+        except (OverflowError, OSError):
+            # datetime.fromtimestamp: OSError for a timestamp whose year the C
+            # library cannot hold (from about 7e16 seconds), OverflowError for
+            # one beyond time_t (2**63). Either is out of range.
+            raise _out_of_range(operator) from None
         except (ValueError, TypeError):
             logger.debug(
                 "%s: cannot compare %s with %s as dates",
@@ -642,6 +684,11 @@ def apply_operator(
 
             return lower_date <= actual_date <= upper_date
 
+        except (OverflowError, OSError):
+            # float() of an integer too large for a float, or
+            # datetime.fromtimestamp of a timestamp out of range: OSError from
+            # about 7e16 seconds, OverflowError beyond time_t (2**63).
+            raise _out_of_range(operator) from None
         except (ValueError, TypeError):
             logger.debug(
                 "%s: cannot compare %s with bounds %s and %s",

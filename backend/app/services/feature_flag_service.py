@@ -695,12 +695,18 @@ class FeatureFlagService:
                     return False
                 elif operator == "ne" and context_value == value:
                     return False
+                # gt/lt compare two numbers: a stored value that is not a
+                # number does not match (comparing it raised TypeError).
                 elif operator == "gt" and not (
-                    isinstance(context_value, (int, float)) and context_value > value
+                    isinstance(context_value, (int, float))
+                    and isinstance(value, (int, float))
+                    and context_value > value
                 ):
                     return False
                 elif operator == "lt" and not (
-                    isinstance(context_value, (int, float)) and context_value < value
+                    isinstance(context_value, (int, float))
+                    and isinstance(value, (int, float))
+                    and context_value < value
                 ):
                     return False
                 elif operator == "contains" and not (
