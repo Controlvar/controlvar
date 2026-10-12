@@ -36,7 +36,9 @@ The classification itself is tested in
 
 from __future__ import annotations
 
+import importlib.util
 import re
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -503,6 +505,34 @@ class TestBuildJobSteps:
             f"them: add them to DOCS_TESTS and the workflow step, or to "
             f"NOT_DOCS_TESTS with the reason: {unclassified}"
         )
+
+
+def _classified(rel: str) -> bool:
+    return rel in NOT_DOCS_TESTS or any(
+        rel == t or (t.endswith("/") and rel.startswith(t)) for t in DOCS_TESTS
+    )
+
+
+def test_every_claims_mechanism_is_classified():
+    """A mechanism of the claims registry (``MECHANISMS`` in
+    ``scripts/doc_claims.py``) is a test that reads a page and holds units of
+    it. Like any test that reads docs/, it runs on a docs-only change
+    (DOCS_TESTS) or is excused with its reason (NOT_DOCS_TESTS). The scan above
+    finds a reader by the path it names; this finds a mechanism by name, so one
+    that builds its path another way is still classified."""
+    spec = importlib.util.spec_from_file_location(
+        "doc_claims_for_the_gate", REPO_ROOT / "scripts" / "doc_claims.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # dataclasses looks its module up
+    spec.loader.exec_module(module)
+    files = sorted({m.test.split("::")[0] for m in module.MECHANISMS.values()})
+    assert files, "MECHANISMS is empty: this check would pass on nothing"
+    unclassified = [f for f in files if not _classified(f)]
+    assert not unclassified, (
+        "these claims mechanisms are neither in DOCS_TESTS nor in NOT_DOCS_TESTS:"
+        f" {unclassified}"
+    )
 
 
 def test_the_dashboard_and_api_gate_runs_on_a_docs_only_change():

@@ -1,0 +1,128 @@
+# What verifies each unit of docs/workspaces/quickstart.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/workspaces/quickstart.md"
+
+[[unit]]
+text = "Team Workspaces — Quickstart"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Part of the workspaces module"
+by = [
+    "test:modules/backend/tests/smoke/test_workspace_routes_contract.py::test_the_positive_control_is_present",
+    "test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route",
+]
+
+[[unit]]
+text = "Team workspaces is one of the optional modules -- present in the full profile, absent from the core one."
+by = [
+    "test:modules/backend/tests/smoke/test_workspace_routes_contract.py::test_the_positive_control_is_present",
+    "test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route",
+]
+
+[[unit]]
+text = "A core deployment does not serve these routes."
+by = ["test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route"]
+
+[[unit]]
+text = "See Modules and profiles for what each profile includes and how to run the full one."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "This guide shows you how to create a workspace, add your team to it, and connect an SDK."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "A workspace groups members and their workspace roles."
+by = ["journey:workspaces-quickstart#add-member", "journey:workspaces-quickstart#members"]
+
+[[unit]]
+text = "It does not limit which experiments, feature flags or API keys anyone can see or change: that is decided by each user's platform role across the whole installation."
+by = ["untested:T"]
+
+[[unit]]
+text = "See the Workspace Overview."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "1. Create a Workspace"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Any authenticated platform user can create a workspace."
+by = [
+    "journey:workspaces-quickstart#create",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestCreateWorkspace::test_create_workspace_developer_can_create",
+]
+
+[[unit]]
+text = "Response (201 Created):"
+by = ["journey:workspaces-quickstart#create"]
+
+[[unit]]
+text = "The user who creates the workspace is automatically assigned the OWNER role."
+by = ["journey:workspaces-quickstart#owner"]
+
+[[unit]]
+text = "The dashboard's Workspaces page (/workspaces) then lists the workspace, with its name, slug and description."
+by = ["journey:workspaces-quickstart#workspaces-page"]
+
+[[unit]]
+text = "2. Invite Team Members"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Option A — Invite by email"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Send the returned token to Alice."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Alice can accept the invite once she is logged into the platform with alice@example.com (in any case); any other account gets 403 with code invite_email_mismatch:"
+by = ["journey:workspaces-quickstart#other-account-refused", "journey:workspaces-quickstart#accept"]
+
+[[unit]]
+text = "Option B — Add existing user directly"
+by = ["exempt:label"]
+
+[[unit]]
+text = "If you already know the user's platform ID:"
+by = ["journey:workspaces-quickstart#add-member"]
+
+[[unit]]
+text = "3. Connect an SDK with a Platform API Key"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Workspaces do not issue API keys."
+by = [
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestWorkspaceAPIKeyRoutesAreGone::test_every_key_operation_is_404",
+    "test:modules/backend/tests/smoke/test_workspace_routes_contract.py::test_no_workspace_api_key_route",
+]
+
+[[unit]]
+text = "A superuser can create a platform key in the dashboard under Admin → API Keys, and a key acts as the user who created it."
+by = ["untested:T"]
+
+[[unit]]
+text = "The SDKs authenticate with a platform API key, created with POST /api/v1/api-keys -- not with a workspace key."
+by = ["journey:workspaces-quickstart#api-key", "journey:workspaces-quickstart#sdk-call"]
+
+[[unit]]
+text = "See API Key Management for how to create one, and the SDK guide for how to pass it to each SDK."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Next Steps"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Workspace Overview — workspace roles and invitations"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "API Reference — interactive Swagger UI"
+by = ["exempt:navigation"]
