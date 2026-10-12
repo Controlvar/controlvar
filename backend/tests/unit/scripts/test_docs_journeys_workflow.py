@@ -108,6 +108,10 @@ DEMO_SETUP = [
     ("actions/setup-node@v7", {"node-version-file": ".nvmrc"}),
 ]
 DEMO_VERDICTS = "docs-journeys-demo-verdicts"
+#: The demo job's timeout: five times the whole job's measured length (4 min
+#: 56 s with every journey passing, docs-journeys run 38211112995). A change
+#: is a new measurement, made here and in the workflow's comment together.
+DEMO_TIMEOUT_MINUTES = 25
 #: The report job's downloads: each job's verdicts, when that job wrote them.
 REPORT_DOWNLOADS = [
     (
@@ -257,8 +261,11 @@ def demo_problems(doc: Dict[Any, Any]) -> List[str]:
     found: List[str] = []
     jobs = doc["jobs"]
     demo = jobs.get("demo") or {}
-    if not isinstance(demo.get("timeout-minutes"), int):
-        found.append("the demo job has no timeout in minutes")
+    if demo.get("timeout-minutes") != DEMO_TIMEOUT_MINUTES:
+        found.append(
+            f"the demo job has no timeout of {DEMO_TIMEOUT_MINUTES} minutes, the"
+            f" measured one: {demo.get('timeout-minutes')!r}"
+        )
     steps = _job_steps(doc, "demo")
     walk = _in_job(doc, "demo", DEMO_WALK)
     if walk is None or walk.get("run") != WALK_RUN or walk.get("env") != DEMO_WALK_ENV:
@@ -1108,7 +1115,12 @@ PLANTS: List[tuple] = [
     (
         "demo-without-a-timeout",
         lambda doc, text: (doc["jobs"]["demo"].pop("timeout-minutes") and doc, text),
-        "no timeout",
+        "no timeout of 25 minutes",
+    ),
+    (
+        "demo-timeout-guessed",
+        _set(["jobs", "demo", "timeout-minutes"], 90),
+        "no timeout of 25 minutes",
     ),
     (
         "demo-verdicts-under-the-journeys-name",

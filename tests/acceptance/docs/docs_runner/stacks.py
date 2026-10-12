@@ -105,8 +105,9 @@ first step rather than ending the session.
   origin its API, and each address is where an ``open`` of it goes), and each
   must answer before the first journey (``DOCS_JOURNEY_DEMO_WAIT`` seconds,
   default 600, which also covers each development server's first compile).
-  The script may take ``DOCS_JOURNEY_DEMO_TIMEOUT`` seconds (default 2400);
-  the time it took is written to the log. Its accounts are the demo seed's.
+  The script may take ``DOCS_JOURNEY_DEMO_TIMEOUT`` seconds (default 900,
+  about four times what it took on a GitHub-hosted runner, 196-238 s); the
+  time it took is written to the log. Its accounts are the demo seed's.
   What it prints, and when the stack comes down each log ``demo/.logs`` holds,
   is written to ``stacks/demo-local.log`` and ``stacks/demo-local/`` with the
   values the stack registers taken out: the administrator's password the
@@ -917,7 +918,7 @@ class DemoLocal:
         self.repo_root = repo_root
         self.logs = logs
         self.environ = dict(environ)
-        self.timeout = float(environ.get("DOCS_JOURNEY_DEMO_TIMEOUT", "2400"))
+        self.timeout = float(environ.get("DOCS_JOURNEY_DEMO_TIMEOUT", "900"))
         self.wait = float(environ.get("DOCS_JOURNEY_DEMO_WAIT", "600"))
         #: The values no file of the run may hold, as soon as they are known
         #: (also after a start that failed part-way).
