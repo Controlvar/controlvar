@@ -170,6 +170,7 @@ demo/shoplab/.env.local
 tests/sdk-contract/live/.api_key
 tests/sdk-contract/live/.api_key_local
 demo/streampulse/.api_key
+demo/streampulse/.api_key_server
 demo/streampulse/.env.local
 
 # The react-native live contract writes its report here (Jest owns stdout, so the

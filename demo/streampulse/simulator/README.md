@@ -2,7 +2,9 @@
 
 Python 3.11, stdlib only. Talks to the platform exactly like the app does: the public API with the
 `streampulse-app` API key (`demo/streampulse/.api_key`, written by `backend/scripts/seed_streampulse.py`)
-for devices, and the dashboard API with a bearer token for the story.
+for devices, the StreamPulse server key (`streampulse-server`, scope `sdk:ruleset`,
+`demo/streampulse/.api_key_server`, written by the same seed) for the crash reports, and the dashboard
+API with a bearer token for the story.
 
 | File | What it is |
 |---|---|
@@ -36,6 +38,7 @@ python demo/streampulse/simulator/traffic.py --dry-run --incident android12
 ```
 
 Options: `--api-url` (default `http://localhost:8000`), `--api-key` (default: `demo/streampulse/.api_key`),
+`--server-api-key` (the key the crash reports are sent with; default: `demo/streampulse/.api_key_server`),
 `--rate` sessions/s, `--duration` seconds (0 = forever), `--seed`, `--devices N` (population size, default 5000),
 `--population-seed` (keep it fixed so device ids are stable), `--incident {off,android12}`, `--max-ticks`,
 `--no-probe`, `--dry-run`.
@@ -43,13 +46,18 @@ Options: `--api-url` (default `http://localhost:8000`), `--api-key` (default: `d
 At start-up it prints what the five app presets get right now (flag on/off + `reason`, variant + `assigned`/`reason`),
 e.g. the internal tester gets `player_v2=ON(targeting_rule)` and `ai_search` is ON only for iOS 17+ / US / premium.
 
-Exit codes: `0` ok · `2` bad or missing API key · `3` catalogue not seeded / not ACTIVE · `4` API unreachable.
+Exit codes: `0` ok · `2` bad or missing API key, or `--incident` without the server key · `3` catalogue not
+seeded / not ACTIVE · `4` API unreachable.
 
 ### The incident model (`--incident android12`)
 
 A broken Player v2 build ships to Android 12. 40% of Android 12 devices (stable per device id) that have
-`streampulse_player_v2` ON crash when the player opens and report it with
+`streampulse_player_v2` ON crash when the player opens, and each crash is reported with
 `POST /tracking/errors {feature_flag_key: streampulse_player_v2, error_type: "crash", message: "NullPointerException in PlayerV2Fragment", metadata: {os, os_version, device_model, app_version}}`.
+The reports are sent with the StreamPulse server key, the way the StreamPulse server would forward its
+devices' crash reports: only reports sent with a server-side key (scope `sdk:ruleset`) count toward a
+flag's error rate and automatic rollback. A report sent with the app's key is stored, and the flag's
+safety check shows it as not counted.
 A crashed app gets relaunched by its user (crash loop, `INCIDENT_RELAUNCHES = 2`): every relaunch re-evaluates
 the flag — still ON — and crashes again, so half of the incident ticks are Android 12 devices. Safety monitoring
 computes `error_rate = crash reports ÷ flag evaluations` over the last 15 minutes: with the flag at 25% the rate

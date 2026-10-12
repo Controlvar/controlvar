@@ -55,9 +55,13 @@ to skip StreamPulse). It does not run the crash incident or the rollout story.
 
 **1. Seed** the StreamPulse catalogue, from the repository root. It is idempotent, and writes
 the API key to `demo/streampulse/.api_key` and the `NEXT_PUBLIC_EXPERIMENTLY_API_KEY` line into
-`demo/streampulse/.env.local`. `--no-history` skips the 7-day backfill, `--reset` removes
-everything it created, and the `STREAMPULSE_DEMO_DIR` environment variable changes where the
-key files go.
+`demo/streampulse/.env.local`. It also writes a second key, the StreamPulse server key (scope
+`sdk:ruleset`), to `demo/streampulse/.api_key_server` and nowhere else: the simulator sends its
+crash reports with it, the way the StreamPulse server would forward them, because only reports
+sent with a server-side key count toward automatic rollback. Never put that key in `.env.local`:
+it can also download every flag's targeting rules. `--no-history` skips the 7-day backfill,
+`--reset` removes everything it created, and the `STREAMPULSE_DEMO_DIR` environment variable
+changes where the key files go.
 
 ```{.bash skip reason="demo: runs the demo applications (Stream F)"}
 source venv/bin/activate
@@ -137,7 +141,8 @@ Keep `traffic.py` running in a terminal throughout so the numbers move.
 3. **Player — rollout + safety** (`streampulse_player_v2`, 5 %, employee rule). *Internal tester*
    gets Player v2 by rule; the other presets are bucketed by the 5 % rollout. Open the **Rollout
    story** drawer and run `rollout_story.py --auto` (or step by step): 25 % → Android 12 crash
-   incident (`traffic.py --incident android12` reports errors through `POST /tracking/errors`) →
+   incident (`traffic.py --incident android12` reports the crashes through `POST /tracking/errors`
+   with the StreamPulse server key) →
    safety check unhealthy → rollback to 5 % → `app_version ≥ 3.2.1` rule → 50 % → 100 %. Watch
    the drawer's readout for *Galaxy S10 · app 3.1.0* vs *iPhone 15 · app 3.2.1*, and the Safety and
    Audit pages in the dashboard. The Audit page shows the rollback as a *Safety rollback* by
@@ -181,5 +186,5 @@ per-experiment), so it can differ after `--reset`; the holdout bucket does not.
 | Player v2 does not change after the story rolls back / advances | The SDK caches for 5 s — wait or press *Refresh now*. If the schedulers are involved (auto-rollback, time-based stages), they run every `SAFETY_CHECK_INTERVAL_MINUTES` / `ROLLOUT_CHECK_INTERVAL_MINUTES` (default 5 / 15) — set both to `1` in the backend `.env` for the demo (`setup-local.sh` sets both to `1` unless they are already set). |
 | A preset shows "not enrolled … holdout" for every experiment | That id hashes into the 2 % holdout. The shipped preset ids do not; if you changed one, pick another id (or use it to demonstrate the holdout). |
 | "Invalid hook call" in the browser | Two React copies. `next.config.js` aliases `react`/`react-dom` to this app's `node_modules`; run `npm install` inside `demo/streampulse`. |
-| Simulator exits with code 2 / 3 / 4 | 2 = API key rejected or missing, 3 = catalogue not seeded (404), 4 = backend unreachable. |
+| Simulator exits with code 2 / 3 / 4 | 2 = API key rejected or missing, or `--incident` without the server key in `demo/streampulse/.api_key_server` (run the seed), 3 = catalogue not seeded (404), 4 = backend unreachable. |
 | `npm run typecheck` fails inside `sdk/react/src` | The app needs `ExperimentAssignment.assigned` / `.reason` and `FeatureFlagEvaluation.reason` from the React SDK; make sure `sdk/react` is at the version in this repo. |
