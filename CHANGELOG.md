@@ -10,6 +10,32 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.29.0](https://github.com/getexperimently/experimently/compare/v0.28.2...v0.29.0) (2026-10-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* **safety:** Safety monitoring: automatic rollback now counts error reports sent with a server-side key (scope `sdk:ruleset`) and server-side evaluation failures. Reports sent with other keys are still stored and shown, but no longer trigger a rollback. If your browser or mobile clients report errors and you rely on automatic rollback, send those reports through your server with a server-side key. Do not put that key in an app: it can also download every flag's targeting rules.
+
+### Features
+
+* **safety:** only error reports sent with an sdk:ruleset key count toward automatic rollback ([19cad21](https://github.com/getexperimently/experimently/commit/19cad2189b68e1e62dd78cde2df227d907209425))
+* **showcase:** narration scripts and the voice step that makes their clips ([#1141](https://github.com/getexperimently/experimently/issues/1141)) ([d1b6ae3](https://github.com/getexperimently/experimently/commit/d1b6ae374a016c6f79f80bf0d9c99004ce79c097))
+* **showcase:** the feature-flag rollout walkthrough ([#1143](https://github.com/getexperimently/experimently/issues/1143)) ([88abd25](https://github.com/getexperimently/experimently/commit/88abd250b4d8108f4438c3f36b7987891d27d1ee))
+* **showcase:** the first-experiment walkthrough ([#1124](https://github.com/getexperimently/experimently/issues/1124)) ([5bf4ea9](https://github.com/getexperimently/experimently/commit/5bf4ea96bd43e9301a8896cdf4cd2057a68be93a))
+
+
+### Bug Fixes
+
+* **docs:** Self-Hosting leads to the self-hosting stack, and the development stack listens on 127.0.0.1 only ([#1154](https://github.com/getexperimently/experimently/issues/1154)) ([3bf2ae7](https://github.com/getexperimently/experimently/commit/3bf2ae71bd1f568f81fb4d261ca90fd1c15251e9))
+* **results:** the early-stopping banner says whether a significant change is better or worse ([#1152](https://github.com/getexperimently/experimently/issues/1152)) ([36b8140](https://github.com/getexperimently/experimently/commit/36b8140c8e9ea7a9336738694cfdb777e743cf11))
+* **results:** the Live tab's p-value pools each arm's own counts ([#1151](https://github.com/getexperimently/experimently/issues/1151)) ([7c573ec](https://github.com/getexperimently/experimently/commit/7c573ecf1e4b5dcef82cc2c07a9659b33711db82))
+* **seeds:** the contract seed refuses to run outside development, like the other demo seeds ([#1153](https://github.com/getexperimently/experimently/issues/1153)) ([c0710a5](https://github.com/getexperimently/experimently/commit/c0710a542db2c5139e69e5fc0f59da2cc40ed314))
+* **showcase:** video 2's headlines say "a 12.1% lift" and "split about evenly" ([#1139](https://github.com/getexperimently/experimently/issues/1139)) ([28c67a5](https://github.com/getexperimently/experimently/commit/28c67a59a6d51ab75541f83284c84769bc0f3bbe))
+* **targeting:** a number or date too large to compare is handled like a pattern condition that cannot be evaluated ([#1165](https://github.com/getexperimently/experimently/issues/1165)) ([37eb02b](https://github.com/getexperimently/experimently/commit/37eb02bfdbcc67625464387a749f7150e82c9548))
+* **targeting:** experiments answer semver and geo rules the same way flags do ([#1155](https://github.com/getexperimently/experimently/issues/1155)) ([784bdd9](https://github.com/getexperimently/experimently/commit/784bdd9ae9c2fa7d40ea80dd979bee3c7d21b16c))
+* **targeting:** one time_window implementation for flags and experiments, and an unreadable window matches nobody ([#1158](https://github.com/getexperimently/experimently/issues/1158)) ([93e6fb4](https://github.com/getexperimently/experimently/commit/93e6fb480914fdbed0078d71670636d3b6154136))
+
 ## [0.28.2](https://github.com/getexperimently/experimently/compare/v0.28.1...v0.28.2) (2026-10-11)
 
 
