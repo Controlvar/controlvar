@@ -466,53 +466,9 @@ exercised_by = [
 ]
 reason = "AWS Secrets Manager and its rotation"
 
-[pages."monitoring/monitoring-guide.md"]
-class = "aws"
-exercised_by = [
-    "run the first stack deploy",
-    "force a circuit breaker and an alarm rollback",
-]
-reason = "CloudWatch monitoring of a deployment on AWS"
-
-[pages."monitoring/setup-guide.md"]
-class = "aws"
-exercised_by = ["none"]
-reason = "sets up CloudWatch monitoring on AWS"
-
-[pages."monitoring/dashboard-reference.md"]
-class = "aws"
-exercised_by = ["none"]
-reason = "the CloudWatch dashboards"
-
-[pages."monitoring/log-insights-queries.md"]
-class = "aws"
-exercised_by = ["none"]
-reason = "CloudWatch Logs Insights queries"
-
-[pages."monitoring/troubleshooting-guide.md"]
-class = "aws"
-exercised_by = ["none"]
-reason = "troubleshooting the CloudWatch monitoring"
-
 [pages."logging_standards.md"]
 class = "reference"
 reason = "logging conventions; no steps to follow"
-
-[pages."middleware/logging.md"]
-class = "reference"
-reason = "how the request-logging middleware works; no steps to follow"
-
-[pages."security-architecture.md"]
-class = "reference"
-reason = "the architecture of the platform's protections; no steps to follow"
-
-[pages."security/threat-model.md"]
-class = "reference"
-reason = "a threat model; no steps to follow"
-
-[pages."security/security-policies.md"]
-class = "reference"
-reason = "policies; no steps to follow"
 
 [pages."security/hardening-changes.md"]
 class = "reference"
@@ -526,20 +482,10 @@ reason = "what to do after an incident on your deployment; no steps to run"
 class = "reference"
 reason = "diagrams of the sign-in, reset and refresh flows; no steps to follow"
 
-[pages."auth/auth-developer-docs.md"]
-class = "aws"
-exercised_by = ["none"]
-reason = "the Cognito user pool and app client set-up"
-
 [pages."auth/auth-user-guide.md"]
 class = "journey"
 journey = "onboarding-and-password"
 reason = "sign in as each role, manage users and change your own password with local sign-in"
-
-[pages."auth/auth-environment-variables.md"]
-class = "aws"
-exercised_by = ["none"]
-reason = "the Cognito settings, which need a Cognito user pool"
 
 [pages."cognito_integration.md"]
 class = "aws"
@@ -566,10 +512,6 @@ reason = "the data models; no steps to follow"
 class = "reference"
 reason = "the stability policy and the OpenAPI snapshots; no steps to follow"
 
-[pages."api/specs.md"]
-class = "reference"
-reason = "the API specification; no steps to follow"
-
 [pages."api/api-docs-guide.md"]
 class = "reference"
 reason = "how to read the served API documentation; no steps beyond opening it"
@@ -582,23 +524,10 @@ reason = "its API steps run on a stack in Doc Examples"
 class = "exec"
 reason = "its API steps run on a stack in Doc Examples"
 
-[pages."infrastructure/aurora-postgres-readme.md"]
-class = "aws"
-exercised_by = [
-    "run the first stack deploy",
-    "migrate",
-]
-reason = "the CDK database stack"
-
 [pages."infrastructure/dynamodb-readme.md"]
 class = "aws"
 exercised_by = ["run the first stack deploy"]
 reason = "the CDK DynamoDB tables"
-
-[pages."infrastructure/redis-summary.md"]
-class = "aws"
-exercised_by = ["run the first stack deploy"]
-reason = "the CDK ElastiCache cluster"
 
 [pages."infrastructure/vpc-stack-implementation.md"]
 class = "aws"
@@ -760,7 +689,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 164
+walked = 149
 
 # The front door, and the policy beside it.
 
@@ -842,12 +771,6 @@ reason = "the deployment index and quick reference: the GitHub environments, the
 scope = "in"
 class = "reference"
 reason = "an index of the getting-started pages; no steps to follow"
-
-[documents."docs/monitoring/index.md"]
-scope = "in"
-class = "aws"
-exercised_by = ["none"]
-reason = "an index of the CloudWatch monitoring pages, with steps that create log groups and dashboards on AWS"
 
 [documents."docs/security/README.md"]
 scope = "in"

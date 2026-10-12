@@ -12,21 +12,14 @@ This directory contains the API documentation for Experimently.
    - SDK usage examples
    - Framework integrations
 
-2. [API Specification](specs.md)
-   - Detailed OpenAPI/Swagger specification
-   - Request/response schemas
-   - Error codes and handling
-   - Pagination details
-   - Data types and formats
-
-3. [API Development Guide](api-docs-guide.md)
+2. [API Development Guide](api-docs-guide.md)
    - Guidelines for API development
    - Best practices
    - Versioning strategy
    - Testing requirements
    - Documentation standards
 
-4. [API stability and the OpenAPI snapshots](stability.md)
+3. [API stability and the OpenAPI snapshots](stability.md)
    - `openapi-v1.stable.json` (core profile) and `openapi-v1.full.json` (full profile),
      the checked-in contract the smoke suite compares against
    - Marking a route `x-stability: beta`
@@ -64,8 +57,7 @@ curl -s localhost:8000/api/v1/experiments/ \
 
 It prints the demo data's experiments, among them `Checkout Button Color`.
 
-Then check the [API Reference](endpoints.md) for detailed usage examples, and the
-[API Specification](specs.md) for complete endpoint documentation.
+Then check the [API Reference](endpoints.md) for detailed usage examples.
 
 ## Common Tasks
 
@@ -75,7 +67,6 @@ Then check the [API Reference](endpoints.md) for detailed usage examples, and th
 
 2. **Experiments**
    - [Creating and managing experiments](endpoints.md#2-managing-experiments)
-   - [Variants and metrics](specs.md)
    - [Analysing results](sequential-testing.md) — and
      [Bayesian](bayesian.md), [CUPED](cuped.md),
      [dimensional breakdowns](dimensional-analysis.md)
@@ -86,11 +77,9 @@ Then check the [API Reference](endpoints.md) for detailed usage examples, and th
 
 4. **Event Tracking**
    - [Tracking events](endpoints.md#4-tracking-events)
-   - [Metrics](specs.md)
 
 ## Need Help?
 
 - Check the [API Reference](endpoints.md) for usage examples
-- Review the [API Specification](specs.md) for detailed endpoint documentation
 - Follow the [API Development Guide](api-docs-guide.md) for best practices
 - Contact support for additional assistance

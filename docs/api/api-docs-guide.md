@@ -27,6 +27,9 @@ The API is organized into the following sections:
 5. **Administration (`/api/v1/admin`)**: Admin-only operations
 6. **Health (`/health`)**: System health check
 
+> The `/api/v1/events` and `/api/v1/assignments` routers only expose an informational `GET /`;
+> use the `/api/v1/tracking/*` endpoints above.
+
 ## Authentication
 
 The API uses two authentication methods:

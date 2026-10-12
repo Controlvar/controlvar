@@ -4,41 +4,28 @@ This directory contains documentation related to authentication and authorizatio
 
 ## Files
 
-1. [Environment Setup](auth-environment-variables.md)
-   - Environment variables configuration
-   - AWS Cognito setup
-   - Local development settings
-   - Production configuration
-
-2. [Authentication Flow](flow.md)
+1. [Authentication Flow](flow.md)
    - Sign-up and login flows
    - Token management
    - Session handling
    - Password reset process
    - Flow diagrams
 
-3. [User Guide](auth-user-guide.md)
+2. [User Guide](auth-user-guide.md)
    - User registration
    - Account management
    - Password policies
    - MFA setup
    - Role management
 
-4. [Developer Guide](auth-developer-docs.md)
-   - Implementation details
-   - Security best practices
-   - Integration examples
-   - Testing guidelines
-   - Troubleshooting
-
-5. [Testing Guide](cognito-auth-testing.md)
+3. [Testing Guide](cognito-auth-testing.md)
    - Unit testing
    - Integration testing
    - E2E testing
    - Mock configurations
    - Test data setup
 
-6. [SSO (OIDC, the `sso` module)](sso.md)
+4. [SSO (OIDC, the `sso` module)](sso.md)
    - SAML 2.0 sign-in is not available yet; use OIDC
    - OIDC setup (Google Workspace, GitHub, Microsoft, Auth0)
    - JIT user provisioning
@@ -54,12 +41,10 @@ This directory contains documentation related to authentication and authorizatio
    - [Password Reset](auth-user-guide.md#password-reset-process)
 
 2. **Development**
-   - [Local Setup](auth-environment-variables.md)
+   - [Cognito settings](../cognito_integration.md#required-settings)
    - [Testing](cognito-auth-testing.md)
-   - [Integration](auth-developer-docs.md#frontend-login-integration)
 
 3. **Security**
-   - [Best Practices](auth-developer-docs.md)
    - [Token Management](flow.md)
    - [MFA Setup](auth-user-guide.md)
 
@@ -72,7 +57,6 @@ This directory contains documentation related to authentication and authorizatio
 
 ## Need Help?
 
-- Review the [Developer Guide](auth-developer-docs.md) for implementation details
 - Check the [User Guide](auth-user-guide.md) for user management
 - See the [Flow Documentation](flow.md) for process understanding
 - Contact the security team for additional assistance

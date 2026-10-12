@@ -435,9 +435,7 @@ dashboard is still on `:bootstrap`.
   when no API task is healthy, and `experimentation-api-error-logs-<env>`,
   which fires on 10 or more lines in 5 minutes whose JSON `level` is `error`
   or `critical`.
-  That is why `experimentation-fargate-<env>` depends on this stack. The
-  [Monitoring Guide](../monitoring/monitoring-guide.md#6-setting-up-alerts)
-  lists every alarm.
+  That is why `experimentation-fargate-<env>` depends on this stack.
 - With the `etl` module: a Kinesis widget and an iterator-age alarm on that
   module's event stream. A core deployment gets neither, rather than an alarm
   on a stream that does not exist.
