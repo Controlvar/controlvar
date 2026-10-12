@@ -23,6 +23,18 @@ log "Stopping Experimently demo environment..."
 # ---------------------------------------------------------------------------
 # 1. Kill tracked processes
 # ---------------------------------------------------------------------------
+# Every process started under PID, children before their parents. A pid file
+# holds the process setup-local.sh started, and for the three web apps that is
+# `npm run dev`: stopping npm alone leaves the Next.js server it started
+# running, still holding its port.
+descendants() {
+    local child
+    for child in $(pgrep -P "$1" 2>/dev/null); do
+        descendants "$child"
+        printf '%s\n' "$child"
+    done
+}
+
 PIDS_DIR="$DEMO_DIR/.pids"
 if [[ -d "$PIDS_DIR" ]]; then
     for pid_file in "$PIDS_DIR"/*.pid; do
@@ -31,14 +43,24 @@ if [[ -d "$PIDS_DIR" ]]; then
         PROC_NAME=$(basename "$pid_file" .pid)
         if [[ -n "$PID" ]] && kill -0 "$PID" 2>/dev/null; then
             log "Stopping $PROC_NAME (PID $PID)..."
-            kill "$PID" 2>/dev/null || true
+            # The whole tree, read before anything is stopped: a child whose
+            # parent has gone is no longer found under it.
+            TREE=("$PID")
+            for child in $(descendants "$PID"); do
+                TREE+=("$child")
+            done
+            kill "${TREE[@]}" 2>/dev/null || true
             # Wait up to 5 seconds for graceful shutdown
             for _ in {1..5}; do
-                kill -0 "$PID" 2>/dev/null || break
+                ALIVE=0
+                for proc in "${TREE[@]}"; do
+                    kill -0 "$proc" 2>/dev/null && ALIVE=1
+                done
+                [[ "$ALIVE" == "1" ]] || break
                 sleep 1
             done
             # Force kill if still running
-            kill -9 "$PID" 2>/dev/null || true
+            kill -9 "${TREE[@]}" 2>/dev/null || true
             ok "$PROC_NAME stopped."
         else
             warn "$PROC_NAME (PID ${PID:-unknown}) not running, skipping."

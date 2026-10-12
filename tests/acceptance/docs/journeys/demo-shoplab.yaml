@@ -45,25 +45,63 @@ steps:
           name: New visitor
       aria: |
         - complementary "Experimently panel":
+          - button "Powered by Experimently" [expanded]
+          - heading "Visitor" [level=2]
           - heading "Experiments" [level=2]
+          - list:
+            - listitem:
+              - text: Hero banner
+              - code: shoplab_hero_banner
+              - text: /^(control|video_hero)$/
+            - listitem:
+              - text: Product sort (bandit)
+              - code: shoplab_plp_sort
+              - text: /^(relevance|price_low_high|ml_personalized)$/
+            - listitem:
+              - text: Buy button (MVT)
+              - code: shoplab_pdp_buy_button
+              - text: /^(control|green_add|orange_buy_now|green_buy_now)$/
+            - listitem:
+              - text: Checkout flow
+              - code: shoplab_checkout_flow
+              - text: /^(standard|one_page)$/
           - heading "Feature flags" [level=2]
-    fail: the panel does not open with the experiments, the flags and a New visitor button
+          - list:
+            - listitem:
+              - text: New search
+              - code: shoplab_new_search
+              - text: /^(on|off)$/
+            - listitem:
+              - text: Free-shipping banner
+              - code: shoplab_free_shipping_banner
+              - text: "on"
+    fail: the panel does not show a variant of each of the four experiments and both flags, with a New visitor button
   - id: products
     doc: what-each-page-demonstrates
     do:
-      open: http://localhost:3200/products
+      click:
+        role: link
+        name: Products
+        quote: false
+        reason: the storefront header's link to /products, the page the README's table names
     expect:
-      status: 200
+      url: /products
+      text: Recommended for you
       aria: |
         - main:
           - heading "All products" [level=1]
-    fail: the product list does not answer
+          - paragraph: 12 items
+    fail: the product list does not open from the header, or is not sorted by the bandit's ml_personalized algorithm, the arm its seeded history favours
   - id: search
     doc: what-each-page-demonstrates
     do:
-      open: http://localhost:3200/search
+      click:
+        role: link
+        name: Search
+        quote: false
+        reason: the storefront header's link to /search, the page the README's table names
     expect:
-      status: 200
+      url: /search
       aria: |
         - main:
           - heading "Search" [level=1]

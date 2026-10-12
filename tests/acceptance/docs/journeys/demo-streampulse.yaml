@@ -56,10 +56,19 @@ steps:
         role: radio
         name: iPhone 15 · iOS 17.4 · US · premium
     expect:
-      text: "on: matched a targeting rule"
       aria: |
-        - radio "iPhone 15 · iOS 17.4 · US · premium" [checked]
-    fail: the panel does not say a targeting rule matched for the iPhone 15 · iOS 17.4 · US · premium device
+        - main:
+          - region "Device":
+            - group "Presets":
+              - radio "iPhone 15 · iOS 17.4 · US · premium" [checked]
+          - region "Powered by Experimently":
+            - region "Feature flags":
+              - list:
+                - listitem:
+                  - text: AI search · targeting rules
+                  - code: streampulse_ai_search
+                  - text: "on: matched a targeting rule on"
+    fail: the panel does not say a targeting rule turned streampulse_ai_search on for the iPhone 15 · iOS 17.4 · US · premium device
   - id: ai-search
     doc: demo-script-what-to-show
     do:
@@ -68,8 +77,9 @@ steps:
         name: Search
     expect:
       aria: |
-        - tabpanel:
-          - heading "AI search ✨"
+        - tabpanel "Search":
+          - region "AI search ✨":
+            - heading "AI search ✨" [level=2]
     fail: the Search screen is not AI search ✨ for the premium iPhone
   - id: rule-matches-the-premium-iphone
     doc: demo-script-what-to-show
@@ -93,10 +103,19 @@ steps:
         role: radio
         name: iPhone 14 · iOS 16.7 · GB · free
     expect:
-      text: "off: outside the rollout %"
       aria: |
-        - radio "iPhone 14 · iOS 16.7 · GB · free" [checked]
-    fail: the panel does not say the iPhone 14 · iOS 16.7 · GB · free device is outside the rollout
+        - main:
+          - region "Device":
+            - group "Presets":
+              - radio "iPhone 14 · iOS 16.7 · GB · free" [checked]
+          - region "Powered by Experimently":
+            - region "Feature flags":
+              - list:
+                - listitem:
+                  - text: AI search · targeting rules
+                  - code: streampulse_ai_search
+                  - text: "off: outside the rollout % off"
+    fail: the panel does not say the iPhone 14 · iOS 16.7 · GB · free device is outside streampulse_ai_search's rollout
   - id: keyword-search
     doc: demo-script-what-to-show
     do:
@@ -105,8 +124,10 @@ steps:
         name: Search
     expect:
       aria: |
-        - tabpanel:
-          - heading "Search"
+        - tabpanel "Search":
+          - region "Search":
+            - heading "Search" [level=2]
+            - paragraph: Keyword search
     fail: the Search screen is not keyword search for the GB iPhone
   - id: rule-leaves-out-the-gb-iphone
     doc: demo-script-what-to-show

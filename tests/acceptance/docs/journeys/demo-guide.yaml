@@ -34,7 +34,7 @@ video: false
 written: 2026-10-11
 steps:
   - id: dashboard-address
-    doc: local-recommended-2-min
+    doc: local-recommended
     do:
       open: http://localhost:3100
     expect:
@@ -150,9 +150,18 @@ steps:
         name: Search
     expect:
       aria: |
-        - tabpanel:
-          - heading "AI search ✨"
-    fail: the Search tab does not show AI search ✨ for the iPhone 15 · iOS 17.4 · US · premium device
+        - main:
+          - tabpanel "Search":
+            - region "AI search ✨":
+              - heading "AI search ✨" [level=2]
+          - region "Powered by Experimently":
+            - region "Feature flags":
+              - list:
+                - listitem:
+                  - text: AI search · targeting rules
+                  - code: streampulse_ai_search
+                  - text: "on: matched a targeting rule on"
+    fail: the Search tab does not show AI search ✨ for the iPhone 15 · iOS 17.4 · US · premium device, or the panel does not say a targeting rule turned streampulse_ai_search on
   - id: pixel
     doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
     do:
@@ -173,9 +182,19 @@ steps:
         name: Search
     expect:
       aria: |
-        - tabpanel:
-          - heading "Search"
-    fail: the Search tab does not fall back to keyword search for the Pixel 7 · Android 14 · DE device
+        - main:
+          - tabpanel "Search":
+            - region "Search":
+              - heading "Search" [level=2]
+              - paragraph: Keyword search
+          - region "Powered by Experimently":
+            - region "Feature flags":
+              - list:
+                - listitem:
+                  - text: AI search · targeting rules
+                  - code: streampulse_ai_search
+                  - text: "off: outside the rollout % off"
+    fail: the Search tab does not fall back to keyword search for the Pixel 7 · Android 14 · DE device, or the panel does not say the rollout left streampulse_ai_search off
   - id: api-key
     doc: scene-1-feature-flags-3-min
     do:
@@ -339,13 +358,15 @@ steps:
   - id: feature-flags
     doc: scene-1-feature-flags-3-min
     do:
-      goto: /feature-flags
+      click:
+        role: link
+        name: Feature Flags
     expect:
       url: /feature-flags
       aria: |
         - main:
           - heading "Feature Flags" [level=1]
-    fail: /feature-flags does not open the flags list
+    fail: the dashboard has no Feature Flags page at /feature-flags
   - id: beta-off
     doc: scene-1-feature-flags-3-min
     do:
@@ -413,13 +434,15 @@ steps:
   - id: experiments
     doc: scene-2-running-ab-test-4-min
     do:
-      goto: /experiments
+      click:
+        role: link
+        name: Experiments
     expect:
       url: /experiments
       aria: |
         - main:
           - heading "Experiments" [level=1]
-    fail: /experiments does not open the experiments list
+    fail: the dashboard has no Experiments page at /experiments
   - id: checkout-button-color
     doc: scene-2-running-ab-test-4-min
     do:
@@ -492,15 +515,30 @@ steps:
             args: {control_users: 25000, control_converted: 1836, treatment_users: 25000, treatment_converted: 2111}
           rel: 1.0e-9
     fail: the results are not the seed's counts, or the p-value is not Fisher's exact test's for them
+  - id: hero-experiments
+    doc: scene-3-statistical-results-5-min
+    do:
+      click:
+        role: link
+        name: Experiments
+    expect:
+      url: /experiments
+      aria: |
+        - main:
+          - heading "Experiments" [level=1]
+    fail: the experiments list does not open again
   - id: hero-experiment
     doc: scene-3-statistical-results-5-min
     do:
-      goto: /experiments/{{hero-id}}
+      click:
+        role: link
+        name: Homepage Hero Copy Test
     expect:
+      text: Completed
       aria: |
         - main:
           - heading "Homepage Hero Copy Test" [level=1]
-    fail: Homepage Hero Copy Test's page does not open
+    fail: Homepage Hero Copy Test is not on the list, or its page does not say it is completed
   - id: hero-results
     doc: scene-3-statistical-results-5-min
     do:
@@ -542,7 +580,9 @@ steps:
   - id: bandit
     doc: scene-4-multi-armed-bandit-3-min
     do:
-      goto: /experiments
+      click:
+        role: link
+        name: Experiments
     expect:
       aria: |
         - main:
@@ -567,7 +607,11 @@ steps:
   - id: audit-log
     doc: scene-5-modules-admin-5-min
     do:
-      goto: /admin/audit
+      click:
+        role: link
+        name: Audit Log
+        quote: false
+        reason: the dashboard's link to /admin/audit, the address the guide gives
     expect:
       url: /admin/audit
       aria: |

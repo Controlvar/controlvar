@@ -8,9 +8,10 @@ This guide walks you through a 20-minute live demo of the Experimently experimen
 
 ## Setup
 
-### Local (recommended, ~2 min)
+### Local (recommended)
 
-From the repository root:
+From the repository root. The first run installs the Python and Node
+dependencies and seeds the data, which takes a few minutes:
 
 ```{.bash skip reason="demo: runs the demo applications (Stream F)"}
 ./demo/setup-local.sh
