@@ -2,10 +2,11 @@
 
 Safety monitoring counts every ``error_logs`` row of a flag in its window
 EXCEPT rows whose ``request_data["source"]`` is ``"client"``
-(``SafetyService.get_error_metrics``). A row that carries no ``source`` at all
--- whatever wrote it -- counts toward the flag's error rate and can roll the
-flag back. So a new writer is not harmless by default: it has to decide what
-its rows mean. Error reports from ``POST /api/v1/tracking/errors[/batch]``
+(``SafetyService.get_error_metrics``). That is exclude polarity: it counts any
+unstamped row. A row that carries no ``source`` at all -- whatever wrote it --
+counts toward the flag's error rate and can roll the flag back, and so does a
+``"client"`` row that an update rewrites. So a new writer is not harmless by
+default: it has to decide what its rows mean. Error reports from ``POST /api/v1/tracking/errors[/batch]``
 stamp ``"server"`` or ``"client"`` from the presented key; flag evaluations
 that fail on the server write ``{"context": ...}`` and count on purpose.
 
@@ -13,12 +14,16 @@ This pins the exact set of writers, as (file, enclosing function), across
 ``backend/app``, ``modules``, ``backend/lambda``, ``backend/scripts`` and
 ``scripts`` (tests excluded). A writer is any of:
 
-* a call to ``ErrorLog(...)``;
+* a call to ``ErrorLog(...)``, under any name it is imported as;
 * a call to a function named ``log_error`` (``MetricsService.log_error``);
-* ``insert(ErrorLog)`` or ``bulk_insert_mappings(ErrorLog, ...)``;
+* ``insert(ErrorLog)``, ``update(ErrorLog)``, ``bulk_insert_mappings(ErrorLog,
+  ...)`` or ``bulk_update_mappings(ErrorLog, ...)``;
+* ``.update(...)`` on a query of ``ErrorLog`` (``db.query(ErrorLog)...update``);
 * any use of ``ErrorLog.__table__``;
-* a string literal of SQL that inserts into, updates or copies into
-  ``error_logs``.
+* SQL text that inserts into, updates or copies into ``error_logs``, with or
+  without a schema: a string literal (also one later passed to ``.format``,
+  ``%`` or ``sql.SQL``) or an f-string, whose interpolated parts are read as
+  placeholders (``f"INSERT INTO {schema}.error_logs"``).
 
 A new site fails ``test_the_writers_are_exactly_these`` until it is listed in
 ``WRITERS``, and a removed one fails it until its entry goes. Sites are keyed
@@ -63,9 +68,15 @@ WRITERS: Dict[Tuple[str, str], str] = {
     ): COUNTED,
 }
 
+#: SQL that writes ``error_logs``; the schema part is anything up to a dot
+#: (``experimentation.``, ``"experimentation".``, ``{schema}.``, ``%s.``, ``{}.``).
 _SQL_WRITE = re.compile(
-    r"\b(?:insert\s+into|update|copy)\s+(?:[\w\"]+\.)?\"?error_logs\b", re.IGNORECASE
+    r"\b(?:insert\s+into|update|copy)\s+(?:\S{1,128}\.)?\"?error_logs\b",
+    re.IGNORECASE,
 )
+
+#: The name every module imports the model by, unless it renames it.
+_MODEL = "ErrorLog"
 
 
 def _name(node: ast.AST) -> str:
@@ -76,28 +87,71 @@ def _name(node: ast.AST) -> str:
     return ""
 
 
-def _is_writer(node: ast.AST) -> bool:
+def _model_names(tree: ast.AST) -> Set[str]:
+    """``ErrorLog`` and every name a module imports it as (``import ... as EL``)."""
+    names = {_MODEL}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                if alias.name.rsplit(".", 1)[-1] == _MODEL and alias.asname:
+                    names.add(alias.asname)
+    return names
+
+
+def _queries_the_model(node: ast.AST, names: Set[str]) -> bool:
+    """Whether ``node`` contains a call ``query(ErrorLog, ...)``."""
+    return any(
+        isinstance(sub, ast.Call)
+        and _name(sub.func) == "query"
+        and any(_name(arg) in names for arg in sub.args)
+        for sub in ast.walk(node)
+    )
+
+
+def _sql_text(node: ast.AST) -> str:
+    """The text of a string literal or an f-string (each interpolation read as ``x``)."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        return "".join(
+            part.value
+            if isinstance(part, ast.Constant) and isinstance(part.value, str)
+            else "x"
+            for part in node.values
+        )
+    return ""
+
+
+def _is_writer(node: ast.AST, names: Set[str] = frozenset({_MODEL})) -> bool:
     if isinstance(node, ast.Call):
         called = _name(node.func)
-        if called in ("ErrorLog", "log_error"):
+        if called in names or called == "log_error":
             return True
-        if called in ("insert", "bulk_insert_mappings") and any(
-            _name(arg) == "ErrorLog" for arg in node.args[:1]
+        if called in (
+            "insert",
+            "update",
+            "bulk_insert_mappings",
+            "bulk_update_mappings",
+        ) and any(_name(arg) in names for arg in node.args[:1]):
+            return True
+        if (
+            called == "update"
+            and isinstance(node.func, ast.Attribute)
+            and _queries_the_model(node.func.value, names)
         ):
             return True
     if (
         isinstance(node, ast.Attribute)
         and node.attr == "__table__"
-        and _name(node.value) == "ErrorLog"
+        and _name(node.value) in names
     ):
         return True
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return bool(_SQL_WRITE.search(node.value))
-    return False
+    return bool(_SQL_WRITE.search(_sql_text(node)))
 
 
 class _Sites(ast.NodeVisitor):
-    def __init__(self) -> None:
+    def __init__(self, names: Set[str]) -> None:
+        self.names = names
         self.stack: list = []
         self.found: Set[str] = set()
 
@@ -111,7 +165,7 @@ class _Sites(ast.NodeVisitor):
     visit_AsyncFunctionDef = _scoped
 
     def generic_visit(self, node: ast.AST) -> None:
-        if _is_writer(node):
+        if _is_writer(node, self.names):
             self.found.add(".".join(self.stack) or "<module>")
         super().generic_visit(node)
 
@@ -133,8 +187,9 @@ def _writers(repo_root: Path = REPO_ROOT) -> Set[Tuple[str, str]]:
         if not base.is_dir():
             continue
         for path in _python_files(base):
-            sites = _Sites()
-            sites.visit(ast.parse(path.read_text(encoding="utf-8"), str(path)))
+            tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+            sites = _Sites(_model_names(tree))
+            sites.visit(tree)
             relative = path.relative_to(repo_root).as_posix()
             found.update((relative, function) for function in sites.found)
     return found
@@ -188,12 +243,30 @@ def test_the_scan_sees_the_writers_it_lists():
         ("db.execute(text('INSERT INTO error_logs (message) VALUES (1)'))", True),
         ("sql = 'insert into experimentation.error_logs values (1)'", True),
         ("sql = 'UPDATE \"error_logs\" SET message = 1'", True),
+        # The schema is configurable, so real SQL interpolates it.
+        ("sql = f'INSERT INTO {schema}.error_logs (message) VALUES (1)'", True),
+        ("sql = 'INSERT INTO {schema}.error_logs VALUES (1)'.format(schema=s)", True),
+        ("sql = 'INSERT INTO %s.error_logs VALUES (1)' % schema", True),
+        ("q = sql.SQL('INSERT INTO {}.error_logs VALUES (1)')", True),
+        ('sql = f\'UPDATE "{schema}"."error_logs" SET request_data = NULL\'', True),
+        ("db.execute(update(ErrorLog).values(request_data=None))", True),
+        ("db.query(ErrorLog).filter(ErrorLog.id == 1).update({'message': 'm'})", True),
+        ("db.bulk_update_mappings(ErrorLog, rows)", True),
+        (
+            "from backend.app.models.metrics.metric import ErrorLog as EL\n"
+            "db.add(EL(error_type='x', message='m'))",
+            True,
+        ),
         ("self._log_error(request, exc)", False),
         ("db.query(ErrorLog).filter(ErrorLog.id == 1).all()", False),
         ("op.create_table('error_logs')", False),
         ("doc = 'reads error_logs rows'", False),
+        ("doc = f'reads {n} error_logs rows'", False),
+        ("db.query(ErrorLog).filter(ErrorLog.id == 1).delete()", False),
+        ("settings.update({'error_logs': 1})", False),
     ],
 )
 def test_each_shape_is_recognised(source, is_writer):
     tree = ast.parse(source)
-    assert any(_is_writer(node) for node in ast.walk(tree)) is is_writer
+    names = _model_names(tree)
+    assert any(_is_writer(node, names) for node in ast.walk(tree)) is is_writer
