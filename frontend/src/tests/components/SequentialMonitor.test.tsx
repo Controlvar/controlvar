@@ -172,4 +172,22 @@ describe('SequentialMonitor', () => {
     render(<SequentialMonitor data={dataNotAtRisk} />);
     expect(screen.queryByTestId('long-running-risk')).not.toBeInTheDocument();
   });
+
+  // #1147: the banner reads the sign of the confidence sequence together with
+  // the metric's direction, which the monitor is handed.
+  it('tells a worse variant from a better one using the confidence sequence', () => {
+    const worse: SequentialTestingResponse = {
+      ...fullData,
+      confidence_sequence: { lower: -0.0427, upper: -0.0173, width: 0.0253, sample_size: 20000 },
+    };
+    const { rerender } = render(<SequentialMonitor data={worse} lowerIsBetter={false} />);
+    expect(screen.getByTestId('early-stopping-banner')).toHaveAttribute('data-direction', 'worse');
+    expect(screen.getByTestId('action-label')).toHaveTextContent(/significantly worse/i);
+
+    rerender(<SequentialMonitor data={worse} lowerIsBetter />);
+    expect(screen.getByTestId('early-stopping-banner')).toHaveAttribute('data-direction', 'better');
+
+    rerender(<SequentialMonitor data={fullData} lowerIsBetter={false} />);
+    expect(screen.getByTestId('early-stopping-banner')).toHaveAttribute('data-direction', 'better');
+  });
 });

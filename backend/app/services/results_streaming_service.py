@@ -186,12 +186,18 @@ class ResultsStreamingService:
 
         # Identify control variant for lift calculation
         control_rate: Optional[float] = None
+        control_participants = 0
+        control_conversions = 0
         for v in variants:
             if v.is_control:
                 vid = str(v.id)
-                participants = assignment_map.get(vid, 0)
-                conversions = conversion_map.get(vid, 0)
-                control_rate = conversions / participants if participants > 0 else 0.0
+                control_participants = assignment_map.get(vid, 0)
+                control_conversions = conversion_map.get(vid, 0)
+                control_rate = (
+                    control_conversions / control_participants
+                    if control_participants > 0
+                    else 0.0
+                )
                 break
 
         results: List[dict] = []
@@ -213,8 +219,8 @@ class ResultsStreamingService:
                 p_value = self._compute_p_value(
                     participants,
                     conversions,
-                    rate,
-                    control_rate,
+                    control_participants,
+                    control_conversions,
                 )
 
             results.append(
@@ -236,28 +242,36 @@ class ResultsStreamingService:
         self,
         treatment_n: int,
         treatment_conv: int,
-        treatment_rate: float,
-        control_rate: float,
+        control_n: int,
+        control_conv: int,
     ) -> Optional[float]:
         """
-        Compute a two-proportion z-test p-value.
+        Compute a two-sided pooled two-proportion z-test p-value.
 
-        Returns None if sample sizes are too small for meaningful inference.
+        The pooled rate is (x1 + x2) / (n1 + n2) and the standard error uses
+        each arm's own n: sqrt(p (1 - p) (1/n1 + 1/n2)).  The arms need not be
+        the same size (a bandit, a 90/10 split).
+
+        Returns None if either arm is too small for meaningful inference (no
+        control participants, fewer than 5 treatment participants) or if the
+        pooled rate is 0 or 1.
         """
         try:
             import math
 
-            if treatment_n < 5:
+            if treatment_n < 5 or control_n < 1:
                 return None
 
-            p_pool = (treatment_conv + control_rate * treatment_n) / (2 * treatment_n)
+            p_pool = (treatment_conv + control_conv) / (treatment_n + control_n)
             if p_pool <= 0 or p_pool >= 1:
                 return None
 
-            se = math.sqrt(p_pool * (1 - p_pool) * (2 / treatment_n))
+            se = math.sqrt(p_pool * (1 - p_pool) * (1 / treatment_n + 1 / control_n))
             if se == 0:
                 return None
 
+            treatment_rate = treatment_conv / treatment_n
+            control_rate = control_conv / control_n
             z = abs(treatment_rate - control_rate) / se
 
             # Approximate two-sided p-value from z-score using erfc

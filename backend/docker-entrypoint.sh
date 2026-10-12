@@ -15,7 +15,7 @@
 #      matching backend/scripts/seed_*.py once. Completed seeds are recorded in
 #      the `seed_markers` table (backend/scripts/seed_markers.py) so a restart
 #      of the container does not re-seed. SEED_FORCE=true re-runs them.
-#      demo, shoplab and streampulse are development-only: they are refused,
+#      Every seed is development-only: SEED=<any of them> is refused,
 #      before step 1, unless ENVIRONMENT is development or test.
 #   4. exec "$@" — by default uvicorn; `--workers ${WEB_CONCURRENCY:-1}` and the
 #      proxy flags are appended when the command is uvicorn and the caller did
@@ -45,15 +45,16 @@ set -euo pipefail
 log() { printf '[entrypoint] %s\n' "$*" >&2; }
 
 # -------------------------------------------------------------------------
-# Demo seeds are development-only
+# Seeds are development-only
 #
-# SEED=demo, shoplab and streampulse load the sample data for the demo apps.
-# They run when ENVIRONMENT is development or test (the legacy spellings dev
-# and demo mean development) and are refused everywhere else, before anything
-# else happens. sdk-contract is not a demo seed and is allowed everywhere.
+# SEED=demo, shoplab and streampulse load the sample data for the demo apps,
+# and sdk-contract creates the demo accounts and API keys the SDK contract
+# suites use. They run when ENVIRONMENT is development or test (the legacy
+# spellings dev and demo mean development) and are refused everywhere else,
+# before anything else happens.
 # The seed scripts make the same check (backend/scripts/seed_guard.py).
 # -------------------------------------------------------------------------
-refuse_demo_seeds_outside_development() {
+refuse_seeds_outside_development() {
     local seed_list="${SEED:-}"
     [ -z "$seed_list" ] && return 0
     local env_raw="${ENVIRONMENT:-${APP_ENV:-development}}"
@@ -67,14 +68,14 @@ refuse_demo_seeds_outside_development() {
     for raw in ${names[@]+"${names[@]}"}; do
         name="$(printf '%s' "$raw" | tr -d '[:space:]')"
         case "$name" in
-            demo|shoplab|streampulse)
+            demo|shoplab|streampulse|sdk-contract)
                 log "SEED=${seed_list} is for development and is refused when ENVIRONMENT=${env_raw}. Remove SEED."
                 exit 78
                 ;;
         esac
     done
 }
-refuse_demo_seeds_outside_development
+refuse_seeds_outside_development
 
 cd /app
 

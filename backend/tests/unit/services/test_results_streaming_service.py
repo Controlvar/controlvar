@@ -13,6 +13,7 @@ Tests cover:
 """
 
 import asyncio
+import math
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
@@ -334,3 +335,165 @@ def test_norm_cdf_monotone():
     """Normal CDF should be monotonically increasing."""
     values = [_norm_cdf(float(z)) for z in range(-3, 4)]
     assert all(values[i] < values[i + 1] for i in range(len(values) - 1))
+
+
+# ---------------------------------------------------------------------------
+# The Live p-value pools each arm's own counts (#1146)
+# ---------------------------------------------------------------------------
+
+
+def _reference_p_value(
+    control_conv: int, control_n: int, treat_conv: int, treat_n: int
+) -> float:
+    """
+    Two-sided pooled two-proportion z-test, from first principles.
+
+    p_pool = (x1 + x2) / (n1 + n2)
+    se     = sqrt(p_pool (1 - p_pool) (1/n1 + 1/n2))
+    z      = |x2/n2 - x1/n1| / se
+    p      = erfc(z / sqrt(2))
+    """
+    pooled = (control_conv + treat_conv) / (control_n + treat_n)
+    se = math.sqrt(pooled * (1 - pooled) * (1 / control_n + 1 / treat_n))
+    z = abs(treat_conv / treat_n - control_conv / control_n) / se
+    return math.erfc(z / math.sqrt(2))
+
+
+def _live_variant_rows(arms: dict, monkeypatch):
+    """
+    Run ``_compute_variant_results`` for a control and a treatment whose
+    (participants, conversions) are given as ``arms``; return the two rows
+    keyed by variant name.
+    """
+    ctrl = _make_variant(vid="ctrl", name="Control", is_control=True)
+    treat = _make_variant(vid="treat", name="Treatment", is_control=False)
+    exp = _make_experiment(variants=[ctrl, treat])
+    db = _make_db_session(exp)
+    db.query.return_value.all.return_value = [
+        MagicMock(variant_id="ctrl", cnt=arms["Control"][0]),
+        MagicMock(variant_id="treat", cnt=arms["Treatment"][0]),
+    ]
+    conversions = {"ctrl": arms["Control"][1], "treat": arms["Treatment"][1]}
+    monkeypatch.setattr(
+        "backend.app.services.event_matching.count_converting_users",
+        lambda _db, _experiment_id, variant_id, _event_name: conversions[
+            str(variant_id)
+        ],
+    )
+    service = ResultsStreamingService(MagicMock(return_value=db))
+    rows = service._compute_variant_results("exp-1", exp, db)
+    return {row["name"]: row for row in rows}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    ("control", "treatment", "expected"),
+    [
+        # The three cases of #1146.  main answered 0.506, 0.035 and 0.0513.
+        ((1000, 100), (100, 13), 0.346116),
+        ((100, 10), (1000, 130), 0.390750),
+        ((5000, 500), (5000, 560), 0.051286),
+    ],
+)
+def test_live_p_value_pools_each_arms_own_counts(
+    control, treatment, expected, monkeypatch
+):
+    """
+    The pooled estimate uses the control's own n and conversions, and the
+    treatment's own: unequal arms (a bandit, a 90/10 split) used to be pooled
+    with the treatment's n for both.
+    """
+    rows = _live_variant_rows({"Control": control, "Treatment": treatment}, monkeypatch)
+
+    p_value = rows["Treatment"]["p_value"]
+    # Hard-coded from an independent implementation (the issue's table) ...
+    assert p_value == pytest.approx(expected, abs=1e-6)
+    # ... and from the closed form written out above.
+    reference = _reference_p_value(control[1], control[0], treatment[1], treatment[0])
+    assert p_value == pytest.approx(reference, abs=1e-6)
+    assert rows["Control"]["p_value"] is None
+
+
+@pytest.mark.regression
+@pytest.mark.asyncio
+async def test_live_is_significant_follows_the_correct_p_value(monkeypatch):
+    """
+    10/100 against 130/1000 is p = 0.39: the Live tab said 0.035 and ticked
+    "Live z-test p < 0.05" in green.  The payload keeps its shape.
+    """
+    ctrl = _make_variant(vid="ctrl", name="Control", is_control=True)
+    treat = _make_variant(vid="treat", name="Treatment", is_control=False)
+    exp = _make_experiment(variants=[ctrl, treat])
+    db = _make_db_session(exp)
+    db.query.return_value.all.return_value = [
+        MagicMock(variant_id="ctrl", cnt=100),
+        MagicMock(variant_id="treat", cnt=1000),
+    ]
+    conversions = {"ctrl": 10, "treat": 130}
+    monkeypatch.setattr(
+        "backend.app.services.event_matching.count_converting_users",
+        lambda _db, _experiment_id, variant_id, _event_name: conversions[
+            str(variant_id)
+        ],
+    )
+    service = ResultsStreamingService(MagicMock(return_value=db))
+
+    snapshot = await service.get_live_snapshot("exp-1")
+
+    assert snapshot["is_significant"] is False
+    assert snapshot["total_participants"] == 1100
+    treatment_row = next(v for v in snapshot["variants"] if not v["is_control"])
+    assert set(treatment_row) == {
+        "key",
+        "name",
+        "participant_count",
+        "conversion_count",
+        "conversion_rate",
+        "relative_lift",
+        "p_value",
+        "is_control",
+    }
+    assert treatment_row["p_value"] == pytest.approx(0.390750, abs=1e-6)
+
+
+@pytest.mark.parametrize(
+    ("control", "treatment"),
+    [
+        ((100, 0), (100, 0)),  # no conversions anywhere: pooled rate 0
+        ((100, 100), (100, 100)),  # every user converted: pooled rate 1
+        ((100, 10), (0, 0)),  # an empty treatment arm
+        ((100, 10), (4, 2)),  # fewer than 5 treatment users
+    ],
+)
+def test_live_p_value_is_none_where_there_is_nothing_to_test(
+    control, treatment, monkeypatch
+):
+    """Degenerate arms answer None, as they did before, and never raise."""
+    rows = _live_variant_rows({"Control": control, "Treatment": treatment}, monkeypatch)
+
+    assert rows["Treatment"]["p_value"] is None
+    assert rows["Control"]["p_value"] is None
+
+
+@pytest.mark.regression
+def test_live_p_value_is_none_when_the_control_has_no_participants(monkeypatch):
+    """
+    An empty control arm has no rate to compare with.  main read it as a
+    control rate of 0 and pooled it with the treatment's n, so 10/100 against
+    nothing came out as p = 0.001; the pooled estimate cannot take an empty arm.
+    """
+    rows = _live_variant_rows({"Control": (0, 0), "Treatment": (100, 10)}, monkeypatch)
+
+    assert rows["Treatment"]["p_value"] is None
+
+
+@pytest.mark.regression
+def test_live_p_value_one_sided_zero_conversions_still_computes(monkeypatch):
+    """0/200 against 10/100 has a defined pooled rate, so it has a p-value."""
+    rows = _live_variant_rows(
+        {"Control": (200, 0), "Treatment": (100, 10)}, monkeypatch
+    )
+
+    assert rows["Treatment"]["p_value"] == pytest.approx(
+        _reference_p_value(0, 200, 10, 100), abs=1e-6
+    )
