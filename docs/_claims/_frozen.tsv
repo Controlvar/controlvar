@@ -1,0 +1,5 @@
+# The ledger of scripts/doc_claims.py (#1142): one line per registry entry whose
+# target is untested:<T|S|X|A> or exempt:baseline, as kind<TAB>document<TAB>the
+# first 12 hex digits of sha256(the unit's text). Sorted; it only shrinks.
+untested:T	docs/workspaces/quickstart.md	7306b0616b05
+untested:T	docs/workspaces/quickstart.md	d280a134f645

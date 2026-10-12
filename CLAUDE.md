@@ -179,6 +179,7 @@ source venv/bin/activate && pytest -m "unit" -v
   test that needs the CLI prepends its own fake `aws` to `PATH`; that one wins.
 - Ensure PostgreSQL is running locally before tests
 - Test users must have a `hashed_password` value set to avoid integrity errors
+- **A test the claims registry names** (`docs/_claims/`, `scripts/doc_claims.py`): renaming, moving or deleting it fails Unit Tests (`backend/tests/unit/docs/test_doc_claims.py`) until the registry follows. `python scripts/doc_claims.py check` names each entry that points at it; change its `by` in the same pull request.
 
 ### Authentication & Permissions
 - Feature flag and report dependencies are async (use `await`)
