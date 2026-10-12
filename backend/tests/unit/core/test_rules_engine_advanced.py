@@ -39,37 +39,74 @@ class TestAdvancedOperators:
         """Setup test data."""
         self.service = RulesEvaluationService()
 
+    @pytest.mark.regression
     def test_semantic_version_operator(self):
-        """Test semantic version comparison operator."""
-        # Test current version >= required version
-        assert self.service._compare_semantic_versions("1.2.3", "1.2.0") is True
-        assert self.service._compare_semantic_versions("2.0.0", "1.9.9") is True
-        assert self.service._compare_semantic_versions("1.2.3", "1.2.3") is True
+        """semantic_version follows its comparison, as on flags (#1144).
 
-        # Test current version < required version
-        assert self.service._compare_semantic_versions("1.1.0", "1.2.0") is False
-        assert self.service._compare_semantic_versions("0.9.9", "1.0.0") is False
+        This test used to pin the service's own comparison, which ignored
+        ``additional_value`` and answered ">=" for every comparison.
+        """
 
-        # Test with pre-release versions
-        assert self.service._compare_semantic_versions("1.2.3-beta.1", "1.2.3") is True
-        assert self.service._compare_semantic_versions("1.2.3", "1.2.3-alpha.1") is True
+        def semver(actual, expected, comparison):
+            return self.service._apply_operator_enhanced(
+                OperatorType.SEMANTIC_VERSION, actual, expected, comparison
+            )
 
+        # gte
+        assert semver("1.2.3", "1.2.0", "gte") is True
+        assert semver("2.0.0", "1.9.9", "gte") is True
+        assert semver("1.2.3", "1.2.3", "gte") is True
+        assert semver("1.1.0", "1.2.0", "gte") is False
+        assert semver("0.9.9", "1.0.0", "gte") is False
+
+        # The other comparisons, each of which used to answer as gte
+        assert semver("3.0.0", "2.0.0", "lt") is False
+        assert semver("1.5.0", "2.0.0", "lt") is True
+        assert semver("9.9.9", "2.0.0", "lte") is False
+        assert semver("2.0.0", "2.0.0", "lte") is True
+        assert semver("2.1.0", "2.0.0", "eq") is False
+        assert semver("2.0.0", "2.0.0", "eq") is True
+        assert semver("2.0.0", "2.0.0", "gt") is False
+        assert semver("2.1.0", "2.0.0", "gt") is True
+
+        # No comparison means eq, as on flags
+        assert semver("2.1.0", "2.0.0", None) is False
+        assert semver("2.0.0", "2.0.0", None) is True
+
+        # A pre-release comes before its release (semver.org, item 11)
+        assert semver("1.2.3-beta.1", "1.2.3", "gte") is False
+        assert semver("1.2.3", "1.2.3-alpha.1", "gte") is True
+
+    @pytest.mark.regression
     def test_geo_distance_operator(self):
-        """Test geographic distance operator."""
+        """geo_distance is the rules engine's, as on flags (#1144)."""
+
+        def geo(actual, target, radius):
+            return self.service._apply_operator_enhanced(
+                OperatorType.GEO_DISTANCE, actual, target, radius
+            )
+
         # New York coordinates
         ny_coords = [40.7128, -74.0060]
         # Los Angeles coordinates
         la_coords = [34.0522, -118.2437]
 
         # Test within distance (should be false - NYC to LA is ~2500 miles)
-        assert self.service._evaluate_geo_distance(ny_coords, la_coords, 1000) is False
+        assert geo(ny_coords, la_coords, 1000) is False
 
         # Test close coordinates (within 1km)
         close_coords = [40.7130, -74.0058]  # Very close to NYC
-        assert self.service._evaluate_geo_distance(ny_coords, close_coords, 1) is True
+        assert geo(ny_coords, close_coords, 1) is True
 
         # Test same coordinates
-        assert self.service._evaluate_geo_distance(ny_coords, ny_coords, 0) is True
+        assert geo(ny_coords, ny_coords, 0) is True
+
+        # The dashboard's geo_within_radius stores the radius as an object and
+        # SDKs send a location as {"lat", "lon"}; neither used to match.
+        assert geo({"lat": 40.7130, "lon": -74.0058}, ny_coords, {"radius": 1}) is True
+        assert (
+            geo({"lat": 34.0522, "lon": -118.2437}, ny_coords, {"radius": 1}) is False
+        )
 
     def test_time_window_operator(self):
         """Test time window operator."""
@@ -342,6 +379,7 @@ class TestRulesEvaluationService:
             attribute="app_version",
             operator=OperatorType.SEMANTIC_VERSION,
             value="1.2.0",
+            additional_value="gte",
             attribute_type=AttributeType.SEMANTIC_VERSION,
         )
 
@@ -375,6 +413,7 @@ class TestRulesEvaluationService:
             attribute="app_version",
             operator=OperatorType.SEMANTIC_VERSION,
             value="1.2.0",
+            additional_value="gte",
             attribute_type=AttributeType.SEMANTIC_VERSION,
         )
 
@@ -651,6 +690,7 @@ class TestIntegrationScenarios:
             attribute="app_version",
             operator=OperatorType.SEMANTIC_VERSION,
             value="1.2.0",
+            additional_value="gte",
             attribute_type=AttributeType.SEMANTIC_VERSION,
         )
 
