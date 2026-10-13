@@ -6,32 +6,19 @@ problems, expand to 50%, confirm everything is healthy, then go to 100%.
 
 ---
 
-## Why Gradual Rollouts Matter
-
-Deploying a new feature to 100% of users at once is the highest-risk approach. If the feature
-has a bug or slows things down, every user is affected at once. Gradual rollouts limit your
-**blast radius**:
-
-- A bug at 5% rollout affects only 5% of users.
-- You can catch problems in monitoring dashboards before they reach the majority.
-- If something goes wrong, you can pause the rollout at the current stage rather than
-  scrambling for a full revert.
-- You can time stages to coincide with low-traffic periods.
-
----
-
 ## What a Rollout Schedule Is
 
 A rollout schedule is a plan attached to a feature flag. It defines:
 
 - a sequence of **stages**, each with a target rollout percentage;
-- a **trigger type** for each stage: time-based (it starts automatically at its
-  `start_date`) or manual (it starts only when you advance it);
+- a **trigger type** for each stage: time-based (the scheduler starts it at its
+  `start_date`, once the stages before it are complete) or manual (it starts only when you
+  advance it);
 - optional start and end dates for the whole schedule.
 
 The platform's background scheduler processes active schedules every 15 minutes
 (`ROLLOUT_CHECK_INTERVAL_MINUTES`) and starts a time-based stage once its `start_date` has
-passed.
+passed and every stage before it is complete.
 
 ---
 
@@ -84,7 +71,8 @@ It prints `"status": "active"` and `"rollout_percentage": 0`.
 This schedule has three stages:
 
 1. **Initial Canary**, 10%, manual: you start it when you're ready.
-2. **Expanded Rollout**, 50%, time-based: it starts by itself a week from now.
+2. **Expanded Rollout**, 50%, time-based, with a `start_date` a week from now. It comes after
+   a manual stage, so it does not start by itself (see [Trigger Types](#trigger-types)).
 3. **Full Rollout**, 100%, manual: a human approval gate before everyone gets the feature.
 
 Dates are UTC, in ISO 8601 form. The first two lines work them out from today with `jq`, so
@@ -161,8 +149,9 @@ curl -s -X POST localhost:8000/api/v1/rollout-schedules/$SCHEDULE_ID/activate \
 ```
 <!-- expect: "active" -->
 
-It prints `"active"`. From now on the scheduler starts each time-based stage once its
-`start_date` has passed. Activating a schedule doesn't change the flag: it is still at 0%.
+It prints `"active"`. From now on the scheduler starts a time-based stage once its
+`start_date` has passed and every stage before it is complete. Activating a schedule doesn't
+change the flag: it is still at 0%.
 
 ---
 
@@ -180,9 +169,13 @@ stage starts. Percentages must not decrease from one stage to the next.
 
 | Trigger Type | Description |
 |--------------|-------------|
-| `time_based` | The stage starts automatically once the current time passes its `start_date`. A time-based stage with no `start_date` starts on the scheduler's next pass. |
+| `time_based` | The stage starts by itself once its `start_date` has passed and every stage before it is complete; with no `start_date`, on the scheduler's first pass after that. The scheduler completes it no sooner than 24 hours after it starts, or the hours its `trigger_configuration` gives as `duration`. |
 | `manual` | The stage starts only when you advance it. |
 | `metric_based` | Accepted, but not implemented in this release: such a stage never starts by itself. |
+
+The scheduler never completes a manual stage, so **a time-based stage after a manual stage
+never starts by itself**. Advance the manual stage a second time to move on (see
+[Manual Advancement](#manual-advancement)).
 
 ### Stage Lifecycle
 
@@ -231,11 +224,12 @@ curl -s localhost:8000/api/v1/feature-flags/$FLAG_ID \
 
 The stage is `in_progress`, and the flag is now at `10`%.
 
-The advance takes effect at once, and the schedule must be active. Only a manual stage can
-be advanced; advancing a time-based one answers `400`. A manual advance is not held back by
-the earlier stages or by `min_stage_duration`: advancing the 100% stage first would put the
-flag at 100% at once. `min_stage_duration` (in hours) applies only to the stages the
-scheduler starts.
+Advancing a manual stage that is in progress completes it and starts the next stage at once,
+whatever that stage's trigger and `start_date`. The advance takes effect at once, and the
+schedule must be active. Only a manual stage can be advanced; advancing a time-based one
+answers `400`. A manual advance is not held back by the earlier stages or by
+`min_stage_duration`: advancing the 100% stage first would put the flag at 100% at once.
+`min_stage_duration` (in hours) applies only to the stages the scheduler starts.
 
 Manual stages are recommended for the final rollout to 100%: they serve as a human approval
 gate before full deployment.
@@ -312,42 +306,6 @@ It prints `"cancelled"`. The flag's current rollout percentage is not changed. T
 change the flag itself (see [Creating Feature Flags](create.md)), or use a
 [safety rollback](safety.md#manual-rollback): a rollback to 0% turns the flag off and pauses
 its schedule.
-
----
-
-## Common Rollout Patterns
-
-### Canary → Stable → Full (3 weeks)
-
-A cautious rollout for high-risk changes like payment flows or authentication:
-
-| Stage | Target % | Trigger | When |
-|-------|----------|---------|------|
-| Canary | 5% | Time-based | Day 0 |
-| Early majority | 25% | Time-based | Day 7 |
-| Majority | 75% | Time-based | Day 14 |
-| Full rollout | 100% | Manual | Day 21 |
-
-### Fast Rollout (3 days)
-
-For lower-risk UI changes with good monitoring:
-
-| Stage | Target % | Trigger | When |
-|-------|----------|---------|------|
-| Early adopters | 20% | Time-based | Day 0 |
-| Half rollout | 50% | Time-based | Day 1 |
-| Full rollout | 100% | Time-based | Day 3 |
-
-### Internal → Beta → General Availability
-
-Roll out first to internal users (with targeting rules), then to beta users, then to
-everyone. Change the flag's targeting rules between the stages:
-
-| Stage | Target % | Targeting Rule | Trigger |
-|-------|----------|---------------|---------|
-| Internal | 100% | `email ends_with @yourcompany.com` | Manual |
-| Beta | 100% | `plan equals beta` | Manual |
-| GA | 100% | No rule (all users) | Manual |
 
 ---
 

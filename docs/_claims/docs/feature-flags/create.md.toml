@@ -1,0 +1,1030 @@
+# What verifies each unit of docs/feature-flags/create.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/feature-flags/create.md"
+
+[[unit]]
+text = "Creating Feature Flags"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This guide creates a flag, adds targeting rules, turns it on for 10% of users and evaluates it: first in the dashboard, then with the REST API."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The API commands run as written against the stack from the Quick Start."
+by = ["docex:docs/feature-flags/create.md#\"ADMIN\""]
+
+[[unit]]
+text = "Prerequisites"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A running stack."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Quick Start Step 1 starts one on localhost."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "On your own deployment, use its URL wherever this page says localhost:8000 or localhost:3000."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A user account with the ADMIN or DEVELOPER role."
+by = [
+    "test:backend/tests/integration/api/test_flag_contract.py::test_post_checks_permission_before_the_body",
+    "test:backend/tests/smoke/test_flag_change_routes_guarded.py::test_the_inventory_is_exact",
+]
+
+[[unit]]
+text = "Creating, changing and turning a flag on all take a user login."
+by = [
+    "test:backend/tests/integration/api/test_flag_contract.py::test_post_checks_permission_before_the_body",
+    "test:backend/tests/smoke/test_flag_change_routes_guarded.py::test_the_inventory_is_exact",
+]
+
+[[unit]]
+text = "An API key can't do them (the API answers 401)."
+by = ["untested:T"]
+
+[[unit]]
+text = "An administrator creates accounts under Admin → Users."
+by = ["untested:T"]
+
+[[unit]]
+text = "The examples below use the demo administrator, admin@demo.com."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An API key, to evaluate the flag the way your application will."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The API section creates one; in the dashboard, it's Admin → API Keys."
+by = ["untested:T"]
+
+[[unit]]
+text = "Creating a Flag in the Dashboard"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Step 1: Open the form"
+by = [
+    "journey:feature-flag-create#flags",
+    "journey:feature-flag-create#new-flag",
+    "journey:feature-flag-create#name",
+    "journey:feature-flag-create#description",
+    "journey:feature-flag-create#add-group",
+    "journey:feature-flag-create#country-attribute",
+    "journey:feature-flag-create#country-operator",
+    "journey:feature-flag-create#country-value",
+    "journey:feature-flag-create#add-condition",
+    "journey:feature-flag-create#plan-attribute",
+    "journey:feature-flag-create#plan-value",
+    "journey:feature-flag-create#rollout",
+    "journey:feature-flag-create#create",
+    "journey:feature-flag-create#turn-on",
+    "journey:feature-flag-create#turn-off",
+]
+
+[[unit]]
+text = "Open the dashboard at http://localhost:3000, click Feature Flags in the top navigation, then click + New Flag."
+by = [
+    "journey:feature-flag-create#sign-in",
+    "journey:feature-flag-create#flags",
+    "journey:feature-flag-create#new-flag",
+]
+
+[[unit]]
+text = "Step 2: Name the flag"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Field | Description | Example"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Name (required) | The label shown in the dashboard. | New Checkout Flow"
+by = [
+    "journey:feature-flag-create#new-flag",
+    "journey:feature-flag-create#name",
+]
+
+[[unit]]
+text = "Key (required) | The identifier your code passes to the SDK. It's filled in from the name (new_checkout_flow), and you can edit it. Use lowercase letters, digits, - and _. The dashboard can't change it after the flag is created. | new-checkout-flow"
+by = ["untested:T"]
+
+[[unit]]
+text = "Description | What the flag controls, and when it should be removed. | Redesigned single-page checkout experience"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Step 3: Add targeting rules (optional)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Targeting rules turn the flag on for specific users, whatever the rollout percentage is."
+by = ["journey:feature-flag-create#rule-users"]
+
+[[unit]]
+text = "Under Targeting Rules, click + Add Group: the group starts with one condition."
+by = [
+    "journey:feature-flag-create#add-group",
+    "journey:feature-flag-create#add-condition",
+]
+
+[[unit]]
+text = "Click + Add Condition for each condition after the first."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A condition has three parts:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "an attribute: pick a suggestion such as user.country, or type any attribute your application sends;"
+by = [
+    "journey:feature-flag-create#country-attribute",
+    "journey:feature-flag-create#plan-attribute",
+]
+
+[[unit]]
+text = "an operator;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "a value."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Attribute | Operator | Value"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "user.country | is one of | US, CA"
+by = [
+    "journey:feature-flag-create#country-attribute",
+    "journey:feature-flag-create#country-operator",
+    "journey:feature-flag-create#country-value",
+]
+
+[[unit]]
+text = "user.plan | equals | enterprise"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each group's AND/OR decides how its conditions combine, and the AND/OR above the groups decides how the groups combine."
+by = [
+    "journey:feature-flag-create#add-group",
+    "journey:feature-flag-create#plan-only-users",
+]
+
+[[unit]]
+text = "If a user matches a rule, the flag is on for them."
+by = [
+    "journey:feature-flag-create#rule-users",
+    "journey:feature-flag-create#rollout-users",
+]
+
+[[unit]]
+text = "If they match no rule, the rollout percentage in Step 4 decides."
+by = [
+    "journey:feature-flag-create#rule-users",
+    "journey:feature-flag-create#rollout-users",
+]
+
+[[unit]]
+text = "With no groups, the builder reads No targeting rules — all users will match, and the rollout percentage decides for everyone."
+by = ["journey:feature-flag-create#new-flag"]
+
+[[unit]]
+text = "Step 4: Set the rollout percentage"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The Rollout percentage slider sets the share of users who get the flag when they match no targeting rule:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Percentage | Effect"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "0% | Only users who match a targeting rule get the flag"
+by = [
+    "docex:docs/guides/segments.md#cust-001 {\"enabled\":true,\"reason\":\"targeting_rule\"}",
+    "journey:feature-flag-rollout#nobody-at-zero",
+]
+
+[[unit]]
+text = "5% | Matching users, plus 5% of everyone else"
+by = [
+    "journey:feature-flag-create#rule-users",
+    "journey:feature-flag-create#rollout-users",
+]
+
+[[unit]]
+text = "100% | Everyone"
+by = ["journey:feature-flag-rollout#users-at-hundred"]
+
+[[unit]]
+text = "Each user always lands on the same side of the percentage."
+by = [
+    "test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches",
+    "journey:feature-flag-create#rollout-users",
+]
+
+[[unit]]
+text = "Raising it adds users, and takes none away."
+by = ["untested:T"]
+
+[[unit]]
+text = "Step 5: Create the flag, then turn it on"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Click Create Feature Flag."
+by = ["journey:feature-flag-create#create"]
+
+[[unit]]
+text = "The flag starts off (its page reads Not serving), so creating it never exposes anyone."
+by = ["journey:feature-flag-create#create"]
+
+[[unit]]
+text = "When you're ready, turn it on with the switch beside Not serving, and the page then reads Serving."
+by = [
+    "journey:feature-flag-create#turn-on",
+    "journey:feature-flag-create#turn-off",
+]
+
+[[unit]]
+text = "The same switch turns it off again."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The dashboard's On/Off is the API's is_active (true/false), reported beside it as status (\"active\"/\"inactive\")."
+by = [
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestFeatureFlagReadStatus::test_inactive_model_reports_inactive",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestFeatureFlagReadStatus::test_active_model_reports_active",
+]
+
+[[unit]]
+text = "You set it with is_active."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Creating a Flag with the API"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Run these in one terminal, in order."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each step uses the shell variables set by the ones before it ($TOKEN, $FLAG_ID, $KEY)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "URLs."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The collection URL answers with or without a trailing slash (/api/v1/feature-flags/ or /api/v1/feature-flags)."
+by = ["test:backend/tests/smoke/test_flag_change_routes_guarded.py::test_the_inventory_is_exact"]
+
+[[unit]]
+text = "A single flag's URL has no trailing slash (/api/v1/feature-flags/$FLAG_ID); with one, the API answers 307 Temporary Redirect."
+by = ["test:backend/tests/unit/middleware/test_relative_slash_redirect.py"]
+
+[[unit]]
+text = "curl doesn't follow the redirect, so nothing happens and nothing is printed."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The second command prints \"ADMIN\"."
+by = ["docex:docs/feature-flags/create.md#\"ADMIN\""]
+
+[[unit]]
+text = "If it prints null, the login failed (it takes the account's email, not a username) and $TOKEN holds no token."
+by = ["docex:docs/feature-flags/create.md#\"ADMIN\""]
+
+[[unit]]
+text = "Create the flag"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A new flag is off unless the request sends \"is_active\": true, so creating one never exposes anyone."
+by = [
+    "docex:docs/feature-flags/create.md#\"status\": \"inactive\"",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_create_without_is_active_is_inactive",
+]
+
+[[unit]]
+text = "The response carries the flag's id, which this saves in $FLAG_ID for the next steps."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The request takes these fields:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "key and name (both required; name is at most 100 characters);"
+by = [
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestRequestModels::test_name_is_limited_to_the_column_length",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_a_name_longer_than_the_column_is_422_not_500",
+]
+
+[[unit]]
+text = "description;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "is_active (default false);"
+by = ["test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestRequestModels::test_a_new_flag_is_off_unless_asked"]
+
+[[unit]]
+text = "rollout_percentage (0–100, default 0);"
+by = ["test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestRequestModels::test_defaults"]
+
+[[unit]]
+text = "targeting_rules;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "default_value: what the flag serves when it is off."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Only false is accepted for now, and it is the default; true answers 422;"
+by = ["test:backend/tests/integration/api/test_flag_contract.py::test_default_value_true_is_422"]
+
+[[unit]]
+text = "tags."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Any other field answers 422 (\"type\": \"extra_forbidden\"), so a misspelled or unsupported field is never dropped silently."
+by = [
+    "test:backend/tests/integration/api/test_flag_contract.py::test_create_unknown_field_is_422",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_update_unknown_field_is_422",
+]
+
+[[unit]]
+text = "null is refused for key, name, is_active, rollout_percentage and default_value."
+by = [
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestRequestModels::test_explicit_null_is_refused",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_put_null_on_a_not_null_field_is_422",
+]
+
+[[unit]]
+text = "A key that already exists answers 409, and a key with capitals or spaces answers 422."
+by = [
+    "test:backend/tests/unit/api/test_feature_flags.py::TestFeatureFlagEndpoints::test_create_duplicate_feature_flag",
+    "test:backend/tests/integration/api/test_feature_flags_api.py::TestFeatureFlagsValidation::test_create_feature_flag_invalid_key_uppercase_returns_422",
+]
+
+[[unit]]
+text = "The fields a response carries but no request writes (id, owner_id, created_at, updated_at and status) are accepted and ignored, so a GET body can be sent back unchanged unless its targeting_rules are ones PUT now refuses (422); omitting the field still works (see Add targeting rules)."
+by = [
+    "test:backend/tests/integration/api/test_flag_contract.py::test_read_only_fields_in_a_put_are_ignored",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_every_response_can_be_put_back_unchanged",
+]
+
+[[unit]]
+text = "A status must match: \"inactive\" (in any case) on a create without is_active: true, and the flag's current status on an update."
+by = [
+    "test:backend/tests/integration/api/test_flag_contract.py::test_put_status_that_differs_is_422",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_create_status_must_be_the_one_the_flag_gets",
+]
+
+[[unit]]
+text = "Any other value answers 422 with \"type\": \"read_only\"; turn a flag on or off with is_active."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Add targeting rules"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "targeting_rules uses the same shape the dashboard rule builder writes: a top-level logical_operator combining one or more groups, each group combining its conditions."
+by = [
+    "docex:docs/feature-flags/create.md#200",
+    "journey:feature-flag-create#evaluate",
+]
+
+[[unit]]
+text = "This example targets enterprise-plan users in the US, CA or GB, or any employee:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints 200."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rules the flag evaluator would not apply as written answer 422, on a create and on an update, and nothing is saved."
+by = [
+    "test:backend/tests/integration/api/test_flag_targeting_validated.py::test_post_refuses_rules_the_evaluator_would_not_apply",
+    "test:backend/tests/integration/api/test_flag_targeting_validated.py::test_put_refuses_rules_the_evaluator_would_not_apply",
+]
+
+[[unit]]
+text = "That is:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "a list of rules (the legacy [{\"type\": ...}] shape), and a value that is not an object (a string, a number, true);"
+by = ["test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused"]
+
+[[unit]]
+text = "a flat object such as {\"country\": [\"US\"]}, and any other key the shape does not have, at the top level, on a group or on a condition;"
+by = ["test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused"]
+
+[[unit]]
+text = "groups together with rules, logical_operator without groups, and a top-level name;"
+by = ["test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused"]
+
+[[unit]]
+text = "native rules without rules (a default_rule on its own), and native rules with a key the shape does not have (a misspelt rollout_percentage, priority or conditions) on a rule, a group at any depth, a condition or the default_rule;"
+by = ["test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused"]
+
+[[unit]]
+text = "native groups nested more than 10 levels deep, and native rules with more than 1,000 rules, groups and conditions in all;"
+by = [
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_very_deep_nesting_is_refused_at_the_cap",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_a_very_wide_value_is_refused_at_the_node_bound",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_the_depth_cap_is_the_rule_validators",
+]
+
+[[unit]]
+text = "a group with no conditions, a condition with no attribute, and an attribute with anything other than letters, digits, _ and .;"
+by = ["test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused"]
+
+[[unit]]
+text = "an unknown operator or logical operator (and, or or not, in any case);"
+by = [
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
+    "docex:docs/feature-flags/create.md#\"loc\":[\"body\",\"targeting_rules\"]",
+]
+
+[[unit]]
+text = "a value the operator cannot use (\"abc\" for greater_than, \"not-a-version\" for semver_gte), a regex pattern RE2 refuses, and a list operator with more than 1,000 values;"
+by = [
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_list_operators_keep_their_limit",
+]
+
+[[unit]]
+text = "a rollout_percentage, top-level or on a native rule, that is not an integer from 0 to 100 (100.0 is accepted; 33.5, true and \"50\" are not), or an id that is not text of 1 to 100 characters."
+by = [
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_a_rollout_percentage_outside_the_integers_0_to_100_is_refused",
+]
+
+[[unit]]
+text = "The message names the place and the reason, never the value you sent."
+by = [
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_the_message_never_repeats_the_submitted_value",
+    "test:backend/tests/integration/api/test_flag_targeting_validated.py::test_the_422_never_repeats_the_submitted_value",
+]
+
+[[unit]]
+text = "Only the first problem found is reported."
+by = ["untested:T"]
+
+[[unit]]
+text = "This request misspells equals:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "groups[0].conditions[0] is the first condition of the first group."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A problem with the rules as a whole has no place, and reads targeting rules: <reason>, for example targeting rules: unknown key."
+by = ["test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused"]
+
+[[unit]]
+text = "Rules stored before this check are not re-checked."
+by = ["test:backend/tests/integration/api/test_flag_targeting_validated.py::test_stored_rules_the_api_refuses_are_still_read_and_evaluated"]
+
+[[unit]]
+text = "They are evaluated as before, and an update that leaves targeting_rules out succeeds whatever is stored."
+by = ["test:backend/tests/integration/api/test_flag_targeting_validated.py::test_stored_rules_the_api_refuses_are_still_read_and_evaluated"]
+
+[[unit]]
+text = "An update that sends stored rules back unchanged, as a GET returned them, answers 422 if they are rules the API now refuses: fix them, or leave the field out."
+by = ["test:backend/tests/integration/api/test_flag_targeting_validated.py::test_d41_stored_rules_the_api_refuses_cannot_be_sent_back"]
+
+[[unit]]
+text = "To list the flags whose stored rules are refused, run this from the repository root, against the same database settings as the API:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints one line per flag, feature_flag <id> <key> <place> <reason>, writes nothing, and exits 0 whether or not it lists anything (2 when it cannot read the database)."
+by = [
+    "test:backend/tests/unit/scripts/test_check_targeting_rules.py::test_one_line_per_listed_flag",
+    "test:backend/tests/unit/scripts/test_check_targeting_rules.py::test_an_unreadable_database_exits_2",
+    "test:backend/tests/integration/api/test_flag_targeting_validated.py::test_the_check_script_lists_stored_rules_and_writes_nothing",
+]
+
+[[unit]]
+text = "A flag whose legacy (list-shaped) rules hold a condition with an operator other than eq, ne, gt, lt, contains or in has its own line: that rule matches no user."
+by = [
+    "test:backend/tests/unit/scripts/test_check_targeting_rules.py::test_a_legacy_condition_that_cannot_match_has_its_own_line",
+    "test:backend/tests/unit/scripts/test_check_targeting_rules.py::test_the_legacy_label_is_what_the_evaluator_does",
+]
+
+[[unit]]
+text = "Operators: equals, not_equals, contains, not_contains, starts_with, ends_with, greater_than, less_than, greater_than_or_equal, less_than_or_equal, in, not_in, regex, is_null, is_not_null, semver_eq, semver_gt, semver_lt, semver_gte, semver_lte, geo_within_radius, time_window, array_contains, array_intersects, in_segment, not_in_segment."
+by = ["test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_every_dashboard_operator_is_covered"]
+
+[[unit]]
+text = "Values typed in the dashboard are strings; they are compared leniently against typed context values (\"true\" matches true, \"17\" matches 17, \"beta, staff\" is a list for in/not_in, \"17.4\" is padded to 17.4.0 for semver_)."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_equals_editor_string_matches_typed_context",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_in_accepts_list_scalar_and_comma_string",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_semver_short_versions_are_padded",
+]
+
+[[unit]]
+text = "regex patterns use RE2 syntax: \\w, \\d, \\s are ASCII-only, $ matches only at the very end of the value, lookaround and backreferences are refused, and values longer than 256 characters are not evaluated."
+by = [
+    "test:backend/tests/unit/core/test_pattern_match.py::test_semantics",
+    "test:backend/tests/unit/core/test_pattern_match.py::test_refused_constructs",
+]
+
+[[unit]]
+text = "A pattern RE2 refuses answers 422 when it is saved (groups[0].conditions[0]: pattern is not valid)."
+by = [
+    "test:backend/tests/unit/core/test_experiment_targeting_validation.py",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
+]
+
+[[unit]]
+text = "A flag whose rules were stored with such a pattern before this check, or whose context value cannot be evaluated, evaluates disabled with reason error rather than falling through to the rollout; python -m backend.scripts.check_targeting_rules lists those flags."
+by = [
+    "test:backend/tests/unit/core/test_pattern_ruleset_abort.py::test_flag_zero_percent_rule_does_not_fall_through_to_rollout",
+    "test:backend/tests/unit/core/test_pattern_ruleset_abort.py::test_flag_value_over_the_limit_is_disabled",
+]
+
+[[unit]]
+text = "See the rules engine reference."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "in_segment, not_in_segment."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "{\"attribute\": \"segment\", \"operator\": \"in_segment\", \"value\": \"<segment id>\"}."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "One segment per condition; to match any of several, put one condition per segment in an OR group."
+by = ["test:backend/tests/unit/core/test_segment_targeting_validation.py::test_refused_with_fixed_text"]
+
+[[unit]]
+text = "A ruleset can use at most 10 different segments."
+by = ["test:backend/tests/unit/core/test_segment_targeting_validation.py::test_ten_segments_accepted_eleven_refused"]
+
+[[unit]]
+text = "A user is a member of an ID-list segment when the user the flag or experiment is evaluated for (the request's user_id) is in its list, and of a rules segment when the attributes sent with the request match its rules; in a segment's rules, user_id is that same user, whatever the context says."
+by = [
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_flags_and_experiments_agree",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_context_user_id_does_not_decide_membership",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_flag_agrees_with_segment_evaluate",
+]
+
+[[unit]]
+text = "Membership is decided by the server from its own records: nothing in the context you send makes a user a member."
+by = [
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_a_caller_cannot_supply_membership",
+    "test:backend/tests/unit/core/test_segment_condition.py::test_a_context_attribute_named_segment_does_not_decide",
+]
+
+[[unit]]
+text = "A condition on the attribute segment with any other operator, such as equals, compares the context value as before."
+by = ["test:backend/tests/unit/core/test_segment_condition.py::test_segment_attribute_with_equals"]
+
+[[unit]]
+text = "Saving rules that name a segment that is unknown, inactive or archived, or whose rules are not valid, answers 422, and a segment condition in a native default_rule (returned without its conditions being evaluated) is refused."
+by = [
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_reference_refused_on_flag_create",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_reference_refused_on_flag_update",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_reference_refused_on_experiment_create",
+    "test:backend/tests/unit/core/test_segment_targeting_validation.py::test_refused_with_fixed_text",
+]
+
+[[unit]]
+text = "When the server cannot decide a user's membership of a segment the rules name (a flag unarchived after its segment was archived, a segment rule whose pattern cannot be evaluated for this context), it does not guess: the flag answers enabled: false with reason: \"error\" and the experiment does not enrol the user (reason: \"targeting\"), whichever of the two operators the condition uses."
+by = [
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_unavailable_segment_fails_closed",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_database_error_fails_closed",
+]
+
+[[unit]]
+text = "Flags that use a segment are always evaluated by the server, never by an SDK's local evaluation."
+by = ["test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_segment_flags_are_remote"]
+
+[[unit]]
+text = "A segment condition requires nothing from the context."
+by = ["test:backend/tests/unit/core/test_segment_condition.py::test_required_attributes_skip_only_segment_conditions"]
+
+[[unit]]
+text = "A user who lacks an attribute is not refused outright: on experiments, as on flags, they fail only the conditions on that attribute (is_null passes), so another OR branch can still enrol them, and they match a NOT group on that attribute (a user with no country matches NOT (country equals US), but not country not_equals US)."
+by = [
+    "test:backend/tests/unit/services/test_experiment_targeting_missing_attribute.py::test_experiment_targeting_matches_the_flag_answer",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_or_targeting_enrols_a_user_lacking_the_other_branch_attribute",
+]
+
+[[unit]]
+text = "Users already assigned to an experiment keep their assignment."
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_existing_assignment_is_sticky_when_weights_change"]
+
+[[unit]]
+text = "See Segments."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Users who match a rule are bucketed with the rule's rollout_percentage (100 unless set on the rules object); users who match no rule fall through to the flag's global rollout_percentage."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestNormaliseShapes::test_dashboard_rollout_percentage_and_id_are_honoured",
+    "docex:docs/feature-flags/create.md#\"enabled\": false",
+]
+
+[[unit]]
+text = "The native Enhanced Rules Engine shape ({\"rules\": [...]}) is accepted as well; it must carry rules."
+by = [
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_accepted",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
+]
+
+[[unit]]
+text = "null, {} and {\"groups\": []} mean no rules."
+by = [
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_null_and_omitted_are_accepted",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_an_accepted_value_is_never_read_as_no_rules",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestNormaliseShapes::test_dashboard_empty_groups_means_no_targeting",
+]
+
+[[unit]]
+text = "A list of rules (the legacy shape) is refused when saved; a flag stored with one before is still evaluated."
+by = [
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
+    "test:backend/tests/integration/api/test_flag_targeting_validated.py::test_stored_rules_the_api_refuses_are_still_read_and_evaluated",
+]
+
+[[unit]]
+text = "Targeting context and attribute aliases"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rules are matched against the context the SDK sends with each evaluation (the user's attributes: context=<url-encoded JSON> on GET /feature-flags/evaluate/{key}, or the context object on the POST variant)."
+by = [
+    "docex:docs/feature-flags/create.md#\"enabled\": true",
+    "docex:docs/feature-flags/create.md#\"targeting_rule\"",
+]
+
+[[unit]]
+text = "Before matching, the context is expanded so that:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "every key is available as given ({\"country\": \"US\"} answers country);"
+by = ["test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_raw_keys_kept"]
+
+[[unit]]
+text = "nested objects are flattened to dotted keys ({\"app\": {\"version\": \"3.2.1\"}} answers app.version);"
+by = ["test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_dotted_keys_for_nested_dicts"]
+
+[[unit]]
+text = "every top-level key also answers user.<key>, device.<key> and app.<key> ({\"country\": \"US\"} answers user.country; {\"os_version\": \"17.4.0\"} answers device.os_version), and user.<key> / device.<key> / app.<key> keys in the context answer the bare <key> too;"
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_prefix_aliases_for_top_level_keys",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_reverse_alias_for_prefixed_keys",
+]
+
+[[unit]]
+text = "explicit keys always win over aliases."
+by = ["test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_explicit_keys_win_over_aliases"]
+
+[[unit]]
+text = "So a dashboard rule on user.country matches an SDK that sends {\"country\": \"US\"} without any renaming on either side."
+by = [
+    "journey:feature-flag-create#evaluate",
+    "docex:docs/feature-flags/create.md#\"enabled\": true",
+]
+
+[[unit]]
+text = "A condition whose attribute is absent from the context does not match (except is_null, which does)."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestEngineExtensions::test_is_null_with_missing_attribute",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestEngineExtensions::test_eq_none_alone_does_not_match_missing_attribute",
+]
+
+[[unit]]
+text = "A context larger or more deeply nested than the Targeting Context Limits allow answers 422."
+by = ["test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_context_over_the_limits_answers_422_and_nothing_is_recorded"]
+
+[[unit]]
+text = "Turn the flag on at 10%"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "\"is_active\": false turns it off again."
+by = ["test:backend/tests/integration/api/test_archived_flag_verbs.py::test_every_status_verb_from_every_status"]
+
+[[unit]]
+text = "POST /api/v1/feature-flags/$FLAG_ID/activate and .../deactivate do the same without a body."
+by = ["test:backend/tests/integration/api/test_archived_flag_verbs.py::test_every_status_verb_from_every_status"]
+
+[[unit]]
+text = "A PUT changes only the fields it sends; a status in it must be the flag's current status."
+by = ["docex:docs/feature-flags/create.md#\"status\": \"active\""]
+
+[[unit]]
+text = "Archived flags"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An archived flag is retired: it is never served, and nothing turns it back on by accident."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every request that would turn it on (PUT with \"is_active\": true, /activate, /enable, /toggle, and bulk enable) answers 400 with"
+by = [
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_every_status_verb_from_every_status",
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_bulk_enable_refuses_only_the_archived_flag",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_put_is_active_true_on_an_archived_flag_answers_400",
+]
+
+[[unit]]
+text = "and leaves the flag archived."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A request that turns it off (\"is_active\": false, /deactivate, /disable, bulk disable) succeeds and changes nothing, because an archived flag is already off."
+by = [
+    "test:backend/tests/integration/api/test_flag_contract.py::test_put_is_active_false_keeps_an_archived_flag_archived",
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_every_status_verb_from_every_status",
+]
+
+[[unit]]
+text = "The way back is POST /api/v1/feature-flags/$FLAG_ID/unarchive (beta), which makes the flag inactive; turn it on afterwards as usual."
+by = [
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_unarchive_is_the_way_back",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "A flag is archived with POST /api/v1/feature-flags/bulk-toggle and \"action\": \"archive\"."
+by = ["test:backend/tests/integration/api/test_bulk_toggle_api.py"]
+
+[[unit]]
+text = "The dashboard has no archive or unarchive action yet."
+by = ["untested:T"]
+
+[[unit]]
+text = "Create an API key"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Applications evaluate flags with an API key, not a user token."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once"]
+
+[[unit]]
+text = "The key is shown only once, and this saves it in $KEY:"
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once"]
+
+[[unit]]
+text = "Flag Key Naming Conventions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A key is lowercase letters, digits, hyphens and underscores, starting with a letter or digit."
+by = [
+    "test:backend/tests/integration/api/test_feature_flags_api.py::TestFeatureFlagsValidation::test_create_feature_flag_invalid_key_uppercase_returns_422",
+    "test:backend/tests/unit/api/test_request_validation.py",
+]
+
+[[unit]]
+text = "Anything else is refused with 422."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "When a Flag Evaluates to Off"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A flag is on or off for each user."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Its default_value, what it serves when it is off, is false for every flag for now."
+by = ["test:backend/tests/integration/api/test_flag_contract.py::test_default_value_true_is_422"]
+
+[[unit]]
+text = "Evaluation returns enabled: false when:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "the flag is off (reason: \"inactive\"), which includes a flag that a safety rollback to 0% turned off (see Safety Monitoring);"
+by = [
+    "journey:feature-flag-create#off-users",
+    "journey:feature-flag-safety#off-for-everyone",
+]
+
+[[unit]]
+text = "the user matches no targeting rule and falls outside the rollout percentage (reason: \"rollout\");"
+by = [
+    "docex:docs/feature-flags/create.md#\"enabled\": false",
+    "journey:feature-flag-create#rollout-users",
+]
+
+[[unit]]
+text = "the user matches a rule but falls outside that rule's own rollout percentage (reason: \"targeting_rule\");"
+by = ["test:backend/tests/unit/services/test_sdk_ruleset_vectors.py"]
+
+[[unit]]
+text = "evaluation fails on the server (reason: \"error\")."
+by = [
+    "test:backend/tests/unit/core/test_pattern_ruleset_abort.py::test_flag_nested_not_is_disabled",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_unavailable_segment_fails_closed",
+]
+
+[[unit]]
+text = "When the call itself fails (a network error or a wrong API key), the SDKs' isFeatureEnabled and is_feature_enabled return false."
+by = [
+    "test:sdk/js/__tests__/client.test.ts",
+    "test:sdk/python/tests/test_client.py::TestIsFeatureEnabled::test_false_on_network_error",
+    "test:sdk/python/tests/test_client.py::TestIsFeatureEnabled::test_false_on_404",
+]
+
+[[unit]]
+text = "So a flag your code can't reach behaves as off."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Evaluating the Flag from Your Application"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "JavaScript SDK"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Python SDK"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "REST API (Direct)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Send the targeting context as a URL-encoded JSON object on the GET endpoint (this is what the SDKs do):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Or send it as the context object in the body of the POST variant:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"targeting_rule\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The same user on a free plan in Germany matches no rule."
+by = ["docex:docs/feature-flags/create.md#\"enabled\": false"]
+
+[[unit]]
+text = "The 10% rollout then decides, and user-123 falls outside it:"
+by = ["docex:docs/feature-flags/create.md#\"enabled\": false"]
+
+[[unit]]
+text = "reason explains the outcome: targeting_rule (a rule matched and its rollout percentage decided), rollout (no rule matched; the global rollout percentage decided), inactive or error."
+by = [
+    "journey:feature-flag-create#rule-users",
+    "journey:feature-flag-create#rollout-users",
+    "journey:feature-flag-create#off-users",
+    "test:backend/tests/unit/core/test_pattern_ruleset_abort.py",
+]
+
+[[unit]]
+text = "A context that is not a JSON object returns 422."
+by = ["test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestPostEvaluate::test_context_must_be_object"]
+
+[[unit]]
+text = "GET /api/v1/feature-flags/user/{user_id}?context=..."
+by = ["test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestUserFlagsWithContext::test_context_query_param"]
+
+[[unit]]
+text = "evaluates every active flag the same way and returns {\"flag-key\": true|false, ...}."
+by = ["test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestUserFlagsWithContext::test_context_query_param"]
+
+[[unit]]
+text = "Reporting client-side errors"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Safety monitoring computes a flag's error rate from error_logs rows divided by its evaluations."
+by = [
+    "journey:feature-flag-safety#unhealthy",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetErrorMetrics::test_computes_rate_and_error_type_breakdown",
+]
+
+[[unit]]
+text = "The errors your applications see behind a flag (crashes, failed requests) count toward it when they are reported with a server-side key: an API key with the sdk:ruleset scope, created by a user who can change feature flags (ADMIN, DEVELOPER or a superuser)."
+by = [
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_server_side_key_rolls_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count",
+]
+
+[[unit]]
+text = "A browser or mobile app sends its errors to your server, and the server forwards them with that key."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Keep the key on the server: it can also download every flag's targeting rules."
+by = [
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_a_key_with_the_scope_is_served",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestContents::test_every_owners_flags_and_nothing_else",
+]
+
+[[unit]]
+text = "It prints \"crash\", the stored row's error_type."
+by = ["docex:docs/feature-flags/create.md#\"crash\""]
+
+[[unit]]
+text = "A report sent with $KEY, or with any other key without the sdk:ruleset scope, is accepted (201) and stored the same way, but does not count toward the error rate or automatic rollback: the flag's safety check shows it in details.uncounted_error_count (see Which errors count)."
+by = [
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_key_without_the_scope_does_not_roll_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_stored_source_follows_the_presented_key",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_check_endpoint_shows_the_reports_it_does_not_count",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/errors/batch accepts {\"errors\": [...]} (up to 100) and returns {\"success_count\", \"failure_count\", \"errors\"}."
+by = [
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportErrorsBatch::test_batch_writes_rows_and_counts",
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportErrorsBatch::test_batch_over_limit_is_413",
+]
+
+[[unit]]
+text = "At least one of feature_flag_key / experiment_key is required; unknown keys return 404 (single) or are listed per item (batch)."
+by = [
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportError::test_missing_both_keys_returns_422",
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportError::test_unknown_flag_key_returns_404",
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportErrorsBatch::test_batch_reports_unknown_keys_per_item",
+]
+
+[[unit]]
+text = "What is stored for each report, on both endpoints:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Field | Stored as"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "timestamp | The time the server received the report, for the stored row and for the timestamp in the POST /api/v1/tracking/errors response. A timestamp you send is kept in the row's metadata as client_timestamp (ISO 8601)."
+by = [
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestStoredErrorReports::test_stored_timestamp_is_the_receive_time",
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportError::test_client_timestamp_is_kept_in_metadata",
+]
+
+[[unit]]
+text = "message | The first 1000 characters."
+by = ["test:backend/tests/integration/api/test_client_errors_api.py::TestReportError::test_long_message_is_truncated_to_column_width"]
+
+[[unit]]
+text = "stack_trace | At most 8 KB (8192 bytes, UTF-8); anything longer is cut off at a character boundary."
+by = [
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestStoredErrorReports::test_stack_trace_is_cut_to_the_byte_limit",
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestStoredErrorReports::test_stack_trace_within_the_limit_is_unchanged",
+]
+
+[[unit]]
+text = "metadata | Stored as sent when its compact JSON is at most 8 KB (8192 bytes, UTF-8). Larger metadata is replaced by {\"metadata_truncated\": true, \"metadata_bytes\": <size>}. client_timestamp is added after this check."
+by = ["test:backend/tests/integration/api/test_client_errors_api.py::TestStoredErrorReports::test_oversized_metadata_is_replaced_by_a_marker"]
+
+[[unit]]
+text = "Next Steps"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Gradual Rollouts — set up a staged rollout schedule with automatic progression"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Safety Monitoring — configure automatic rollback if error rates spike"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "SDK Documentation — full SDK integration guide"
+by = ["exempt:baseline"]
