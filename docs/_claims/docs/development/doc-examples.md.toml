@@ -144,6 +144,22 @@ text = "Nothing from your own environment is: each page runs with only PATH, HOM
 by = ["untested:T"]
 
 [[unit]]
+text = "The blocks run under set -euo pipefail."
+by = ["untested:T"]
+
+[[unit]]
+text = "So yes | head -1 and … | grep -q x exit 141 when the pipe closes early, and the block fails; write them another way."
+by = ["untested:T"]
+
+[[unit]]
+text = "Trailing slashes are real."
+by = ["exempt:label"]
+
+[[unit]]
+text = "POST /api/v1/rollout-schedules/ needs its slash: without it the API answers 307, curl doesn't follow it, and nothing is printed."
+by = ["test:backend/tests/unit/middleware/test_relative_slash_redirect.py::test_the_real_app_still_redirects_relatively"]
+
+[[unit]]
 text = "No # comments in a shell block, skip blocks included (see Rewriting a comment)."
 by = ["untested:T"]
 
@@ -325,7 +341,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Every problem is reported in the same run, one line each, naming the page (and the line, where there is one) and what to change."
-by = ["untested:T"]
+by = ["mechanism:doc-examples-failure-sample"]
 
 [[unit]]
 text = "For a new page with a zsh block, and a comment left in an enrolled one:"
@@ -348,8 +364,20 @@ text = "Add expect lines, and say the same values in the prose."
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "Run python scripts/doc_examples.py --check, and copy the counts it prints into a [[document]] entry in scripts/doc_examples.toml; add its exec to [meta] exec, add one to [meta] documents, and remove the page's line from [pending] if it has one."
+text = "Run python scripts/doc_examples.py --check, and copy the counts it prints into a [[document]] entry in scripts/doc_examples.toml, with the page's environment; add its exec to [meta] exec, add one to [meta] documents, and remove the page's line from [pending] if it has one."
 by = ["exempt:instruction"]
+
+[[unit]]
+text = "An entry has exactly these five keys: the page, its environment (see Environments), and its counts of exec blocks, skip blocks and expectations."
+by = ["untested:T"]
+
+[[unit]]
+text = "If an edit changes a count, change the entry in the same pull request."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The check prints the counts it finds, and fails naming both numbers when they differ."
+by = ["untested:T"]
 
 [[unit]]
 text = "A page with no bash block needs no entry, and enrolling one is refused."

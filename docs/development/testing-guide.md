@@ -27,8 +27,10 @@ python -m pytest backend/tests/unit/core/test_rules_engine.py -v
 look for it.
 
 The backend suites are directories under `backend/tests/`, such as `unit`,
-`integration` and `smoke`. The pull-request checks choose tests by directory, not
-by marker, so a test with no marker still runs.
+`integration` and `smoke`. The pull-request checks run `backend/tests/unit`,
+`backend/tests/integration` and `backend/tests/smoke` with no marker filter, so a
+test there with no marker still runs. The `e2e` and `contract` suites are run with
+`-m e2e` and `-m contract`, so a test there needs that marker.
 
 Run the dashboard's tests from `frontend/`:
 
@@ -61,5 +63,5 @@ that one runs.
   [Development Guidelines](guidelines.md) say why.
 - Test a permission with a user who is not a superuser, one of each role. A
   superuser passes every permission check.
-- [Route Dependencies](dependency-injection.md) says which dependencies are async,
-  and so which ones a test awaits.
+- [Dependency Injection](dependency-injection.md) says which dependencies are
+  async, and so which ones a test awaits.

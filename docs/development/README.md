@@ -11,7 +11,7 @@ This directory contains development guidelines, best practices, and technical do
    - [Migrations Guide](database/migrations.md)
    - [Using the Data Layer](database/usage.md)
    - [Backup Guide](database/backup.md)
-5. [Route Dependencies](dependency-injection.md): a route's session, caller and permission checks
+5. [Dependency Injection](dependency-injection.md): a route's session, caller and permission checks
 6. [CI workflows](workflow-explanation.md): the required checks, and running them yourself
 
 ## Common Tasks

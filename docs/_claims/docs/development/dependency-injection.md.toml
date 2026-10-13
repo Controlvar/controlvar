@@ -4,7 +4,7 @@
 document = "docs/development/dependency-injection.md"
 
 [[unit]]
-text = "Route Dependencies"
+text = "Dependency Injection"
 by = ["exempt:label"]
 
 [[unit]]
@@ -93,5 +93,9 @@ text = "Reports."
 by = ["exempt:label"]
 
 [[unit]]
-text = "The report dependencies are async: await them."
-by = ["test:backend/tests/unit/api/test_permission_deps.py::TestReportPermissionDeps::test_can_update_report_with_permission"]
+text = "The report checks in deps.py, get_report_access, can_create_report, can_update_report and can_delete_report, are async: await them."
+by = [
+    "test:backend/tests/unit/api/test_permission_deps.py::TestReportPermissionDeps::test_the_report_checks_are_coroutines",
+    "test:backend/tests/unit/api/test_permission_deps.py::TestReportPermissionDeps::test_get_report_access_owner",
+    "test:backend/tests/unit/api/test_permission_deps.py::TestReportPermissionDeps::test_can_update_report_with_permission",
+]

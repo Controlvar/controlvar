@@ -8,7 +8,7 @@ Where the database code is, for a contributor writing code against it.
   set, that is `test_experimentation` with `APP_ENV=test` or `TESTING=true`, and
   `experimentation` otherwise.
 - A route's session comes from a dependency: see
-  [Route Dependencies](../dependency-injection.md).
+  [Dependency Injection](../dependency-injection.md).
 - Import a model from the module that defines it, rooted at `backend.app`:
   `from backend.app.models.experiment import Experiment`.
 - A script that runs outside the API calls `register_core_models()` from

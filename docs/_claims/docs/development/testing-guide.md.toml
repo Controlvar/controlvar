@@ -40,7 +40,11 @@ text = "The backend suites are directories under backend/tests/, such as unit, i
 by = ["untested:T"]
 
 [[unit]]
-text = "The pull-request checks choose tests by directory, not by marker, so a test with no marker still runs."
+text = "The pull-request checks run backend/tests/unit, backend/tests/integration and backend/tests/smoke with no marker filter, so a test there with no marker still runs."
+by = ["untested:T"]
+
+[[unit]]
+text = "The e2e and contract suites are run with -m e2e and -m contract, so a test there needs that marker."
 by = ["untested:T"]
 
 [[unit]]
@@ -118,5 +122,5 @@ by = [
 ]
 
 [[unit]]
-text = "Route Dependencies says which dependencies are async, and so which ones a test awaits."
+text = "Dependency Injection says which dependencies are async, and so which ones a test awaits."
 by = ["exempt:navigation"]

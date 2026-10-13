@@ -28,7 +28,7 @@ text = "When it is not set, that is test_experimentation with APP_ENV=test or TE
 by = ["test:backend/tests/unit/db/test_schema_name.py::test_the_schema_is_resolved_the_same_way_everywhere"]
 
 [[unit]]
-text = "A route's session comes from a dependency: see Route Dependencies."
+text = "A route's session comes from a dependency: see Dependency Injection."
 by = ["exempt:navigation"]
 
 [[unit]]

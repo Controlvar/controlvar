@@ -97,6 +97,12 @@ it's broken.
 - **The page's blocks share one shell, top to bottom.** A variable set in one
   block is there in the next. Nothing from your own environment is: each page runs
   with only `PATH`, `HOME`, `USER`, `TMPDIR` and Docker's own settings.
+- **The blocks run under `set -euo pipefail`.** So `yes | head -1` and
+  `… | grep -q x` exit 141 when the pipe closes early, and the block fails; write
+  them another way.
+- **Trailing slashes are real.** `POST /api/v1/rollout-schedules/` needs its slash:
+  without it the API answers `307`, `curl` doesn't follow it, and nothing is
+  printed.
 - **No `#` comments in a shell block**, `skip` blocks included (see
   [Rewriting a comment](#rewriting-a-comment)).
 - **Every block passes `bash -n`**, with bash 4.4 or later, the one that runs the
@@ -223,9 +229,25 @@ refused: docs/guides/tour.md:14: shell comment "# prints the flag's id" breaks w
    language.
 3. Add `expect` lines, and say the same values in the prose.
 4. Run `python scripts/doc_examples.py --check`, and copy the counts it prints into a
-   `[[document]]` entry in `scripts/doc_examples.toml`; add its `exec` to `[meta] exec`,
-   add one to `[meta] documents`, and remove the page's line from `[pending]` if it has
-   one.
+   `[[document]]` entry in `scripts/doc_examples.toml`, with the page's `environment`;
+   add its `exec` to `[meta] exec`, add one to `[meta] documents`, and remove the
+   page's line from `[pending]` if it has one.
+
+An entry has exactly these five keys: the page, its environment (see
+[Environments](#environments)), and its counts of `exec` blocks, `skip` blocks and
+expectations.
+
+```toml
+[[document]]
+path = "docs/guides/new-page.md"
+environment = "stack"
+exec = 2
+skip = 1
+expects = 3
+```
+
+If an edit changes a count, change the entry in the same pull request. The check
+prints the counts it finds, and fails naming both numbers when they differ.
 
 A page with no `bash` block needs no entry, and enrolling one is refused.
 

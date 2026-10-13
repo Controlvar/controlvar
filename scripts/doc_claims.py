@@ -840,6 +840,19 @@ MECHANISMS: Dict[str, Mechanism] = {
             ),
         ),
     ),
+    # The Doc Examples guide's "When the check fails" sample is what the check
+    # prints; the sentence above the sample says what that output is.
+    "doc-examples-failure-sample": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_the_authoring_pages_sample_is_what_the_check_prints",
+        holds=(
+            (
+                "docs/development/doc-examples.md",
+                r"^Every problem is reported in the same run, one line each, naming"
+                r" the page",
+            ),
+        ),
+    ),
 }
 
 #: The mobile and not-yet-published SDK pages (#1107): their registries wait

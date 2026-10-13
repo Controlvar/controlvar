@@ -1,4 +1,4 @@
-# Route Dependencies
+# Dependency Injection
 
 How an API route gets its database session, its caller and its permission
 checks. They are FastAPI dependencies, in `backend/app/api/deps.py`.
@@ -32,7 +32,9 @@ async def read_items(
   `backend/app/core/permissions.py`, and creating one goes through the async
   `deps.can_create_feature_flag`. Build a new route on those two, not on the other
   flag helpers in `deps.py`.
-- **Reports.** The report dependencies are async: await them.
+- **Reports.** The report checks in `deps.py`, `get_report_access`,
+  `can_create_report`, `can_update_report` and `can_delete_report`, are async:
+  await them.
 
 ```python
 @router.get("/{experiment_id}/results")

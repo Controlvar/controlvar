@@ -1,3 +1,4 @@
+import inspect
 import uuid
 from unittest.mock import MagicMock, patch
 
@@ -508,6 +509,16 @@ class TestFeatureFlagPermissions:
 
 class TestReportPermissionDeps:
     """Tests for report permission dependency functions."""
+
+    def test_the_report_checks_are_coroutines(self):
+        """Each report check is async, so a caller awaits it."""
+        for check in (
+            get_report_access,
+            can_create_report,
+            can_update_report,
+            can_delete_report,
+        ):
+            assert inspect.iscoroutinefunction(check), check.__name__
 
     @pytest.mark.asyncio
     @patch("backend.app.api.deps.check_permission")
