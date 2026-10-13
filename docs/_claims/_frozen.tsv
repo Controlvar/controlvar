@@ -1,6 +1,8 @@
 # The ledger of scripts/doc_claims.py (#1142): one line per registry entry whose
 # target is untested:<T|S|X|A> or exempt:baseline, as kind<TAB>document<TAB>the
 # first 12 hex digits of sha256(the unit's text). Sorted; it only shrinks.
+# The untested lines of the contributor pages and the Cognito testing page
+# (D73 G5e) are TR3's: that pull request gives each one a test: target.
 # The untested lines of the architecture, migrations, logging and load-testing
 # pages (D73 G5d) are TR3's: that pull request gives each one a test: target.
 # The untested:T lines of the experiments and statistics pages (D73 G5b) are TR1's:
@@ -2525,6 +2527,80 @@ untested:T	docs/auth/sso.md	ed21359b2429
 untested:T	docs/auth/sso.md	f3771565b24c
 untested:T	docs/auth/sso.md	f8b5afbe5d3e
 untested:T	docs/auth/sso.md	fb82488e1891
+untested:T	docs/development/database/usage.md	5d056cd46ab5
+untested:T	docs/development/database/usage.md	ad5972932da5
+untested:T	docs/development/doc-examples.md	02c69b518cfd
+untested:T	docs/development/doc-examples.md	08907076a2ae
+untested:T	docs/development/doc-examples.md	120a33a0404b
+untested:T	docs/development/doc-examples.md	1506750014e3
+untested:T	docs/development/doc-examples.md	16f1b6cd217a
+untested:T	docs/development/doc-examples.md	19797b35174c
+untested:T	docs/development/doc-examples.md	1a5861e47652
+untested:T	docs/development/doc-examples.md	22cbe0a85689
+untested:T	docs/development/doc-examples.md	233328f2d0ac
+untested:T	docs/development/doc-examples.md	2a7029630432
+untested:T	docs/development/doc-examples.md	33654f7b382a
+untested:T	docs/development/doc-examples.md	3714b17ec7cb
+untested:T	docs/development/doc-examples.md	39029720463a
+untested:T	docs/development/doc-examples.md	3d4683dcc669
+untested:T	docs/development/doc-examples.md	3ea2714bc8c6
+untested:T	docs/development/doc-examples.md	47225d531047
+untested:T	docs/development/doc-examples.md	479ccc239254
+untested:T	docs/development/doc-examples.md	47e9c36d3594
+untested:T	docs/development/doc-examples.md	4a622afb39cf
+untested:T	docs/development/doc-examples.md	51823f5b04ba
+untested:T	docs/development/doc-examples.md	546e94592afe
+untested:T	docs/development/doc-examples.md	562f49da0fff
+untested:T	docs/development/doc-examples.md	5bbf2d8aab21
+untested:T	docs/development/doc-examples.md	5c214fd792ee
+untested:T	docs/development/doc-examples.md	5f9145b2081e
+untested:T	docs/development/doc-examples.md	65ea14ec0b61
+untested:T	docs/development/doc-examples.md	67cac736adc5
+untested:T	docs/development/doc-examples.md	6d6210aef7db
+untested:T	docs/development/doc-examples.md	6e331b906ef4
+untested:T	docs/development/doc-examples.md	71ef3400bcaf
+untested:T	docs/development/doc-examples.md	72bb2e7d365f
+untested:T	docs/development/doc-examples.md	7617730b2be7
+untested:T	docs/development/doc-examples.md	76481f10d762
+untested:T	docs/development/doc-examples.md	79753c32a0d7
+untested:T	docs/development/doc-examples.md	8310aafafc8f
+untested:T	docs/development/doc-examples.md	84be5cc2ddc5
+untested:T	docs/development/doc-examples.md	85757e7ad90a
+untested:T	docs/development/doc-examples.md	8af0b5bbfeb0
+untested:T	docs/development/doc-examples.md	914bba0c2a00
+untested:T	docs/development/doc-examples.md	916ad5fc0374
+untested:T	docs/development/doc-examples.md	9c97fa73e348
+untested:T	docs/development/doc-examples.md	aa79725f15b3
+untested:T	docs/development/doc-examples.md	ad9d7f984ffa
+untested:T	docs/development/doc-examples.md	af78948be7e1
+untested:T	docs/development/doc-examples.md	b3b098c0ad16
+untested:T	docs/development/doc-examples.md	c4c29087f9f6
+untested:T	docs/development/doc-examples.md	c4d57202028f
+untested:T	docs/development/doc-examples.md	c595133d8198
+untested:T	docs/development/doc-examples.md	c6084799e2ec
+untested:T	docs/development/doc-examples.md	cd2878301a43
+untested:T	docs/development/doc-examples.md	cd2b66be0f7b
+untested:T	docs/development/doc-examples.md	cef477972328
+untested:T	docs/development/doc-examples.md	d0ab3ff1f6bc
+untested:T	docs/development/doc-examples.md	d232a4c78d56
+untested:T	docs/development/doc-examples.md	d70f47dfff78
+untested:T	docs/development/doc-examples.md	dcdb6dcee152
+untested:T	docs/development/doc-examples.md	dd43a1fbbc67
+untested:T	docs/development/doc-examples.md	f693320cc309
+untested:T	docs/development/doc-examples.md	f6cd58b88404
+untested:T	docs/development/doc-examples.md	f8b8af8f3226
+untested:T	docs/development/guidelines.md	8086a547dc58
+untested:T	docs/development/guidelines.md	87e5d55f801d
+untested:T	docs/development/guidelines.md	cffb3835b65e
+untested:T	docs/development/guidelines.md	e9da2fd99d84
+untested:T	docs/development/guidelines.md	fe813ecbd817
+untested:T	docs/development/testing-guide.md	153c706b691d
+untested:T	docs/development/testing-guide.md	312552174023
+untested:T	docs/development/testing-guide.md	9424a7c0ca8d
+untested:T	docs/development/testing-guide.md	c02c9dc983c6
+untested:T	docs/development/testing-guide.md	e004462efc33
+untested:T	docs/development/workflow-explanation.md	127f90ded8e6
+untested:T	docs/development/workflow-explanation.md	684c1787b113
 untested:T	docs/guides/experiment-wizard.md	2421617fdc23
 untested:T	docs/guides/experiment-wizard.md	6a744edcbe42
 untested:T	docs/guides/experiment-wizard.md	9df7f61b307e
