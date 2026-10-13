@@ -621,8 +621,11 @@ MECHANISMS: Dict[str, Mechanism] = {
             ("docs/sdk/*.md", _TARBALL),
             ("docs/sdk-guide.md", _TARBALL),
             ("docs/sdk/python.md", r"(?<![\w@/-])experimently " + _VERSION),
-            ("docs/sdk/*.md", _BETA),
-            ("sdk/*/README.md", _BETA),
+            # The sentence before it names the package: the test reads the two.
+            ("docs/sdk/python.md", _BETA),
+            ("docs/sdk/javascript.md", _BETA),
+            ("sdk/python/README.md", _BETA),
+            ("sdk/js/README.md", _BETA),
             (
                 "docs/sdk-guide.md",
                 r" package is on (?:PyPI|npm) " + _VERSION + r", beta\):$",
