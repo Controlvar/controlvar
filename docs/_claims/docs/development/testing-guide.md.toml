@@ -1,0 +1,122 @@
+# What verifies each unit of docs/development/testing-guide.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/development/testing-guide.md"
+
+[[unit]]
+text = "Testing Guide"
+by = ["exempt:label"]
+
+[[unit]]
+text = "How to run the test suites, and the rules a new test follows."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The make targets are under \"Tests\" in CONTRIBUTING.md, and the conventions behind these rules are in CLAUDE.md."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Running the backend tests"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Run them from the repository root."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Activate the virtual environment first, every time, then set the test environment:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "To run one file, name it:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "\"Tests\" in CONTRIBUTING.md says which suites need PostgreSQL, and where they look for it."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The backend suites are directories under backend/tests/, such as unit, integration and smoke."
+by = ["untested:T"]
+
+[[unit]]
+text = "The pull-request checks choose tests by directory, not by marker, so a test with no marker still runs."
+by = ["untested:T"]
+
+[[unit]]
+text = "Run the dashboard's tests from frontend/:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Markers"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Markers are declared in markers under [tool.pytest.ini_options] in pyproject.toml."
+by = ["untested:T"]
+
+[[unit]]
+text = "Declare a new one there before you use it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "@pytest.mark.regression: every bug fix carries a test with this marker that fails on the old code."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The regression-guard check fails a pull request labelled bug that changes no test file."
+by = ["test:backend/tests/unit/scripts/test_regression_guard_workflow.py::test_a_bug_pr_behind_main_without_a_test_still_fails"]
+
+[[unit]]
+text = "Run them with pytest -m regression."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "@pytest.mark.modules: for a test that needs the modules package."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "In a core build, which has no modules/, such a test is skipped."
+by = ["untested:T"]
+
+[[unit]]
+text = "Tests and AWS"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The repository root's conftest.py loads backend/tests/no_real_aws.py."
+by = ["test:backend/tests/unit/test_no_real_aws.py::test_every_ci_conftest_root_loads_the_fixture"]
+
+[[unit]]
+text = "The AWS access keys a test sees are dummies, and the aws first on PATH is a fake that fails."
+by = [
+    "test:backend/tests/unit/test_no_real_aws.py::test_the_credential_chain_holds_only_dummies",
+    "test:backend/tests/unit/test_no_real_aws.py::test_aws_cli_runs_the_blocking_fake",
+]
+
+[[unit]]
+text = "A test that needs the AWS CLI puts its own fake aws first on PATH, and that one runs."
+by = ["test:backend/tests/unit/test_no_real_aws.py::test_a_test_that_prepends_its_own_fake_aws_wins"]
+
+[[unit]]
+text = "Writing a backend test"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Import application code rooted at backend.app, as in from backend.app.models.user import User; the Development Guidelines say why."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Test a permission with a user who is not a superuser, one of each role."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A superuser passes every permission check."
+by = [
+    "test:backend/tests/unit/core/test_permissions.py::TestCheckPermission::test_superuser_permission",
+    "test:backend/tests/unit/core/test_feature_flag_access_rule.py::test_a_superuser_may_always_act",
+]
+
+[[unit]]
+text = "Route Dependencies says which dependencies are async, and so which ones a test awaits."
+by = ["exempt:navigation"]

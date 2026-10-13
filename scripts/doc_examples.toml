@@ -12,7 +12,7 @@
 # scripts/doc_examples.py), and each page's residual counts can only fall.
 
 [meta]
-documents = 50
+documents = 53
 exec = 305
 universe = [
     ".github/pull_request_template.md",
@@ -178,6 +178,20 @@ expects = 11
 
 [[document]]
 path = "docs/development/doc-examples.md"
+environment = "bare"
+exec = 0
+skip = 3
+expects = 0
+
+[[document]]
+path = "docs/development/guidelines.md"
+environment = "bare"
+exec = 0
+skip = 1
+expects = 0
+
+[[document]]
+path = "docs/development/testing-guide.md"
 environment = "bare"
 exec = 0
 skip = 3
@@ -416,6 +430,13 @@ exec = 0
 skip = 6
 expects = 0
 
+[[document]]
+path = "docs/auth/cognito-auth-testing.md"
+environment = "bare"
+exec = 0
+skip = 1
+expects = 0
+
 # Its sign-in is walked by the sso-sign-in docs journey (tests/acceptance/docs/),
 # on the compose stack its override file starts; its blocks need a tenant.
 [[document]]
@@ -443,16 +464,12 @@ reason = "starts the production stack on a Docker host: the compose-production w
 "backend/lambda/event_processor/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
 "docs/api/split-url.md" = { comments = 0, unlabelled = 3, syntax = 0 }
 "docs/architecture/models.md" = { comments = 0, unlabelled = 1, syntax = 1 }
-"docs/auth/cognito-auth-testing.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/deployment/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/deployment/deployment-guide.md" = { comments = 0, unlabelled = 1, syntax = 2 }
 "docs/deployment/disaster-recovery.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/deployment/iam-permissions.md" = { comments = 0, unlabelled = 1, syntax = 1 }
 "docs/deployment/rollback-runbook.md" = { comments = 0, unlabelled = 1, syntax = 0 }
 "docs/deployment/secrets-management.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"docs/development/guidelines.md" = { comments = 0, unlabelled = 2, syntax = 0 }
-"docs/development/testing-guide.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"docs/development/workflow-explanation.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/getting-started/pre-commit-hooks.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/getting-started/python-virtual-env-setup.md" = { comments = 0, unlabelled = 1, syntax = 0 }
 "docs/getting-started/vscode-settings.md" = { comments = 0, unlabelled = 0, syntax = 0 }

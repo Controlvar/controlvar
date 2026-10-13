@@ -1,0 +1,173 @@
+# What verifies each unit of docs/auth/cognito-auth-testing.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/auth/cognito-auth-testing.md"
+
+[[unit]]
+text = "Testing the Cognito Sign-in Flows"
+by = ["exempt:label"]
+
+[[unit]]
+text = "How to exercise the API's Cognito endpoints against your own user pool, and what each one answers."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Cognito only"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The password-reset and token-refresh endpoints (POST /api/v1/auth/forgot-password, /reset-password and /refresh) are available only when AUTH_PROVIDER=cognito."
+by = [
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_local_provider_answers_fixed_404",
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_any_other_provider_answers_fixed_404",
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_exactly_the_five_routes_carry_the_gate",
+]
+
+[[unit]]
+text = "The sign-up and confirmation endpoints (POST /api/v1/auth/signup and /confirm) also need COGNITO_SELF_SIGNUP_ENABLED=true; without it they answer 404 and an administrator creates users (Adding a user)."
+by = [
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_cognito_provider_with_self_signup_off_answers_404",
+    "test:backend/tests/integration/auth/test_self_signup_gate.py::test_signup_refused_by_default_makes_no_cognito_call",
+    "test:backend/tests/integration/auth/test_self_signup_gate.py::test_confirm_refused_by_default_makes_no_cognito_call",
+]
+
+[[unit]]
+text = "With any other provider, including the default local, all five answer 404."
+by = [
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_local_provider_answers_fixed_404",
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_any_other_provider_answers_fixed_404",
+]
+
+[[unit]]
+text = "With local, sign in with POST /api/v1/auth/login; an administrator creates accounts and resets passwords."
+by = [
+    "test:backend/tests/integration/api/test_local_auth_path.py::TestLoginFlow::test_full_flow",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_superuser_resets_another_account",
+]
+
+[[unit]]
+text = "The dashboard does not yet sign in with Cognito."
+by = ["test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_404_under_cognito_provider"]
+
+[[unit]]
+text = "Sign in through the API with POST /api/v1/auth/token."
+by = ["test:backend/tests/integration/auth/test_token.py::TestTokenSuccess::test_login_returns_access_token"]
+
+[[unit]]
+text = "SSO sign-in needs AUTH_PROVIDER=local."
+by = ["test:backend/tests/unit/api/test_local_auth.py::TestGetCurrentUserLocal::test_cognito_provider_still_uses_cognito"]
+
+[[unit]]
+text = "Before you start"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Start the API with AUTH_PROVIDER=cognito, and with COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID and AWS_REGION set to your user pool's."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The endpoints"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Each is a POST under /api/v1/auth/, and none needs a token."
+by = [
+    "test:backend/tests/integration/auth/test_signup.py::TestSignupSuccess::test_signup_no_auth_required",
+    "test:backend/tests/integration/auth/test_confirm.py::TestConfirmSuccess::test_confirm_no_auth_required",
+    "test:backend/tests/integration/auth/test_token.py::TestTokenSuccess::test_login_no_auth_required",
+    "test:backend/tests/integration/auth/test_password_reset.py::TestForgotPassword::test_forgot_password_no_auth_required",
+    "test:backend/tests/integration/auth/test_password_reset.py::TestConfirmForgotPassword::test_no_auth_required",
+    "test:backend/tests/integration/auth/test_refresh.py::TestRefreshSuccess::test_refresh_no_auth_required",
+]
+
+[[unit]]
+text = "/token takes a form (application/x-www-form-urlencoded); the others take JSON."
+by = [
+    "test:backend/tests/integration/auth/test_token.py::TestTokenSuccess::test_login_accepts_form_data",
+    "test:backend/tests/integration/auth/test_signup.py::TestSignupSuccess::test_signup_returns_201",
+]
+
+[[unit]]
+text = "Endpoint | Body | Answers"
+by = ["exempt:label"]
+
+[[unit]]
+text = "/signup | username, password, email, given_name, family_name | 201, with user_id, confirmed (false) and message"
+by = [
+    "test:backend/tests/integration/auth/test_signup.py::TestSignupSuccess::test_signup_returns_201",
+    "test:backend/tests/integration/auth/test_signup.py::TestSignupSuccess::test_signup_response_has_user_id",
+    "test:backend/tests/integration/auth/test_signup.py::TestSignupSuccess::test_signup_confirmed_is_false",
+    "test:backend/tests/integration/auth/test_signup.py::TestSignupSuccess::test_signup_response_has_message",
+    "test:backend/tests/integration/auth/test_signup.py::TestSignupValidation::test_missing_given_name_returns_422",
+    "test:backend/tests/integration/auth/test_signup.py::TestSignupValidation::test_missing_family_name_returns_422",
+]
+
+[[unit]]
+text = "/confirm | username, confirmation_code | 200, with message and confirmed (true)"
+by = [
+    "test:backend/tests/integration/auth/test_confirm.py::TestConfirmSuccess::test_confirm_returns_200_on_success",
+    "test:backend/tests/integration/auth/test_confirm.py::TestConfirmSuccess::test_confirm_response_has_confirmed_field",
+    "test:backend/tests/integration/auth/test_confirm.py::TestConfirmSuccess::test_confirm_response_has_message",
+]
+
+[[unit]]
+text = "/token | username, password | 200, with access_token, id_token, refresh_token, expires_in and token_type"
+by = [
+    "test:backend/tests/integration/auth/test_token.py::TestTokenSuccess::test_login_returns_200",
+    "test:backend/tests/integration/auth/test_token.py::TestTokenSuccess::test_login_returns_access_token",
+    "test:backend/tests/integration/auth/test_token.py::TestTokenSuccess::test_login_returns_id_token",
+    "test:backend/tests/integration/auth/test_token.py::TestTokenSuccess::test_login_returns_refresh_token",
+    "test:backend/tests/integration/auth/test_token.py::TestTokenSuccess::test_login_returns_expires_in",
+    "test:backend/tests/integration/auth/test_token.py::TestTokenSuccess::test_login_returns_token_type",
+]
+
+[[unit]]
+text = "/forgot-password | username | 200, with message"
+by = [
+    "test:backend/tests/integration/auth/test_password_reset.py::TestForgotPassword::test_forgot_password_returns_200",
+    "test:backend/tests/integration/auth/test_password_reset.py::TestForgotPassword::test_forgot_password_response_has_message",
+]
+
+[[unit]]
+text = "/reset-password | username, confirmation_code, new_password | 200, with message"
+by = [
+    "test:backend/tests/integration/auth/test_password_reset.py::TestConfirmForgotPassword::test_confirm_reset_returns_200",
+    "test:backend/tests/integration/auth/test_password_reset.py::TestConfirmForgotPassword::test_confirm_reset_response_has_message",
+    "test:backend/tests/integration/auth/test_password_reset.py::TestConfirmForgotPassword::test_missing_new_password_returns_422",
+]
+
+[[unit]]
+text = "/refresh | refresh_token | 200, with access_token, id_token, expires_in and token_type"
+by = [
+    "test:backend/tests/integration/auth/test_refresh.py::TestRefreshSuccess::test_refresh_returns_200",
+    "test:backend/tests/integration/auth/test_refresh.py::TestRefreshSuccess::test_refresh_returns_new_access_token",
+    "test:backend/tests/integration/auth/test_refresh.py::TestRefreshSuccess::test_refresh_returns_id_token",
+    "test:backend/tests/integration/auth/test_refresh.py::TestRefreshSuccess::test_refresh_returns_expires_in",
+    "test:backend/tests/integration/auth/test_refresh.py::TestRefreshSuccess::test_refresh_returns_token_type",
+]
+
+[[unit]]
+text = "A request Cognito refuses answers 400, or 401 at /token and /refresh."
+by = [
+    "test:backend/tests/integration/auth/test_signup.py::TestSignupErrors::test_duplicate_username_returns_400",
+    "test:backend/tests/integration/auth/test_confirm.py::TestConfirmErrors::test_wrong_code_returns_400",
+    "test:backend/tests/integration/auth/test_password_reset.py::TestForgotPassword::test_nonexistent_user_returns_400",
+    "test:backend/tests/integration/auth/test_password_reset.py::TestConfirmForgotPassword::test_wrong_code_returns_400",
+    "test:backend/tests/integration/auth/test_token.py::TestTokenErrors::test_wrong_password_returns_401",
+    "test:backend/tests/integration/auth/test_refresh.py::TestRefreshErrors::test_invalid_refresh_token_returns_401",
+]
+
+[[unit]]
+text = "A body with a field missing answers 422."
+by = [
+    "test:backend/tests/integration/auth/test_signup.py::TestSignupValidation::test_missing_username_returns_422",
+    "test:backend/tests/integration/auth/test_confirm.py::TestConfirmErrors::test_missing_confirmation_code_returns_422",
+    "test:backend/tests/integration/auth/test_token.py::TestTokenErrors::test_missing_password_returns_422",
+    "test:backend/tests/integration/auth/test_password_reset.py::TestForgotPassword::test_forgot_password_missing_username_returns_422",
+    "test:backend/tests/integration/auth/test_password_reset.py::TestConfirmForgotPassword::test_missing_username_returns_422",
+    "test:backend/tests/integration/auth/test_refresh.py::TestRefreshErrors::test_missing_refresh_token_returns_422",
+]
+
+[[unit]]
+text = "To sign in, with the user's name and password in COGNITO_USERNAME and COGNITO_PASSWORD:"
+by = ["exempt:instruction"]

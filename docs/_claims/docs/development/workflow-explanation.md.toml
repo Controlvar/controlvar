@@ -1,0 +1,66 @@
+# What verifies each unit of docs/development/workflow-explanation.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/development/workflow-explanation.md"
+
+[[unit]]
+text = "CI workflows"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The checks a pull request has to pass to merge, and how to run them yourself."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The workflows are in .github/workflows/."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Required checks"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The checks main requires are REQUIRED_CHECKS in scripts/configure-repo.sh, the script that writes them to branch protection."
+by = [
+    "test:backend/tests/unit/infrastructure/test_required_check_producers.py::test_required_checks_are_read",
+    "test:backend/tests/unit/infrastructure/test_configure_repo_guard.py::test_check_on_the_recorded_live_response",
+]
+
+[[unit]]
+text = "Branch protection matches a required check by its status name, which is the job's name:, not its id."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "So change a required job's name: and that list in the same pull request."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "scripts/check_required_checks.sh prints each difference between what configure-repo.sh would write and the live branch protection."
+by = [
+    "test:backend/tests/unit/infrastructure/test_configure_repo_guard.py::test_check_reports_each_kind_of_drift",
+    "test:backend/tests/unit/infrastructure/test_configure_repo_guard.py::test_check_reports_no_drift_on_an_exact_match",
+]
+
+[[unit]]
+text = "Run it with your own gh login: the Actions token cannot read branch protection."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Running a check yourself"
+by = ["exempt:label"]
+
+[[unit]]
+text = "lint: see \"Lint and format\" in the Development Guidelines."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "core-build: make core-build, which runs scripts/core_build.sh."
+by = ["untested:T"]
+
+[[unit]]
+text = "It copies the tree, deletes modules/ from the copy, then rebuilds and tests it, and never touches your checkout."
+by = ["untested:T"]
+
+[[unit]]
+text = "The backend and dashboard suites: see the Testing Guide."
+by = ["exempt:navigation"]

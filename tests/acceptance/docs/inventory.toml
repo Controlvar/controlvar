@@ -574,7 +574,7 @@ reason = "how the API wires its dependencies; no steps to follow"
 
 [pages."development/workflow-explanation.md"]
 class = "reference"
-reason = "what each CI workflow does; no steps to follow"
+reason = "the required checks, and how to run two of them; no reader flow"
 
 [pages."development/database/migrations.md"]
 class = "exec"
@@ -582,7 +582,7 @@ reason = "its Alembic commands run in Doc Examples from a development virtual en
 
 [pages."development/database/usage.md"]
 class = "reference"
-reason = "code examples for the data layer; no steps to run"
+reason = "where the data layer's code is; no steps to run"
 
 [pages."development/database/backup.md"]
 class = "aws"

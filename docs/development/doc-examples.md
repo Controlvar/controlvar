@@ -1,61 +1,33 @@
 # Runnable Documentation Examples
 
-The shell examples on an enrolled page are run in CI exactly as they're written, in one
-shell session per page, against a real stack. `scripts/doc_examples.py` does it on every
-pull request (the `doc-examples` workflow). A page fails when:
-
-- a command fails;
-- an example stops printing what the page says it prints;
-- a shell block is left untagged, or tagged in a form the site would break;
-- a block contains something a reader can't paste as written;
-- the counts of blocks and expectations stop matching the enrolment file;
-- a tagged block renders as a paragraph instead of code.
+The shell examples on an enrolled page run in CI as they are written, in one bash
+session per page. `scripts/doc_examples.py` is the check, and the `doc-examples`
+workflow runs it on every pull request. A page fails when a command fails, when an
+example stops printing what the page says it prints, or when a block breaks one of
+the rules below.
 
 ---
 
 ## Which pages are checked
 
 Every Markdown page in the repository, except `CLAUDE.md` files and anything under
-`.claude/`. The check walks the tree for them (skipping `node_modules`, `venv`, `site`
-and hidden directories other than `.github`), and the list it finds must equal
-`[meta] universe` in `scripts/doc_examples.toml` exactly. A new page, or a renamed one,
-fails the check until the list says so.
+`.claude/`. The check walks the tree for them, skipping `node_modules`, `venv`,
+`site` and hidden directories other than `.github`, and the list it finds must
+equal `[meta] universe` in `scripts/doc_examples.toml`. A new page, or a renamed
+one, fails the check until that list names it.
 
 On every one of those pages:
 
-- every code fence names a language (use `text` for output, a directory tree or
+- every code fence names a language (`text` for output, a directory tree or
   anything else that is not code);
-- a shell fence is `bash`; `sh`, `shell`, `console`, `zsh`, `sh-session`,
-  `shell-session`, `fish`, `powershell`, `ps1` and the like are refused, because
-  nothing would check what they contain;
-- a page with a `bash` block is exactly one of **enrolled**, **exempt** or **pending**.
+- a shell fence is `bash`: `sh`, `shell`, `console`, `zsh`, `powershell` and the
+  other shells the check knows are refused;
+- a page with a `bash` block is exactly one of **enrolled**, **exempt** or
+  **pending**.
 
-Pending is the rollout, and it only shrinks: the list of pending pages was frozen in
-`scripts/doc_examples.py` when the walk landed, so a page can leave it but not join
-it. Each pending page records what is left to fix on it (its shell comment lines,
-unlabelled fences and blocks that fail `bash -n`), exactly, and each number can only
-fall.
-
----
-
-## Is my page enrolled?
-
-Enrolled pages are listed in `scripts/doc_examples.toml`. Each entry names the page, the
-environment it will run in, and its exact counts of `exec` blocks, `skip` blocks and
-expectations:
-
-```toml
-[[document]]
-path = "docs/getting-started/quick-start.md"
-environment = "bare"
-exec = 11
-skip = 3
-expects = 11
-```
-
-If your edit changes a count, update the entry in the same pull request. The check prints
-the counts it finds, and fails naming both numbers if they differ. Never change a number
-just to make the check pass: find out why it moved.
+The pending pages are the ones not yet enrolled. That list can only shrink, and a
+pending page's fences that name no language, its shell comment lines and its
+`bash -n` failures can only fall.
 
 ---
 
@@ -71,9 +43,8 @@ curl -s localhost:8000/health/ready | jq .status
 ```
 ````
 
-**Don't run it, and say why.** The reason is required, and it starts with a category
-(see [Pages that cannot run here](#pages-that-cannot-run-here)). It's visible to anyone
-reading the page source, so write it for them:
+**Don't run it, and say why.** The reason is required, and it starts with a
+category (see [Pages that cannot run here](#pages-that-cannot-run-here)):
 
 ````markdown
 ```{.bash skip reason="server: starts a long-running development server"}
@@ -81,34 +52,20 @@ cd frontend && npm ci && npm run dev
 ```
 ````
 
-`exec` takes an optional `timeout=<seconds>` (1–3600, default 120), as in
-`{.bash exec timeout=1200}`.
+`exec` takes an optional `timeout=<seconds>`, from 1 to 3600 (120 when it is not
+given), as in `{.bash exec timeout=1200}`.
 
-**Refused**, with the file and line:
-
-| Written as | Why |
-|---|---|
-| `` ```bash `` | untagged |
-| `` ```bash exec `` | without braces the site renders the block as a paragraph of text |
-| `` ```{bash exec} `` | no dot: the site shows it unhighlighted |
-| `` ```{.bash exec} trailing `` | text after `}` breaks the block on the site |
-| `` ```{.bash exec skip} `` | both tags, or neither |
-| `` ```{.bash skip} `` | `skip` without a `reason` |
-| `` ```{.bash exec title="x"} `` | any other attribute (none are allowed yet) |
-| `` ```{.bash skip reason="needs AWS"} `` | the reason names no category |
-| `` ```zsh `` | a shell the runner doesn't know (on every page, enrolled or not) |
-| ` ``` ` with no language | on every page; use `text` for output |
-| a block indented four spaces | on every page: it renders as code but names no language; fence it |
-| a line starting with `#` after the page's title | on every page: the site renders it as a title-sized heading. Usually a shell block whose opening fence is missing, so its `# Step` comments show as titles; or a wrapped sentence whose next line starts with `#217`. Restore the fence or rewrap; make a real heading `##` |
-
-Blocks in other languages (`json`, `python`, `javascript`, …) aren't run and need no tag.
+Any other form of a shell fence on an enrolled page is refused, with the file and
+line. Blocks in other languages (`json`, `python`, `javascript`, …) aren't run and
+need no tag.
 
 ---
 
 ## Saying what the reader should see
 
-Put one `expect` line per value directly under the block, with no blank line between,
-and also say the value in the prose, because the reader never sees the `expect` line:
+Put one `expect` line per value directly under the block, with no blank line
+between, and also say the value in the prose, because the reader never sees the
+`expect` line:
 
 ````markdown
 ```{.bash exec}
@@ -119,55 +76,45 @@ curl -s localhost:8000/health/ready | jq .status
 It prints `"healthy"`.
 ````
 
-`TEXT` has to appear in what the block prints (stdout), in the order the lines are
-given, and a match can't start or end inside a word: `"active"` doesn't match
-`"inactive"`, and `1` doesn't match `10`. A block that prints something needs at least
-one `expect` line. The one exception is the Quick Start's `docker compose up -d --wait`:
-when it has to build the images it prints the build log, and when they exist it prints
-nothing, so it's checked by its exit status (`--wait` fails unless every service is
-healthy) and by the next block's expectations.
+The text of an `expect` line has to appear in what the block prints to stdout, in
+the order the lines are given, and a match can't start or end inside a word:
+`active` doesn't match `inactive`, and `1` doesn't match `10`. A block that prints
+something needs at least one `expect` line, except the two blocks that start a
+stack, `docker compose up -d --wait` and
+`EXPERIMENTLY_PROFILE=full docker compose up -d --wait`.
 
-Choose a value that would be **different if the step had failed**. `curl -s` exits 0 on
-a `404` or a `422`, so an example that doesn't check its output passes when it's broken.
-
-`expect` lines don't show on the site or on GitHub.
+Choose a value that would be **different if the step had failed**. `curl -s` exits
+0 on a `404` or a `422`, so an example that doesn't check its output passes when
+it's broken.
 
 ---
 
 ## Writing a block that runs as written
 
-- **No placeholders.** A reader can't run `your-api-key` or `flag-uuid-here`. Capture the
-  value in an earlier block (`KEY=$(curl … | jq -r .key)`), or mark the block `skip`.
-- **The page's blocks share one shell, top to bottom.** A variable set in one block is
-  there in the next. Nothing from your own environment is: each page runs with only
-  `PATH`, `HOME`, `USER`, `TMPDIR` and Docker's own settings.
+- **No placeholders.** A reader can't run `your-api-key` or `flag-uuid-here`.
+  Capture the value in an earlier block (`KEY=$(curl … | jq -r .key)`), or mark
+  the block `skip`.
+- **The page's blocks share one shell, top to bottom.** A variable set in one
+  block is there in the next. Nothing from your own environment is: each page runs
+  with only `PATH`, `HOME`, `USER`, `TMPDIR` and Docker's own settings.
 - **No `#` comments in a shell block**, `skip` blocks included (see
   [Rewriting a comment](#rewriting-a-comment)).
-- **Trailing slashes are real.** `POST /api/v1/rollout-schedules/` needs the slash; without
-  it the API answers `307`, `curl` doesn't follow it, and nothing is printed. (The
-  feature-flag collection answers either form; a single flag's URL takes no slash.)
-- **Refused because they hide a failure:** `export X=$(command)` (and `declare`, `local`,
-  `readonly`), which reports success even when the command fails — assign first, then
-  export; and a last line ending in `\`, which would swallow what follows.
-- **Shapes that fail when the page is right**, under `set -euo pipefail`:
-  `yes | head -1` and `… | grep -q x` (exit 141 when the pipe closes early).
-- **Shapes that pass when the page is wrong:** a failure in the middle of `a && b`.
-  An `expect` line catches it.
-- **Nothing is installed, and no cloud account is reached.** A block that runs may not
-  call a package manager (`pip`, `pipx`, `poetry`, `uv`, `npm`, `npx`, `yarn`, `pnpm`,
-  `bun`, `gem`, `composer`, `go get|install|run`, `cargo install`, `mvn`, `gradle`,
-  `swift package|build`, `dotnet add|restore|build`): most of our package names aren't
-  published yet, so a run would fetch whatever else holds the name. Nor may it call
-  `aws`, `cdk` or `sam`. Writing `\aws`, `"aws"` or `/usr/local/bin/aws` is the same
-  command. Text inside a here-document is checked like any other line, even one
-  written to a file by `cat`, because a here-document is too easily executed
-  (`bash <<EOF`, `. <(cat <<EOF`, `(cat <<EOF) | bash`). Tag such a block `skip`
-  with the `registry` or `aws` category, or write the file another way.
-
-Every block, `exec` or `skip`, must also pass `bash -n` (with bash 4.4 or later, the one
-that runs the examples; macOS's `/bin/bash` is 3.2 and is refused). A `skip` block whose
-reason is `fragment: …` is not syntax-checked, since it is a template to fill in; if it
-isn't shell at all, label it `text` instead.
+- **Every block passes `bash -n`**, with bash 4.4 or later, the one that runs the
+  examples; macOS's `/bin/bash` is 3.2 and is refused. A `skip` block whose reason
+  is `fragment: …` is not syntax-checked, since it is a template to fill in.
+- **A block that runs may not:**
+    - end its last line in `\`, which would swallow what follows;
+    - write `export X=$(command)` (or `declare`, `local`, `readonly`), which reports
+      success even when the command fails: assign first, then export;
+    - run a package manager (`pip`, `npm`, `yarn`, `go get`, `cargo install` and the
+      others the check lists), or `aws`, `cdk` or `sam`, however the command is
+      written and even inside a here-document. Tag such a block `skip` with the
+      `registry` or `aws` category;
+    - mention `COMPOSE_PROJECT_NAME` or unset a `COMPOSE_` setting, pass `-p` or
+      `--project-name` to `docker compose`, run `env -u` or `env -i`, or remove
+      Docker resources directly (`docker rm`, `docker volume rm`, `… prune`). A
+      plain `docker compose down -v` is allowed: each page runs under a compose
+      project of its own.
 
 ---
 
@@ -181,9 +128,9 @@ of the source will see:
 | `checkout` | clones or enters the repository (the runner is already inside one) |
 | `dev` | is a contributor's command in a development checkout (venv, make, pytest, this repository's own tooling) |
 | `server` | starts a long-running process |
-| `aws` | needs an AWS account or credentials |
+| `aws` | needs an AWS account |
 | `idp` | needs an identity-provider tenant (Cognito, SAML, OIDC) |
-| `secret` | needs a credential or third-party account the reader holds |
+| `secret` | needs a key, a password or a third-party account the reader holds |
 | `registry` | installs a package from a public registry; it must name the package manager |
 | `toolchain` | needs a language toolchain the runner doesn't use (Go, .NET, JVM, Swift, …) |
 | `destructive` | changes state a reader must choose to change (restore, rollback, delete) |
@@ -200,9 +147,9 @@ The check prints how many skipped blocks each category holds.
 
 macOS's default `zsh` doesn't treat `#` as a comment when you paste, so
 `jq .status   # "healthy"` fails with `Could not open file #`, and a whole-line
-`# step 2` fails with `command not found: #`. Worse, `ENV=prod   # or staging` fails
-silently and leaves `ENV` at whatever it was before. Say it in the sentence before or
-after the block instead:
+`# step 2` fails with `command not found: #`. `ENV=prod   # or staging` fails the
+same way, and leaves `ENV` at whatever it was before. Say it in the sentence before
+or after the block instead:
 
 ````markdown
 Set the environment you are rolling back (`prod` or `staging`):
@@ -223,69 +170,9 @@ inside a here-document is not a comment and is fine.
 |---|---|
 | `bare` | Docker is available and nothing is running. The page starts its own stack. |
 | `stack` | The Quick Start's `docker compose up -d --wait` has already run. |
-| `stack-dev` | As `stack`, and the repository root has a development virtual environment, `venv/`, with `backend/requirements.txt` installed, for a contributor's page (`source venv/bin/activate`). CI builds it; a page whose venv cannot `import alembic, locust, backend.app.core.config` fails before its stack starts. |
+| `stack-dev` | As `stack`, and the repository root has a development virtual environment, `venv/`, with `backend/requirements.txt` installed, for a contributor's page (`source venv/bin/activate`). A page whose venv cannot `import alembic, locust, backend.app.core.config` fails before its stack starts. |
 | `stack-full` | The full profile's `EXPERIMENTLY_PROFILE=full docker compose up -d --wait` has already run, and `GET /api/v1/modules` said `"profile": "full"`. For a page about a module. |
 | `local` | Reserved for the demo applications, and refused as not implemented yet. |
-
-A `stack` or `stack-dev` page is coupled to the Quick Start by assertion: the Quick
-Start must be enrolled as `bare` and contain exactly one block that runs
-`docker compose up -d --wait`, or the check fails. A `stack-full` page is coupled the
-same way to [Modules and profiles](../getting-started/modules.md), which must be enrolled
-as `stack-full` and contain exactly one block that runs
-`EXPERIMENTLY_PROFILE=full docker compose up -d --wait`. If the full stack starts but
-`GET /api/v1/modules` doesn't say `"profile": "full"`, the page fails with "the full
-profile did not load" rather than running its blocks against a core API, where every
-module route answers `404`. A `stack-full` page can't run in a tree without `modules/`.
-
-### How a run will stay away from your own stack
-
-Each page runs under its own compose project (`COMPOSE_PROJECT_NAME=docex-…`), so both the runner's clean-up and a page's own
-`docker compose down -v` can reach only that project's containers and volumes, never
-the `experimently` project a developer runs. That only holds while a page cannot reach
-past its project, so the check refuses a block that:
-
-- mentions `COMPOSE_PROJECT_NAME`, or unsets a `COMPOSE_` setting;
-- passes `-p` or `--project-name` to `docker compose`;
-- runs `env -u` or `env -i`;
-- removes Docker resources directly (`docker rm`, `docker volume rm`, `… prune`).
-
-A plain `docker compose down -v` is allowed: under the page's own project it removes only
-what the run created. After each page the runner removes the project and fails if any of
-its containers, volumes or networks remain, and waits (up to 75 s) for the ports the
-stack published to be free again: a connection the API closed first keeps its port in
-TIME_WAIT for 60 s on Linux after every container is gone. A port still held after the
-wait fails the page, naming what holds it. Before a page it refuses, touching nothing,
-if a port the stack publishes is in use (naming what holds it) or a previous run left
-`docex-` resources behind.
-It also compares `docker volume ls` before and after the run and fails if any volume that
-existed before is gone. That is a detection, not a
-prevention: it reports a loss, it can't undo one. Running pages locally also rebuilds and
-retags the local `experimently-api:core` and `experimently-web:core` images from your
-working tree, so your next `docker compose up` recreates its containers from them.
-
-### How CI runs the pages
-
-CI splits the pages that run into **shards**, each a job of its own, and a **summary**
-job checks them all:
-
-- The runner decides the shards, from `scripts/doc_examples.toml`
-  (`python scripts/doc_examples.py --plan` prints them). Pages are grouped by what
-  their stack needs: `core` for `bare` and `stack` pages, `full` for `stack-full`
-  pages, and `dev` for `stack-dev` pages, whose shard builds the virtual environment
-  once before its pages run. Each
-  group is dealt across as many shards as keep each one to a few pages, since each page
-  starts a stack of its own and takes about a minute. Enrolling a page never means
-  editing the workflow.
-- Each shard prints every page's result with how long it took, then the number of
-  `exec` blocks that actually reached their end. That number is counted as the blocks
-  run, never copied from the enrolment file.
-- A shard stops itself two minutes before the job's time limit. It stops the block that
-  was running, names the page and line, removes the page's stack, and reports the pages
-  it never started.
-- The summary fails unless every page that runs ran in exactly one shard, every one of
-  its `exec` blocks reached its end, and the total equals `[meta] exec`. A shard that
-  never ran fails it, and so does a page that no shard ran. It also warns when a
-  `bug #N` skip names an issue that's no longer open.
 
 ---
 
@@ -296,8 +183,7 @@ python scripts/doc_examples.py --check
 ```
 
 To run the examples, stop anything that holds the stack's ports first (your own
-`docker compose stop` is enough; your volumes are left alone). `--env` moves a port if
-something else holds it, and `--only` runs one page:
+`docker compose stop` is enough). `--only` runs one page:
 
 ```{.bash skip reason="dev: runs the documentation's examples"}
 python scripts/doc_examples.py --run --only docs/feature-flags/create.md
@@ -310,23 +196,15 @@ bash scripts/docs_toolchain.sh && mkdocs build && python scripts/doc_examples.py
 ```
 
 The render check covers every page under `docs/`, enrolled or not: a fence the site
-doesn't show as code, such as one inside an HTML comment, fails it on any page.
-Pages outside `docs/` aren't part of the site, so nothing renders them.
-
-CI's render job also runs two checks that `--check` can't, because `--check` has to
-work in a copy of the tree with no `.git` and no zsh. `--walk-vs-git` fails if the pages
-the check walks differ from the Markdown files git tracks (less `CLAUDE.md` files and
-`.claude/`). `--zsh-oracle` fails if zsh's own parser and the comment rule disagree about
-any line of a `bash` block. Both run locally too, given git and zsh.
+doesn't show as code fails it on any page.
 
 ---
 
 ## When the check fails
 
-Every problem is reported in the same run, one line each. Each names the page (and the
-line, where there is one) and says what to change. In CI each line is also an
-annotation on the pull request's diff. For a new page with a `zsh` block, and a comment
-left in an enrolled one:
+Every problem is reported in the same run, one line each, naming the page (and the
+line, where there is one) and what to change. For a new page with a `zsh` block, and
+a comment left in an enrolled one:
 
 ```text
 refused: docs/guides/new-page.md: a page scripts/doc_examples.toml does not know. Add it to [meta] universe (docs/development/doc-examples.md#enrolling-a-page).

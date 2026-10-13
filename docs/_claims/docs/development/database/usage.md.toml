@@ -1,0 +1,44 @@
+# What verifies each unit of docs/development/database/usage.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/development/database/usage.md"
+
+[[unit]]
+text = "Using the Data Layer"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Where the database code is, for a contributor writing code against it."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The API keeps its data in PostgreSQL through SQLAlchemy."
+by = ["untested:T"]
+
+[[unit]]
+text = "The models are in backend/app/models/, and the optional modules' in modules/backend/app/models/."
+by = ["untested:T"]
+
+[[unit]]
+text = "The models' tables are in the schema POSTGRES_SCHEMA names."
+by = ["test:backend/tests/unit/db/test_schema_name.py::test_the_schema_is_resolved_the_same_way_everywhere"]
+
+[[unit]]
+text = "When it is not set, that is test_experimentation with APP_ENV=test or TESTING=true, and experimentation otherwise."
+by = ["test:backend/tests/unit/db/test_schema_name.py::test_the_schema_is_resolved_the_same_way_everywhere"]
+
+[[unit]]
+text = "A route's session comes from a dependency: see Route Dependencies."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Import a model from the module that defines it, rooted at backend.app: from backend.app.models.experiment import Experiment."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A script that runs outside the API calls register_core_models() from backend.app.models before its first query, so that SQLAlchemy can configure the mappers."
+by = ["test:backend/tests/smoke/test_core_model_registry.py::TestCoreModelRegistry::test_mappers_configure_without_the_module_models"]
+
+[[unit]]
+text = "A change to a model needs a migration: see Guide to Using the SQLAlchemy Models and Database Migrations."
+by = ["exempt:navigation"]
