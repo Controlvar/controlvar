@@ -80,7 +80,8 @@ Every `evaluateFlag` / `getAssignment` call resolves in this order:
 2. **Shared store** (`config.store`; Cloudflare KV / Deno KV via the adapters) — one KV read.
 3. **Network** — one request to the backend; the result is written to both caches.
 
-Failures (404 when the flag/experiment is not ACTIVE, network errors, timeouts) are **never cached**:
+Failures (network errors, timeouts, and a 404: an experiment unknown or not ACTIVE, or an unknown
+flag key) are **never cached**:
 `evaluateFlag` resolves to `{ key, enabled: false, config: null }` and `getAssignment` to `null`, and
 the next call retries. Concurrent calls for the same user + key share one in-flight request.
 
@@ -296,7 +297,7 @@ interface Assignment {
 ## Migrating from 0.1
 
 - `evaluateFlag` now resolves to `FlagEvaluation` instead of `boolean` — use `.enabled` or
-  `isFeatureEnabled`. The `attributes` argument was dropped (the evaluate endpoint takes only the user id).
+  `isFeatureEnabled`. The `attributes` argument was dropped: this SDK sends no `context` on the evaluate call, although the endpoint takes one.
 - `getAssignment` now resolves to `Assignment | null` instead of `string | null` — use `.variantName`
   or `getVariant`. It accepts `attributes` (sent as `context`).
 - `bootstrapFlags`, `FeatureFlag`, `TargetingRule`, `FlagVariant`, `Experiment`, `BootstrapResponse`,

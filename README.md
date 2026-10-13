@@ -36,7 +36,8 @@ production deployment we cannot show you:
 - **Statistical engine**: sequential testing (mSPRT), CUPED, Bayesian and multi-armed bandits, each
   with a DB-backed test that drives the public API. CUPED adjusts for each user's own events
   before assignment ([CUPED](docs/api/cuped.md))
-- **5,400+ backend tests, 640+ dashboard tests**, and 13 of the 16 SDKs run against a live backend in
+- **The backend and dashboard test suites** run in `pr-qa-gate.yml` on every pull request that
+  changes code, and 13 of the 16 SDKs run against a live backend in
   CI (the `SDK Live Contract` job of `pr-qa-gate.yml`); Flutter, Elixir
   and iOS are covered by their unit tests, nightly and whenever they change
 
@@ -63,9 +64,9 @@ Built using modern, scalable architecture leveraging AWS services:
 
 - **Frontend**: Next.js React application with TypeScript
 - **Backend**: FastAPI Python services (ECS/Fargate, auto-scaling)
-- **Real-time**: AWS Lambda for low-latency operations
+- **Request path**: the API serves assignment, flag evaluation and event tracking; no Lambda function is on it
 - **Data**: Aurora PostgreSQL Multi-AZ, ElastiCache Redis, DynamoDB
-- **Analytics**: Kinesis → Lambda → OpenSearch pipeline
+- **Analytics**: events are stored in PostgreSQL and the API computes results from them
 - **Infrastructure**: AWS CDK for infrastructure as code
 
 **Technology Stack**: Python 3.11+, FastAPI, SQLAlchemy, Pydantic v2, Next.js, React, TypeScript, PostgreSQL, Redis
@@ -198,10 +199,9 @@ Refer to the documentation for:
 - **ElastiCache Redis**: Session and evaluation caching
 - **Data Retention**: Configurable policies (90 days to 7 years)
 
-### Real-time Processing
+### Lambda, Kinesis and OpenSearch
 - **Lambda code**: event processing and flag evaluation under `backend/lambda/`, not deployed by any stack (assignment and evaluation run in the API)
-- **Kinesis Streams**: Event ingestion into OpenSearch
-- **OpenSearch**: Real-time analytics queries
+- **Kinesis and OpenSearch**: created by the full profile's analytics stack; the API writes nothing to the stream and nothing writes to the domain
 
 ---
 

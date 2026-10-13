@@ -10,6 +10,34 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.31.0](https://github.com/getexperimently/experimently/compare/v0.30.0...v0.31.0) (2026-10-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** POST /api/v1/segments/{segment_id}/evaluate and POST /api/v1/segments/bulk-evaluate answer 422 for a user_context nested more than 10 levels deep (objects and arrays both count) or larger than 8,192 bytes as compact UTF-8 JSON, where they used to accept it. A body nested too deeply to parse still answers 400. The limits and the detail are those of the flag evaluation routes; send only the attributes the segment's rules use.
+
+### Bug Fixes
+
+* **api:** segment evaluate and bulk-evaluate refuse a user_context over 8,192 bytes or 10 levels deep ([9f9d512](https://github.com/getexperimently/experimently/commit/9f9d5124ff3d03c2fdf437d06f8e93e784ec86dc))
+
+## [0.30.0](https://github.com/getexperimently/experimently/compare/v0.29.0...v0.30.0) (2026-10-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** GET and POST /api/v1/feature-flags/evaluate/{flag_key}, GET /api/v1/feature-flags/user/{user_id}, POST /api/v1/tracking/assign and POST /api/v1/tracking/assign/batch answer 422 for a targeting context nested more than 10 levels deep (objects and arrays both count) or larger than 8,192 bytes as compact UTF-8 JSON, where they used to accept it. On the GET routes the context parameter is held to 8,192 bytes as sent. The batch refuses the whole request and assigns nobody. A POST body nested too deeply to parse still answers 400. The contexts the SDKs send are far smaller; if you call the API directly with a larger context, send only the attributes your targeting rules use.
+
+### Bug Fixes
+
+* **api:** flag evaluation and assignment refuse a targeting context over 8,192 bytes or 10 levels deep ([a382e14](https://github.com/getexperimently/experimently/commit/a382e14a26ddde214288c71ccb7e33dfe2469075))
+* **demo:** setup-local.sh prepares a new database with the bootstrap ([#1167](https://github.com/getexperimently/experimently/issues/1167)) ([f357788](https://github.com/getexperimently/experimently/commit/f3577884ecd473763b430ecbcf5696a24317ecea))
+
+
+### Documentation
+
+* remove the fifteen wrong-product pages ([#1170](https://github.com/getexperimently/experimently/issues/1170)) ([3bfbd74](https://github.com/getexperimently/experimently/commit/3bfbd746de822a9737ace15607e2cc90c3831d6d))
+
 ## [0.29.0](https://github.com/getexperimently/experimently/compare/v0.28.2...v0.29.0) (2026-10-12)
 
 
