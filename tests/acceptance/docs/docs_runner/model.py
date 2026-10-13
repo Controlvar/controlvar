@@ -10,7 +10,7 @@ needs the inventory to classify ``README.md`` as the journey ``docs-site``,
 without ``pending``)::
 
     guide: README.md                         # the nav path, as inventory.toml keys it (a [documents] key for a document)
-    stack: docs-local                        # compose-dev | compose-sso | docs-local | docs-published | marketing-local | demo-local
+    stack: docs-local                        # compose-dev | compose-empty | compose-sso | docs-local | docs-published | marketing-local | demo-local
     profile: core                            # core | full
     video: true
     written: 2026-10-06                      # the day the expectations were written
@@ -210,6 +210,7 @@ from docs_runner.sdk import required_placeholders
 
 STACKS = (
     "compose-dev",
+    "compose-empty",
     "compose-sso",
     "docs-local",
     "docs-published",
@@ -218,6 +219,7 @@ STACKS = (
 )
 Stack = Literal[
     "compose-dev",
+    "compose-empty",
     "compose-sso",
     "docs-local",
     "docs-published",
@@ -226,8 +228,9 @@ Stack = Literal[
 ]
 #: The stacks with an API and a dashboard: ``api`` and ``open`` steps run on
 #: these. compose-sso is compose-dev's stack brought up for SSO sign-in;
+#: compose-empty is compose-dev's stack with no seed data (``SEED=``);
 #: demo-local is the one ``demo/setup-local.sh`` starts (``stacks.py``).
-COMPOSE_STACKS = ("compose-dev", "compose-sso", "demo-local")
+COMPOSE_STACKS = ("compose-dev", "compose-empty", "compose-sso", "demo-local")
 Profile = Literal["core", "full"]
 
 #: Who an ``api`` step calls as: nobody, or one of the four role accounts the
@@ -322,6 +325,8 @@ Role = Literal[
 ]
 
 SLUG_PATTERN = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
+#: A guide's path: a Markdown file, or a dashboard component (``.tsx``).
+GUIDE_PATTERN = r"^[^/\s][^\s]*\.(?:md|tsx)$"
 
 #: The actions on one screen, which expect an ARIA snapshot.
 SCREEN_ACTIONS = ("goto", "open", "click", "fill", "select")
@@ -845,7 +850,9 @@ class Recording(_Strict):
 
 
 class Journey(_Strict):
-    guide: StrictStr = Field(pattern=r"^[^/\s][^\s]*\.md$")
+    #: A Markdown page or document, or a dashboard component the inventory
+    #: classes journey (``.tsx``: its anchors are its ``data-testid`` values).
+    guide: StrictStr = Field(pattern=GUIDE_PATTERN)
     stack: Stack
     profile: Profile
     video: StrictBool
