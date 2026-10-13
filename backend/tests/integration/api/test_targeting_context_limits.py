@@ -536,6 +536,24 @@ def test_contexts_around_the_parsers_own_depth_limit_are_refused_cleanly(
     assert spies == {"flags": [], "assignments": []}
 
 
+def _over_both():
+    context = object_chain(MAX_CONTEXT_DEPTH + 1, **MATCHING)
+    context["pad"] = "x" * (MAX_CONTEXT_BYTES + 1)
+    return context
+
+
+@pytest.mark.parametrize("route", ["post-evaluate", "post-assign", "post-batch"])
+def test_a_context_over_both_limits_answers_the_depth_detail(
+    route, client, headers, flag, experiment, spies, db_session
+):
+    detail = CONTEXT_TOO_DEEP
+    if route == "post-batch":
+        detail = f"users[{BATCH_POSITION}]: {detail}"
+    response = _send(route, client, headers, flag, experiment, _over_both())
+    assert _answer(response) == (422, {"detail": detail})
+    assert _rows(db_session, flag, experiment) == NOTHING
+
+
 def test_the_batch_is_refused_whole_before_the_first_user_is_assigned(
     client, headers, flag, experiment, spies, db_session
 ):
