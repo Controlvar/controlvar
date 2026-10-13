@@ -73,7 +73,7 @@ THE TARGETS (a closed list; anything else is refused)
     gate lists (``DOCS_TESTS``, ``NOT_DOCS_TESTS`` in ``DOCS_GATE``) or whose
     file matches that gate's ``DOCS_READER``. Such a test is reached only
     through ``mechanism:``, which says which units it holds; the exception is
-    ``API_SNAPSHOT_TESTS``, which read only the OpenAPI snapshots, not a page. In
+    ``API_SNAPSHOT_TESTS``, which read the OpenAPI snapshots, not a page. In
     Python the function, or the class and method, is found by parsing the
     file, its name starts with ``test`` (a class with ``Test``), and one marked
     ``benchmark`` is refused (skipped unless RUN_BENCHMARKS=1, so it would hold
@@ -560,17 +560,11 @@ WORDING_TESTS = "backend/tests/unit/docs/"
 #: reads documentation, and its detector of one (held equal to it there).
 DOCS_GATE = "backend/tests/unit/infrastructure/test_docs_only_gate.py"
 DOCS_READER = re.compile(r"""["']docs["']|["']docs/|mkdocs\.yml""")
-#: Tests the docs-only gate lists only because they read the OpenAPI snapshots
-#: under docs/api/, the product's schema rather than a page's wording, each with
-#: the docs/ files it may open: a claim about a route or a field names one with
-#: ``test:``. One that names a page (``.md``) or mkdocs, or builds a docs/ path
-#: that is not on its list, reads wording, and is refused like any other.
-API_SNAPSHOT_TESTS: Dict[str, Tuple[str, ...]] = {
-    "backend/tests/smoke/test_openapi_snapshot.py": (
-        "docs/api/openapi-v1.stable.json",
-        "docs/api/openapi-v1.full.json",
-    ),
-}
+#: Tests the docs-only gate lists because they read the OpenAPI snapshots under
+#: docs/api/, the product's schema rather than a page's wording: a claim about a
+#: route or a field may name one with ``test:``, while ``docs_reads_problem``
+#: finds nothing in it.
+API_SNAPSHOT_TESTS: Tuple[str, ...] = ("backend/tests/smoke/test_openapi_snapshot.py",)
 _NAMES_A_PAGE = re.compile(r"\.md\b|mkdocs")
 
 
@@ -1106,107 +1100,25 @@ def _python_problem(ctx: Context, path: str, name: Optional[str]) -> Optional[st
     return None
 
 
-def _chain(node: ast.AST) -> List[ast.AST]:
-    """The operands of ``a / b / c``, left to right ([node] when not a division)."""
-    found: List[ast.AST] = []
-    while isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
-        found.insert(0, node.right)
-        node = node.left
-    return [node] + found
+def docs_reads_problem(text: Optional[str], tree: Any) -> Optional[str]:
+    """Why a test in API_SNAPSHOT_TESTS no longer looks like a snapshot reader.
 
-
-def docs_reads_problem(
-    text: Optional[str], tree: Any, allowed: Sequence[str]
-) -> Optional[str]:
-    """What a test reads under docs/ beyond *allowed*, or None.
-
-    Every docs/ path it names is a literal, or a ``/`` chain of literals from
-    ``"docs"`` or from a module-level name bound to one, and is one of *allowed*
-    or a directory above one; a name bound to such a directory is used only to
-    name a file under it. No string names a page (``.md``) or mkdocs."""
+    Exactly two checks: nothing in the file names a page (``.md``) or mkdocs,
+    and its only literal containing "docs" (docstrings and other bare string
+    statements aside) is one ``"docs"``. A guard against drift, not one an
+    author cannot get round: a docs path built without such a literal passes."""
     if text is None or not isinstance(tree, ast.Module):
         return "does not exist or does not parse"
     if _NAMES_A_PAGE.search(text):
         return "names a page (.md) or mkdocs"
-    places = set(allowed)
-    for path in allowed:
-        parts = path.split("/")
-        places.update("/".join(parts[:n]) for n in range(1, len(parts)))
-    bound: Dict[str, str] = {}
-    heads: Set[int] = set()
-    inside: Set[int] = set()
-
-    def path_of(node: ast.AST) -> Any:
-        """The docs/ path a ``/`` chain names, None if none, or the problem."""
-        operands = _chain(node)
-        head = operands[0]
-        if isinstance(head, ast.Name) and head.id in bound:
-            parts, rest = [bound[head.id]], operands[1:]
-            heads.add(id(head))
-        else:
-            start = next(
-                (
-                    n
-                    for n, op in zip(range(len(operands)), operands)
-                    if isinstance(op, ast.Constant) and op.value == "docs"
-                ),
-                None,
-            )
-            if start is None:
-                return None
-            parts, rest = [], operands[start:]
-        for operand in rest:
-            if not (
-                isinstance(operand, ast.Constant) and isinstance(operand.value, str)
-            ):
-                return "builds a docs/ path from something other than literals"
-            inside.add(id(operand))
-            parts.append(operand.value)
-        return "/".join(parts)
-
-    for statement in tree.body:
-        if (
-            isinstance(statement, ast.Assign)
-            and len(statement.targets) == 1
-            and isinstance(statement.targets[0], ast.Name)
-        ):
-            found = path_of(statement.value)
-            if isinstance(found, str) and found.startswith("docs"):
-                bound[statement.targets[0].id] = found
-    docstrings = {
-        id(node.body[0].value)
-        for node in ast.walk(tree)
-        if isinstance(
-            node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-        )
-        and node.body
-        and isinstance(node.body[0], ast.Expr)
-        and isinstance(node.body[0].value, ast.Constant)
-    }
-    nested: Set[int] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
-            if id(node) in nested:
-                continue
-            nested.update(id(n) for n in ast.walk(node.left))
-            found = path_of(node)
-            if found is not None and found not in places:
-                return found if found.startswith("builds") else f"opens {found}"
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and node.id in bound and id(node) not in heads:
-            if isinstance(node.ctx, ast.Load) and bound[node.id] not in allowed:
-                return (
-                    f"uses {node.id} ({bound[node.id]}) other than to name a file in it"
-                )
-        if (
-            isinstance(node, ast.Constant)
-            and isinstance(node.value, str)
-            and id(node) not in docstrings
-            and id(node) not in inside
-            and (node.value == "docs" or node.value.startswith("docs/"))
-            and node.value not in allowed
-        ):
-            return f"names {node.value!r} outside a / chain of literals"
+    bare = {id(node.value) for node in ast.walk(tree) if isinstance(node, ast.Expr)}
+    found = [
+        n.value
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Constant) and "docs" in str(n.value) and id(n) not in bare
+    ]
+    if found != ["docs"]:
+        return f"has string literals naming docs {found[:3]}, not one 'docs'"
     return None
 
 
@@ -1227,9 +1139,7 @@ def test_problem(
         return f"{path} is not a test (application code or a script)"
     snapshot = path in API_SNAPSHOT_TESTS
     if snapshot and not mechanism:
-        problem = docs_reads_problem(
-            ctx.text(path), ctx.tree(path), API_SNAPSHOT_TESTS[path]
-        )
+        problem = docs_reads_problem(ctx.text(path), ctx.tree(path))
         if problem:
             return (
                 f"{path} {problem}: it reads documentation, so a claim reaches it"

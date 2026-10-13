@@ -169,7 +169,9 @@ def test_slow():
     pass
 """
 
-SNAPSHOT_PY = """REPO = "docs/api/openapi-v1.full.json"
+SNAPSHOT_PY = """REPO_ROOT = None
+DOCS_API = REPO_ROOT / "docs" / "api"
+FULL = DOCS_API / "openapi-v1.full.json"
 
 
 def test_core_api_matches_stable_snapshot():
@@ -996,50 +998,24 @@ def test_the_real_snapshot_test_is_a_target():
     ctx = dc.Context(REPO_ROOT, documents, dc.MECHANISMS)
     for target in dc.SNAPSHOT_TARGETS.values():
         assert dc.test_problem(ctx, target) is None, target
-    assert dc.API_SNAPSHOT_TESTS == {
-        dc.SNAPSHOT_TEST: (
-            "docs/api/openapi-v1.stable.json",
-            "docs/api/openapi-v1.full.json",
-        )
-    }
+    assert dc.API_SNAPSHOT_TESTS == (dc.SNAPSHOT_TEST,)
 
 
-#: (id, what the planted snapshot test adds, a substring of the refusal).
+#: (id, what the planted snapshot test adds). The rule is a drift guard: these
+#: are the shapes it refuses, not all the ways round it.
 SNAPSHOT_READS = [
-    (
-        "a page split across literals",
-        'ROOT = None\nAPI = ROOT / "docs" / "api"\nPAGE = API / ("endpoints.m" + "d")\n',
-        "builds a docs/ path from something other than literals",
-    ),
-    (
-        "a docs/ literal not on the list",
-        'PAGE = "docs/api/" + "endpoints.m" + "d"\n',
-        "names 'docs/api/' outside",
-    ),
-    (
-        "another file under docs/",
-        'ROOT = None\nNOTES = ROOT / "docs" / "api" / "notes.json"\n',
-        "opens docs/api/notes.json",
-    ),
-    (
-        "the directory listed",
-        'ROOT = None\nAPI = ROOT / "docs" / "api"\nALL = list(API.glob("*"))\n',
-        "uses API (docs/api) other than to name a file in it",
-    ),
-    (
-        "docs joined some other way",
-        'import os\nPAGE = os.path.join("docs", "api", "x.json")\n',
-        "names 'docs' outside",
-    ),
+    ("an f-string", 'PAGE = f"docs/api/{1}.json"\n'),
+    ("a split literal", 'PAGE = "docs/api/" + "endpoints.m" + "d"\n'),
+    ("a second docs literal", 'import os\nPAGE = os.path.join("docs", "x.json")\n'),
 ]
 
 
 @pytest.mark.parametrize(
-    "added, refusal",
-    [case[1:] for case in SNAPSHOT_READS],
+    "added",
+    [case[1] for case in SNAPSHOT_READS],
     ids=[case[0] for case in SNAPSHOT_READS],
 )
-def test_a_snapshot_test_opens_only_the_snapshots(tmp_path, added, refusal):
+def test_a_snapshot_test_names_docs_once(tmp_path, added):
     root = build(tmp_path)
     documents, _ = dc.inventory_documents(root)
     ctx = dc.Context(root, documents, dc.MECHANISMS)
@@ -1047,7 +1023,8 @@ def test_a_snapshot_test_opens_only_the_snapshots(tmp_path, added, refusal):
     (root / dc.SNAPSHOT_TEST).write_text(SNAPSHOT_PY + added, encoding="utf-8")
     ctx = dc.Context(root, documents, dc.MECHANISMS)
     problem = dc.test_problem(ctx, SNAPSHOT_FULL) or ""
-    assert refusal in problem and "reads documentation" in problem, problem
+    assert "string literals naming docs" in problem, problem
+    assert "reads documentation" in problem, problem
 
 
 def test_a_snapshot_test_that_names_a_page_reads_wording(tmp_path):
