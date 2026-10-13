@@ -22,14 +22,10 @@ Before creating the integration, you need:
 2. A strong **webhook secret** that you will configure both in the platform and in the GitHub webhook settings
 3. A GitHub repository where you will configure the webhook
 
-### Creating a GitHub PAT
+### The GitHub token
 
 The token is stored for calls to GitHub, which nothing in the platform makes yet, so an integration that only receives webhooks can leave it out.
 
-1. In GitHub, go to **Settings → Developer Settings → Personal access tokens → Tokens (classic)**
-2. Click **Generate new token**
-3. Select the `repo` scope (or `public_repo` for public repositories only)
-4. Generate and copy the token
 
 ---
 
@@ -115,7 +111,7 @@ Neither the `token` nor the `webhook_secret` is returned in any response: a resp
 
 ## Configuring the Webhook in GitHub
 
-1. In your GitHub repository, go to **Settings → Webhooks → Add webhook**
+1. Add a webhook to your GitHub repository (**Settings → Webhooks → Add webhook**)
 2. Set the **Payload URL** to:
    ```text
    https://your-platform.example.com/api/v1/integrations/webhooks/github
@@ -135,16 +131,15 @@ Neither the `token` nor the `webhook_secret` is returned in any response: a resp
 POST /api/v1/integrations/webhooks/github
 ```
 
-### Required Headers
+### Headers
 
-GitHub sends the following headers with every webhook delivery:
+The platform reads these headers of a delivery:
 
-| Header | Description |
+| Header | What the platform does with it |
 |--------|-------------|
-| `X-GitHub-Event` | Event type (e.g., `push`, `pull_request`, `issues`) |
-| `X-Hub-Signature-256` | HMAC-SHA256 signature of the raw request body |
-| `X-GitHub-Delivery` | Unique delivery GUID for idempotency |
-| `Content-Type` | `application/json` |
+| `X-Hub-Signature-256` | HMAC-SHA256 signature of the raw request body: **required** |
+| `X-GitHub-Event` | The event type (e.g., `push`, `pull_request`, `issues`); optional |
+| `X-GitHub-Delivery`, `Content-Type` | Not checked |
 
 ### HMAC-SHA256 Signature Validation
 
@@ -206,7 +201,7 @@ Each prints `{"detail":"Webhook authentication failed"}`.
 
 ### Push Events
 
-Received when code is pushed to the repository.
+An example `push` delivery:
 
 ```json
 {
@@ -227,7 +222,7 @@ Received when code is pushed to the repository.
 
 ### Pull Request Events
 
-Received when a pull request is opened, updated, merged, or closed.
+An example `pull_request` delivery:
 
 ```json
 {
@@ -248,7 +243,7 @@ Received when a pull request is opened, updated, merged, or closed.
 
 ### Issues Events
 
-Received when an issue is opened, edited, closed, or labeled.
+An example `issues` delivery:
 
 ```json
 {
@@ -284,7 +279,7 @@ An answered delivery changes nothing in the platform yet: a pull request is not 
 Every refused delivery is answered the same way, so the status does not say which of these it is:
 
 1. **Secret mismatch**: The `webhook_secret` in the platform does not match the secret in GitHub's webhook settings. Set it again with the recipe in [Rotating the Webhook Secret](#rotating-the-webhook-secret) and use the same value in GitHub. As a last resort you can `DELETE /api/v1/integrations/github` and create the integration again, but that removes the stored `token` and repository settings too, so you send them again.
-2. **No secret in GitHub**: GitHub sends no `X-Hub-Signature-256` header when the webhook's **Secret** field is empty. Open the webhook's settings in GitHub and fill it in.
+2. **No secret in GitHub**: a delivery without an `X-Hub-Signature-256` header is refused. Open the webhook's settings in GitHub and check its **Secret** field.
 3. **Not active, or no `webhook_secret` stored**: `GET /api/v1/integrations/github` must show `"is_active": true` and list `webhook_secret` in `stored_secrets`. The platform log also names an active integration that has no secret, once per process.
 4. **Encoding issue**: Ensure the secret does not contain leading or trailing whitespace. Copy-paste carefully.
 
@@ -305,6 +300,6 @@ The signature was accepted, but the body is not a JSON object. Confirm the webho
 
 If you need to rotate the webhook secret:
 
-Step 1: Change the secret in the platform. Use the recipe in [Upgrading an integration created before webhook authentication](../api/integrations.md#upgrading-an-integration-created-before-webhook-authentication) with `TYPE=github` and an ADMIN token. It sends one `PUT /api/v1/integrations/github` that carries only the new `webhook_secret`; the stored `token` and repository settings are kept, and it prints the new secret.
+Step 1: Set a new secret in the platform. Use the recipe in [Upgrading an integration created before webhook authentication](../api/integrations.md#upgrading-an-integration-created-before-webhook-authentication) with `TYPE=github` and an ADMIN token. It sends one `PUT /api/v1/integrations/github` that carries only the new `webhook_secret`; the stored `token` and repository settings are kept, and it prints the new secret.
 
-Step 2: Update the secret in GitHub webhook settings immediately (There will be a brief window during rotation where deliveries may fail)
+Step 2: Set the same secret in the GitHub webhook's settings at once: until you do, GitHub's deliveries are refused with `401`.

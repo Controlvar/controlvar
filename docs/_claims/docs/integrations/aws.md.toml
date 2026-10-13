@@ -1,0 +1,534 @@
+# What verifies each unit of docs/integrations/aws.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/integrations/aws.md"
+
+[[unit]]
+text = "AWS Integration"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This document describes how each AWS service is used and how to configure the integration."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "ECS Fargate"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The FastAPI application runs on Amazon ECS Fargate — a serverless container execution environment that removes the need to manage EC2 instances."
+by = ["test:infrastructure/tests/test_dashboard_service.py"]
+
+[[unit]]
+text = "Deployment Architecture"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The Fargate service runs multiple task replicas behind an Application Load Balancer (ALB)"
+by = ["test:infrastructure/tests/test_dashboard_service.py"]
+
+[[unit]]
+text = "Blue/Green Deployments"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform uses AWS CodeDeploy for zero-downtime blue/green deployments:"
+by = ["untested:A"]
+
+[[unit]]
+text = "A new task definition is registered with the updated container image"
+by = ["untested:A"]
+
+[[unit]]
+text = "CodeDeploy starts the new tasks in the idle target group; the Deploy workflow approves the shift once every one is healthy"
+by = ["untested:A"]
+
+[[unit]]
+text = "The canary shifts 10% of traffic, waits 15 minutes (why 15), then shifts the rest"
+by = ["untested:A"]
+
+[[unit]]
+text = "Two 5xx alarms, one per target group, watch the API through the canary and the hour after it: while either is in ALARM, CodeDeploy stops the deployment and rolls the API back by itself."
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_both_target_groups_and_nothing_else_are_watched",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summarys_bake_is_the_groups_termination_wait",
+]
+
+[[unit]]
+text = "They watch the API's target 5xx only, so a release that answers wrongly with a 2xx is not caught, and after that hour the Rollback workflow is the response to a bad release"
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_each_alarm_is_exactly_the_specified_one"]
+
+[[unit]]
+text = "To deploy a new version, run Actions → Deploy with a release tag (deployment guide, section 3)."
+by = ["untested:A"]
+
+[[unit]]
+text = "The API's revision moves through CodeDeploy, not through cdk deploy: the service has a CODE_DEPLOY deployment controller, and ECS refuses a task-definition change through UpdateService on such a service."
+by = ["test:infrastructure/tests/test_pipeline_owns_the_image.py"]
+
+[[unit]]
+text = "Environment Variables"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The ECS task reads configuration from AWS Secrets Manager at startup."
+by = [
+    "test:infrastructure/tests/test_database_wiring.py::test_credentials_are_the_secret_aurora_was_created_with",
+    "test:infrastructure/tests/test_secret_arns.py",
+]
+
+[[unit]]
+text = "The variables are listed in the Environment Variables Reference below."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Aurora PostgreSQL"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Amazon Aurora PostgreSQL is the primary relational database, storing all experiments, feature flags, users, results, and audit data."
+by = [
+    "test:infrastructure/tests/test_aurora_engine.py",
+    "test:infrastructure/tests/test_database_wiring.py",
+]
+
+[[unit]]
+text = "Connection Configuration"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The API connects with the POSTGRES_ variables, not a DATABASE_URL:"
+by = ["test:backend/tests/unit/core/test_preflight.py::test_a_connection_string_the_image_does_not_read_is_refused"]
+
+[[unit]]
+text = "Instances and connections"
+by = ["exempt:label"]
+
+[[unit]]
+text = "In prod the cluster has a writer and a reader; in the other environments it has one instance."
+by = ["untested:T"]
+
+[[unit]]
+text = "The API sends every query to POSTGRES_SERVER, and routes none to the reader."
+by = ["untested:T"]
+
+[[unit]]
+text = "The API keeps a pool of 20 database connections, opens up to 20 more when they are all busy, and waits up to 30 seconds for a free one; no setting changes these numbers."
+by = ["untested:T"]
+
+[[unit]]
+text = "ElastiCache Redis"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "REDIS_HOST is the cluster's primary endpoint."
+by = [
+    "test:infrastructure/tests/test_redis_wiring.py::test_the_task_gets_the_replication_groups_primary_endpoint",
+    "test:infrastructure/tests/test_redis_wiring.py::test_the_task_speaks_tls_to_a_replication_group_that_requires_it",
+]
+
+[[unit]]
+text = "REDIS_SSL is true because in-transit encryption is on, and a plaintext client is refused."
+by = [
+    "test:infrastructure/tests/test_redis_wiring.py::test_the_task_gets_the_replication_groups_primary_endpoint",
+    "test:infrastructure/tests/test_redis_wiring.py::test_the_task_speaks_tls_to_a_replication_group_that_requires_it",
+]
+
+[[unit]]
+text = "Application Cache"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With CACHE_ENABLED on (it is off by default), GET /api/v1/experiments/{experiment_id} and its daily-results and segmented-results are cached in Redis for 3,600 seconds (an hour)."
+by = [
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_an_entry_is_kept_for_an_hour",
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_the_cache_is_off_by_default",
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_with_the_cache_off_nothing_is_written_or_read",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_the_experiment_detail_is_cached_and_served_from_the_cache",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_results_are_cached_and_served_from_the_cache",
+]
+
+[[unit]]
+text = "A change to the experiment clears its cached detail; its cached daily and segmented results stay until they expire."
+by = ["test:backend/tests/unit/api/test_experiment_cache_scope.py::test_a_change_clears_the_detail_and_leaves_the_daily_and_segmented_results"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id} and GET /api/v1/experiments/{experiment_id}/results are cached in Redis whenever it is reachable, CACHE_ENABLED or not: for 5 minutes while the experiment is running, and for 24 hours otherwise."
+by = ["test:backend/tests/unit/api/test_results_stored_settings.py::test_results_are_kept_300_seconds_while_running_and_86400_otherwise"]
+
+[[unit]]
+text = "The API does not cache feature flags: it reads them from the database on every request, so a flag change is served on the next one."
+by = ["test:backend/tests/smoke/test_no_flag_cache.py"]
+
+[[unit]]
+text = "DynamoDB"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The counters module (full profile) keeps real-time assignment, event and conversion counters in Amazon DynamoDB, and increments them with atomic ADD update expressions so that concurrent writers never contend on a row."
+by = ["untested:A"]
+
+[[unit]]
+text = "Atomic Increment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "DynamoDBCounterService (modules/backend/app/services/dynamodb_counter_service.py) does the increments."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/unit/services/test_dynamodb_counter_service.py",
+]
+
+[[unit]]
+text = "The API's real-time counter endpoints call it, and the bandit scheduler reads the counters (backend/app/core/bandit_scheduler.py)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Configuration"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "DYNAMODB_COUNTERS_TABLE names the table the API uses (default experiment-counters)."
+by = ["untested:T"]
+
+[[unit]]
+text = "On the full profile the counters stack creates experiment-counters-<env>, and the Fargate stack sets the variable on the API task to that same name (both come from counters_table_name in infrastructure/cdk/stacks/names.py)."
+by = ["untested:T"]
+
+[[unit]]
+text = "It also sets AWS_DEFAULT_REGION to the stack's region, because the counter service builds its DynamoDB client without naming a region, and gives the task role dynamodb:Query and dynamodb:UpdateItem on that one table: the two calls the service makes."
+by = ["untested:T"]
+
+[[unit]]
+text = "The intent is that the /api/v1/counters routes and the bandit scheduler's DynamoDB read reach the table once this is deployed; nothing writes counters automatically yet, so the scheduler still takes its statistics from PostgreSQL while the table is empty."
+by = ["untested:T"]
+
+[[unit]]
+text = "The core profile creates no table and sets neither variable."
+by = ["untested:T"]
+
+[[unit]]
+text = "Lambda Functions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "No Lambda function serves requests or processes events."
+by = ["untested:T"]
+
+[[unit]]
+text = "The stacks deploy three:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Function | Stack | What it does"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "DatabaseAccessLambda | experimentation-compute-<env> | A placeholder. Its inline code returns 200 and does nothing"
+by = ["untested:T"]
+
+[[unit]]
+text = "AnalyticsLambda | experimentation-analytics-<env> (full profile) | A placeholder on the Kinesis stream. Its inline code returns 200 and processes nothing"
+by = ["untested:T"]
+
+[[unit]]
+text = "ETLTriggerLambda | experimentation-glue-etl-<env> (full profile) | Starts the Glue ETL jobs, from a daily EventBridge rule"
+by = ["untested:T"]
+
+[[unit]]
+text = "The repository has Lambda code for event processing and flag evaluation under backend/lambda/, but no stack deploys it."
+by = ["untested:T"]
+
+[[unit]]
+text = "SDKs call the API (/api/v1/tracking/, /api/v1/feature-flags/evaluate/) for assignment and evaluation."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "CloudFront and Lambda@Edge"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The CDK does not create a CloudFront distribution, and there is no S3 bucket for frontend assets."
+by = ["untested:T"]
+
+[[unit]]
+text = "The dashboard is an ECS service behind the same Application Load Balancer as the API, which sends it every path except /api/, /health, /health/ and /metrics; see AWS CDK Deployment."
+by = ["test:infrastructure/tests/test_dashboard_service.py"]
+
+[[unit]]
+text = "Lambda@Edge for Split URL Testing"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The split-URL module ships a CDK construct, modules/infrastructure/constructs/split_url_distribution.py, that creates a CloudFront distribution with a Lambda@Edge viewer-request router in front of your application."
+by = ["untested:T"]
+
+[[unit]]
+text = "infrastructure/cdk/app.py does not use it, so a deployment gets it only if you add it to a stack yourself."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The router (modules/lambda/split_url_router/handler.py):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Reads the assignment cookie"
+by = ["test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerExistingCookie::test_existing_valid_cookie_passes_through"]
+
+[[unit]]
+text = "If absent, hashes the client fingerprint (IP + User-Agent) to assign a variant"
+by = ["test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_the_fingerprint_is_ip_and_user_agent_not_a_user_id"]
+
+[[unit]]
+text = "Returns a 302 Found redirect to the variant URL"
+by = ["test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_returns_302_redirect"]
+
+[[unit]]
+text = "Sets a Set-Cookie header recording the assignment (30 days by default; cookie_ttl_days in the experiment config)"
+by = [
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_cookie_ttl_defaults_to_30_days",
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_cookie_ttl_from_config",
+]
+
+[[unit]]
+text = "AWS requires a Lambda@Edge function to be created in us-east-1."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "The construct is Python, like the rest of the CDK app."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Its usage, and how the router receives its configuration, are in Split URL testing."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Kinesis and OpenSearch"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The full profile's analytics stack (experimentation-analytics-<env>) creates a Kinesis Data Stream that Firehose delivers to the S3 data lake, and an Amazon OpenSearch Service domain."
+by = ["untested:T"]
+
+[[unit]]
+text = "The resource names are generated by CloudFormation."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The API does not publish tracking events to the stream today: POST /api/v1/tracking/track and /tracking/batch store events in PostgreSQL."
+by = ["untested:T"]
+
+[[unit]]
+text = "Nothing indexes events into OpenSearch either, because the Lambda on the stream is a placeholder (see Lambda Functions)."
+by = ["untested:T"]
+
+[[unit]]
+text = "CDK Deployment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "All infrastructure is defined in infrastructure/cdk using AWS CDK v2, in Python."
+by = ["test:infrastructure/tests/test_app_profiles.py::TestTheAppActuallySynthesises::test_synth_completes"]
+
+[[unit]]
+text = "How to bootstrap the account and deploy the stacks is in AWS CDK Deployment."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "ALARM_EMAIL is the address every alarm emails, including the API rollback alarms."
+by = ["test:infrastructure/tests/test_alarm_email.py"]
+
+[[unit]]
+text = "It is required for staging and prod, and synth refuses to run without it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Confirm the subscription it creates from the inbox; see AWS CDK Deployment for that and for the other required settings."
+by = ["untested:A"]
+
+[[unit]]
+text = "The stacks a deployment builds are listed in AWS CDK Deployment."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Required IAM Permissions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The CDK (infrastructure/cdk/stacks/fargate_service_stack.py) gives the API's ECS task role these permissions:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "ECS Task Role"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "the CloudWatchLogsFullAccess managed policy"
+by = ["untested:T"]
+
+[[unit]]
+text = "secretsmanager:GetSecretValue on the secrets the task reads"
+by = ["test:infrastructure/tests/test_secret_arns.py"]
+
+[[unit]]
+text = "ssmmessages:CreateControlChannel, CreateDataChannel, OpenControlChannel, OpenDataChannel, logs:DescribeLogGroups, CreateLogStream, DescribeLogStreams and PutLogEvents, which come with ECS Exec"
+by = ["untested:T"]
+
+[[unit]]
+text = "full profile only: dynamodb:Query and dynamodb:UpdateItem on arn:aws:dynamodb:<region>:<account>:table/experiment-counters-<env> (see DynamoDB)"
+by = ["untested:T"]
+
+[[unit]]
+text = "full profile only, for the etl module's routes (see Glue):"
+by = ["exempt:label"]
+
+[[unit]]
+text = "glue:StartJobRun and glue:GetJobRun on arn:aws:glue:<region>:<account>:job/experimentation-events-etl-<env> and job/experimentation-metrics-etl-<env>"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "glue:StartCrawler and glue:GetCrawler on crawler/experimentation-crawler-<env>"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "glue:GetTable and glue:BatchCreatePartition on catalog, database/experimentation_<env> and table/experimentation_<env>/"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "There is no Kinesis, Cognito, Athena, S3 or other DynamoDB permission, and no other Glue action or Glue object."
+by = ["untested:T"]
+
+[[unit]]
+text = "Glue: the ETL routes"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "On the full profile the Fargate stack tells the API the Glue names the glue-etl stack creates (GLUE_ETL_JOB_NAME, GLUE_METRICS_JOB_NAME, GLUE_CRAWLER_NAME, GLUE_DATABASE, all from glue_names in infrastructure/cdk/stacks/names.py) and grants the six calls above on those objects alone."
+by = ["untested:T"]
+
+[[unit]]
+text = "The routes accept only those names (see the ETL section of the API reference)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The Glue client is built without naming a region, so it takes the region from AWS_DEFAULT_REGION."
+by = ["test:modules/backend/tests/unit/services/test_etl_service_calls.py::test_the_glue_client_takes_its_region_from_aws_default_region"]
+
+[[unit]]
+text = "The client never reads AWS_REGION."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The CDK sets AWS_DEFAULT_REGION on the task to the stack's region, and the repository's docker-compose.yml sets it from AWS_REGION."
+by = ["untested:T"]
+
+[[unit]]
+text = "Anywhere else (Helm, a container you run yourself), set AWS_DEFAULT_REGION to the region your Glue job and crawler are in."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Without it the job, crawler and partitions routes answer 500 and the API logs NoRegionError."
+by = [
+    "test:modules/backend/tests/unit/services/test_etl_service_calls.py::test_with_no_region_the_routes_answer_a_handled_500",
+    "test:modules/backend/tests/unit/services/test_etl_service_calls.py::test_with_no_region_the_glue_client_cannot_be_built",
+]
+
+[[unit]]
+text = "On Helm, put it in api.extraEnv alongside the GLUE_ names."
+by = ["untested:T"]
+
+[[unit]]
+text = "The chart has no value of its own for it."
+by = ["untested:T"]
+
+[[unit]]
+text = "GLUE_EVENTS_TABLE (default raw_events) names the one catalog table POST /etl/partitions/add accepts, and the CDK does not set it."
+by = ["untested:T"]
+
+[[unit]]
+text = "It must be the table the crawler creates."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The crawler is given an S3 path and no table prefix, so it picks the table's name itself when it runs."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Check the name after the first crawl and set GLUE_EVENTS_TABLE to it; until then that route answers 404."
+by = ["untested:T"]
+
+[[unit]]
+text = "Environment Variables Reference"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Variable | Required | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "POSTGRES_SERVER | Yes | Aurora endpoint; with POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB. DATABASE_URL is not read; in staging and production the container's start-up check refuses to start with it set"
+by = ["test:backend/tests/unit/core/test_preflight.py::test_a_connection_string_the_image_does_not_read_is_refused"]
+
+[[unit]]
+text = "REDIS_HOST | Yes | ElastiCache primary endpoint (localhost if unset)"
+by = ["untested:T"]
+
+[[unit]]
+text = "REDIS_PORT | No | ElastiCache port (default 6379)"
+by = ["untested:T"]
+
+[[unit]]
+text = "REDIS_SSL | Yes, on AWS | true to connect over TLS (default false)"
+by = ["test:infrastructure/tests/test_redis_wiring.py::test_the_task_speaks_tls_to_a_replication_group_that_requires_it"]
+
+[[unit]]
+text = "SECRET_KEY | Yes | Application secret key (min 32 chars)"
+by = ["test:backend/tests/unit/core/test_preflight.py::test_each_secret_refusal_names_the_setting_and_how_to_generate_it"]
+
+[[unit]]
+text = "COGNITO_USER_POOL_ID | Only for Cognito sign-in | AWS Cognito User Pool ID"
+by = ["untested:T"]
+
+[[unit]]
+text = "COGNITO_CLIENT_ID | Only for Cognito sign-in | Cognito app client ID"
+by = ["untested:T"]
+
+[[unit]]
+text = "AWS_REGION | Yes | Primary AWS region, read by Cognito and the other settings that name it. The Glue and DynamoDB counter clients do not read it"
+by = ["untested:T"]
+
+[[unit]]
+text = "AWS_DEFAULT_REGION | Full profile: yes, for the ETL routes | The region the Glue client (see Glue) and the DynamoDB counter client (see DynamoDB) use. The CDK sets it to the stack's region. Outside the CDK set it yourself (Helm: api.extraEnv); without it the job and crawler routes answer 500"
+by = ["test:modules/backend/tests/unit/services/test_etl_service_calls.py::test_with_no_region_the_routes_answer_a_handled_500"]
+
+[[unit]]
+text = "GLUE_ETL_JOB_NAME, GLUE_METRICS_JOB_NAME, GLUE_CRAWLER_NAME, GLUE_DATABASE | Full profile, for the ETL routes | The Glue job, crawler and database names the ETL routes accept. The CDK sets them to the glue-etl stack's -<env> names"
+by = ["untested:T"]
+
+[[unit]]
+text = "GLUE_EVENTS_TABLE | Full profile, for POST /etl/partitions/add | The catalog table that route accepts (default raw_events). Not set by the CDK: set it to the table the crawler creates (see Glue)"
+by = ["untested:T"]
+
+[[unit]]
+text = "DYNAMODB_COUNTERS_TABLE | No | Full profile: the counters table, set by the CDK to experiment-counters-<env> (default experiment-counters; see DynamoDB)"
+by = ["untested:T"]
+
+[[unit]]
+text = "SLACK_BOT_TOKEN | No | Slack bot token for alerting"
+by = ["test:backend/tests/unit/services/test_slack_notifier.py"]
+
+[[unit]]
+text = "SENDGRID_API_KEY | No | SendGrid API key for email alerts"
+by = ["test:backend/tests/unit/services/test_email_notifier.py::TestSendEmailTriesSendgridFirst::test_send_email_tries_sendgrid_first"]
+
+[[unit]]
+text = "AUDIT_HMAC_KEY | Full profile: yes | Key for HMAC-SHA256 audit event signing"
+by = [
+    "test:backend/tests/unit/core/test_preflight.py::test_the_core_profile_does_not_ask_for_the_audit_key",
+    "test:backend/tests/unit/core/test_preflight.py::test_nothing_set_lists_every_required_setting_at_once",
+]
+
+[[unit]]
+text = "ANTHROPIC_API_KEY | No | Claude API key for AI experiment design"
+by = ["untested:T"]

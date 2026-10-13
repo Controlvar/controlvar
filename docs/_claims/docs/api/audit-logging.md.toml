@@ -1,0 +1,976 @@
+# What verifies each unit of docs/api/audit-logging.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/audit-logging.md"
+
+[[unit]]
+text = "Audit Logging & Bulk Toggle"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The audit log is a record of who changed what."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "No API edits or deletes an entry."
+by = ["test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact"]
+
+[[unit]]
+text = "It records the changes people make through the API: creating, changing and deleting feature flags and experiments, turning flags on and off, starting, pausing and completing experiments, rollout schedule changes, API keys, holdouts, mutual exclusion groups, segments, creating and deleting users, changes to a user's role, superuser flag or active status, signing in with a password or through Cognito (POST /auth/token; a sign-in through the Cognito Hosted UI does not pass through the API and is not recorded), and safety rollbacks."
+by = ["untested:A"]
+
+[[unit]]
+text = "In the full profile it also records custom roles assigned and revoked, a workspace member's role changes, and single sign-on (SSO) sign-ins."
+by = ["test:modules/backend/tests/integration/api/test_audit_module_events.py"]
+
+[[unit]]
+text = "Action Types lists every action and when it is written."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It also records the changes the platform makes on its own: scheduled experiment starts and ends, rollout stages the rollout scheduler starts, rollbacks the safety monitor makes, a user's first Cognito or SSO sign-in, and role changes Cognito group sync and SSO sign-in make."
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py",
+    "test:backend/tests/smoke/test_audit_non_route_inventory.py::test_the_sites_are_exact",
+]
+
+[[unit]]
+text = "Those role changes are written by a system actor."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The Quick Start's demo data includes a history written by the seed script, in the form the platform writes it."
+by = ["test:backend/tests/integration/services/test_seed_audit_entries.py"]
+
+[[unit]]
+text = "Creating, changing and deleting a feature flag or an experiment is also recorded in a separate table, the compliance audit trail, which GET /api/v1/compliance/audit-events lists in every profile; see Compliance Audit Trail for what it holds."
+by = [
+    "test:backend/tests/integration/api/test_compliance_api.py",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in first:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Bulk Feature Flag Toggle"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Toggle several feature flags in one call."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each flag succeeds or fails on its own: the call answers 200 with a result per flag, even when some of them fail."
+by = ["docex:docs/api/audit-logging.md#\"total\": 3"]
+
+[[unit]]
+text = "These two flags give the call something to change."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "They are created on (\"is_active\": true; a new flag is off otherwise)."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "This saves their ids in $DARK_ID and $CHECKOUT_ID:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints 2, one id per flag."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "POST /api/v1/feature-flags/bulk-toggle"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "action is enable, disable or archive, and reason is optional."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "This turns off both flags, and a third id that doesn't exist:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"succeeded\": 2 and \"failed\": 1, with the error \"Feature flag not found\" for the third id."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The full response lists each flag's result, and the id of the audit entry written for each flag that changed:"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_bulk_toggle_one_entry_per_flag",
+]
+
+[[unit]]
+text = "A flag the caller may not change (an ANALYST or VIEWER changes none) fails with \"Not enough permissions to change this feature flag\" and is left as it was."
+by = ["untested:T"]
+
+[[unit]]
+text = "Audit Log API"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/audit-logs/"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Query the audit log with filters."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The URL ends with a slash; without it the API answers 307."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/unit/middleware/test_relative_slash_redirect.py",
+]
+
+[[unit]]
+text = "Query Parameters"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Parameter | Type | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "entity_type | string | feature_flag, experiment, user, role, permission, safety_config, rollout_schedule, api_key, holdout, mutual_exclusion_group, segment"
+by = ["untested:T"]
+
+[[unit]]
+text = "entity_id | UUID | Filter by specific entity ID"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/integration/api/test_audit_export.py::test_each_filter_returns_exactly_its_rows_newest_first",
+]
+
+[[unit]]
+text = "action_type | string | Filter by action (see Action Types below)"
+by = ["test:backend/tests/integration/api/test_audit_export.py::test_each_filter_returns_exactly_its_rows_newest_first"]
+
+[[unit]]
+text = "user_id | UUID | Filter by the user who performed the action"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_admin_and_analyst_read_every_entry",
+]
+
+[[unit]]
+text = "from_date | datetime | Entries at or after this time (ISO 8601)"
+by = ["test:backend/tests/integration/api/test_audit_log_local_day_range.py"]
+
+[[unit]]
+text = "to_date | datetime | Entries at or before this time (ISO 8601)"
+by = ["test:backend/tests/integration/api/test_audit_log_local_day_range.py"]
+
+[[unit]]
+text = "page | int | Page number, from 1 (default: 1)"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "limit | int | Page size (default: 50, max: 1000)"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "An unknown entity_type or action_type answers 400."
+by = ["test:backend/tests/integration/api/test_audit_export.py::test_refusals_match_the_list_route"]
+
+[[unit]]
+text = "This lists the two entries the bulk toggle wrote:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"total\": 2, and for each flag its old and new status and the reason given."
+by = ["docex:docs/api/audit-logging.md#\"reason\": \"Checkout incident\""]
+
+[[unit]]
+text = "One entry in full:"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "The list also carries page, limit and total_pages."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "GET /api/v1/audit-logs/entity/{entity_type}/"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every entry recorded against one entity, most recent first."
+by = ["untested:T"]
+
+[[unit]]
+text = "There is no fetch-one-by-id route; query by entity, by actor (/audit-logs/user/{user_id}), or filter the collection (/audit-logs/):"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "It prints the two entries for the dark-mode flag, newest first: toggle_disable, then feature_flag_create."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/audit-logs/stats"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Returns counts: the total, per action type, per entity type, and per user."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "from_date and to_date narrow it:"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "It prints 2."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The whole response has the shape {\"total_logs\", \"action_counts\", \"entity_counts\", \"most_active_users\", \"date_range\"}."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "GET /api/v1/audit-logs/export"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Downloads every entry the filters match as one file, newest first."
+by = ["test:backend/tests/integration/api/test_audit_export.py::test_each_filter_returns_exactly_its_rows_newest_first"]
+
+[[unit]]
+text = "This route is beta: its shape may still change (see API stability)."
+by = ["test:backend/tests/integration/api/test_audit_export.py::test_each_filter_returns_exactly_its_rows_newest_first"]
+
+[[unit]]
+text = "The URL has no trailing slash; with one the API answers 307."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/unit/middleware/test_relative_slash_redirect.py",
+]
+
+[[unit]]
+text = "It takes the list's filters (user_id, entity_type, entity_id, action_type, from_date, to_date), with the same 400 refusals, plus format:"
+by = ["test:backend/tests/integration/api/test_audit_export.py::test_refusals_match_the_list_route"]
+
+[[unit]]
+text = "format | File"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "json (default) | application/json: an array of the list's entry objects, as shown above"
+by = ["test:backend/tests/unit/api/test_audit_export_format.py::test_json_body_is_an_array_and_a_cut_one_does_not_parse"]
+
+[[unit]]
+text = "csv | text/csv; charset=utf-8: a header row, then one row per entry"
+by = ["test:backend/tests/integration/api/test_audit_export.py::test_headers_name_the_file_and_the_format"]
+
+[[unit]]
+text = "The CSV columns are id, timestamp, user_id, user_email, action_type, action_description, entity_type, entity_id, entity_name, old_value, new_value and reason, in that order."
+by = ["test:backend/tests/unit/api/test_audit_export_format.py::test_the_csv_header_is_pinned"]
+
+[[unit]]
+text = "Each cell is the same field's value in the JSON (empty for null), quoted as RFC 4180 describes."
+by = [
+    "test:backend/tests/integration/api/test_audit_export.py::test_csv_has_the_pinned_header_and_equals_the_json",
+    "test:backend/tests/unit/api/test_audit_export_format.py::test_none_is_an_empty_cell",
+    "test:backend/tests/unit/api/test_audit_export_format.py::test_csv_rows_quote_as_rfc_4180",
+]
+
+[[unit]]
+text = "Export cells are made safe for spreadsheets: a cell that starts with =, +, -, @, a tab or a carriage return starts with an apostrophe in the CSV."
+by = [
+    "test:backend/tests/integration/api/test_audit_export.py::test_export_cells_are_made_safe_for_spreadsheets",
+    "test:backend/tests/unit/api/test_audit_export_format.py::test_a_cell_starting_with_an_unsafe_sign_is_prefixed",
+]
+
+[[unit]]
+text = "The JSON holds the stored text unchanged."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The file is named audit-log-<UTC time>.<format> in Content-Disposition, for example audit-log-20261004T090507Z.csv."
+by = ["test:backend/tests/unit/api/test_audit_export_format.py::test_the_filename_is_utc_and_names_the_format"]
+
+[[unit]]
+text = "Entries written after the request arrived are not in it."
+by = ["test:backend/tests/integration/api/test_audit_export.py::test_an_entry_written_after_the_request_is_not_exported"]
+
+[[unit]]
+text = "Who sees what is the list's rule: ADMIN and ANALYST export every entry; DEVELOPER and VIEWER export only their own, whatever user_id they send."
+by = [
+    "test:backend/tests/integration/api/test_audit_export.py::test_developer_and_viewer_export_only_their_own_rows",
+    "test:backend/tests/integration/api/test_audit_export.py::test_admin_and_analyst_export_every_row",
+]
+
+[[unit]]
+text = "Exporting is not recorded in the audit log."
+by = ["test:backend/tests/integration/api/test_audit_export.py::test_exporting_writes_no_audit_entry"]
+
+[[unit]]
+text = "Check the count."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "X-Total-Count is the number of entries the file holds."
+by = [
+    "test:backend/tests/integration/api/test_audit_export.py::test_an_entry_written_after_the_request_is_not_exported",
+    "docex:docs/api/audit-logging.md#expected 2, received 2",
+]
+
+[[unit]]
+text = "A download that stops part-way can still look complete, a CSV especially, so compare the entries you received with it before you use the file."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This exports the two bulk-toggle entries as JSON and compares:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints expected 2, received 2."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The same entries as CSV start with the header row:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "To count the entries in a CSV, use a CSV parser: a quoted cell can hold a line break, so counting lines can be wrong."
+by = ["test:backend/tests/unit/api/test_audit_export_format.py::test_csv_rows_quote_as_rfc_4180"]
+
+[[unit]]
+text = "At most 50,000 entries fit in one export."
+by = [
+    "test:backend/tests/integration/api/test_audit_export.py::test_the_cap_is_fifty_thousand",
+    "test:backend/tests/integration/api/test_audit_export.py::test_the_cap_is_refused_never_cut_short",
+]
+
+[[unit]]
+text = "When more match, the API answers 422, says how many match, and sends no file; narrow from_date and to_date, or filter by action_type or entity_type."
+by = [
+    "test:backend/tests/integration/api/test_audit_export.py::test_the_cap_is_fifty_thousand",
+    "test:backend/tests/integration/api/test_audit_export.py::test_the_cap_is_refused_never_cut_short",
+]
+
+[[unit]]
+text = "It never sends part of the entries."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The export has its own rate limit, 10 requests a minute per client address, apart from the data export routes' limit."
+by = [
+    "test:backend/tests/unit/api/test_audit_export_format.py::test_the_export_has_its_own_limit_of_ten_a_minute",
+    "test:backend/tests/unit/api/test_audit_export_format.py::test_the_export_counter_is_its_own",
+]
+
+[[unit]]
+text = "The dashboard's Audit Log page (/admin/audit) is in the top navigation for every signed-in role."
+by = [
+    "test:frontend/src/tests/components/AppShell.test.tsx",
+    "test:frontend/src/tests/admin/AuditLogAccess.test.tsx",
+]
+
+[[unit]]
+text = "It shows what GET /api/v1/audit-logs/ returns for that user: every entry for ADMIN, ANALYST and superusers, and their own entries for DEVELOPER and VIEWER, who see a note saying so."
+by = ["test:frontend/src/tests/admin/AuditLogAccess.test.tsx"]
+
+[[unit]]
+text = "Its Download CSV and Download JSON buttons export the same entries, with the page's current filters."
+by = ["test:frontend/src/tests/admin/AuditLogPage.test.tsx"]
+
+[[unit]]
+text = "The page makes the same comparison, and when the counts differ it says so and saves nothing."
+by = [
+    "test:frontend/src/tests/admin/AuditLogPage.test.tsx",
+    "test:frontend/src/tests/utils/auditExport.test.ts",
+]
+
+[[unit]]
+text = "Action Types"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every action below is written by the route or the part of the platform named."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A route writes it after the change is saved, with the signed-in user as the actor; the failure policy says what happens when an entry cannot be written."
+by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_route_site_keeps_the_change_when_the_audit_write_fails"]
+
+[[unit]]
+text = "An update records only the fields that changed, as old_value and new_value JSON; a create records the new entity's identifying fields in new_value, and a delete the old ones in old_value."
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_update_records_only_what_changed",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_create",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_delete",
+]
+
+[[unit]]
+text = "Descriptions, hypotheses, targeting rules, segment rules, variants and metrics are never stored: when they change, their names are listed in new_value.changed_fields."
+by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_free_text_never_reaches_an_entry"]
+
+[[unit]]
+text = "No entry holds a password, a token, any part of an API key, or a request body."
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_api_key_create_and_revoke_hold_no_part_of_the_key",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_free_text_never_reaches_an_entry",
+]
+
+[[unit]]
+text = "Action Type | Entity | Written when"
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "feature_flag_create | feature_flag | POST /feature-flags/"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_create",
+]
+
+[[unit]]
+text = "feature_flag_update | feature_flag | PUT /feature-flags/{id}; /unarchive; bulk archive; every change to one of the flag's rollout schedules or stages (reason is rollout schedule <change>, such as rollout schedule activated)"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_update_records_only_what_changed",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_rollout_schedule_routes_record_on_the_flag",
+    "test:backend/tests/integration/api/test_flag_status_audit_write.py::test_unarchive_answers_200_with_one_row",
+]
+
+[[unit]]
+text = "feature_flag_delete | feature_flag | DELETE /feature-flags/{id}"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_delete",
+]
+
+[[unit]]
+text = "feature_flag_activate, feature_flag_deactivate | feature_flag | /activate, /deactivate, when the status changes"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_status_verbs",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_activate_that_changes_nothing_writes_nothing",
+]
+
+[[unit]]
+text = "toggle_enable, toggle_disable | feature_flag | A flag is turned on or off (/toggle, /enable, /disable, or bulk enable/disable); old_value and new_value are the status"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_status_verbs",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_bulk_toggle_one_entry_per_flag",
+]
+
+[[unit]]
+text = "experiment_create | experiment | POST /experiments/, /clone (reason names the source), wizard submit"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_create_update_delete",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_schedule_metadata_and_clone",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_wizard_submit_records_the_created_experiment",
+]
+
+[[unit]]
+text = "experiment_update | experiment | PUT /experiments/{id}, /schedule, /metadata, /archive, PUT /bandit/{id}/weights (reason names the change, except for PUT)"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_schedule_metadata_and_clone",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_bandit_weights_override",
+]
+
+[[unit]]
+text = "experiment_delete | experiment | DELETE /experiments/{id}"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_create_update_delete",
+]
+
+[[unit]]
+text = "experiment_start, experiment_pause, experiment_complete | experiment | /start (also a resume), /pause, /complete"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_lifecycle",
+]
+
+[[unit]]
+text = "api_key_create, api_key_revoke | api_key | POST /api-keys, DELETE /api-keys/{id}"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_api_key_create_and_revoke_hold_no_part_of_the_key",
+]
+
+[[unit]]
+text = "holdout_create | holdout | POST /holdout. With is_active: true it turns the active holdout off, and that holdout gets its own holdout_deactivate"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_holdout_post_activation_records_the_one_it_ends",
+]
+
+[[unit]]
+text = "holdout_update, holdout_activate, holdout_deactivate | holdout | PUT /holdout/{id}, one entry per kind of change. Activating a holdout turns any other active one off, and that holdout gets its own holdout_deactivate. An activate or deactivate entry also carries the activated_at or deactivated_at it set"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_holdout_create_update_and_activation",
+]
+
+[[unit]]
+text = "mutual_exclusion_group_create, mutual_exclusion_group_update, mutual_exclusion_group_archive | mutual_exclusion_group | Create, PUT, and DELETE (which archives). Adding or removing an experiment is an update with {\"experiment_id\": ...} and the reason experiment added or experiment removed"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_exclusion_group_routes",
+]
+
+[[unit]]
+text = "segment_create, segment_update, segment_archive | segment | POST /segments, PUT /segments/{id}, DELETE /segments/{id} (which archives). Adding or removing members of an id list (POST /segments/{id}/members, /members/remove) is an update with the reason members added or members removed and new_value {\"added\", \"already_members\", \"member_count\"} or {\"removed\", \"not_members\", \"member_count\"}: the counts, never the user IDs"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_segment_create_update_archive",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_segment_members_add_and_remove_record_counts_only",
+]
+
+[[unit]]
+text = "user_create, user_delete | user | POST /users/; DELETE /users/{id} and DELETE /admin/users/{id}. Deleting your own account is recorded with no user_id"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_user_create",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_user_delete",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_deleting_your_own_account_is_recorded_without_a_user_id",
+]
+
+[[unit]]
+text = "role_assign | user | A superuser changes a user's role or superuser flag (PATCH /admin/users/{id}, PUT /admin/users/{id}, PUT /users/{id}); old_value and new_value are {\"role\", \"is_superuser\"}"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_patch_role_and_active",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_superuser_flag_through_put_is_recorded",
+]
+
+[[unit]]
+text = "user_activate, user_deactivate | user | The same routes change a user's active status"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_active_status_through_put_is_recorded",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_patch_role_and_active",
+]
+
+[[unit]]
+text = "user_login | user | Signing in with a password (POST /auth/login, or POST /auth/token with AUTH_PROVIDER=local); new_value is {\"provider\": \"local\"}"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_local_sign_in",
+]
+
+[[unit]]
+text = "user_login | user | Signing in through Cognito (POST /auth/token with the Cognito provider) as a user who already has an account; new_value is {\"provider\": \"cognito\"}. A user's first Cognito sign-in writes no user_login: their account is created by the first request they make with the token, which writes user_create. A sign-in through the Cognito Hosted UI does not pass through this API and writes nothing"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_cognito_sign_in_with_an_account_is_recorded",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_cognito_sign_in_without_an_account_writes_nothing",
+]
+
+[[unit]]
+text = "safety_rollback | feature_flag | A safety rollback, manual (POST /safety/feature-flags/{id}/rollback, by the calling user) or by the safety monitor. new_value is {\"trigger_type\", \"previous_percentage\", \"new_percentage\", \"deactivated\", \"paused_schedules\"}; reason is the rollback's reason. It appears in the flag's history"
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_manual_rollback_is_recorded_by_the_calling_user",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_monitor_rollback_is_recorded_by_the_safety_monitor",
+]
+
+[[unit]]
+text = "experiment_start, experiment_complete | experiment | The experiment scheduler starts an experiment at its start date or scheduled resume, or completes it at its end date (also when POST /experiments/schedules/process runs it). reason is scheduled start, scheduled resume or scheduled end"
+by = ["untested:T"]
+
+[[unit]]
+text = "feature_flag_update | feature_flag | The rollout scheduler starts a rollout stage and sets the flag's rollout percentage. reason is rollout schedule stage started"
+by = ["test:backend/tests/integration/services/test_audit_service_sites.py::test_stage_start_is_recorded_by_the_rollout_scheduler"]
+
+[[unit]]
+text = "user_create | user | A user's first Cognito sign-in creates their account. The actor is the new user; reason is first sign-in"
+by = ["test:backend/tests/integration/services/test_audit_service_sites.py::test_first_sign_in_is_recorded_by_the_new_account"]
+
+[[unit]]
+text = "role_assign | user | Cognito group sync (SYNC_ROLES_ON_LOGIN) changes a user's role or superuser flag when they sign in; old_value and new_value are {\"role\", \"is_superuser\"}"
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_group_role_change_is_recorded_by_cognito_sync",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_superuser_flag_change_alone_is_recorded",
+]
+
+[[unit]]
+text = "With the modules installed (the full profile), these are written too:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "role_assign | user | POST /rbac/roles/assign gives a user a custom role they did not hold; new_value is {\"custom_role\"}, reason is custom role assigned"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_assigning_a_custom_role_writes_one_role_assign",
+]
+
+[[unit]]
+text = "role_unassign | user | POST /rbac/roles/revoke takes away a custom role the user held; old_value is {\"custom_role\"}, reason is custom role revoked"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_revoking_a_custom_role_writes_one_role_unassign",
+]
+
+[[unit]]
+text = "role_assign | user | PUT /workspaces/{id}/members/{user_id} changes a member's workspace role; old_value and new_value are {\"workspace_id\", \"workspace_role\"}, reason is workspace role changed"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_changing_a_members_workspace_role_writes_one_role_assign",
+]
+
+[[unit]]
+text = "user_login | user | An SSO sign-in: the SAML ACS (POST /auth/sso/saml/{config_id}/acs), the dashboard's POST /auth/sso/exchange, or the OIDC callback when it answers with a token; new_value is {\"provider\": \"sso\"}"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_a_saml_sign_in_writes_one_user_login",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_the_dashboard_exchange_writes_one_user_login",
+    "test:modules/backend/tests/integration/api/test_sso_oidc_flow.py::test_a_sign_in_writes_one_user_login_and_one_user_create",
+]
+
+[[unit]]
+text = "user_create | user | A user's first SSO sign-in creates their account. The actor is the new user; reason is first SSO sign-in"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_a_first_sso_sign_in_writes_user_create_by_the_new_account",
+]
+
+[[unit]]
+text = "role_assign | user | An SSO sign-in changes an existing user's role from a mapped group; old_value and new_value are {\"role\", \"is_superuser\"} (SSO never changes the superuser flag, so it is the same in both), reason is SSO groups changed"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_an_sso_role_change_writes_one_role_assign_by_sso_sync",
+]
+
+[[unit]]
+text = "A request that changes nothing (a custom role already held, a workspace role or SSO role already equal) writes no entry."
+by = [
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_unchanged_groups_write_nothing",
+]
+
+[[unit]]
+text = "Assigning a direct permission, defining a custom role, adding or removing a workspace member, invites, SSO configuration and the other module routes write none."
+by = ["test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact"]
+
+[[unit]]
+text = "User changes record the superuser flag."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A change to a user's role, superuser flag or active status is saved together with its entry: if the entry cannot be written, the change is refused with a 500 and nothing is saved, and sending the same request again once the problem is fixed writes it once."
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_patch_under_a_failed_audit_write_keeps_neither",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_put_under_a_failed_audit_write_keeps_neither",
+]
+
+[[unit]]
+text = "ActionType also defines user_update, user_logout, permission_grant, permission_revoke and safety_config_update."
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_written_action_types_are_what_the_inventory_writes",
+    "test:backend/tests/smoke/test_audit_action_types_json.py",
+]
+
+[[unit]]
+text = "You can filter on them, but nothing in this release writes them (role_unassign is written only with the modules installed)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Granting and revoking a direct permission are not recorded because no permission check reads direct grants yet (#891)."
+by = ["untested:T"]
+
+[[unit]]
+text = "Changes the platform makes on its own"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An entry the platform makes on its own has no user_id, and its user_email is one of these reserved values:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "user_email | Written by"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "system:experiment-scheduler | The experiment scheduler: scheduled starts, resumes and ends"
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_five",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_scheduled_start_is_recorded_by_the_experiment_scheduler",
+]
+
+[[unit]]
+text = "system:rollout-scheduler | The rollout scheduler: each rollout stage it starts"
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_five",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_stage_start_is_recorded_by_the_rollout_scheduler",
+]
+
+[[unit]]
+text = "system:safety-monitor | The safety monitor: each automatic rollback"
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_five",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_monitor_rollback_is_recorded_by_the_safety_monitor",
+]
+
+[[unit]]
+text = "system:cognito-sync | Cognito group sync: each role or superuser flag change"
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_five",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_group_role_change_is_recorded_by_cognito_sync",
+]
+
+[[unit]]
+text = "system:sso-sync | SSO sign-in (full profile): each role change from a mapped group"
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_the_reserved_actors_are_exactly_five",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_an_sso_role_change_writes_one_role_assign_by_sso_sync",
+]
+
+[[unit]]
+text = "An entry is automatic only when user_id is empty and user_email is one of these values."
+by = ["test:backend/tests/integration/services/test_audit_service_sites.py::test_a_deleted_users_entries_are_never_automatic"]
+
+[[unit]]
+text = "Deleting a user also empties user_id on their entries, but keeps their own user_email, so those entries are never automatic."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A manual rollback is recorded with the user who asked for it."
+by = ["test:backend/tests/integration/services/test_audit_service_sites.py::test_manual_rollback_is_recorded_by_the_calling_user"]
+
+[[unit]]
+text = "What is never recorded"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Action Types is the complete list: a change not listed there writes no entry."
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/smoke/test_audit_non_route_inventory.py::test_the_sites_are_exact",
+]
+
+[[unit]]
+text = "No entry ever holds:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "reading anything: lists, reports, the audit log itself, or exporting it;"
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_each_read_route_exists_and_is_not_audited",
+    "test:backend/tests/integration/api/test_audit_export.py::test_exporting_writes_no_audit_entry",
+]
+
+[[unit]]
+text = "failed sign-ins (there is no account to attach them to) or sign-outs;"
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_failed_sign_in_writes_nothing",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_failed_cognito_sign_in_writes_nothing",
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+]
+
+[[unit]]
+text = "passwords or their hashes, tokens, or any part of an API key or its hash;"
+by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_api_key_create_and_revoke_hold_no_part_of_the_key"]
+
+[[unit]]
+text = "request bodies, IP addresses or user agents;"
+by = ["test:backend/tests/unit/models/test_audit_log_text_normalised.py"]
+
+[[unit]]
+text = "the contents of descriptions, hypotheses, targeting rules, segment rules, variants and metrics (only their names, under changed_fields);"
+by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_free_text_never_reaches_an_entry"]
+
+[[unit]]
+text = "error text;"
+by = ["untested:T"]
+
+[[unit]]
+text = "changes made directly in the database rather than through the platform."
+by = ["untested:T"]
+
+[[unit]]
+text = "When an entry can be missing"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Whether a change is kept when its entry cannot be written depends on where it is made:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Where | If the entry cannot be written"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A route (all the route actions above) | The change is kept and the response is 2xx; there is no entry"
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_route_site_keeps_the_change_when_the_audit_write_fails",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_bulk_toggle_keeps_the_change_when_the_audit_write_fails",
+    "test:backend/tests/integration/api/test_change_audit_saved.py::test_failed_audit_write_keeps_the_answer_and_the_change",
+]
+
+[[unit]]
+text = "A superuser's change to a user's role, superuser flag or active status | Nothing is saved and the response is 500; resend it once the problem is fixed"
+by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_patch_under_a_failed_audit_write_keeps_neither"]
+
+[[unit]]
+text = "A safety rollback, manual or by the safety monitor | The rollback is kept; there is no entry"
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_entry_never_blocks_a_rollback",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_monitor_entry_never_blocks_a_rollback",
+]
+
+[[unit]]
+text = "The experiment scheduler | The start or end is kept; there is no entry, and it is not written later"
+by = ["test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_entry_for_one_experiment_of_three_keeps_every_transition"]
+
+[[unit]]
+text = "The rollout scheduler | The stage does not start and the rollout percentage does not change; the next run tries both again"
+by = ["test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_entry_keeps_neither_the_stage_start_nor_the_entry"]
+
+[[unit]]
+text = "A first Cognito or SSO sign-in | The account is created; there is no entry"
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_entry_still_creates_the_account",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_a_refused_entry_still_creates_the_sso_account",
+]
+
+[[unit]]
+text = "Cognito group sync | The role change is kept and the request succeeds; there is no entry, and it is not written later: the next request finds the role already changed and writes nothing"
+by = ["test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_entry_still_applies_the_role_change"]
+
+[[unit]]
+text = "SSO sign-in changing a role | The role change is kept and the sign-in succeeds; there is no entry, and it is not written later: the next sign-in finds the role already changed and writes nothing"
+by = ["test:modules/backend/tests/integration/api/test_audit_module_events.py::test_a_refused_entry_still_applies_the_sso_role_change"]
+
+[[unit]]
+text = "Each entry that cannot be written logs one ERROR line from the API:"
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py",
+]
+
+[[unit]]
+text = "In a deployed stack that line is the only signal that an entry is missing."
+by = ["untested:A"]
+
+[[unit]]
+text = "The API also counts these failures in a Prometheus counter, audit_write_failures_total, but do not rely on it there: the AWS deployment does not collect it."
+by = ["untested:T"]
+
+[[unit]]
+text = "Keeping entries, and deleted users"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Nothing deletes audit entries: they are kept until someone removes them from the database."
+by = ["untested:T"]
+
+[[unit]]
+text = "Deleting a user empties user_id on their entries and keeps user_email, so a deleted user's email address stays in the log, readable by everyone who reads every entry (see Permissions)."
+by = ["test:backend/tests/integration/services/test_audit_service_sites.py::test_a_deleted_users_entries_are_never_automatic"]
+
+[[unit]]
+text = "Recent Entries as a Stream (SSE)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/audit-logs/stream sends the most recent entries as Server-Sent Events: one data: line per entry, newest first, then a final {\"event\": \"end\"}, and closes."
+by = ["docex:docs/api/audit-logging.md#data: {\"event\": \"end\"}"]
+
+[[unit]]
+text = "It does not stay open for new entries."
+by = ["docex:docs/api/audit-logging.md#data: {\"event\": \"end\"}"]
+
+[[unit]]
+text = "limit (default 50, max 100) and entity_type narrow it:"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "It prints the two toggle_disable entries, then the end event:"
+by = ["untested:T"]
+
+[[unit]]
+text = "Feature Flag Change History"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/feature-flags/{flag_id}/history"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The audit entries for one flag, most recent first, with limit (default 50, max 200) and offset:"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "It prints \"total_changes\": 2 (the flag's creation and the bulk toggle) and the latest entry, the bulk toggle's: toggle_disable, from ACTIVE to INACTIVE, by admin@demo.com."
+by = ["docex:docs/api/audit-logging.md#\"total_changes\": 2"]
+
+[[unit]]
+text = "Permissions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "ADMIN and ANALYST (and superusers) read every audit entry."
+by = [
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries",
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_admin_and_analyst_read_every_entry",
+]
+
+[[unit]]
+text = "DEVELOPER and VIEWER read only the entries they made themselves."
+by = [
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries",
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_admin_and_analyst_read_every_entry",
+]
+
+[[unit]]
+text = "Route | ADMIN, ANALYST | DEVELOPER, VIEWER"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /audit-logs/ | Every entry; user_id filters by any user | Own entries only; a user_id naming anyone else is replaced by their own"
+by = ["test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries"]
+
+[[unit]]
+text = "GET /audit-logs/export | Every entry; user_id filters by any user | Own entries only; a user_id naming anyone else is replaced by their own"
+by = ["test:backend/tests/integration/api/test_audit_export.py::test_developer_and_viewer_export_only_their_own_rows"]
+
+[[unit]]
+text = "GET /audit-logs/user/{user_id} | Any user | Their own id only; any other id is 403"
+by = [
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries",
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_still_reads_own_entries",
+]
+
+[[unit]]
+text = "GET /audit-logs/entity/{entity_type}/{entity_id} | Every entry | 403"
+by = ["test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_are_refused_entity_history_and_stats"]
+
+[[unit]]
+text = "GET /audit-logs/stats | Every entry | 403"
+by = ["test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_are_refused_entity_history_and_stats"]
+
+[[unit]]
+text = "GET /audit-logs/stream | Every entry | Own entries only"
+by = [
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_still_reads_own_entries",
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_admin_and_analyst_read_every_entry",
+]
+
+[[unit]]
+text = "GET /feature-flags/{flag_id}/history | Every entry | Own entries only; total_changes counts only those"
+by = ["test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_still_reads_own_entries"]
+
+[[unit]]
+text = "POST /feature-flags/bulk-toggle changes flags, so it follows the flag rule: ADMIN and DEVELOPER may use it, ANALYST and VIEWER may not."
+by = ["test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_refuses_flags_the_user_cannot_update"]

@@ -1,0 +1,70 @@
+# What verifies each unit of docs/security/README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/security/README.md"
+
+[[unit]]
+text = "Security Documentation"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This directory contains the security compliance documentation for Experimently."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Document | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Security model | What the platform does to protect a deployment"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Responding to an incident on your deployment | Where to report a vulnerability, and how to roll back"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Hardening Changes | Security controls implemented"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Quick Reference"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Report a security issue: privately, as SECURITY.md describes"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An incident on your deployment: Responding to an incident on your deployment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Key Security Controls (Implemented)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Security headers: HSTS (1yr + preload), CSP (default-src 'none', except the two API reference pages, which allow the jsdelivr assets they load), X-Frame-Options: DENY — backend/app/middleware/security_middleware.py"
+by = [
+    "test:backend/tests/unit/api/test_docs_page_csp.py::test_docs_page_carries_the_docs_policy",
+    "test:backend/tests/unit/api/test_security_headers.py::TestSecurityMiddleware::test_hsts_in_production",
+]
+
+[[unit]]
+text = "RBAC enforcement: 4 roles (ADMIN, DEVELOPER, ANALYST, VIEWER) — backend/app/core/permissions.py"
+by = ["test:backend/tests/unit/core/test_permissions.py"]
+
+[[unit]]
+text = "bcrypt password hashing — backend/app/core/security.py"
+by = ["test:backend/tests/unit/security/test_owasp_compliance.py::TestCryptographicFailures::test_bcrypt_used_for_password_hashing"]
+
+[[unit]]
+text = "API key expiry and revocation (an expired or revoked key is refused) — backend/app/models/api_key.py, backend/app/api/deps.py"
+by = [
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_expired_or_inactive_key_is_401",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestDelete::test_deleted_key_no_longer_authenticates",
+]
+
+[[unit]]
+text = "Safety auto-rollback for feature flags — backend/app/core/safety_scheduler.py"
+by = ["test:backend/tests/unit/services/test_safety_service.py"]

@@ -6,12 +6,9 @@
     part of the **full profile** and every route is `x-stability: beta`: its
     shape may still change.
 
-    Snowflake is available: its connector passed a check against a real
-    Snowflake account on 2026-10-04 (see [Setting up Snowflake](#setting-up-snowflake)).
-    BigQuery is available: its connector passed a check against a real
-    BigQuery project on 2026-10-05 (see [Setting up BigQuery](#setting-up-bigquery)).
-    Amazon Athena isn't available yet; it becomes available only after its
-    own check against a real account.
+    Snowflake is available (see [Setting up Snowflake](#setting-up-snowflake)).
+    BigQuery is available (see [Setting up BigQuery](#setting-up-bigquery)).
+    Amazon Athena isn't available yet.
     `GET /api/v1/warehouse/analysis/connectors` says which are available on
     your deployment; creating a connection of any other type answers
     `422 connector_disabled`.
@@ -25,8 +22,8 @@ You point Experimently at two of your own tables or views:
 - a **metric source** per metric: one row per event, with the unit id and the
   time of the event, and for a mean metric the event's value.
 
-Experimently generates the SQL (there is no field that takes SQL), runs it
-with the read-only identity you created for it, and computes the results
+Experimently writes the SQL itself (there is no field that takes SQL), runs
+it as the identity you created for it, and computes the results
 from what comes back. A metric is one of two types:
 
 - a **proportion**: the share of exposed units that had at least one event in
@@ -79,19 +76,9 @@ otherwise the warehouse numbers are the stricter ones.
 Experimently signs in to Snowflake's SQL API as a user in your account, with
 a key pair it generates. There is no password field.
 
-1. **Create a role that can read the tables analysis needs, and nothing
-   else**, and a user that has it. For example, as an administrator:
-
-    ```sql
-    CREATE ROLE EXPERIMENTLY_READER;
-    GRANT USAGE ON WAREHOUSE ANALYSIS_WH TO ROLE EXPERIMENTLY_READER;
-    GRANT USAGE ON DATABASE ANALYTICS TO ROLE EXPERIMENTLY_READER;
-    GRANT USAGE ON SCHEMA ANALYTICS.PUBLIC TO ROLE EXPERIMENTLY_READER;
-    GRANT SELECT ON TABLE ANALYTICS.PUBLIC.ASSIGNMENTS TO ROLE EXPERIMENTLY_READER;
-    GRANT SELECT ON TABLE ANALYTICS.PUBLIC.ORDERS TO ROLE EXPERIMENTLY_READER;
-    CREATE USER EXPERIMENTLY DEFAULT_ROLE = EXPERIMENTLY_READER;
-    GRANT ROLE EXPERIMENTLY_READER TO USER EXPERIMENTLY;
-    ```
+1. **In Snowflake, give Experimently a user and a role of its own.** Grant
+   the role `USAGE` on the warehouse, the database and the schema, and `SELECT`
+   on each table or view analysis reads, and nothing else.
 
     A connection whose role is ACCOUNTADMIN or another of Snowflake's
     built-in administrative roles is refused.
@@ -107,26 +94,24 @@ a key pair it generates. There is no password field.
    as Snowflake stores it (upper case unless it was created quoted).
 
 Every statement runs with the session time zone set to UTC and is stopped by
-Snowflake at the connection's `query_timeout_seconds`. Snowflake bills for
-the warehouse's running time, so a resource monitor on the warehouse is a
-good second limit.
+Snowflake at the connection's `query_timeout_seconds`. A resource monitor on
+the Snowflake warehouse is a good second limit.
 
-To replace the key, use **Generate a new key**: it shows a statement for
-`RSA_PUBLIC_KEY_2`, and the old key keeps working until a test with the new
-one passes.
+To replace the key, choose **Generate a new key**. It shows the statement
+that registers the new public key as `RSA_PUBLIC_KEY_2`; the old key keeps
+working until a test with the new one passes.
 
 ## Setting up BigQuery
 
 Experimently signs in to BigQuery with a service-account key you create for
 it, and runs every query as a job in a project you choose.
 
-1. **Create a service account for Experimently** and give it two roles, and
-   nothing more:
+1. **In Google Cloud, create a service account for Experimently** with these
+   two roles only:
     - **BigQuery Job User** on the project that runs and pays for the
       queries (the connection's billing project);
-    - **BigQuery Data Viewer** on each dataset analysis reads, granted on the
-      dataset itself. Never grant it on the whole project: the service
-      account can then read every table in it.
+    - **BigQuery Data Viewer** on each dataset analysis reads, granted on each
+      dataset rather than on the project.
 2. **Create a JSON key** for the service account and paste it into the
    connection form in Warehouse › Connections (ADMIN). It is sent only in the
    request body and stored encrypted, and it is never shown again. A key
@@ -189,8 +174,7 @@ case per day (`worst_case_bytes_per_day` or `worst_case_seconds_per_day`):
 
 Connection tests and source validation are not counted by the daily limit.
 They are ADMIN-only (validation: the source's editors) and each has a
-30-second limit; on a warehouse that bills for resuming compute, each test can
-resume it.
+30-second limit.
 
 When a limit is reached the API answers:
 
@@ -245,7 +229,7 @@ A source names a table or view and maps its columns:
   "kind": "metric",
   "connection_id": "3f6c1a52-0d7e-4a55-9a51-2b1f3f0b6e10",
   "name": "Purchases",
-  "table": "analytics.purchases",
+  "table": "ANALYTICS.PUBLIC.PURCHASES",
   "columns": {"unit_id": "user_id", "event_at": "purchased_at"},
   "metric_type": "proportion",
   "conversion_window_hours": 168,
@@ -287,12 +271,12 @@ validation lists where and why, but never repeats the value you sent.
 
 ## If you ran an earlier full-profile release
 
-The earlier `/api/v1/warehouse` endpoints -- saved connections, sync, and the
-ClickHouse, MySQL and Databricks connectors -- were removed in 0.9.0, and the
+As of v0.9.0, the earlier `/api/v1/warehouse` endpoints (saved connections,
+sync, and the ClickHouse, MySQL and Databricks connectors) are removed, and the
 migration to the warehouse analysis tables deletes the connections they saved
 (see [Upgrading and migrations](../self-hosting/migrations.md)). Rotate every
-credential that was ever saved there. Credentials sent to those endpoints as
-query parameters may be in your access logs: rotate those too.
+credential that was ever saved there, and every credential sent to those endpoints in a
+query parameter: it may be in your access logs.
 
 See [Modules and profiles](../getting-started/modules.md) for what each
 profile includes.

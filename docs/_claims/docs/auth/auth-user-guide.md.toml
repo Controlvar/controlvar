@@ -1,0 +1,747 @@
+# What verifies each unit of docs/auth/auth-user-guide.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/auth/auth-user-guide.md"
+
+[[unit]]
+text = "Authentication User Guide"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This guide explains how to use the authentication features of Experimently, including registration, login, password management, and security best practices."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Cognito only"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The password-reset and token-refresh endpoints (POST /api/v1/auth/forgot-password, /reset-password and /refresh) are available only when AUTH_PROVIDER=cognito."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The sign-up and confirmation endpoints (POST /api/v1/auth/signup and /confirm) also need COGNITO_SELF_SIGNUP_ENABLED=true; without it they answer 404 and an administrator creates users (Adding a user)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With any other provider, including the default local, all five answer 404."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With local, sign in with POST /api/v1/auth/login; an administrator creates accounts and resets passwords."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The dashboard does not yet sign in with Cognito."
+by = [
+    "test:backend/tests/integration/auth/test_token.py",
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_404_under_cognito_provider",
+]
+count = 2
+
+[[unit]]
+text = "Sign in through the API with POST /api/v1/auth/token."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "SSO sign-in needs AUTH_PROVIDER=local."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Account Registration"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Only with COGNITO_SELF_SIGNUP_ENABLED=true and a user pool that allows self sign-up; otherwise see Adding a user."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Registration Requirements"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "To create an account on Experimently, you will need to provide:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Username: 3 to 50 characters"
+by = [
+    "test:backend/tests/integration/auth/test_signup.py::TestSignupValidation::test_short_username_returns_422",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "Email: A valid email address you can access for verification"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Password: Must satisfy the following requirements:"
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_weak_new_password_is_422"]
+
+[[unit]]
+text = "At least 8 characters"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "At most 100 characters"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "At least one uppercase letter"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "At least one lowercase letter"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "At least one digit (0-9)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "First Name and Last Name: Your real name or preferred name"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Registration Process"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The dashboard has no registration page and no sign-up link: registration is through the API only, and only with COGNITO_SELF_SIGNUP_ENABLED=true."
+by = ["test:backend/tests/integration/auth/test_self_signup_gate.py"]
+
+[[unit]]
+text = "Without it, both endpoints below answer 404 and an administrator creates your account (Adding a user)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "POST /api/v1/auth/signup with username, password, email, given_name and family_name."
+by = [
+    "test:backend/tests/integration/auth/test_signup.py",
+    "test:backend/tests/integration/auth/test_confirm.py",
+    "test:backend/tests/integration/auth/test_token.py",
+]
+
+[[unit]]
+text = "Cognito emails a verification code to the address."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "POST /api/v1/auth/confirm with username and the confirmation_code from the email."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sign in with POST /api/v1/auth/token (form fields username and password)."
+by = [
+    "test:backend/tests/integration/auth/test_token.py",
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_404_under_cognito_provider",
+]
+
+[[unit]]
+text = "Email Verification"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If you don't receive a verification code, check your spam folder"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Login Process"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Standard Login"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Navigate to the login page at /login"
+by = [
+    "journey:onboarding-and-password#sign-in-page",
+    "journey:onboarding-and-password#demo-admin-email",
+    "journey:onboarding-and-password#demo-admin-password",
+    "journey:onboarding-and-password#demo-admin-signed-in",
+]
+
+[[unit]]
+text = "Enter your email address and password"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Click \"Sign in\""
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This is the sign-in for AUTH_PROVIDER=local."
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_404_under_cognito_provider",
+    "journey:onboarding-and-password#demo-admin-signed-in",
+]
+
+[[unit]]
+text = "With cognito, the dashboard does not yet sign in; see the note at the top of this page."
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_404_under_cognito_provider",
+    "journey:onboarding-and-password#demo-admin-signed-in",
+]
+
+[[unit]]
+text = "Login Security Features"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Session Management: A sign-in lasts 12 hours by default (LOCAL_AUTH_TOKEN_TTL_MINUTES); then you sign in again"
+by = [
+    "test:backend/tests/unit/core/test_config_environment.py::TestAuthSettings::test_defaults",
+    "test:backend/tests/unit/api/test_local_auth.py::TestGetCurrentUserLocal::test_expired_token_is_401",
+]
+
+[[unit]]
+text = "Account Protection: Too many failed login attempts will temporarily lock your account"
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginAttemptTracker::test_locks_after_threshold_within_window",
+    "test:backend/tests/unit/api/test_local_auth.py::TestLocalAuthService::test_lockout_after_threshold_even_with_correct_password",
+]
+
+[[unit]]
+text = "After Login"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Once logged in successfully:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "You will be redirected to the dashboard"
+by = ["journey:onboarding-and-password#demo-admin-signed-in"]
+
+[[unit]]
+text = "An access token is stored in your browser"
+by = ["untested:T"]
+
+[[unit]]
+text = "This token is used for all subsequent API requests"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Password Management"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Password Reset Process"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The dashboard has no reset page and no reset link, under any AUTH_PROVIDER."
+by = ["test:frontend/src/tests/pages/login.test.tsx::shows the \"forgot password\" copy without a reset link"]
+
+[[unit]]
+text = "The login page's Forgot password?"
+by = ["test:frontend/src/tests/pages/login.test.tsx::shows the \"forgot password\" copy without a reset link"]
+
+[[unit]]
+text = "only says \"Ask an administrator to reset it.\" What happens next depends on the provider."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With AUTH_PROVIDER=local (the default) there is no self-service reset."
+by = ["test:backend/tests/unit/api/test_cognito_only_routes.py::test_local_provider_answers_fixed_404"]
+
+[[unit]]
+text = "An administrator with a superuser account sets a new password for you through the API, without knowing the old one: PUT /api/v1/admin/users/{user_id} with a JSON body of {\"password\": \"<new password>\"} and the administrator's bearer token."
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_superuser_resets_another_account"]
+
+[[unit]]
+text = "PUT /api/v1/users/{user_id} accepts the same password field."
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_superuser_resets_another_account"]
+
+[[unit]]
+text = "The dashboard's Edit dialog on Admin → Users changes the role and whether the account is active, not the password."
+by = ["test:frontend/src/tests/admin/EditUserModal.test.tsx"]
+
+[[unit]]
+text = "Nobody can reset their own password this way, administrators included; sign in with the new password and then change it yourself (see Changing Your Password)."
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_own_password_via_put_is_refused"]
+
+[[unit]]
+text = "With AUTH_PROVIDER=cognito the password lives in the Cognito user pool, and either of these works:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "an administrator sets it with aws cognito-idp admin-set-user-password ..."
+by = ["test:backend/tests/integration/auth/test_cognito_onboarding.py"]
+
+[[unit]]
+text = "--permanent, as in step 3 of Adding a user;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "you reset it yourself through the API, if your account's email address is verified (email_verified=true): POST /api/v1/auth/forgot-password with {\"username\": \"...\"} emails you a code, and POST /api/v1/auth/reset-password with username, confirmation_code and new_password sets the new password."
+by = ["test:backend/tests/integration/auth/test_password_reset.py"]
+
+[[unit]]
+text = "Then sign in with POST /api/v1/auth/token."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Password Reset Notes"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "New passwords must meet the same requirements as registration"
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_weak_password_in_a_superuser_reset_is_422"]
+
+[[unit]]
+text = "Under cognito, a password set in the dashboard's database (the local route above) does not change the Cognito password, so it does not change how you sign in"
+by = ["untested:A"]
+
+[[unit]]
+text = "Changing Your Password"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With the default local provider, open More in the dashboard's top navigation and choose Change password (in a window narrower than 1280 px, open the menu button first)."
+by = [
+    "journey:onboarding-and-password#admin-change-password-page",
+    "journey:onboarding-and-password#admin-type-current",
+    "journey:onboarding-and-password#admin-type-new",
+    "journey:onboarding-and-password#admin-type-confirm",
+    "journey:onboarding-and-password#admin-changed",
+    "test:frontend/src/tests/components/AppShell.test.tsx",
+]
+
+[[unit]]
+text = "The page (/account/password) asks for your current password and the new one twice."
+by = [
+    "test:frontend/src/tests/components/AppShell.test.tsx",
+    "journey:onboarding-and-password#admin-change-password-page",
+]
+
+[[unit]]
+text = "The link is not shown under cognito, where the password lives in the user pool."
+by = ["test:frontend/src/tests/components/AppShell.test.tsx"]
+
+[[unit]]
+text = "An account created through single sign-on has no password of its own, and the page says so."
+by = [
+    "test:frontend/src/tests/pages/account-password.test.tsx",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_no_password_account_cannot_set_one_on_me_password",
+]
+
+[[unit]]
+text = "Through the API, send your current password and the new one to POST /api/v1/users/me/password; see Change Your Own Password for a runnable example."
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_correct_current_password_changes_it"]
+
+[[unit]]
+text = "A wrong current password is refused with 403 and counts toward the same limit as failed logins."
+by = [
+    "test:backend/tests/integration/api/test_own_password_change.py::test_wrong_current_password_is_403_not_401",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_repeated_wrong_current_passwords_lock_the_account",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_sign_in_failures_lock_the_password_change",
+]
+
+[[unit]]
+text = "The new password must meet the same requirements as registration."
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_weak_new_password_is_422"]
+
+[[unit]]
+text = "Changing your password does not sign out your other sessions: a token issued before the change keeps working until it expires."
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_keeps_working"]
+
+[[unit]]
+text = "To end them straight away, an administrator deactivates the account (sets is_active to false)."
+by = ["test:backend/tests/integration/api/test_local_auth_path.py::TestLoginFlow::test_deactivated_after_login_gets_400"]
+
+[[unit]]
+text = "An administrator resets another user's password with PUT /api/v1/admin/users/{id}; nobody, administrators included, can change their own password that way."
+by = [
+    "test:backend/tests/integration/api/test_own_password_change.py::test_superuser_resets_another_account",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_own_password_via_put_is_refused",
+]
+
+[[unit]]
+text = "Using Authentication Tokens"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform uses JWT (JSON Web Tokens) for authentication."
+by = ["test:backend/tests/unit/api/test_local_auth.py"]
+
+[[unit]]
+text = "Here's how they work:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Token Types"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With AUTH_PROVIDER=local (the default), POST /api/v1/auth/login returns one access token, valid for 12 hours by default; there is no ID token and no refresh token."
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_success_shape",
+    "test:backend/tests/unit/core/test_config_environment.py::TestAuthSettings::test_defaults",
+]
+
+[[unit]]
+text = "With AUTH_PROVIDER=cognito, POST /api/v1/auth/token returns Cognito's access token, ID token and refresh token."
+by = [
+    "test:backend/tests/integration/auth/test_token.py",
+    "test:backend/tests/integration/auth/test_refresh.py::TestRefreshSuccess::test_refresh_returns_id_token",
+]
+
+[[unit]]
+text = "Sample Token Usage"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "When making API requests, include the access token in the Authorization header:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Token Refresh"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Under cognito, when your access token expires, use the refresh token to get a new one:"
+by = [
+    "test:backend/tests/integration/auth/test_refresh.py::TestRefreshSuccess::test_refresh_returns_new_access_token",
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_local_provider_answers_fixed_404",
+]
+
+[[unit]]
+text = "Managing users in the dashboard"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The dashboard's Admin → Users page (/admin/users) lists every account and lets you invite, edit and delete them."
+by = [
+    "journey:onboarding-and-password#admin-area",
+    "journey:onboarding-and-password#users-page",
+    "journey:onboarding-and-password#developer-admin-area",
+    "journey:onboarding-and-password#analyst-admin-area",
+    "journey:onboarding-and-password#viewer-admin-area",
+]
+
+[[unit]]
+text = "Opening it needs a superuser account, whatever its role; the table's Superuser column shows who has one."
+by = ["test:frontend/src/tests/admin/UserTable.test.tsx"]
+
+[[unit]]
+text = "The Admin role alone does not open the admin area, and the dashboard cannot make an existing account a superuser."
+by = ["test:frontend/src/tests/admin/withAdminGuard.test.tsx::refuses a non-superuser by default, whatever their role"]
+
+[[unit]]
+text = "Invite User creates an account with a temporary password, shown once."
+by = [
+    "journey:onboarding-and-password#invite-admin",
+    "journey:onboarding-and-password#invite-admin-email",
+    "journey:onboarding-and-password#invite-admin-role",
+    "journey:onboarding-and-password#invite-admin-create",
+    "journey:onboarding-and-password#admin-temporary-password",
+    "journey:onboarding-and-password#invite-admin-done",
+]
+
+[[unit]]
+text = "An account invited with the Admin role is also made a superuser."
+by = [
+    "journey:onboarding-and-password#invite-admin-done",
+    "journey:onboarding-and-password#admin-admin-area",
+]
+
+[[unit]]
+text = "Edit changes an account's role, whether it is active, or both."
+by = ["test:frontend/src/tests/admin/EditUserModal.test.tsx"]
+
+[[unit]]
+text = "Save is available once something has changed, and only what changed is sent (PATCH /api/v1/admin/users/{user_id}, see the API reference)."
+by = ["test:frontend/src/tests/admin/EditUserModal.test.tsx"]
+
+[[unit]]
+text = "After a save the list reloads on the page and search you were on."
+by = ["untested:T"]
+
+[[unit]]
+text = "Delete removes the account after you confirm it."
+by = ["untested:T"]
+
+[[unit]]
+text = "The four roles are Admin, Developer, Analyst and Viewer."
+by = [
+    "test:frontend/src/tests/admin/EditUserModal.test.tsx",
+    "test:frontend/src/tests/admin/UserTable.test.tsx",
+]
+
+[[unit]]
+text = "A legacy account with no role shows \"No role\" in the table; pick one in the Edit dialog."
+by = [
+    "test:frontend/src/tests/admin/EditUserModal.test.tsx",
+    "test:frontend/src/tests/admin/UserTable.test.tsx",
+]
+
+[[unit]]
+text = "Custom roles in the full edition are assigned on the Roles page, not here."
+by = ["untested:T"]
+
+[[unit]]
+text = "Rules the page and the API both apply:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "You can't change your own role or deactivate yourself; ask another administrator."
+by = [
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchRefusals::test_changing_your_own_role_is_refused",
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchRefusals::test_deactivating_yourself_is_refused",
+]
+
+[[unit]]
+text = "You can't delete your own account either."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Through the API (PUT /api/v1/admin/users/{user_id} or PUT /api/v1/users/{user_id}) you also can't remove your own superuser access, so keep at least two superusers; with Cognito role sync on, though, a superuser removed from the admin group in Cognito loses superuser access on their next request, and nothing here stops that."
+by = [
+    "test:backend/tests/integration/api/test_own_access_put.py",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_superuser_flag_change_alone_is_recorded",
+]
+
+[[unit]]
+text = "Deactivating a user stops them signing in, refuses requests with a token they already hold, and stops the API keys they created, including keys your applications use."
+by = [
+    "test:backend/tests/integration/api/test_local_auth_path.py::TestLoginFlow::test_inactive_user_cannot_log_in",
+    "test:backend/tests/integration/api/test_local_auth_path.py::TestLoginFlow::test_deactivated_after_login_gets_400",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_inactive_owner_is_401",
+]
+
+[[unit]]
+text = "Check which keys a user created before deactivating them."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With AUTH_PROVIDER=cognito and SYNC_ROLES_ON_LOGIN on (the default), roles come from Cognito groups and are rewritten on every request, so a role change is refused with \"Roles on this deployment come from Cognito groups and are updated on every request."
+by = [
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchUnderCognitoRoleSync::test_a_role_change_is_409",
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchUnderCognitoRoleSync::test_deactivation_is_saved_under_sync",
+]
+
+[[unit]]
+text = "Change this user's group in Cognito instead.\" Deactivating still works."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With SSO (full edition), a role set here lasts until the user's next SSO sign-in with a group in the configuration's role_mapping, which replaces it (see Group-to-Role Mapping)."
+by = ["test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_mapped_group_still_sets_the_role"]
+
+[[unit]]
+text = "When a save fails, the dialog stays open with your choices and says why."
+by = ["test:frontend/src/tests/admin/EditUserModal.test.tsx"]
+
+[[unit]]
+text = "\"You don't have permission to change users\" means your account is no longer a superuser; sign in again to check."
+by = ["test:frontend/src/tests/admin/EditUserModal.test.tsx"]
+
+[[unit]]
+text = "\"This user no longer exists\" means someone deleted the account; closing the dialog refreshes the list."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Common Error Scenarios and Solutions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Registration Errors"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Error | Cause | Solution"
+by = ["exempt:baseline"]
+count = 3
+
+[[unit]]
+text = "422, at [\"body\", \"email\"] | Email address is not valid | Check for typos in your email"
+by = ["test:backend/tests/integration/auth/test_signup.py::TestSignupValidation::test_invalid_email_format_returns_422"]
+
+[[unit]]
+text = "422, at [\"body\", \"password\"], naming the rule it breaks | The password breaks a requirement above | Follow the password requirements listed above"
+by = ["test:backend/tests/integration/auth/test_signup.py::TestSignupValidation::test_short_password_returns_422"]
+
+[[unit]]
+text = "Login Errors"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What the dashboard's sign-in form shows (AUTH_PROVIDER=local):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "\"Email or password is incorrect.\" | No account has this email, the password does not match, or the account is deactivated. The API answers 401 the same way for all three | Check both. An administrator can reset the password or reactivate the account"
+by = [
+    "test:frontend/src/tests/pages/login.test.tsx",
+    "test:backend/tests/unit/api/test_local_auth.py::TestLocalAuthService::test_inactive_user_is_invalid_credentials",
+]
+
+[[unit]]
+text = "\"Too many failed login attempts; account temporarily locked. Retry in N seconds.\" | Ten failed sign-ins for this email within 15 minutes (LOCAL_AUTH_MAX_FAILED_ATTEMPTS, LOCAL_AUTH_LOCKOUT_MINUTES); the API answers 423 | Wait the seconds it names. Every attempt until then is refused, even with the right password"
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginAttemptTracker::test_locks_after_threshold_within_window",
+    "test:backend/tests/unit/core/test_config_environment.py",
+]
+
+[[unit]]
+text = "\"Too many attempts. Please wait a moment and try again.\" | More than ten sign-ins in a minute from one address (429) | Wait a minute"
+by = [
+    "test:frontend/src/tests/pages/login.test.tsx",
+    "test:backend/tests/unit/middleware/test_preflight_and_429_cors.py",
+]
+
+[[unit]]
+text = "\"Can't reach the API at …\" | The dashboard got no answer from the API | Check that the API is running and that the dashboard's origin is in CORS_ORIGINS"
+by = [
+    "test:frontend/src/tests/services/api.test.ts",
+    "test:frontend/src/tests/pages/login.test.tsx",
+]
+
+[[unit]]
+text = "Token Errors"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "401 \"Could not validate credentials\" | The access token has expired, or is malformed or altered | Log in again (under cognito, you can also refresh the token)"
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestGetCurrentUserLocal::test_expired_token_is_401",
+    "test:backend/tests/unit/api/test_local_auth.py::TestGetCurrentUserLocal::test_malformed_token_is_401",
+]
+
+[[unit]]
+text = "Password Reset Errors"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "These come from the Cognito API routes only."
+by = ["test:backend/tests/integration/auth/test_password_reset.py"]
+
+[[unit]]
+text = "The route answers 400 with Cognito's own message, which names the error:"
+by = ["test:backend/tests/integration/auth/test_password_reset.py"]
+
+[[unit]]
+text = "Error in the message | Cause | Solution"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "CodeMismatchException | The code does not match the one emailed | Check the code, or request a new one"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "ExpiredCodeException | The code has expired | Request a new code with /auth/forgot-password"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "InvalidPasswordException | The new password does not meet the pool's policy | Follow the pool's password requirements"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "LimitExceededException | Too many attempts | Wait before trying again"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Security Best Practices"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "To keep your account secure:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Password Security"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Use a unique password not used on other websites"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Consider using a password manager"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Change your password if you think someone else may know it"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Never share your password with anyone"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Account Protection"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Don't share your verification codes with anyone"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log out when using shared or public computers"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Check for HTTPS in the browser address bar before logging in"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Device Security"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Keep your devices and browsers updated"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Use antivirus software on your computers"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Be cautious when logging in from public networks"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Clear browser cookies and storage after using public computers"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Suspicious Activity"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If you notice suspicious activity on your account:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Ask an administrator to deactivate the account (is_active set to false)."
+by = ["untested:T"]
+
+[[unit]]
+text = "That ends every session straight away; changing the password alone does not."
+by = [
+    "test:backend/tests/integration/api/test_local_auth_path.py::TestLoginFlow::test_deactivated_after_login_gets_400",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_keeps_working",
+]
+
+[[unit]]
+text = "Have the administrator reset your password, and reactivate the account once the tokens issued before it was deactivated have expired (12 hours with the default LOCAL_AUTH_TOKEN_TTL_MINUTES)."
+by = ["test:backend/tests/unit/core/test_config_environment.py"]
+
+[[unit]]
+text = "A deactivated account's tokens are refused only while it stays deactivated."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The audit log records sign-ins with a password, through Cognito (POST /auth/token) or through SSO, and an administrator's changes to your account's role, superuser flag or active status."
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_local_sign_in",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_cognito_sign_in_with_an_account_is_recorded",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_patch_role_and_active",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py",
+]
+
+[[unit]]
+text = "A password change and other changes to your profile are not recorded (#502); keep the account deactivated while you check."
+by = ["test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact"]

@@ -44,8 +44,9 @@ On the Quick Start stack it prints the names of its three demo experiments, amon
 - Passed via `X-API-Key` header
 - Required for all `/api/v1/tracking/*` endpoints
 
-An administrator or developer creates a key with the token above (see
-[API Keys](../security/api-keys.md)); the full key is shown only in this response:
+Any signed-in user, whatever their role, can create a key, and an API key writes tracking
+data. This creates one with the token above (see [API Keys](../security/api-keys.md)); the
+full key is shown only in this response:
 
 ```{.bash exec}
 KEY=$(curl -s -X POST http://localhost:8000/api/v1/api-keys \

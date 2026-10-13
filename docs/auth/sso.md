@@ -231,21 +231,6 @@ curl -X POST https://app.example.com/api/v1/auth/sso/configs \
 
 ## Provider-Specific Setup
 
-### Okta SAML 2.0
-
-SAML 2.0 sign-in is not available yet; use OIDC: see [Okta (OIDC)](#okta-oidc). The steps below register the SAML application for when SAML sign-in is available.
-
-1. In Okta, go to **Applications → Create App Integration → SAML 2.0**.
-2. Create the configuration first (with a placeholder certificate if you do not have Okta's yet), to learn its `id`.
-3. In Okta, set:
-   - **Single sign-on URL**: `{PUBLIC_BASE_URL}/api/v1/auth/sso/saml/{config_id}/acs`
-   - **Audience URI (SP Entity ID)**: the value of `SAML_SP_ENTITY_ID`
-   - **Name ID format**: `EmailAddress`, **Application username**: `Email`
-4. Under **Attribute Statements**, add `firstName` → `user.firstName` and `lastName` → `user.lastName` (the names are optional).
-5. Under **Group Attribute Statements**, add a statement named `groups` with the filter that selects the groups you map.
-6. From Okta's metadata, update the configuration: `entity_id` is the IdP's entity ID (the `Issuer`), `sso_url` its sign-on URL, `x509_certificate` its signing certificate.
-7. Users sign in from their Okta dashboard.
-
 ### Okta (OIDC)
 
 1. In Okta, create an **OIDC - OpenID Connect** app integration of type **Web Application**, with the **Authorization Code** grant.
@@ -253,21 +238,9 @@ SAML 2.0 sign-in is not available yet; use OIDC: see [Okta (OIDC)](#okta-oidc). 
 3. Create the configuration with `provider_type: "okta"`, the **Client ID** as `entity_id`, the **Client secret** as `client_secret`, and the authorization server's URL as `sso_url`: `https://acme.okta.com/oauth2/default` for the default custom authorization server, or `https://acme.okta.com/oauth2` for the org authorization server. The ID token's `iss` must be that URL (the org URL, `https://acme.okta.com`, for the org authorization server).
 4. For `role_mapping`, configure the authorization server to put a `groups` claim in the user info; the sign-in asks for the `groups` scope.
 
-### Azure Active Directory (SAML)
-
-SAML 2.0 sign-in is not available yet; use OIDC, and Microsoft Entra ID's (Azure AD's) OIDC provider types are not supported yet, so Entra ID cannot be used for sign-in today. The steps below register the SAML application for when SAML sign-in is available.
-
-1. In Azure, go to **Enterprise Applications → New Application → Create your own application → Integrate any other application you don't find in the gallery**.
-2. Under **Single sign-on → SAML**, set:
-   - **Identifier (Entity ID)**: the value of `SAML_SP_ENTITY_ID`
-   - **Reply URL (Assertion Consumer Service URL)**: `{PUBLIC_BASE_URL}/api/v1/auth/sso/saml/{config_id}/acs`
-3. The email is taken from the Name ID when it contains an `@`, otherwise from the `emailaddress` claim.
-4. For `role_mapping`, add a group claim. The groups are read from the `groups` attribute or from `http://schemas.microsoft.com/ws/2008/06/identity/claims/groups`, and the keys of `role_mapping` must be what Azure sends (by default, group object IDs).
-5. Download the **Certificate (Base64)**, and update the configuration: `entity_id` is the **Microsoft Entra Identifier**, `sso_url` the **Login URL**, `x509_certificate` the certificate.
-
 ### Google Workspace (OIDC)
 
-1. In Google Cloud Console, go to **APIs & Services → Credentials → Create OAuth client ID**, of type **Web application**.
+1. In Google Cloud, create an OAuth client ID of type **Web application** (**APIs & Services → Credentials**).
 2. Add the authorized redirect URI `{PUBLIC_BASE_URL}/api/v1/auth/sso/oidc/google/callback`.
 3. Create the configuration with `provider_type: "google"`, the **Client ID** as `entity_id` and the **Client secret** as `client_secret` (see [OIDC Configuration](#oidc-configuration)).
 
@@ -277,7 +250,7 @@ Only accounts of the Google Workspace domain that equals `org_domain` can sign i
 
 GitHub is OAuth 2, not OpenID Connect; it has no ID token.
 
-1. In GitHub, go to **Settings → Developer settings → OAuth Apps → New OAuth App** (or the same under an organization's settings).
+1. In GitHub, create an OAuth App (**Settings → Developer settings → OAuth Apps**, for a user or an organization).
 2. Set the **Authorization callback URL** to `{PUBLIC_BASE_URL}/api/v1/auth/sso/oidc/github/callback`.
 3. Create the configuration with `provider_type: "github"`, the **Client ID** as `entity_id` and a client secret as `client_secret`.
 

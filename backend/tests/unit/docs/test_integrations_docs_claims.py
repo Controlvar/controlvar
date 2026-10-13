@@ -394,8 +394,6 @@ ALLOWED_PLATFORM_SENTENCES: Dict[str, Tuple[str, ...]] = {
         "The GitHub client is written for a **Bearer Token** (a GitHub Personal Access Token or a GitHub App installation token in `Authorization: Bearer <token>`); nothing in the platform calls it yet.",
     ),
     "docs/integrations/github.md": (
-        "Received when a pull request is opened, updated, merged, or closed.",
-        "Received when an issue is opened, edited, closed, or labeled.",
         "It also stores a token and a repository for calls to GitHub, but nothing in the platform calls GitHub yet, and a delivery is acknowledged without changing anything in the platform.",
         "- **Inbound (GitHub → Platform)**: Receive webhook events from GitHub (`push`, `pull_request`, `issues`).",
         "Nothing in the platform acts on the event yet: no pull request is linked to an experiment, and no experiment changes.",
@@ -413,10 +411,8 @@ ALLOWED_PLATFORM_SENTENCES: Dict[str, Tuple[str, ...]] = {
         "The Connected App's credentials are stored for calls to Salesforce, which nothing in the platform makes yet, so an integration that only receives webhooks needs nothing but a `webhook_secret`.",
         "The Salesforce client in the platform is written for the **OAuth 2.0 Client Credentials** flow, and nothing calls it yet.",
         "To receive incoming events from Salesforce, configure a Salesforce Flow with an HTTP Callout (or an Apex callout, or a relay in front of the platform) to POST a JSON object to:",
-        "In Salesforce, build the sender: a Flow that runs on the record change you care about (for example a Campaign whose status becomes `Completed`) and calls an **HTTP Callout** action, or an Apex callout, or point your relay at the platform",
         "The platform accepts JSON objects from a Salesforce Flow HTTP Callout, an Apex callout or a relay.",
         "Nothing in the platform calls Salesforce yet: no experiment's status or result is written to a Salesforce record, and the `instance_url`, `client_id` and `client_secret` are stored for a sync that is not wired.",
-        "Ensure your platform is accessible from the public internet (Salesforce requires a reachable HTTPS endpoint)",
     ),
     "docs/getting-started/faq.md": (
         "Integrations are created by an ADMIN at `POST /api/v1/integrations`, are addressed by their type afterwards (`GET /api/v1/integrations/github`; there is one of each type), and have per-service webhook endpoints at `POST /api/v1/integrations/webhooks/github (also /jira, /salesforce)`.",
