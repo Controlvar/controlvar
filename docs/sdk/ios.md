@@ -253,4 +253,4 @@ swift build
 swift test
 ```
 
-- `swift test`: 71 XCTests; URLSession is intercepted with a URLProtocol mock
+- `swift test`: XCTest; URLSession is intercepted with a URLProtocol mock

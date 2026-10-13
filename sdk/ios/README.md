@@ -170,6 +170,6 @@ CI does not run this SDK's contract smoke against a real API: `ios` is not in th
 cd sdk/ios && swift test
 ```
 
-- `cd sdk/ios && swift test`: 71 XCTests; URLSession is intercepted with a URLProtocol mock
+- `cd sdk/ios && swift test`: XCTest; URLSession is intercepted with a URLProtocol mock
 
 `Examples/SwiftUIExample/ExampleApp.swift` shows the same calls from a SwiftUI view.

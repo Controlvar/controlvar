@@ -255,5 +255,5 @@ bundle install && bundle exec rspec
 ruby test_standalone.rb
 ```
 
-- `bundle install && bundle exec rspec`: 109 examples (run here on Ruby 2.6.10); HTTP stubbed with WebMock
+- `bundle install && bundle exec rspec`: RSpec (run here on Ruby 2.6.10); HTTP stubbed with WebMock
 - `ruby test_standalone.rb`: stdlib only: hash vector, types, cache, config, track safety
