@@ -72,11 +72,12 @@ THE TARGETS (a closed list; anything else is refused)
     ``scripts/``, and never a test that reads documentation: one the docs-only
     gate lists (``DOCS_TESTS``, ``NOT_DOCS_TESTS`` in ``DOCS_GATE``) or whose
     file matches that gate's ``DOCS_READER``. Such a test is reached only
-    through ``mechanism:``, which says which units it holds. In Python the function, or the
-    class and method, is found by parsing the file, its name starts with
-    ``test`` (a class with ``Test``), and one marked ``benchmark`` is refused
-    (skipped unless RUN_BENCHMARKS=1, so it would hold nothing). In another
-    language the file contains the name. ``test:<path>`` alone (the whole file)
+    through ``mechanism:``, which says which units it holds; the exception is
+    ``API_SNAPSHOT_TESTS``, which read the OpenAPI snapshots, not a page. In
+    Python the function, or the class and method, is found by parsing the
+    file, its name starts with ``test`` (a class with ``Test``), and one marked
+    ``benchmark`` is refused (skipped unless RUN_BENCHMARKS=1, so it would hold
+    nothing). In another language the file contains the name. ``test:<path>`` alone (the whole file)
     is allowed and counted separately. A ``modules/`` target in a tree without
     ``modules/`` (``scripts/core_build.sh``'s copy) is checked for its form only,
     and counted.
@@ -125,15 +126,55 @@ shrinks) or ``CLAIMS_DEFERRED`` (the mobile and not-yet-published SDK pages,
 a journey holds (no extractor) has none. This file reads Markdown only; a
 surface stays pending until its extractor is added here.
 
+THE GENERATOR (``generate``; a developer tool, its input is private)
+
+``generate --audit ROWS --audit-sha SHA DOC ...`` writes the registries of a
+page group from the doc-claims audit, read from the path given (JSON Lines: one
+row per flow or claim, with the ``doc``, the ``line`` at the audited commit, the
+auditor's ``text``, ``covered``, ``by`` and ``tag``). Each document is split as
+it was at SHA (``git show``) and each row goes to the units on its line (of
+several, those its excerpt picks). A unit whose text is unchanged today keeps
+its rows (``plan_document`` has the rules): covered rows give targets, from
+``by``:
+
+* ``path::name`` (also ``path (name, name)``) gives ``test:path::name``, each;
+* a test file gives ``test:<path>``; a bare file name is found if it is unique;
+* ``doc-examples <page>:<line>`` gives ``docex:<page>#<expectation>``, the
+  block at that line then, named by an expectation exactly one block has now;
+* ``journey s#a,b`` gives ``journey:s#a`` and ``journey:s#b``;
+* the OpenAPI snapshots give ``test:`` on their test (``API_SNAPSHOT_TESTS``);
+* a workflow gives ``workflow:<name>.yml``;
+* a script or application source is refused: printed, never written.
+
+A target that does not resolve in this tree is printed. Uncovered T, S and A
+rows give ``untested:<tag>``; a unit with no row ``exempt:baseline``; both are
+ledgered. A unit new since SHA gets no entry. An R or X row still on the page
+makes the exit status 1 and that page is not written. A row that does not map
+(some excerpts are not verbatim) is printed for the author to map by hand,
+never dropped; the units on its line get no entry. An audit with no row is
+refused: an empty or cut-off file would otherwise read as "nothing found".
+
+``sync DOC`` prints each unit that is not in the registry beside the
+registered units within a difflib ratio of 0.9 (inputs cut to 2,000
+characters); it writes nothing, so no target moves to a new sentence unless its
+author moves it. ``baseline`` lists the audit claim rows that map to a unit a
+registry leaves at ``exempt:baseline`` (run at a release candidate).
+
 RUN
 
     python scripts/doc_claims.py check            every problem, then the counts
     python scripts/doc_claims.py report           the counts
     python scripts/doc_claims.py units DOC ...    a registry skeleton per document
     python scripts/doc_claims.py units --all      the same for every Markdown document
+    python scripts/doc_claims.py generate --audit ROWS --audit-sha SHA DOC ...
+                                                  [--out DIR] [--replace]
+    python scripts/doc_claims.py sync DOC         what changed, and what is near it
+    python scripts/doc_claims.py baseline --audit ROWS --audit-sha SHA [DOC ...]
 
-Standard library only; imports nothing from ``backend`` or ``modules`` and
-runs no git, so it gives the same answer in ``scripts/core_build.sh``'s copy.
+Standard library only; imports nothing from ``backend`` or ``modules``.
+``check``, ``report``, ``units`` and ``sync`` run no git, so they give the same
+answer in ``scripts/core_build.sh``'s copy; ``generate`` and ``baseline`` read
+the audited commit with ``git show``.
 """
 
 from __future__ import annotations
@@ -143,6 +184,7 @@ import ast
 import collections
 import dataclasses
 import datetime
+import difflib
 import fnmatch
 import hashlib
 import importlib.util
@@ -150,6 +192,7 @@ import json
 import os
 import pathlib
 import re
+import subprocess
 import sys
 import tomllib
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
@@ -414,19 +457,42 @@ def _blocks(lines: Sequence[str]) -> List[_Block]:
 
 def units(text: str) -> List[Unit]:
     """The units of a Markdown document, in page order (rules in the docstring)."""
-    found: List[Unit] = []
+    return [unit for unit, _, _ in unit_lines(text)]
+
+
+def unit_lines(text: str) -> List[Tuple[Unit, int, int]]:
+    """Each unit with the first and last line its own words are on.
+
+    A sentence of a hard-wrapped paragraph spans only its own lines, found by
+    counting words, which normalising leaves in place; where markup across a
+    line break changes the count, the sentence spans its whole block.
+    """
+    found: List[Tuple[Unit, int, int]] = []
     for block in _blocks(visible_lines(text)):
         if block.kind in ("heading", "row"):
             pieces = [block.parts[0][1]]
+            owners = [block.line] * len(pieces[0].split())
         else:
-            joined = " ".join(part for _, part in block.parts)
-            if block.kind == "html":
-                joined = _TAG.sub(" ", joined)
+            tidy = (lambda s: _TAG.sub(" ", s)) if block.kind == "html" else str
+            joined = tidy(" ".join(part for _, part in block.parts))
             pieces = _SENTENCE_END.split(normalise(joined))
+            owners = [
+                line
+                for line, part in block.parts
+                for _ in normalise(tidy(part)).split()
+            ]
+        aligned = len(owners) == sum(len(piece.split()) for piece in pieces)
+        position = 0
         for piece in pieces:
-            piece = " ".join(piece.split())
+            words = piece.split()
+            piece = " ".join(words)
+            if aligned and words:
+                first, last = owners[position], owners[position + len(words) - 1]
+            else:
+                first, last = block.parts[0][0], block.parts[-1][0]
+            position += len(words)
             if _WORD.search(piece):
-                found.append(Unit(piece, block.line))
+                found.append((Unit(piece, block.line), first, last))
     return found
 
 
@@ -494,6 +560,12 @@ WORDING_TESTS = "backend/tests/unit/docs/"
 #: reads documentation, and its detector of one (held equal to it there).
 DOCS_GATE = "backend/tests/unit/infrastructure/test_docs_only_gate.py"
 DOCS_READER = re.compile(r"""["']docs["']|["']docs/|mkdocs\.yml""")
+#: Tests the docs-only gate lists because they read the OpenAPI snapshots under
+#: docs/api/, the product's schema rather than a page's wording: a claim about a
+#: route or a field may name one with ``test:``, while ``docs_reads_problem``
+#: finds nothing in it.
+API_SNAPSHOT_TESTS: Tuple[str, ...] = ("backend/tests/smoke/test_openapi_snapshot.py",)
+_NAMES_A_PAGE = re.compile(r"\.md\b|mkdocs")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1028,6 +1100,28 @@ def _python_problem(ctx: Context, path: str, name: Optional[str]) -> Optional[st
     return None
 
 
+def docs_reads_problem(text: Optional[str], tree: Any) -> Optional[str]:
+    """Why a test in API_SNAPSHOT_TESTS no longer looks like a snapshot reader.
+
+    Exactly two checks: nothing in the file names a page (``.md``) or mkdocs,
+    and its only literal containing "docs" (docstrings and other bare string
+    statements aside) is one ``"docs"``. A guard against drift, not one an
+    author cannot get round: a docs path built without such a literal passes."""
+    if text is None or not isinstance(tree, ast.Module):
+        return "does not exist or does not parse"
+    if _NAMES_A_PAGE.search(text):
+        return "names a page (.md) or mkdocs"
+    bare = {id(node.value) for node in ast.walk(tree) if isinstance(node, ast.Expr)}
+    found = [
+        n.value
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Constant) and "docs" in str(n.value) and id(n) not in bare
+    ]
+    if found != ["docs"]:
+        return f"has string literals naming docs {found[:3]}, not one 'docs'"
+    return None
+
+
 def test_problem(
     ctx: Context, target: str, *, mechanism: bool = False
 ) -> Optional[str]:
@@ -1043,7 +1137,15 @@ def test_problem(
         return "the path must be repository-relative"
     if path.startswith(NOT_TESTS):
         return f"{path} is not a test (application code or a script)"
-    if not mechanism and ctx.reads_docs(path):
+    snapshot = path in API_SNAPSHOT_TESTS
+    if snapshot and not mechanism:
+        problem = docs_reads_problem(ctx.text(path), ctx.tree(path))
+        if problem:
+            return (
+                f"{path} {problem}: it reads documentation, so a claim reaches it"
+                " only as mechanism:<name>"
+            )
+    if not mechanism and not snapshot and ctx.reads_docs(path):
         return (
             f"{path} reads documentation (the docs-only gate classes it so); a"
             " claim reaches it only as mechanism:<name> (MECHANISMS in"
@@ -1502,6 +1604,1076 @@ def _registry_problems(
 
 
 # ---------------------------------------------------------------------------
+# The generator, sync and the baseline check (developer tools)
+# ---------------------------------------------------------------------------
+#: An audit row's tag: uncovered and testable as is (T), with a stack (S), on
+#: AWS (A), on a device (D); reword it (R); not verifiable before launch (X).
+AUDIT_TAGS: Tuple[Optional[str], ...] = (None, "T", "S", "A", "D", "R", "X")
+#: Debt kinds, heaviest first: a unit with rows of two kinds takes the first.
+DEBT: Tuple[str, ...] = ("A", "S", "T")
+#: What a page may not keep: a registry is not written while one is on it.
+MUST_GO: Tuple[str, ...] = ("R", "X")
+SNAPSHOT_TEST = "backend/tests/smoke/test_openapi_snapshot.py"
+SNAPSHOT_TARGETS: Dict[str, str] = {
+    "stable": f"test:{SNAPSHOT_TEST}::test_core_api_matches_stable_snapshot",
+    "full": f"test:{SNAPSHOT_TEST}::test_full_api_matches_full_snapshot",
+}
+#: Shortest excerpt fragment that picks a unit among those on its line, and how
+#: far from its line an excerpt is looked for.
+FRAGMENT_MIN = 4
+LINE_SLACK = 2
+#: ``sync``: a registered unit this close to a changed one is printed beside it.
+NEAR = 0.9
+NEAR_INPUT = 2000
+SOURCE_SUFFIXES: Tuple[str, ...] = (
+    ".py",
+    ".sh",
+    ".bash",
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    ".ts",
+    ".tsx",
+    ".go",
+    ".rb",
+    ".php",
+    ".java",
+    ".kt",
+    ".swift",
+    ".dart",
+    ".ex",
+    ".exs",
+    ".cs",
+    ".rs",
+)
+#: Directories the basename index does not walk.
+NOT_WALKED = {
+    ".git",
+    ".next",
+    ".venv",
+    "__pycache__",
+    "build",
+    "coverage",
+    "dist",
+    "node_modules",
+    "site",
+    "venv",
+}
+GIT_SHA = re.compile(r"[0-9a-f]{7,40}")
+
+_NAME = r"[A-Za-z_][A-Za-z0-9_]{0,200}"
+_PARAMS = r"(?:\[[^\]\n]{0,200}\])?"
+_TEST_NAME = r"(?:Test[A-Za-z0-9_]{0,200}::)?[Tt]est[A-Za-z0-9_]{0,200}" + _PARAMS
+_EXTENSIONS = (
+    "py|pyi|tsx|ts|jsx|js|mjs|cjs|go|rb|php|java|kts|kt|swift|dart|exs|ex|cs|rs"
+    "|bash|sh|yml|yaml|json|toml|md|txt|cfg|ini"
+)
+_LINES = r"[0-9]{1,6}(?:-[0-9]{1,6})?(?:,[0-9]{1,6}(?:-[0-9]{1,6})?){0,20}"
+#: ``path.py (test_a, test_b)``: the names in the brackets are the tests.
+_PAREN_NAMES = re.compile(
+    r"(?P<path>[A-Za-z0-9_./@+-]{1,300}\.py)[ \t]{0,3}\((?P<names>"
+    + _TEST_NAME
+    + r"(?:[ \t]{0,3},[ \t]{0,3}"
+    + _TEST_NAME
+    + r"){0,40})\)"
+)
+_PAREN = re.compile(r"\([^()\n]{0,400}\)")
+_DOCEX_REF = re.compile(
+    r"doc-examples[ \t]{1,3}(?P<file>[A-Za-z0-9_./@+-]{0,300}\.md)(?![A-Za-z0-9_])"
+    r"(?::(?P<lines>" + _LINES + r"))?"
+)
+_MORE_LINES = re.compile(r"(?<![\w/.:]):(?P<lines>" + _LINES + r")(?![\w:])")
+_JOURNEY_REF = re.compile(
+    r"journey[ \t]{1,3}(?P<slug>" + SLUG + r")"
+    r"(?P<steps>(?:[ \t]{0,3},?[ \t]{0,3}#" + SLUG + r"(?:," + SLUG + r"){0,40}){0,10})"
+)
+_PATH_TOKEN = re.compile(
+    r"(?<![\w./@+-])(?P<path>(?:[\w.@+-]{1,100}/){0,20}[\w@+-][\w.@+-]{0,100}"
+    r"\.(?:" + _EXTENSIONS + r"))(?![\w])"
+    r"(?::[0-9]{1,6}(?:[-,][0-9]{1,6}){0,20})?"
+    r"(?:::(?P<names>"
+    + _NAME
+    + r"(?:::"
+    + _NAME
+    + r")?"
+    + _PARAMS
+    + r"(?:[ \t]{0,3},[ \t]{0,3}(?:::)?"
+    + _TEST_NAME
+    + r"){0,40}))?"
+)
+_OPENAPI = re.compile(r"openapi-v1\.(?:\*|stable|full)\.json|^[ \t]{0,3}snapshot\b")
+_SPLIT_NAMES = re.compile(r"[ \t]{0,3},[ \t]{0,3}")
+_PARAM_TAIL = re.compile(r"\[[^\]\n]{0,200}\]$")
+_ELLIPSIS = re.compile("\\.\\.\\.|\u2026")
+
+
+@dataclasses.dataclass(frozen=True)
+class Row:
+    """One flow or claim of the audit, where it stood and what held it."""
+
+    doc: str
+    kind: str  # "flow" or "claim"
+    line: int  # 1-based, in the document at the audit commit
+    text: str  # the auditor's excerpt
+    covered: bool
+    by: Optional[str]
+    tag: Optional[str]
+
+    def label(self) -> str:
+        tag = f" {self.tag}" if self.tag else ""
+        return f"{self.doc}:{self.line} {self.kind}{tag} {self.text[:120]!r}"
+
+
+def _row_of(data: Any) -> Any:
+    """A Row, or what is wrong with the object."""
+    if not isinstance(data, dict):
+        return "not an object"
+    line = data.get("line")
+    checks = (
+        (isinstance(data.get("doc"), str) and data.get("doc"), "doc is a path"),
+        (data.get("kind") in ("flow", "claim"), "kind is flow or claim"),
+        (
+            isinstance(line, int) and not isinstance(line, bool) and line >= 1,
+            "line is a number from 1",
+        ),
+        (isinstance(data.get("text"), str), "text is a string"),
+        (isinstance(data.get("covered"), bool), "covered is true or false"),
+        (data.get("by") is None or isinstance(data.get("by"), str), "by is a string"),
+        (data.get("tag") in AUDIT_TAGS, "tag is null or one of T S A D R X"),
+    )
+    for ok, problem in checks:
+        if not ok:
+            return problem
+    return Row(
+        data["doc"],
+        data["kind"],
+        line,
+        data["text"],
+        data["covered"],
+        data.get("by"),
+        data.get("tag"),
+    )
+
+
+def load_audit(paths: Sequence[pathlib.Path]) -> Tuple[List[Row], List[str]]:
+    """The rows of the audit's JSON Lines files, and every line that is not one."""
+    rows: List[Row] = []
+    problems: List[str] = []
+    for path in paths:
+        try:
+            lines = path.read_text(encoding="utf-8").split("\n")
+        except OSError as error:
+            problems.append(f"{path}: {error}")
+            continue
+        for number, line in zip(range(1, len(lines) + 1), lines):
+            if not line.strip():
+                continue
+            try:
+                row = _row_of(json.loads(line))
+            except ValueError:
+                row = "not JSON"
+            if isinstance(row, Row):
+                rows.append(row)
+            else:
+                problems.append(f"{path.name}:{number}: {row}")
+    return rows, problems
+
+
+def git_reader(root: pathlib.Path, sha: str) -> Any:
+    """A function giving a document's text at commit *sha* (None if absent)."""
+    if not GIT_SHA.fullmatch(sha):
+        raise ValueError(f"{sha!r} is not a commit id (7-40 lowercase hex digits)")
+    found = subprocess.run(
+        ["git", "-C", str(root), "cat-file", "-e", f"{sha}^{{commit}}"],
+        capture_output=True,
+    )
+    if found.returncode != 0:
+        raise ValueError(f"{sha} is not a commit of {root} (a shallow clone?)")
+    cache: Dict[str, Optional[str]] = {}
+
+    def read(path: str) -> Optional[str]:
+        if path not in cache:
+            shown = subprocess.run(
+                ["git", "-C", str(root), "show", f"{sha}:{path}"],
+                capture_output=True,
+            )
+            cache[path] = (
+                shown.stdout.decode("utf-8", "replace")
+                if shown.returncode == 0
+                else None
+            )
+        return cache[path]
+
+    return read
+
+
+@dataclasses.dataclass
+class Mapped:
+    """What one row's ``by`` names: the targets that resolve in this tree, what
+    to map by hand (with why), and what is refused (a script or application
+    source, which is not a test)."""
+
+    targets: List[str] = dataclasses.field(default_factory=list)
+    by_hand: List[str] = dataclasses.field(default_factory=list)
+    refused: List[str] = dataclasses.field(default_factory=list)
+
+
+class Resolver:
+    """Turns an audit row's ``by`` text into registry targets for one tree."""
+
+    def __init__(self, ctx: Context, old_text: Any) -> None:
+        self.ctx = ctx
+        self.old_text = old_text
+        self._index: Optional[Dict[str, List[str]]] = None
+        self._old_blocks: Dict[str, Any] = {}
+        #: The document whose rows are being mapped (a workflow target needs it).
+        self.document = Document("", "", MARKDOWN)
+
+    # -- lookups -----------------------------------------------------------
+    def index(self) -> Dict[str, List[str]]:
+        """Every test file of the tree, by file name."""
+        if self._index is None:
+            found: Dict[str, List[str]] = collections.defaultdict(list)
+            for directory, dirs, files in os.walk(self.ctx.root):
+                dirs[:] = sorted(d for d in dirs if d not in NOT_WALKED)
+                for name in sorted(files):
+                    if TEST_FILE.search(name):
+                        rel = (pathlib.Path(directory) / name).relative_to(
+                            self.ctx.root
+                        )
+                        found[name].append(rel.as_posix())
+            self._index = dict(found)
+        return self._index
+
+    def resolve(self, path: str) -> Optional[str]:
+        """The repository path of a test file the audit named, or None."""
+        if (self.ctx.root / path).is_file():
+            return path
+        name = path.rsplit("/", 1)[-1]
+        found = [
+            p for p in self.index().get(name, []) if p == name or p.endswith("/" + path)
+        ]
+        return found[0] if len(found) == 1 else None
+
+    def methods(self, path: str, name: str) -> List[str]:
+        """``Class::name`` when exactly one test class of *path* has a method
+        *name* (the audit often names a method without its class)."""
+        tree = (
+            self.ctx.tree(path) if path.endswith(".py") and "::" not in name else None
+        )
+        if not isinstance(tree, ast.Module):
+            return []
+        owners = [
+            node.name
+            for node in tree.body
+            if isinstance(node, ast.ClassDef)
+            and node.name.startswith("Test")
+            and any(
+                isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and s.name == name
+                for s in node.body
+            )
+        ]
+        return [f"{owners[0]}::{name}"] if len(owners) == 1 else []
+
+    def valid(self, target: str, mapped: Mapped, why: str) -> None:
+        problem = target_problem(self.ctx, self.document, {"text": ""}, target)
+        if problem is None:
+            mapped.targets.append(target)
+        else:
+            mapped.by_hand.append(f"{why} -> {target}: {problem}")
+
+    # -- the parts of a ``by`` ---------------------------------------------
+    def targets(self, by: str) -> Mapped:
+        mapped = Mapped()
+        for part in by.split(";"):
+            if part.strip():
+                self._part(part.strip(), mapped)
+        mapped.targets = list(dict.fromkeys(mapped.targets))
+        return mapped
+
+    def _part(self, raw: str, mapped: Mapped) -> None:
+        text = _PAREN_NAMES.sub(lambda m: f"{m['path']}::{m['names']}", raw)
+        for _ in range(3):
+            text = _PAREN.sub(" ", text)
+        named = False
+        docex = _DOCEX_REF.search(text)
+        if docex:
+            named = True
+            tail = text[docex.end() :]
+            specs = [docex["lines"]] if docex["lines"] else []
+            specs += [m["lines"] for m in _MORE_LINES.finditer(tail)]
+            self._docex(docex["file"], specs, mapped)
+            text = text[: docex.start()] + " " + _MORE_LINES.sub(" ", tail)
+        for journey in _JOURNEY_REF.finditer(text):
+            named = True
+            steps = [s for s in re.split(r"[ \t,#]{1,20}", journey["steps"]) if s]
+            if not steps:
+                mapped.by_hand.append(f"{journey[0]!r}: names no step of the journey")
+            for step in steps:
+                self.valid(f"journey:{journey['slug']}#{step}", mapped, journey[0])
+        text = _JOURNEY_REF.sub(" ", text)
+        snapshot = False
+        for token in _PATH_TOKEN.finditer(text):
+            named = True
+            snapshot |= self._path(token["path"], token["names"], raw, mapped)
+        if not snapshot and _OPENAPI.search(text):
+            named = True
+            self.valid(SNAPSHOT_TARGETS[_which(raw)], mapped, raw)
+        if not named:
+            mapped.by_hand.append(
+                f"{raw!r}: names no test, journey step, Doc Examples block or workflow"
+            )
+
+    def _path(self, path: str, names: Optional[str], raw: str, mapped: Mapped) -> bool:
+        """Map one path the audit named; True when it is the OpenAPI snapshot."""
+        name = path.rsplit("/", 1)[-1]
+        if re.fullmatch(r"openapi-v1\.(?:stable|full)\.json", name) or (
+            name == SNAPSHOT_TEST.rsplit("/", 1)[-1] and not names
+        ):
+            which = name.split(".")[1] if name.endswith(".json") else _which(raw)
+            self.valid(SNAPSHOT_TARGETS[which], mapped, raw)
+            return True
+        if path.startswith(".github/workflows/") or (
+            "/" not in path and (self.ctx.root / ".github/workflows" / path).is_file()
+        ):
+            if path.endswith(".yml"):
+                self.valid(f"workflow:{name}", mapped, raw)
+            else:
+                mapped.by_hand.append(f"{path}: a workflow target names a .yml file")
+            return False
+        if path.startswith(NOT_TESTS) or (
+            path.endswith(SOURCE_SUFFIXES) and not TEST_FILE.search(path)
+        ):
+            mapped.refused.append(
+                f"{path}: a script or application source is not a test"
+            )
+            return False
+        if not TEST_FILE.search(path):
+            mapped.by_hand.append(
+                f"{path}: not a test, a journey step, a Doc Examples block or a workflow"
+            )
+            return False
+        resolved = None if ".." in path.split("/") else self.resolve(path)
+        if resolved is None:
+            mapped.by_hand.append(f"{path}: no such test file here, or several")
+            return False
+        if not names:
+            self.valid(f"test:{resolved}", mapped, raw)
+            return False
+        listed = [
+            _PARAM_TAIL.sub("", n).removeprefix("::")
+            for n in _SPLIT_NAMES.split(names)
+            if n.strip(":")
+        ]
+        owner = listed[0].split("::")[0] if "::" in listed[0] else None
+        for number, test in zip(range(len(listed)), listed):
+            tries = [test]
+            if number and owner and "::" not in test:
+                tries.insert(0, f"{owner}::{test}")
+            tries += self.methods(resolved, test)
+            problems = []
+            for attempt in tries:
+                target = f"test:{resolved}::{attempt}"
+                problem = target_problem(self.ctx, self.document, {"text": ""}, target)
+                if problem is None:
+                    mapped.targets.append(target)
+                    break
+                problems.append(f"{target}: {problem}")
+            else:
+                mapped.by_hand.append(f"{raw!r} -> {problems[0]}")
+        return False
+
+    def _docex(self, file: str, specs: Sequence[str], mapped: Mapped) -> None:
+        """``doc-examples <page>:<line>``: the block there, named by an expectation
+        that exactly one exec block of the page carries today."""
+        where = f"doc-examples {file}"
+        enrolled = self.ctx.enrolled()
+        if isinstance(enrolled, str):
+            mapped.by_hand.append(f"{where}: {enrolled}")
+            return
+        path = file if file in enrolled else None
+        if path is None:
+            found = [p for p in sorted(enrolled) if p == file or p.endswith("/" + file)]
+            path = found[0] if len(found) == 1 else None
+        if path is None:
+            mapped.by_hand.append(f"{where}: not one document Doc Examples enrols")
+            return
+        if not specs:
+            mapped.by_hand.append(f"{where}: names no block (no line)")
+            return
+        old = self.old_blocks(path)
+        if isinstance(old, str):
+            mapped.by_hand.append(f"{where}: {old}")
+            return
+        now = self.ctx.exec_blocks(path)
+        if isinstance(now, str):
+            mapped.by_hand.append(f"{where}: {now}")
+            return
+        for spec in specs:
+            for low, high in _ranges(spec):
+                chosen = [b for start, end, b in old if start <= high and low <= end]
+                runs = [b for b in chosen if b is not None and b.kind == "exec"]
+                if not runs:
+                    mapped.by_hand.append(
+                        f"{where}:{spec}: no block that ran at the audit commit"
+                    )
+                for block in runs:
+                    expect = next(
+                        (
+                            e
+                            for e in block.expects
+                            if sum(e in b.expects for b in now) == 1
+                        ),
+                        None,
+                    )
+                    if expect is None:
+                        mapped.by_hand.append(
+                            f"{where}:{block.line}: "
+                            + (
+                                "no expectation of that block names exactly one"
+                                " block today"
+                                if block.expects
+                                else "the block has no expect line, so a docex"
+                                " target cannot name it"
+                            )
+                        )
+                        continue
+                    self.valid(f"docex:{path}#{expect}", mapped, where)
+
+    def old_blocks(self, path: str) -> Any:
+        """(first line, last line, Block or None) per fence at the audit commit."""
+        if path not in self._old_blocks:
+            module = _load_doc_examples()
+            text = self.old_text(path)
+            if text is None:
+                self._old_blocks[path] = "not at the audit commit"
+                return self._old_blocks[path]
+            try:
+                fences = module.parse_fences(text, path)
+            except module.Refused as refusal:
+                self._old_blocks[path] = f"at the audit commit: {refusal}"
+                return self._old_blocks[path]
+            found = []
+            for fence in fences:
+                try:
+                    block = module.classify(fence, path)
+                except module.Refused:
+                    block = None
+                end = fence.line + len(fence.body) + 1 + len(fence.trailing)
+                found.append((fence.line, end, block))
+            self._old_blocks[path] = found
+        return self._old_blocks[path]
+
+
+def _which(raw: str) -> str:
+    """Which OpenAPI snapshot a reference means: the core one only if it says so."""
+    return "stable" if "stable" in raw and "full" not in raw else "full"
+
+
+def _ranges(spec: str) -> List[Tuple[int, int]]:
+    found = []
+    for piece in spec.split(","):
+        low, _, high = piece.partition("-")
+        found.append((int(low), int(high or low)))
+    return found
+
+
+def fragments(excerpt: str) -> List[str]:
+    """The pieces of an excerpt to look for in a unit: split at an ellipsis
+    and after a sentence, normalised like a unit."""
+    found = []
+    for piece in _ELLIPSIS.split(normalise(excerpt)):
+        for sentence in _SENTENCE_END.split(piece.strip()):
+            sentence = sentence.strip()
+            if len(sentence) >= FRAGMENT_MIN:
+                found.append(sentence)
+    return found
+
+
+def _picked(units_near: Sequence[Unit], row: Row) -> List[Unit]:
+    """The units that hold a fragment of the row's excerpt no other one holds,
+    or that the excerpt holds whole."""
+    picked: List[Unit] = []
+    for fragment in fragments(row.text):
+        holding = [u for u in units_near if fragment in u.text]
+        if len(holding) == 1 and holding[0] not in picked:
+            picked.append(holding[0])
+    whole = normalise(row.text)
+    for unit in units_near:
+        if unit not in picked and len(unit.text) >= FRAGMENT_MIN and unit.text in whole:
+            picked.append(unit)
+    return [u for u in units_near if u in picked]
+
+
+def units_of_row(
+    spans: Sequence[Tuple[Unit, int, int]], row: Row
+) -> Tuple[List[Unit], List[Unit]]:
+    """The units a row maps to, and the units on its line.
+
+    By line overlap, with the excerpt deciding: the units on the row's line
+    that hold a piece of it; failing that, the units within LINE_SLACK lines
+    that do (an auditor's line can be one off); failing that, the one unit on
+    the line, if there is one (the excerpt is not verbatim). Otherwise none."""
+    on_line = [unit for unit, first, last in spans if first <= row.line <= last]
+    picked = _picked(on_line, row)
+    if picked:
+        return picked, on_line
+    near = [
+        unit
+        for unit, first, last in spans
+        if first <= row.line + LINE_SLACK and row.line - LINE_SLACK <= last
+    ]
+    picked = _picked(near, row)
+    if picked:
+        return picked, on_line
+    return (on_line if len(on_line) == 1 else []), on_line
+
+
+def outside_prose(raw: Sequence[str], visible: Sequence[str], line: int) -> bool:
+    """True when *line* has text the splitter does not read: a fence, an HTML
+    comment or front matter."""
+    return (
+        1 <= line <= len(raw)
+        and bool(raw[line - 1].strip())
+        and not (visible[line - 1].strip())
+    )
+
+
+def on_page(
+    row: Row,
+    old_lines: Sequence[str],
+    mapped: Sequence[Unit],
+    texts: Mapping[str, int],
+    flat: str,
+) -> bool:
+    """Whether what an R or X row names is still on the page: *texts* are its
+    units now, *flat* its whole text normalised.
+
+    Yes when a unit it maps to is still there word for word, when every
+    fragment of its excerpt is, or when its own line at the audit commit is."""
+    if any(u.text in texts for u in mapped):
+        return True
+    found = fragments(row.text)
+    if found and all(f in flat for f in found):
+        return True
+    if 1 <= row.line <= len(old_lines):
+        line = normalise(old_lines[row.line - 1].strip())
+        if len(line) >= 12 and line in flat:
+            return True
+    return False
+
+
+@dataclasses.dataclass
+class Plan:
+    """What ``generate`` writes for one document, and what it prints."""
+
+    document: str
+    entries: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
+    ledger: List[Tuple[str, str, str]] = dataclasses.field(default_factory=list)
+    present: List[str] = dataclasses.field(default_factory=list)
+    by_hand: List[str] = dataclasses.field(default_factory=list)
+    refused: List[str] = dataclasses.field(default_factory=list)
+    outside: List[str] = dataclasses.field(default_factory=list)
+    mixed: List[str] = dataclasses.field(default_factory=list)
+    new: List[str] = dataclasses.field(default_factory=list)
+    error: Optional[str] = None
+    counts: collections.Counter = dataclasses.field(default_factory=collections.Counter)
+
+
+#: Where a row ends up; a row on two units takes the first that applies.
+OUTCOMES: Tuple[str, ...] = ("mapped", "refused", "by hand")
+
+
+def plan_document(resolver: Resolver, document: Document, rows: Sequence[Row]) -> Plan:
+    """The registry for *document* from the audit *rows* (S-3 of #1142).
+
+    Rows map to the units of the page at the audit commit by line; a unit whose
+    text is unchanged on the page now carries its rows forward:
+
+    * an R or X row still on the page: listed, and no registry is written;
+    * a T, S or A row: ``untested:<tag>`` (the heaviest of A, S, T), ledgered;
+    * covered rows: the targets their ``by`` names that resolve here;
+    * no row: ``exempt:baseline``, ledgered;
+    * a unit new since the audit: no entry (the author gives it one).
+
+    Anything that does not map is printed, never dropped: a row on no unit, a
+    row whose line holds several units the excerpt does not tell apart (those
+    units get no entry either), a target that does not resolve here, and a
+    script or application source named as a test (refused)."""
+    plan = Plan(document.path)
+    counts = plan.counts
+    resolver.document = document
+    now = resolver.ctx.text(document.path)
+    old = resolver.old_text(document.path)
+    if now is None or old is None:
+        plan.error = f"{document.path}: " + (
+            "does not exist" if now is None else "not at the audit commit"
+        )
+        return plan
+    try:
+        now_spans, old_spans = unit_lines(now), unit_lines(old)
+    except SplitError as error:
+        plan.error = f"{document.path}: {error}"
+        return plan
+    old_raw = old.replace("\r\n", "\n").split("\n")
+    old_visible = visible_lines(old)
+    on_now = collections.Counter(u.text for u, _, _ in now_spans)
+    flat = normalise(now)
+    first_line: Dict[str, int] = {}
+    for unit, line, _ in now_spans:
+        first_line.setdefault(unit.text, line)
+    was = {u.text for u, _, _ in old_spans}
+    rows_of: Dict[str, List[int]] = collections.defaultdict(list)
+    held: Set[str] = set()  # units of a row that could not be placed: no entry
+
+    for number, row in zip(range(len(rows)), rows):
+        counts["rows"] += 1
+        inside = outside_prose(old_raw, old_visible, row.line)
+        mapped, on_line = ([], []) if inside else units_of_row(old_spans, row)
+        if row.tag in MUST_GO:
+            if on_page(row, old_raw, mapped or on_line, on_now, flat):
+                counts["R/X on the page"] += 1
+                plan.present.append(row.label())
+            else:
+                counts["R/X gone"] += 1
+            held.update(u.text for u in mapped or on_line)
+            continue
+        if inside and (row.tag or not row.covered):
+            counts["outside prose, uncovered"] += 1
+            plan.outside.append(row.label())
+            continue
+        if inside:
+            counts["outside prose, covered"] += 1
+            continue
+        if not mapped and not on_line:
+            counts["by hand"] += 1
+            plan.by_hand.append(f"{row.label()}: no unit on or near that line")
+            continue
+        if not mapped:
+            counts["by hand"] += 1
+            held.update(u.text for u in on_line)
+            plan.by_hand.append(
+                f"{row.label()}: {len(on_line)} units on that line and the excerpt"
+                " does not pick one"
+            )
+            continue
+        kept = [u.text for u in mapped if u.text in on_now]
+        if not kept:
+            counts["unit changed since the audit"] += 1
+            continue
+        for text in kept:
+            rows_of[text].append(number)
+
+    outcome: Dict[int, str] = {}
+    entries: Dict[str, Dict[str, Any]] = {}
+    for text, numbers in rows_of.items():
+        entry = _entry_for(
+            resolver, plan, text, [(n, rows[n]) for n in numbers], outcome
+        )
+        if entry is not None:
+            entries[text] = entry
+    counts.update(outcome.values())
+    for text, times in on_now.items():
+        if text in entries:
+            entry = entries[text]
+        elif text in rows_of or text in held:
+            continue
+        elif text not in was:
+            counts["units new since the audit"] += 1
+            plan.new.append(f"{document.path}:{first_line[text]}: {text[:160]!r}")
+            continue
+        else:
+            entry = {"text": text, "by": ["exempt:baseline"]}
+        if times > 1:
+            entry["count"] = times
+        plan.entries.append(entry)
+        head = entry["by"][0]
+        if head in LEDGER_KINDS:
+            plan.ledger.append((head, document.path, unit_hash(text)))
+        counts[head if kind_of(head) in ("untested", "baseline") else "verified"] += 1
+    counts["units gone since the audit"] = len(was - set(on_now))
+    for name in ("by_hand", "refused", "mixed"):
+        setattr(plan, name, list(dict.fromkeys(getattr(plan, name))))
+    return plan
+
+
+def _entry_for(
+    resolver: Resolver,
+    plan: Plan,
+    text: str,
+    rows: Sequence[Tuple[int, Row]],
+    outcome: Dict[int, str],
+) -> Optional[Dict[str, Any]]:
+    """One unit's entry from its rows, or None (its rows are printed). Each
+    row's outcome is recorded, the first of OUTCOMES over the units it is on."""
+
+    def settle(number: int, result: str) -> None:
+        known = outcome.get(number, OUTCOMES[-1])
+        outcome[number] = min(known, result, key=OUTCOMES.index)
+
+    covered = [(n, r) for n, r in rows if r.tag is None and r.covered and r.by]
+    debt = [r.tag for _, r in rows if r.tag in DEBT]
+    other = [(n, r) for n, r in rows if (n, r) not in covered and r.tag not in DEBT]
+    if other:
+        for number, row in rows:
+            settle(number, "by hand")
+            why = (
+                "a device"
+                if row.tag == "D"
+                else "covered, but by names nothing"
+                if row.covered and row.tag is None
+                else "not covered and no tag"
+                if row.tag is None
+                else f"on a unit with a row that is not mapped ({text[:80]!r})"
+            )
+            plan.by_hand.append(f"{row.label()}: {why}; map the unit by hand")
+        return None
+    if debt:
+        kind = next(k for k in DEBT if k in debt)
+        for number, _ in rows:
+            settle(number, "mapped")
+        if covered:
+            held = sorted(
+                {t for _, r in covered for t in resolver.targets(r.by or "").targets}
+            )
+            plan.mixed.append(f"{text[:120]!r}: untested:{kind}; also held by {held}")
+        return {"text": text, "by": [f"untested:{kind}"]}
+    targets: List[str] = []
+    for number, row in covered:
+        mapped = resolver.targets(row.by or "")
+        plan.by_hand += [f"{row.label()}: {p}" for p in mapped.by_hand]
+        plan.refused += [f"{row.label()}: {p}" for p in mapped.refused]
+        if mapped.targets:
+            settle(number, "mapped")
+            targets += mapped.targets
+        elif mapped.refused and not mapped.by_hand:
+            settle(number, "refused")
+        else:
+            settle(number, "by hand")
+    targets = list(dict.fromkeys(targets))
+    return {"text": text, "by": targets} if targets else None
+
+
+def registry_text(document: str, entries: Sequence[Mapping[str, Any]]) -> str:
+    """A registry file, in the layout of the hand-written ones."""
+    out = [
+        f"# What verifies each unit of {document} (#1142).",
+        "# The contract is scripts/doc_claims.py's docstring; check with",
+        "# `python scripts/doc_claims.py check`.",
+        f"document = {json.dumps(document)}",
+    ]
+    for entry in entries:
+        out += [
+            "",
+            "[[unit]]",
+            f"text = {json.dumps(entry['text'], ensure_ascii=False)}",
+        ]
+        by = [json.dumps(t, ensure_ascii=False) for t in entry["by"]]
+        if len(by) == 1:
+            out.append(f"by = [{by[0]}]")
+        else:
+            out += ["by = ["] + [f"    {t}," for t in by] + ["]"]
+        if "count" in entry:
+            out.append(f"count = {entry['count']}")
+    return "\n".join(out) + "\n"
+
+
+def ledger_text(
+    existing: str, add: Iterable[Tuple[str, str, str]], drop: Iterable[str]
+) -> str:
+    """The ledger with *drop*'s documents' lines replaced by *add*: its
+    comment lines first, then every line sorted, once."""
+    dropped = set(drop)
+    head = [line for line in existing.split("\n") if line.startswith("#")]
+    body = set()
+    for line in existing.split("\n"):
+        fields = line.split("\t")
+        if line.strip() and not line.startswith("#"):
+            if len(fields) < 2 or fields[1] not in dropped:
+                body.add(line)
+    body |= {"\t".join(line) for line in add}
+    return "".join(f"{line}\n" for line in head + sorted(body))
+
+
+def plan_lines(plan: Plan) -> List[str]:
+    """What ``generate`` prints for one document."""
+    if plan.error:
+        return [plan.error]
+    counts = plan.counts
+    lines = [
+        f"{plan.document}: {counts['rows']} audit rows; {len(plan.entries)} entries"
+        f" (verified {counts['verified']}, untested"
+        f" {sum(counts[f'untested:{k}'] for k in UNTESTED_KINDS)}, baseline"
+        f" {counts['exempt:baseline']}); units new since the audit"
+        f" {counts['units new since the audit']}, gone"
+        f" {counts['units gone since the audit']}"
+    ]
+    sections = (
+        ("R OR X STILL ON THE PAGE (reword, date or cut it first)", plan.present),
+        ("MAP BY HAND", plan.by_hand),
+        ("REFUSED (never written)", plan.refused),
+        (
+            "UNCOVERED OUTSIDE PROSE (a fence or comment: give each a disposition)",
+            plan.outside,
+        ),
+        ("DEBT THAT IS ALSO PARTLY HELD", plan.mixed),
+        ("NEW SINCE THE AUDIT (no entry: give each one)", plan.new),
+    )
+    for title, items in sections:
+        if items:
+            lines.append(f"  {title}: {len(items)}")
+            lines += [f"    {item}" for item in items]
+    return lines
+
+
+def near_matches(text: str, candidates: Iterable[str]) -> List[Tuple[float, str]]:
+    """The candidates within NEAR of *text*, closest first (inputs bounded)."""
+    found = []
+    for candidate in candidates:
+        matcher = difflib.SequenceMatcher(
+            None, text[:NEAR_INPUT], candidate[:NEAR_INPUT], autojunk=False
+        )
+        if matcher.real_quick_ratio() < NEAR or matcher.quick_ratio() < NEAR:
+            continue
+        ratio = matcher.ratio()
+        if ratio >= NEAR:
+            found.append((ratio, candidate))
+    return sorted(found, key=lambda pair: (-pair[0], pair[1]))
+
+
+def sync_lines(root: pathlib.Path, document: str) -> Tuple[List[str], int]:
+    """``sync``: the units of *document* that changed against its registry,
+    each with the registered units close to it. It writes nothing: a target is
+    carried over only by its author. Exit 0 when they agree, 1 when not, 2
+    when there is no registry."""
+    rel = registry_path(document)
+    try:
+        data = tomllib.loads((root / rel).read_text(encoding="utf-8"))
+        page = units((root / document).read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError, SplitError) as error:
+        return [f"{document}: {error}"], 2
+    entries = {
+        e["text"]: e
+        for e in data.get("unit", [])
+        if isinstance(e, dict) and isinstance(e.get("text"), str)
+    }
+    seen = collections.Counter(u.text for u in page)
+    first: Dict[str, int] = {}
+    for unit in page:
+        first.setdefault(unit.text, unit.line)
+    gone = [t for t in entries if t not in seen]
+    near_any: Set[str] = set()
+    lines = []
+    for text in seen:
+        if text in entries:
+            want = entries[text].get("count", 1)
+            if want != seen[text]:
+                lines.append(
+                    f"{document}:{first[text]}: {text[:160]!r}: registered x{want},"
+                    f" found x{seen[text]}"
+                )
+            continue
+        lines.append(f"{document}:{first[text]}: not in the registry: {text[:160]!r}")
+        near = near_matches(text, gone)
+        for ratio, old in near:
+            near_any.add(old)
+            lines.append(
+                f"    near ({ratio:.2f}): {old[:160]!r} by = {entries[old].get('by')}"
+            )
+        if not near:
+            lines.append(f"    nothing registered within {NEAR}: a new unit")
+    for old in gone:
+        if old not in near_any:
+            lines.append(f"{rel}: listed, no longer on the page: {old[:160]!r}")
+    return lines, 1 if lines else 0
+
+
+def baseline_problems(
+    resolver: Resolver, documents: Sequence[str], rows: Sequence[Row]
+) -> Tuple[List[str], collections.Counter]:
+    """Every audit claim row that maps to a unit registered ``exempt:baseline``,
+    and how many claim rows were read and mapped.
+
+    A row the excerpt cannot place among the units on its line counts against
+    all of them. Run at a release candidate, privately (the audit is private)."""
+    problems = []
+    counts: collections.Counter = collections.Counter()
+    for document in documents:
+        rel = registry_path(document)
+        try:
+            data = tomllib.loads((resolver.ctx.root / rel).read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError) as error:
+            problems.append(f"{document}: {error}")
+            continue
+        baseline = {
+            e.get("text")
+            for e in data.get("unit", [])
+            if isinstance(e, dict) and e.get("by") == ["exempt:baseline"]
+        }
+        old = resolver.old_text(document)
+        if old is None:
+            counts["documents not at the audit commit"] += 1
+            continue
+        try:
+            spans = unit_lines(old)
+        except SplitError as error:
+            problems.append(f"{document} at the audit commit: {error}")
+            continue
+        old_raw = old.replace("\r\n", "\n").split("\n")
+        old_visible = visible_lines(old)
+        for row in rows:
+            if row.doc != document or row.kind != "claim":
+                continue
+            counts["claim rows"] += 1
+            if outside_prose(old_raw, old_visible, row.line):
+                counts["outside prose"] += 1
+                continue
+            mapped, on_line = units_of_row(spans, row)
+            counts["mapped to a unit"] += bool(mapped or on_line)
+            for unit in mapped or on_line:
+                if unit.text in baseline:
+                    problems.append(
+                        f"{row.label()}: maps to {unit.text[:120]!r}, registered"
+                        " exempt:baseline: classify it"
+                    )
+    return problems, counts
+
+
+def generate_refusal(
+    path: str, documents: Mapping[str, Document], out: pathlib.Path, replace: bool
+) -> Optional[str]:
+    """Why ``generate`` will not write *path*'s registry, or None."""
+    if path not in documents:
+        return f"not an in-scope document ({INVENTORY})"
+    if documents[path].extractor != MARKDOWN:
+        return "scripts/doc_claims.py has no extractor for it yet"
+    if path in CLAIMS_DEFERRED:
+        return "in CLAIMS_DEFERRED (#1107): it has no registry"
+    if (out / registry_path(path)).is_file() and not replace:
+        return (
+            f"{registry_path(path)} exists: edit it (sync shows what changed),"
+            " or pass --replace"
+        )
+    return None
+
+
+def run_generate(
+    root: pathlib.Path,
+    audit: Sequence[pathlib.Path],
+    sha: str,
+    paths: Sequence[str],
+    out: Optional[pathlib.Path] = None,
+    replace: bool = False,
+    old_text: Any = None,
+) -> int:
+    """``generate``: write the registries and ledger lines of *paths* under
+    *out* (default *root*). Exit 0; 1 when an R or X row is still on a page
+    (that page is not written); 2 when an input is refused."""
+    out = out or root
+    try:
+        old_text = old_text or git_reader(root, sha)
+    except ValueError as error:
+        print(error)
+        return 2
+    rows, bad = load_audit(audit)
+    if bad:
+        print("\n".join(["the audit has lines that are not rows:"] + bad))
+        return 2
+    if not rows:
+        print(f"the audit has no rows ({', '.join(map(str, audit))}): refused")
+        return 2
+    documents, _ = inventory_documents(root)
+    resolver = Resolver(Context(root, documents, MECHANISMS), old_text)
+    status = 0
+    totals: collections.Counter = collections.Counter()
+    ledger: Dict[str, List[Tuple[str, str, str]]] = {}
+    for path in paths:
+        refusal = generate_refusal(path, documents, out, replace)
+        if refusal:
+            print(f"{path}: {refusal}")
+            status = 2
+            continue
+        plan = plan_document(
+            resolver, documents[path], [r for r in rows if r.doc == path]
+        )
+        print("\n".join(plan_lines(plan)))
+        totals.update(plan.counts)
+        if plan.error:
+            status = 2
+            continue
+        if plan.present:
+            print(
+                f"  NOT WRITTEN: {len(plan.present)} R or X rows are still on the page"
+            )
+            status = max(status, 1)
+            continue
+        target = out / registry_path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(registry_text(path, plan.entries), encoding="utf-8")
+        ledger[path] = plan.ledger
+        note = f"; take {path} off CLAIMS_PENDING" if path in CLAIMS_PENDING else ""
+        print(f"  wrote {target} and {len(plan.ledger)} ledger lines{note}")
+    if ledger:
+        source = out / LEDGER if (out / LEDGER).is_file() else root / LEDGER
+        existing = source.read_text(encoding="utf-8") if source.is_file() else ""
+        lines = [line for found in ledger.values() for line in found]
+        (out / LEDGER).parent.mkdir(parents=True, exist_ok=True)
+        (out / LEDGER).write_text(
+            ledger_text(existing, lines, ledger), encoding="utf-8"
+        )
+    print(
+        f"rows {totals['rows']}: mapped {totals['mapped']}, by hand"
+        f" {totals['by hand']}, refused {totals['refused']}, R/X on the page"
+        f" {totals['R/X on the page']} (gone {totals['R/X gone']}), outside prose"
+        f" {totals['outside prose, uncovered']} uncovered and"
+        f" {totals['outside prose, covered']} covered, unit changed since the"
+        f" audit {totals['unit changed since the audit']}"
+    )
+    return status
+
+
+def run_baseline(
+    root: pathlib.Path,
+    audit: Sequence[pathlib.Path],
+    sha: str,
+    paths: Sequence[str],
+    old_text: Any = None,
+) -> int:
+    """``baseline``: exit 1 when an audit claim row maps to a unit that a
+    registry of *paths* (default: every registered document) leaves at
+    ``exempt:baseline``; 2 when an input is refused."""
+    try:
+        old_text = old_text or git_reader(root, sha)
+    except ValueError as error:
+        print(error)
+        return 2
+    rows, bad = load_audit(audit)
+    if bad:
+        print("\n".join(["the audit has lines that are not rows:"] + bad))
+        return 2
+    if not rows:
+        print(f"the audit has no rows ({', '.join(map(str, audit))}): refused")
+        return 2
+    documents, _ = inventory_documents(root)
+    paths = list(paths) or sorted(
+        p for p in documents if (root / registry_path(p)).is_file()
+    )
+    resolver = Resolver(Context(root, documents, MECHANISMS), old_text)
+    problems, counts = baseline_problems(resolver, paths, rows)
+    print("\n".join(problems))
+    print(
+        f"rows read {len(rows)}; documents {len(paths)}"
+        f" ({counts['documents not at the audit commit']} not at the audit commit);"
+        f" claim rows on them {counts['claim rows']}, outside prose"
+        f" {counts['outside prose']}, mapped to a unit {counts['mapped to a unit']};"
+        f" on a baseline unit {len(problems)}"
+    )
+    return 1 if problems else 0
+
+
+# ---------------------------------------------------------------------------
 # Command line
 # ---------------------------------------------------------------------------
 def report_lines(counts: Mapping[str, Any]) -> List[str]:
@@ -1550,8 +2722,41 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     unit_parser = sub.add_parser("units", help="a registry skeleton per document")
     unit_parser.add_argument("documents", nargs="*")
     unit_parser.add_argument("--all", action="store_true")
+    for name, text in (
+        ("generate", "write registries for documents from the audit"),
+        ("baseline", "audit claim rows that map to an exempt:baseline unit"),
+    ):
+        audited = sub.add_parser(name, help=text)
+        audited.add_argument(
+            "--audit",
+            action="append",
+            required=True,
+            type=pathlib.Path,
+            help="the audit's rows, JSON Lines (repeat for several files)",
+        )
+        audited.add_argument("--audit-sha", required=True, help="the audited commit")
+        audited.add_argument("documents", nargs="+" if name == "generate" else "*")
+    generate_parser = sub.choices["generate"]
+    generate_parser.add_argument(
+        "--out", type=pathlib.Path, help="write docs/_claims/ under this directory"
+    )
+    generate_parser.add_argument(
+        "--replace", action="store_true", help="replace an existing registry"
+    )
+    sync_parser = sub.add_parser("sync", help="near matches for changed units")
+    sync_parser.add_argument("document")
     args = parser.parse_args(argv)
     command = args.command or "check"
+    if command == "generate":
+        return run_generate(
+            ROOT, args.audit, args.audit_sha, args.documents, args.out, args.replace
+        )
+    if command == "sync":
+        lines, status = sync_lines(ROOT, args.document)
+        print("\n".join(lines or [f"{args.document}: the page and its registry agree"]))
+        return status
+    if command == "baseline":
+        return run_baseline(ROOT, args.audit, args.audit_sha, args.documents)
     if command == "units":
         targets = list(args.documents)
         if args.all:
