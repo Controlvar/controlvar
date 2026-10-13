@@ -121,7 +121,7 @@ by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_app_has_exa
 [[unit]]
 text = "Aurora PostgreSQL | Primary relational database"
 by = [
-    "test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists",
+    "test:infrastructure/tests/test_aurora_engine.py::test_the_cluster_uses_an_orderable_engine_version",
     "test:infrastructure/tests/test_front_door_cdk.py::test_only_prod_has_an_aurora_reader",
     "test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate",
 ]
@@ -209,7 +209,10 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "User-to-variant assignment uses a deterministic consistent hash of experiment_key + user_id."
-by = ["test:tests/sdk-contract/test_hash_contract.py::test_correct_answers_pass_and_report_the_counts"]
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_assignment_hashes_the_experiment_key_and_the_user",
+    "test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches",
+]
 
 [[unit]]
 text = "Because the hash is deterministic, the same user always receives the same variant for a given experiment — regardless of which server processes the request, whether the cache is warm, or whether the SDK has been restarted."
@@ -248,7 +251,10 @@ by = [
 
 [[unit]]
 text = "Sequential testing (mSPRT) | Continuous monitoring with valid p-values at any sample size"
-by = ["test:backend/tests/unit/api/test_sequential_contract.py::test_msprt_has_no_alias_notice"]
+by = [
+    "test:backend/tests/unit/services/test_sequential_testing_service.py::TestMSPRT::test_always_valid_p_value_range",
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_overwhelming_difference_stays_finite_and_stops",
+]
 
 [[unit]]
 text = "Always-valid confidence intervals | Confidence sequences that are valid at every look"

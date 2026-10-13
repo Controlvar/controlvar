@@ -285,3 +285,83 @@ def test_an_api_key_expires_only_when_given_an_expiry():
     assert APIKey(is_active=True, expires_at=later).is_valid
     past = datetime.utcnow() - timedelta(seconds=1)
     assert not APIKey(is_active=True, expires_at=past).is_valid
+
+
+def test_assignment_hashes_the_experiment_key_and_the_user(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from backend.app.services import assignment_service
+
+    seen = []
+
+    def bucket_of(user_id, namespace):
+        seen.append((user_id, namespace))
+        return 0
+
+    monkeypatch.setattr(assignment_service, "bucket_of", bucket_of)
+    experiment = SimpleNamespace(
+        id="00000000-0000-0000-0000-000000000001",
+        key="homepage_button_colour",
+        variants=[SimpleNamespace(id="control", traffic_allocation=100)],
+    )
+    assignment_service.AssignmentService(MagicMock())._hash_user_to_variant(
+        "user-123", experiment
+    )
+    assert seen == [("user-123", "homepage_button_colour")]
+
+
+def test_the_audit_trail_is_append_only(routes):
+    audit_routes = [(m, p) for m, p in routes if "audit" in p]
+    assert audit_routes, "no audit route was found"
+    assert [(m, p) for m, p in audit_routes if m in {"PUT", "PATCH", "DELETE"}] == []
+    pattern = re.compile(
+        r"query\(\s*(?:AuditLog|ComplianceAuditEvent)\s*\)[^;]{0,400}?\.(?:delete|update)\(",
+        re.S,
+    )
+    assert [rel for rel, text in _app_sources() if pattern.search(text)] == []
+
+
+#: Every function that deletes rows older than a cut-off. Events, assignments
+#: and audit records are not among them; the event purge has no caller
+#: (test_nothing_calls_the_event_purge).
+AGE_DELETIONS = {
+    "backend/app/services/analysis_snapshot_service.py::purge_expired_history",
+    "backend/app/services/event_service.py::purge_old_events",
+    "backend/app/services/sdk_evaluation_service.py::_prune",
+}
+
+
+def _deletes_by_age(tree):
+    import ast
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        deletes = any(
+            isinstance(n, ast.Call)
+            and (
+                (isinstance(n.func, ast.Attribute) and n.func.attr == "delete")
+                or (isinstance(n.func, ast.Name) and n.func.id == "delete")
+            )
+            for n in ast.walk(node)
+        )
+        by_age = any(
+            isinstance(n, ast.Compare)
+            and any(isinstance(op, (ast.Lt, ast.LtE)) for op in n.ops)
+            and re.search(r"cutoff|timedelta|now\(", ast.unparse(n), re.I)
+            for n in ast.walk(node)
+        )
+        if deletes and by_age:
+            yield node.name
+
+
+def test_only_analysis_history_and_evaluation_counters_are_deleted_by_age():
+    import ast
+
+    found = {
+        f"{rel}::{name}"
+        for rel, text in _app_sources()
+        for name in _deletes_by_age(ast.parse(text))
+    }
+    assert found == AGE_DELETIONS

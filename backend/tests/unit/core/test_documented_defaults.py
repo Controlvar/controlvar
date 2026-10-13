@@ -33,9 +33,28 @@ def test_ten_failed_sign_ins_lock_an_account_for_15_minutes():
     assert _default("LOCAL_AUTH_LOCKOUT_MINUTES") == 15
 
 
-def test_two_settings_purge_the_platforms_own_history():
+def test_analysis_history_is_kept_90_days():
     assert _default("ANALYSIS_HISTORY_RETENTION_DAYS") == 90
-    assert _default("SCHEDULER_HISTORY_RETENTION_DAYS") == 30
+
+
+def test_the_metrics_tick_purges_the_analysis_history(monkeypatch):
+    """The purge has a caller: the metrics scheduler's tick runs it."""
+    import asyncio
+
+    from backend.app.core import metrics_scheduler as module
+
+    called = []
+    monkeypatch.setattr(
+        "backend.app.services.analysis_snapshot_service.purge_expired_history",
+        lambda *a, **k: called.append(True) or {},
+    )
+    monkeypatch.setattr(
+        module.MetricsService,
+        "aggregate_metrics",
+        classmethod(lambda cls, **kwargs: []),
+    )
+    asyncio.run(module.metrics_scheduler.aggregate_metrics())
+    assert called == [True]
 
 
 def test_the_compliance_reports_cover_365_and_730_days_by_default():

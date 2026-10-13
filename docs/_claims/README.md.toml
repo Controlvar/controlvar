@@ -306,10 +306,19 @@ by = [
 ]
 
 [[unit]]
-text = "There is no retention policy, and no tool that erases one person's data."
+text = "Nothing deletes events, assignments or audit records by age, and no tool erases one person's data."
 by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_no_route_sets_retention_or_erases_a_users_data",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_only_analysis_history_and_evaluation_counters_are_deleted_by_age",
     "test:backend/tests/unit/api/test_documented_limits.py::test_nothing_calls_the_event_purge",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_no_route_sets_retention_or_erases_a_users_data",
+]
+
+[[unit]]
+text = "The platform's own analysis history is purged after ANALYSIS_HISTORY_RETENTION_DAYS (90 days by default)."
+by = [
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_analysis_history_is_kept_90_days",
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_the_metrics_tick_purges_the_analysis_history",
+    "test:backend/tests/integration/services/test_analysis_history_retention.py::TestPurgeExpiredHistory::test_deletes_rows_older_than_the_window_and_keeps_newer",
 ]
 
 [[unit]]
@@ -347,6 +356,60 @@ text = "AWS CDK Deployment and Kubernetes have the steps."
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "SDKs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "There are 16 SDKs under sdk/, and 13 of them run assignment, flag evaluation and event tracking against a live API in CI (the SDK Live Contract job of pr-qa-gate.yml)."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_thirteen_of_the_sixteen_sdks_run_the_live_contract"]
+
+[[unit]]
+text = "SDK | Install"
+by = ["exempt:label"]
+
+[[unit]]
+text = "JavaScript | npm install @getexperimently/js-sdk"
+by = [
+    "journey:sdk-javascript#quick-start-user-on",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names",
+]
+
+[[unit]]
+text = "Python | pip install experimently (it imports as experimentation)"
+by = [
+    "journey:sdk-python#quick-start-user-on",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names",
+]
+
+[[unit]]
+text = "Go | go get github.com/getexperimently/experimently/sdk/go"
+by = ["journey:sdk-go#quick-start-user-on"]
+
+[[unit]]
+text = "Every other SDK installs from a clone of this repository."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The SDK guide says how, and what CI runs for each one."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Documentation"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Documentation home"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Architecture overview"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Targeting rules: operators, attribute aliases and examples"
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "🛡️ Security"
 by = ["exempt:label"]
 
@@ -354,6 +417,7 @@ by = ["exempt:label"]
 text = "Controls that support your compliance program: append-only audit log, role-based access, per-flag safety monitoring with automatic rollback; the compliance and hipaa modules add tamper-evident audit signing, compliance report packs and PHI encryption."
 by = [
     "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_create",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_audit_trail_is_append_only",
     "test:backend/tests/unit/core/test_permissions.py::TestCheckPermission::test_viewer_permission",
     "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage",
     "test:modules/backend/tests/unit/api/test_compliance_signing.py::TestAuditEventSignature::test_audit_event_has_hmac_signature",
@@ -453,11 +517,11 @@ by = [
 ]
 
 [[unit]]
-text = "hipaa | PHI encryption, six-year PHI audit retention, BAA records"
+text = "hipaa | PHI encryption, PHI access records stamped with a six-year retention (nothing deletes them), BAA records"
 by = [
     "test:modules/backend/tests/integration/api/test_hipaa_api.py::TestEncryptDecrypt::test_admin_can_encrypt_phi",
     "test:modules/backend/tests/unit/services/test_hipaa_service.py::TestLogPhiAccess::test_retention_years_set_to_6",
-    "test:modules/backend/tests/integration/api/test_hipaa_api.py::TestCreateBaa::test_admin_can_create_baa",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_only_analysis_history_and_evaluation_counters_are_deleted_by_age",
 ]
 
 [[unit]]
@@ -562,3 +626,11 @@ by = [
     "test:backend/tests/unit/infrastructure/test_dco_check.py::test_an_unsigned_commit_fails",
     "test:backend/tests/unit/infrastructure/test_dco_check.py::test_the_workflow_runs_the_script",
 ]
+
+[[unit]]
+text = "Contributing"
+by = ["exempt:label"]
+
+[[unit]]
+text = "CONTRIBUTING.md covers the development setup, the test suites and the core/modules boundary."
+by = ["exempt:navigation"]

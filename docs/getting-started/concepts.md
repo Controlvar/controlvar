@@ -54,10 +54,10 @@ An experiment can have one control and one or more treatments. With two variants
 
 ### Statistical Significance
 
-Statistical significance tells you how confident you are that the difference between control and treatment is real — not just random noise. It is expressed as a p-value.
+Statistical significance tells you whether a difference between control and treatment is larger than random noise would usually produce. It is expressed as a p-value: the probability of seeing results as extreme as these if there were no true effect.
 
-- **p-value < 0.05**: 95% confidence the difference is real. Standard threshold for most experiments.
-- **p-value < 0.01**: 99% confidence. Use for high-stakes decisions.
+- **p-value < 0.05**: a difference this large would appear less than 5% of the time if there were no true effect. Standard threshold for most experiments.
+- **p-value < 0.01**: a difference this large would appear less than 1% of the time if there were no true effect. Use for high-stakes decisions.
 
 A result is statistically significant when p < your chosen alpha threshold (usually 0.05).
 

@@ -104,7 +104,9 @@ Walkthrough: [demo/DEMO_GUIDE.md](demo/DEMO_GUIDE.md).
   with its own API keys.
 - Sign-in has no multi-factor step, and SAML sign-in is not available (OIDC is, with the `sso`
   module).
-- There is no retention policy, and no tool that erases one person's data.
+- Nothing deletes events, assignments or audit records by age, and no tool erases one person's
+  data. The platform's own analysis history is purged after `ANALYSIS_HISTORY_RETENTION_DAYS`
+  (90 days by default).
 
 [Limitations](docs/getting-started/limitations.md) lists these and the rest, with what happens
 instead.
@@ -121,6 +123,30 @@ instead.
 
 [AWS CDK Deployment](docs/self-hosting/cdk.md) and [Kubernetes](docs/self-hosting/kubernetes.md)
 have the steps.
+
+---
+
+## SDKs
+
+There are 16 SDKs under [`sdk/`](sdk/), and 13 of them run assignment, flag evaluation and event
+tracking against a live API in CI (the SDK Live Contract job of `pr-qa-gate.yml`).
+
+| SDK | Install |
+|---|---|
+| JavaScript | `npm install @getexperimently/js-sdk` |
+| Python | `pip install experimently` (it imports as `experimentation`) |
+| Go | `go get github.com/getexperimently/experimently/sdk/go` |
+
+Every other SDK installs from a clone of this repository. The [SDK guide](docs/sdk-guide.md) says
+how, and what CI runs for each one.
+
+---
+
+## Documentation
+
+- [Documentation home](docs/README.md)
+- [Architecture overview](docs/getting-started/architecture.md)
+- [Targeting rules](docs/feature-flags/create.md): operators, attribute aliases and examples
 
 ---
 
@@ -154,7 +180,7 @@ the core through the registration hooks in `backend/app/core/`:
 | `workspaces` | Group users into teams, with workspace roles and email invites. Grouping only: access to experiments and flags is by platform role |
 | `rbac` | Roles beyond the built-in four, and permissions granted directly to a user. Both are recorded, but they do not change what anyone can do yet: each user's built-in role decides ([#891](https://github.com/getexperimently/experimently/issues/891)) |
 | `sso` | OIDC identity providers with just-in-time provisioning and role mapping. SAML 2.0 sign-in is not available yet; use OIDC |
-| `hipaa` | PHI encryption, six-year PHI audit retention, BAA records |
+| `hipaa` | PHI encryption, PHI access records stamped with a six-year retention (nothing deletes them), BAA records |
 | `compliance` | SOC 2 / ISO 27001 reports, signed audit exports |
 | `warehouse` | Warehouse analysis (beta): run an experiment's analysis on tables in your own warehouse, under `/api/v1/warehouse/analysis` (connections, sources, runs). Snowflake and BigQuery are available; `GET /api/v1/warehouse/analysis/connectors` lists which connectors are. See [docs/api/warehouse-analytics.md](docs/api/warehouse-analytics.md) |
 | `integrations` | Jira, Salesforce and GitHub |
@@ -185,3 +211,10 @@ The two profiles are under the same licence. Details in
 Third-party dependency licences are listed in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md);
 attribution is in [NOTICE](NOTICE). Security reports go to [SECURITY.md](SECURITY.md), not to
 public issues. Contributions are accepted under the DCO — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+## Contributing
+
+[CONTRIBUTING.md](CONTRIBUTING.md) covers the development setup, the test suites and the
+core/modules boundary.

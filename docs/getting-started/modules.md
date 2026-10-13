@@ -54,7 +54,7 @@ the dashboard checks:
 | Team workspaces | `workspaces` | Group users into teams, with workspace roles and email invites. Grouping only: access to experiments and flags is by platform role |
 | Custom roles | `rbac` | Roles beyond the built-in four, and permissions granted directly to a user. Both are recorded, but they do not change what anyone can do yet: each user's built-in role decides ([#891](https://github.com/getexperimently/experimently/issues/891)) |
 | SSO / SAML / OIDC | `sso` | OIDC identity providers with just-in-time provisioning and role mapping. SAML 2.0 sign-in is not available yet; use OIDC |
-| HIPAA | `hipaa` | PHI encryption, six-year PHI audit retention, BAA records |
+| HIPAA | `hipaa` | PHI encryption, PHI access records stamped with a six-year retention (nothing deletes them), BAA records |
 | Compliance reporting | `compliance` | SOC 2 / ISO 27001 reports, signed audit exports |
 | Warehouse analytics | `warehouse` | Warehouse analysis (beta): run an experiment's analysis on tables in your own warehouse, under `/api/v1/warehouse/analysis`. Snowflake and BigQuery are available ([Warehouse analytics](../api/warehouse-analytics.md)) |
 | Third-party integrations | `integrations` | Jira, Salesforce and GitHub |

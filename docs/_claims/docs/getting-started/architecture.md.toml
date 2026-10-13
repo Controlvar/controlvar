@@ -146,7 +146,10 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Amazon Aurora PostgreSQL is the primary relational database."
-by = ["test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate"]
+by = [
+    "test:infrastructure/tests/test_aurora_engine.py::test_the_cluster_uses_an_orderable_engine_version",
+    "test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate",
+]
 
 [[unit]]
 text = "It stores all persistent application data:"

@@ -97,11 +97,14 @@ text = "Data"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A retention policy, or a tool that erases one person's data | Neither exists. Nothing deletes events by age, and no route deletes the events of one of your app's users. Two settings purge the platform's own history: ANALYSIS_HISTORY_RETENTION_DAYS (default 90) and SCHEDULER_HISTORY_RETENTION_DAYS (default 30)."
+text = "A retention policy, or a tool that erases one person's data | Neither exists. Nothing deletes events, assignments or audit records by age, and no route deletes the events of one of your app's users. One setting purges the platform's own analysis history: ANALYSIS_HISTORY_RETENTION_DAYS (default 90) deletes analysis snapshots and bandit-state history older than that, each time the metrics scheduler runs."
 by = [
     "test:backend/tests/unit/api/test_documented_limits.py::test_no_route_sets_retention_or_erases_a_users_data",
     "test:backend/tests/unit/api/test_documented_limits.py::test_nothing_calls_the_event_purge",
-    "test:backend/tests/unit/core/test_documented_defaults.py::test_two_settings_purge_the_platforms_own_history",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_only_analysis_history_and_evaluation_counters_are_deleted_by_age",
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_analysis_history_is_kept_90_days",
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_the_metrics_tick_purges_the_analysis_history",
+    "test:backend/tests/integration/services/test_analysis_history_retention.py::TestPurgeExpiredHistory::test_deletes_rows_older_than_the_window_and_keeps_newer",
 ]
 
 [[unit]]

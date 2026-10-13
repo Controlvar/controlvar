@@ -166,15 +166,15 @@ text = "Statistical Significance"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Statistical significance tells you how confident you are that the difference between control and treatment is real — not just random noise."
+text = "Statistical significance tells you whether a difference between control and treatment is larger than random noise would usually produce."
 by = ["exempt:theory"]
 
 [[unit]]
-text = "It is expressed as a p-value."
+text = "It is expressed as a p-value: the probability of seeing results as extreme as these if there were no true effect."
 by = ["exempt:theory"]
 
 [[unit]]
-text = "p-value < 0.05: 95% confidence the difference is real."
+text = "p-value < 0.05: a difference this large would appear less than 5% of the time if there were no true effect."
 by = ["exempt:theory"]
 
 [[unit]]
@@ -182,7 +182,7 @@ text = "Standard threshold for most experiments."
 by = ["exempt:theory"]
 
 [[unit]]
-text = "p-value < 0.01: 99% confidence."
+text = "p-value < 0.01: a difference this large would appear less than 1% of the time if there were no true effect."
 by = ["exempt:theory"]
 
 [[unit]]
@@ -328,7 +328,10 @@ by = ["exempt:theory"]
 
 [[unit]]
 text = "The platform uses consistent hash-based bucketing."
-by = ["test:tests/sdk-contract/test_hash_contract.py::test_correct_answers_pass_and_report_the_counts"]
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_assignment_hashes_the_experiment_key_and_the_user",
+    "test:tests/sdk-contract/test_hash_contract.py::test_correct_answers_pass_and_report_the_counts",
+]
 
 [[unit]]
 text = "Consistent Hash Assignment"
@@ -336,7 +339,10 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The assignment is computed as a deterministic hash of experiment_key + user_id."
-by = ["test:tests/sdk-contract/test_hash_contract.py::test_correct_answers_pass_and_report_the_counts"]
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_assignment_hashes_the_experiment_key_and_the_user",
+    "test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches",
+]
 
 [[unit]]
 text = "This means:"

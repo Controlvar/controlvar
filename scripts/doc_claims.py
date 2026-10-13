@@ -764,7 +764,7 @@ MECHANISMS: Dict[str, Mechanism] = {
     # Which dashboard image a plain `docker build` gives, on the modules page.
     "dashboard-image-default": Mechanism(
         "backend/tests/unit/infrastructure/test_dashboard_image_docs.py"
-        "::TestTheDocumentedDashboardBuild::test_the_prose_does_not_claim_the_wrong_default",
+        "::test_the_modules_page_names_the_dockerfile_default",
         holds=(
             (
                 "docs/getting-started/modules.md",

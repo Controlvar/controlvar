@@ -35,7 +35,7 @@ the row links it.
 
 | What you might expect | What happens instead |
 |---|---|
-| A retention policy, or a tool that erases one person's data | Neither exists. Nothing deletes events by age, and no route deletes the events of one of your app's users. Two settings purge the platform's own history: `ANALYSIS_HISTORY_RETENTION_DAYS` (default 90) and `SCHEDULER_HISTORY_RETENTION_DAYS` (default 30). |
+| A retention policy, or a tool that erases one person's data | Neither exists. Nothing deletes events, assignments or audit records by age, and no route deletes the events of one of your app's users. One setting purges the platform's own analysis history: `ANALYSIS_HISTORY_RETENTION_DAYS` (default 90) deletes analysis snapshots and bandit-state history older than that, each time the metrics scheduler runs. |
 
 ## Split URL testing
 
