@@ -118,7 +118,7 @@ const sections = [
     description: 'Run Experimently yourself: Docker Compose on one machine, Helm on Kubernetes, or a CDK app that deploys to AWS.',
     links: [
       { label: 'AWS CDK Deployment', href: docsUrl('self-hosting/cdk'), desc: 'CDK app for ECS Fargate, Aurora and ElastiCache' },
-      { label: 'Docker Compose', href: `${DOCS_REPO}/blob/${DOCS_BRANCH}/deploy/compose/compose.yml`, desc: 'The published images on one Docker host: deploy/compose/compose.yml, whose header comment lists its commands and settings' },
+      { label: 'Docker Compose', href: `${DOCS_REPO}/blob/${DOCS_BRANCH}/deploy/compose/README.md`, desc: 'The published images on one Docker host: deploy/compose/compose.yml, and a README that says how to run it and lists its settings' },
       { label: 'Kubernetes (Helm)', href: docsUrl('self-hosting/kubernetes'), desc: 'The Helm chart from each release, on the published images' },
       { label: 'Environment Variables', href: docsUrl('getting-started/environment-setup'), desc: 'Configuration reference' },
       { label: 'Database Migrations', href: docsUrl('self-hosting/migrations'), desc: 'Alembic migration guide' },

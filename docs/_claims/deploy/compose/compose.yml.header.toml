@@ -1,0 +1,22 @@
+# What verifies each unit of deploy/compose/compose.yml#header (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "deploy/compose/compose.yml#header"
+
+[[unit]]
+text = "Experimently: the production compose file, for one Docker host."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_production_with_no_seed_and_no_bypass",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_exactly_the_four_services",
+]
+
+[[unit]]
+text = "It runs the published images and builds nothing."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_nothing_is_built",
+]
+
+[[unit]]
+text = "README.md beside this file says how to run it and lists its settings."
+by = ["exempt:navigation"]

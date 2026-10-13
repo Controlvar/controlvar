@@ -44,6 +44,10 @@ on:
       - 'frontend/**'
       - 'modules/**'
       - 'charts/**'
+      # Literal entries, beside the glob, for the inventory: chart-kind is the
+      # workflow these two pages name (tests/acceptance/docs/inventory.toml).
+      - 'charts/experimently/README.md'
+      - 'charts/experimently/templates/NOTES.txt'
       - 'VERSION'
       - 'docs/self-hosting/kubernetes.md'
       - 'scripts/chart_kind.sh'
