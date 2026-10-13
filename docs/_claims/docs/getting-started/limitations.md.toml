@@ -105,13 +105,6 @@ by = [
 ]
 
 [[unit]]
-text = "A targeting context of any size | A context larger than 8,192 bytes, or nested more than 10 levels deep, is refused with 422 (Targeting Context Limits)."
-by = [
-    "test:backend/tests/unit/core/test_context_limits.py::test_the_limits_are_8192_bytes_and_10_levels",
-    "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_context_over_the_limits_answers_422_and_nothing_is_recorded",
-]
-
-[[unit]]
 text = "Split URL testing"
 by = ["exempt:label"]
 
