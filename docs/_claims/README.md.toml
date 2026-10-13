@@ -522,6 +522,7 @@ by = [
     "test:modules/backend/tests/integration/api/test_hipaa_api.py::TestEncryptDecrypt::test_admin_can_encrypt_phi",
     "test:modules/backend/tests/unit/services/test_hipaa_service.py::TestLogPhiAccess::test_retention_years_set_to_6",
     "test:backend/tests/unit/api/test_documented_limits.py::test_only_analysis_history_and_evaluation_counters_are_deleted_by_age",
+    "test:modules/backend/tests/integration/api/test_hipaa_api.py::TestCreateBaa::test_admin_can_create_baa",
 ]
 
 [[unit]]
