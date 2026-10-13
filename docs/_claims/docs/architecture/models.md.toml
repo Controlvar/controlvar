@@ -1,0 +1,67 @@
+# What verifies each unit of docs/architecture/models.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/architecture/models.md"
+
+[[unit]]
+text = "Data Models"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Variant traffic allocation must be between 0 and 100"
+by = ["test:backend/tests/integration/database/test_constraints.py::TestExperimentConstraints::test_variant_traffic_allocation_check"]
+
+[[unit]]
+text = "Metric names must be unique within an experiment"
+by = ["test:backend/tests/integration/database/test_constraints.py::TestExperimentConstraints::test_metric_name_unique_within_experiment"]
+
+[[unit]]
+text = "Experiment end date must be after start date"
+by = ["untested:T"]
+
+[[unit]]
+text = "The models are SQLAlchemy classes in backend/app/models/, one module per area, and in modules/backend/app/models/ for the optional modules."
+by = ["untested:T"]
+
+[[unit]]
+text = "Each table is in the PostgreSQL schema that POSTGRES_SCHEMA names."
+by = ["test:backend/tests/unit/db/test_schema_name.py::test_the_schema_is_resolved_the_same_way_everywhere"]
+
+[[unit]]
+text = "The fields a client sends and receives are in the API reference at /api/v1/docs, not here."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Constraints the database enforces"
+by = ["exempt:label"]
+
+[[unit]]
+text = "One assignment per user and experiment"
+by = ["test:backend/tests/integration/database/test_constraints.py::TestExperimentConstraints::test_assignment_unique_per_experiment_user"]
+
+[[unit]]
+text = "A feature flag's key is unique, and its rollout percentage is between 0 and 100"
+by = [
+    "test:backend/tests/integration/database/test_constraints.py::TestFeatureFlagConstraints::test_feature_flag_key_unique",
+    "test:backend/tests/integration/database/test_constraints.py::TestFeatureFlagConstraints::test_feature_flag_rollout_percentage_constraint",
+]
+
+[[unit]]
+text = "The API also checks that an experiment's variant traffic allocations sum to 100."
+by = ["test:backend/tests/unit/api/test_request_validation.py::TestExperimentValidation::test_variant_traffic_allocation_sum"]
+
+[[unit]]
+text = "The database does not check the sum."
+by = ["untested:T"]
+
+[[unit]]
+text = "Migrations"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Upgrading a deployment's database: Database Migrations"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Writing a migration in a checkout: Creating New Migrations"
+by = ["exempt:navigation"]

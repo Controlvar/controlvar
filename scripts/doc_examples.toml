@@ -13,7 +13,7 @@
 
 [meta]
 documents = 50
-exec = 305
+exec = 303
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -442,7 +442,6 @@ reason = "starts the production stack on a Docker host: the compose-production w
 "backend/lambda/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
 "backend/lambda/event_processor/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
 "docs/api/split-url.md" = { comments = 0, unlabelled = 2, syntax = 0 }
-"docs/architecture/models.md" = { comments = 0, unlabelled = 1, syntax = 1 }
 "docs/auth/cognito-auth-testing.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/deployment/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/deployment/deployment-guide.md" = { comments = 0, unlabelled = 1, syntax = 2 }
@@ -541,7 +540,7 @@ expects = 40
 path = "docs/architecture/technical-guide.md"
 environment = "stack"
 exec = 4
-skip = 4
+skip = 0
 expects = 4
 
 [[document]]
@@ -563,8 +562,8 @@ expects = 25
 [[document]]
 path = "docs/self-hosting/migrations.md"
 environment = "stack"
-exec = 7
-skip = 12
+exec = 6
+skip = 11
 expects = 5
 
 # The contributor pages: the Quick Start's stack and a development virtual
@@ -579,9 +578,9 @@ expects = 6
 [[document]]
 path = "docs/performance/load-testing.md"
 environment = "stack-dev"
-exec = 10
-skip = 6
-expects = 8
+exec = 9
+skip = 5
+expects = 7
 
 # #1075: the integration pages' setup and inbound webhook examples, each
 # signing in first and signing its deliveries as the page says. Nothing on

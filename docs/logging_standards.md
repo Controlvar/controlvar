@@ -77,18 +77,20 @@ reporting an error can quote it.
 
 No credentials, API keys, tokens, password hashes, or PHI.
 
-**Know which half of the system masks.** `LoggingMiddleware` runs request and
-response bodies through `backend/app/utils/masking.py`, which blanks
+**No request or response body is masked.** `backend/app/utils/masking.py` blanks
 `password`, `token`, `api_key`, `secret`, `credential`, `authorization`,
 `access_token`, `refresh_token`, `private_key` and friends, and partially
-masks emails, phone numbers, credit card numbers and IP addresses. The
-middleware is `backend/app/middleware/logging_middleware.py`.
+masks emails, phone numbers, credit card numbers and IP addresses. Only
+`LoggingMiddleware` (`backend/app/middleware/logging_middleware.py`) calls it,
+and the application does not mount that middleware.
 
-That masking applies to what the **middleware** logs. A keyword you pass to
-`logger.info(...)` yourself does **not** go through it — it lands in CloudWatch
-verbatim. So the rule for your own call sites stands: log the identifier, not
-the object. A `User` or a tracking payload carries an email address or an
-attribute you did not mean to persist.
+Query values are redacted in uvicorn's access and error logs: a filter on the
+`uvicorn.access` and `uvicorn.error` loggers blanks the values
+`backend/app/core/query_redaction.py` recognises, and keeps the parameter names.
+
+A keyword you pass to `logger.info(...)` lands in CloudWatch verbatim. So log
+the identifier, not the object. A `User` or a tracking payload carries an email
+address or an attribute you did not mean to persist.
 
 ## What flag evaluation and assignment log
 
@@ -99,8 +101,9 @@ log none of it:
 - **No line carries the end user's id or attribute values, at any level.** This
   covers `AssignmentService`, `FeatureFlagService` evaluation, the rules
   engine and its evaluation cache, `EventService`'s writes (exposures and
-  tracked events), and the assignment, flag-evaluation and event-processor
-  Lambda functions, including their shared DynamoDB and Kinesis helpers.
+  tracked events), and the flag-evaluation and event-processor code under
+  `backend/lambda/`, which no stack deploys, including their shared DynamoDB
+  and Kinesis helpers.
 - **Routine per-request lines are `DEBUG`**: an assignment made, a sticky
   assignment reused, a user left out by holdout, mutual exclusion or targeting,
   a flag evaluated. They name the experiment or flag and the variant, not the
@@ -115,6 +118,7 @@ log none of it:
   experiment and the variant, not the user.
 
 To follow one user through the system, use the data that is kept for it: the
-assignments and events tables, and `error_logs`. The dashboard user's own id
-(`user_id` bound by the request middleware and in audit logs) is a separate
-field and is unchanged.
+assignments and events tables, and `error_logs`.
+
+No middleware binds the dashboard user's id to a log line; the
+[audit log](api/audit-logging.md) records who changed what.
