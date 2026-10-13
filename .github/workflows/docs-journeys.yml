@@ -235,12 +235,13 @@ jobs:
   demo:
     name: Demo journeys
     runs-on: ubuntu-latest
-    # Measured on the dispatched runs of #1169: the whole job took 4 min 56 s
-    # with every journey passing (run 38211112995), and setup-local.sh itself
+    # PROVISIONAL (D73 DJ2): the rollout-story journey runs the story, up to
+    # 40 minutes on its own; set from its first measured run. Before it, the
+    # whole job took 4 min 56 s (run 38211112995), and setup-local.sh itself
     # 196 s, 228 s and 238 s in three runs (the stack writes the time to
-    # stacks/demo-local.log). 25 minutes is five times the job; the script
-    # alone stops at DOCS_JOURNEY_DEMO_TIMEOUT (900 s), inside it.
-    timeout-minutes: 25
+    # stacks/demo-local.log); the script alone stops at
+    # DOCS_JOURNEY_DEMO_TIMEOUT (900 s), inside it.
+    timeout-minutes: 75
     permissions:
       contents: read
     outputs:

@@ -1,0 +1,714 @@
+# The StreamPulse rollout story (demo/streampulse/simulator/README.md), run
+# as its reader runs it, with the crash incident and the automatic rollback
+# (#1142, D73 DJ2). The journey runs on the stack demo/setup-local.sh starts
+# (demo-local), which seeds StreamPulse, keeps its steady device traffic
+# running, and starts the backend with SAFETY_CHECK_INTERVAL_MINUTES=1 and
+# ROLLOUT_CHECK_INTERVAL_MINUTES=1 (the backend's own defaults are 5 and 15).
+#
+# What it holds:
+# - before the story, the seed's state: Player v2 at 5% with the employee
+#   rule, its four-stage schedule at stage 1, automatic rollbacks on, the
+#   flag's safety configuration (critical 5%, rollback to 5%), no error report
+#   and no rollback yet; an employee's device gets the flag by its rule and
+#   other devices by the 5% rollout;
+# - the app's Rollout story drawer: the narrative, the command, and the live
+#   readout for the device the app shows;
+# - the page's two story commands, run as written from the checkout's root
+#   with the venv setup-local.sh made: --step 1 (read only), then --auto
+#   --pace 20 in the background, while the journey watches the API: the
+#   flag at 25%, the safety check critical with every report counted (the
+#   story's step 3 sends them with the StreamPulse server key the seed wrote
+#   to demo/streampulse/.api_key_server, scope sdk:ruleset), the safety
+#   monitor's rollback to 5% (the flag stays on, the global percentage is
+#   lowered, an employee's device keeps it by rule), the schedule paused, the
+#   one audit entry naming the monitor, then the fixed-build rule; and when
+#   the story ends, exit 0, its printed account of each step, the flag at 100%
+#   with no rules and the schedule completed;
+# - the same crash reports sent with a key without the sdk:ruleset scope
+#   (made here, like the app's key) are stored and shown as not counted, the
+#   check stays healthy, and the monitor's next pass leaves the flag on at
+#   100% with still one rollback: only the server key's reports counted.
+#
+# The waits: the story itself paces its steps (20 s) and waits for the
+# monitor (its step 4, up to 6 min) and for the 15-minute error window to
+# clear (its step 6, up to 16 min); its bound here is 40 min. The journey's
+# polls wait for what the story does: each is bounded and every 5 or 10 s.
+#
+# Expectations written on 2026-10-13 from the simulator's README, the story
+# (rollout_story.py), traffic.py, the seed (backend/scripts/seed_streampulse.py)
+# and the safety monitor, before the first run.
+#
+# Not recorded: the journey makes an API key.
+guide: demo/streampulse/simulator/README.md
+stack: demo-local
+profile: full
+video: false
+written: 2026-10-13
+steps:
+  - id: story-flag
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/?search=streampulse_player_v2
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: streampulse_player_v2
+        items.0.status: active
+        items.0.rollout_percentage: 5
+    save:
+      flag-id:
+        path: items.0.id
+    fail: the seed's Player v2 flag is not on at 5% before the story
+  - id: story-schedule
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/rollout-schedules/?feature_flag_id={{flag-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.status: active
+        items.0.stages.0.target_percentage: 5
+        items.0.stages.0.status: in_progress
+        items.0.stages.1.target_percentage: 25
+        items.0.stages.1.status: pending
+        items.0.stages.2.target_percentage: 50
+        items.0.stages.2.status: pending
+        items.0.stages.3.target_percentage: 100
+        items.0.stages.3.status: pending
+    save:
+      schedule-id:
+        path: items.0.id
+    fail: the flag's four-stage schedule (5, 25, 50, 100%) is not active at stage 1
+  - id: automatic-rollbacks-on
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/safety/settings
+        as: admin
+    expect:
+      status: 200
+      json:
+        enable_automatic_rollbacks: true
+    fail: the seed does not turn automatic rollbacks on in the global safety settings
+  - id: rolls-back-to-5
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/safety/feature-flags/{{flag-id}}/config
+        as: admin
+    expect:
+      status: 200
+      json:
+        enabled: true
+        rollback_percentage: 5
+        metrics.error_rate.warning_threshold: 0.02
+        metrics.error_rate.critical_threshold: 0.05
+    fail: the flag's safety configuration does not warn at 2%, go critical at 5% and roll back to 5%
+  - id: no-incident-yet
+    doc: the-incident-model-incident-android12
+    do:
+      api:
+        method: GET
+        path: /api/v1/safety/feature-flags/{{flag-id}}/check
+        as: admin
+    expect:
+      status: 200
+      json:
+        is_healthy: true
+        metrics.0.name: error_rate
+        details.error_count: 0
+        details.uncounted_error_count: 0
+    fail: the flag has error reports before the incident, so setup-local.sh or the seed ran one
+  - id: no-rollback-yet
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/audit-logs/?entity_type=feature_flag&entity_id={{flag-id}}&action_type=safety_rollback
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 0
+    fail: the flag has a safety rollback before the story, so the seed wrote one
+  - id: app-key
+    doc: streampulse-device-simulator-rollout-story
+    do:
+      api:
+        method: POST
+        path: /api/v1/api-keys
+        as: admin
+        body:
+          name: Docs journey StreamPulse app
+    expect:
+      status: 201
+    save:
+      app-key:
+        path: key
+        secret: true
+    fail: no API key without a scope can be made, like the app's, to evaluate and report with
+  - id: employee-by-rule
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/streampulse_player_v2?user_id=docs-journey-employee&context=%7B%22os%22%3A%22iOS%22%2C%22os_version%22%3A%2217.4.0%22%2C%22app_version%22%3A%223.2.1%22%2C%22region%22%3A%22US%22%2C%22tier%22%3A%22premium%22%2C%22employee%22%3Atrue%2C%22device_model%22%3A%22iPhone%2015%22%2C%22device_id%22%3A%22docs-journey-employee%22%7D
+        as: anonymous
+        key: app-key
+    expect:
+      status: 200
+      json:
+        key: streampulse_player_v2
+        enabled: true
+        reason: targeting_rule
+    fail: an employee's device does not get Player v2 by the employee rule
+  - id: others-by-rollout
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/streampulse_player_v2?user_id=sp-iphone-15-us-premium&context=%7B%22os%22%3A%22iOS%22%2C%22os_version%22%3A%2217.4.0%22%2C%22app_version%22%3A%223.2.1%22%2C%22region%22%3A%22US%22%2C%22tier%22%3A%22premium%22%2C%22employee%22%3Afalse%2C%22device_model%22%3A%22iPhone%2015%22%2C%22device_id%22%3A%22sp-iphone-15-us-premium%22%7D
+        as: anonymous
+        key: app-key
+    expect:
+      status: 200
+      json:
+        key: streampulse_player_v2
+        reason: rollout
+    fail: a device that is not an employee's is not bucketed by the 5% rollout
+  - id: app
+    doc: rollout-story
+    do:
+      open: http://localhost:3300
+    expect:
+      status: 200
+      aria: |
+        - heading "StreamPulse" [level=1]
+    fail: the StreamPulse app does not answer at the address the page gives
+  - id: drawer
+    doc: rollout-story
+    do:
+      click:
+        role: button
+        name: Rollout story
+    expect:
+      aria: |
+        - dialog "The rollout story":
+          - heading "The rollout story" [level=2]
+          - region "Player v2 rollout · this device":
+            - text: "/(on: inside|off: outside) the rollout %/"
+          - region "Run it":
+            - code: python demo/streampulse/simulator/rollout_story.py --auto
+          - list:
+            - listitem:
+              - heading "Step 1: We are launching a redesigned player" [level=3]
+            - listitem:
+              - heading "Step 4: Crash rate spikes on Android 12" [level=3]
+            - listitem:
+              - heading "Step 5: Safety monitor rolls back to 5 %" [level=3]
+            - listitem:
+              - heading "Step 7: Full rollout" [level=3]
+    fail: the Rollout story drawer does not show the narrative, the command and Player v2 for the device by the 5% rollout
+  - id: step-one
+    doc: rollout-story
+    do:
+      run:
+        command: python demo/streampulse/simulator/rollout_story.py --step 1
+        up_to_seconds: 120
+    expect:
+      exit: 0
+      output:
+        - "Step 1/7"
+        - "Flag streampulse_player_v2: rollout 5%  status active"
+        - "rollback to 5%; automatic rollbacks globally ON"
+    fail: the story's first step does not sign in as the demo admin and print the flag at 5% with automatic rollbacks on
+  - id: story
+    doc: rollout-story
+    do:
+      run:
+        command: python demo/streampulse/simulator/rollout_story.py --auto --pace 20
+        up_to_seconds: 2400
+        background: true
+    fail: the story cannot be started as the page writes it
+  - id: at-25
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/{{flag-id}}
+        as: admin
+    poll:
+      up_to_seconds: 300
+      every_seconds: 5
+    expect:
+      status: 200
+      json:
+        status: active
+        rollout_percentage: 25
+    fail: the story's step 2 does not take the flag to 25%
+  - id: stage-2
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/rollout-schedules/{{schedule-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: active
+        stages.0.status: completed
+        stages.1.target_percentage: 25
+        stages.1.status: in_progress
+    fail: at 25% the schedule's stage 1 is not completed and stage 2 in progress
+  - id: critical
+    doc: the-incident-model-incident-android12
+    do:
+      api:
+        method: GET
+        path: /api/v1/safety/feature-flags/{{flag-id}}/check
+        as: admin
+    poll:
+      up_to_seconds: 600
+      every_seconds: 10
+    expect:
+      status: 200
+      json:
+        is_healthy: false
+        metrics.0.name: error_rate
+        metrics.0.is_healthy: false
+        details.uncounted_error_count: 0
+    fail: the crash incident, reported with the StreamPulse server key, does not make the flag's error rate critical, every report counted
+  - id: rolled-back
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/{{flag-id}}
+        as: admin
+    poll:
+      up_to_seconds: 600
+      every_seconds: 10
+    expect:
+      status: 200
+      json:
+        status: active
+        rollout_percentage: 5
+    fail: the flag is not rolled back to 5%, still on, after the safety check went critical
+  - id: schedule-paused
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/rollout-schedules/{{schedule-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: paused
+        stages.1.status: in_progress
+    fail: the rollback did not pause the flag's rollout schedule
+  - id: by-the-monitor
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/audit-logs/?entity_type=feature_flag&entity_id={{flag-id}}&action_type=safety_rollback
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.user_email: system:safety-monitor
+        items.0.user_id: null
+        items.0.new_value: '{"deactivated": false, "new_percentage": 5, "paused_schedules": ["{{schedule-id}}"], "previous_percentage": 25, "trigger_type": "automatic"}'
+    fail: the rollback is not the safety monitor's one automatic rollback from 25% to 5% that paused the schedule
+  - id: employee-keeps-it
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/streampulse_player_v2?user_id=docs-journey-employee&context=%7B%22os%22%3A%22iOS%22%2C%22os_version%22%3A%2217.4.0%22%2C%22app_version%22%3A%223.2.1%22%2C%22region%22%3A%22US%22%2C%22tier%22%3A%22premium%22%2C%22employee%22%3Atrue%2C%22device_model%22%3A%22iPhone%2015%22%2C%22device_id%22%3A%22docs-journey-employee%22%7D
+        as: anonymous
+        key: app-key
+    expect:
+      status: 200
+      json:
+        enabled: true
+        reason: targeting_rule
+    fail: after the rollback to 5% an employee's device no longer gets Player v2 by the employee rule
+  - id: fixed-build-rule
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/{{flag-id}}
+        as: admin
+    poll:
+      up_to_seconds: 300
+      every_seconds: 5
+    expect:
+      status: 200
+      json:
+        rollout_percentage: 5
+        targeting_rules.logical_operator: OR
+        targeting_rules.groups.0.conditions.0.attribute: employee
+        targeting_rules.groups.1.conditions.0.attribute: app_version
+        targeting_rules.groups.1.conditions.0.operator: semver_gte
+        targeting_rules.groups.1.conditions.0.value: 3.2.1
+    fail: the story's step 5 does not add the app_version semver_gte 3.2.1 rule beside the employee rule
+  - id: fixed-build-by-rule
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/streampulse_player_v2?user_id=sp-iphone-15-us-premium&context=%7B%22os%22%3A%22iOS%22%2C%22os_version%22%3A%2217.4.0%22%2C%22app_version%22%3A%223.2.1%22%2C%22region%22%3A%22US%22%2C%22tier%22%3A%22premium%22%2C%22employee%22%3Afalse%2C%22device_model%22%3A%22iPhone%2015%22%2C%22device_id%22%3A%22sp-iphone-15-us-premium%22%7D
+        as: anonymous
+        key: app-key
+    expect:
+      status: 200
+      json:
+        enabled: true
+        reason: targeting_rule
+    fail: a device on the fixed build 3.2.1 does not get Player v2 by the new rule
+  - id: old-build-by-rollout
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/streampulse_player_v2?user_id=sp-galaxy-s10-us-premium&context=%7B%22os%22%3A%22Android%22%2C%22os_version%22%3A%2212.0.0%22%2C%22app_version%22%3A%223.1.0%22%2C%22region%22%3A%22US%22%2C%22tier%22%3A%22premium%22%2C%22employee%22%3Afalse%2C%22device_model%22%3A%22Galaxy%20S10%22%2C%22device_id%22%3A%22sp-galaxy-s10-us-premium%22%7D
+        as: anonymous
+        key: app-key
+    expect:
+      status: 200
+      json:
+        reason: rollout
+    fail: a device on the old build 3.1.0 is not left to the global rollout
+  - id: story-ended
+    doc: rollout-story
+    do:
+      finish: story
+    expect:
+      exit: 0
+      output:
+        - "Rollout 5% → 25%"
+        - "error_rate is above the 5% critical threshold — the flag is now CRITICAL."
+        - "Automatic rollbacks are ON: waiting for the safety scheduler to roll the flag back to 5%"
+        - "Rollout 25% → 5%"
+        - "Added rule: app_version semver_gte 3.2.1 → 100% (kept: employee equals true)"
+        - "Resumed the rollout schedule (the rollback in step 4 paused it)."
+        - "% → 50%"
+        - "Rollout is now 100%"
+        - "Removed the targeting rules"
+        - "Step 7/7"
+    fail: the story does not run its seven steps to the end, or does not say so
+  - id: full-rollout
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/{{flag-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: active
+        rollout_percentage: 100
+        targeting_rules: {}
+    fail: after the story the flag is not on at 100% with its rules removed
+  - id: schedule-completed
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/rollout-schedules/{{schedule-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: completed
+        stages.2.target_percentage: 50
+        stages.2.status: completed
+        stages.3.target_percentage: 100
+        stages.3.status: completed
+    fail: after the story the schedule is not completed through its 50% and 100% stages
+  - id: everyone
+    doc: rollout-story
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/streampulse_player_v2?user_id=sp-galaxy-s10-us-premium&context=%7B%22os%22%3A%22Android%22%2C%22os_version%22%3A%2212.0.0%22%2C%22app_version%22%3A%223.1.0%22%2C%22region%22%3A%22US%22%2C%22tier%22%3A%22premium%22%2C%22employee%22%3Afalse%2C%22device_model%22%3A%22Galaxy%20S10%22%2C%22device_id%22%3A%22sp-galaxy-s10-us-premium%22%7D
+        as: anonymous
+        key: app-key
+    expect:
+      status: 200
+      json:
+        enabled: true
+        reason: rollout
+    fail: at 100% the old build does not get Player v2 by the rollout
+  # The control: the incident's crash reports again, sent with the app's kind
+  # of key (no scope). Were they counted, 500 more errors would put the error
+  # rate far above 5% and the monitor's next pass would roll the flag back
+  # from 100% to 5% (step still-on).
+  - id: healthy-at-100
+    doc: the-incident-model-incident-android12
+    do:
+      api:
+        method: GET
+        path: /api/v1/safety/feature-flags/{{flag-id}}/check
+        as: admin
+    expect:
+      status: 200
+      json:
+        is_healthy: true
+        details.uncounted_error_count: 0
+    fail: after the story the flag is not healthy, so the control below would prove nothing
+  - id: app-key-crashes
+    doc: the-incident-model-incident-android12
+    do:
+      api:
+        method: POST
+        path: /api/v1/tracking/errors/batch
+        as: anonymous
+        key: app-key
+        body: &crashes
+          errors:
+            - &crash
+              feature_flag_key: streampulse_player_v2
+              user_id: sp-galaxy-s10-us-premium
+              error_type: crash
+              message: NullPointerException in PlayerV2Fragment
+              metadata: {os: Android, os_version: 12.0.0, device_model: Galaxy S10, app_version: 3.1.0}
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+            - *crash
+    expect:
+      status: 200
+      json:
+        success_count: 100
+        failure_count: 0
+    fail: crash reports sent with a key without the sdk:ruleset scope are not accepted and stored
+  - id: app-key-crashes-2
+    doc: the-incident-model-incident-android12
+    do:
+      api:
+        method: POST
+        path: /api/v1/tracking/errors/batch
+        as: anonymous
+        key: app-key
+        body: *crashes
+    expect:
+      status: 200
+      json:
+        success_count: 100
+    fail: the second batch of crash reports with the app's key is not stored
+  - id: app-key-crashes-3
+    doc: the-incident-model-incident-android12
+    do:
+      api:
+        method: POST
+        path: /api/v1/tracking/errors/batch
+        as: anonymous
+        key: app-key
+        body: *crashes
+    expect:
+      status: 200
+      json:
+        success_count: 100
+    fail: the third batch of crash reports with the app's key is not stored
+  - id: app-key-crashes-4
+    doc: the-incident-model-incident-android12
+    do:
+      api:
+        method: POST
+        path: /api/v1/tracking/errors/batch
+        as: anonymous
+        key: app-key
+        body: *crashes
+    expect:
+      status: 200
+      json:
+        success_count: 100
+    fail: the fourth batch of crash reports with the app's key is not stored
+  - id: app-key-crashes-5
+    doc: the-incident-model-incident-android12
+    do:
+      api:
+        method: POST
+        path: /api/v1/tracking/errors/batch
+        as: anonymous
+        key: app-key
+        body: *crashes
+    expect:
+      status: 200
+      json:
+        success_count: 100
+    fail: the fifth batch of crash reports with the app's key is not stored
+  - id: not-counted
+    doc: the-incident-model-incident-android12
+    do:
+      api:
+        method: GET
+        path: /api/v1/safety/feature-flags/{{flag-id}}/check
+        as: admin
+    expect:
+      status: 200
+      json:
+        is_healthy: true
+        metrics.0.name: error_rate
+        metrics.0.is_healthy: true
+        details.uncounted_error_count: 500
+    save:
+      # The check saw the 500 reports, so they were stored before this time,
+      # on the stack's clock: the monitor's pass that decides started after.
+      errors-at:
+        path: last_checked
+    fail: the 500 crash reports sent with the app's key are not shown as not counted, or they count toward the error rate
+  - id: deciding-pass
+    doc: the-incident-model-incident-android12
+    do:
+      api:
+        method: GET
+        path: /api/v1/scheduler/safety/history?limit=1
+        as: admin
+    poll:
+      up_to_seconds: 240
+      every_seconds: 10
+    expect:
+      status: 200
+      json:
+        0.scheduler_name: safety
+      after:
+        0.started_at: errors-at
+    fail: no pass of the safety monitor that started after the app's reports finished within 240 s, at its one-minute interval
+  - id: still-on
+    doc: the-incident-model-incident-android12
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/{{flag-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: active
+        rollout_percentage: 100
+    fail: the safety monitor rolled the flag back for crash reports sent with a key without the sdk:ruleset scope
+  - id: still-one-rollback
+    doc: the-incident-model-incident-android12
+    do:
+      api:
+        method: GET
+        path: /api/v1/audit-logs/?entity_type=feature_flag&entity_id={{flag-id}}&action_type=safety_rollback
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+    fail: a second rollback was written for crash reports that do not count

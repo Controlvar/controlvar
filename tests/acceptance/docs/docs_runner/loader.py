@@ -93,7 +93,15 @@ YAML, or not a mapping, stops at that. Refused, besides what ``model`` refuses:
   block does not print as ``<key>=``); a Go step on a page whose "Requires Go
   X+" is not sdk/go/go.mod's ``go`` version; and a journey whose sdk steps give
   every user the same answer for a flag (the oracle could not tell an SDK that
-  always answers on, or always off, from a right one).
+  always answers on, or always off, from a right one);
+* a ``run`` or ``finish`` step on any stack but demo-local, or with a
+  ``snapshot`` setting; a ``run`` whose ``command`` is not one shell block of
+  its section (``doc``) word for word (``commands.block_problem``); a ``run``
+  without ``background`` and a ``finish`` without ``expect.exit``, or
+  expecting anything but ``exit`` and ``output``; a background ``run`` with an
+  ``expect`` (its ``finish`` checks it); a ``finish`` that names no earlier
+  background ``run``, or one already finished; and a background ``run`` no
+  later step finishes.
 """
 
 from __future__ import annotations
@@ -119,8 +127,8 @@ from typing import (
 import yaml
 from pydantic import ValidationError
 
+from docs_runner import commands, registry, sdk, traffic, values
 from docs_runner import guide as guides
-from docs_runner import registry, sdk, traffic, values
 from docs_runner.model import (
     API_ANSWER_EXPECTS,
     API_EXPECTS,
@@ -128,6 +136,8 @@ from docs_runner.model import (
     COMPOSE_STACKS,
     GUIDE_PATTERN,
     LOCAL_URL,
+    RUN_EXPECTS,
+    RUN_STACKS,
     SCREEN_ACTIONS,
     SEARCH_EXPECTS,
     SITE_STACKS,
@@ -402,6 +412,33 @@ def _expect_problems(label: str, step: Step, stack: Optional[str]) -> List[str]:
         if step.snapshot is not None:
             found.append(f"{label}: {article} {kind} step has no screen to snapshot")
         return found
+    if kind in ("run", "finish"):
+        if stack is not None and stack not in RUN_STACKS:
+            found.append(
+                f"{label}: a {kind} step runs a block of the guide in the checkout"
+                f" demo/setup-local.sh set up ({', '.join(RUN_STACKS)}); {stack}"
+                " has none"
+            )
+        if step.snapshot is not None:
+            found.append(f"{label}: a {kind} step has no screen to snapshot")
+        if kind == "run" and step.do.run.background:
+            if given:
+                found.append(
+                    f"{label}: a background run is checked by the finish step that"
+                    " names it; it has no expect"
+                )
+            return found
+        wrong = [name for name in given if name not in RUN_EXPECTS]
+        if wrong:
+            found.append(
+                f"{label}: a {kind} step expects only exit or output, not {wrong}"
+            )
+        if "exit" not in given:
+            found.append(
+                f"{label}: a {kind} step needs expect.exit, the status its block"
+                " must end with"
+            )
+        return found
     if kind == "api":
         if stack is not None and stack not in COMPOSE_STACKS:
             found.append(
@@ -609,6 +646,13 @@ def _step_problems(
                 found.append(f"{label}: no oracle named {oracle!r}")
     if step.save is not None and step.do.kind != "api":
         found.append(f"{label}: save keeps values from an api step's answer only")
+    if step.do.run is not None and guide is not None and step.doc in guide.anchors:
+        problem = commands.block_problem(guide.section(step.doc), step.do.run.command)
+        if problem:
+            found.append(
+                f"{label}: run takes a shell block of #{step.doc} as the page writes"
+                f" it: {problem}"
+            )
     if step.do.sdk is not None and guide is not None:
         found.extend(_sdk_problems(label, step.do.sdk, guide, context.docs_root.parent))
     return found
@@ -940,11 +984,42 @@ def semantic_problems(
     if complete:
         found.extend(_value_problems(steps, passwords))
         found.extend(_sdk_journey_problems(steps))
+        found.extend(_background_problems(steps))
     if complete and steps:
         if all(step.do.kind == "ref" or step.not_run is not None for _, step in steps):
             found.append(
                 "no step is run by this runner: every step is ref: doc-examples or"
                 " declares not_run"
+            )
+    return found
+
+
+def _background_problems(steps: Sequence[Tuple[int, Step]]) -> List[str]:
+    """Each ``finish`` names an earlier background run not finished before it,
+    and each background run is finished by a later step."""
+    found: List[str] = []
+    started: Dict[str, str] = {}
+    finished: Set[str] = set()
+    for index, step in steps:
+        label = f"step {index + 1} ({step.id})"
+        if step.do.run is not None and step.do.run.background:
+            started[step.id] = label
+        name = step.do.finish
+        if name is None:
+            continue
+        if name not in started:
+            found.append(
+                f"{label}: finish {name!r} names no earlier run step with"
+                " background: true"
+            )
+        elif name in finished:
+            found.append(f"{label}: finish {name!r} is finished twice")
+        finished.add(name)
+    for name, label in started.items():
+        if name not in finished:
+            found.append(
+                f"{label}: a background run needs a later finish step that names"
+                f" it ({name!r}): how it ended is checked there"
             )
     return found
 

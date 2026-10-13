@@ -110,10 +110,10 @@ DEMO_SETUP = [
     ("actions/setup-node@v7", {"node-version-file": ".nvmrc"}),
 ]
 DEMO_VERDICTS = "docs-journeys-demo-verdicts"
-#: The demo job's timeout: five times the whole job's measured length (4 min
-#: 56 s with every journey passing, docs-journeys run 38211112995). A change
+#: The demo job's timeout. PROVISIONAL until the rollout-story journey's first
+#: measured run (D73 DJ2): its story alone may take up to 40 minutes. A change
 #: is a new measurement, made here and in the workflow's comment together.
-DEMO_TIMEOUT_MINUTES = 25
+DEMO_TIMEOUT_MINUTES = 75
 #: The report job's downloads: each job's verdicts, when that job wrote them.
 REPORT_DOWNLOADS = [
     (
@@ -1118,12 +1118,12 @@ PLANTS: List[tuple] = [
     (
         "demo-without-a-timeout",
         lambda doc, text: (doc["jobs"]["demo"].pop("timeout-minutes") and doc, text),
-        "no timeout of 25 minutes",
+        f"no timeout of {DEMO_TIMEOUT_MINUTES} minutes",
     ),
     (
         "demo-timeout-guessed",
         _set(["jobs", "demo", "timeout-minutes"], 90),
-        "no timeout of 25 minutes",
+        f"no timeout of {DEMO_TIMEOUT_MINUTES} minutes",
     ),
     (
         "demo-verdicts-under-the-journeys-name",
