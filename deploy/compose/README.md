@@ -30,6 +30,8 @@ FIRST_SUPERUSER=you@example.com ./generate-env.sh
 Without them it writes `http://localhost:8080` and `admin@example.com`.
 `EXPERIMENTLY_PROFILE=full` makes it write the full profile, and `ENV_FILE`
 writes the file somewhere else.
+It needs `openssl`, or `python3` when `openssl` is absent, and with neither it
+stops without writing anything.
 
 It refuses to overwrite an existing `.env`, whose secrets the running install
 already uses. To start again from nothing, run `docker compose down -v`, which

@@ -19,6 +19,25 @@ text = "Install it with the four blocks of Kubernetes (Helm): the chart-kind wor
 by = ["workflow:chart-kind.yml"]
 
 [[unit]]
+text = "Resource names"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The chart names what it creates after the release."
+by = ["test:backend/tests/unit/chart/test_chart_render.py::test_the_resources_are_named_after_the_release"]
+
+[[unit]]
+text = "With the guide's release, experimently in the namespace experimently, the API's Deployment and Service are experimently-api and the dashboard's are experimently-web."
+by = [
+    "test:backend/tests/unit/chart/test_chart_render.py::test_the_resources_are_named_after_the_release",
+    "workflow:chart-kind.yml",
+]
+
+[[unit]]
+text = "A release whose name does not contain experimently, such as prod, gets prod-experimently-api and prod-experimently-web."
+by = ["test:backend/tests/unit/chart/test_chart_render.py::test_the_resources_are_named_after_the_release"]
+
+[[unit]]
 text = "After the install"
 by = ["exempt:label"]
 
@@ -30,13 +49,17 @@ by = [
 ]
 
 [[unit]]
-text = "If a pod stays in Init, read that container's log: kubectl logs -n <namespace> deploy/<release>-experimently-api -c migrate."
-by = ["exempt:instruction"]
+text = "If a pod stays in Init, read that container's log; for the guide's release: kubectl logs -n experimently deploy/experimently-api -c migrate."
+by = [
+    "test:backend/tests/unit/chart/test_chart_render.py::test_the_resources_are_named_after_the_release",
+    "test:backend/tests/unit/chart/test_chart_render.py::test_migrations_run_in_the_init_container_only",
+]
 
 [[unit]]
-text = "helm test <release> -n <namespace> checks that the API answers on your public host and refuses another host name."
+text = "helm test experimently -n experimently checks that the API answers on your public host and refuses another host name."
 by = [
     "test:backend/tests/unit/chart/test_chart_render.py::test_helm_test_checks_the_public_host_and_refuses_another",
+    "test:backend/tests/unit/chart/test_chart_render.py::test_the_resources_are_named_after_the_release",
     "workflow:chart-kind.yml",
 ]
 
@@ -60,8 +83,11 @@ text = "Without the Ingress"
 by = ["exempt:label"]
 
 [[unit]]
-text = "With ingress.enabled=false, route /api, /ws and /health to the <release>-experimently-api Service and everything else to <release>-experimently-web, as the chart's Ingress does."
-by = ["test:backend/tests/unit/chart/test_chart_render.py::test_the_ingress_host_is_the_public_base_url_hostname"]
+text = "With ingress.enabled=false, route /api, /ws and /health to the API's Service (experimently-api for the guide's release) and everything else to the dashboard's (experimently-web), as the chart's Ingress does."
+by = [
+    "test:backend/tests/unit/chart/test_chart_render.py::test_the_ingress_host_is_the_public_base_url_hostname",
+    "test:backend/tests/unit/chart/test_chart_render.py::test_the_resources_are_named_after_the_release",
+]
 
 [[unit]]
 text = "Pass the Host header unchanged: the API answers only for the host name of publicBaseUrl."
@@ -76,7 +102,7 @@ text = "The bundled PostgreSQL and Redis"
 by = ["exempt:label"]
 
 [[unit]]
-text = "They are for evaluation and small installs: each is one replica, and the chart does not back them up."
+text = "They are for evaluation and small installs: each is one replica, the chart does not back them up, and it never moves them to a new major version (PostgreSQL 16 and Redis 7)."
 by = ["test:backend/tests/unit/chart/test_chart_render.py::test_the_bundled_postgres_and_redis_are_one_replica_each_and_never_backed_up"]
 
 [[unit]]

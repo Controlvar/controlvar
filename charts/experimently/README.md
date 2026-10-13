@@ -6,13 +6,22 @@ default, a bundled PostgreSQL and Redis. Install it with the four blocks of
 the `chart-kind` workflow runs those blocks as written on a kind cluster, for
 the `core` and `full` profiles, and runs `helm test` after the install.
 
+## Resource names
+
+The chart names what it creates after the release. With the guide's release,
+`experimently` in the namespace `experimently`, the API's Deployment and
+Service are `experimently-api` and the dashboard's are `experimently-web`. A
+release whose name does not contain `experimently`, such as `prod`, gets
+`prod-experimently-api` and `prod-experimently-web`.
+
 ## After the install
 
 The API's `migrate` init container creates or upgrades the database schema
-before the API starts. If a pod stays in `Init`, read that container's log:
-`kubectl logs -n <namespace> deploy/<release>-experimently-api -c migrate`.
+before the API starts. If a pod stays in `Init`, read that container's log; for
+the guide's release:
+`kubectl logs -n experimently deploy/experimently-api -c migrate`.
 
-`helm test <release> -n <namespace>` checks that the API answers on your
+`helm test experimently -n experimently` checks that the API answers on your
 public host and refuses another host name. The health probes do not check the
 host name, so they stay healthy when `publicBaseUrl` is wrong.
 
@@ -22,12 +31,13 @@ database has no users: changing it later does nothing.
 
 ## Without the Ingress
 
-With `ingress.enabled=false`, route `/api`, `/ws` and `/health` to the
-`<release>-experimently-api` Service and everything else to
-`<release>-experimently-web`, as the chart's Ingress does. Pass the Host header
+With `ingress.enabled=false`, route `/api`, `/ws` and `/health` to the API's
+Service (`experimently-api` for the guide's release) and everything else to the
+dashboard's (`experimently-web`), as the chart's Ingress does. Pass the Host header
 unchanged: the API answers only for the host name of `publicBaseUrl`.
 
 ## The bundled PostgreSQL and Redis
 
-They are for evaluation and small installs: each is one replica, and the chart
-does not back them up. Back up the database before every upgrade.
+They are for evaluation and small installs: each is one replica, the chart does
+not back them up, and it never moves them to a new major version (PostgreSQL 16
+and Redis 7). Back up the database before every upgrade.

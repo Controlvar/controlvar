@@ -244,7 +244,7 @@ jobs:
       # So what neither scan reads is third-party files on the paths above.
       # A finding fails the job before anything is pushed. There is no
       # allow-list: the fix is to remove the file and cut a new release (see
-      # docs/self-hosting/releases.md, "If the credential scan fails"). The
+      # CONTRIBUTING.md, "When a release's image scan fails"). The
       # report goes to a file under $RUNNER_TEMP and only path, rule,
       # severity and line are printed (scripts/render_secret_findings.py),
       # because this log is public. trivy's own exit status is kept.
@@ -374,8 +374,8 @@ jobs:
 
       # Before the label check and signing: an image whose layers differ from
       # the scanned ones is not signed. If this fails, the versioned tag has
-      # already been pushed; see "If the credential scan fails" in
-      # docs/self-hosting/releases.md.
+      # already been pushed; see "When a release's image scan fails" in
+      # CONTRIBUTING.md.
       - name: The pushed image is the scanned image
         env:
           IMAGE: ${{ needs.verify.outputs.image }}

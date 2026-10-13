@@ -20,6 +20,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Dict
 
@@ -229,6 +230,53 @@ class TestGenerator:
         assert "PUBLIC_BASE_URL=https://experimently.example.com\n" in text
         assert "FIRST_SUPERUSER=you@example.com\n" in text
         assert "EXPERIMENTLY_PROFILE=full\n" in text
+
+    def _bin_without_openssl(self, tmp_path: Path, python: bool) -> Path:
+        """A PATH with what the script runs besides openssl: sh's builtins
+        need only dirname and cat, and python3 when *python*."""
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        for tool in ("dirname", "cat"):
+            (bin_dir / tool).symlink_to(shutil.which(tool))
+        if python:
+            (bin_dir / "python3").symlink_to(sys.executable)
+        return bin_dir
+
+    def test_without_openssl_it_generates_with_python3(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env = {
+            "PATH": str(self._bin_without_openssl(tmp_path, python=True)),
+            "ENV_FILE": str(env_file),
+        }
+        result = subprocess.run(
+            [shutil.which("sh"), str(GENERATOR)],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        values = dict(
+            line.split("=", 1)
+            for line in env_file.read_text().splitlines()
+            if line and not line.startswith("#")
+        )
+        assert re.fullmatch(r"[0-9a-f]{64}", values["SECRET_KEY"]), values["SECRET_KEY"]
+
+    def test_with_neither_openssl_nor_python3_it_writes_nothing(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env = {
+            "PATH": str(self._bin_without_openssl(tmp_path, python=False)),
+            "ENV_FILE": str(env_file),
+        }
+        result = subprocess.run(
+            [shutil.which("sh"), str(GENERATOR)],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0
+        assert "Need openssl or python3" in result.stderr
+        assert not env_file.exists()
 
     def test_a_second_run_refuses_and_leaves_the_file_alone(self, tmp_path):
         env_file = tmp_path / ".env"

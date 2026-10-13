@@ -686,7 +686,10 @@ MECHANISMS: Dict[str, Mechanism] = {
         holds=(
             (
                 "docs/self-hosting/releases.md",
-                r"^It accepts release\.yml run from main, which is how release-please",
+                r"^It accepts release\.yml run from main, which is how release-please"
+                r" cuts a release and how gh workflow run release\.yml -f tag=vX\.Y\.Z"
+                r" runs one again, and run from a v tag, which is how a tag pushed by"
+                r" hand starts it\.$",
             ),
         ),
     ),

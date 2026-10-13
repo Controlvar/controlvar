@@ -146,3 +146,9 @@ Each SDK is released by its own tag, such as `sdk/js/v1.2.3` or
 `sdk/python/v1.2.3`, and versions independently of the platform.
 `sdk-release.yml` publishes to PyPI and npm by trusted publishing (OIDC — no
 long-lived token in any secret), behind the `sdk-release` environment.
+A prerelease — a version with a `-`, such as `1.0.0-rc.1` — publishes under
+the `next` dist-tag, so `npm install <package>` keeps resolving the last
+stable version and `npm install <package>@next` gets the prerelease.
+
+How a maintainer cuts a release, and what to do when its image scan fails, is
+in `CONTRIBUTING.md`, "Releasing".

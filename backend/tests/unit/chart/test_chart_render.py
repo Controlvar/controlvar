@@ -423,9 +423,46 @@ def test_the_bundled_postgres_and_redis_are_one_replica_each_and_never_backed_up
     single replica; no values render a job of any kind, so nothing backs the
     database up."""
     defaults = render("core")
-    assert one(defaults, "StatefulSet", f"{FULLNAME}-postgres")["spec"]["replicas"] == 1
-    assert one(defaults, "Deployment", f"{FULLNAME}-redis")["spec"]["replicas"] == 1
+    postgres = one(defaults, "StatefulSet", f"{FULLNAME}-postgres")
+    redis = one(defaults, "Deployment", f"{FULLNAME}-redis")
+    assert postgres["spec"]["replicas"] == 1
+    assert redis["spec"]["replicas"] == 1
+    # One major version each, fixed by the chart: an upgrade never moves the
+    # data to another one.
+    assert container(postgres, "postgres")["image"] == "postgres:16-alpine"
+    assert container(redis, "redis")["image"] == "redis:7-alpine"
     assert [d["kind"] for d in docs if d["kind"] in ("CronJob", "Job")] == []
+
+
+@pytest.mark.parametrize(
+    "release, prefix",
+    [
+        ("experimently", "experimently"),
+        ("prod", "prod-experimently"),
+        ("my-experimently", "my-experimently"),
+    ],
+)
+def test_the_resources_are_named_after_the_release(release, prefix):
+    """The guide installs release `experimently`, whose resources are
+    `experimently-api` and `experimently-web`: a release name that contains the
+    chart's name is used as it is, any other gets `-experimently` added."""
+    result = subprocess.run(
+        [str(HELM), "template", release, str(CHART), "-f", str(CI_VALUES["core"])],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    for kind in ("Deployment", "Service"):
+        one(docs, kind, f"{prefix}-api")
+        one(docs, kind, f"{prefix}-web")
+    api = one(docs, "Deployment", f"{prefix}-api")
+    assert [c["name"] for c in pod_spec(api)["initContainers"]] == ["migrate"]
+    smoke = one(docs, "Pod", f"{prefix}-smoke")
+    assert (
+        env_of(container(smoke, "smoke"))["BASE"]["value"]
+        == f"http://{prefix}-api:8000"
+    )
 
 
 def test_extra_allowed_hosts_keep_the_public_host():

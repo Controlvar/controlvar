@@ -275,3 +275,11 @@ by = [
     "test:backend/tests/smoke/test_sdk_release_wiring.py::test_the_release_environment_and_the_token_sit_on_the_publish_jobs_only",
     "test:backend/tests/smoke/test_sdk_release_wiring.py::test_no_job_that_installs_or_tests_can_request_an_oidc_token",
 ]
+
+[[unit]]
+text = "A prerelease — a version with a -, such as 1.0.0-rc.1 — publishes under the next dist-tag, so npm install <package> keeps resolving the last stable version and npm install <package>@next gets the prerelease."
+by = ["test:backend/tests/smoke/test_sdk_release_wiring.py::test_a_prerelease_publishes_under_next_and_a_stable_version_passes_no_tag"]
+
+[[unit]]
+text = "How a maintainer cuts a release, and what to do when its image scan fails, is in CONTRIBUTING.md, \"Releasing\"."
+by = ["exempt:navigation"]
