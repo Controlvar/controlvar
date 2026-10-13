@@ -20,9 +20,11 @@ name: RC evidence
 # rather than skips, so the run cannot read as green.
 #
 # The suites run as the pull request jobs run them (pr-qa-gate.yml,
-# integration-tests.yml, sdk-unit-tests.yml), the tag's whole tree, one job
-# each: the pytest ones in the python-suites matrix (with sdk/python's own
-# suite and the demo apps' simulators), the jest ones in the jest-suites
+# integration-tests.yml, infrastructure-tests.yml, sdk-unit-tests.yml), the
+# tag's whole tree, one job each: the pytest ones in the python-suites matrix
+# (with the CDK stack tests, sdk/python's own suite, the SDK contract
+# self-tests and the demo apps' simulators; `deps` is what each installs, as
+# its pull request job does), the jest ones in the jest-suites
 # matrix (the frontend, sdk/js and the two demo apps), whose reports are
 # written as JUnit too. The list is SUITES in scripts/rc_evidence.py. Their
 # JUnit reports and the verifier's record (the run table, the verdicts it
@@ -61,18 +63,31 @@ jobs:
         include:
           - suite: unit
             db: experimentation
+            deps: backend
           - suite: smoke
             db: experimentation
+            deps: backend
           - suite: lambda
             db: experimentation
+            deps: backend
           - suite: modules
             db: experimentation
+            deps: backend
           - suite: integration
             db: experimentation_test
+            deps: backend
+          - suite: infrastructure
+            db: experimentation
+            deps: backend
           - suite: sdk-python
             db: experimentation
+            deps: pytest
+          - suite: sdk-contract
+            db: experimentation
+            deps: pytest
           - suite: demo-simulators
             db: experimentation
+            deps: backend
     services:
       postgres:
         image: postgres:15
@@ -124,14 +139,21 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        if: matrix.suite != 'sdk-python'
+        if: matrix.deps == 'backend'
         run: python -m pip install -r backend/requirements.txt
 
-      # As sdk-unit-tests.yml runs it: pytest only, and the SDK from its
-      # source tree (its tests/conftest.py puts that on sys.path).
-      - name: Install pytest for the SDK's own suite
-        if: matrix.suite == 'sdk-python'
+      # As sdk-unit-tests.yml and pr-qa-gate.yml's SDK Contract Tests run
+      # them: pytest only (the SDK is imported from its source tree).
+      - name: Install pytest only
+        if: matrix.deps == 'pytest'
         run: python -m pip install pytest
+
+      # As infrastructure-tests.yml: the CDK's jsii runtime needs Node.js.
+      - name: Set up Node.js for the CDK
+        if: matrix.suite == 'infrastructure'
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
 
       # The modules' own packages, as module-tests installs them.
       - name: Install the modules' dependencies

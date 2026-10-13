@@ -11,9 +11,12 @@ Pinned, because the verifier's PASS is only as good as these:
   (``actions: write`` would let a job dispatch or re-run the runs it judges);
 * every job starts by refusing a ref that is not a ``vX.Y.Z`` tag, as a step
   that fails, so a dispatch elsewhere is red, never skipped;
-* the python-suites matrix is ``SUITES``' pytest ones (sdk/python's own suite
-  installs pytest only, as sdk-unit-tests.yml does) and the jest-suites matrix
+* the python-suites matrix is ``SUITES``' pytest ones, each leg installing
+  what its pull request job does (pytest only for sdk/python's suite and the
+  SDK contract self-tests; Node.js beside backend/requirements.txt for the
+  CDK stack tests, with --import-mode=importlib), and the jest-suites matrix
   its jest ones, each in its npm project (their reports written as JUnit);
+  every session names trees that exist, which ``suite_of`` reads;
   each runs ``--suite`` and uploads its reports as the artifact the verifier
   downloads, for 90 days; the verify job runs after every leg (``always()``),
   reads them, never ``--staging`` or ``--registry``, and keeps its record for
@@ -205,20 +208,98 @@ def test_the_matrix_is_the_scripts_suites(doc):
     assert upload["if"] == "always()"
 
 
-def test_the_sdks_own_suite_installs_pytest_only_as_sdk_unit_tests_does(doc):
-    steps = doc["jobs"]["python-suites"]["steps"]
+#: The legs whose pull request job installs pytest alone (sdk-unit-tests.yml's
+#: python leg, pr-qa-gate.yml's SDK Contract Tests); the rest install
+#: backend/requirements.txt.
+PYTEST_ONLY = {"sdk-python", "sdk-contract"}
+
+
+def test_each_leg_installs_what_its_pull_request_job_does(doc):
+    job = doc["jobs"]["python-suites"]
+    deps = {leg["suite"]: leg["deps"] for leg in job["strategy"]["matrix"]["include"]}
+    assert {s for s, d in deps.items() if d == "pytest"} == PYTEST_ONLY
+    assert set(deps.values()) == {"backend", "pytest"}
+    steps = job["steps"]
     backend = next(s for s in steps if s.get("name") == "Install dependencies")
-    assert backend["if"] == "matrix.suite != 'sdk-python'"
-    sdk = next(
-        s for s in steps if s.get("name") == "Install pytest for the SDK's own suite"
-    )
-    assert sdk["if"] == "matrix.suite == 'sdk-python'"
-    assert sdk["run"].strip() == "python -m pip install pytest"
-    text = (WORKFLOWS / "sdk-unit-tests.yml").read_text(encoding="utf-8")
-    assert "pip install pytest\n" in text
-    assert 'python -m pytest sdk/python/tests -q -o addopts=""' in text
+    assert backend["if"] == "matrix.deps == 'backend'"
+    assert backend["run"].strip() == "python -m pip install -r backend/requirements.txt"
+    alone = next(s for s in steps if s.get("name") == "Install pytest only")
+    assert alone["if"] == "matrix.deps == 'pytest'"
+    assert alone["run"].strip() == "python -m pip install pytest"
+    sdk = (WORKFLOWS / "sdk-unit-tests.yml").read_text(encoding="utf-8")
+    assert "pip install pytest\n" in sdk
+    assert 'python -m pytest sdk/python/tests -q -o addopts=""' in sdk
     (session,) = rc.SUITES["sdk-python"]
     assert session.args[0] == "sdk/python/tests" and "--rootdir=." in session.args
+    gate = _load(WORKFLOWS / "pr-qa-gate.yml")["jobs"]["sdk-contracts"]["steps"]
+    runs = [str(s.get("run", "")).strip() for s in gate]
+    assert "pip install pytest" in runs
+    assert 'python -m pytest tests/sdk-contract -v -o addopts=""' in runs
+    (session,) = rc.SUITES["sdk-contract"]
+    assert session.args == ("tests/sdk-contract", "-o", "addopts=")
+
+
+def test_the_cdk_leg_runs_as_the_cdk_stack_tests_job(doc):
+    """infrastructure-tests.yml's CDK Stack Tests: backend/requirements.txt,
+    Node.js 22 for jsii, and --import-mode=importlib."""
+    cdk = _load(WORKFLOWS / "infrastructure-tests.yml")["jobs"]["cdk-python-tests"]
+    runs = " ".join(str(s.get("run", "")) for s in cdk["steps"])
+    assert "pip install -r backend/requirements.txt" in runs
+    assert "python -m pytest infrastructure/tests" in runs
+    assert '-o addopts="" --import-mode=importlib' in runs
+    their_node = next(
+        s
+        for s in cdk["steps"]
+        if str(s.get("uses", "")).startswith("actions/setup-node")
+    )
+    (session,) = rc.SUITES["infrastructure"]
+    assert session.args == (
+        "infrastructure/tests",
+        "-o",
+        "addopts=",
+        "--import-mode=importlib",
+    )
+    leg = next(
+        g
+        for g in doc["jobs"]["python-suites"]["strategy"]["matrix"]["include"]
+        if g["suite"] == "infrastructure"
+    )
+    assert leg["deps"] == "backend"
+    node = next(
+        s
+        for s in doc["jobs"]["python-suites"]["steps"]
+        if s.get("name") == "Set up Node.js for the CDK"
+    )
+    assert node["if"] == "matrix.suite == 'infrastructure'"
+    assert node["uses"] == their_node["uses"]
+    assert node["with"] == {"node-version": their_node["with"]["node-version"]}
+
+
+def test_the_frontend_session_searches_the_trees_its_jest_config_adds():
+    """frontend/jest.config.js puts MODULES_DIR among its roots in a full tree,
+    so the modules' jest tests are in the frontend report; the session says so."""
+    (session,) = rc.SUITES["frontend"]
+    config = (REPO_ROOT / "frontend" / "jest.config.js").read_text(encoding="utf-8")
+    alias = (REPO_ROOT / "frontend" / "modules-alias.js").read_text(encoding="utf-8")
+    assert "roots: full ? ['<rootDir>', MODULES_DIR] : ['<rootDir>']" in config
+    assert (
+        "const MODULES_DIR = path.join(REPO_ROOT, 'modules', 'frontend', 'src');"
+        in alias
+    )
+    assert session.also == ("modules/frontend/src",)
+    assert "modules/frontend/src" in rc.JEST_ROOTS
+
+
+def test_every_pytest_session_names_trees_that_exist():
+    """suite_of reads these roots: a session with none, or a root that is not
+    a directory of this tree, would let a target fall outside every suite."""
+    for name, invocations in rc.SUITES.items():
+        for session in invocations:
+            assert session.roots, (name, session.report)
+            for root in session.roots:
+                if root.startswith("modules/") and not (REPO_ROOT / "modules").is_dir():
+                    continue  # scripts/core_build.sh's copy: modules/ deleted
+                assert (REPO_ROOT / root).is_dir(), (name, root)
 
 
 def test_the_jest_matrix_runs_each_jest_suite_in_its_project(doc):

@@ -50,9 +50,11 @@ Then:
 * E3 Doc Examples: its run is one of the workflows above (its summary job
   holds every page's expectations).
 * E4 claim tests. Each suite ``rc-evidence.yml`` ran at the tag left its
-  JUnit reports, each with at least one test: the Python suites, the two
-  published SDKs' own suites (``sdk/python``'s pytest, ``sdk/js``'s jest), the
-  demo apps' jest and their simulators' tests, and the frontend's jest. Every
+  JUnit reports, each with at least one test: the Python suites, the CDK stack
+  tests, the two published SDKs' own suites (``sdk/python``'s pytest,
+  ``sdk/js``'s jest), the SDK contract self-tests, the demo apps' jest and their
+  simulators' tests, and the frontend's jest. Every target must be in a tree
+  some suite runs (``suite_of``); one in no suite's tree fails by name. Every
   ``test:`` target of the registries (``docs/_claims``), and the test of every
   ``mechanism:`` they use, is in them, passed and was not skipped. A Python
   function matches itself and its parametrized cases; a jest target's name
@@ -65,9 +67,13 @@ Then:
   them as the residual.
 * P published packages (``PACKAGES``: npm's ``@getexperimently/js-sdk`` and
   PyPI's ``experimently``). The manifest at the RC gives the name and version.
-  One sdk-release.yml run at the RC commit, at the ref ``sdk/<sdk>/v<version>``,
-  succeeded (any other run there that did not succeed needs a disposition),
-  with its resolve, test-and-build and publish jobs green. Its build job's log
+  The tag ``sdk/<sdk>/v<version>`` exists, and the RC's ``sdk/<sdk>`` tree is
+  the tag's (the same git tree id: ``git diff --quiet <tag> <rc> --
+  sdk/<sdk>``), so the published package was built from what the RC tests;
+  a release that publishes no SDK passes this as long as the SDK is unchanged.
+  One sdk-release.yml run of that tag, at the tag's commit, succeeded (any
+  other run of the tag that did not succeed needs a disposition), with its
+  resolve, test-and-build and publish jobs green. Its build job's log
   holds the record that job wrote before uploading: for PyPI each file's
   sha256 and the digest of that listing (which must hash back to it, so the
   record was read whole), for npm the tarball's sha256. The registry's latest
@@ -230,6 +236,18 @@ class Invocation:
     env: Tuple[Tuple[str, str], ...] = ()
     runner: str = "pytest"
     cwd: str = ""
+    #: jest: trees outside the project its config also searches (``roots``).
+    also: Tuple[str, ...] = ()
+
+    @property
+    def roots(self) -> Tuple[str, ...]:
+        """The trees this session runs: pytest's path arguments, or jest's
+        project and the trees its config adds."""
+        if self.runner == "jest":
+            return (self.cwd, *self.also)
+        return tuple(
+            a.rstrip("/") for a in self.args if "/" in a and not a.startswith("-")
+        )
 
 
 _INTEGRATION_ENV: Tuple[Tuple[str, str], ...] = (
@@ -276,17 +294,39 @@ SUITES: Dict[str, Tuple[Invocation, ...]] = {
             _INTEGRATION_ENV,
         ),
     ),
+    # As infrastructure-tests.yml's CDK Stack Tests: importlib, so the local
+    # infrastructure/constructs does not shadow the `constructs` package.
+    "infrastructure": (
+        Invocation(
+            "infrastructure.xml",
+            ("infrastructure/tests", "-o", "addopts=", "--import-mode=importlib"),
+        ),
+    ),
     "sdk-python": (
         Invocation(
             "sdk-python.xml",
             ("sdk/python/tests", "--rootdir=.", "-o", "addopts="),
         ),
     ),
+    # As pr-qa-gate.yml's SDK Contract Tests run it (pytest only installed).
+    "sdk-contract": (
+        Invocation("sdk-contract.xml", ("tests/sdk-contract", "-o", "addopts=")),
+    ),
     "demo-simulators": tuple(
         Invocation(f"demo-{name}-simulator.xml", (f"demo/{name}/simulator",))
         for name in ("shoplab", "streampulse")
     ),
-    "frontend": (Invocation("frontend.xml", (), runner="jest", cwd="frontend"),),
+    # frontend/jest.config.js adds modules/frontend/src (MODULES_DIR) to its
+    # roots in a full tree: the modules' own jest tests run in this session.
+    "frontend": (
+        Invocation(
+            "frontend.xml",
+            (),
+            runner="jest",
+            cwd="frontend",
+            also=("modules/frontend/src",),
+        ),
+    ),
     "sdk-js": (Invocation("sdk-js.xml", ("--ci",), runner="jest", cwd="sdk/js"),),
     "demo-shoplab": (
         Invocation("demo-shoplab.xml", (), runner="jest", cwd="demo/shoplab"),
@@ -308,10 +348,28 @@ def suite_job(name: str) -> str:
     return (JEST_SUITE_JOB if is_jest(name) else SUITE_JOB).format(name)
 
 
+def suite_of(target: str) -> Optional[str]:
+    """The suite whose sessions run *target*'s file: a path under one of its
+    roots. None when no suite in SUITES runs it."""
+    match = TEST_TARGET.fullmatch(target)
+    if not match:
+        return None
+    path = match.group("path")
+    for name, invocations in SUITES.items():
+        for invocation in invocations:
+            if any(path.startswith(root + "/") for root in invocation.roots):
+                return name
+    return None
+
+
 #: The npm projects whose jest the jest suites run; a jest target is a test
 #: file in one of them.
 JEST_ROOTS: Tuple[str, ...] = tuple(
-    i.cwd for invocations in SUITES.values() for i in invocations if i.runner == "jest"
+    root
+    for invocations in SUITES.values()
+    for i in invocations
+    if i.runner == "jest"
+    for root in i.roots
 )
 
 
@@ -1414,6 +1472,13 @@ class Verifier:
         )
 
     def _judge_tests(self, targets: Sequence[str]) -> Check:
+        # Whether a suite runs each target's file is known before any report
+        # is read, so it is said even when the suites did not run.
+        outside = [
+            f"{target}: no suite in SUITES runs it"
+            for target in targets
+            if suite_of(target) is None
+        ]
         problems: List[str] = []
         junit = self.out / "junit"
         junit.mkdir(parents=True, exist_ok=True)
@@ -1428,7 +1493,8 @@ class Verifier:
                     "claim tests",
                     [
                         f"no rc-evidence.yml run at {self.tag}: the suites did not run at the RC"
-                    ],
+                    ]
+                    + outside,
                 )
             for suite in SUITES:
                 try:
@@ -1451,10 +1517,11 @@ class Verifier:
                 if not found:
                     problems.append(f"suite {suite}: {invocation.report} holds no test")
                 cases += found
-        failing = [
+        failing = outside + [
             problem
             for target in targets
-            if (problem := target_problem(target, cases, self.short))
+            if suite_of(target) is not None
+            and (problem := target_problem(target, cases, self.short))
         ]
         problems += failing
         return Check(
@@ -1487,15 +1554,45 @@ class Verifier:
             raise EvidenceError(f"{package.manifest}: version {version!r} is not X.Y.Z")
         return name, version
 
-    def release_run(
-        self, package: Package, ref: str, problems: List[str]
-    ) -> Optional[Run]:
-        """The sdk-release.yml run at the RC that published *ref*; every other
-        run of it there listed, and one that did not succeed disposed of."""
+    def commit_of(self, tag: str) -> Optional[str]:
+        """The commit *tag* names (an annotated tag is followed); None when
+        there is no such tag."""
+        try:
+            obj = self.github.get(f"git/ref/tags/{tag}")["object"]
+        except GhError:
+            return None
+        for _ in range(5):
+            if obj.get("type") != "tag":
+                break
+            obj = self.github.get(f"git/tags/{obj['sha']}")["object"]
+        sha = str(obj.get("sha"))
+        if obj.get("type") != "commit" or not SHA.fullmatch(sha):
+            raise EvidenceError(f"{tag} does not name a commit")
+        return sha
+
+    def sdk_tree(self, commit: str, sdk: str) -> str:
+        """The git tree id of sdk/<sdk> at *commit*: two commits with the same
+        id have no difference under it (``git diff --quiet A B -- sdk/<sdk>``)."""
+        entries = self.github.get(f"contents/sdk?ref={commit}")
+        if not isinstance(entries, list):
+            raise EvidenceError(f"sdk/ at {commit[:12]} is not a directory")
+        for entry in entries:
+            if isinstance(entry, dict) and entry.get("name") == sdk:
+                tree = str(entry.get("sha"))
+                if entry.get("type") != "dir" or not SHA.fullmatch(tree):
+                    raise EvidenceError(f"sdk/{sdk} at {commit[:12]} is not a tree")
+                return tree
+        raise EvidenceError(f"there is no sdk/{sdk} at {commit[:12]}")
+
+    def release_run(self, ref: str, commit: str, problems: List[str]) -> Optional[Run]:
+        """The sdk-release.yml run of the tag *ref*, at the tag's *commit*,
+        that published it; every other run of the tag listed, and one that did
+        not succeed disposed of."""
         try:
             runs = _runs(
                 self.github,
-                f"actions/workflows/{SDK_RELEASE}/runs?head_sha={self.sha}&per_page=100",
+                f"actions/workflows/{SDK_RELEASE}/runs"
+                f"?branch={urllib.parse.quote(ref, safe='')}&per_page=100",
                 SDK_RELEASE,
             )
         except (GhError, EvidenceError) as error:
@@ -1504,12 +1601,12 @@ class Verifier:
         published: List[Run] = []
         for run in sorted(runs, key=lambda r: (r.created, r.id)):
             if run.ref != ref:
-                continue  # another package's tag at the commit
-            if run.sha != self.sha:
+                continue  # the list is filtered by GitHub; this is not ours
+            if run.sha != commit:
                 problems.append(
-                    f"run {run.id} is at {run.sha[:12]}, not the RC {self.short}"
+                    f"run {run.id} is at {run.sha[:12]}, not {ref}'s commit {commit[:12]}"
                 )
-                self._row(run, "not at the RC")
+                self._row(run, f"not at {ref}")
             elif run.status != "completed":
                 problems.append(f"run {run.id} is still {run.status}: wait for it")
                 self._row(run, "still running")
@@ -1524,8 +1621,8 @@ class Verifier:
                 self._row(run, "not counted")
         if not published:
             problems.append(
-                f"no {SDK_RELEASE} run of {ref} at {self.short} succeeded: push the"
-                " tag at the RC commit and approve the publish"
+                f"no {SDK_RELEASE} run of {ref} succeeded: push the tag and approve"
+                " the publish"
             )
             return None
         for run in published[:-1]:
@@ -1616,15 +1713,35 @@ class Verifier:
         subject = f"{package.registry} {name} {version}"
         problems: List[str] = []
         ref = f"sdk/{package.sdk}/v{version}"
-        run = self.release_run(package, ref, problems)
-        recorded = self.release_record(package, run, problems) if run else None
+        run = recorded = None
+        try:
+            commit = self.commit_of(ref)
+            if commit is None:
+                problems.append(
+                    f"{ref} is not a tag: the published v{version} was not released"
+                    f" by {SDK_RELEASE}"
+                )
+            elif self.sdk_tree(commit, package.sdk) != self.sdk_tree(
+                self.sha, package.sdk
+            ):
+                problems.append(
+                    f"the RC changes sdk/{package.sdk} since the published v{version}"
+                    f" ({ref} at {commit[:12]})"
+                )
+        except (GhError, EvidenceError, KeyError, TypeError) as error:
+            commit = None
+            problems.append(f"cannot compare sdk/{package.sdk} with {ref}: {error}")
+        if commit is not None:
+            run = self.release_run(ref, commit, problems)
+            recorded = self.release_record(package, run, problems) if run else None
         if package.registry == "PyPI":
             checked = self._judge_pypi(package, name, version, run, recorded, problems)
         else:
             checked = self._judge_npm(package, name, version, run, recorded, problems)
         summary = (
-            f"run {run.id} of {ref}: {checked} published files equal its record;"
-            f" the description installs {version}"
+            f"run {run.id} of {ref}: sdk/{package.sdk} unchanged at the RC;"
+            f" {checked} published files equal its record; the description"
+            f" installs {version}"
             if run
             else ""
         )

@@ -60,6 +60,11 @@ DEMO_SIM = "test:demo/streampulse/simulator/test_story.py::test_the_story_runs"
 SDK_GO = "test:sdk/go/client_test.go::TestClient_Flags"
 SDK_JAVA = "test:sdk/java/core/src/test/java/ClientTest.java"
 JS_NAME, PY_NAME = "@getexperimently/js-sdk", "experimently"
+#: The commits the SDK tags name: older than the RC, as a release that
+#: publishes no new SDK version finds them.
+TAG_COMMITS = {"js": "d4" * 20, "python": "e5" * 20}
+#: Made-up git tree ids of sdk/js and sdk/python.
+TREES = {"js": "f6" * 20, "python": "a7" * 20}
 JS_VERSION = PY_VERSION = "0.1.1"
 WHEEL = f"experimently-{PY_VERSION}-py3-none-any.whl"
 SDIST = f"experimently-{PY_VERSION}.tar.gz"
@@ -263,6 +268,12 @@ class World:
         self.descriptions = dict(GOOD_DESCRIPTION)
         self.latest = {"js": JS_VERSION, "python": PY_VERSION}
         self.integrity: Optional[str] = None
+        #: sdk/<name>'s tree id at each commit: the RC's equals each tag's.
+        self.trees = {commit: dict(TREES) for commit in (RC, *TAG_COMMITS.values())}
+        for sdk, commit in TAG_COMMITS.items():
+            self.api[f"git/ref/tags/sdk/{sdk}/v{self.manifests[sdk][1]}"] = {
+                "object": {"type": "commit", "sha": commit}
+            }
         self.set_runs(
             rc.SDK_RELEASE,
             [
@@ -271,6 +282,7 @@ class World:
                     rc.SDK_RELEASE,
                     event="push",
                     ref=f"sdk/{sdk}/v{self.manifests[sdk][1]}",
+                    sha=TAG_COMMITS[sdk],
                 )
                 for sdk in ("js", "python")
             ],
@@ -311,6 +323,8 @@ class World:
                 for r in found
                 if r["head_sha"] == query["head_sha"][0] or r.get("stray")
             ]
+        if "branch" in query:
+            found = [r for r in found if r["head_branch"] == query["branch"][0]]
         if "event" in query:
             found = [r for r in found if r["event"] == query["event"][0]]
         if "created" in query:
@@ -489,6 +503,14 @@ class World:
             for sdk, job_id in self.build_ids.items():
                 if path == f"actions/jobs/{job_id}/logs":
                     return self.build_log(sdk)
+            if path.startswith("contents/sdk?ref="):
+                trees = self.trees.get(path.split("=", 1)[1])
+                if trees is None:
+                    raise rc.GhError(f"gh api {path} failed (exit 1)")
+                return json.dumps(
+                    [{"name": n, "type": "dir", "sha": t} for n, t in trees.items()]
+                    + [{"name": "README.md", "type": "file", "sha": "0" * 40}]
+                )
             for sdk, package in rc.PACKAGES.items():
                 if path == f"contents/{package.manifest}?ref={RC}":
                     name, version = self.manifests[sdk]
@@ -995,11 +1017,53 @@ def test_a_target_whose_module_skipped_at_collection_fails(world):
     )
 
 
-def test_a_target_no_suite_reports_fails(world):
-    world.registry.targets.append(
-        ("test:infrastructure/cdk/test/stack.test.ts::synthesises", "docs/c.md")
+@pytest.mark.parametrize(
+    "target",
+    [
+        "test:infrastructure/cdk/test/stack.test.ts::synthesises",
+        "test:charts/experimently/tests/test_values.py::test_defaults",
+        "test:tests/acceptance/docs/test_runner.py::test_x",
+    ],
+)
+def test_a_target_outside_every_suite_fails_by_name(world, target):
+    """A target whose file no suite in SUITES runs: refused by name, not left
+    to read as missing from the reports."""
+    world.registry.targets.append((target, "docs/c.md"))
+    text = _fails(world, f"{target}: no suite in SUITES runs it")
+    assert "not in the suites' JUnit" not in text
+
+
+def test_a_target_outside_every_suite_is_named_even_when_the_suites_did_not_run(world):
+    world.set_runs("rc-evidence.yml", [])
+    target = "test:charts/experimently/tests/test_values.py::test_defaults"
+    world.registry.targets.append((target, "docs/c.md"))
+    _fails(
+        world,
+        "the suites did not run at the RC",
+        f"{target}: no suite in SUITES runs it",
     )
-    _fails(world, "no suite at the RC reports this test")
+
+
+def test_the_new_suites_cover_the_targets_they_were_added_for():
+    for target, suite in (
+        ("test:infrastructure/tests/test_aurora_engine.py::test_x", "infrastructure"),
+        ("test:tests/sdk-contract/test_hash_contract.py::test_x", "sdk-contract"),
+        ("test:sdk/python/tests/test_client.py::test_x", "sdk-python"),
+        ("test:demo/shoplab/simulator/test_traffic.py::test_x", "demo-simulators"),
+        ("test:demo/streampulse/src/__tests__/a.test.tsx::x", "demo-streampulse"),
+        ("test:sdk/js/__tests__/client.test.ts::x", "sdk-js"),
+        ("test:frontend/src/tests/a.test.tsx::x", "frontend"),
+        ("test:modules/frontend/src/tests/sso.test.ts", "frontend"),
+        ("test:backend/tests/unit/x/test_a.py::test_x", "unit"),
+    ):
+        assert rc.suite_of(target) == suite, target
+    module_test = "test:modules/frontend/src/tests/sso.test.ts::signs in"
+    cases = [
+        rc.Case("modules/frontend/src/tests/sso.test.ts", "SSO signs in", "passed")
+    ]
+    assert rc.target_problem(module_test, cases, "x") is None
+    assert rc.suite_of("test:infrastructure/cdk/x.test.ts") is None
+    assert rc.suite_of("test:backend/tests/unitx/test_a.py") is None  # a prefix only
 
 
 @pytest.mark.parametrize("outcome", ["skipped", "failed"])
@@ -1176,7 +1240,8 @@ def test_a_synthetic_history_of_more_than_100_runs_passes(world):
     lists = [
         c[1]
         for c in world.calls
-        if c[0] == "api" and "/runs?" in c[1] and "head_sha" not in c[1]
+        if c[0] == "api"
+        and ("deploy.yml/runs?" in c[1] or "synthetic.yml/runs?" in c[1])
     ]
     assert lists and all(bound in path for path in lists), lists
 
@@ -1506,8 +1571,8 @@ def test_both_packages_pass_against_their_record(world):
     assert code == 0, text
     js = next(line for line in text.splitlines() if f"| P | npm {JS_NAME}" in line)
     py = next(line for line in text.splitlines() if f"| P | PyPI {PY_NAME}" in line)
-    assert "| PASS |" in js and "run 3000 of sdk/js/v0.1.1: 1 published files" in js
-    assert "| PASS |" in py and "run 3001 of sdk/python/v0.1.1: 2 published files" in py
+    assert "| PASS |" in js and "unchanged at the RC; 1 published files" in js
+    assert "| PASS |" in py and "unchanged at the RC; 2 published files" in py
     assert "counted (published)" in text
 
 
@@ -1609,18 +1674,57 @@ def test_a_registry_whose_latest_is_another_version_fails(world, sdk, registry):
     _fails(world, f"{registry}'s latest {name} is 0.1.0, not the manifest's 0.1.1")
 
 
-def test_no_release_run_at_the_rc_fails(world):
+def test_no_release_run_of_the_tag_fails(world):
     world.set_runs(rc.SDK_RELEASE, [world.release_run("python")])
+    _fails(world, "no sdk-release.yml run of sdk/js/v0.1.1 succeeded")
+
+
+def test_a_release_run_at_another_commit_than_its_tags_is_refused(world):
+    world.release_run("js")["head_sha"] = OLD
     _fails(
         world,
-        f"no sdk-release.yml run of sdk/js/v0.1.1 at {RC[:12]} succeeded",
+        f"run 3000 is at {OLD[:12]}, not sdk/js/v0.1.1's commit {TAG_COMMITS['js'][:12]}",
     )
 
 
-def test_a_release_run_at_another_commit_is_refused(world):
-    run = world.release_run("js")
-    run["head_sha"], run["stray"] = OLD, True
-    _fails(world, f"run 3000 is at {OLD[:12]}, not the RC")
+def test_a_release_at_an_older_commit_passes_when_the_rc_leaves_the_sdk_alone(world):
+    """The tag's commit is not the RC: a platform release that publishes no
+    new SDK. The RC's sdk/js and sdk/python trees are the tags', so it passes."""
+    assert all(world.release_run(sdk)["head_sha"] != RC for sdk in ("js", "python"))
+    code, text = world.main()
+    assert code == 0, text
+    assert "run 3000 of sdk/js/v0.1.1: sdk/js unchanged at the RC" in text
+    assert "run 3001 of sdk/python/v0.1.1: sdk/python unchanged at the RC" in text
+
+
+@pytest.mark.parametrize("sdk", ["js", "python"])
+def test_an_rc_that_changes_the_sdk_since_its_published_version_fails(world, sdk):
+    world.trees[RC][sdk] = "0b" * 20
+    _fails(
+        world,
+        f"the RC changes sdk/{sdk} since the published v0.1.1"
+        f" (sdk/{sdk}/v0.1.1 at {TAG_COMMITS[sdk][:12]})",
+    )
+
+
+def test_a_published_version_with_no_tag_fails(world):
+    del world.api["git/ref/tags/sdk/js/v0.1.1"]
+    _fails(
+        world,
+        "sdk/js/v0.1.1 is not a tag: the published v0.1.1 was not released by"
+        " sdk-release.yml",
+    )
+
+
+def test_an_annotated_sdk_tag_is_followed_to_its_commit(world):
+    world.api["git/ref/tags/sdk/js/v0.1.1"] = {
+        "object": {"type": "tag", "sha": "c4" * 20}
+    }
+    world.api[f"git/tags/{'c4' * 20}"] = {
+        "object": {"type": "commit", "sha": TAG_COMMITS["js"]}
+    }
+    code, text = world.main()
+    assert code == 0, text
 
 
 def test_a_release_of_the_previous_version_is_not_this_ones(world):
@@ -1636,6 +1740,7 @@ def test_a_failed_release_run_before_the_good_one_needs_a_disposition(world):
             rc.SDK_RELEASE,
             event="push",
             ref="sdk/js/v0.1.1",
+            sha=TAG_COMMITS["js"],
             conclusion="failure",
             created="2026-11-01T10:30:00Z",
         ),
@@ -1656,6 +1761,7 @@ def test_two_successful_release_runs_of_one_version_fail(world):
             rc.SDK_RELEASE,
             event="push",
             ref="sdk/js/v0.1.1",
+            sha=TAG_COMMITS["js"],
             created="2026-11-01T10:30:00Z",
         ),
     )
