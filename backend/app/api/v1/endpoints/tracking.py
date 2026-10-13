@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.sdk_scope import require_sdk_ruleset_key
+from backend.app.core.context_limits import check_context
 from backend.app.core.logger import failure_detail, unexpected_failure
 from backend.app.core.metrics import record_event_tracked, record_experiment_assignment
 from backend.app.models.api_key import APIKey
@@ -188,6 +189,10 @@ async def assign_user_to_experiment(
         HTTPException 404: If the experiment doesn't exist or is not active
         HTTPException 500: If there's an error during assignment
     """
+    # The limits of backend.app.core.context_limits, before anything is read
+    # or written.
+    check_context(request.context)
+
     # Get experiment by key
     experiment = (
         db.query(Experiment)
@@ -340,6 +345,12 @@ def assign_users_to_experiment_batch(
     A plain ``def``: FastAPI runs it in the thread pool, so a batch does not
     hold the event loop while it works through its users.
     """
+    # Every user's context is held to the limits of
+    # backend.app.core.context_limits before the first user is assigned: one
+    # over a limit refuses the whole request, and nobody is assigned.
+    for index in range(len(request.users)):
+        check_context(request.users[index].context, field=f"users[{index}]")
+
     experiment = (
         db.query(Experiment)
         .filter(

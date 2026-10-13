@@ -990,21 +990,16 @@ class EvaluationMetrics:
 
 The Enhanced Rules Engine provides:
 
-✅ **60+ Unit Tests** - Comprehensive test coverage
-✅ **15 Integration Tests** - Real-world scenario validation
+✅ **Tests** - The suites under Coverage below, in the Unit Tests job of `pr-qa-gate.yml`
 ✅ **Performance Benchmarks** - Validated performance targets
 ✅ **Backward Compatible** - Existing rules work unchanged
 ✅ **Production Ready** - Caching, metrics, error handling
 
-**Coverage** (counted with `pytest --collect-only`, not recalled):
-
-| suite | tests |
-|---|---|
-| `test_rules_engine` | 214 |
-| `test_evaluation_cache` | 25 |
-| `test_rules_evaluation_service` | 21 |
-| `test_rule_compiler` | 16 |
-| `test_performance_benchmarks` | 14 (skipped in CI — see above) |
+**Coverage**: `backend/tests/unit/core/test_rules_engine.py`,
+`backend/tests/unit/core/test_evaluation_cache.py`,
+`backend/tests/unit/services/test_rules_evaluation_service.py`,
+`backend/tests/unit/core/test_rule_compiler.py` and
+`backend/tests/unit/core/test_performance_benchmarks.py` (skipped in CI — see above).
 
 Four core modules: `rules_engine.py`, `rule_compiler.py`,
 `evaluation_cache.py` and `rules_evaluation_service.py`.

@@ -44,7 +44,7 @@ using var client = new ExperimentationClient(config);
 var flag = await client.EvaluateFlagAsync("new-checkout-ui", "user-42");
 if (flag.Enabled)
 {
-    var theme = flag.Config?.GetProperty("theme").GetString();   // Config is the server's payload (any JSON) or null
+    // show the feature (flag.Config is always null: the evaluate endpoint returns config: null)
 }
 
 // Experiment — POST /api/v1/tracking/assign (sticky on the server, records the exposure)
@@ -99,13 +99,14 @@ using var client = new ExperimentationClient(config, httpClient);   // never mut
 | `Dispose()` | — | Releases the SDK-created `HttpClient` |
 
 `Config` and `Configuration` are `System.Text.Json.JsonElement?` — the raw JSON the server returned
-(`null` when absent): `flag.Config?.GetProperty("variant").GetString()`.
+(`null` when absent). `Config` is always `null`, because the evaluate endpoint returns `config: null`
+for every flag; a variant's configuration reads as `assignment.Configuration?.GetProperty("headline").GetString()`.
 
 ### Caching and failures
 
 Successful evaluations and assignments are cached per **user + key** for `CacheTtlSeconds`;
-failures (network error, 401, 404 when the flag/experiment is not ACTIVE, 429, 5xx, undecodable
-body) are never cached, so the next call retries. On a failure the SDK returns a disabled
+failures (network error, 401, 404 for an experiment unknown or not ACTIVE, or an unknown flag key, 429, 5xx,
+undecodable body) are never cached, so the next call retries. On a failure the SDK returns a disabled
 `FlagEvaluationResult` / `null` assignment. Both caches are guarded by locks; one client can be
 shared across threads.
 
@@ -203,14 +204,14 @@ dotnet test --filter "FullyQualifiedName~HashCompatibilityTests"
 
 - `dotnet test`: whole solution
 
-**Test coverage** (by inspection — not executed here): 89 xUnit test methods across 4 test classes.
+**Test coverage** (by inspection — not executed here):
 
-| Test class | Tests | Coverage |
-|------------|-------|----------|
-| `ExperimentationClientTests` | 42 | Request URL/method/headers/body per endpoint, response mapping, per-user cache + TTL, 404 → failure value, track fan-out + chunking, never-throws |
-| `ExperimentationHttpClientTests` | 20 | URL building/encoding, headers, JSON body, 401/404/422/500 mapping, network errors |
-| `CacheTests` | 14 | TTL, eviction, thread safety |
-| `HashCompatibilityTests` | 13 | Cross-SDK hash vector |
+| Test class | Coverage |
+|------------|----------|
+| `ExperimentationClientTests` | Request URL/method/headers/body per endpoint, response mapping, per-user cache + TTL, 404 → failure value, track fan-out + chunking, never-throws |
+| `ExperimentationHttpClientTests` | URL building/encoding, headers, JSON body, 401/404/422/500 mapping, network errors |
+| `CacheTests` | TTL, eviction, thread safety |
+| `HashCompatibilityTests` | Cross-SDK hash vector |
 
 All HTTP is faked with an `HttpMessageHandler` injected through `HttpClient`; no network access.
 

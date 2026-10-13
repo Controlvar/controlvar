@@ -122,8 +122,8 @@ function SearchPage() {
 |-------|------|-------------|
 | `flagKey` | `string` | The key you asked for |
 | `isEnabled` | `boolean` | Server decision for this user (`false` while loading or on error) |
-| `variant` | `string \| null` | `null` when off; `config.variant` when the flag config carries a string `variant`; otherwise `'on'` |
-| `config` | `unknown \| null` | The flag's `config` payload as returned by the server |
+| `variant` | `string \| null` | `null` when off, otherwise `'on'` |
+| `config` | `unknown \| null` | Always `null`: the evaluate endpoint returns `config: null` for every flag |
 | `loading` | `boolean` | `true` until the first response |
 | `error` | `Error \| null` | Set when the request failed (flag is reported off) |
 | `reason` | `string \| undefined` | Why the server decided: `targeting_rule`, `rollout`, `inactive` or `error`; `undefined` while loading, on error, or from servers that do not send it |
@@ -340,5 +340,5 @@ npx jest
 npm run build
 ```
 
-- `npx jest`: 215 unit tests, fetch is mocked
+- `npx jest`: unit tests, fetch is mocked
 - `npm run build`: tsc --strict

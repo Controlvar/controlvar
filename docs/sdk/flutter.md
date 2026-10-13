@@ -72,7 +72,7 @@ await client.init();
 
 final flag = await client.evaluateFlag('new-checkout', 'user-123');
 if (flag.enabled) {
-  showNewCheckout(flag.config);
+  showNewCheckout();
 }
 
 final assignment = await client.getAssignment('checkout-cta-copy', 'user-123',
@@ -127,19 +127,19 @@ this page).
 |----------|------|-------------|
 | `key` | `String` | The flag key you asked for |
 | `enabled` | `bool` | Server decision for this user (`false` on any failure) |
-| `config` | `dynamic` | The flag's `config` payload as returned by the server, or `null` |
-| `configMap` | `Map<String, dynamic>?` | `config` when it is a JSON object, else `null` |
+| `config` | `dynamic` | Always `null`: the evaluate endpoint returns `config: null` for every flag |
+| `configMap` | `Map<String, dynamic>?` | Always `null`, like `config` |
 
 ```dart
 final flag = await client.evaluateFlag('dark-mode', 'user-456');
 if (flag.enabled) {
-  final theme = flag.configMap?['theme'] ?? 'dark';
+  enableDarkMode();
 }
 ```
 
 Never throws. On a network/HTTP failure the cached evaluation is returned when one exists,
 otherwise the persisted offline value (if `offlineFallback`), otherwise `EvalResult.disabled(key)`.
-Failures are never cached, so the next call retries. A 404 (flag not ACTIVE or unknown) is a
+Failures are never cached, so the next call retries. A 404 (an unknown flag key) is a
 definitive answer: the flag is reported disabled and any persisted offline value is removed.
 Concurrent calls for the same user + key share a single request.
 

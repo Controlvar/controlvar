@@ -64,19 +64,19 @@ Each SDK's own unit tests run in
 the Linux SDKs on pull requests that touch them (js, python and react on every one), and elixir, flutter, android and ios nightly and
 when touched.
 
-| SDK | Location | Unit tests | Verified live | Docs |
+| SDK | Location | Unit test runner | Verified live | Docs |
 |---|---|---|---|---|
-| React | `sdk/react` | 215 (jest) | yes — also runs the ShopLab demo | [react.md](sdk/react.md) |
-| JavaScript / TypeScript | `sdk/js` | 171 (jest) | yes, including local evaluation | [javascript.md](sdk/javascript.md), [local-evaluation.md](sdk/local-evaluation.md) |
-| OpenFeature (JS) | `sdk/openfeature` | 51 (jest) | yes | [openfeature.md](sdk/openfeature.md) |
-| Edge (Cloudflare Workers) | `sdk/edge` | 101 (jest) | yes | [edge.md](sdk/edge.md) |
+| React | `sdk/react` | jest | yes — also runs the ShopLab demo | [react.md](sdk/react.md) |
+| JavaScript / TypeScript | `sdk/js` | jest | yes, including local evaluation | [javascript.md](sdk/javascript.md), [local-evaluation.md](sdk/local-evaluation.md) |
+| OpenFeature (JS) | `sdk/openfeature` | jest | yes | [openfeature.md](sdk/openfeature.md) |
+| Edge (Cloudflare Workers) | `sdk/edge` | jest | yes | [edge.md](sdk/edge.md) |
 | React Native | `sdk/react-native` | jest | yes, in CI — the smoke runs under jest in Node (no device runtime) | [react-native.md](sdk/react-native.md) |
-| Python | `sdk/python` | 182 (pytest, Python 3.9+) | yes, including local evaluation | [python.md](sdk/python.md), [local-evaluation.md](sdk/local-evaluation.md) |
-| OpenFeature (Python) | `sdk/openfeature-python` | 79 (pytest) | yes | [openfeature.md](sdk/openfeature.md) |
-| Go | `sdk/go` | 51 (`go test -race`) | yes | [go.md](sdk/go.md) |
-| Java + Spring Boot starter | `sdk/java` | 77 + 30 (JUnit 5) | yes | [java.md](sdk/java.md) |
-| iOS (Swift) | `sdk/ios` | 71 (XCTest) | not yet (unit tests run in the nightly tier) | [ios.md](sdk/ios.md) |
-| Ruby | `sdk/ruby` | 109 (RSpec) | yes | [ruby.md](sdk/ruby.md) |
+| Python | `sdk/python` | pytest (Python 3.9+) | yes, including local evaluation | [python.md](sdk/python.md), [local-evaluation.md](sdk/local-evaluation.md) |
+| OpenFeature (Python) | `sdk/openfeature-python` | pytest | yes | [openfeature.md](sdk/openfeature.md) |
+| Go | `sdk/go` | `go test -race` | yes | [go.md](sdk/go.md) |
+| Java + Spring Boot starter | `sdk/java` | JUnit 5 | yes | [java.md](sdk/java.md) |
+| iOS (Swift) | `sdk/ios` | XCTest | not yet (unit tests run in the nightly tier) | [ios.md](sdk/ios.md) |
+| Ruby | `sdk/ruby` | RSpec | yes | [ruby.md](sdk/ruby.md) |
 | PHP | `sdk/php` | PHPUnit | in CI only (no PHP on the dev machine) | [php.md](sdk/php.md) |
 | .NET | `sdk/dotnet` | xUnit | in CI only (no .NET on the dev machine) | [dotnet.md](sdk/dotnet.md) |
 | Android (Kotlin) | `sdk/android` | JUnit 5 | yes, in CI — the smoke runs the JVM build of the Kotlin sources (no emulator); the Android library tests run in the nightly tier | [android.md](sdk/android.md) |
@@ -417,7 +417,7 @@ experimentation:
 ```
 
 The starter registers an `ExperimentationClient` bean (`@ConditionalOnMissingBean`) that you can inject
-anywhere. Tests: `cd sdk/java && mvn test` (77 core + 30 starter). Smoke against a live backend:
+anywhere. Tests: `cd sdk/java && mvn test` (the core and starter modules). Smoke against a live backend:
 `bash sdk/java/examples/contract_smoke.sh`.
 
 ---
