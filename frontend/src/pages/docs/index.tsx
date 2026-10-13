@@ -38,15 +38,15 @@ const sections = [
       { label: 'Multi-Armed Bandits', href: docsUrl('api/multi-armed-bandit'), desc: 'Thompson Sampling, UCB1, Epsilon-Greedy (create a bandit through the API)' },
       { label: 'Split URL Testing', href: docsUrl('api/split-url'), desc: 'Full profile: store split URL experiments and preview the URL a user id hashes to. The edge router does not split traffic yet.' },
       { label: 'Mutual Exclusion Groups', href: docsUrl('api/mutual-exclusion-groups'), desc: 'Keep users out of conflicting experiments, and a share of new users out of every experiment' },
-      { label: 'Live Results Streaming', href: docsUrl('websocket-streaming'), desc: 'Live experiment results over WebSocket, sent every 30 seconds by default.' },
+      { label: 'Live Results Streaming', href: docsUrl('websocket-streaming'), desc: 'Live experiment results over WebSocket: a snapshot on connect, then a fresh one after 30 seconds (by default) with no message from the client.' },
     ],
   },
   {
     category: 'LLM / AI Model Evaluation',
     icon: '🤖',
-    description: 'Compare prompt versions, model variants, and agent configs against real business metrics.',
+    description: 'Compare model variants on a task; the winner has the best business metric, or the best LLM-judge score without one.',
     links: [
-      { label: 'Overview', href: docsUrl('llm-evaluation/overview'), desc: 'What LLM evaluation is, and how it differs from a classic A/B test' },
+      { label: 'Overview', href: docsUrl('llm-evaluation/overview'), desc: 'Supported providers, task types, variant assignment, judge scoring, cost estimation and the analysis' },
       { label: 'Quick Start', href: docsUrl('llm-evaluation/quickstart'), desc: 'Compare GPT-4o with Claude 3.5 Sonnet (steps 3–5 need provider API keys)' },
     ],
   },

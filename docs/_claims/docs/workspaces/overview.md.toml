@@ -1,0 +1,282 @@
+# What verifies each unit of docs/workspaces/overview.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/workspaces/overview.md"
+
+[[unit]]
+text = "Team Workspaces — Overview"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Part of the workspaces module"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Team workspaces is one of the optional modules -- present in the full profile, absent from the core one."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "A core deployment does not serve these routes."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "See Modules and profiles for what each profile includes and how to run the full one."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What Are Workspaces?"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A workspace groups platform users into a team, with a workspace role for each member."
+by = [
+    "test:modules/backend/tests/unit/services/test_workspace_service.py::TestCreateWorkspace::test_create_workspace_owner_added_as_member",
+    "test:modules/backend/tests/unit/services/test_workspace_service.py::TestUpdateMemberRole::test_update_member_role_success",
+]
+
+[[unit]]
+text = "It represents a team, project, or product area — for example:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "acme-mobile for the mobile engineering team"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "acme-web for the web product team"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "acme-growth for the growth squad"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A workspace holds its members, their workspace roles and its pending invitations."
+by = [
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestWorkspaceMembers",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestWorkspaceInvites",
+]
+
+[[unit]]
+text = "The workspace routes (/api/v1/workspaces/...) check membership and workspace role: only a member can read a workspace or its member list, and only an ADMIN or OWNER of that workspace can change its settings, members or invites (any member can leave)."
+by = [
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestGetWorkspace::test_get_workspace_as_non_member_returns_403",
+    "test:modules/backend/tests/unit/services/test_workspace_service.py::TestCheckMemberPermission::test_non_member_has_no_access",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestUpdateWorkspace::test_update_workspace_as_viewer_returns_403",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestWorkspaceMembers::test_add_member_as_developer_returns_403",
+    "test:modules/backend/tests/unit/services/test_workspace_service.py::TestCheckMemberPermission::test_developer_cannot_manage_members",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestListCarriesMemberCounts::test_a_member_who_leaves_is_no_longer_counted",
+]
+
+[[unit]]
+text = "What workspaces do not do"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Workspaces do not decide which experiments, feature flags or API keys a user can see or change."
+by = ["untested:T"]
+
+[[unit]]
+text = "Experiments and feature flags are not created inside a workspace, and workspace membership plays no part when they are listed, read or changed."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "That is decided by the user's platform role (ADMIN, DEVELOPER, ANALYST or VIEWER) across the whole installation — see Role-based access control."
+by = ["untested:T"]
+
+[[unit]]
+text = "If you need teams to be unable to see each other's experiments and flags, run a separate installation for each team."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Role Hierarchy"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every workspace member has exactly one workspace role."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The roles form a hierarchy, and a workspace role applies only to the workspace routes:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Role | On the workspace routes"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "OWNER | Everything an ADMIN can do, and delete the workspace"
+by = [
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestDeleteWorkspace::test_delete_workspace_as_owner",
+    "test:modules/backend/tests/unit/services/test_workspace_service.py::TestCheckMemberPermission::test_owner_has_all_permissions",
+]
+
+[[unit]]
+text = "ADMIN | Update workspace settings, add and remove members, change member roles, send invites"
+by = [
+    "test:modules/backend/tests/unit/services/test_workspace_service.py::TestCheckMemberPermission::test_admin_can_manage_members",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestUpdateWorkspace::test_update_workspace_as_admin",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestWorkspaceInvites::test_create_invite_as_admin",
+]
+
+[[unit]]
+text = "DEVELOPER | Read the workspace and its member list; leave the workspace"
+by = [
+    "test:modules/backend/tests/unit/services/test_workspace_service.py::TestCheckMemberPermission::test_developer_cannot_manage_members",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestDeleteWorkspace::test_delete_workspace_as_developer_returns_403",
+]
+
+[[unit]]
+text = "ANALYST | Read the workspace and its member list; leave the workspace"
+by = ["untested:T"]
+
+[[unit]]
+text = "VIEWER | Read the workspace and its member list; leave the workspace"
+by = ["test:modules/backend/tests/unit/services/test_workspace_service.py::TestCheckMemberPermission::test_viewer_is_read_only"]
+
+[[unit]]
+text = "DEVELOPER, ANALYST and VIEWER are recorded for each member but currently grant the same thing on the workspace routes."
+by = ["untested:T"]
+
+[[unit]]
+text = "Changing Roles"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An ADMIN or OWNER can change a member's role among VIEWER, ANALYST, DEVELOPER and ADMIN."
+by = [
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestOwnerRoleChanges::test_admin_still_manages_other_roles",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestOwnerRoleChanges::test_owner_grants_changes_and_removes_owner",
+]
+
+[[unit]]
+text = "The last remaining OWNER cannot be demoted or removed."
+by = [
+    "test:modules/backend/tests/unit/services/test_workspace_service.py::TestRemoveMember::test_cannot_remove_last_owner",
+    "test:modules/backend/tests/unit/services/test_workspace_service.py::TestUpdateMemberRole::test_owner_cannot_demote_themselves_when_last_owner",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestOwnerRoleChanges::test_last_owner_still_cannot_step_down",
+]
+
+[[unit]]
+text = "A member can remove themselves; an OWNER can do so only while there is at least one other OWNER."
+by = [
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestOwnerRoleChanges::test_last_owner_still_cannot_step_down",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestListCarriesMemberCounts::test_a_member_who_leaves_is_no_longer_counted",
+]
+
+[[unit]]
+text = "Plans and Limits"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Workspaces have no plan and no limits: a workspace can have any number of members."
+by = [
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestNoMemberLimit::test_sixth_member_is_added",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestNoMemberLimit::test_sixth_member_accepts_an_invite",
+    "test:modules/backend/tests/unit/services/test_workspace_service.py::TestAddMember::test_no_member_limit",
+]
+
+[[unit]]
+text = "A create or update request that sends plan is refused with 422."
+by = [
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestPlanIsRefused::test_create_with_plan_is_422",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestPlanIsRefused::test_update_with_plan_is_422",
+]
+
+[[unit]]
+text = "API Keys"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Workspaces do not issue API keys."
+by = [
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestWorkspaceAPIKeyRoutesAreGone::test_every_key_operation_is_404",
+    "test:modules/backend/tests/smoke/test_workspace_routes_contract.py::test_no_workspace_api_key_route",
+]
+
+[[unit]]
+text = "To connect an SDK, send events or evaluate flags, use a platform API key."
+by = [
+    "journey:workspaces-quickstart#api-key",
+    "journey:workspaces-quickstart#sdk-call",
+]
+
+[[unit]]
+text = "Any signed-in user can create one for themselves with POST /api/v1/api-keys; step 3 of the quickstart links to the full guide."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once"]
+
+[[unit]]
+text = "Invitations"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Workspace members can be added in two ways:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Direct add (ADMIN+): Look up an existing platform user by their UUID and add them immediately with the desired role."
+by = [
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestWorkspaceMembers::test_add_member_as_admin",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestWorkspaceMembers::test_add_member_as_developer_returns_403",
+]
+
+[[unit]]
+text = "Email invite (ADMIN+): Create an invite for an email address."
+by = ["test:modules/backend/tests/integration/api/test_workspaces_api.py::TestWorkspaceInvites::test_create_invite_as_admin"]
+
+[[unit]]
+text = "No email is sent."
+by = ["test:modules/backend/tests/integration/api/test_workspaces_api.py::TestWorkspaceInvites::test_create_invite_as_admin"]
+
+[[unit]]
+text = "The dashboard shows the invitation link after you create it, with a Copy link button; the API response contains the token (the link is /workspaces/invites/<token> on the dashboard's address)."
+by = [
+    "test:modules/frontend/src/tests/pages/workspace-members-invite.test.tsx",
+    "test:modules/backend/tests/integration/api/test_workspace_invite_preview.py::test_creating_an_invite_returns_the_link_details",
+]
+
+[[unit]]
+text = "Send the link to the recipient."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The token is valid for 7 days."
+by = [
+    "test:modules/backend/tests/unit/services/test_workspace_service.py::TestCreateInvite::test_create_invite_expires_in_7_days",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestWorkspaceInvites::test_accept_expired_invite_returns_400",
+]
+
+[[unit]]
+text = "When the recipient accepts the invite (while authenticated), they are added as a member with the invited role."
+by = ["test:modules/backend/tests/integration/api/test_workspace_invite_binding.py::test_the_invited_address_joins_with_the_invited_role"]
+
+[[unit]]
+text = "Anyone with the link can look the invitation up through the API, but only the invited account sees the address in full; everyone else sees it masked, for example a•••@example.com."
+by = [
+    "test:modules/backend/tests/integration/api/test_workspace_invite_preview.py::test_an_anonymous_preview_is_masked",
+    "test:modules/backend/tests/integration/api/test_workspace_invite_preview.py::test_the_invitee_sees_the_address_as_stored",
+    "test:modules/backend/tests/integration/api/test_workspace_invite_preview.py::test_any_other_account_sees_the_address_masked",
+    "test:modules/backend/tests/integration/api/test_workspace_invite_preview.py::test_mask_invite_email",
+]
+
+[[unit]]
+text = "Only a user signed in with the invited address (compared without regard to case) can accept it."
+by = [
+    "test:modules/backend/tests/integration/api/test_workspace_invite_binding.py::test_the_address_is_compared_without_case",
+    "test:modules/backend/tests/integration/api/test_workspace_invite_binding.py::test_another_account_cannot_accept",
+]
+
+[[unit]]
+text = "Anyone else gets 403 with code invite_email_mismatch."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The address must be ASCII, and an alias is a different address: alice+work@example.com does not accept an invite sent to alice@example.com."
+by = [
+    "test:modules/backend/tests/integration/api/test_workspace_invite_binding.py::test_an_invite_needs_a_valid_ascii_address",
+    "test:modules/backend/tests/integration/api/test_workspace_invite_binding.py::test_an_alias_is_a_different_address",
+]
+
+[[unit]]
+text = "An invitation cannot grant the OWNER role."
+by = ["untested:T"]

@@ -2,24 +2,7 @@
 
 The Benjamini-Hochberg (BH) procedure controls the **False Discovery Rate (FDR)** — the
 expected proportion of false positives among all rejected hypotheses — when testing
-multiple metrics simultaneously. It is less conservative than Bonferroni while still
-providing strong statistical guarantees.
-
-## Why FDR is Better Than Bonferroni for Many Metrics
-
-When an experiment measures 10 or more metrics, Bonferroni correction becomes extremely
-conservative: it controls the **Family-Wise Error Rate (FWER)** — the probability of
-even *one* false positive — at the cost of almost never detecting true effects.
-
-| Property | Bonferroni | BH FDR |
-|---|---|---|
-| Controls | FWER (any false positive) | FDR (proportion of false positives) |
-| Threshold per metric | $\alpha / m$ | $k/m \times \alpha$ (rank-dependent) |
-| Recommended for | 1–4 metrics | 5+ metrics |
-| Power (sensitivity) | Low for many tests | Higher |
-| False positives | Nearly zero | At most $\alpha$ proportion |
-
-**Rule of thumb**: Use Bonferroni for $\leq 4$ metrics; use BH FDR for $\geq 5$ metrics.
+multiple metrics simultaneously.
 
 ## The BH Procedure
 
@@ -54,7 +37,7 @@ largest k, so ranks 1, 2, 5, 6 passing brings along ranks 3 and 4.
 At $\alpha = 0.05$ with the same p-values, only 2 are significant
 (k=1: 0.001≤0.005 ✓, k=2: 0.008≤0.010 ✓, k=3: 0.039>0.015 ✗).
 
-### Adjusted P-values (Holm Step-Up Formula)
+### Adjusted P-values
 
 The BH-adjusted p-value for rank $k$ is:
 
@@ -63,17 +46,7 @@ $$p_{\text{adj}}(k) = \min\left(\frac{p_{(k)} \cdot m}{k},\ 1.0\right)$$
 with monotonicity enforced from right to left:
 $$p_{\text{adj,mono}}(k) = \min\left(p_{\text{adj}}(k),\ p_{\text{adj,mono}}(k+1)\right)$$
 
-A metric is significant when $p_{\text{adj,mono}}(k) < \alpha$.
-
-## When to Use BH vs. Bonferroni
-
-| Situation | Recommendation |
-|---|---|
-| 1–4 primary metrics (confirmatory) | Bonferroni or no correction |
-| 5–20 metrics (exploratory) | Benjamini-Hochberg FDR |
-| Dimensional breakdown (per-segment) | Bonferroni (small number of segments) |
-| 20+ metrics or large-scale analysis | Benjamini-Hochberg FDR |
-| Sequential / always-valid testing | mSPRT (no multiple-testing correction needed) |
+A metric is significant when its rank is at most $k^*$, that is, when its adjusted p-value is at most $\alpha$.
 
 ## REST API Reference
 
@@ -161,9 +134,7 @@ curl -s localhost:8000/api/v1/auth/me -H "Authorization: Bearer $TOKEN" | jq .ro
 <!-- expect: "ADMIN" -->
 
 It prints `"ADMIN"`. This saves the id of the demo data's `checkout_button_color`
-experiment in `$EXP_ID`, then corrects the five p-values above. The collection URL ends
-with a slash, `/api/v1/experiments/`; without it the API answers `307`, which `curl`
-doesn't follow:
+experiment in `$EXP_ID`, then corrects the five p-values above:
 
 ```{.bash exec}
 EXP_ID=$(curl -s localhost:8000/api/v1/experiments/ \
@@ -201,41 +172,6 @@ It prints each metric's rank, name and whether it is significant: `revenue` and
 | 422 | Empty `p_values`, any value outside [0,1], or `fdr_threshold` outside [0,1] |
 | 500 | Internal computation error |
 
-## Example Python Usage
-
-```python
-from backend.app.services.fdr_correction_service import BenjaminiHochbergService
-
-svc = BenjaminiHochbergService()
-
-p_values = {
-    "revenue": 0.001,
-    "ctr": 0.032,
-    "session_duration": 0.08,
-    "churn": 0.41,
-    "engagement": 0.015,
-}
-
-results = svc.correct(p_values, fdr_threshold=0.05)
-
-for r in results:
-    status = "SIGNIFICANT" if r.is_significant else "not significant"
-    print(
-        f"Rank {r.rank:2d}: {r.metric_name:<20s} "
-        f"p={r.raw_p_value:.4f}  adj_p={r.adjusted_p_value:.4f}  {status}"
-    )
-```
-
-Output:
-
-```text
-Rank  1: revenue              p=0.0010  adj_p=0.0050  SIGNIFICANT
-Rank  2: engagement           p=0.0150  adj_p=0.0375  SIGNIFICANT
-Rank  3: ctr                  p=0.0320  adj_p=0.0533  not significant
-Rank  4: session_duration     p=0.0800  adj_p=0.1000  not significant
-Rank  5: churn                p=0.4100  adj_p=0.4100  not significant
-```
-
 ## Integration with the Existing Results API
 
 Each experiment stores a `correction_method` (`none`, `bonferroni` or
@@ -262,10 +198,3 @@ It prints the correction applied and the experiment's metric, `Checkout Completi
 The `POST /api/v1/results/{experiment_id}/fdr-correction` endpoint provides finer
 control: you supply any set of p-values (from post-stratification, CUPED, or raw
 analysis) and receive BH-corrected results immediately.
-
-## References
-
-- Benjamini, Y., & Hochberg, Y. (1995). Controlling the false discovery rate: A practical
-  and powerful approach to multiple testing. *JRSS-B*, 57(1), 289–300.
-- Storey, J. D., & Tibshirani, R. (2003). Statistical significance for genomewide studies.
-  *PNAS*, 100(16), 9440–9445.

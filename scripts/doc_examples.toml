@@ -13,7 +13,7 @@
 
 [meta]
 documents = 53
-exec = 305
+exec = 303
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -299,7 +299,7 @@ expects = 18
 path = "docs/llm-evaluation/quickstart.md"
 environment = "stack"
 exec = 6
-skip = 4
+skip = 0
 expects = 8
 
 [[document]]
@@ -383,7 +383,7 @@ expects = 8
 path = "docs/websocket-streaming.md"
 environment = "stack"
 exec = 4
-skip = 1
+skip = 0
 expects = 8
 
 # Stream E batch 2: the demo READMEs, contract-only until Stream F runs the
@@ -462,8 +462,7 @@ reason = "starts the production stack on a Docker host: the compose-production w
 [pending]
 "backend/lambda/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
 "backend/lambda/event_processor/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
-"docs/api/split-url.md" = { comments = 0, unlabelled = 3, syntax = 0 }
-"docs/architecture/models.md" = { comments = 0, unlabelled = 1, syntax = 1 }
+"docs/api/split-url.md" = { comments = 0, unlabelled = 2, syntax = 0 }
 "docs/deployment/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/deployment/deployment-guide.md" = { comments = 0, unlabelled = 1, syntax = 2 }
 "docs/deployment/disaster-recovery.md" = { comments = 0, unlabelled = 0, syntax = 0 }
@@ -558,7 +557,7 @@ expects = 39
 path = "docs/architecture/technical-guide.md"
 environment = "stack"
 exec = 4
-skip = 4
+skip = 0
 expects = 4
 
 [[document]]
@@ -580,8 +579,8 @@ expects = 25
 [[document]]
 path = "docs/self-hosting/migrations.md"
 environment = "stack"
-exec = 7
-skip = 12
+exec = 6
+skip = 11
 expects = 5
 
 # The contributor pages: the Quick Start's stack and a development virtual
@@ -596,9 +595,9 @@ expects = 6
 [[document]]
 path = "docs/performance/load-testing.md"
 environment = "stack-dev"
-exec = 10
-skip = 6
-expects = 8
+exec = 9
+skip = 5
+expects = 7
 
 # #1075: the integration pages' setup and inbound webhook examples, each
 # signing in first and signing its deliveries as the page says. Nothing on

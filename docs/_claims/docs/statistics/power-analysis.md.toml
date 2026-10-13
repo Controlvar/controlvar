@@ -1,0 +1,408 @@
+# What verifies each unit of docs/statistics/power-analysis.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/statistics/power-analysis.md"
+
+[[unit]]
+text = "Statistical Power Analysis"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This guide explains how to use the pre-experiment Power Calculator to plan your A/B tests before you launch them."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Inputs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "1. Baseline Rate"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The current performance of your metric before any change."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For a conversion rate experiment, this might be 5% (0.05)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This must be between 0 and 1 exclusive."
+by = [
+    "test:backend/tests/integration/api/test_power_calculator_api.py::TestSampleSizeEndpoint::test_baseline_rate_zero_returns_422",
+    "test:backend/tests/integration/api/test_power_calculator_api.py::TestSampleSizeEndpoint::test_baseline_rate_one_returns_422",
+]
+
+[[unit]]
+text = "2. Minimum Detectable Effect (MDE)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The smallest relative improvement you want to be able to detect."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An MDE of 10% on a 5% baseline means you want to detect a lift from 5% to 5.5% (absolute change = 0.5 percentage points)."
+by = [
+    "journey:power-calculator#effect-five",
+    "journey:power-calculator#effect-twenty",
+]
+
+[[unit]]
+text = "The Power Calculator in the dashboard"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The dashboard's Power Calculator is at /power-calculator: on the Docker Compose stack, http://localhost:3000/power-calculator."
+by = ["journey:power-calculator#calculator"]
+
+[[unit]]
+text = "It needs no sign-in."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Set Baseline Conversion Rate and Minimum Detectable Effect (relative) with their sliders, and choose Significance Level (alpha), Statistical Power and Number of Variants (including control)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sample Size per Variant then shows how many users each variant needs, by the formula below, with the Bonferroni correction of Multi-Variant Experiments when there are more than two variants; MDE (absolute) shows the effect in percentage points."
+by = [
+    "journey:power-calculator#calculator",
+    "journey:power-calculator#three-variants",
+    "journey:power-calculator#four-variants",
+    "journey:power-calculator#effect-five",
+]
+
+[[unit]]
+text = "The Formula"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For a two-proportions z-test (the standard for conversion rate experiments), the required sample size per variant is:"
+by = [
+    "journey:power-calculator#calculator",
+    "test:backend/tests/unit/api/test_sample_size_one_formula.py::test_documented_case_on_both_routes",
+]
+
+[[unit]]
+text = "Where:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "p1 = baseline rate"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "p2 = baseline rate + (baseline rate MDE)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "p_bar = (p1 + p2) / 2"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "z_alpha = norm.ppf(1 - alpha/2) for two-tailed (e.g."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "1.96 for alpha=0.05)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "z_power = norm.ppf(power) (e.g."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "0.842 for power=0.80)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The Power Calculator and POST /api/v1/power/sample-size give n rounded up to a whole user."
+by = ["journey:power-calculator#api-guides-example"]
+
+[[unit]]
+text = "Verification example for baseline=0.05, MDE=10% relative, alpha=0.05, power=0.80:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "p1 = 0.05, p2 = 0.055, p_bar = 0.0525"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "z_alpha = 1.9600, z_power = 0.8416"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "n ≈ 31,234 per variant (31,234 control + 31,234 treatment = 62,468 total)"
+by = ["journey:power-calculator#api-guides-example"]
+
+[[unit]]
+text = "Runtime Estimation"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Once you have the required sample size per variant, you can estimate the runtime:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Example: You need 31,234 per variant, have 10,000 daily users, 50% traffic allocation, 2 variants:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "daily_per_variant = 10,000 0.50 / 2 = 2,500"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "days = 31,234 / 2,500 = 12.5 days"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Multi-Variant Experiments"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "When you have more than 2 variants (e.g."
+by = [
+    "journey:power-calculator#three-variants",
+    "journey:power-calculator#four-variants",
+    "journey:power-calculator#api-three-variants",
+    "journey:power-calculator#api-four-variants",
+]
+
+[[unit]]
+text = "A/B/C), the platform applies Bonferroni correction to control the family-wise error rate:"
+by = [
+    "journey:power-calculator#three-variants",
+    "journey:power-calculator#four-variants",
+    "journey:power-calculator#api-three-variants",
+    "journey:power-calculator#api-four-variants",
+]
+
+[[unit]]
+text = "For a 3-variant experiment with alpha=0.05:"
+by = [
+    "journey:power-calculator#api-three-variants",
+    "test:backend/tests/integration/api/test_power_calculator_api.py::TestSampleSizeEndpoint::test_three_variants_larger_than_two",
+]
+
+[[unit]]
+text = "corrected_alpha = 0.05 / 2 = 0.025"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This increases the required sample size per variant"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Minimum Detectable Effect (MDE) Calculator"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If you have a fixed sample size available (e.g."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "2 weeks of traffic at 50% allocation), you can use the MDE calculator to find the smallest effect you can detect:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "POST /api/v1/power/mde"
+by = ["test:backend/tests/integration/api/test_power_calculator_api.py::TestMDEEndpoint::test_larger_sample_gives_smaller_mde"]
+count = 2
+
+[[unit]]
+text = "During the experiment: the Sample Size tab"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Everything above is for planning before launch."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Once an experiment is running, the Sample Size tab of its results page (and GET /api/v1/results/{experiment_id}/sample-size) plans again from the experiment's own data, with the same formula as above:"
+by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_the_tab_and_the_guided_setup_agree"]
+
+[[unit]]
+text = "Baseline: the conversion rate observed in the control variant on the primary metric so far, counted the way the results count it (users with a conversion, over users assigned)."
+by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_the_observed_rate_is_the_control_rate_the_results_show"]
+
+[[unit]]
+text = "You can type a different rate instead."
+by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_a_requested_baseline_wins_over_the_observed_one"]
+
+[[unit]]
+text = "The results page is cached for up to five minutes and the tab is not, so for that long the tab's rate can be newer than the one on the Overview."
+by = ["untested:T"]
+
+[[unit]]
+text = "MDE: 5% relative unless you change it."
+by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm"]
+
+[[unit]]
+text = "Experiments do not store a planned effect."
+by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm"]
+
+[[unit]]
+text = "Power 80%, two-sided, unless you change it."
+by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm"]
+
+[[unit]]
+text = "Two-sided is what the results test."
+by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm"]
+
+[[unit]]
+text = "Significance: one minus the experiment's stored confidence level (5% for the default 0.95) unless you change it, the same as the results."
+by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm"]
+
+[[unit]]
+text = "Correction: the experiment's stored correction method (Benjamini-Hochberg unless it was created with another) unless you choose another, the same as the results."
+by = [
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_a_correction_plans_each_comparison_at_alpha_over_k_minus_1",
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm",
+]
+
+[[unit]]
+text = "With Bonferroni or Benjamini-Hochberg each of the k - 1 comparisons is planned at alpha / (k - 1)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Unlike the Power Calculator, the tab does not apply Bonferroni on its own: the multi-variant paragraph above is about the Power Calculator only."
+by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_a_correction_plans_each_comparison_at_alpha_over_k_minus_1"]
+
+[[unit]]
+text = "Progress is the smallest variant's users against the planned number, and the achieved power is the power to detect the planned MDE at that size, not the effect observed so far."
+by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm"]
+
+[[unit]]
+text = "The tab plans a conversion rate (a two-proportion test) whatever the metric's type, because every metric is analysed as a conversion today, and it says so."
+by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm"]
+
+[[unit]]
+text = "Nothing typed on the tab is saved."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Worked example: a control rate of 12% so far, a 5% relative MDE, 80% power, 5% significance, two variants (so the correction changes nothing):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "p1 = 0.12, p2 = 0.126"
+by = ["test:backend/tests/unit/api/test_sample_size_one_formula.py::test_documented_case_on_both_routes"]
+
+[[unit]]
+text = "n = 47,036 per variant"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "with 20,000 users in the smallest variant: 43% of the planned sample, and a power of 45% to detect the 5% lift"
+by = ["untested:T"]
+
+[[unit]]
+text = "with three variants and Bonferroni: each comparison at 2.5%, n = 56,961 per variant"
+by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm"]
+
+[[unit]]
+text = "When there is nothing to plan from yet (no users in control, no control conversions, or every control user converted) the tab asks for the rate you expect, and the API answers 200 with required_sample_size_per_variant: null and an unavailable_reason."
+by = [
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_no_assignments_answers_200_with_nulls",
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_no_control_conversions",
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_every_control_user_converted",
+]
+
+[[unit]]
+text = "REST API Reference"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "All endpoints are unauthenticated (no login required)."
+by = ["test:backend/tests/integration/api/test_power_calculator_api.py"]
+
+[[unit]]
+text = "They perform pure computation with no database access."
+by = ["test:backend/tests/integration/api/test_power_calculator_api.py"]
+
+[[unit]]
+text = "Limits."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "n_variants is at most 100 (an experiment's variants split its traffic in whole percentages, so no more than 100 of them receive any), and sample_size_per_variant, required_sample_size and daily_traffic are at most 1,000,000,000,000 (10^12, more than a hundred times the world's population)."
+by = ["test:backend/tests/integration/api/test_power_calculator_api.py::TestVeryLargeIntegers"]
+
+[[unit]]
+text = "A larger value answers 422 naming the field: the error's loc is [\"body\", \"<field>\"] and its type is less_than_equal."
+by = ["test:backend/tests/integration/api/test_power_calculator_api.py::TestVeryLargeIntegers"]
+
+[[unit]]
+text = "A calculation whose numbers still leave floating-point range, such as a mean metric with a very large baseline_std, answers 422 with the detail \"These values are too large or too small to calculate with."
+by = ["journey:power-calculator#api-mean-out-of-range"]
+
+[[unit]]
+text = "Use values nearer those of a real experiment.\" A proportion sample size whose treatment rate (the baseline raised by the effect) is too close to the baseline for the size to be a finite number, such as a baseline_rate of 1e-300 or a minimum_detectable_effect of 1e-17, answers 422 with the detail \"This baseline raised by this effect changes too little to estimate a sample size."
+by = [
+    "journey:power-calculator#api-mean-out-of-range",
+    "test:backend/tests/unit/api/test_sample_size_not_finite.py::test_the_power_calculator_route_refuses_it_too",
+]
+
+[[unit]]
+text = "Raise the baseline rate or the effect.\""
+by = ["test:backend/tests/unit/api/test_sample_size_not_finite.py::test_the_power_calculator_route_refuses_it_too"]
+
+[[unit]]
+text = "POST /api/v1/power/sample-size"
+by = ["journey:power-calculator#api-guides-example"]
+
+[[unit]]
+text = "Compute the required sample size per variant."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Request body:"
+by = ["exempt:baseline"]
+count = 4
+
+[[unit]]
+text = "Response:"
+by = ["exempt:baseline"]
+count = 5
+
+[[unit]]
+text = "Given a fixed sample size per variant, compute the minimum detectable effect."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "POST /api/v1/power/runtime"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Estimate how many days it will take to collect the required sample size."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/power/curve"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Return the power curve — sample size required per variant for a range of effect sizes."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Query parameters: baseline, alpha, power, mde (optional, marks a point)"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Example: GET /api/v1/power/curve?baseline=0.05&alpha=0.05&power=0.80&mde=0.10"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "POST /api/v1/power/plan"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Generate plain-English planning advice for a power analysis result."
+by = ["test:backend/tests/integration/api/test_power_calculator_api.py::TestPlanEndpoint::test_response_has_generated_by"]
+
+[[unit]]
+text = "The advice is the built-in planning advice, and generated_by is always \"template\"."
+by = ["test:backend/tests/integration/api/test_power_calculator_api.py::TestPlanEndpoint::test_response_has_generated_by"]

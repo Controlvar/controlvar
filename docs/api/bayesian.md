@@ -51,9 +51,7 @@ curl -s localhost:8000/api/v1/auth/me -H "Authorization: Bearer $TOKEN" | jq .ro
 <!-- expect: "ADMIN" -->
 
 It prints `"ADMIN"`. This reads the Bayesian block of the demo data's
-`checkout_button_color` experiment, saving its id in `$EXP_ID` first. The collection URL
-ends with a slash, `/api/v1/experiments/`; without it the API answers `307`, which `curl`
-doesn't follow:
+`checkout_button_color` experiment, saving its id in `$EXP_ID` first:
 
 ```{.bash exec}
 EXP_ID=$(curl -s localhost:8000/api/v1/experiments/ \
@@ -124,7 +122,7 @@ it is answered as if it had not.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `prior_family` | `string` | `beta` | Conjugate prior family: `beta`, `normal` or `gamma` |
+| `prior_family` | `string` | `beta` | Stored only: `beta`, `normal` or `gamma` are accepted, and every config is analysed as Beta-Binomial |
 | `alpha` | `float` | `1.0` | Prior alpha (> 0) |
 | `beta` | `float` | `1.0` | Prior beta (> 0) |
 | `loss_threshold` | `float` | `0.001` | Expected loss the leading variant must be below to be declared the winner (> 0); it also needs a probability to be best of at least 0.975 (see [the decision values](#bayesiandecision-values)) |
@@ -212,51 +210,17 @@ The decision is a recommendation: nothing stops the experiment or changes its st
 The example response above answers `CONTINUE`: the treatment's expected loss, 0.0002, is
 below the default `loss_threshold`, but its probability to be best, 0.9731, is under 0.975.
 
-### How often `STOP_WINNER` appears when there is no difference
-
-Before engine version 1.2.0, `STOP_WINNER` needed only the expected loss to be below
-`loss_threshold`. At a low conversion rate that is true of two identical variants once
-there is modest traffic: in 2,000 simulated A/A tests at a 1% rate with 5,000 users per
-variant, every one answered `STOP_WINNER`.
-
-The 0.975 threshold was chosen by simulation, 2,000 A/A tests in each of six cells:
-conversion rate 1%, 10% and 50%, with 5,000 and 20,000 users per variant. Measured at the
-default settings:
-
-| What was measured | Result |
-|---|---|
-| A/A, one look at the end | 90 to 108 `STOP_WINNER` per 2,000 (4.5% to 5.4%) |
-| A/A, read 10 times at equal intervals, `STOP_WINNER` at any read | 367 to 426 per 2,000 (18% to 21%) |
-| 1% against 1.25%, 40,000 users per variant, one look | 1,847 per 2,000 (92%) |
-
-Two things follow:
+### Reading the decision
 
 - **Read the decision once, at the planned sample size.** Like a fixed-horizon p-value,
-  the decision assumes a single look. Checking it every day and stopping at the first
-  `STOP_WINNER` turns about a 5% false-winner rate into about 20% over ten reads. For an
+  the decision assumes a single look. For an
   experiment you want to monitor continuously, use the sequential analysis
   ([`GET /results/{id}/sequential`](sequential-testing.md)), which is built for repeated
   looks.
-- **The 0.975 threshold is deliberately not configurable.** It is what holds the
-  false-winner rate near 5%; a per-experiment setting would let one experiment lower it
-  back to the level that called identical variants winners. `bayesian_config` has no field
+- **The 0.975 threshold is deliberately not configurable.** `bayesian_config` has no field
   for it.
-- **`loss_threshold` rarely decides on its own.** At the default 0.001 it never vetoed a
-  variant that had reached 0.975 in any of the single-look simulations above. A smaller value makes the
+- A smaller `loss_threshold` makes the
   rule stricter; a larger one cannot make it looser than the 0.975 probability allows.
-
-The A/A and power figures are held by tests in
-`backend/tests/unit/stats_validation/test_bayesian_stop_winner.py`.
-
----
-
-## Prior Selection Guide
-
-| Scenario | Recommended Prior | Rationale |
-|---|---|---|
-| No prior knowledge | `alpha=1, beta=1` (uniform) | Completely uninformative; posterior is driven entirely by data |
-| Historical baseline known | `alpha = baseline_rate * N, beta = (1 - baseline_rate) * N` | Encodes prior experiments as an equivalent number of observations `N` |
-| Conservative (shrink toward zero) | `alpha=0.5, beta=0.5` (Jeffreys) | Weakly informative, recommended when sample sizes are small |
 
 ---
 
