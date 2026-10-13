@@ -198,7 +198,9 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("is a synchronous, dependency-free Python client"),
     ),
     "Spring Boot 3 auto-configuration starter; thread-safe client with a TTL cache": (
-        lede("adds Spring Boot auto-configuration (Spring Boot 3.1"),
+        lede(
+            "adds Spring Boot auto-configuration (built and tested against Spring Boot 3.5.16"
+        ),
         lede("caches the answer per user + key for a TTL"),
         says("The client is thread-safe"),
     ),
@@ -239,7 +241,9 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         says("is a CNCF (Cloud Native Computing Foundation) standard"),
     ),
     "For Cloudflare Workers, Vercel Edge and Deno Deploy. Zero runtime dependencies; results cached in memory or KV.": (
-        lede("runs in Cloudflare Workers, Vercel Edge Functions, Deno Deploy"),
+        lede(
+            "with adapters for Cloudflare Workers, Vercel Edge Middleware and Deno Deploy"
+        ),
         lede("It has zero runtime dependencies"),
         lede("in memory and, optionally, in a shared KV store"),
     ),

@@ -1,12 +1,25 @@
 # @getexperimently/edge-sdk
 
-Edge-compatible SDK for Cloudflare Workers, Vercel Edge Functions, Deno Deploy, Node >= 18 and any
-WinterCG runtime. Zero runtime dependencies, no Node.js built-ins.
+SDK for edge runtimes, with adapters for Cloudflare Workers, Vercel Edge Middleware and Deno Deploy;
+declares Node >= 18. Zero runtime dependencies, no Node.js built-ins. Its tests and contract smoke
+run it under Node, with the adapters' KV and request objects stubbed.
 
 Flag evaluation and experiment assignment are **decided by the server**; results are cached per
 user + key in memory (and optionally in Cloudflare KV / Deno KV). Nothing is bucketed locally.
 
 Full documentation: [`docs/sdk/edge.md`](https://github.com/getexperimently/experimently/blob/main/docs/sdk/edge.md).
+
+## Installation
+
+**Not yet published.** `@getexperimently/edge-sdk` is not on npm, so build it from source in a
+clone of this repository and install the packed tarball in your app:
+
+```bash
+cd sdk/edge
+npm ci && npm run build && npm pack
+```
+
+`npm pack` writes `getexperimently-edge-sdk-0.2.0.tgz`; `npm install <path to that file>` adds it.
 
 ## Quick start
 

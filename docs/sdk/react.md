@@ -17,13 +17,8 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/exp
 
 ## Installation
 
-**Not yet published.** `@getexperimently/react-sdk` is not on npm yet, so the command below fails
-today. Build it from a clone of this repository and install the packed tarball instead (the
-blocks below).
-
-```bash
-npm install @getexperimently/react-sdk
-```
+**Not yet published.** `@getexperimently/react-sdk` is not on npm, so build it from source in a
+clone of this repository and install the packed tarball (the blocks below).
 
 Its peer dependencies are `react` >= 17 and `react-dom` >= 17.
 
@@ -79,8 +74,10 @@ function App() {
 | `user.userId` | `string` | Yes | Stable identifier used for bucketing |
 | `user.attributes` | `Record<string, unknown>` | No | Sent as `context` on experiment assignment and on flag evaluation (targeting rules); see [Targeting context](#targeting-context) |
 
-The client is recreated only when `apiKey`/`baseUrl` change; hooks re-run when `userId` or the
-attributes change. All hooks return safe defaults while loading and on error, and never throw.
+The client is recreated only when `apiKey`, `baseUrl`, `timeoutMs` or `cacheTtlMs` change (a new
+client starts with empty caches); hooks re-run when `userId` or the attributes change. All hooks
+return safe defaults while loading and on a network or server error, and do not throw then;
+outside an `<ExperimentationProvider>` they throw.
 
 ### Targeting context
 
@@ -229,7 +226,7 @@ disabled evaluation or the control defaults with `error` set.
 
 ```tsx
 // pages/checkout.tsx
-import { ServerClient } from '@getexperimently/react-sdk/ssr';
+import { ServerClient } from '@getexperimently/react-sdk';
 import type { GetServerSideProps } from 'next';
 
 export const getServerSideProps: GetServerSideProps = async ({ req }) => {
@@ -307,6 +304,8 @@ interface ExperimentAssignment {
   configuration: Record<string, unknown> | null;
   loading: boolean;
   error: Error | null;
+  assigned?: boolean; // false when the server returned control without enrolling the user
+  reason?: string;    // 'assigned' | 'holdout' | 'mutual_exclusion' | 'targeting'
 }
 
 interface TrackEventOptions {

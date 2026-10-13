@@ -15,13 +15,9 @@ locally.
 
 ## Installation
 
-**Not yet published.** `experimently/sdk` is not on Packagist yet, so the first line below fails
-today. Point Composer at `sdk/php` in a clone of this repository with a path repository instead,
-as in the second block (this has not been tested here).
-
-```bash
-composer require experimently/sdk
-```
+**Not yet published.** `experimently/sdk` is not on Packagist, so build it from source: point
+Composer at `sdk/php` in a clone of this repository with a path repository (this has not been
+tested here).
 
 ```bash
 git clone https://github.com/getexperimently/experimently.git
@@ -80,10 +76,11 @@ $client->track('page_view', 'user-123', ['page' => '/']);   // no key: fanned ou
 
 ### `evaluateFlag(string $flagKey, string $userId): FlagEvaluation`
 
-`GET /api/v1/feature-flags/evaluate/{flagKey}?user_id={userId}`. Returns a `FlagEvaluation`
-with `key`, `enabled` and `config`. On any network/HTTP failure (transport error, 401, 404 for an
-unknown flag key, 429, ...) the flag is reported as **disabled** (`config: null`); a cached
-evaluation, when present, is returned instead. Failures are never cached. Never throws on
+`GET /api/v1/feature-flags/evaluate/{flagKey}?user_id={userId}`: the user id alone, so the server
+evaluates the flag's targeting rules against an empty context. Returns a `FlagEvaluation` with
+`key`, `enabled` and `config`. A cached evaluation is returned before any request is made; on any
+network/HTTP failure (transport error, 401, 404 for an unknown flag key, 429, ...) the flag is
+reported as **disabled** (`config: null`). Failures are never cached. Never throws on
 network/HTTP errors.
 
 ### `isFeatureEnabled(string $flagKey, string $userId): bool`
@@ -151,8 +148,9 @@ disabled flag / `null` / `false` / a `BatchResult` with failures. Only `HttpClie
 ## Hash Utility
 
 `FeatureFlagEvaluator::hashUser($userId, $key)` implements the cross-SDK formula
-`MD5("{userId}:{key}")` → first 4 bytes as little-endian uint32 / 2^32 and is pinned by the
-golden-vector tests in `tests/sdk-contract/`:
+`MD5("{userId}:{key}")` → first 4 bytes as little-endian uint32 / 2^32. The SDK's own
+`HashCompatibilityTest` pins one vector; the cross-SDK golden vectors in `tests/sdk-contract/` are
+not run against this SDK:
 
 ```php
 FeatureFlagEvaluator::hashUser('user-123', 'my-flag');   // 0.6927449859213084
@@ -199,9 +197,8 @@ the client's request shapes:
 php test_standalone.php
 ```
 
-The PHPUnit suite (client, cache, HTTP client, hash tests) and `test_standalone.php` were reviewed
-line by line for the server-side rewire but **not executed** on the development machine (no
-`php`/`composer` installed); run them on a machine with PHP 8.1+.
+CI runs the PHPUnit suite (client, cache, HTTP client, hash tests) on PHP 8.2 in the SDK Unit Tests
+workflow; no workflow runs `test_standalone.php`.
 
 ## License
 

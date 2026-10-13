@@ -9,14 +9,11 @@ Flag evaluation and experiment assignment are decided **by the server**: every c
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key. Nothing is bucketed on the device.
 
-> **Beta: flag targeting on user attributes does not work in this SDK yet.** Flag
-> evaluation sends only the user id (`GET /api/v1/feature-flags/evaluate/{key}?user_id=…`),
-> not the user's attributes, so a flag targeting rule on an attribute (app version, OS,
-> country, plan) never matches here, and the flag's rollout percentage alone decides. Experiment
-> assignment is not affected: `getAssignment` sends the attributes as `context`, so experiment
-> targeting works. Until this is fixed ([#438](https://github.com/getexperimently/experimently/issues/438)), an app that needs attribute targeting on a
-> flag can call the evaluate endpoint itself with a `context` query parameter (a URL-encoded
-> JSON object of the attributes).
+> **Flag evaluation sends only the user id.** `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`
+> carries none of the user's attributes, so the server evaluates a flag's targeting rules against
+> an empty context. Experiment assignment sends them: `getAssignment` sends the attributes as
+> `context`. To evaluate a flag with attributes, call the evaluate endpoint with a `context`
+> query parameter (a URL-encoded JSON object of the attributes).
 
 Source: `sdk/flutter`.
 
@@ -30,6 +27,9 @@ Source: `sdk/flutter`.
 ---
 
 ## Installation
+
+**Not yet published.** The `experimently` package is not on pub.dev, so build it from source: this
+dependency takes `sdk/flutter` from this repository.
 
 ```yaml
 dependencies:
@@ -120,8 +120,8 @@ const config = SdkConfig(
 ### `evaluateFlag(String flagKey, String userId): Future<EvalResult>`
 
 Calls `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…` and returns the `EvalResult` below. An
-optional `attributes:` named argument is accepted but not sent (see the beta note at the top of
-this page).
+optional `attributes:` named argument is accepted and not sent: the request carries the user id
+only (see the note at the top of this page).
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -137,8 +137,9 @@ if (flag.enabled) {
 }
 ```
 
-Never throws. On a network/HTTP failure the cached evaluation is returned when one exists,
-otherwise the persisted offline value (if `offlineFallback`), otherwise `EvalResult.disabled(key)`.
+Never throws. A cached evaluation is returned before any request is made; on a network/HTTP
+failure the persisted offline value is returned (if `offlineFallback`), otherwise
+`EvalResult.disabled(key)`.
 Failures are never cached, so the next call retries. A 404 (an unknown flag key) is a
 definitive answer: the flag is reported disabled and any persisted offline value is removed.
 Concurrent calls for the same user + key share a single request.
@@ -277,9 +278,10 @@ These SDK paths share a per-IP rate-limit ceiling of `SDK_RATE_LIMIT_PER_MINUTE`
 
 ## Error Handling
 
-The public methods never throw on network or HTTP errors. The single exception is calling any
-method before `init()`, which throws `StateError` (a programming error). Only `ApiHttpClient`
-throws:
+The public methods never throw on network or HTTP errors. The one exception is calling
+`evaluateFlag`, `getAssignment`, `trackEvent` or `trackBatch` (or `isEnabled`, `getVariant` and
+`track`, which call them) before `init()`, which throws `StateError` (a programming error). Only
+`ApiHttpClient` throws:
 
 | Exception | When |
 |-----------|------|
