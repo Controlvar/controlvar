@@ -14,23 +14,16 @@ Source: `sdk/dotnet`.
 
 ## Requirements
 
-- .NET 6.0+ runtime, or any `netstandard2.1`-compatible runtime (.NET Core 3.0+, Mono 6.4+)
+- The library targets `netstandard2.1` and `net6.0`; its xUnit tests target `net6.0`
 - .NET 6+ SDK to build, test or run the examples
 
 ---
 
 ## Installation
 
-**Not yet published.** `Experimently.SDK` is not on NuGet yet, so the command below fails today.
-Reference the project from a clone of this repository instead, as shown after it
-(`dotnet add reference /path/to/experimently/sdk/dotnet/src/Experimently/Experimently.csproj`
-adds the same line; this has not been tested here).
-
-```bash
-dotnet add package Experimently.SDK
-```
-
-Or reference the project directly from a checkout:
+**Not yet published.** `Experimently.SDK` has no release on NuGet, so build it from source: reference
+the project in `sdk/dotnet/src/Experimently` of a clone of this repository from your own project
+(this is what the SDK's `examples/` and `tests/` do):
 
 ```xml
 <ProjectReference Include="../../sdk/dotnet/src/Experimently/Experimently.csproj" />
@@ -100,8 +93,9 @@ is thread-safe and meant to be shared (one instance per process). Dispose it to 
 ### `Task<FlagEvaluationResult> EvaluateFlagAsync(string flagKey, string userId, Dictionary<string, object>? attributes = null)`
 
 Calls `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…` (both values percent-encoded) and
-returns a `FlagEvaluationResult`. `attributes` is accepted for source compatibility but not sent:
-the evaluate endpoint takes a `context`, which this SDK does not send yet.
+returns a `FlagEvaluationResult`. `attributes` is accepted for source compatibility and not sent:
+the request carries the user id alone, so the server evaluates the flag's targeting rules
+against an empty context.
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -117,9 +111,10 @@ if (flag.Enabled)
 }
 ```
 
-Never throws. A flag that is not ACTIVE is not a failure: it answers `Enabled: false`. On a
-network/HTTP failure (a 404 is an unknown flag key) a cached evaluation is returned when one exists; otherwise a disabled result
-(`FlagEvaluationResult.Disabled(flagKey)`). Failures are never cached, so the next call retries.
+Never throws. A flag that is not ACTIVE is not a failure: it answers `Enabled: false`. A cached
+evaluation is returned before any request is made; on a network/HTTP failure (a 404 is an unknown
+flag key) the result is disabled (`FlagEvaluationResult.Disabled(flagKey)`). Failures are never
+cached, so the next call retries.
 
 ---
 
@@ -242,7 +237,7 @@ low-level `ExperimentationHttpClient` throws:
 |-----------|---------|------|
 | `Experimently.Exceptions.ExperimentationException` | `Exception` | Base class |
 | `Experimently.Exceptions.NetworkException` | `ExperimentationException` | `HttpRequestException`, timeouts (`TaskCanceledException`) |
-| `Experimently.Exceptions.ApiException` (`StatusCode`, `ResponseBody`) | `ExperimentationException` | Other 4xx/5xx (404 not ACTIVE, 422 validation, 429 rate limited) or an undecodable body |
+| `Experimently.Exceptions.ApiException` (`StatusCode`, `ResponseBody`) | `ExperimentationException` | Other 4xx/5xx (404: an experiment unknown or not ACTIVE, or an unknown flag key; 422 validation; 429 rate limited) or an undecodable body |
 | `Experimently.Exceptions.AuthException` | `ExperimentationException` | HTTP 401 — invalid API key |
 
 ---
@@ -250,8 +245,9 @@ low-level `ExperimentationHttpClient` throws:
 ## Consistent Hash Utility
 
 `FeatureFlagEvaluator.HashUser(string userId, string flagKey)` implements the cross-SDK formula —
-`MD5("{userId}:{flagKey}")`, first 4 bytes as little-endian uint32, divided by 2^32 — and is
-pinned by the golden-vector tests in `tests/sdk-contract/`:
+`MD5("{userId}:{flagKey}")`, first 4 bytes as little-endian uint32, divided by 2^32. The SDK's own
+`HashCompatibilityTests` pin one vector; the cross-SDK golden vectors in `tests/sdk-contract/`
+are not run against this SDK:
 
 ```csharp
 FeatureFlagEvaluator.HashUser("user-123", "my-flag");   // 0.6927449859213084

@@ -1,8 +1,10 @@
 # Edge SDK
 
-`@getexperimently/edge-sdk` (v0.2) runs in Cloudflare Workers, Vercel Edge Functions, Deno
-Deploy, Node >= 18 and any WinterCG-compatible runtime. It has zero runtime dependencies and uses no
-Node.js built-ins — only Web-standard `fetch`, `AbortController` and `Headers`.
+`@getexperimently/edge-sdk` (v0.2) is written for edge runtimes, with adapters for Cloudflare
+Workers, Vercel Edge Middleware and Deno Deploy, and declares Node >= 18. It has zero runtime
+dependencies and uses no Node.js built-ins — only Web-standard `fetch`, `AbortController` and
+`Headers`. Its unit tests and its contract smoke run it under Node; the adapters are tested there
+with stubbed KV and request objects, not on the three platforms.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and the
@@ -18,14 +20,8 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/exp
 
 ## Installation
 
-**Not yet published.** `@getexperimently/edge-sdk` is not on npm yet, so this fails today:
-
-```bash
-npm install @getexperimently/edge-sdk
-```
-
-Build it from a clone of this repository instead. `npm pack` writes
-`getexperimently-edge-sdk-0.2.0.tgz`:
+**Not yet published.** `@getexperimently/edge-sdk` is not on npm, so build it from source in a
+clone of this repository. `npm pack` writes `getexperimently-edge-sdk-0.2.0.tgz`:
 
 ```bash
 git clone https://github.com/getexperimently/experimently.git
@@ -93,12 +89,19 @@ the request handler), then use the sync accessors freely.
 
 ## Cloudflare Workers
 
-```typescript
-import { withExperimentation } from '@getexperimently/edge-sdk/cloudflare';
+A Worker's secrets and bindings arrive in `env` with each request, so build the client inside the
+fetch handler:
 
-export default withExperimentation(
-  async (request, env, ctx) => {
-    const client = env.EP_CLIENT; // injected by the wrapper
+```typescript
+import { CloudflareExperimentationClient } from '@getexperimently/edge-sdk/cloudflare';
+
+export default {
+  async fetch(request, env, ctx) {
+    const client = new CloudflareExperimentationClient({
+      apiKey: env.EP_API_KEY,
+      baseUrl: 'https://api.your-platform.example.com',
+      kvNamespace: env.EP_FLAGS_KV, // optional: share cached results across worker instances
+    });
     const userId = request.headers.get('X-User-Id') ?? 'anon';
 
     const { enabled } = await client.evaluateFlag('new-checkout', userId);
@@ -106,13 +109,13 @@ export default withExperimentation(
 
     return enabled ? Response.redirect('https://checkout-v2.example.com', 302) : fetch(request);
   },
-  {
-    apiKey: env.EP_API_KEY,
-    baseUrl: 'https://api.your-platform.example.com',
-    kvNamespace: env.EP_FLAGS_KV, // optional: share cached results across worker instances
-  }
-);
+};
 ```
+
+`withExperimentation(handler, config, clientEnvKey = 'EP_CLIENT')` wraps a
+`(request, env, ctx)` handler: it builds a `CloudflareExperimentationClient` from `config` on every
+call and passes it to the handler as `env.EP_CLIENT`. Its `config` is a fixed object, so it cannot
+read `env`; when `config.kvNamespace` is not set it uses the `env.KV` binding.
 
 ### KV caching
 
@@ -122,20 +125,16 @@ When a `kvNamespace` is provided the SDK stores each **server result** under
 serving the same user reads the value from KV instead of calling the API. No bootstrap payload is
 stored any more.
 
-```typescript
-// wrangler.toml
+The binding is declared in `wrangler.toml` and read as `env.EP_FLAGS_KV` in the handler above:
+
+```toml
 [[kv_namespaces]]
 binding = "EP_FLAGS_KV"
 id = "your-kv-namespace-id"
-
-// Worker
-export default withExperimentation(handler, {
-  apiKey: env.EP_API_KEY,
-  kvNamespace: env.EP_FLAGS_KV,
-  kvTtlSeconds: 300,  // KV entry TTL (default: cacheTtlMs / 1000, min 60)
-  cacheTtlMs: 60_000, // in-memory cache TTL (default: 60 s)
-});
 ```
+
+`kvTtlSeconds` sets the KV entry TTL (default `cacheTtlMs / 1000`, never below 60) and `cacheTtlMs`
+the in-memory TTL (default 60 s), both in the client's options.
 
 `CloudflareExperimentationClient` can also be constructed directly; its `loadFromKvOrApi()` and
 `refreshAndStore()` methods are deprecated no-ops.
@@ -144,20 +143,9 @@ export default withExperimentation(handler, {
 
 ## Vercel Edge Middleware
 
-```typescript
-// middleware.ts
-import { createEdgeMiddleware } from '@getexperimently/edge-sdk/vercel';
-
-export const middleware = createEdgeMiddleware({
-  apiKey: process.env.EP_API_KEY!,
-  baseUrl: 'https://api.your-platform.example.com',
-  flagKeys: ['new-checkout', 'dark-mode', 'beta-feature'],
-});
-
-export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'] };
-```
-
-The middleware:
+`createEdgeMiddleware({ apiKey, baseUrl, flagKeys?, userIdHeaderName?, userIdCookieName? })` from
+`@getexperimently/edge-sdk/vercel` returns a `(request: Request) => Promise<Response>` that builds
+one client and, on each request:
 
 1. Resolves the user id from the `X-User-Id` header (`userIdHeaderName`) or the `ep_user_id`
    cookie (`userIdCookieName`). Anonymous requests evaluate nothing.
@@ -165,28 +153,20 @@ The middleware:
    flag the server reports via `GET /api/v1/feature-flags/user/{user_id}`.
 3. Injects `X-EP-Flag-{flagKey}: "true"|"false"` and `X-EP-User-Id` request headers for downstream
    pages and API routes. Evaluation failures are reported as `"false"` and never break the request.
+4. Passes the request on with `fetch(new Request(request, { headers }))`.
+
+In a Next.js project the adapter's own note says to pass the same headers with
+`NextResponse.next({ request: { headers } })` instead of that pass-through; `extractUserId` and
+`evaluateFlagsForRequest` are exported for that.
 
 ---
 
 ## Deno Deploy
 
-```typescript
-import { createDenoHandler } from 'npm:@getexperimently/edge-sdk/deno';
-
-export default createDenoHandler(
-  async (req, client) => {
-    const userId = req.headers.get('X-User-Id') ?? 'anon';
-    const { enabled } = await client.evaluateFlag('new-feature', userId);
-    return new Response(enabled ? 'Feature enabled' : 'Feature disabled');
-  },
-  {
-    apiKey: Deno.env.get('EP_API_KEY')!,
-    baseUrl: 'https://api.your-platform.example.com',
-    kv: await Deno.openKv(), // optional: share cached results across isolates
-    kvTtlMs: 300_000,        // default: cacheTtlMs
-  }
-);
-```
+`createDenoHandler(handler, config)` from `@getexperimently/edge-sdk/deno` returns a
+`(request: Request) => Promise<Response>` for `Deno.serve`, and calls `handler(request, client)`.
+`config` takes the client options plus `kv` (a Deno KV instance, optional: share cached results
+across isolates) and `kvTtlMs` (default `cacheTtlMs`).
 
 `createDenoHandler` creates one client per isolate so the in-memory cache is reused across
 requests. With `kv`, results are stored under `["ep", "flag:{userId}:{flagKey}"]` /
@@ -231,7 +211,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 ```typescript
 interface EdgeSdkConfig {
   apiKey: string;        // Required. Sent as X-API-Key.
-  baseUrl?: string;      // Backend origin. Defaults to https://api.getexperimently.com.
+  baseUrl?: string;      // Backend origin. Set it: the default, https://api.getexperimently.com, serves no API.
   cacheTtlMs?: number;   // Per user + key cache TTL (default: 60_000 ms).
   timeout?: number;      // Per-request timeout (default: 500 ms).
   store?: EdgeStore;     // Optional shared KV store ({ get(key), put(key, value, ttlMs) }).
@@ -297,7 +277,8 @@ interface Assignment {
 ## Migrating from 0.1
 
 - `evaluateFlag` now resolves to `FlagEvaluation` instead of `boolean` — use `.enabled` or
-  `isFeatureEnabled`. The `attributes` argument was dropped: this SDK sends no `context` on the evaluate call, although the endpoint takes one.
+  `isFeatureEnabled`. The `attributes` argument was dropped: `evaluateFlag` sends the user id
+  alone (`?user_id=`), so the server evaluates the flag's targeting rules against an empty context.
 - `getAssignment` now resolves to `Assignment | null` instead of `string | null` — use `.variantName`
   or `getVariant`. It accepts `attributes` (sent as `context`).
 - `bootstrapFlags`, `FeatureFlag`, `TargetingRule`, `FlagVariant`, `Experiment`, `BootstrapResponse`,

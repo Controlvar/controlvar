@@ -1,0 +1,519 @@
+# What verifies each unit of docs/api/interaction-detection.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/interaction-detection.md"
+
+[[unit]]
+text = "Experiment Interaction Detection"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Two experiments that run at the same time usually share users."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "That is normal and harmless unless they interact: one experiment's effect is different depending on which variant of the other a user sees."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This page shows how to measure the overlap and how to test for an interaction."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/interactions/scan (stable) lists the pairs of active experiments that share many users."
+by = ["docex:docs/api/interaction-detection.md#\"total_active_experiments\": 4"]
+
+[[unit]]
+text = "GET /api/v1/interactions/{exp_a_id}/{exp_b_id} (beta) reports the overlap of any two experiments and, for each treatment of each one, tests whether its lift on the experiment's primary conversion metric differs across the other experiment's variants, among the users in both."
+by = [
+    "docex:docs/api/interaction-detection.md#\"shared_users\":40",
+    "docex:docs/api/interaction-detection.md#[\"pricing-page\",\"annual_first\",true]",
+]
+
+[[unit]]
+text = "The pair route is beta (#219): its responses carry \"analysis_status\": \"beta\" and an analysis_notice, and the route is marked x-stability: beta in the OpenAPI document."
+by = [
+    "test:backend/tests/integration/api/test_analysis_beta_labels.py",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Only each experiment's primary metric is tested, and only a conversion metric; pairs are tested one at a time, with no correction across pairs."
+by = ["untested:T"]
+
+[[unit]]
+text = "An interaction does not mean either experiment is wrong."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each experiment's own result is still a valid average over the other's current split; it may change once the other experiment ships one of its variants."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What gets detected"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Issue | Description | In this release"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "User overlap | Users assigned to both experiments | Measured, on both routes"
+by = [
+    "docex:docs/api/interaction-detection.md#\"total_active_experiments\": 4",
+    "docex:docs/api/interaction-detection.md#\"shared_users\":40",
+]
+
+[[unit]]
+text = "Interaction | A treatment's lift, in percentage points, differs across the other experiment's variants | Tested on the pair route (beta)"
+by = ["docex:docs/api/interaction-detection.md#[\"pricing-page\",\"annual_first\",true]"]
+
+[[unit]]
+text = "Novelty effects | An early effect that decays over time | Not offered"
+by = ["test:backend/tests/unit/api/test_interaction_endpoints.py::TestAnalyzePairEndpoint::test_the_novelty_route_is_gone"]
+
+[[unit]]
+text = "SUTVA violations | Users in different variants influencing each other | Not offered"
+by = ["test:backend/tests/unit/services/test_interaction_detection_service.py::TestInteractionService::test_analyze_experiment_pair_reports_overlap_and_no_sub_results"]
+
+[[unit]]
+text = "Two overlapping experiments"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in first:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The demo data's running experiments share no users, so this creates two experiments that will, and starts them."
+by = ["docex:docs/api/interaction-detection.md#\"shared_users\":0"]
+
+[[unit]]
+text = "This saves their ids in $PRICING_ID and $ONBOARDING_ID:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints active twice."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Then the same 40 users enter both, through the tracking API."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "That takes an API key, which this saves in $KEY."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The key has the sdk:ruleset scope, which the batch assignment below needs; keep such a key on a server:"
+by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py"]
+
+[[unit]]
+text = "It prints 80 true: 40 users, each enrolled in both experiments."
+by = ["docex:docs/api/interaction-detection.md#80 true"]
+
+[[unit]]
+text = "GET /api/v1/interactions/scan"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Checks every pair of active experiments and returns the pairs whose overlap is above 0.3, with a count of the high-risk ones:"
+by = ["docex:docs/api/interaction-detection.md#\"total_active_experiments\": 4"]
+
+[[unit]]
+text = "It prints four active experiments (the two new ones and the demo data's two running ones), and one pair above the threshold, with an overlap of 1.0: the two new experiments."
+by = ["docex:docs/api/interaction-detection.md#\"total_active_experiments\": 4"]
+
+[[unit]]
+text = "high_risk_pairs counts the pairs whose overlap is above 0.6."
+by = [
+    "test:backend/tests/unit/api/test_interaction_endpoints.py::TestHighRiskPairs::test_high_risk_pairs_counted_correctly",
+    "test:backend/tests/unit/core/test_analysis_status.py",
+]
+
+[[unit]]
+text = "The scan measures overlap only."
+by = ["test:backend/tests/unit/services/test_interaction_detection_service.py::TestInteractionService::test_analyze_experiment_pair_reports_overlap_and_no_sub_results"]
+
+[[unit]]
+text = "Each entry in analyses has overlap_coefficient, has_significant_overlap, overall_risk (from the overlap alone, below) and recommendations; its interaction_result, novelty_result and sutva_result are always null, because the scan does not test interactions."
+by = ["test:backend/tests/unit/services/test_interaction_detection_service.py::TestInteractionService::test_analyze_experiment_pair_reports_overlap_and_no_sub_results"]
+
+[[unit]]
+text = "To test one pair, call the pair route."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The scan lists only pairs whose Jaccard overlap is above 0.3, so a small experiment that sits entirely inside a large one has a low overlap and is not listed."
+by = ["test:backend/tests/unit/services/test_interaction_detection_service.py::TestInteractionService::test_scan_active_experiments_excludes_low_overlap_pairs"]
+
+[[unit]]
+text = "To check one experiment against another, call the pair route: it answers for any two experiments, however little they overlap."
+by = [
+    "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_an_overlap_below_the_threshold_is_reported_as_it_is",
+    "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_a_small_experiment_inside_a_large_one_reports_its_real_overlap",
+]
+
+[[unit]]
+text = "GET /api/v1/interactions/{exp_a_id}/"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The overlap of two experiments, in any status, and the interaction test (beta)."
+by = ["untested:T"]
+
+[[unit]]
+text = "With only the 40 shared users, nothing can be tested yet:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints an overlap of 1 and 40 shared users, and both rows say too_few_shared_users: the 40 users split about 10 per combination of variants, and a row is tested only when every combination has at least min_users_per_cell (100) users."
+by = ["docex:docs/api/interaction-detection.md#\"shared_users\":40"]
+
+[[unit]]
+text = "This enrols 1,000 more visitors in both experiments, in one request per experiment (Assign a customer list to an experiment), and saves the two answers in $PRICING and $ONBOARDING:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"assigned\":1000 for each experiment."
+by = ["docex:docs/api/interaction-detection.md#{\"assigned\":1000,\"holdout\":0,\"mutual_exclusion\":0,\"targeting\":0}"]
+
+[[unit]]
+text = "Now plant an interaction: annual-first pricing lifts signups only for visitors who did not get the checklist, and the checklist lifts signups whatever the pricing."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Signup rates:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "pricing: 30% for annual_first visitors who are in onboarding's control, 10% for everyone else;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "onboarding: 20% for checklist visitors, 10% for everyone else."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each signup is tagged with the experiment it counts for."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This joins the two batch answers by position, picks every visitor's signups, and sends them 100 at a time:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints true: more than 250 signups were stored."
+by = ["docex:docs/api/interaction-detection.md#true"]
+
+[[unit]]
+text = "Ask the pair route again, and print each row's experiment, treatment and decision:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints [\"pricing-page\",\"annual_first\",true]: annual-first pricing's lift differs across the onboarding variants, as planted."
+by = ["docex:docs/api/interaction-detection.md#[\"pricing-page\",\"annual_first\",true]"]
+
+[[unit]]
+text = "And [\"onboarding-flow\",\"checklist\",false]: the checklist's lift is about the same whatever the pricing."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The p-values themselves vary a little from one stack to another, because which visitor lands in which variant depends on the order the variants are read in; the two decisions do not."
+by = ["docex:docs/api/interaction-detection.md#[\"pricing-page\",\"annual_first\",true]"]
+
+[[unit]]
+text = "The pricing row of the response looks like this when the variants are read in the order they were created (numbers rounded; arms shortened to its first entry, onboarding's control: +22.2 percentage points there, -0.7 in checklist):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Two experiments with no shared users still answer: the demo data's two running experiments, looked up by their keys, give one row each with no_shared_users:"
+by = ["docex:docs/api/interaction-detection.md#\"shared_users\":0"]
+
+[[unit]]
+text = "has_interaction is null: not tested, which never means \"no interaction\"."
+by = ["docex:docs/api/interaction-detection.md#\"shared_users\":0"]
+
+[[unit]]
+text = "What the test measures"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For one treatment of experiment A, take the users who are in both experiments, and split them by A's control or treatment and by B's variant."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "In each of B's variants the treatment's lift is its conversion rate minus the control's, in percentage points (effect in each entry of arms; 0.05 is 5 percentage points)."
+by = ["test:backend/tests/unit/services/test_interaction_golden.py::test_the_constant_relative_lift_table_is_frozen"]
+
+[[unit]]
+text = "The test asks whether that lift is the same in every variant of B."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It fits the model in which it is (one baseline rate per variant of B plus one common lift) by maximum likelihood, and compares the counts with that model: statistic is Pearson's X² and degrees_of_freedom is the number of B's variants minus one."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Because the lift is measured in percentage points, a constant relative lift is an interaction."
+by = [
+    "test:backend/tests/unit/services/test_interaction_golden.py::test_the_constant_relative_lift_table_is_frozen",
+    "test:backend/tests/unit/services/test_interaction_golden.py::test_s7_a_constant_relative_lift_is_an_interaction",
+]
+
+[[unit]]
+text = "A treatment that lifts conversion by 50% everywhere, 10% → 15% in one variant of B and 20% → 30% in the other, is +5 points in one and +10 in the other."
+by = [
+    "test:backend/tests/unit/services/test_interaction_golden.py::test_s7_a_constant_relative_lift_is_an_interaction",
+    "test:backend/tests/unit/services/test_interaction_golden.py::test_the_constant_relative_lift_table_is_frozen",
+]
+
+[[unit]]
+text = "With 2,000 users in each of the four groups that gives X² = 8.46 and p = 0.0036: an interaction."
+by = ["test:backend/tests/unit/services/test_interaction_golden.py::test_the_constant_relative_lift_table_is_frozen"]
+
+[[unit]]
+text = "The decision"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "p_value is the test's p-value, uncorrected."
+by = ["test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_correction_none_leaves_corrected_null_and_decides_on_p"]
+
+[[unit]]
+text = "corrected_p_value applies the tested experiment's stored correction_method across that experiment's own tested rows (its treatments), as /results does."
+by = [
+    "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_the_stored_correction_is_applied_across_the_experiments_rows",
+    "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_correction_none_leaves_corrected_null_and_decides_on_p",
+]
+
+[[unit]]
+text = "It is null under none."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "is_significant is true when the corrected p-value (the p-value under none) is below 1 − confidence_level, the experiment's stored level."
+by = ["test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_the_stored_level_decides"]
+
+[[unit]]
+text = "has_interaction is true when any row is significant, false only when every row was tested and none is, and null otherwise."
+by = [
+    "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_no_interaction_gives_false_only_when_every_row_was_tested",
+    "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_has_interaction_is_null_when_a_row_has_a_reason_and_none_is_significant",
+]
+
+[[unit]]
+text = "Rows that are not tested"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every treatment of both experiments has a row; a row that cannot be tested is listed with an unavailable_reason and null results, never dropped."
+by = [
+    "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_every_treatment_has_a_row",
+    "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_the_reason_order_is_published",
+]
+
+[[unit]]
+text = "The first reason that applies wins, in this order:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "unavailable_reason | Applies to | Meaning"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "mutual_exclusion_group | the experiment | Both experiments are in the same mutual exclusion group now (mutual_exclusion_group_id), whatever the group's status. The overlap is still reported."
+by = [
+    "test:backend/tests/integration/api/test_interaction_pair_api.py::test_g1_an_archived_group_still_counts",
+    "test:backend/tests/integration/api/test_interaction_pair_api.py::test_g2_leaving_the_group_switches_the_answer",
+    "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_same_group_still_reports_the_overlap",
+]
+
+[[unit]]
+text = "no_shared_users | the experiment | The two experiments share no users."
+by = ["test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_no_shared_users_gives_one_row_per_experiment_and_a_null_verdict"]
+
+[[unit]]
+text = "no_metric | the experiment | The experiment has no metric."
+by = ["test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_experiment_level_reasons_give_one_row_and_spare_the_other"]
+
+[[unit]]
+text = "not_a_proportion_metric | the experiment | Its primary metric is not a conversion metric."
+by = ["test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_experiment_level_reasons_give_one_row_and_spare_the_other"]
+
+[[unit]]
+text = "no_control_variant | the experiment | It has no control variant."
+by = ["test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_experiment_level_reasons_give_one_row_and_spare_the_other"]
+
+[[unit]]
+text = "too_few_shared_users | one treatment | Fewer than two of the other experiment's variants share users with it, or some combination of variants has fewer than min_users_per_cell (100) users."
+by = [
+    "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_one_arm_with_shared_users_is_too_few",
+    "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_ninety_nine_users_in_one_cell_is_too_few",
+    "test:backend/tests/unit/services/test_interaction_analysis.py::test_u6_ninety_nine_users_is_too_few_and_one_hundred_is_enough",
+]
+
+[[unit]]
+text = "too_few_conversions | one treatment | Some combination of variants is expected to have fewer than min_expected_per_cell (25) converters or non-converters, at the row's pooled rate."
+by = [
+    "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_too_few_expected_conversions",
+    "test:backend/tests/unit/services/test_interaction_analysis.py::test_u6_expected_converters_at_exactly_25_is_enough",
+]
+
+[[unit]]
+text = "A reason that applies to the whole experiment gives one row with variant_id null."
+by = ["test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_experiment_level_reasons_give_one_row_and_spare_the_other"]
+
+[[unit]]
+text = "Below those minimums the test's false-positive rate is not what its p-value says on uneven splits (95/5, 99/1), so the row is not tested."
+by = [
+    "test:backend/tests/unit/services/test_interaction_calibration.py::test_s8_the_skewed_null_is_calibrated",
+    "test:backend/tests/unit/services/test_interaction_calibration.py::test_s8_plan_v1s_rule_fails_the_band",
+]
+
+[[unit]]
+text = "When an interaction is found"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Read the lift in each of B's variants in arms, and consider deciding B first: A's result is still a valid average over B's current split, but it may change once B ships one variant."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The test can also flag an interaction that is not there when one experiment changes who enters the other, for example when B's treatment sends more visitors to A's page."
+by = ["untested:T"]
+
+[[unit]]
+text = "Check it by comparing, for each of B's variants, the share of its users who are also in A."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "In A's row, add n_control and n_treatment of that variant's entry in arms (for an A with more than one treatment, add each row's n_treatment and the control once), and divide by that variant's sample_size in GET /api/v1/results/{exp_b_id}: the primary metric's entry in metrics, under variants."
+by = ["docex:docs/api/interaction-detection.md#{\"control\":1,\"checklist\":1}"]
+
+[[unit]]
+text = "Shares that differ between B's variants mean B changed who entered A."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A ramp-up or a bandit changes those shares by design."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "On the pair above, every user is in both experiments, so each share is 1:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Errors"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Status | When | detail"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "403 | a VIEWER | Interaction analysis needs the ANALYST, DEVELOPER or ADMIN role."
+by = ["test:backend/tests/unit/api/test_interaction_endpoints.py::TestAnalyzePairEndpoint::test_viewer_gets_403_naming_the_roles"]
+
+[[unit]]
+text = "404 | an id that matches no experiment | experiment_a_id does not match an experiment. (or experiment_b_id; experiment_a_id when both)"
+by = [
+    "test:backend/tests/unit/api/test_interaction_endpoints.py::TestAnalyzePairEndpoint::test_an_unknown_experiment_is_404_naming_the_parameter",
+    "test:backend/tests/unit/api/test_interaction_endpoints.py::TestAnalyzePairEndpoint::test_both_unknown_names_experiment_a_id",
+]
+
+[[unit]]
+text = "422 | the same id twice | The two experiments must be different."
+by = ["test:backend/tests/unit/api/test_interaction_endpoints.py::TestAnalyzePairEndpoint::test_the_same_experiment_twice_is_422"]
+
+[[unit]]
+text = "500 | anything else, a database error included | Could not analyse the two experiments (request ID: <id>)."
+by = [
+    "test:backend/tests/unit/api/test_interaction_endpoints.py::TestAnalyzePairEndpoint::test_a_database_error_in_any_read_is_a_500_with_a_fixed_sentence",
+    "test:backend/tests/integration/api/test_interaction_pair_api.py::test_the_statement_timeout_reaches_the_fixed_500",
+]
+
+[[unit]]
+text = "Overlap"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Both routes compute the overlap from the experiments' assignments, using Jaccard similarity:"
+by = [
+    "test:backend/tests/unit/services/test_interaction_detection_service.py::TestOverlapDetection::test_compute_user_overlap_partial_overlap",
+    "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_a_small_experiment_inside_a_large_one_reports_its_real_overlap",
+]
+
+[[unit]]
+text = "The pair route also reports shared_users, and share_of_a and share_of_b: the fraction of each experiment's users who are also in the other."
+by = ["test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_a_small_experiment_inside_a_large_one_reports_its_real_overlap"]
+
+[[unit]]
+text = "For a small experiment inside a large one the overlap is low and share_of_a is 1."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "has_significant_overlap means an overlap above 0.3, not a statistical test."
+by = [
+    "test:backend/tests/unit/services/test_interaction_detection_service.py::TestOverlapDetection::test_has_significant_overlap_true_above_threshold",
+    "test:backend/tests/unit/services/test_interaction_detection_service.py::TestOverlapDetection::test_has_significant_overlap_false_below_threshold",
+]
+
+[[unit]]
+text = "Risk levels"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "/scan's overall_risk describes how much two experiments share users, not whether they interact."
+by = ["test:backend/tests/integration/api/test_analysis_beta_labels.py"]
+
+[[unit]]
+text = "The pair route does not return it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Level | Overlap"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "low | 0.3 or less"
+by = ["test:backend/tests/unit/core/test_analysis_status.py"]
+
+[[unit]]
+text = "medium | above 0.3, up to 0.6"
+by = ["test:backend/tests/unit/core/test_analysis_status.py"]
+
+[[unit]]
+text = "high | above 0.6"
+by = ["test:backend/tests/unit/core/test_analysis_status.py"]
+
+[[unit]]
+text = "Permissions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Action | Who"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Scan and pair analysis | ADMIN, DEVELOPER or ANALYST"
+by = ["test:backend/tests/unit/api/test_interaction_endpoints.py::TestAnalyzePairEndpoint::test_analyst_may_ask"]
+
+[[unit]]
+text = "A VIEWER gets 403 on every interaction endpoint."
+by = [
+    "test:backend/tests/unit/api/test_interaction_endpoints.py::TestScanEndpoint::test_scan_viewer_gets_403",
+    "test:backend/tests/unit/api/test_interaction_endpoints.py::TestAnalyzePairEndpoint::test_viewer_gets_403_naming_the_roles",
+]

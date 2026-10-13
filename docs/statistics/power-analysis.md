@@ -2,61 +2,15 @@
 
 This guide explains how to use the pre-experiment Power Calculator to plan your A/B tests before you launch them.
 
-## What is Statistical Power?
-
-When you run an A/B test, you are trying to detect whether a change (treatment) produces a meaningful difference compared to the baseline (control). Two types of errors can occur:
-
-| Error Type | Description | Probability |
-|---|---|---|
-| **Type I (false positive)** | You conclude there is an effect when there is none | alpha (significance level) |
-| **Type II (false negative)** | You miss a real effect | beta = 1 - power |
-
-**Statistical power** is the probability that your test correctly detects a real effect when one exists. A power of 0.80 means that if the true effect is at least as large as your MDE, you will detect it 80% of the time.
-
-Typical recommended values:
-- **Alpha**: 0.05 (5% chance of false positive)
-- **Power**: 0.80 (80% chance of detecting a real effect)
-
----
-
-## The Four Parameters
-
-Every power calculation involves four interdependent parameters. Change one, and the others are affected.
+## Inputs
 
 ### 1. Baseline Rate
 
 The current performance of your metric before any change. For a conversion rate experiment, this might be 5% (0.05). This must be between 0 and 1 exclusive.
 
-**How to find it**: Use your analytics tool to measure the current metric over the past 4-8 weeks. Use the same time period and user segment you will use in the experiment.
-
 ### 2. Minimum Detectable Effect (MDE)
 
 The smallest relative improvement you want to be able to detect. An MDE of 10% on a 5% baseline means you want to detect a lift from 5% to 5.5% (absolute change = 0.5 percentage points).
-
-**How to choose the right MDE**:
-- Think about the smallest effect that would be worth launching the feature
-- Very small MDEs (< 2%) require extremely large samples
-- Very large MDEs (> 30%) are easy to detect but may miss meaningful smaller improvements
-- Rule of thumb: start with 10-20% relative MDE for most product experiments
-
-### 3. Significance Level (Alpha)
-
-The acceptable probability of a false positive. The most common value is 0.05 (5%).
-
-- 0.01 → stricter, requires larger sample, fewer false positives
-- 0.05 → standard for most product experiments
-- 0.10 → more lenient, smaller sample, more false positives
-
-For experiments with multiple variants (A/B/C tests), the platform automatically applies **Bonferroni correction**: alpha is divided by the number of treatment-vs-control comparisons. This keeps the family-wise error rate at the specified alpha level.
-
-### 4. Statistical Power
-
-The probability of detecting a real effect. Standard is 0.80 (80%).
-
-- 0.70 → smaller sample, 30% chance of missing a real effect
-- 0.80 → recommended balance
-- 0.90 → larger sample, only 10% chance of missing a real effect
-- 0.95 → very conservative, requires the largest samples
 
 ---
 
@@ -92,8 +46,6 @@ Where:
 
 The Power Calculator and `POST /api/v1/power/sample-size` give `n` rounded up to a whole user.
 
-This is the **Fleiss (2003)** formula, which is more accurate than the simpler pooled formula for small proportions.
-
 **Verification example** for `baseline=0.05, MDE=10% relative, alpha=0.05, power=0.80`:
 - `p1 = 0.05`, `p2 = 0.055`, `p_bar = 0.0525`
 - `z_alpha = 1.9600`, `z_power = 0.8416`
@@ -116,33 +68,6 @@ days = required_sample_size / daily_per_variant
 
 ---
 
-## Runtime vs. Rigor Trade-off
-
-Longer experiments are more statistically rigorous but slower to reach a decision. Here are practical guidelines:
-
-| Runtime | Assessment | Action |
-|---|---|---|
-| < 7 days | Excellent | Run the experiment |
-| 7–30 days | Acceptable | Standard experimentation window |
-| 30–90 days | Long | Consider optimizations (see below) |
-| > 90 days | Very long | Reduce scope or use sequential testing |
-
-### How to Reduce Runtime
-
-If your estimated runtime is too long, you have several options:
-
-1. **Increase traffic allocation**: Expose a larger fraction of your users to the experiment.
-
-2. **Increase the MDE**: Accept a larger minimum effect. If a 5% lift is enough to launch, you do not need to detect a 2% lift.
-
-3. **Apply CUPED variance reduction**: Use each user's history from before the experiment to reduce metric variance; how much it saves depends on how well that history predicts the outcome (see the [CUPED guide](../api/cuped.md)). The sample-size calculator does not apply CUPED: its sizes are for the unadjusted analysis.
-
-4. **Use sequential testing (mSPRT)**: Instead of a fixed sample, check results continuously with a valid stopping rule. You may stop early when significance is reached, potentially cutting runtime in half. See [Statistical Methods](../api/sequential-testing.md).
-
-5. **Focus on a high-volume segment**: Run the experiment on the user segment most likely to exhibit the effect, where you have the most traffic.
-
----
-
 ## Multi-Variant Experiments
 
 When you have more than 2 variants (e.g. A/B/C), the platform applies **Bonferroni correction** to control the family-wise error rate:
@@ -155,8 +80,6 @@ For a 3-variant experiment with alpha=0.05:
 - `corrected_alpha = 0.05 / 2 = 0.025`
 - This increases the required sample size per variant
 
-This is the most conservative correction. For large numbers of variants, you may prefer Benjamini-Hochberg (BH) FDR correction — see the [FDR Correction guide](fdr-correction.md).
-
 ---
 
 ## Minimum Detectable Effect (MDE) Calculator
@@ -164,20 +87,6 @@ This is the most conservative correction. For large numbers of variants, you may
 If you have a fixed sample size available (e.g. 2 weeks of traffic at 50% allocation), you can use the **MDE calculator** to find the smallest effect you can detect:
 
 `POST /api/v1/power/mde`
-
-The service uses binary search to find the relative MDE that requires exactly the given sample size. This is the **inverse** of the sample size calculation and is useful when you have budget constraints.
-
----
-
-## When to Use Sequential Testing Instead
-
-Consider sequential testing (mSPRT) rather than fixed-sample testing when:
-- Your estimated runtime is > 14 days
-- You want to make a go/no-go decision as soon as possible
-- You have variable traffic (e.g. weekday/weekend patterns)
-- The cost of running a harmful experiment outweighs the cost of false positives
-
-See [Statistical Methods](../api/sequential-testing.md) for details on mSPRT and early stopping.
 
 ---
 
@@ -331,9 +240,9 @@ Return the power curve — sample size required per variant for a range of effec
 ```json
 {
   "points": [
-    {"effect_size_relative": 0.01, "sample_size_per_variant": 3122837, "is_current_target": false},
+    {"effect_size_relative": 0.01, "sample_size_per_variant": 2996698, "is_current_target": false},
     {"effect_size_relative": 0.10, "sample_size_per_variant": 31234, "is_current_target": true},
-    {"effect_size_relative": 0.50, "sample_size_per_variant": 1151, "is_current_target": false}
+    {"effect_size_relative": 0.50, "sample_size_per_variant": 1471, "is_current_target": false}
   ],
   "baseline_rate": 0.05,
   "alpha": 0.05,
@@ -369,38 +278,3 @@ built-in planning advice, and `generated_by` is always `"template"`.
   "runtime_days": 12.5
 }
 ```
-
----
-
-## Python SDK Example
-
-```python
-import requests
-
-# Compute sample size
-response = requests.post(
-    "https://api.yourplatform.com/api/v1/power/sample-size",
-    json={
-        "baseline_rate": 0.05,
-        "minimum_detectable_effect": 0.10,
-        "alpha": 0.05,
-        "power": 0.80,
-        "n_variants": 2,
-        "daily_traffic": 10000,
-        "traffic_allocation": 0.5,
-    }
-)
-result = response.json()
-print(f"Need {result['per_variant']:,} users per variant")
-print(f"Estimated runtime: {result['runtime_days']:.1f} days")
-```
-
----
-
-## Further Reading
-
-- [CUPED Variance Reduction](../api/cuped.md) — adjust for each user's own events before assignment
-- [Sequential Testing](../api/sequential-testing.md) — stop experiments early when significance is reached
-- [Post-Stratification](post-stratification.md) — another variance reduction technique
-- [Multi-Armed Bandits](../api/multi-armed-bandit.md) — when to use exploration instead of hypothesis testing
-- [Interaction Detection](../api/interaction-detection.md) — avoid bias from experiment overlap

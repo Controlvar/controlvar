@@ -106,7 +106,6 @@ WITNESSES: Dict[str, str] = {
     "Archive and unarchive a feature flag": "flag-archive",
     "Create a bandit experiment": "bandit-create",
     "Set a bandit's weights by hand": "bandit-weights-override",
-    "See how a bandit's weights changed over time": "bandit-weights-history",
     "Global holdouts: create, activate, and read their results (beta)": "holdouts-page",
     "Mutual exclusion groups": "exclusion-groups-page",
     "Split-URL experiments (full profile)": "split-url-config",

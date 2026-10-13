@@ -113,9 +113,18 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
     # A/B Testing & Experiments
     "Create and start experiments, read their results, and the statistics behind them.": (
         lede(
-            "create an experiment, start it, read its results",
+            "The table lists each capability and where you do it today",
             "docs/guides/dashboard-and-api.md",
         ),
+        says(
+            "Create an experiment, with guided setup",
+            "docs/guides/dashboard-and-api.md",
+        ),
+        says(
+            "Start, pause, resume and complete an experiment",
+            "docs/guides/dashboard-and-api.md",
+        ),
+        says("### Reading Results", "docs/guides/user-guide.md"),
         lede("Sequential Testing", "docs/api/sequential-testing.md"),
     ),
     "End-to-end experiment lifecycle": (
@@ -123,10 +132,10 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         says("### Creating an Experiment"),
         says("### Pausing and Stopping"),
         says("### Reading Results"),
-        says("### Making a Decision"),
+        says("#### Recommendation Meanings"),
     ),
     "Which capabilities have a dashboard screen, and which work through the API only for now": (
-        lede("Some capabilities work through the API"),
+        lede("The table lists each capability and where you do it today"),
         lede("API only: it works through the API, with no screen yet"),
     ),
     "Sequential testing with mSPRT": (
@@ -135,9 +144,7 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
     ),
     "Variance reduction from each user's own pre-experiment events (API only)": (
         lede("CUPED Variance Reduction"),
-        lede(
-            "adjusts for each user's own events in the covariate_lookback_days before they were assigned"
-        ),
+        lede("by adjusting for what each user did before the experiment"),
         lede("the dashboard and GET /results/{id} show the unadjusted numbers"),
     ),
     "Thompson Sampling, UCB1, Epsilon-Greedy (create a bandit through the API)": (
@@ -145,7 +152,6 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         says(
             "Set optimization_type to one of thompson_sampling, ucb1 or epsilon_greedy when you create the experiment"
         ),
-        says("The collection URL ends with a slash, /api/v1/experiments/"),
     ),
     "Full profile: store split URL experiments and preview the URL a user id hashes to. The edge router does not split traffic yet.": (
         lede("present in the full profile"),
@@ -164,24 +170,40 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
             "A global holdout keeps a percentage of new users out of every experiment"
         ),
     ),
-    "Live experiment results over WebSocket, sent every 30 seconds by default.": (
-        lede("Live experiment results delivered over WebSocket"),
-        says("30 seconds (configurable via RESULTS_STREAM_INTERVAL_SECONDS)"),
+    "Live experiment results over WebSocket: a snapshot on connect, then a fresh one after 30 seconds (by default) with no message from the client.": (
+        lede("Live Results over WebSocket"),
+        says("streams experiment result snapshots to connected clients"),
+        says(
+            "On connect the server sends an initial snapshot. After 30 seconds with no message from the client it sends a fresh one"
+        ),
+        says("RESULTS_STREAM_INTERVAL_SECONDS"),
     ),
     # LLM / AI Model Evaluation
-    "Compare prompt versions, model variants, and agent configs against real business metrics.": (
+    "Compare model variants on a task; the winner has the best business metric, or the best LLM-judge score without one.": (
         lede(
-            "compare prompt versions, model variants", "docs/llm-evaluation/overview.md"
+            "compares two models on a customer support task",
+            "docs/llm-evaluation/quickstart.md",
         ),
-        lede("agent configurations", "docs/llm-evaluation/overview.md"),
-        lede("against real business metrics", "docs/llm-evaluation/overview.md"),
+        says(
+            "the winner is always the variant with the highest mean business metric, or, with no business metric, the highest mean auto-eval score",
+            "docs/llm-evaluation/overview.md",
+        ),
+        says(
+            "Judge scores are stored as auto_eval_score",
+            "docs/llm-evaluation/overview.md",
+        ),
     ),
-    "What LLM evaluation is, and how it differs from a classic A/B test": (
+    "Supported providers, task types, variant assignment, judge scoring, cost estimation and the analysis": (
         lede("LLM/AI Model Evaluation — Overview"),
-        says("Why LLM Evaluation is Different from Traditional A/B Testing"),
+        says("## Supported Providers and Models"),
+        says("## Task types and evaluation metrics"),
+        says("## Variant Assignment"),
+        says("## LLM-as-Judge Scoring"),
+        says("## Cost Estimation"),
+        says("## Statistical Analysis"),
     ),
     "Compare GPT-4o with Claude 3.5 Sonnet (steps 3–5 need provider API keys)": (
-        lede("comparing GPT-4o (treatment) against Claude 3.5 Sonnet (control)"),
+        lede("claude-3-5-sonnet-20241022 is the control and gpt-4o the treatment"),
         lede("Steps 3 to 5 need a provider key"),
     ),
     # SDKs
@@ -198,7 +220,9 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("is a synchronous, dependency-free Python client"),
     ),
     "Spring Boot 3 auto-configuration starter; thread-safe client with a TTL cache": (
-        lede("adds Spring Boot auto-configuration (Spring Boot 3.1"),
+        lede(
+            "adds Spring Boot auto-configuration (built and tested against Spring Boot 3.5.16"
+        ),
         lede("caches the answer per user + key for a TTL"),
         says("The client is thread-safe"),
     ),
@@ -239,7 +263,9 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         says("is a CNCF (Cloud Native Computing Foundation) standard"),
     ),
     "For Cloudflare Workers, Vercel Edge and Deno Deploy. Zero runtime dependencies; results cached in memory or KV.": (
-        lede("runs in Cloudflare Workers, Vercel Edge Functions, Deno Deploy"),
+        lede(
+            "with adapters for Cloudflare Workers, Vercel Edge Middleware and Deno Deploy"
+        ),
         lede("It has zero runtime dependencies"),
         lede("in memory and, optionally, in a shared KV store"),
     ),
@@ -442,7 +468,7 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("User Guide"),
         says("### Creating an Experiment"),
         says("### Reading Results"),
-        says("### Making a Decision"),
+        says("#### Recommendation Meanings"),
     ),
     "Beta-Binomial posteriors and stopping rules": (
         lede("a posterior for each variant"),

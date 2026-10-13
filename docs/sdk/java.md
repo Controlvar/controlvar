@@ -2,8 +2,8 @@
 
 `com.getexperimently:experimently-sdk` (v1.0.0) is a Java 11+ client for feature
 flags, experiment assignment and event tracking, built on OkHttp 4 and Jackson.
-`experimently-spring-boot-starter` adds Spring Boot auto-configuration (Spring Boot 3.1,
-which needs Java 17+ at runtime).
+`experimently-spring-boot-starter` adds Spring Boot auto-configuration (built and tested
+against Spring Boot 3.5.16, which needs Java 17+ at runtime).
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
@@ -16,8 +16,9 @@ Source: `sdk/java` (`core/`, `spring-boot-starter/`).
 ## Installation
 
 **Not yet published.** `com.getexperimently:experimently-sdk` and the Spring Boot starter are not
-on Maven Central yet, so the dependencies below resolve only after you run `mvn install` in
-`sdk/java` of a clone of this repository, which installs both into your local `~/.m2`.
+on Maven Central, so build them from source: in a clone of this repository,
+`cd sdk/java && ./mvnw install` installs both into your local `~/.m2`, and the dependencies
+below then resolve from there.
 
 ```xml
 <!-- core client -->
@@ -35,8 +36,8 @@ on Maven Central yet, so the dependencies below resolve only after you run `mvn 
 </dependency>
 ```
 
-Gradle: `implementation 'com.getexperimently:experimently-sdk:1.0.0'` (or the
-starter). From this monorepo, `cd sdk/java && mvn install` publishes both to `~/.m2`.
+Gradle reads `~/.m2` only through `mavenLocal()`: add it to `repositories`, then
+`implementation 'com.getexperimently:experimently-sdk:1.0.0'` (or the starter).
 
 ---
 
@@ -50,13 +51,14 @@ import com.getexperimently.sdk.model.ExperimentAssignment;
 import com.getexperimently.sdk.model.FlagEvaluation;
 import com.getexperimently.sdk.model.TrackEvent;
 import com.getexperimently.sdk.model.User;
+import java.util.Map;
 
 SdkConfig config = SdkConfig.builder(System.getenv("EXPERIMENTLY_API_KEY"), "http://localhost:8000")
         .timeoutMs(3000)
         .build();
 
 try (ExperimentationClient client = new ExperimentationClient(config)) {   // AutoCloseable
-    User user = User.builder("user-123").attribute("plan", "pro").build(); // attributes = context
+    User user = User.builder("user-123").attribute("plan", "pro").build(); // sent as the assignment's context
 
     // 1. Assignment — POST /api/v1/tracking/assign (sticky, records the exposure)
     String headline = "Buy now";
@@ -238,7 +240,7 @@ It prints:
 {"sdk":"java","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-The script builds when needed (`mvn -q -pl core -am package -DskipTests`, Maven output on stderr;
+The script builds when needed (`./mvnw -q -B -pl core -am package -DskipTests`, Maven output on stderr;
 `FORCE_BUILD=1` forces it) and runs
 `java -cp "core/target/classes:core/target/lib/*" com.getexperimently.sdk.examples.ContractSmoke`.
 Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),

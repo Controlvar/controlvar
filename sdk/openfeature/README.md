@@ -11,14 +11,8 @@ Full documentation: [`docs/sdk/openfeature.md`](https://github.com/getexperiment
 
 ## Install
 
-**Not yet published.** `@getexperimently/openfeature-provider` is not on npm yet, so this fails
-today (`@getexperimently/js-sdk` and `@openfeature/server-sdk` are on npm):
-
-```bash
-npm install @openfeature/server-sdk @getexperimently/openfeature-provider
-```
-
-Build it from a clone of this repository instead (the provider's build also builds `sdk/js`):
+**Not yet published.** `@getexperimently/openfeature-provider` is not on npm, so build it from
+source in a clone of this repository (the provider's build also builds `sdk/js`):
 
 ```bash
 git clone https://github.com/getexperimently/experimently.git
@@ -27,7 +21,10 @@ npm --prefix experimently/sdk/openfeature ci
 npm --prefix experimently/sdk/openfeature run build
 ```
 
-`@getexperimently/js-sdk` is installed with it; `@openfeature/server-sdk` is a peer dependency your app provides.
+Then, in your app, install both directories:
+`npm install @openfeature/server-sdk /path/to/experimently/sdk/js /path/to/experimently/sdk/openfeature`.
+From source the provider's manifest names `@getexperimently/js-sdk` as `file:../js`, so install
+that directory too; `@openfeature/server-sdk` is a peer dependency your app provides.
 
 ## Quick start
 
@@ -65,8 +62,8 @@ Only boolean flags carry a value: the evaluate endpoint returns `config: null` f
 
 Errors never throw: 404 → `FLAG_NOT_FOUND`, bad body → `PARSE_ERROR`, missing `targetingKey` →
 `TARGETING_KEY_MISSING`, anything else → `GENERAL`; the default is returned with reason `ERROR` and
-nothing is cached. Context attributes are **not** sent: the evaluate endpoint takes a `context`, which this provider
-does not send yet.
+nothing is cached. Context attributes are **not** sent: the evaluate call carries `user_id` alone,
+so the server evaluates the flag's targeting rules against an empty context.
 `provider.hashUser(userId, flagKey)` exposes the cross-SDK MD5 hash as a compatibility utility only.
 
 ## Backend endpoints used

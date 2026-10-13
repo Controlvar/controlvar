@@ -1,0 +1,323 @@
+# What verifies each unit of docs/api/split-url.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/split-url.md"
+
+[[unit]]
+text = "Server-Side Split URL Testing API"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Part of the split_url module"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Split URL testing is one of the optional modules -- present in the full profile, absent from the core one."
+by = [
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_create_split_url_experiment_returns_501",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestCapabilityLookup::test_split_url_preview_handler_none_when_absent",
+]
+
+[[unit]]
+text = "A core deployment does not serve these routes."
+by = [
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_create_split_url_experiment_returns_501",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestCapabilityLookup::test_split_url_preview_handler_none_when_absent",
+]
+
+[[unit]]
+text = "See Modules and profiles for what each profile includes and how to run the full one."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The edge router does not split traffic in this release"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The Lambda@Edge router reads its configuration only from an X-Split-URL-Config request header, and nothing sets that header: no stack creates the CloudFront distribution or adds the header, and the platform does not send an experiment's split_url_config to the edge."
+by = ["untested:T"]
+
+[[unit]]
+text = "Without it the router passes every request through unchanged, so deploying the construct does not split traffic."
+by = ["test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerPassThrough::test_no_config_header_passes_through"]
+
+[[unit]]
+text = "What works today is storing a split URL experiment and its configuration, and the preview endpoint."
+by = [
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestCreateSplitUrlExperiment",
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestGetSplitUrlExperiment",
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview",
+]
+
+[[unit]]
+text = "The preview does not predict the router either: it hashes the user_id you pass with the experiment's id, while the router hashes the viewer's IP address and User-Agent with the experiment_key in its configuration (#393)."
+by = [
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_the_fingerprint_is_ip_and_user_agent_not_a_user_id",
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_preview_assignment_is_deterministic",
+]
+
+[[unit]]
+text = "This document describes the server-side split URL testing feature."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Split URL experiments are meant to redirect different users to distinct URLs (e.g., /checkout vs /checkout-v2) at the CloudFront layer, with a Lambda@Edge router and a cookie that keeps each viewer on one variant."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Overview"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Split URL testing differs from classic A/B tests in that the entire page or URL path varies between variants rather than a component within a single page."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Given a configuration, the router (modules/lambda/split_url_router/handler.py):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Reads the viewer's assignment cookie (split_url_{experiment_key} unless the configuration names another)."
+by = [
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_set_cookie_contains_cookie_name",
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_custom_cookie_name_in_config",
+]
+
+[[unit]]
+text = "If the cookie holds one of the variant URLs, passes the request through."
+by = ["test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerExistingCookie::test_existing_valid_cookie_passes_through"]
+
+[[unit]]
+text = "Otherwise hashes the viewer's IP address and User-Agent to pick a variant."
+by = [
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_the_fingerprint_is_ip_and_user_agent_not_a_user_id",
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_assignment_is_consistent_for_same_fingerprint",
+]
+
+[[unit]]
+text = "Answers 302 to that variant's URL, with a cookie that lasts 30 days unless the configuration sets cookie_ttl_days."
+by = [
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_returns_302_redirect",
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_cookie_ttl_defaults_to_30_days",
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_cookie_ttl_from_config",
+]
+
+[[unit]]
+text = "Experiment Type"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Set experiment_type to split_url when creating an experiment."
+by = ["test:modules/backend/tests/integration/api/test_split_url_api.py::TestCreateSplitUrlExperiment::test_split_url_experiment_has_correct_type"]
+
+[[unit]]
+text = "SplitUrlConfig Schema"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "split_url_config holds the URL variants:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Field | Type | Required | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "variants | array | Yes | The URL variants: at least 2"
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigVariantCount::test_one_variant_raises",
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlValidation::test_single_variant_rejected",
+]
+
+[[unit]]
+text = "variants[].name | string | Yes | The variant's name"
+by = ["test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlVariant::test_variant_missing_name_raises"]
+
+[[unit]]
+text = "variants[].url | string | Yes | The URL this variant is sent to (stored as given; not checked)"
+by = ["test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlVariant::test_variant_missing_url_raises"]
+
+[[unit]]
+text = "variants[].traffic_allocation | number | Yes | Percentage of traffic; only the sum is checked, which must be 100"
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigTrafficSum::test_sum_less_than_100_raises",
+    "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigTrafficSum::test_sum_greater_than_100_raises",
+    "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigTrafficSum::test_exact_100_valid",
+]
+
+[[unit]]
+text = "cookie_name | string | No | The router's cookie name; null means split_url_{experiment_key}"
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigOptionalFields::test_cookie_name_defaults_to_none",
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_set_cookie_contains_cookie_name",
+]
+
+[[unit]]
+text = "cookie_ttl_days | int | No | How long the router's cookie lasts, in days (default 30)"
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigOptionalFields::test_cookie_ttl_days_default_30",
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_cookie_ttl_defaults_to_30_days",
+]
+
+[[unit]]
+text = "canonical_url | string | No | Stored with the configuration; nothing reads it yet"
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigOptionalFields::test_canonical_url_defaults_to_none",
+    "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigOptionalFields::test_canonical_url_can_be_set",
+]
+
+[[unit]]
+text = "The first URL variant is the router's control, which a holdout sends its viewers to."
+by = ["test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerHoldout::test_holdout_users_see_control_url"]
+
+[[unit]]
+text = "Create a Split URL Experiment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Example Request"
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "Response: 201 Created (abridged: the response is the whole experiment)"
+by = [
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestCreateSplitUrlExperiment::test_split_url_experiment_has_draft_status",
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestCreateSplitUrlExperiment::test_split_url_experiment_has_correct_type",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Split URL Preview Endpoint"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Returns the URL variant the preview's own hash gives a user_id, without redirecting."
+by = [
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_preview_assignment_is_deterministic",
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_preview_url_is_from_config",
+]
+
+[[unit]]
+text = "It hashes {user_id}:{experiment_id}, so it does not tell you what the router would do for a viewer (see the note at the top of this page)."
+by = [
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_preview_assignment_is_deterministic",
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_preview_url_is_from_config",
+]
+
+[[unit]]
+text = "It is for ADMIN and DEVELOPER users (and superusers), and in a core deployment it answers 501."
+by = [
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_admin_can_preview_split_url_assignment",
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_developer_can_preview_split_url_assignment",
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_analyst_cannot_access_preview",
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_viewer_cannot_access_preview",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestCapabilityLookup::test_split_url_preview_handler_none_when_absent",
+]
+
+[[unit]]
+text = "Path Parameters"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Parameter | Type | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "experiment_id | string (UUID) | The experiment to preview"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Query Parameters"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Parameter | Type | Required | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "user_id | string | Yes | User identifier to hash"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Response: 200 OK"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "CloudFront CDK Construct"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "modules/infrastructure/constructs/split_url_distribution.py provisions a CloudFront distribution wired to a Lambda@Edge viewer-request function."
+by = [
+    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_cloudfront_distribution_created",
+    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_lambda_edge_attached_to_viewer_request",
+]
+
+[[unit]]
+text = "Validation Rules"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "On create, split_url_config is checked for:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "at least 2 URL variants;"
+by = ["test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlValidation::test_single_variant_rejected"]
+
+[[unit]]
+text = "traffic_allocation values that sum to 100 (within 0.01), none of them NaN or infinite."
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigTrafficSum::test_floating_point_tolerance",
+    "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigTrafficSum::test_sum_less_than_100_raises",
+    "test:backend/tests/unit/schemas/test_experiment_numeric_bounds.py",
+]
+
+[[unit]]
+text = "Nothing else about it is checked: the URLs are stored as given, the number of URL variants need not match the experiment's variants, and an experiment of another type can carry a configuration, as a split_url experiment can be created without one (its preview then answers 400)."
+by = [
+    "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestPreviewSplitUrlAssignment::test_preview_split_url_without_config_returns_400",
+    "test:modules/backend/tests/unit/api/test_split_url_experiment_api.py::TestExperimentCreateWithSplitUrlConfig::test_experiment_create_split_url_type_without_config_is_allowed",
+]
+
+[[unit]]
+text = "Error Responses"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Status | Meaning"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "400 Bad Request | Preview: the experiment is not a split_url experiment, or has no split_url_config"
+by = [
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_preview_for_regular_experiment_returns_400",
+    "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestPreviewSplitUrlAssignment::test_preview_split_url_without_config_returns_400",
+]
+
+[[unit]]
+text = "401 Unauthorized | Missing or invalid Bearer token"
+by = ["untested:T"]
+
+[[unit]]
+text = "403 Forbidden | Preview: the user is not ADMIN, DEVELOPER or a superuser"
+by = [
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_analyst_cannot_access_preview",
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_viewer_cannot_access_preview",
+]
+
+[[unit]]
+text = "404 Not Found | Preview: no experiment has this id"
+by = ["test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_preview_nonexistent_experiment_returns_404"]
+
+[[unit]]
+text = "422 Unprocessable Entity | Create: the body fails validation, such as allocations that do not sum to 100"
+by = ["test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlValidation::test_traffic_not_summing_to_100_rejected"]
+
+[[unit]]
+text = "501 Not Implemented | Preview, or creating a split_url experiment, in a core deployment"
+by = [
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_create_split_url_experiment_returns_501",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_update_to_split_url_returns_501",
+]

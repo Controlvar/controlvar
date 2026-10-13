@@ -21,16 +21,8 @@ the SDK caches the answer per user + key. Nothing is bucketed locally.
 
 Add to your `mix.exs`.
 
-**Not yet published.** The `experimently` package is not on Hex yet, so the first block below
-fails today. Take it from this repository with the second block instead.
-
-```elixir
-defp deps do
-  [
-    {:experimently, "~> 0.1.0"}
-  ]
-end
-```
+**Not yet published.** The `experimently` package is not on Hex, so build it from source: this
+dependency takes `sdk/elixir` from this repository.
 
 ```elixir
 defp deps do
@@ -134,8 +126,9 @@ that spawns one process per request, and `stop/1` waits (up to `timeout`) for th
 ## Hash Compatibility
 
 `Experimently.Evaluator.hash_user/2` implements the cross-SDK formula
-`MD5("{user_id}:{flag_key}") -> first 4 bytes as little-endian uint32 / 2^32` and is pinned by the
-golden-vector tests in `tests/sdk-contract/`:
+`MD5("{user_id}:{flag_key}") -> first 4 bytes as little-endian uint32 / 2^32`. The SDK's own
+`hash_compatibility_test.exs` pins one vector; the cross-SDK golden vectors in `tests/sdk-contract/`
+are not run against this SDK:
 
 ```elixir
 Experimently.Evaluator.hash_user("user-123", "my-flag")
@@ -143,8 +136,8 @@ Experimently.Evaluator.hash_user("user-123", "my-flag")
 ```
 
 It is exported as a utility only. Since assignment moved to the server, nothing in the SDK uses
-it to decide a variant. Standalone checks: `elixir sdk/elixir/test_standalone.exs` and
-`python3 sdk/elixir/verify_hash.py`.
+it to decide a variant. `elixir sdk/elixir/test_standalone.exs` and `python3 sdk/elixir/verify_hash.py`
+check their own copies of the formula; neither loads the SDK.
 
 ## Contract smoke
 
@@ -182,8 +175,8 @@ mix test
 
 - `mix test`: ExUnit, HTTP mocked through HttpBehaviour modules
 
-The ExUnit suite (client, facade, cache, HTTP helpers, hash parity) was rewritten for the
-public-API contract but **not executed here** — no `mix` on the development machine.
+The ExUnit suite (client, facade, cache, HTTP helpers, hash parity) runs in CI: `mix deps.get` and
+`mix test` on Elixir 1.16.3 in the SDK Unit Tests workflow.
 
 ### Testing your own code
 

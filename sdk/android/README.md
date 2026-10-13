@@ -1,29 +1,25 @@
 # Experimently Android SDK
 
 Kotlin client for the Experimently A/B testing and feature flag platform. Coroutine-based,
-OkHttp under the hood, `SharedPreferences`-backed offline fallback, `minSdk 21`.
+OkHttp under the hood, an offline fallback (in memory by default, `SharedPreferences` through an
+adapter you pass), `minSdk 21`.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key for a TTL. Nothing is bucketed locally.
 
-> **Beta: flag targeting on user attributes does not work in this SDK yet.** Flag
-> evaluation sends only the user id (`GET /api/v1/feature-flags/evaluate/{key}?user_id=…`),
-> not the user's attributes, so a flag targeting rule on an attribute (app version, OS,
-> country, plan) never matches here, and the flag's rollout percentage alone decides. Experiment
-> assignment is not affected: `getAssignment`, with `user.attributes`, sends the attributes as `context`, so experiment
-> targeting works. Until this is fixed ([#438](https://github.com/getexperimently/experimently/issues/438)), an app that needs attribute targeting on a
-> flag can call the evaluate endpoint itself with a `context` query parameter (a URL-encoded
-> JSON object of the attributes).
+> **Flag evaluation sends only the user id.** `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`
+> carries none of the user's attributes, so the server evaluates a flag's targeting rules against
+> an empty context. Experiment assignment sends them: `getAssignment`, with `user.attributes`, sends the attributes as
+> `context`. To evaluate a flag with attributes, call the evaluate endpoint with a `context`
+> query parameter (a URL-encoded JSON object of the attributes).
 
 Full reference: [`docs/sdk/android.md`](../../docs/sdk/android.md).
 
-> Toolchain note: the rewire onto the public API was done by inspection only. No gradle / Android
-> SDK is installed on the development machine, so the module has **not been compiled or its unit
-> tests executed** there. There is no contract smoke for Android (it needs a device runtime);
-> unit tests only.
-
 ## Installation
+
+**Not yet published.** The module is not on Maven Central, so build it from source: include
+`sdk/android/sdk` of a clone of this repository in your Gradle build.
 
 ```kotlin
 // settings.gradle.kts

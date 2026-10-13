@@ -13,8 +13,9 @@ Modules: `core/` (`experimently-sdk`) and `spring-boot-starter/`
 ## Installation
 
 **Not yet published.** `com.getexperimently:experimently-sdk` and the Spring Boot starter are not
-on Maven Central yet, so the dependencies below resolve only after you run `mvn install` in
-`sdk/java` of a clone of this repository, which installs both into your local `~/.m2`.
+on Maven Central, so build them from source: in a clone of this repository,
+`cd sdk/java && ./mvnw install` installs both into your local `~/.m2`, and the dependencies
+below then resolve from there.
 
 ```xml
 <dependency>
@@ -30,8 +31,8 @@ on Maven Central yet, so the dependencies below resolve only after you run `mvn 
 </dependency>
 ```
 
-Gradle: `implementation 'com.getexperimently:experimently-sdk:1.0.0'`.
-Inside this monorepo: `cd sdk/java && mvn install`.
+Gradle reads `~/.m2` only through `mavenLocal()`: add it to `repositories`, then
+`implementation 'com.getexperimently:experimently-sdk:1.0.0'`.
 
 ## Quick Start (core client)
 
@@ -40,6 +41,7 @@ import com.getexperimently.sdk.ExperimentationClient;
 import com.getexperimently.sdk.config.SdkConfig;
 import com.getexperimently.sdk.exception.ExperimentationException;
 import com.getexperimently.sdk.model.*;
+import java.util.Map;
 
 SdkConfig config = SdkConfig.builder(System.getenv("EXPERIMENTLY_API_KEY"), "http://localhost:8000").build();
 
@@ -86,6 +88,7 @@ public class CheckoutService {
     public String headline(String userId) {
         try {
             var a = client.getExperimentAssignment(User.builder(userId).build(), "checkout_flow");
+            if (a.getConfiguration() == null) return "Buy now";   // a variant with no configuration
             return (String) a.getConfiguration().getOrDefault("headline", "Buy now");
         } catch (ExperimentationException e) {
             return "Buy now";
@@ -198,7 +201,7 @@ cd sdk/java && ./mvnw clean test
 
 - `cd sdk/java && ./mvnw clean test`: the core module (MockWebServer) and the spring-boot-starter module
 
-`./mvnw` pins Maven 3.9.9 and verifies the download against a SHA-256 in
+`./mvnw` pins Maven 3.10.0 and verifies the download against a SHA-256 in
 `.mvn/wrapper/maven-wrapper.properties` (no `maven-wrapper.jar` is committed —
 `distributionType=only-script`). The pin matters: `ExperimentationClientTest` is a `@Nested`-heavy
 JUnit 5 suite and only Surefire 3.x discovers those, so "whichever Maven the runner ships" must not

@@ -1,6 +1,6 @@
 # PHP SDK
 
-`experimently/sdk` (v0.1) provides feature flag evaluation, experiment
+`experimently/sdk` provides feature flag evaluation, experiment
 assignment and event tracking for PHP 8.1+ applications. It depends only on `ext-curl` and
 `ext-json`.
 
@@ -22,13 +22,9 @@ Source: `sdk/php`.
 
 ## Installation
 
-**Not yet published.** `experimently/sdk` is not on Packagist yet, so the first line below fails
-today. Point Composer at `sdk/php` in a clone of this repository with a path repository instead,
-as in the second block (this has not been tested here).
-
-```bash
-composer require experimently/sdk
-```
+**Not yet published.** `experimently/sdk` is not on Packagist, so build it from source: point
+Composer at `sdk/php` in a clone of this repository with a path repository (this has not been
+tested here).
 
 ```bash
 git clone https://github.com/getexperimently/experimently.git
@@ -100,7 +96,9 @@ $config = new SdkConfig(
 
 ### `evaluateFlag(string $flagKey, string $userId): FlagEvaluation`
 
-Calls `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…` and returns a `FlagEvaluation`:
+Calls `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…` and returns a `FlagEvaluation`.
+The request carries the user id alone, so the server evaluates the flag's targeting rules against
+an empty context.
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -115,9 +113,9 @@ if ($flag->enabled) {
 }
 ```
 
-A flag that is not ACTIVE is not a failure: it answers `enabled: false`. On a network/HTTP
-failure (a 404 is an unknown flag key) a cached evaluation is returned when one exists; otherwise the flag is reported as disabled. Failures are never cached,
-so the next call retries. `FlagEvaluation::toArray()` gives `['key', 'enabled', 'config']`.
+A flag that is not ACTIVE is not a failure: it answers `enabled: false`. A cached evaluation is
+returned before any request is made; on a network/HTTP failure (a 404 is an unknown flag key) the
+flag is reported as disabled. Failures are never cached, so the next call retries. `FlagEvaluation::toArray()` gives `['key', 'enabled', 'config']`.
 
 ### `isFeatureEnabled(string $flagKey, string $userId): bool`
 
@@ -212,9 +210,9 @@ Malformed events are counted as failures without being sent. Never throws.
 | `getEvaluatedFlags(string $userId): string[]` | Keys of flags successfully evaluated (and still cached) for the user |
 | `clearCache(): void` | Drop every cached evaluation and assignment |
 
-The cache is an in-memory array scoped to the `ExperimentationClient` instance. PHP is
-single-threaded per request, so no locking is needed; under a long-running runtime (Swoole,
-RoadRunner, FrankenPHP workers) one client per worker gives you cross-request reuse for `cacheTtl`.
+The cache is an in-memory array scoped to the `ExperimentationClient` instance and lives as long
+as the instance does, so it is reused across requests only where one instance serves several of
+them.
 
 ---
 
@@ -242,7 +240,7 @@ The public methods never throw on network or HTTP errors. Only `HttpClient` thro
 |-----------|---------|------|
 | `Experimently\Errors\ExperimentationException` | `\RuntimeException` | Base class |
 | `Experimently\Errors\NetworkException` | `ExperimentationException` | cURL transport errors, timeouts |
-| `Experimently\Errors\ApiException` (`getStatusCode()`) | `ExperimentationException` | Other 4xx/5xx (404 not ACTIVE, 422 validation, 429 rate limited) |
+| `Experimently\Errors\ApiException` (`getStatusCode()`) | `ExperimentationException` | Other 4xx/5xx (404: an experiment unknown or not ACTIVE, or an unknown flag key; 422 validation; 429 rate limited) |
 | `Experimently\Errors\AuthException` | `ApiException` | HTTP 401 — invalid API key |
 
 ---
@@ -250,8 +248,9 @@ The public methods never throw on network or HTTP errors. Only `HttpClient` thro
 ## Consistent Hash Utility
 
 `FeatureFlagEvaluator::hashUser(string $userId, string $key): float` implements the cross-SDK
-formula — `MD5("{userId}:{key}")`, first 4 bytes as little-endian uint32, divided by 2^32 — and is
-pinned by the golden-vector tests in `tests/sdk-contract/`:
+formula — `MD5("{userId}:{key}")`, first 4 bytes as little-endian uint32, divided by 2^32. The
+SDK's own `HashCompatibilityTest` pins one vector; the cross-SDK golden vectors in
+`tests/sdk-contract/` are not run against this SDK:
 
 ```php
 FeatureFlagEvaluator::hashUser('user-123', 'my-flag');   // 0.6927449859213084

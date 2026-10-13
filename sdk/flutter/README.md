@@ -8,14 +8,11 @@ Flag evaluation and experiment assignment are decided **by the server**: every c
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key. Nothing is bucketed on the device.
 
-> **Beta: flag targeting on user attributes does not work in this SDK yet.** Flag
-> evaluation sends only the user id (`GET /api/v1/feature-flags/evaluate/{key}?user_id=…`),
-> not the user's attributes, so a flag targeting rule on an attribute (app version, OS,
-> country, plan) never matches here, and the flag's rollout percentage alone decides. Experiment
-> assignment is not affected: `getAssignment` sends the attributes as `context`, so experiment
-> targeting works. Until this is fixed ([#438](https://github.com/getexperimently/experimently/issues/438)), an app that needs attribute targeting on a
-> flag can call the evaluate endpoint itself with a `context` query parameter (a URL-encoded
-> JSON object of the attributes).
+> **Flag evaluation sends only the user id.** `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`
+> carries none of the user's attributes, so the server evaluates a flag's targeting rules against
+> an empty context. Experiment assignment sends them: `getAssignment` sends the attributes as
+> `context`. To evaluate a flag with attributes, call the evaluate endpoint with a `context`
+> query parameter (a URL-encoded JSON object of the attributes).
 
 - **Server-decided** — `GET /api/v1/feature-flags/evaluate/{key}` and `POST /api/v1/tracking/assign`
 - **Per-user TTL cache** — successful results are reused for `cacheTtl` (default 5 minutes);
@@ -26,6 +23,9 @@ the SDK caches the answer per user + key. Nothing is bucketed on the device.
 - **Null-safe Dart 2.17+**, `http` + `crypto` + `shared_preferences` only
 
 ## Installation
+
+**Not yet published.** The `experimently` package is not on pub.dev, so build it from source: this
+dependency takes `sdk/flutter` from this repository.
 
 ```yaml
 dependencies:
@@ -104,8 +104,9 @@ a `package:http` `Client` — inject `MockClient` in tests) and an `offlineStore
 
 A 404 (an experiment unknown or not ACTIVE, or an unknown flag key) is a definitive answer: it returns the failure
 value and also removes any persisted offline entry, so a stale value is never served for it.
-All methods throw `StateError` when called before `init()` — that is the only exception the
-public API raises.
+`evaluateFlag`, `getAssignment`, `trackEvent` and `trackBatch` (and `isEnabled`, `getVariant` and
+`track`, which call them) throw `StateError` when called before `init()` — that is the only
+exception the public API raises.
 
 **Fan-out rule.** With `experimentKey` and/or `featureFlagKey`, `track` sends one
 `POST /api/v1/tracking/track`. Without a key it sends one `POST /api/v1/tracking/batch`
@@ -128,7 +129,9 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 ## Hash Utility
 
 `hashUser(userId, key)` implements the cross-SDK formula `MD5("{userId}:{key}")` → first 4 bytes
-as little-endian uint32 / 2^32 and is pinned by the golden-vector tests in `tests/sdk-contract/`:
+as little-endian uint32 / 2^32. The SDK's own `test/hash_compatibility_test.dart` pins it with its
+own copy of the vectors (seven of its eight are in `tests/sdk-contract/golden-vectors.json`); the
+cross-SDK golden-vector job does not run this SDK:
 
 ```dart
 hashUser('user-123', 'my-flag');   // 0.6927449859213084
@@ -171,6 +174,5 @@ flutter test
 
 - `flutter test`: the client (HTTP faked with package:http MockClient), hash vectors, SharedPreferences store
 
-The test suite and the contract smoke were reviewed line by line for the server-side rewire but
-**not executed** on the development machine (no `dart`/`flutter` installed); run them on a machine
-with the Flutter SDK.
+CI runs `flutter pub get` and `flutter test` on Flutter 3.19.6 in the SDK Unit Tests workflow. No
+CI job runs the contract smoke; run it on a machine with the Flutter SDK.

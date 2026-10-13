@@ -46,8 +46,8 @@ experiment in five steps:
   either view. A key another experiment already has is named, with **Edit details** to
   change it. If your session has ended, sign in again in another tab, then press
   **Create Experiment** again.
-- Split URL and bandit experiments need settings guided setup does not ask for;
-  create them through the API or an SDK.
+- Guided setup offers only A/B Test and Multivariate. Create a split URL or bandit
+  experiment through the API (`POST /api/v1/experiments/`).
 
 Guided setup sends the same `POST /api/v1/experiments` request as the single-page
 form. **It does not use the wizard API below** and creates no draft.
@@ -99,9 +99,6 @@ curl -s localhost:8000/api/v1/auth/me -H "Authorization: Bearer $TOKEN" | jq .ro
 <!-- expect: "ADMIN" -->
 
 It prints `"ADMIN"`.
-
-The collection URL has no trailing slash (`/api/v1/wizard/drafts`). With one, the API
-answers `307 Temporary Redirect`, which `curl` doesn't follow, so nothing is printed.
 
 ### POST /api/v1/wizard/drafts
 
@@ -368,4 +365,3 @@ would raise to 100% or more is refused with a 422.
   their own: for every role, another user's draft is answered exactly as a draft that
   does not exist.
 - Submitting needs permission to create experiments, as `POST /api/v1/experiments` does.
-- Submitted experiments follow the standard experiment RBAC rules.
