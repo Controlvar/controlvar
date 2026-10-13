@@ -1,0 +1,539 @@
+# What verifies each unit of docs/guides/experiment-wizard.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/guides/experiment-wizard.md"
+
+[[unit]]
+text = "Guided experiment builder"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "There are two guided ways to create an experiment, and they are unrelated: the dashboard's guided setup, and the wizard API described in the rest of this page."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "In the dashboard: guided setup"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Experiments → + New Experiment opens guided setup, which asks for a new experiment in five steps:"
+by = [
+    "journey:experiment-wizard#sign-in-page",
+    "journey:experiment-wizard#new-experiment",
+]
+
+[[unit]]
+text = "Step | What you set"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "1. Type | A/B Test or Multivariate"
+by = ["journey:experiment-wizard#new-experiment"]
+
+[[unit]]
+text = "2. Details | Name, key, description, hypothesis, and the metrics (each with its own name), one of them primary"
+by = [
+    "journey:experiment-wizard#type-next",
+    "journey:experiment-wizard#name",
+    "journey:experiment-wizard#metric-event",
+]
+
+[[unit]]
+text = "3. Variants | The variants, their traffic split (it must add up to exactly 100%), which one is the control, and optional targeting rules"
+by = [
+    "journey:experiment-wizard#details-next",
+    "journey:experiment-wizard#split-90",
+    "journey:experiment-wizard#split-refused",
+]
+
+[[unit]]
+text = "4. Estimate | How results will be judged (the confidence level and the correction, saved with the experiment), then, optionally, how many users each variant needs and roughly how many days that takes"
+by = [
+    "journey:experiment-wizard#variants-next",
+    "journey:experiment-wizard#calculate",
+]
+
+[[unit]]
+text = "5. Review | Everything as it will be sent; Create Experiment creates it as a draft"
+by = [
+    "journey:experiment-wizard#estimate-next",
+    "journey:experiment-wizard#create",
+]
+
+[[unit]]
+text = "Next checks only the step you are on; Back never checks anything."
+by = [
+    "journey:experiment-wizard#details-refused",
+    "journey:experiment-wizard#split-refused",
+    "journey:experiment-wizard#back",
+]
+
+[[unit]]
+text = "The step is in the address (?step=details), so the browser's Back and Forward move between steps."
+by = ["journey:experiment-wizard#type-next"]
+
+[[unit]]
+text = "Your answers are kept only in this browser tab."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "Nothing is saved until you create the experiment: reloading the page or opening a link to a later step starts over at step 1, and the browser asks before you reload or close a tab with answers in it."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "Use the single-page form (advanced) switches to every field on one page (/experiments/new?advanced); your answers carry over in both directions."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "The Estimate step starts with How results will be judged: the confidence level (90%, 95% or 99%; default 95%) and the correction for several variants (Benjamini-Hochberg by default, Bonferroni or None)."
+by = ["journey:experiment-wizard#variants-next"]
+
+[[unit]]
+text = "Those two are saved with the experiment as confidence_level and correction_method, and cannot be changed once it leaves draft."
+by = [
+    "journey:experiment-wizard#create",
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_superuser_cannot_change_the_settings_once_out_of_draft",
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_developer_cannot_change_them_on_an_active_experiment_either",
+]
+
+[[unit]]
+text = "The single-page form has them in a collapsed Analysis settings section."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "The Review step shows them in its Analysis row."
+by = ["journey:experiment-wizard#estimate-next"]
+
+[[unit]]
+text = "The rest of the step, the estimate, is advisory and is not saved."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "It calls the sample-size endpoint shown below at a significance of 1 − the confidence level, treats the minimum detectable effect as a relative change (5% of a 12% baseline is 12.6%, not 17%), and assumes users are split evenly between the variants."
+by = ["untested:T"]
+
+[[unit]]
+text = "It makes no correction for comparing several variants with the control, even when one is chosen above, so with three or more variants the experiment needs more users than it says; the Power Calculator applies a Bonferroni correction, so its number is higher."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx",
+    "journey:power-calculator#three-variants",
+    "journey:power-calculator#api-three-variants",
+]
+
+[[unit]]
+text = "Only ADMIN and DEVELOPER users (and superusers) can create experiments; anyone else sees a note saying so instead of the form."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "If Create Experiment fails, you stay where you are with every answer kept, in either view."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx",
+    "test:frontend/src/tests/pages/experiment-new-create-errors.test.tsx",
+]
+
+[[unit]]
+text = "A key another experiment already has is named, with Edit details to change it."
+by = ["test:frontend/src/tests/pages/experiment-new-create-errors.test.tsx"]
+
+[[unit]]
+text = "If your session has ended, sign in again in another tab, then press Create Experiment again."
+by = ["test:frontend/src/tests/pages/experiment-new-create-errors.test.tsx"]
+
+[[unit]]
+text = "Guided setup offers only A/B Test and Multivariate."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::offers exactly the types the single-page form offers",
+    "journey:experiment-wizard#new-experiment",
+]
+
+[[unit]]
+text = "Create a split URL or bandit experiment through the API (POST /api/v1/experiments/)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Guided setup sends the same POST /api/v1/experiments request as the single-page form."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "It does not use the wizard API below and creates no draft."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The wizard API"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The wizard API is a 5-step flow for designing an experiment from your own tooling: it keeps a draft while you answer one question at a time, validates each step, and creates the experiment when you submit."
+by = [
+    "test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestSubmitDraft::test_submit_complete_draft_creates_a_real_experiment",
+    "test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestSubmitDraft::test_submitted_draft_is_discarded",
+]
+
+[[unit]]
+text = "Submitting writes a real experiment in DRAFT status, owned by the caller, and discards the draft."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The dashboard does not use it."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "Drafts are held in the API process's memory, so they do not survive a restart and are not shared between replicas."
+by = ["untested:T"]
+
+[[unit]]
+text = "The wizard endpoints are deprecated and may be removed in a later release."
+by = ["test:backend/tests/unit/api/test_wizard_drafts_per_user.py::test_every_wizard_operation_is_deprecated"]
+
+[[unit]]
+text = "Drafts are per user: a draft that belongs to another user is answered exactly as one that does not exist (404)."
+by = [
+    "test:backend/tests/unit/api/test_wizard_drafts_per_user.py::test_get_another_users_draft_is_404",
+    "test:backend/tests/unit/api/test_wizard_drafts_per_user.py::test_put_step_on_another_users_draft_is_404_and_changes_nothing",
+]
+
+[[unit]]
+text = "Steps Overview"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Step | Name | What You Configure"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "1 | choose_type | Experiment type: ab, multivariate or feature_flag_rollout"
+by = ["test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardValidation::test_choose_type_valid_ab"]
+
+[[unit]]
+text = "2 | define_hypothesis | Name, description, hypothesis, primary metric and guardrail metrics"
+by = ["docex:docs/guides/experiment-wizard.md#\"targeting\""]
+
+[[unit]]
+text = "3 | targeting | Audience rules"
+by = ["docex:docs/guides/experiment-wizard.md#\"sample_size\""]
+
+[[unit]]
+text = "4 | sample_size | Baseline rate and minimum detectable effect (MDE)"
+by = ["test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardValidation::test_sample_size_valid"]
+
+[[unit]]
+text = "5 | review | Final review, then submission"
+by = ["docex:docs/guides/experiment-wizard.md#\"success\": true"]
+
+[[unit]]
+text = "Each completed step is saved in the draft, and the draft's current_step moves on to the next one."
+by = [
+    "docex:docs/guides/experiment-wizard.md#\"define_hypothesis\"",
+    "docex:docs/guides/experiment-wizard.md#\"targeting\"",
+    "docex:docs/guides/experiment-wizard.md#\"sample_size\"",
+]
+
+[[unit]]
+text = "You can come back to a draft later, as long as the API process has not restarted."
+by = ["docex:docs/guides/experiment-wizard.md#\"total\": 1"]
+
+[[unit]]
+text = "API Reference"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "All wizard endpoints are under /api/v1/wizard."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The commands below run as written against the stack from the Quick Start, in one terminal, top to bottom; each uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in first:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "POST /api/v1/wizard/drafts"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Create a new wizard draft."
+by = ["docex:docs/guides/experiment-wizard.md#\"current_step\": \"choose_type\""]
+
+[[unit]]
+text = "The draft starts at step 1 (choose_type)."
+by = ["docex:docs/guides/experiment-wizard.md#\"current_step\": \"choose_type\""]
+
+[[unit]]
+text = "This saves its id in $DRAFT_ID:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The API answers 201 Created:"
+by = ["test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestCreateDraft::test_create_draft_returns_201"]
+
+[[unit]]
+text = "The draft also carries its id, user_id and the other step fields, all empty: primary_metric_id, guardrail_metric_ids, targeting_rules, baseline_rate, mde, name and description."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "POST /api/v1/wizard/validate"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Validate one step's data before you save it."
+by = ["docex:docs/guides/experiment-wizard.md#\"is_valid\":false"]
+
+[[unit]]
+text = "The body names the step and its data, and the response lists what is wrong, if anything:"
+by = ["docex:docs/guides/experiment-wizard.md#\"is_valid\":false"]
+
+[[unit]]
+text = "Valid data answers {\"is_valid\":true,\"errors\":[]}."
+by = ["test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestValidateStep::test_validate_choose_type_valid_returns_is_valid_true"]
+
+[[unit]]
+text = "The rules, by step:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "choose_type: experiment_type is ab, multivariate or feature_flag_rollout;"
+by = ["test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardValidation::test_choose_type_invalid_returns_error"]
+
+[[unit]]
+text = "define_hypothesis: a hypothesis of at least 10 characters, and a primary_metric_id;"
+by = ["docex:docs/guides/experiment-wizard.md#\"is_valid\":false"]
+
+[[unit]]
+text = "sample_size: baseline_rate and mde each between 0 and 1;"
+by = [
+    "test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardValidation::test_sample_size_baseline_must_be_between_0_and_1",
+    "test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardValidation::test_sample_size_mde_must_be_between_0_and_1",
+]
+
+[[unit]]
+text = "review: experiment_type, hypothesis and primary_metric_id are all set;"
+by = ["test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardValidation::test_review_missing_field_returns_errors"]
+
+[[unit]]
+text = "targeting: anything."
+by = [
+    "test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardValidation::test_targeting_empty_rules_valid",
+    "test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestSubmitDraft::test_invalid_targeting_is_refused_with_fixed_text",
+]
+
+[[unit]]
+text = "The conditions are checked when the draft is submitted."
+by = [
+    "test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardValidation::test_targeting_empty_rules_valid",
+    "test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestSubmitDraft::test_invalid_targeting_is_refused_with_fixed_text",
+]
+
+[[unit]]
+text = "PUT /api/v1/wizard/drafts/{draft_id}/step"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Save one step's data in the draft, and move the draft to the next step."
+by = [
+    "test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestUpdateDraftStep::test_update_step_advances_current_step",
+    "test:backend/tests/unit/api/test_wizard_drafts_per_user.py::test_step_fields_are_still_saved",
+]
+
+[[unit]]
+text = "The body names the step and its data, as for validation."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Fields the step doesn't send are kept."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "data may only contain step fields (experiment_type, hypothesis, primary_metric_id, guardrail_metric_ids, targeting_rules, baseline_rate, mde, name, description); any other key answers 422 and the draft is left unchanged."
+by = [
+    "test:backend/tests/unit/api/test_wizard_drafts_per_user.py::test_step_data_with_an_unknown_key_is_refused_with_a_fixed_message",
+    "test:backend/tests/unit/api/test_wizard_drafts_per_user.py::test_step_data_cannot_set_draft_identity_fields",
+]
+
+[[unit]]
+text = "So does a step field of the wrong type: guardrail_metric_ids takes a list of strings, targeting_rules a list of objects, baseline_rate and mde numbers, and the other fields strings (any of them may be null)."
+by = [
+    "test:backend/tests/unit/api/test_wizard_drafts_per_user.py::test_a_wrong_typed_step_value_is_refused_and_not_stored",
+    "test:backend/tests/unit/api/test_wizard_drafts_per_user.py::test_every_step_field_is_probed_with_a_wrong_type",
+]
+
+[[unit]]
+text = "The answer names the field, for example Step field 'hypothesis' must be a string or null."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Step 1: type."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"define_hypothesis\", the next step."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Step 2: hypothesis and metrics."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "primary_metric_id and guardrail_metric_ids are the event names the metrics count, such as checkout_completed:"
+by = ["untested:T"]
+
+[[unit]]
+text = "It prints \"targeting\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Step 3: targeting."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each rule is one condition, and a user must match all of them:"
+by = ["test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardExperimentCreation::test_payload_wraps_targeting_rules_in_the_dashboard_shape"]
+
+[[unit]]
+text = "It prints \"sample_size\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Step 4: sample size."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "baseline_rate is the metric's current conversion rate and mde the smallest relative change worth detecting:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"review\": the draft is ready to submit."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/wizard/drafts"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "List your drafts that are still in progress:"
+by = ["docex:docs/guides/experiment-wizard.md#\"total\": 1"]
+
+[[unit]]
+text = "It prints \"total\": 1, and the draft's step, \"review\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/wizard/drafts/"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Retrieve one of your drafts, with all the data its steps have saved."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A draft that doesn't exist, was submitted, or belongs to another user answers 404."
+by = [
+    "test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestGetDraft::test_get_draft_returns_404_for_missing_draft",
+    "test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestSubmitDraft::test_submitted_draft_is_discarded",
+    "test:backend/tests/unit/api/test_wizard_drafts_per_user.py::test_get_another_users_draft_is_404",
+]
+
+[[unit]]
+text = "POST /api/v1/wizard/drafts/{draft_id}/submit"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Submit the draft: this creates a real experiment in DRAFT status, and the draft is discarded."
+by = [
+    "docex:docs/guides/experiment-wizard.md#\"success\": true",
+    "docex:docs/guides/experiment-wizard.md#\"name\": \"Checkout CTA Button Color\"",
+]
+
+[[unit]]
+text = "It saves the new experiment's id in $EXP_ID:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A draft that fails the review step's rules answers \"success\": false, with errors listing them."
+by = ["test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestSubmitDraft::test_submit_incomplete_draft_returns_errors"]
+
+[[unit]]
+text = "So does a draft whose targeting conditions would not be applied as written, such as an unknown operator or a blank attribute."
+by = ["test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestSubmitDraft::test_invalid_targeting_is_refused_with_fixed_text"]
+
+[[unit]]
+text = "The error names the condition, for example targeting_rules: Value error, groups[0].conditions[0].operator: unknown operator, and no experiment is created."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The experiment is an ordinary one."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An ab draft gets two variants, Control and Variant A, at 50% each; its primary metric counts checkout_completed:"
+by = ["docex:docs/guides/experiment-wizard.md#\"name\": \"Checkout CTA Button Color\""]
+
+[[unit]]
+text = "A multivariate draft gets three variants (33/33/34), and a feature_flag_rollout draft gets a held-back control with {\"enabled\": false} and a treatment with {\"enabled\": true}, at 50% each."
+by = ["untested:T"]
+
+[[unit]]
+text = "Review the experiment and start it when you're ready."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sample Size Guidance"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The draft stores baseline_rate and mde, but the wizard doesn't compute a sample size from them."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "The experiments API does, and the dashboard's guided setup calls it on its Estimate step:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For a 12% baseline and a 5% relative change it needs 47036 users per variant, 94072 in all, at 80% power and 5% significance (two-sided)."
+by = ["docex:docs/guides/experiment-wizard.md#\"samples_per_variant\": 47036"]
+
+[[unit]]
+text = "It also takes statistical_power, significance_level, is_one_sided, variant_count, and daily_traffic with traffic_allocation for a duration estimate."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "The calculation is the standard one for two proportions (Fleiss), the same one the results page's Sample Size tab uses: the variance is pooled under the null hypothesis and unpooled under the alternative."
+by = [
+    "test:backend/tests/unit/api/test_sample_size_one_formula.py::test_both_routes_agree_with_the_service",
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_the_tab_and_the_guided_setup_agree",
+]
+
+[[unit]]
+text = "Where p₁ = baseline rate, p₂ = baseline rate × (1 + MDE), p̄ = (p₁ + p₂) / 2, z_α/2 = 1.96 (two-tailed, α=0.05; a one-sided test uses z_α = 1.645), z_β = 0.842 (80% power), and n is rounded up."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It is per variant, with no correction for comparing more than two variants; the total is n times the number of variants."
+by = [
+    "test:backend/tests/unit/api/test_sample_size_critical_values.py::test_sample_size_matches_exact_critical_values",
+    "test:backend/tests/unit/api/test_sample_size_one_formula.py::test_documented_case_on_both_routes",
+]
+
+[[unit]]
+text = "A baseline that the effect would raise to 100% or more is refused with a 422."
+by = ["test:backend/tests/unit/api/test_sample_size_one_formula.py::test_a_treatment_rate_of_100_percent_or_more_is_refused"]
+
+[[unit]]
+text = "Permissions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Any logged-in user can create, read and update their own wizard drafts, and only their own: for every role, another user's draft is answered exactly as a draft that does not exist."
+by = ["test:backend/tests/unit/api/test_wizard_drafts_per_user.py::test_get_another_users_draft_is_404"]
+
+[[unit]]
+text = "Submitting needs permission to create experiments, as POST /api/v1/experiments does."
+by = [
+    "test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestSubmitDraft::test_viewer_cannot_create_an_experiment_through_the_wizard",
+    "test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestSubmitDraft::test_developer_can_create_an_experiment_through_the_wizard",
+]

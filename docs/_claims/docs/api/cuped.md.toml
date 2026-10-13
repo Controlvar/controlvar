@@ -1,0 +1,531 @@
+# What verifies each unit of docs/api/cuped.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/cuped.md"
+
+[[unit]]
+text = "CUPED Variance Reduction"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "CUPED (Controlled-experiment Using Pre-Experiment Data) narrows the interval around a treatment effect by adjusting for what each user did before the experiment."
+by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_s1_planted_correlation_removes_60_to_68_percent"]
+
+[[unit]]
+text = "How much it narrows depends on how well that history predicts the outcome."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The endpoint is GET /api/v1/results/{experiment_id}/cuped; the dashboard and GET /results/{id} show the unadjusted numbers."
+by = [
+    "docex:docs/api/cuped.md#\"analysis_status\": \"ga\"",
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_s6_sizes_and_conversions_are_the_results_routes",
+]
+
+[[unit]]
+text = "Reference: Deng, Xu, Kohavi & Walker — Improving the sensitivity of online controlled experiments by utilizing pre-experiment data (WSDM 2013)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "How It Works"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For each conversion metric, the outcome Y of a user is 1 if they converted after assignment (counted exactly as GET /results/{id} counts them) and 0 otherwise."
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_s6_sizes_and_conversions_are_the_results_routes"]
+
+[[unit]]
+text = "The covariate X is 1 if the same user sent the metric's event in the covariate_lookback_days before their assignment, and 0 if they did not."
+by = [
+    "test:backend/tests/integration/services/test_cuped_covariate_window.py::test_w1_boundary_table",
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_n1_users_with_no_history_stay_in_with_x_zero",
+]
+
+[[unit]]
+text = "A user with no history stays in the analysis with X = 0."
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_n1_users_with_no_history_stay_in_with_x_zero"]
+
+[[unit]]
+text = "Each arm's adjusted conversion rate is:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Where:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "θ is the slope of Y on X, pooled within arms over every arm of the experiment: the x coefficient of the regression Y ~ arm + X"
+by = [
+    "test:backend/tests/unit/services/test_cuped_metric_result.py::test_s2_theta_equals_the_ols_coefficient_with_unequal_arms",
+    "test:backend/tests/unit/services/test_cuped_metric_result.py::test_s2_theta_pools_every_arm_with_different_slopes",
+]
+
+[[unit]]
+text = "overall mean(X) is the share of all assigned users with history, so the adjusted rates stay on the conversion-rate scale"
+by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_s3_effect_equals_ols_and_se_matches_hc2"]
+
+[[unit]]
+text = "The adjusted effect is the treatment's adjusted rate minus the control's."
+by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_s3_effect_equals_ols_and_se_matches_hc2"]
+
+[[unit]]
+text = "Its variance is each arm's residual variance over its size, so the more of the outcome the history explains, the narrower the interval."
+by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_s3_effect_equals_ols_and_se_matches_hc2"]
+
+[[unit]]
+text = "What counts as history, per user:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "the event is the metric's own event_name (or that of covariate_metric_id, below), matched the way results match conversions: an experiment-view row never counts;"
+by = [
+    "test:backend/tests/integration/services/test_cuped_covariate_window.py::test_only_conversion_events_of_the_name_count",
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_x3_a_covariate_metric_of_the_experiment_is_read",
+]
+
+[[unit]]
+text = "it happened in [assigned_at − covariate_lookback_days, assigned_at): an event at the moment of assignment is not history;"
+by = ["test:backend/tests/integration/services/test_cuped_covariate_window.py::test_w1_boundary_table"]
+
+[[unit]]
+text = "it can carry any experiment key, any flag key, or none."
+by = ["test:backend/tests/integration/services/test_cuped_covariate_window.py::test_w5_a_fanned_out_copy_counts_once"]
+
+[[unit]]
+text = "One event is enough; a user with three copies of the same purchase still has X = 1;"
+by = ["test:backend/tests/integration/services/test_cuped_covariate_window.py::test_w5_a_fanned_out_copy_counts_once"]
+
+[[unit]]
+text = "History counts only if the server received it before the user was assigned."
+by = ["test:backend/tests/integration/services/test_cuped_covariate_window.py::test_receive_guard_stored_after_assignment_is_not_history"]
+
+[[unit]]
+text = "Send history before you start the experiment."
+by = ["test:backend/tests/integration/services/test_cuped_covariate_window.py::test_receive_guard_stored_after_assignment_is_not_history"]
+
+[[unit]]
+text = "History backfilled after the start is ignored."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sending pre-experiment history"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Send each user's past events to POST /api/v1/tracking/track, or 100 at a time to POST /api/v1/tracking/batch, without an experiment_key or a feature_flag_key."
+by = ["docex:docs/api/cuped.md#\"experiment_id\": null"]
+
+[[unit]]
+text = "Such an event is stored as history: it counts in no experiment's results, only as CUPED history."
+by = ["test:backend/tests/integration/api/test_tracking_untagged_events.py::test_untagged_events_change_no_results_path"]
+
+[[unit]]
+text = "For each event:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "user_id is exactly the id the user will be assigned with (it is case-sensitive);"
+by = ["untested:T"]
+
+[[unit]]
+text = "event_type is the metric's event_name, for example checkout_completed;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "timestamp is when the event happened, in ISO 8601 (no offset means UTC)."
+by = ["untested:T"]
+
+[[unit]]
+text = "Without it the event is dated when it is received."
+by = ["untested:T"]
+
+[[unit]]
+text = "Send events from at least covariate_lookback_days before the planned start; anything older is never read."
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_x4_the_lookback_setting_is_read"]
+
+[[unit]]
+text = "Events during the experiment still need the experiment's key, as they always have: an event without one counts in no experiment's results."
+by = ["test:backend/tests/integration/api/test_tracking_untagged_events.py::test_an_untagged_event_after_assignment_counts_nowhere"]
+
+[[unit]]
+text = "The SDKs' track() without a key sends one event for each experiment and flag cached for the user, and those tagged events count as history for a later experiment."
+by = [
+    "test:sdk/js/__tests__/client.test.ts",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_fans_out_to_cached_assignment_and_flag",
+    "test:backend/tests/integration/services/test_cuped_covariate_window.py::test_w5_a_fanned_out_copy_counts_once",
+]
+
+[[unit]]
+text = "An SDK user with nothing cached sends no history, which is usual before a user's first assignment."
+by = ["test:sdk/js/__tests__/client.test.ts"]
+
+[[unit]]
+text = "Each result's covariate_coverage_pct shows how many users had history."
+by = ["docex:docs/api/cuped.md#true"]
+
+[[unit]]
+text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in first:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The examples use the demo data's checkout_button_color experiment, whose primary metric counts checkout_completed events."
+by = ["docex:docs/api/cuped.md#\"experiment_id\": null"]
+
+[[unit]]
+text = "The demo data already gives about one user in ten a checkout_completed before their assignment."
+by = ["test:backend/tests/unit/scripts/test_seed_demo_history.py"]
+
+[[unit]]
+text = "Sending an event takes an API key, which this saves in $KEY, with the experiment's id in $EXP_ID; then it sends one history event with no key:"
+by = ["docex:docs/api/cuped.md#\"experiment_id\": null"]
+
+[[unit]]
+text = "It prints \"experiment_id\": null: the event is stored as history, tagged with no experiment."
+by = ["docex:docs/api/cuped.md#\"experiment_id\": null"]
+
+[[unit]]
+text = "Choosing the method"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The method is part of the experiment, in its variance_reduction_config, set when you create it (POST /api/v1/experiments/) or change it (PUT /api/v1/experiments/{id}):"
+by = ["docex:docs/api/cuped.md#200"]
+
+[[unit]]
+text = "Field | Type | Default | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "method | string | none | none, cuped, cuped_plus or winsorization"
+by = [
+    "test:backend/tests/unit/schemas/test_variance_reduction_schemas.py::TestVarianceReductionConfig::test_default_method_is_none",
+    "test:backend/tests/unit/schemas/test_variance_reduction_schemas.py::TestVarianceReductionMethodEnum::test_all_enum_members",
+]
+
+[[unit]]
+text = "covariate_metric_id | string | null | The id of one of the experiment's metrics whose event_name is the history to read. By default each metric's own event_name"
+by = [
+    "test:backend/tests/unit/schemas/test_variance_reduction_schemas.py::TestVarianceReductionConfig::test_default_covariate_metric_id_is_none",
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_x3_a_covariate_metric_of_the_experiment_is_read",
+]
+
+[[unit]]
+text = "covariate_lookback_days | int | 7 | Days of history before each user's assignment, 1–90"
+by = [
+    "test:backend/tests/unit/schemas/test_variance_reduction_schemas.py::TestVarianceReductionConfig::test_default_covariate_lookback_days",
+    "test:backend/tests/unit/schemas/test_variance_reduction_schemas.py::TestVarianceReductionConfig::test_covariate_lookback_days_min_1",
+    "test:backend/tests/unit/schemas/test_variance_reduction_schemas.py::TestVarianceReductionConfig::test_covariate_lookback_days_max_90",
+]
+
+[[unit]]
+text = "winsorization_percentile | float | 99.0 | The percentile above which values are clipped, 50–100"
+by = [
+    "test:backend/tests/unit/schemas/test_variance_reduction_schemas.py::TestVarianceReductionConfig::test_default_winsorization_percentile",
+    "test:backend/tests/unit/schemas/test_variance_reduction_schemas.py::TestVarianceReductionConfig::test_winsorization_percentile_min_50",
+    "test:backend/tests/unit/schemas/test_variance_reduction_schemas.py::TestVarianceReductionConfig::test_winsorization_percentile_max_100",
+]
+
+[[unit]]
+text = "none applies no adjustment: theta is 0 and the numbers are the unadjusted ones."
+by = [
+    "test:backend/tests/unit/services/test_cuped_metric_result.py::test_adjust_false_is_the_method_none",
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_s6_sizes_and_conversions_are_the_results_routes",
+]
+
+[[unit]]
+text = "cuped adjusts as described above."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "cuped_plus is currently computed as cuped: the response's top-level method says cuped_plus, and each row's method says cuped."
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_em6_cuped_plus_is_computed_as_cuped"]
+
+[[unit]]
+text = "winsorization clips values above a percentile, which only means something for a mean metric (revenue, say)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This view does not apply it: a conversion metric is listed with unavailable_reason: \"winsorization_needs_mean_metric\"."
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_winsorization_on_a_conversion_metric_is_a_reason_not_zeroed"]
+
+[[unit]]
+text = "This sets the demo experiment's method to cuped with a 7-day lookback:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints 200."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "API Reference"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}/cuped"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Returns one comparison per conversion metric and treatment, each against the control."
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_reports_every_treatment"]
+
+[[unit]]
+text = "It takes no query parameters: the method comes from the experiment, the interval uses the experiment's stored confidence_level, and corrected_p_value applies its stored correction_method across the metric's treatments (How results are judged)."
+by = [
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_uses_the_stored_confidence_level",
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_c2_the_stored_correction_applies_across_three_treatments",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Like the main results, the view is fixed-horizon: do not stop an experiment the first time it looks significant."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Any logged-in user can read it; an experiment that doesn't exist answers 404."
+by = [
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_not_found_answers_404",
+    "test:backend/tests/unit/api/test_cuped_api.py::TestCupedApiEndpoint::test_cuped_endpoint_requires_authentication",
+]
+
+[[unit]]
+text = "It prints \"analysis_status\": \"ga\", \"method\": \"cuped\" and one comparison, for green_button against blue_button."
+by = ["docex:docs/api/cuped.md#\"analysis_status\": \"ga\""]
+
+[[unit]]
+text = "This checks that the history narrowed the interval:"
+by = ["docex:docs/api/cuped.md#true"]
+
+[[unit]]
+text = "It prints true."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The full response:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Response Fields"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Field | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "method (top level) | The method the experiment is configured with"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_em6_cuped_plus_is_computed_as_cuped"]
+
+[[unit]]
+text = "confidence_level, correction_method | The experiment's stored settings the numbers use"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_uses_the_stored_confidence_level"]
+
+[[unit]]
+text = "covariate_lookback_days | Days of history before each assignment that were read"
+by = [
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_uses_the_stored_confidence_level",
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_x4_the_lookback_setting_is_read",
+]
+
+[[unit]]
+text = "variant_id, variant_name, control_variant_id | The treatment, and the control it is compared with"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_reports_every_treatment"]
+
+[[unit]]
+text = "control_sample_size, treatment_sample_size | Users assigned to each, the same as GET /results/{id}"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_s6_sizes_and_conversions_are_the_results_routes"]
+
+[[unit]]
+text = "adjusted_control_mean, adjusted_treatment_mean | The two conversion rates, adjusted for history"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_recovers_the_seeded_history"]
+
+[[unit]]
+text = "adjusted_effect, adjusted_se | Treatment minus control, adjusted, and its standard error"
+by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_s3_effect_equals_ols_and_se_matches_hc2"]
+
+[[unit]]
+text = "adjusted_ci_lower, adjusted_ci_upper | The adjusted effect's interval at confidence_level"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_uses_the_stored_confidence_level"]
+
+[[unit]]
+text = "adjusted_p_value | Two-sided p-value of the adjusted effect, before any correction"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_c2_the_stored_correction_applies_across_three_treatments"]
+
+[[unit]]
+text = "corrected_p_value | adjusted_p_value after correction_method, across the metric's treatments; null for none"
+by = [
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_c2_the_stored_correction_applies_across_three_treatments",
+    "test:backend/tests/unit/stats_validation/test_multiple_comparison_reference.py::test_no_correction_adjusts_nothing",
+]
+
+[[unit]]
+text = "is_significant | corrected_p_value (or adjusted_p_value when there is none) is below 1 − confidence_level"
+by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_correction_applies_across_the_metrics_treatments"]
+
+[[unit]]
+text = "unadjusted_effect, unadjusted_se | The same comparison without CUPED"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_s6_sizes_and_conversions_are_the_results_routes"]
+
+[[unit]]
+text = "variance_reduction_pct | 100 × (1 − adjusted variance / unadjusted variance) of the effect. At r % the interval is √(1 − r/100) as wide: 36% means 80% as wide, worth about 1.56 times the users"
+by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_s1_planted_correlation_removes_60_to_68_percent"]
+
+[[unit]]
+text = "theta | The slope of the outcome on history, pooled within arms. 0 when no user (or every user) has history, and for none"
+by = [
+    "test:backend/tests/unit/services/test_cuped_metric_result.py::test_no_covariate_variation_gives_theta_zero_and_the_unadjusted_numbers",
+    "test:backend/tests/unit/services/test_cuped_metric_result.py::test_adjust_false_is_the_method_none",
+]
+
+[[unit]]
+text = "covariate_event_name | The event read as history; null when none is read"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_recovers_the_seeded_history"]
+
+[[unit]]
+text = "covariate_coverage_pct | Share of this comparison's users (control and treatment), 0–100, with history"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_n1_users_with_no_history_stay_in_with_x_zero"]
+
+[[unit]]
+text = "unavailable_reason | null, or why the comparison has no numbers (below)"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_recovers_the_seeded_history"]
+
+[[unit]]
+text = "method (each row) | The method actually computed: cuped when cuped_plus is configured"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_em6_cuped_plus_is_computed_as_cuped"]
+
+[[unit]]
+text = "analysis_status | ga: the numbers are computed as described. analysis_notice is null"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_n2_n4_zero_coverage_is_theta_zero_and_still_ga"]
+
+[[unit]]
+text = "In GET /results/{id}, adjusted_p_value is the p-value after the multiple-comparison correction; here it is the p-value of the CUPED-adjusted effect before any correction, and the corrected one is corrected_p_value."
+by = [
+    "journey:experiment-results#results-api",
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_c2_the_stored_correction_applies_across_three_treatments",
+]
+
+[[unit]]
+text = "Three things can surprise:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "variance_reduction_pct can be negative."
+by = ["untested:T"]
+
+[[unit]]
+text = "θ is one slope pooled over every arm."
+by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_s2_theta_pools_every_arm_with_different_slopes"]
+
+[[unit]]
+text = "If an arm's history relates to its outcome differently from the others' (a small arm, say), its adjusted variance can come out larger than its unadjusted one."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The estimate is still valid; CUPED simply did not help that comparison."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Adding an arm changes the other arms' adjusted effects."
+by = ["untested:T"]
+
+[[unit]]
+text = "Because θ is pooled over every arm, a new treatment's users move θ, and with it every comparison's adjusted numbers."
+by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_s2_theta_pools_every_arm_with_different_slopes"]
+
+[[unit]]
+text = "The unadjusted numbers do not move."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Coverage near 0 gives the unadjusted numbers."
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_n2_n4_zero_coverage_is_theta_zero_and_still_ga"]
+
+[[unit]]
+text = "With no history, θ is 0, variance_reduction_pct is 0 and the adjusted effect equals the unadjusted one."
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_n2_n4_zero_coverage_is_theta_zero_and_still_ga"]
+
+[[unit]]
+text = "That is not an error."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "unavailable_reason"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Value | Meaning"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "not_a_proportion_metric | The metric is not a conversion metric; this view computes conversion metrics only"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_x2_a_mean_metric_is_listed_with_a_reason"]
+
+[[unit]]
+text = "winsorization_needs_mean_metric | The method is winsorization, which this view does not apply to a conversion metric"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_winsorization_on_a_conversion_metric_is_a_reason_not_zeroed"]
+
+[[unit]]
+text = "fewer_than_2_units | The control or this treatment has fewer than 2 assigned users"
+by = [
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_variant_without_users_is_not_one_user",
+    "test:backend/tests/unit/services/test_cuped_metric_result.py::test_a_control_with_fewer_than_2_units_is_not_computed",
+]
+
+[[unit]]
+text = "no_variation | Neither arm's outcome varies (in each arm nobody, or everybody, converted): there is no standard error to compute"
+by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_no_variation_in_either_arm_is_a_reason"]
+
+[[unit]]
+text = "no_residual_variation | History predicts every user's outcome exactly in both arms, so the adjusted standard error would be 0 and no p-value can be given"
+by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_an_exact_fit_has_no_numbers_never_a_zero_se_p_value"]
+
+[[unit]]
+text = "no_control_variant / no_treatment_variant | The experiment has no control, or no treatment; the row has no variant"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_x2_no_control_and_no_treatment_are_reasons"]
+
+[[unit]]
+text = "covariate_metric_not_found | covariate_metric_id is not one of the experiment's metrics (after a PUT replaced them, say)"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_x3_a_covariate_metric_that_is_not_the_experiments"]
+
+[[unit]]
+text = "metric_has_no_event_name | The metric whose event is the history has no event_name"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_pe10_a_metric_with_no_event_name_never_reads_every_conversion"]
+
+[[unit]]
+text = "result_invalid | The counts were ones no sample could produce"
+by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_sums_no_sample_could_produce_are_refused"]
+
+[[unit]]
+text = "Permissions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Any logged-in user can read the results."
+by = ["test:backend/tests/unit/api/test_cuped_api.py::TestCupedApiEndpoint::test_cuped_endpoint_requires_authentication"]
+
+[[unit]]
+text = "Changing an experiment's variance_reduction_config is a change to the experiment, decided by role and by the experiment's state, not by who created it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "ANALYST and VIEWER cannot change any experiment: the PUT above answers 403 with \"You don't have permission to update experiments\"."
+by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py"]
+
+[[unit]]
+text = "ADMIN and DEVELOPER may change experiments, but only a superuser may change one that is no longer a draft, and the demo experiment is running: for a DEVELOPER (or an ADMIN who is not a superuser) the PUT above answers 400 with \"Cannot update experiments in active status\"."
+by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py"]
+
+[[unit]]
+text = "The demo's admin@demo.com is a superuser, which is why it gets 200."
+by = ["docex:docs/api/cuped.md#200"]

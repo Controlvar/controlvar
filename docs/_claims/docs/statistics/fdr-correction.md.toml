@@ -1,0 +1,265 @@
+# What verifies each unit of docs/statistics/fdr-correction.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/statistics/fdr-correction.md"
+
+[[unit]]
+text = "Benjamini-Hochberg FDR Correction"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The Benjamini-Hochberg (BH) procedure controls the False Discovery Rate (FDR) — the expected proportion of false positives among all rejected hypotheses — when testing multiple metrics simultaneously."
+by = [
+    "test:backend/tests/unit/services/test_fdr_correction.py::TestBHVsBonferroni::test_bh_finds_more_discoveries_than_bonferroni_on_classic_example",
+    "test:backend/tests/unit/services/test_fdr_correction.py::TestBHVsBonferroni::test_bh_with_many_tests_still_controls_fdr",
+]
+
+[[unit]]
+text = "The BH Procedure"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Given $m$ raw p-values $p_1, p_2, \\ldots, p_m$ and a desired FDR threshold $\\alpha$:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sort p-values ascending: $p_{(1)} \\leq p_{(2)} \\leq \\cdots \\leq p_{(m)}$."
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_known_result_6_significant_at_fdr_10"]
+
+[[unit]]
+text = "Compute the BH threshold for rank $k$: $T_k = \\frac{k}{m} \\times \\alpha$."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Find the largest rank $k^$ such that $p_{(k^)} \\leq T_{k^}$."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Reject all hypotheses with rank $\\leq k^$ (declare significant)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Example"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "10 p-values with $\\alpha = 0.10$:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rank | p-value | BH threshold $k/10 \\times 0.10$ | Reject?"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "1 | 0.001 | 0.010 | Yes"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "2 | 0.008 | 0.020 | Yes"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "3 | 0.039 | 0.030 | No"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "4 | 0.041 | 0.040 | No"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "5 | 0.042 | 0.050 | Yes"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "6 | 0.060 | 0.060 | Yes ← largest k"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "7 | 0.074 | 0.070 | No"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "8 | 0.205 | 0.080 | No"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "9 | 0.212 | 0.090 | No"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "10 | 0.391 | 0.100 | No"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Result: Reject 6 hypotheses (all with rank $\\leq 6$), even though ranks 3–5 individually don't satisfy their per-rank threshold — the step-up property means we look for the largest k, so ranks 1, 2, 5, 6 passing brings along ranks 3 and 4."
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_known_result_6_significant_at_fdr_10"]
+
+[[unit]]
+text = "At $\\alpha = 0.05$ with the same p-values, only 2 are significant (k=1: 0.001≤0.005 ✓, k=2: 0.008≤0.010 ✓, k=3: 0.039>0.015 ✗)."
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHProcedureBasic::test_known_result_2_significant_from_10"]
+
+[[unit]]
+text = "Adjusted P-values"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The BH-adjusted p-value for rank $k$ is:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "$$p_{\\text{adj}}(k) = \\min\\left(\\frac{p_{(k)} \\cdot m}{k},\\ 1.0\\right)$$"
+by = [
+    "test:backend/tests/unit/services/test_fdr_correction.py::TestBHMonotonicity::test_adjusted_p_values_non_decreasing",
+    "test:backend/tests/unit/services/test_fdr_correction.py::TestBHMonotonicity::test_adjusted_p_values_bounded_by_1",
+]
+
+[[unit]]
+text = "with monotonicity enforced from right to left: $$p_{\\text{adj,mono}}(k) = \\min\\left(p_{\\text{adj}}(k),\\ p_{\\text{adj,mono}}(k+1)\\right)$$"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A metric is significant when its rank is at most $k^$, that is, when its adjusted p-value is at most $\\alpha$."
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_known_result_6_significant_at_fdr_10"]
+
+[[unit]]
+text = "REST API Reference"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "POST /api/v1/results/{experiment_id}/fdr-correction"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Apply Benjamini-Hochberg FDR correction to per-metric p-values."
+by = ["docex:docs/statistics/fdr-correction.md#1 revenue true"]
+
+[[unit]]
+text = "The p-values are the ones you send: the experiment in the path must exist, but its own data isn't read."
+by = ["test:backend/tests/integration/api/test_post_strat_api.py::TestFDRCorrectionEndpoint::test_fdr_correction_nonexistent_experiment_returns_404"]
+
+[[unit]]
+text = "Any logged-in user can call it."
+by = [
+    "test:backend/tests/integration/api/test_experiment_errors_fixed_message.py",
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratAuthRequired::test_fdr_correction_requires_auth",
+]
+
+[[unit]]
+text = "Request body:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Field | Type | Required | Default | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "p_values | dict[str, float] | Yes | — | Metric name → raw p-value. All values in [0,1]. Non-empty."
+by = [
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestFDRCorrectionEndpoint::test_fdr_correction_pvalue_above_1_returns_422",
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestFDRCorrectionEndpoint::test_fdr_correction_pvalue_below_0_returns_422",
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestFDRCorrectionEndpoint::test_fdr_correction_empty_pvalues_returns_422",
+]
+
+[[unit]]
+text = "fdr_threshold | float | No | 0.05 | FDR control level α in [0,1]."
+by = [
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestFDRCorrectionEndpoint::test_fdr_correction_invalid_threshold_returns_422",
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestFDRCorrectionEndpoint::test_fdr_correction_custom_threshold",
+]
+
+[[unit]]
+text = "Response (200):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The response is sorted by rank ascending (smallest raw p-value first)."
+by = [
+    "test:backend/tests/unit/services/test_fdr_correction.py::TestBHMonotonicity::test_raw_p_values_sorted_ascending_by_rank",
+    "test:backend/tests/unit/services/test_fdr_correction.py::TestBHProcedureBasic::test_rank_1_is_smallest_p_value",
+]
+
+[[unit]]
+text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in first:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This saves the id of the demo data's checkout_button_color experiment in $EXP_ID, then corrects the five p-values above:"
+by = ["docex:docs/statistics/fdr-correction.md#1 revenue true"]
+
+[[unit]]
+text = "It prints each metric's rank, name and whether it is significant: revenue and engagement_score are, the other three are not, as in the response above."
+by = ["docex:docs/statistics/fdr-correction.md#1 revenue true"]
+
+[[unit]]
+text = "Error codes:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Status | Condition"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "404 | Experiment not found"
+by = ["test:backend/tests/integration/api/test_post_strat_api.py::TestFDRCorrectionEndpoint::test_fdr_correction_nonexistent_experiment_returns_404"]
+
+[[unit]]
+text = "422 | Empty p_values, any value outside [0,1], or fdr_threshold outside [0,1]"
+by = [
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestFDRCorrectionEndpoint::test_fdr_correction_empty_pvalues_returns_422",
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestFDRCorrectionEndpoint::test_fdr_correction_invalid_threshold_returns_422",
+]
+
+[[unit]]
+text = "500 | Internal computation error"
+by = ["test:backend/tests/integration/api/test_experiment_errors_fixed_message.py::test_unexpected_error_answers_fixed_message"]
+
+[[unit]]
+text = "Integration with the Existing Results API"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each experiment stores a correction_method (none, bonferroni or benjamini_hochberg), Benjamini-Hochberg unless it was created with another, and GET /api/v1/results/{experiment_id} applies it across the treatments of each metric: each treatment then carries an adjusted_p_value, and is_significant is decided on it."
+by = [
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_new_experiment_stores_benjamini_hochberg_at_095",
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_create_refuses_a_value_outside_the_contract",
+    "test:backend/tests/unit/services/test_results_correction_pins.py",
+]
+
+[[unit]]
+text = "With one treatment the adjusted p-value equals the p-value and no decision changes."
+by = [
+    "test:backend/tests/unit/services/test_results_correction_pins.py::test_with_one_valid_treatment_a_correction_reports_the_p_value",
+    "test:backend/tests/unit/services/test_results_correction_pins.py::test_with_one_valid_treatment_every_method_gives_the_same_output",
+]
+
+[[unit]]
+text = "The stored method can be changed only while the experiment is a draft."
+by = ["test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_superuser_cannot_change_the_settings_once_out_of_draft"]
+
+[[unit]]
+text = "A request can name another method for itself with the correction_method query parameter; none shows the uncorrected numbers."
+by = ["docex:docs/statistics/fdr-correction.md#\"correction_method\": \"benjamini_hochberg\""]
+
+[[unit]]
+text = "The response's correction_method says which one was applied:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints the correction applied and the experiment's metric, Checkout Completion."
+by = ["docex:docs/statistics/fdr-correction.md#\"correction_method\": \"benjamini_hochberg\""]
+
+[[unit]]
+text = "The POST /api/v1/results/{experiment_id}/fdr-correction endpoint provides finer control: you supply any set of p-values (from post-stratification, CUPED, or raw analysis) and receive BH-corrected results immediately."
+by = ["docex:docs/statistics/fdr-correction.md#1 revenue true"]

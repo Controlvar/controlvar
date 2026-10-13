@@ -1,15 +1,15 @@
 # LLM/AI Model Evaluation — Quick Start
 
-This guide walks you through a complete example: comparing **GPT-4o** (treatment) against **Claude 3.5 Sonnet** (control) for a customer support task.
+This guide creates an experiment that compares two models on a customer support task:
+`claude-3-5-sonnet-20241022` is the control and `gpt-4o` the treatment.
 
 Run the commands in one terminal, in order, against the stack from the
 [Quick Start](../getting-started/quick-start.md). Each uses the shell variables set by the
 ones before it.
 
 **Steps 3 to 5 need a provider key.** They call the models, so the API needs a key for
-each provider your variants use (step 3 names the variables). Steps 1, 2 and 6 need no key.
-Our documentation checks run without provider keys: they run steps 1, 2 and 6 and skip
-3 to 5.
+each provider your variants use. Steps 1, 2 and 6 need no key, and only they are commands
+to run here.
 
 ---
 
@@ -107,43 +107,14 @@ It prints `"ACTIVE"`.
 
 For each incoming customer message, call the `/complete` endpoint. The platform assigns the
 user to a variant deterministically (the same user always gets the same model), renders the
-variant's prompt template with `input_variables`, and calls the model. This saves the
-evaluation's id in `$EVALUATION_ID`, for step 4:
+variant's prompt template with `input_variables`, and calls the model.
 
-```{.bash skip reason="secret: calls the model, which needs a provider key (OPENAI_API_KEY, ANTHROPIC_API_KEY) set on the API"}
-COMPLETION=$(curl -s -X POST localhost:8000/api/v1/llm-experiments/$EXPERIMENT_ID/complete \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'content-type: application/json' \
-  -d '{
-    "user_id": "customer-12345",
-    "input_variables": {
-      "customer_message": "My order has not arrived after 2 weeks. Can you help?"
-    }
-  }')
-EVALUATION_ID=$(jq -r .evaluation_id <<<"$COMPLETION")
+Send `POST /api/v1/llm-experiments/{id}/complete` with the user's `user_id` and the
+template's `input_variables`. The answer names the variant and the model, and carries the
+model's reply (`response`), `latency_ms`, `cost_usd`, the token counts and an
+`evaluation_id`, which step 4 uses.
 
-jq . <<<"$COMPLETION"
-```
-
-The response names the variant and the model, and carries the model's reply with its cost:
-
-```json
-{
-  "variant_id": "2f2b5ac5-0c2a-4c6b-ba31-3b773b19b8a9",
-  "variant_name": "treatment_gpt4o",
-  "provider": "openai",
-  "model_name": "gpt-4o",
-  "response": "I'm sorry to hear your order hasn't arrived yet...",
-  "latency_ms": 1234,
-  "cost_usd": 0.00087,
-  "input_tokens": 89,
-  "output_tokens": 142,
-  "evaluation_id": "8c1f0d7e-3b52-4f0e-9a51-6f3d2c7b9e10"
-}
-```
-
-The provider keys are the API's environment variables, such as `OPENAI_API_KEY` and
-`ANTHROPIC_API_KEY`. A `google` variant calls the Gemini REST API with the key in
+A `google` variant calls the Gemini REST API with the key in
 `GEMINI_API_KEY`; `GEMINI_BASE_URL` (default `https://generativelanguage.googleapis.com`)
 points it at a proxy or gateway instead. With no `GEMINI_API_KEY`, a Gemini variant's
 completion answers `502 {"detail":"LLM provider error: GEMINI_API_KEY is not set"}`.
@@ -153,40 +124,19 @@ completion answers `502 {"detail":"LLM provider error: GEMINI_API_KEY is not set
 ## 4. Record Business Outcomes
 
 When the customer resolves their issue (converts), submit the business metric for that
-evaluation:
-
-```{.bash skip reason="secret: needs the evaluation id from step 3, which needs a provider key"}
-curl -s -X POST localhost:8000/api/v1/llm-experiments/$EXPERIMENT_ID/evaluate \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'content-type: application/json' \
-  -d "{\"evaluation_id\": \"$EVALUATION_ID\", \"business_metric_value\": 1.0}"
-```
-
-You can also submit a human rating (1–5) from your QA team:
-
-```{.bash skip reason="secret: needs the evaluation id from step 3, which needs a provider key"}
-curl -s -X POST localhost:8000/api/v1/llm-experiments/$EXPERIMENT_ID/evaluate \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'content-type: application/json' \
-  -d "{\"evaluation_id\": \"$EVALUATION_ID\", \"human_rating\": 4.5}"
-```
+evaluation with `POST /api/v1/llm-experiments/{id}/evaluate`: the `evaluation_id` and a
+`business_metric_value`, such as `1.0`. A `human_rating` from your QA team, from 1 to 5,
+goes in the same request.
 
 ---
 
 ## 5. Run Automated Quality Scoring (Optional)
 
-Use LLM-as-judge to score the responses on a quality dimension. The judge model is called
-through the same provider libraries:
-
-```{.bash skip reason="secret: calls the judge model, which needs a provider key set on the API"}
-curl -s -X POST localhost:8000/api/v1/llm-experiments/$EXPERIMENT_ID/judge \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'content-type: application/json' \
-  -d '{
-    "criteria": "empathy_and_helpfulness",
-    "judge_model": "claude-3-5-sonnet-20241022"
-  }'
-```
+`POST /api/v1/llm-experiments/{id}/judge` scores the responses on a quality dimension with
+LLM-as-judge. It takes a `criteria` (default `helpfulness`) and a
+`judge_model` (default `LLM_DEFAULT_JUDGE_MODEL`). The judge is called through the
+Anthropic SDK, so `judge_model` names a Claude model. A judge call that fails scores the
+response 0.5.
 
 ---
 
@@ -257,8 +207,6 @@ With traffic, the full response looks like this:
   ]
 }
 ```
-
-**Interpretation**: GPT-4o achieves a 79% resolution rate vs Claude's 71% (p=0.003, medium effect). GPT-4o costs $0.0003 more per request but is 39% faster. Based on these results, ship GPT-4o.
 
 ---
 
