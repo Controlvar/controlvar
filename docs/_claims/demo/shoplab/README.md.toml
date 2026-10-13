@@ -1,0 +1,440 @@
+# What verifies each unit of demo/shoplab/README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "demo/shoplab/README.md"
+
+[[unit]]
+text = "ShopLab — demo storefront for Experimently"
+by = ["exempt:label"]
+
+[[unit]]
+text = "ShopLab is a small e-commerce storefront (Next.js 16, pages router, Tailwind) whose every page runs a real experiment or feature flag through the Experimently platform via the React SDK."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_is_next_16_on_the_pages_router_with_tailwind",
+    "journey:demo-shoplab#panel",
+]
+
+[[unit]]
+text = "It exists to show the platform: open the storefront, click around, watch the \"Powered by Experimently\" panel, then open the dashboard and see the same visitor, the same variants and the same events turn into statistics."
+by = [
+    "journey:demo-shoplab#storefront",
+    "journey:demo-shoplab#panel",
+    "journey:demo-shoplab#signed-in",
+]
+
+[[unit]]
+text = "Nothing is for sale."
+by = ["exempt:example"]
+
+[[unit]]
+text = "There are no images, no external fonts and no CDNs — just twelve made-up products with gradient artwork."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_app_loads_no_image_font_audio_or_cdn",
+    "journey:demo-shoplab#products",
+]
+
+[[unit]]
+text = "What each page demonstrates"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Page | Experiment / flag | Platform feature shown"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Homepage / | shoplab_hero_banner — image hero vs. CSS-animated \"video\" hero | Classic A/B test, sequential testing (mSPRT), Bayesian results, variant configuration driving copy"
+by = [
+    "journey:demo-shoplab#hero-banner",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_shoplab_seeds_four_experiments_of_the_kinds_its_pages_show",
+    "test:demo/shoplab/src/__tests__/index.test.tsx::renders the video variant with its own copy and the animated placeholder",
+]
+
+[[unit]]
+text = "Product list /products | shoplab_plp_sort — relevance vs. price vs. \"ML personalised\" ordering | Multi-armed bandit (Thompson sampling): traffic shifts toward the winning sort"
+by = [
+    "journey:demo-shoplab#product-sort",
+    "journey:demo-shoplab#products",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_shoplab_seeds_four_experiments_of_the_kinds_its_pages_show",
+]
+
+[[unit]]
+text = "Product detail /products/[id] | shoplab_pdp_buy_button — button colour × CTA text (4 cells) | Multivariate test, sequential testing, value on add_to_cart"
+by = [
+    "journey:demo-shoplab#buy-button",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_shoplab_seeds_four_experiments_of_the_kinds_its_pages_show",
+    "test:demo/shoplab/simulator/test_traffic.py::test_batch_payloads_have_the_right_keys",
+]
+
+[[unit]]
+text = "Checkout /checkout | shoplab_checkout_flow — 3-step stepper vs. one-page form | CUPED (API only; the simulator's visitors are new, so they have no history), revenue metric from purchase value"
+by = [
+    "journey:demo-shoplab#checkout-flow",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_shoplab_seeds_four_experiments_of_the_kinds_its_pages_show",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_checkout_flow_counts_purchases_with_order_value_second",
+]
+
+[[unit]]
+text = "Search /search | shoplab_new_search flag — exact name match vs. fuzzy engine with highlights | Feature-flag gradual rollout (10% → 50% → 100%), safety config, flag-attributed events"
+by = [
+    "journey:demo-shoplab#new-search",
+    "journey:demo-shoplab#new-search-schedule",
+    "journey:demo-shoplab#search",
+    "test:demo/shoplab/src/__tests__/search.test.tsx::fires search with {query, results, engine} attached to the flag, and product_click on result click",
+]
+
+[[unit]]
+text = "Header (every page) | shoplab_free_shipping_banner flag | Kill switch: turn the banner off in the dashboard, reload the storefront"
+by = [
+    "journey:demo-shoplab#storefront",
+    "journey:demo-shoplab#banner-off",
+    "journey:demo-shoplab#banner-off-evaluated",
+    "journey:demo-shoplab#banner-back",
+]
+
+[[unit]]
+text = "The bottom-right Powered by Experimently panel shows the visitor id, the variant for each of the four experiments, both flags, the last 8 tracked events, a \"New visitor\" button (new id + reload → fresh assignments) and a link to the dashboard."
+by = ["journey:demo-shoplab#panel"]
+
+[[unit]]
+text = "Event vocabulary (all event_type == event_name): page_view {page} · hero_cta_click · product_click {product_id, position, sort} · add_to_cart value = unit price {product_id, quantity, button} · begin_checkout value = cart total {items, flow} · purchase value = order total {items, flow, order_id} · search {query, results, engine} (attached to the shoplab_new_search flag)."
+by = ["test:demo/shoplab/simulator/test_traffic.py::test_batch_payloads_have_the_right_keys"]
+
+[[unit]]
+text = "Events without an explicit key are fanned out by the SDK to every experiment the visitor has been assigned to in the session."
+by = ["test:sdk/react/src/__tests__/ExperimentationClient.test.ts::POSTs one entry per cached assignment to /api/v1/tracking/batch"]
+
+[[unit]]
+text = "Running it"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Prerequisites: the Experimently backend on http://localhost:8000, the dashboard on http://localhost:3100, Node 20.9 or later (Next.js 16 refuses older versions), and the repo's Python venv."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_is_next_16_on_the_pages_router_with_tailwind",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard",
+]
+
+[[unit]]
+text = "demo/setup-local.sh does all of this for you (set SHOPLAB=0 to skip ShopLab)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_setting_shoplab_or_streampulse_to_0_skips_that_app",
+    "journey:demo-shoplab#storefront",
+]
+
+[[unit]]
+text = "By hand:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "1."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Seed the ShopLab experiments, flags, history and API key, from the repository root."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "backend/scripts/seed_shoplab.py is idempotent."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_a_second_shoplab_seed_run_adds_no_experiment_or_flag"]
+
+[[unit]]
+text = "It writes the key to demo/shoplab/.api_key and the NEXT_PUBLIC_EXPERIMENTLY_API_KEY line into demo/shoplab/.env.local."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_key_files_go_to_the_apps_folder_unless_the_variable_moves_them",
+]
+
+[[unit]]
+text = "--no-history skips the 14-day backfill, and --reset removes everything it created."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history"]
+
+[[unit]]
+text = "2."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Environment."
+by = ["exempt:label"]
+
+[[unit]]
+text = "cp -n copies .env.example only if .env.local does not exist yet."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "After step 1 it usually does, holding only the key line, so this changes nothing and the two URLs take their defaults:"
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard",
+]
+
+[[unit]]
+text = "Setting | Value"
+by = ["exempt:label"]
+
+[[unit]]
+text = "NEXT_PUBLIC_EXPERIMENTLY_API_URL | defaults to http://localhost:8000"
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard"]
+
+[[unit]]
+text = "NEXT_PUBLIC_EXPERIMENTLY_API_KEY | the plaintext key for shoplab-storefront, written by the seed"
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
+]
+
+[[unit]]
+text = "NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL | defaults to http://localhost:3100"
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard"]
+
+[[unit]]
+text = "3."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Run it, still in demo/shoplab."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The storefront is at http://localhost:3200."
+by = [
+    "journey:demo-shoplab#storefront",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_is_next_16_on_the_pages_router_with_tailwind",
+]
+
+[[unit]]
+text = "Other scripts: npm test (jest + Testing Library, SDK mocked), npm run lint, npm run typecheck (type-checks against the SDK source), npm run build, npm start."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_has_the_documented_scripts_and_tests_with_the_sdk_mocked"]
+
+[[unit]]
+text = "The React SDK is consumed straight from ../../sdk/react/src (tsconfig paths + webpack alias + experimental.externalDir), so SDK changes show up without a build step."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_builds_against_the_react_sdk_source_with_its_own_react"]
+
+[[unit]]
+text = "react and react-dom are aliased to this app's copies to avoid the duplicate-React \"Invalid hook call\" trap."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_builds_against_the_react_sdk_source_with_its_own_react"]
+
+[[unit]]
+text = "Traffic simulator"
+by = ["exempt:label"]
+
+[[unit]]
+text = "simulator/traffic.py (Python 3.11, stdlib only) drives synthetic visitors through the same funnel using only the public API and the storefront key — so the dashboard has fresh data while you demo."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_needs_only_the_standard_library",
+    "test:demo/shoplab/simulator/test_traffic.py::test_api_client_request_shape_and_error_mapping",
+]
+
+[[unit]]
+text = "From the repository root, with the venv active, this sends 3 visitors a second for ten minutes (--duration 0, the default, runs until you stop it):"
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_runs_until_stopped_and_takes_the_documented_options"]
+
+[[unit]]
+text = "To print one visitor's planned events without touching the network:"
+by = ["test:demo/shoplab/simulator/test_traffic.py::test_dry_run_prints_plan_without_network"]
+
+[[unit]]
+text = "Its other options are --api-url, --api-key (default: the contents of demo/shoplab/.api_key) and --max-visitors; --help describes them all."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_runs_until_stopped_and_takes_the_documented_options",
+    "test:demo/shoplab/simulator/test_traffic.py::test_help_lists_documented_arguments",
+]
+
+[[unit]]
+text = "Each visitor is assigned to the four experiments (POST /tracking/assign, context = persona attributes), has both flags evaluated, then walks the funnel with the spec's true conversion rates (hero CTA 12% vs 15%; sort click 22/19/28%; add-to-cart 8.0/8.5/10.5/9.5%; purchase after checkout 62% vs 68%, lognormal order value with median $85; search click 35% with the new engine vs 25% without)."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_walks_the_funnel_at_the_spec_rates",
+    "test:demo/shoplab/simulator/test_traffic.py::test_assignment_and_flag_calls_carry_context",
+]
+
+[[unit]]
+text = "Three personas scale intent — casual 60%, shopper 30%, power 10% — calibrated so the population rates equal the spec."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_three_personas_split_60_30_10",
+    "test:demo/shoplab/simulator/test_traffic.py::test_persona_mix_is_calibrated_to_spec_rates",
+]
+
+[[unit]]
+text = "Events go out via POST /tracking/batch (≤100 per call) with an explicit experiment_key for every assigned experiment and feature_flag_key for search."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_events_go_out_in_batches_of_at_most_100_and_stats_every_10_seconds",
+    "test:demo/shoplab/simulator/test_traffic.py::test_batch_payloads_have_the_right_keys",
+]
+
+[[unit]]
+text = "Stats print every 10 s; the process exits non-zero on 401 (bad key) or 404 (not seeded)."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_events_go_out_in_batches_of_at_most_100_and_stats_every_10_seconds",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_a_rejected_key_a_missing_seed_and_no_backend_exit_2_3_and_4",
+]
+
+[[unit]]
+text = "Tests (no network):"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Demo script — what to show in the dashboard"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Hero banner (shoplab_hero_banner): open Results."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Point at the Sequential tab (mSPRT boundary, \"can stop early?\")."
+by = ["journey:demo-shoplab#hero-banner"]
+
+[[unit]]
+text = "The probability that video beats control and the expected loss are in the Overview tab's Bayesian panel where your version has one, and always in the API (GET /api/v1/results/{id}/bayesian)."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Reload the storefront with \"New visitor\" until you land in video_hero."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Product sort (shoplab_plp_sort): open the experiment's page."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Its Current traffic weights panel shows each variant's share of new visitors, drifting toward ml_personalized (true click rate 28% vs 22% / 19%)."
+by = [
+    "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::shows each variant with the server values, in its order, and when they were computed",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_walks_the_funnel_at_the_spec_rates",
+]
+
+[[unit]]
+text = "Press Refresh to see the latest weights; the panel does not update by itself, and the dashboard has no chart of past weights."
+by = [
+    "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::reads GET /api/v1/bandit/{id} once on load, with no options, and again on Refresh",
+    "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::never polls: no further request without a click",
+    "test:frontend/src/tests/components/BanditWeightsSection.test.tsx::offers no control but Refresh, for anyone",
+]
+
+[[unit]]
+text = "Then go to /products and note \"Sorted by Recommended for you\"."
+by = ["journey:demo-shoplab#products"]
+
+[[unit]]
+text = "Buy button (shoplab_pdp_buy_button): four cells."
+by = [
+    "journey:demo-shoplab#buy-button",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_shoplab_seeds_four_experiments_of_the_kinds_its_pages_show",
+]
+
+[[unit]]
+text = "orange_buy_now wins on add-to-cart; show the multivariate breakdown and the sequential-testing status."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_walks_the_funnel_at_the_spec_rates"]
+
+[[unit]]
+text = "On a product page, switch visitors to see colour and text change."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Checkout flow (shoplab_checkout_flow): open Results."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Its primary metric is the purchase conversion, and its secondary the revenue metric Order value."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_checkout_flow_counts_purchases_with_order_value_second"]
+
+[[unit]]
+text = "There is no CUPED toggle in the dashboard."
+by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx::offers no CUPED tab, toggle or control: CUPED-adjusted results are API only"]
+
+[[unit]]
+text = "CUPED adjusts for each user's own purchases before assignment, and the simulator's visitors are new, so its covariate_coverage_pct is near 0 and it does not narrow the interval here; the Quick Start's checkout_button_color has history and shows a reduction (CUPED)."
+by = [
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_n2_n4_zero_coverage_is_theta_zero_and_still_ga",
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_n1_users_with_no_history_stay_in_with_x_zero",
+]
+
+[[unit]]
+text = "Walk through the 3-step vs."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "one-page form in the storefront."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "New search (shoplab_new_search): open the flag → Rollout schedule (10% in progress → 50% → 100%) and the safety config (error-rate thresholds)."
+by = [
+    "journey:demo-shoplab#new-search",
+    "journey:demo-shoplab#new-search-schedule",
+]
+
+[[unit]]
+text = "Search \"rain jaket\" as a visitor with the flag on (fuzzy, highlighted, \"New search ✨\") vs."
+by = ["test:demo/shoplab/src/__tests__/search.test.tsx::flag on: fuzzy engine with badge and highlighted terms"]
+
+[[unit]]
+text = "off (0 results)."
+by = ["test:demo/shoplab/src/__tests__/search.test.tsx::flag off: legacy exact engine, no badge, typo finds nothing"]
+
+[[unit]]
+text = "Free-shipping banner (shoplab_free_shipping_banner): toggle the flag off in the dashboard, reload the storefront — banner gone."
+by = [
+    "journey:demo-shoplab#banner-off",
+    "journey:demo-shoplab#banner-off-evaluated",
+]
+
+[[unit]]
+text = "Toggle back on."
+by = [
+    "journey:demo-shoplab#banner-on",
+    "journey:demo-shoplab#banner-back",
+]
+
+[[unit]]
+text = "Keep the simulator running in a terminal during all of the above so the numbers move."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Troubleshooting"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Symptom | Cause / fix"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Panel shows error for every experiment; network tab shows 401 | Wrong or missing NEXT_PUBLIC_EXPERIMENTLY_API_KEY. Re-run the seed script (it rewrites .env.local and .api_key), then restart npm run dev (env vars are read at startup)."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
+]
+
+[[unit]]
+text = "404 on /tracking/assign or /feature-flags/evaluate/... | The ShopLab experiments are not seeded or not ACTIVE, or the flags are not seeded (a flag that is not ACTIVE answers enabled: false, not a 404). Run the seed script."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_inactive_experiment_returns_404",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
+    "journey:demo-shoplab#banner-off-evaluated",
+]
+
+[[unit]]
+text = "Browser console: CORS error from localhost:3200 | Port 3200 is not in the backend's CORS allow-list. The development defaults (DEFAULT_CORS_ORIGINS in backend/app/core/config.py) include it; if you set CORS_ORIGINS or BACKEND_CORS_ORIGINS yourself, add http://localhost:3200 and restart the API. Against a staging or production API, add it to that API's CORS_ORIGINS: those allow no other origin by default."
+by = [
+    "test:backend/tests/unit/core/test_config_cors.py::TestCorsOriginsSettings::test_dev_settings_default_allows_shoplab_port",
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_the_localhost_defaults_are_the_five_local_apps",
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_a_staging_or_production_api_allows_no_origin_it_was_not_given",
+]
+
+[[unit]]
+text = "Every visitor is control and nothing loads | Backend not running on NEXT_PUBLIC_EXPERIMENTLY_API_URL. Start it from the repository root: ENVIRONMENT=development uvicorn backend.app.main:app --reload."
+by = ["test:sdk/react/src/__tests__/useExperiment.test.tsx::sets error and keeps the control defaults on network failure"]
+
+[[unit]]
+text = "\"Invalid hook call\" in the browser | Two React copies. next.config.js aliases react/react-dom to this app's node_modules; make sure you ran npm install inside demo/shoplab."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_builds_against_the_react_sdk_source_with_its_own_react"]
+
+[[unit]]
+text = "Simulator exits with code 2 / 3 / 4 | 2 = API key rejected or missing, 3 = experiments not seeded (404), 4 = backend unreachable."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_a_rejected_key_a_missing_seed_and_no_backend_exit_2_3_and_4",
+    "test:demo/shoplab/simulator/test_traffic.py::test_fatal_api_errors_exit_non_zero_with_message",
+]
+
+[[unit]]
+text = "npm run typecheck fails inside sdk/react/src | The app is written against React SDK v1.1.0's surface (useExperiment, useTrackEvent, ExperimentAssignment.configuration, ...). Make sure sdk/react is on that version."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_1_1_0_with_the_hooks_the_apps_use"]

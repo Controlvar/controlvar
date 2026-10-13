@@ -1,0 +1,16 @@
+# What verifies each unit of deploy/compose/generate-env.sh#header (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "deploy/compose/generate-env.sh#header"
+
+[[unit]]
+text = "deploy/compose/generate-env.sh: write the .env that compose.yml reads, with generated secrets."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_it_writes_every_required_setting_privately"]
+
+[[unit]]
+text = "Run it once, before the first start: it refuses to overwrite an existing .env."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_a_second_run_refuses_and_leaves_the_file_alone"]
+
+[[unit]]
+text = "README.md beside this file says how to use it."
+by = ["exempt:navigation"]

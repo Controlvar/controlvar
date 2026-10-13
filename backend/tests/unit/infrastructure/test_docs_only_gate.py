@@ -202,6 +202,10 @@ NOT_DOCS_TESTS = {
     "backend/tests/smoke/test_openapi_release_rewrite.py": "docs/api only",
     # Reads only docs/api/endpoints.md (same reason as above).
     "backend/tests/unit/api/test_wizard_docs_routes.py": "docs/api only",
+    # Runs the quick start of sdk/python/README.md, which is not under docs/:
+    # a change to it is never docs-only (scripts/classify_changes.py), and the
+    # SDK suite it is in runs on every pull request (sdk-unit-tests.yml).
+    "sdk/python/tests/test_readme.py": "reads sdk/python/README.md only",
     # Reads only docs/api/warehouse-analytics.md (same reason as above).
     "modules/backend/tests/unit/test_warehouse_docs_availability.py": "docs/api only",
     # Runs the runbook SQL of docs/self-hosting/migrations.md against

@@ -1,6 +1,6 @@
 # Docker Local Development
 
-**This guide runs the local development stack, for your own machine. It is not for a server.** The stack publishes its ports on `127.0.0.1` only, `ENVIRONMENT=development` accepts a short `SECRET_KEY`, and the first start creates the demo administrator `admin@demo.com` with the demo password shown in this guide. To run Experimently on a server, use the published images in [`deploy/compose/compose.yml`](https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml); the header comment of that file lists its commands and settings, and [Releases, images and verification](../self-hosting/releases.md) covers the versions and how to verify the images.
+**This guide runs the local development stack, for your own machine. It is not for a server.** The stack publishes its ports on `127.0.0.1` only, `ENVIRONMENT=development` accepts a short `SECRET_KEY`, and the first start creates the demo administrator `admin@demo.com` with the demo password shown in this guide. To run Experimently on a server, use the published images in [`deploy/compose/compose.yml`](https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml): the [README](https://github.com/getexperimently/experimently/blob/main/deploy/compose/README.md) beside it says how to run it and lists its settings, and [Releases, images and verification](../self-hosting/releases.md) covers the versions and how to verify the images.
 
 ## Overview
 
@@ -9,11 +9,11 @@ service. By default the compose file at the repository root starts PostgreSQL, R
 API and the dashboard. Three optional profiles add more: `tools` (pgAdmin), `aws`
 (LocalStack, for developing the optional AWS integrations) and `demo` (the ShopLab and
 StreamPulse demo applications). [The Docker Compose stack](docker-compose-file.md) lists
-every service, port and variable.
+every service with its host port and profile.
 
 ## Prerequisites
 
-- Docker 24 or later, with Compose v2 (`docker compose`, not the retired `docker-compose`)
+- Docker with Compose v2 (`docker compose`, not the retired `docker-compose`)
 - `curl` and `jq`
 - The AWS CLI, only for the LocalStack section below
 
@@ -117,9 +117,6 @@ docker compose --profile aws up -d --wait localstack
 
 It listens on http://localhost:4566.
 
-**Not run by our documentation checks: these commands use the AWS CLI.** They talk to
-LocalStack on your machine, not to an AWS account, but the checks never run the AWS CLI.
-
 #### AWS CLI Configuration for LocalStack
 
 LocalStack accepts any credentials. Set dummy ones for this shell only, so that nothing is
@@ -132,7 +129,7 @@ export AWS_DEFAULT_REGION=us-west-2
 ```
 
 Every command below passes `--endpoint-url=http://localhost:4566`, which sends it to
-LocalStack.
+LocalStack on your machine, not to an AWS account.
 
 #### Creating and Listing DynamoDB Tables
 

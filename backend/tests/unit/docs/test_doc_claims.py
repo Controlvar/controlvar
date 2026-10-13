@@ -492,7 +492,7 @@ reason = "r"
 [documents."run.sh#header"]
 scope = "in"
 class = "reference"
-extractor = "leading-hash-comments"
+extractor = "yaml-keys"
 reason = "r"
 """
 
@@ -1166,7 +1166,7 @@ PLANTED = [
                 {"run.sh#header": [unit("Runs it.", "exempt:label")]}
             ),
         ),
-        "has no 'leading-hash-comments' extractor yet",
+        "has no 'yaml-keys' extractor yet",
     ),
     (
         "a registry for a pending page",
@@ -1402,7 +1402,7 @@ def test_a_whole_file_target_is_counted_apart(tmp_path):
 
 
 def test_a_skeleton_lists_every_unit_once_with_its_count():
-    text = dc.skeleton("docs/x.md", dc.units("# T\n\nSame. Same.\n"))
+    text = dc.skeleton("docs/x.md", "# T\n\nSame. Same.\n")
     assert text.count("[[unit]]") == 2
     assert 'text = "Same."\nby = []\ncount = 2\n' in text
 
@@ -1497,3 +1497,118 @@ def test_the_real_hub_is_read_literal_by_literal():
     text = (REPO_ROOT / "frontend/src/pages/docs/index.tsx").read_text(encoding="utf-8")
     assert entry["extractor"] == dc.HUB
     assert len(dc.hub_units(text)) == entry["literals"] > 0
+
+
+# ---------------------------------------------------------------------------
+# The two surfaces read through an extractor: a file read whole, and the
+# comment block at the top of a file (the inventory's `text` and
+# `leading-hash-comments`)
+# ---------------------------------------------------------------------------
+TOOL = """#!/bin/sh
+# tool.sh -- writes the settings file, once.
+#
+#   ./tool.sh
+#
+# It refuses to overwrite one.
+set -eu
+# Not the header: the script starts above.
+"""
+
+NOTES = """Installed {{ .Release.Name }}.
+
+Sign in at {{ .Values.url }}.
+"""
+
+
+def surfaces_tree() -> Dict[str, Any]:
+    """The planted tree with one header surface and one text surface registered."""
+    tree = base()
+    tree["files"][dc.INVENTORY] += """
+[documents."tool.sh#header"]
+scope = "in"
+class = "reference"
+extractor = "leading-hash-comments"
+reason = "r"
+
+[documents."chart/NOTES.txt"]
+scope = "in"
+class = "reference"
+extractor = "text"
+reason = "r"
+"""
+    tree["files"]["tool.sh"] = TOOL
+    tree["files"]["chart/NOTES.txt"] = NOTES
+    tree["registries"]["tool.sh#header"] = [
+        unit("tool.sh -- writes the settings file, once.", "exempt:label"),
+        unit("./tool.sh", "exempt:instruction"),
+        unit("It refuses to overwrite one.", "test:tests/test_things.py::test_alpha"),
+    ]
+    tree["registries"]["chart/NOTES.txt"] = [
+        unit("Installed {{ .Release.Name }}.", "exempt:label"),
+        unit("Sign in at {{ .Values.url }}.", "exempt:instruction"),
+    ]
+    return tree
+
+
+def test_a_header_and_a_text_surface_are_registered_like_pages(tmp_path):
+    """The positive control for the surface cases below."""
+    result = build(tmp_path, surfaces_tree())
+    assert not result.problems, "\n".join(result.problems)
+    assert result.counts["registered"] == 6
+    assert (tmp_path / "docs/_claims/tool.sh.header.toml").is_file()
+
+
+SURFACE_CASES = [
+    (
+        "a sentence added to the header",
+        lambda t: edit(
+            t, "tool.sh", "# It refuses", "# It runs anywhere.\n#\n# It refuses"
+        ),
+        "tool.sh#header:6: unregistered unit 'It runs anywhere.'",
+    ),
+    (
+        "a comment below the first line of code is not the header",
+        lambda t: t["registries"]["tool.sh#header"].append(
+            unit("Not the header: the script starts above.", "exempt:label")
+        ),
+        "'Not the header: the script starts above.' is listed but no longer on"
+        " tool.sh#header",
+    ),
+    (
+        "the #! line is not the header",
+        lambda t: t["registries"]["tool.sh#header"].append(
+            unit("!/bin/sh", "exempt:label")
+        ),
+        "'!/bin/sh' is listed but no longer on tool.sh#header",
+    ),
+    (
+        "a sentence edited in a text surface",
+        lambda t: edit(t, "chart/NOTES.txt", "Sign in at", "Log in at"),
+        "chart/NOTES.txt:3: unregistered unit 'Log in at {{ .Values.url }}.'",
+    ),
+    (
+        "the header's file is gone",
+        lambda t: t["files"].pop("tool.sh"),
+        "tool.sh#header does not exist",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "plant, refusal", [c[1:] for c in SURFACE_CASES], ids=[c[0] for c in SURFACE_CASES]
+)
+def test_each_surface_refusal_fires(tmp_path, plant, refusal):
+    tree = surfaces_tree()
+    plant(tree)
+    result = build(tmp_path, tree)
+    assert any(refusal in p for p in result.problems), "\n".join(result.problems)
+
+
+def test_a_surface_skeleton_reads_through_its_extractor(tmp_path):
+    """`units` on a surface lists the header's units, not the script's."""
+    tree = surfaces_tree()
+    build(tmp_path, tree)
+    text = dc.skeleton("tool.sh#header", dc.read_document(tmp_path, "tool.sh#header"))
+    assert text.count("[[unit]]") == 3
+    assert "It refuses to overwrite one." in text
+    assert "set -eu" not in text and "Not the header" not in text

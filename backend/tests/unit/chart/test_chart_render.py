@@ -404,6 +404,67 @@ def test_the_ingress_host_is_the_public_base_url_hostname(url):
     )
 
 
+def test_helm_test_checks_the_public_host_and_refuses_another(docs):
+    """`helm test`, which the install notes and the README name: the API
+    answers 200 for publicBaseUrl's host and 400 for any other."""
+    smoke = one(docs, "Pod", f"{FULLNAME}-smoke")
+    assert smoke["metadata"]["annotations"]["helm.sh/hook"] == "test"
+    test = container(smoke, "smoke")
+    assert env_of(test)["PUBLIC_HOST"]["value"] == urlparse(PUBLIC_BASE_URL).hostname
+    script = test["args"][0]
+    assert '-H "Host: $PUBLIC_HOST" "$BASE/api/v1/modules"' in script
+    assert '[ "$code" = 200 ]' in script
+    assert '-H "Host: not-$PUBLIC_HOST" "$BASE/api/v1/modules"' in script
+    assert '[ "$code" = 400 ]' in script
+
+
+def test_the_bundled_postgres_and_redis_are_one_replica_each_and_never_backed_up(docs):
+    """The core CI values keep the chart's defaults, which bundle both, each a
+    single replica; no values render a job of any kind, so nothing backs the
+    database up."""
+    defaults = render("core")
+    postgres = one(defaults, "StatefulSet", f"{FULLNAME}-postgres")
+    redis = one(defaults, "Deployment", f"{FULLNAME}-redis")
+    assert postgres["spec"]["replicas"] == 1
+    assert redis["spec"]["replicas"] == 1
+    # One major version each, fixed by the chart: an upgrade never moves the
+    # data to another one.
+    assert container(postgres, "postgres")["image"] == "postgres:16-alpine"
+    assert container(redis, "redis")["image"] == "redis:7-alpine"
+    assert [d["kind"] for d in docs if d["kind"] in ("CronJob", "Job")] == []
+
+
+@pytest.mark.parametrize(
+    "release, prefix",
+    [
+        ("experimently", "experimently"),
+        ("prod", "prod-experimently"),
+        ("my-experimently", "my-experimently"),
+    ],
+)
+def test_the_resources_are_named_after_the_release(release, prefix):
+    """The guide installs release `experimently`, whose resources are
+    `experimently-api` and `experimently-web`: a release name that contains the
+    chart's name is used as it is, any other gets `-experimently` added."""
+    result = subprocess.run(
+        [str(HELM), "template", release, str(CHART), "-f", str(CI_VALUES["core"])],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    for kind in ("Deployment", "Service"):
+        one(docs, kind, f"{prefix}-api")
+        one(docs, kind, f"{prefix}-web")
+    api = one(docs, "Deployment", f"{prefix}-api")
+    assert [c["name"] for c in pod_spec(api)["initContainers"]] == ["migrate"]
+    smoke = one(docs, "Pod", f"{prefix}-smoke")
+    assert (
+        env_of(container(smoke, "smoke"))["BASE"]["value"]
+        == f"http://{prefix}-api:8000"
+    )
+
+
 def test_extra_allowed_hosts_keep_the_public_host():
     config = one(render("full"), "ConfigMap", f"{FULLNAME}-config")["data"]
     assert config["ALLOWED_HOSTS"].split(",") == [

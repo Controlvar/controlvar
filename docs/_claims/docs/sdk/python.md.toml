@@ -1,0 +1,553 @@
+# What verifies each unit of docs/sdk/python.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/sdk/python.md"
+
+[[unit]]
+text = "Python SDK"
+by = ["exempt:label"]
+
+[[unit]]
+text = "experimently (v0.1.0) is a synchronous, dependency-free Python client for the Experimently public API: experiment assignment, feature-flag evaluation and event tracking."
+by = [
+    "mechanism:sdk-doc-versions",
+    "test:sdk/python/tests/test_package.py::test_the_client_is_synchronous",
+    "test:sdk/python/tests/test_package.py::test_it_needs_python_3_9_and_no_other_package",
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_maps_response",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_maps_response",
+    "test:sdk/python/tests/test_client.py::TestTrackWithKey::test_experiment_key_posts_to_track",
+]
+
+[[unit]]
+text = "Requires Python 3.9+; HTTP goes through the standard library (urllib)."
+by = [
+    "test:sdk/python/tests/test_package.py::test_it_needs_python_3_9_and_no_other_package",
+    "test:sdk/python/tests/test_package.py::test_http_goes_through_the_standard_library",
+]
+
+[[unit]]
+text = "By default, flag evaluation and experiment assignment are decided by the server: every call goes to the public API with your X-API-Key, the server buckets the user (sticky per user + experiment), and the SDK caches the answer per user + key."
+by = [
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_sticky_cache_hit_makes_one_request",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky",
+]
+
+[[unit]]
+text = "In server-side code you can opt in to local evaluation (evaluation=\"local\"): flags are then answered in-process from the server's ruleset, with the server's answers, and experiments stay on the server."
+by = [
+    "test:sdk/python/tests/test_evaluator.py::test_no_local_answer_differs_from_the_server",
+    "test:sdk/python/tests/test_local.py::test_the_vectors_through_get_feature_flag",
+]
+
+[[unit]]
+text = "Source: sdk/python."
+by = ["test:sdk/python/tests/test_package.py::test_it_installs_as_experimently_and_imports_as_experimentation"]
+
+[[unit]]
+text = "The OpenFeature provider in sdk/openfeature-python is built on top of this client (see openfeature.md)."
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestConstruction::test_client_property_exposes_sdk_client",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestConstruction::test_accepts_prebuilt_client",
+]
+
+[[unit]]
+text = "Installation"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The experimently package is on PyPI."
+by = [
+    "journey:sdk-python#quick-start-user-on",
+    "journey:sdk-python#quick-start-user-off",
+]
+
+[[unit]]
+text = "0.1.0 is a beta release."
+by = [
+    "mechanism:sdk-doc-versions",
+    "journey:sdk-python#quick-start-user-on",
+    "journey:sdk-python#quick-start-user-off",
+]
+
+[[unit]]
+text = "To work on the SDK itself, install it from the root of a clone of this repository instead:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Quick start"
+by = ["exempt:label"]
+
+[[unit]]
+text = "render_new_checkout() and use_new_search() below stand for your own code: define them, or replace the two calls, before you run the block."
+by = [
+    "journey:sdk-python#quick-start-user-on",
+    "journey:sdk-python#quick-start-user-off",
+]
+
+[[unit]]
+text = "As written, a branch that reaches one of them raises NameError."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Constructor"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Instances are thread-safe and should be shared across your application (one per process is typical): the per-user cache is what makes a key-less track count for every experiment the user is in."
+by = ["test:sdk/python/tests/test_client.py::TestAssignmentsAndCache::test_concurrent_evaluations_are_thread_safe"]
+
+[[unit]]
+text = "API reference"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Method | Returns | Failure behaviour"
+by = ["exempt:label"]
+
+[[unit]]
+text = "get_assignment(experiment_key, user_id, user_attributes=None) | Assignment(experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason) | raises ExperimentationError (status == 404 when the experiment is not ACTIVE or unknown)"
+by = [
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_maps_response",
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_404_raises_with_status_and_body",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_unknown_key_returns_404",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_inactive_experiment_returns_404",
+]
+
+[[unit]]
+text = "get_variant(experiment_key, user_id, user_attributes=None) | str — the variant name | returns default_variant (\"control\")"
+by = ["test:sdk/python/tests/test_client.py::TestGetVariant::test_returns_default_on_404"]
+
+[[unit]]
+text = "get_feature_flag(flag_key, user_id, user_attributes=None) | FlagEvaluation(key, enabled, config, reason) | raises ExperimentationError (status == 404 when the flag key is unknown; a flag that is not ACTIVE returns enabled=False, reason=\"inactive\")"
+by = [
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_maps_response",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_404_raises_and_is_not_cached",
+    "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
+]
+
+[[unit]]
+text = "is_feature_enabled(flag_key, user_id, user_attributes=None) | bool | returns False"
+by = [
+    "test:sdk/python/tests/test_client.py::TestIsFeatureEnabled::test_false_on_404",
+    "test:sdk/python/tests/test_client.py::TestIsFeatureEnabled::test_false_on_network_error",
+]
+
+[[unit]]
+text = "get_all_flags(user_id, user_attributes=None) | dict[str, bool] (not cached) | raises ExperimentationError"
+by = ["test:sdk/python/tests/test_client.py::TestGetAllFlags::test_not_cached_and_raises_on_error"]
+
+[[unit]]
+text = "track(user_id, event_name, event_value=None, properties=None, experiment_key=None, feature_flag_key=None, event_type=None, timestamp=None) | bool — True when the server accepted it | never raises; False on failure or when nothing was sent"
+by = ["test:sdk/python/tests/test_client.py::TestTrackNeverRaises"]
+
+[[unit]]
+text = "track_batch(events) | BatchResult(success_count, failure_count, errors), .ok | never raises; sends chunks of 100, a failed chunk counts all its events as failures"
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackBatch::test_chunks_aggregates_and_offsets_error_indexes",
+    "test:sdk/python/tests/test_client.py::TestTrackBatch::test_failed_chunk_counts_all_events_without_raising",
+]
+
+[[unit]]
+text = "get_assignments(user_id, active_only=True) | list[dict] — the user's assignments from the server (not cached) | raises ExperimentationError"
+by = ["test:sdk/python/tests/test_client.py::TestAssignmentsAndCache::test_get_assignments_url"]
+
+[[unit]]
+text = "cached_assignments(user_id) / cached_flags(user_id) | cached, unexpired entries for the user | —"
+by = ["test:sdk/python/tests/test_client.py::TestAssignmentsAndCache::test_cached_accessors_list_live_entries"]
+
+[[unit]]
+text = "clear_cache() | — | —"
+by = ["test:sdk/python/tests/test_client.py::TestAssignmentsAndCache::test_clear_cache_forces_refetch"]
+
+[[unit]]
+text = "ready(timeout_seconds=None) | ReadyResult(ok, ruleset_version, error), truthy when ready; ReadyResult(ok=True) at once in server mode | never raises"
+by = [
+    "test:sdk/python/tests/test_local.py::test_server_mode_is_unchanged",
+    "test:sdk/python/tests/test_local.py::test_ready_with_a_timeout_does_not_block_forever",
+]
+
+[[unit]]
+text = "status() | LocalEvaluationStatus(evaluation, ready, ruleset_version, last_refresh_at, last_error, server_evaluated_flags) | —"
+by = ["test:sdk/python/tests/test_local.py::test_status_reports_the_ruleset"]
+
+[[unit]]
+text = "close(), with ExperimentationClient(...) as client: | local mode: stops the refresh thread and sends the remaining evaluation counts; a no-op in server mode | never raises"
+by = [
+    "test:sdk/python/tests/test_local.py::test_the_context_manager_closes",
+    "test:sdk/python/tests/test_local.py::test_the_thread_is_a_daemon_and_close_stops_it",
+    "test:sdk/python/tests/test_local.py::test_close_sends_one_entry_per_flag_and_deferred_evaluations_are_not_counted",
+]
+
+[[unit]]
+text = "consistent_hash(user_id, flag_key) / md5_hex(user_id, flag_key) | cross-SDK MD5 bucket in [0, 1) / hex digest | pure functions; not the flag bucketing function and not used to decide variants or flags"
+by = [
+    "test:sdk/python/tests/test_hashing.py::test_consistent_hash_matches_golden_vector",
+    "test:sdk/python/tests/test_hashing.py::test_md5_hex_matches_golden_vector",
+    "test:sdk/python/tests/test_hashing.py::test_hash_is_deterministic_and_in_unit_interval",
+    "test:sdk/python/tests/test_evaluator.py::test_the_bucket_is_not_consistent_hash",
+]
+
+[[unit]]
+text = "Assignment and FlagEvaluation are frozen dataclasses."
+by = ["test:sdk/python/tests/test_package.py::test_assignment_and_flag_evaluation_are_frozen_dataclasses"]
+
+[[unit]]
+text = "ExperimentationError carries .status (HTTP status, None for network errors and timeouts) and .body (raw response text)."
+by = [
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_404_raises_with_status_and_body",
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_transport_failure_raises_experimentation_error",
+]
+
+[[unit]]
+text = "FlagEvaluation.reason (\"targeting_rule\", \"rollout\", \"inactive\" or \"error\") says why the server decided; it is None when the server does not send one."
+by = [
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_maps_reason_when_present",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_reason_is_none_when_absent_or_not_a_string",
+]
+
+[[unit]]
+text = "FlagEvaluation.source is set only in local mode: \"local\" when answered in-process, \"server\" when the server evaluated it."
+by = [
+    "test:sdk/python/tests/test_local.py::test_server_mode_is_unchanged",
+    "test:sdk/python/tests/test_local.py::test_after_ready_evaluations_make_no_request_and_follow_the_attributes",
+]
+
+[[unit]]
+text = "Enrolment: assigned and reason"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An Assignment also carries assigned and reason."
+by = ["test:sdk/python/tests/test_client.py::TestGetAssignment::test_carries_assigned_true_and_reason"]
+
+[[unit]]
+text = "assigned is False means the server did not enrol the user (reason is \"holdout\", \"mutual_exclusion\" or \"targeting\") and returned the control variant so you render the default experience; no exposure was recorded."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_carries_assigned_false_and_reason_for_an_unenrolled_user",
+]
+
+[[unit]]
+text = "When you export exposures to a warehouse, exclude assignments with assigned is False: the user was not enrolled, and reason says why."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A server that predates the fields sends neither, so assigned is None (never False)."
+by = ["test:sdk/python/tests/test_client.py::TestGetAssignment::test_assigned_and_reason_are_none_not_false_for_an_older_server"]
+
+[[unit]]
+text = "Decide deliberately how to treat those rows rather than dropping them with an assigned is True filter."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Targeting context"
+by = ["exempt:label"]
+
+[[unit]]
+text = "user_attributes is what the platform's targeting rules evaluate against."
+by = [
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_sends_attributes_as_url_encoded_json_context",
+]
+
+[[unit]]
+text = "It is sent as context in the POST /api/v1/tracking/assign body and, when non-empty, as context=<url-encoded JSON> (compact json.dumps(..., separators=(\",\", \":\")), percent-encoded) on GET /api/v1/feature-flags/evaluate/{flag_key} and GET /api/v1/feature-flags/user/{user_id} — so a flag whose dashboard rule says os_version semver_gte 17.0.0 AND tier equals premium turns on only for matching users."
+by = [
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_sends_post_with_context",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_sends_attributes_as_url_encoded_json_context",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_empty_attributes_send_no_context",
+    "test:sdk/python/tests/test_client.py::TestGetAllFlags::test_sends_attributes_as_context",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_semver_gte_evaluates_against_context",
+]
+
+[[unit]]
+text = "Top-level keys are also reachable under user."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_prefix_aliases_for_top_level_keys",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_dotted_keys_for_nested_dicts",
+]
+
+[[unit]]
+text = "/ device."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_prefix_aliases_for_top_level_keys",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_dotted_keys_for_nested_dicts",
+]
+
+[[unit]]
+text = "/ app."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_prefix_aliases_for_top_level_keys",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_dotted_keys_for_nested_dicts",
+]
+
+[[unit]]
+text = "aliases in rules (country matches user.country), and nested dicts flatten to dotted keys ({\"app\": {\"version\": \"3.2.1\"}} answers app.version)."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_prefix_aliases_for_top_level_keys",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_dotted_keys_for_nested_dicts",
+]
+
+[[unit]]
+text = "Attributes are assumed stable per user: evaluations and assignments are cached by user + key only, so call clear_cache() after changing a user's attributes."
+by = ["test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_cache_key_ignores_attributes_until_clear_cache"]
+
+[[unit]]
+text = "Caching and retries"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Successful assignments and evaluations are cached per user + key for cache_ttl_seconds (default 300 s)."
+by = [
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_cache_expires_after_ttl",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_404_raises_and_is_not_cached",
+]
+
+[[unit]]
+text = "Failures are never cached, so the next call retries."
+by = [
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_failure_is_never_cached",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_404_raises_and_is_not_cached",
+]
+
+[[unit]]
+text = "A 429 is retried once after Retry-After seconds (capped at 5 s; 1 s when the header is missing or unparseable)."
+by = [
+    "test:sdk/python/tests/test_client.py::TestRateLimit::test_retries_once_after_retry_after",
+    "test:sdk/python/tests/test_client.py::TestRateLimit::test_retry_after_is_capped_or_defaulted",
+    "test:sdk/python/tests/test_client.py::TestRateLimit::test_second_429_raises",
+]
+
+[[unit]]
+text = "Any other non-2xx status raises immediately."
+by = ["test:sdk/python/tests/test_client.py::TestRateLimit::test_any_other_error_status_raises_at_once"]
+
+[[unit]]
+text = "The cache is checked before any request, so a cached value is returned even if the backend is currently unreachable."
+by = ["test:sdk/python/tests/test_client.py::TestGetAssignment::test_sticky_cache_hit_makes_one_request"]
+
+[[unit]]
+text = "Tracking fan-out rule"
+by = ["exempt:label"]
+
+[[unit]]
+text = "With experiment_key and/or feature_flag_key → one POST /api/v1/tracking/track."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackWithKey::test_experiment_key_posts_to_track",
+    "test:sdk/python/tests/test_client.py::TestTrackWithKey::test_both_keys_are_sent",
+]
+
+[[unit]]
+text = "Without a key → one POST /api/v1/tracking/batch (chunks of 100) containing one entry per experiment the user has been assigned to through this client (experiment_key) plus one per flag evaluated for the user (feature_flag_key), taken from the cache (successful, unexpired only)."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_fans_out_to_cached_assignment_and_flag",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_expired_entries_are_not_fanned_out",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_chunks_at_batch_limit",
+]
+
+[[unit]]
+text = "Nothing cached for the user → nothing is sent and track returns False."
+by = ["test:sdk/python/tests/test_client.py::TestTrackFanOut::test_nothing_cached_sends_nothing"]
+
+[[unit]]
+text = "event_type defaults to event_name; properties is sent as metadata; timestamp may be a datetime (naive values are treated as UTC) or an ISO-8601 string."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackWithKey::test_naive_datetime_is_utc_and_strings_pass_through",
+    "test:sdk/python/tests/test_client.py::TestTrackWithKey::test_experiment_key_posts_to_track",
+]
+
+[[unit]]
+text = "Conversions are matched to experiment metrics by event name."
+by = ["test:backend/tests/integration/services/test_conversion_event_matching.py::TestConversionEventFilter::test_matches_both_producer_shapes_and_excludes_exposures"]
+
+[[unit]]
+text = "Backend endpoints used"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every request carries X-API-Key: <key>, Content-Type: application/json and Accept: application/json."
+by = ["test:sdk/python/tests/test_client.py::TestConstruction::test_headers_and_timeout_reach_the_transport"]
+
+[[unit]]
+text = "SDK call | Method and path | Body / query | Response used"
+by = ["exempt:label"]
+
+[[unit]]
+text = "get_assignment, get_variant | POST /api/v1/tracking/assign | {experiment_key, user_id, context?} | {experiment_key, user_id, variant_id, variant_name, is_control, configuration}; 404 when the experiment is not ACTIVE"
+by = [
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_sends_post_with_context",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_inactive_experiment_returns_404",
+]
+
+[[unit]]
+text = "get_feature_flag, is_feature_enabled | GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON> | context = user_attributes (omitted when empty) | {key, enabled, config, reason}; enabled: false, reason: \"inactive\" when the flag is not ACTIVE; 404 only for an unknown key"
+by = [
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_sends_attributes_as_url_encoded_json_context",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_empty_attributes_send_no_context",
+    "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
+]
+
+[[unit]]
+text = "get_all_flags | GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON> | context = user_attributes (omitted when empty) | {\"<flag_key>\": bool, …}"
+by = [
+    "test:sdk/python/tests/test_client.py::TestGetAllFlags::test_url_and_mapping",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "track with a key | POST /api/v1/tracking/track | {event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?} | ignored"
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackWithKey::test_experiment_key_posts_to_track",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "track without keys, track_batch | POST /api/v1/tracking/batch | {events: [<track body>, …]} (max 100 per request) | {success_count, failure_count, errors}"
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_chunks_at_batch_limit",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "get_assignments | GET /api/v1/tracking/assignments/{user_id}?active_only=true | — | list of dicts"
+by = [
+    "test:sdk/python/tests/test_client.py::TestAssignmentsAndCache::test_get_assignments_url",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "local mode: ruleset refresh | GET /api/v1/sdk/ruleset (beta) | If-None-Match: \"<version>\" | the ruleset and ETag; 304 when unchanged"
+by = [
+    "test:sdk/python/tests/test_local.py::test_polls_send_the_etag_and_a_304_keeps_the_ruleset",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestVersioning::test_a_matching_if_none_match_is_304_with_no_body",
+]
+
+[[unit]]
+text = "local mode: evaluation counts | POST /api/v1/tracking/evaluations (beta) | {evaluations: [{flag_key, count, enabled_count, window_start, window_end}]} | {accepted, errors}"
+by = [
+    "test:sdk/python/tests/test_local.py::test_close_sends_one_entry_per_flag_and_deferred_evaluations_are_not_counted",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "These SDK paths share a per-IP rate-limit ceiling of SDK_RATE_LIMIT_PER_MINUTE requests (default 6000) on the backend; the SDK honours Retry-After on 429 as described above."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_the_sdk_paths_default_to_6000_a_minute",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_tracking_endpoints_have_higher_limits",
+    "test:sdk/python/tests/test_client.py::TestRateLimit::test_retries_once_after_retry_after",
+]
+
+[[unit]]
+text = "Local evaluation (server-side, beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "With evaluation=\"local\" the client downloads the flag ruleset (GET /api/v1/sdk/ruleset), refreshes it on a daemon thread every refresh_interval_seconds (30 s by default, 5 s minimum), and answers get_feature_flag, is_feature_enabled and get_all_flags in-process whenever it can give exactly the server's answer; otherwise it makes the usual request."
+by = [
+    "test:sdk/python/tests/test_local.py::test_the_thread_is_a_daemon_and_close_stops_it",
+    "test:sdk/python/tests/test_local.py::test_the_minimum_interval_is_five_seconds",
+    "test:sdk/python/tests/test_local.py::test_after_ready_evaluations_make_no_request_and_follow_the_attributes",
+    "test:sdk/python/tests/test_local.py::test_an_unknown_key_and_a_remote_flag_go_to_the_server",
+]
+
+[[unit]]
+text = "Experiments are always assigned by the server."
+by = ["test:sdk/python/tests/test_local.py::test_experiments_are_assigned_by_the_server_in_local_mode"]
+
+[[unit]]
+text = "It needs an Experimently server at 0.11.0 or later and a key with the sdk:ruleset scope, and it is for server-side code only."
+by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these"]
+
+[[unit]]
+text = "A change made in the dashboard reaches the process at its next successful refresh."
+by = [
+    "test:sdk/python/tests/test_local.py::test_5xx_after_a_load_keeps_serving_and_reports_each_failure",
+    "test:sdk/python/tests/test_local.py::test_a_refusal_after_a_load_discards_the_ruleset",
+    "test:sdk/python/tests/test_local.py::test_max_stale_seconds",
+]
+
+[[unit]]
+text = "While the API is unreachable the last ruleset keeps being served (set max_stale_seconds to bound that); a 401 or 403 on refresh discards it."
+by = [
+    "test:sdk/python/tests/test_local.py::test_5xx_after_a_load_keeps_serving_and_reports_each_failure",
+    "test:sdk/python/tests/test_local.py::test_a_refusal_after_a_load_discards_the_ruleset",
+    "test:sdk/python/tests/test_local.py::test_max_stale_seconds",
+]
+
+[[unit]]
+text = "A client created before os.fork() (gunicorn --preload) keeps working in each child, which starts its own refresh thread and reports only its own evaluations."
+by = [
+    "test:sdk/python/tests/test_local.py::test_a_fork_while_the_lock_is_held_gives_the_child_working_state",
+    "test:sdk/python/tests/test_local.py::test_the_pid_check_reinitialises_when_the_fork_hook_did_not_run",
+]
+
+[[unit]]
+text = "What is answered locally, the refresh failure table, safety monitoring and troubleshooting: Local evaluation."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Testing your own code"
+by = ["exempt:label"]
+
+[[unit]]
+text = "experimentation.testing.FakeTransport records requests and serves canned responses, so unit tests can assert the exact request without a network:"
+by = [
+    "test:sdk/python/tests/test_client.py::TestConstruction::test_headers_and_timeout_reach_the_transport",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_url_encodes_key_and_user_id",
+]
+
+[[unit]]
+text = "Contract smoke"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Runs the four contract steps (sticky assignment, flag evaluation, keyed track, key-less fan-out plus a 2-event batch) against a live backend and prints one JSON line:"
+by = ["test:sdk/python/tests/test_contract_smoke.py::test_it_runs_the_four_contract_steps"]
+
+[[unit]]
+text = "It prints:"
+by = ["test:sdk/python/tests/test_contract_smoke.py::test_it_runs_from_the_source_tree_with_its_defaults"]
+
+[[unit]]
+text = "Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
+by = [
+    "test:sdk/python/tests/test_contract_smoke.py::test_it_runs_from_the_source_tree_with_its_defaults",
+    "test:sdk/python/tests/test_contract_smoke.py::test_it_runs_the_four_contract_steps",
+    "test:sdk/python/tests/test_contract_smoke.py::test_it_stops_without_a_key",
+]
+
+[[unit]]
+text = "No install is needed; the script adds sdk/python to sys.path."
+by = ["test:sdk/python/tests/test_contract_smoke.py::test_it_runs_from_the_source_tree_with_its_defaults"]
+
+[[unit]]
+text = "CI runs this SDK's contract smoke against a real API: python is in the sdks: list of the SDK Live Contract job in pr-qa-gate.yml."
+by = ["mechanism:sdk-live-contract-sentence"]
+
+[[unit]]
+text = "Fixtures: backend/scripts/seed_sdk_contract.py; the live runner: python tests/sdk-contract/live/run_live_contract.py --sdk python --strict."
+by = [
+    "test:backend/tests/unit/scripts/test_run_live_contract.py::test_sdk_runs_that_sdk_against_the_seeds_fixtures",
+    "test:backend/tests/unit/scripts/test_run_live_contract.py::test_the_seed_creates_the_fixtures_the_runner_defaults_to",
+    "test:backend/tests/unit/scripts/test_run_live_contract.py::test_strict_fails_on_a_missing_toolchain_and_the_default_skips_it",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestContractSeed::test_the_seed_writes_a_plain_and_a_scoped_key",
+]
+
+[[unit]]
+text = "Development"
+by = ["exempt:label"]
+
+[[unit]]
+text = "python -m pytest sdk/python/tests -q -o addopts=\"\" -p no:cacheprovider: HTTP is faked"
+by = ["test:sdk/python/tests/test_transport.py::test_the_suite_cannot_open_a_real_connection"]
+
+[[unit]]
+text = "python tests/sdk-contract/hash_contract.py python: this SDK's hash vs the golden vectors"
+by = [
+    "test:sdk/python/tests/test_hashing.py::test_consistent_hash_matches_golden_vector",
+    "test:sdk/python/tests/test_hashing.py::test_md5_hex_matches_golden_vector",
+]

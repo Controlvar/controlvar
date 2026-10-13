@@ -395,8 +395,8 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
     # Self-Hosting
     "Run Experimently yourself: Docker Compose on one machine, Helm on Kubernetes, or a CDK app that deploys to AWS.": (
         lede(
-            "production compose file (self-hosting on one Docker host)",
-            "deploy/compose/compose.yml",
+            "runs Experimently on one Docker host from the published images",
+            "deploy/compose/README.md",
         ),
         lede(
             "installs on Kubernetes with the Helm chart",
@@ -413,11 +413,13 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         says("Aurora PostgreSQL cluster"),
         says("ElastiCache Redis replication group"),
     ),
-    "The published images on one Docker host: deploy/compose/compose.yml, whose header comment lists its commands and settings": (
-        lede("production compose file (self-hosting on one Docker host)"),
-        lede("This file runs the PUBLISHED images"),
-        lede("docker compose up -d --wait"),
-        lede("Settings come from the .env file next to this file"),
+    "The published images on one Docker host: deploy/compose/compose.yml, and a README that says how to run it and lists its settings": (
+        lede("Self-hosting with Docker Compose"),
+        lede(
+            "compose.yml in this directory runs Experimently on one Docker host from the published images"
+        ),
+        says("## Run it"),
+        says("## Settings"),
     ),
     "The Helm chart in charts/experimently: a one-time secret step, then one install command": (
         lede(
@@ -641,7 +643,7 @@ def test_the_hub_is_read_link_by_link():
         hub["Configuration reference"].page
         == "docs/getting-started/environment-setup.md"
     )
-    compose = [l for l in hub.values() if l.page == "deploy/compose/compose.yml"]
+    compose = [l for l in hub.values() if l.page == "deploy/compose/README.md"]
     assert len(compose) == 1
     assert hub[
         "How power analysis, post-stratification and FDR correction work."

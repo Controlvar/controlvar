@@ -5,6 +5,7 @@ And: no test can reach real AWS credentials or the real ``aws`` binary (below).
 
 import os
 import shutil
+import socket
 import stat
 import sys
 import tempfile
@@ -69,6 +70,9 @@ def _isolate(mp, bin_dir):
 
 
 def pytest_configure(config):
+    # This suite has its own rootdir, so the repository's marker list does not
+    # reach it; a fix's test still carries the repository's regression marker.
+    config.addinivalue_line("markers", "regression: a test that fails on the code before a fix")
     bin_dir = tempfile.mkdtemp(prefix="no-real-aws-")
     fake = os.path.join(bin_dir, "aws")
     with open(fake, "w") as fh:
@@ -93,3 +97,36 @@ def _no_real_aws(monkeypatch):
     """Per test: dummy credentials, no ~/.aws, and a failing ``aws`` first on PATH."""
     _isolate(monkeypatch, _no_real_aws_state["bin_dir"])
     return _no_real_aws_state["bin_dir"]
+
+
+# ---------------------------------------------------------------------------
+# No test can open a network connection: HTTP is faked (FakeTransport, or a
+# mocked ``urlopen``). A connection a test attempts is refused, and the test
+# then fails at teardown even when the SDK swallowed the error (``track``
+# returns ``False``), so a test that forgot to fake HTTP cannot pass by
+# reaching whatever answers on localhost.
+# ---------------------------------------------------------------------------
+class NetworkBlocked(ConnectionRefusedError):
+    """A test tried to open a real connection."""
+
+
+_attempted = []
+
+
+def _refuse_connection(*args, **kwargs):
+    _attempted.append(next((a for a in args if isinstance(a, tuple)), args[:1]))
+    raise NetworkBlocked("the SDK tests fake HTTP; a real connection was attempted")
+
+
+@pytest.fixture(autouse=True)
+def _no_network(monkeypatch):
+    """Yields the attempts so far; a test that makes one on purpose clears it."""
+    _attempted.clear()
+    monkeypatch.setattr(socket.socket, "connect", _refuse_connection)
+    monkeypatch.setattr(socket.socket, "connect_ex", _refuse_connection)
+    monkeypatch.setattr(socket, "create_connection", _refuse_connection)
+    yield _attempted
+    if _attempted:
+        attempted = list(_attempted)
+        _attempted.clear()
+        pytest.fail(f"the test opened a real connection ({attempted}): fake HTTP with FakeTransport")

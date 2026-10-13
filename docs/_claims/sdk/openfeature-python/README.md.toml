@@ -1,0 +1,222 @@
+# What verifies each unit of sdk/openfeature-python/README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "sdk/openfeature-python/README.md"
+
+[[unit]]
+text = "experimently-openfeature (Python)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Beta."
+by = ["test:sdk/openfeature-python/tests/test_package.py::test_the_package_is_a_0_x_beta"]
+
+[[unit]]
+text = "This is a 0.x release: pin the exact version you test against."
+by = ["test:sdk/openfeature-python/tests/test_package.py::test_the_package_is_a_0_x_beta"]
+
+[[unit]]
+text = "OpenFeature provider for Experimently."
+by = ["test:sdk/openfeature-python/tests/test_provider.py::TestOpenFeatureIntegration::test_provider_can_be_registered_with_api_set_provider"]
+
+[[unit]]
+text = "Flags are evaluated by the server through the experimentation Python SDK (GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>) and cached per user + flag; nothing is bucketed locally."
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestRequestShape::test_evaluate_request_url_headers_and_no_context",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestCache::test_cache_hit_makes_no_additional_requests",
+]
+
+[[unit]]
+text = "Install"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Install the provider and the Python SDK from the root of a clone of this repository (openfeature-sdk is installed as a dependency):"
+by = [
+    "test:sdk/openfeature-python/tests/test_package.py::test_it_needs_python_3_9_and_openfeature_sdk_0_10",
+    "test:sdk/openfeature-python/tests/test_package.py::test_its_only_other_dependency_is_the_python_sdk_which_has_none",
+]
+
+[[unit]]
+text = "Requires Python 3.9+ and openfeature-sdk 0.10.0 or later."
+by = ["test:sdk/openfeature-python/tests/test_package.py::test_it_needs_python_3_9_and_openfeature_sdk_0_10"]
+
+[[unit]]
+text = "The only other dependency is experimently, which itself has none."
+by = ["test:sdk/openfeature-python/tests/test_package.py::test_its_only_other_dependency_is_the_python_sdk_which_has_none"]
+
+[[unit]]
+text = "Quick start"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Constructor: ExperimentationProvider(api_key, base_url=\"http://localhost:8000\", cache_ttl=300, timeout=10, , client=None, transport=None)."
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestConstruction::test_default_base_url",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestConstruction::test_provider_config_defaults",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestConstruction::test_accepts_prebuilt_client",
+]
+
+[[unit]]
+text = "Pass client= to share one experimentation.ExperimentationClient (and its cache) with the rest of your application."
+by = ["test:sdk/openfeature-python/tests/test_provider.py::TestConstruction::test_accepts_prebuilt_client"]
+
+[[unit]]
+text = "Resolution rules"
+by = ["exempt:label"]
+
+[[unit]]
+text = "OpenFeature call | Value"
+by = ["exempt:label"]
+
+[[unit]]
+text = "get_boolean_ | enabled"
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_enabled_flag_returns_true",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_disabled_flag_returns_false_even_with_true_default",
+]
+
+[[unit]]
+text = "get_string_, get_integer_, get_float_, get_object_ | the caller's default, reason DEFAULT"
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveStringDetails::test_default_when_config_has_no_string_variant",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveIntegerDetails::test_default_when_value_is_not_an_integer",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveFloatDetails::test_default_when_value_is_not_numeric",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveObjectDetails::test_default_when_config_is_not_an_object",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+]
+
+[[unit]]
+text = "Only boolean flags carry a value: the evaluate endpoint returns config: null for every flag."
+by = [
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+    "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveStringDetails::test_default_when_config_has_no_string_variant",
+]
+
+[[unit]]
+text = "targeting_key → user_id."
+by = ["test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_missing_targeting_key_returns_default_without_request"]
+
+[[unit]]
+text = "It is required: without it you get the default value with TARGETING_KEY_MISSING."
+by = ["test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_missing_targeting_key_returns_default_without_request"]
+
+[[unit]]
+text = "Context attributes are not sent — the evaluate endpoint takes a context, which this provider does not send yet."
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestRequestShape::test_evaluate_request_url_headers_and_no_context",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+]
+
+[[unit]]
+text = "A disabled flag resolves non-boolean calls to the default with reason DISABLED."
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveStringDetails::test_disabled_flag_returns_default_with_disabled",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveObjectDetails::test_disabled_returns_default",
+]
+
+[[unit]]
+text = "Reasons: TARGETING_MATCH (fresh from the server, on), DISABLED, CACHED (from the SDK cache), DEFAULT, ERROR (FLAG_NOT_FOUND on 404 — an unknown flag key — otherwise GENERAL)."
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_enabled_flag_returns_true",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_disabled_flag_returns_false_even_with_true_default",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_second_evaluation_is_served_from_cache",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveStringDetails::test_default_when_config_has_no_string_variant",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_not_found_returns_default_with_flag_not_found",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_http_error_returns_default_with_general",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
+    "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
+]
+
+[[unit]]
+text = "Errors never raise and are never cached."
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_network_error_returns_default_with_general",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestCache::test_failed_evaluation_is_not_cached",
+]
+
+[[unit]]
+text = "variant on the details is not set, because config is always null."
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_no_variant_when_config_is_null",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+]
+
+[[unit]]
+text = "client.track(event_name, ctx, TrackingEventDetails(value=…)) forwards to ExperimentationClient.track (fans out to the user's cached assignments and flags)."
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestTracking::test_track_fans_out_to_cached_flags",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestTracking::test_track_never_raises",
+]
+
+[[unit]]
+text = "Backend endpoints used"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every request carries X-API-Key: <key>, Content-Type: application/json, Accept: application/json."
+by = ["test:sdk/openfeature-python/tests/test_provider.py::TestRequestShape::test_evaluate_request_url_headers_and_no_context"]
+
+[[unit]]
+text = "Call | Method and path | Response used"
+by = ["exempt:label"]
+
+[[unit]]
+text = "every resolve__details | GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=… | {key, enabled, config}; off with reason: \"inactive\" when the flag exists but is not ACTIVE; 404 only for an unknown key"
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestRequestShape::test_evaluate_request_url_headers_and_no_context",
+    "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
+]
+
+[[unit]]
+text = "provider.track / provider.client.track | POST /api/v1/tracking/track (with a key) or POST /api/v1/tracking/batch (fan-out) | ignored / {success_count, failure_count, errors}"
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestTracking::test_track_fans_out_to_cached_flags",
+    "test:sdk/python/tests/test_client.py::TestTrackWithKey::test_experiment_key_posts_to_track",
+]
+
+[[unit]]
+text = "provider.client.get_assignment | POST /api/v1/tracking/assign | {experiment_key, user_id, variant_id, variant_name, is_control, configuration}"
+by = [
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_sends_post_with_context",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Contract smoke"
+by = ["exempt:label"]
+
+[[unit]]
+text = "It prints:"
+by = ["test:sdk/openfeature-python/tests/test_contract_smoke.py::test_it_reads_its_settings_from_the_environment_with_these_defaults"]
+
+[[unit]]
+text = "Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
+by = [
+    "test:sdk/openfeature-python/tests/test_contract_smoke.py::test_it_reads_its_settings_from_the_environment_with_these_defaults",
+    "test:sdk/openfeature-python/tests/test_contract_smoke.py::test_the_flag_goes_through_openfeature_and_the_rest_through_provider_client",
+]
+
+[[unit]]
+text = "The flag is resolved through the OpenFeature API; assignment and tracking use provider.client."
+by = ["test:sdk/openfeature-python/tests/test_contract_smoke.py::test_the_flag_goes_through_openfeature_and_the_rest_through_provider_client"]
+
+[[unit]]
+text = "CI runs this SDK's contract smoke against a real API: openfeature-python is in the sdks: list of the SDK Live Contract job in pr-qa-gate.yml."
+by = ["mechanism:sdk-live-contract-readme"]
+
+[[unit]]
+text = "Run it with python tests/sdk-contract/live/run_live_contract.py --sdk openfeature-python --strict."
+by = [
+    "test:backend/tests/unit/scripts/test_run_live_contract.py::test_each_sdk_runs_its_own_contract_smoke",
+    "test:backend/tests/unit/scripts/test_run_live_contract.py::test_strict_fails_on_a_missing_toolchain_and_the_default_skips_it",
+]
+
+[[unit]]
+text = "Development"
+by = ["exempt:label"]
+
+[[unit]]
+text = "tests/conftest.py puts sdk/python and src/ on sys.path, so neither package needs to be installed."
+by = ["test:sdk/openfeature-python/tests/test_package.py::test_the_tests_import_both_packages_from_the_source_tree"]

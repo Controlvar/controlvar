@@ -50,11 +50,21 @@ PRESENTS_COGNITO = re.compile(r"AUTH_PROVIDER\s*[=:]\s*[\"'`]?cognito\b")
 COGNITO_ONLY_BOX = re.compile(r'^\s*!!!\s+\w+\s+"Cognito only"', re.M)
 
 
+#: The claims registries (scripts/doc_claims.py): each quotes its page's units
+#: with the markup removed, and the site leaves the directory out. Read as a
+#: page, a registry of a page that presents Cognito mode would "present" it
+#: without the note, whose backticks it has dropped.
+CLAIMS = DOCS / "_claims"
+
+
 def _doc_files() -> List[Path]:
-    """Every file under docs/ except the generated OpenAPI snapshots."""
+    """Every file under docs/ except the generated OpenAPI snapshots and the
+    claims registries."""
     found = []
     for dirpath, dirnames, filenames in os.walk(DOCS):
-        dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+        dirnames[:] = sorted(
+            d for d in dirnames if not d.startswith(".") and Path(dirpath) / d != CLAIMS
+        )
         for name in sorted(filenames):
             if name.startswith("openapi") and name.endswith(".json"):
                 continue
