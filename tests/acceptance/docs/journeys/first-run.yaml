@@ -172,7 +172,10 @@ steps:
       aria: |
         - main:
           - heading "Assign your first user in three steps" [level=2]
-          - link "+ New Experiment"
+          - list:
+            - listitem:
+              - heading "Create an experiment" [level=3]
+              - link "+ New Experiment"
     fail: with the API key made and still no experiment, the experiments page no longer shows the card
   - id: new-experiment
     doc: checklist-create-experiment
@@ -199,9 +202,12 @@ steps:
       url: /experiments/new?step=details
       aria: |
         - main:
-          - textbox "Name *"
-          - textbox "Key"
-          - textbox "Metric 1 event name"
+          - navigation "Guided setup steps":
+            - paragraph: Step 2 of 5
+          - region "Name it and choose what to measure":
+            - textbox "Name *"
+            - textbox "Key"
+            - textbox "Metric 1 event name"
     fail: Next does not move to the step that asks for the name and a metric
   - id: experiment-name
     doc: checklist-step-2
@@ -243,10 +249,13 @@ steps:
       url: /experiments/new?step=variants
       aria: |
         - main:
-          - textbox "Variant 1 name":
-            - text: Control
-          - textbox "Variant 2 name":
-            - text: Treatment
+          - navigation "Guided setup steps":
+            - paragraph: Step 3 of 5
+          - region "Set up the versions users will see":
+            - textbox "Variant 1 name":
+              - text: Control
+            - textbox "Variant 2 name":
+              - text: Treatment
     fail: the next step does not offer a control and a treatment variant, as the card says an experiment has
   - id: variants-next
     doc: checklist-step-2
@@ -260,7 +269,8 @@ steps:
       url: /experiments/new?step=estimate
       aria: |
         - main:
-          - button "Next"
+          - navigation "Guided setup steps":
+            - paragraph: Step 4 of 5
     fail: Next does not leave the variants step
   - id: estimate-next
     doc: checklist-step-2
@@ -274,6 +284,8 @@ steps:
       url: /experiments/new?step=review
       aria: |
         - main:
+          - navigation "Guided setup steps":
+            - paragraph: Step 5 of 5
           - button "Create Experiment"
     fail: Next does not reach the step that creates the experiment
   - id: create-experiment
