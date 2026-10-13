@@ -5,7 +5,9 @@ The Docker guide and the compose-file page describe the development stack:
 ``SECRET_KEY`` accepted, ports on ``127.0.0.1`` only. The stack meant for a
 server is ``deploy/compose/compose.yml``, which runs the published images.
 The navigation had the development guide under ``Self-Hosting -> Docker
-Compose``, so a reader who followed it set up the wrong thing.
+Compose``, so a reader who followed it set up the wrong thing. It now leads to
+``deploy/compose/README.md``, which says how to run that file and lists its
+settings.
 
 These read ``mkdocs.yml`` and pages as text; no Docker, no git, so they run
 in the docs-only gate's "Docs content tests" (this directory) and in
@@ -34,6 +36,9 @@ DEVELOPMENT_PAGES = (
 )
 BLOB = "https://github.com/getexperimently/experimently/blob/main/"
 SELF_HOSTING_STACK = BLOB + "deploy/compose/compose.yml"
+#: What Self-Hosting -> Docker Compose links: the README beside the file, which
+#: says how to run it and lists its settings.
+SELF_HOSTING_README = BLOB + "deploy/compose/README.md"
 
 
 class _AnyTagLoader(yaml.SafeLoader):
@@ -80,8 +85,8 @@ def problems(nav: List[Any]) -> List[str]:
             found.append(f"Self-Hosting lists the development page {page}")
         if page not in getting_started:
             found.append(f"Getting Started does not list {page}")
-    if SELF_HOSTING_STACK not in self_hosting:
-        found.append(f"Self-Hosting does not link {SELF_HOSTING_STACK}")
+    if SELF_HOSTING_README not in self_hosting:
+        found.append(f"Self-Hosting does not link {SELF_HOSTING_README}")
     if "self-hosting/releases.md" not in self_hosting:
         found.append("Self-Hosting does not list self-hosting/releases.md")
     return found
@@ -99,9 +104,10 @@ def test_self_hosting_leads_to_the_self_hosting_stack(nav):
     assert problems(nav) == []
 
 
-def test_the_linked_stack_is_a_file_in_this_repository():
+@pytest.mark.parametrize("link", [SELF_HOSTING_STACK, SELF_HOSTING_README])
+def test_the_linked_stack_is_a_file_in_this_repository(link):
     """A link that names a path which moved would answer 404 on the site."""
-    path = SELF_HOSTING_STACK.removeprefix(BLOB)
+    path = link.removeprefix(BLOB)
     assert (REPO_ROOT / path).is_file(), f"{path} is not in the repository"
 
 
@@ -117,15 +123,16 @@ def test_the_docker_guide_says_it_is_for_local_development():
         "short `SECRET_KEY`",
         "demo administrator",
         SELF_HOSTING_STACK,
-        "header comment",
+        SELF_HOSTING_README,
     ):
         assert phrase in opening, f"the guide's opening does not say {phrase!r}"
 
 
 def test_the_pages_that_send_a_reader_to_the_stack_say_only_what_is_true():
-    """releases.md names compose.yml in a table row and has no run procedure;
-    the commands and settings are the file's header comment. A sentence that
-    says the page "describes" the stack is the claim this pins against."""
+    """releases.md names compose.yml and has no run procedure; the commands
+    and settings are deploy/compose/README.md. A sentence that says the page
+    "describes" the stack is the claim this pins against, and the two
+    development pages link the README as well as the file."""
     releases = (DOCS / "self-hosting" / "releases.md").read_text(encoding="utf-8")
     assert "deploy/compose/compose.yml" in releases
     for relative in (
@@ -137,6 +144,8 @@ def test_the_pages_that_send_a_reader_to_the_stack_say_only_what_is_true():
         assert SELF_HOSTING_STACK in text, f"{relative} does not link the stack"
         assert "described in [Releases" not in text, relative
         assert "cannot reach it" not in text, relative
+        if relative in DEVELOPMENT_PAGES:
+            assert SELF_HOSTING_README in text, f"{relative} does not link the README"
 
 
 def test_no_page_starts_a_development_server_on_all_interfaces():
@@ -191,7 +200,7 @@ GOOD = [
     },
     {
         "Self-Hosting": [
-            {"Docker Compose": SELF_HOSTING_STACK},
+            {"Docker Compose": SELF_HOSTING_README},
             {"Releases": "self-hosting/releases.md"},
         ]
     },
@@ -218,13 +227,13 @@ def test_the_old_navigation_is_refused():
     assert f"Self-Hosting lists the development page {DEVELOPMENT_PAGES[0]}" in found
     assert f"Self-Hosting lists the development page {DEVELOPMENT_PAGES[1]}" in found
     assert f"Getting Started does not list {DEVELOPMENT_PAGES[0]}" in found
-    assert f"Self-Hosting does not link {SELF_HOSTING_STACK}" in found
+    assert f"Self-Hosting does not link {SELF_HOSTING_README}" in found
 
 
 def test_a_navigation_without_the_releases_page_is_refused():
     nav = [
         GOOD[0],
-        {"Self-Hosting": [{"Docker Compose": SELF_HOSTING_STACK}]},
+        {"Self-Hosting": [{"Docker Compose": SELF_HOSTING_README}]},
     ]
     assert problems(nav) == ["Self-Hosting does not list self-hosting/releases.md"]
 

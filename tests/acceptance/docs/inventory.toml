@@ -693,7 +693,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 150
+walked = 152
 
 # The front door, and the policy beside it.
 
@@ -866,6 +866,20 @@ scope = "in"
 class = "device"
 reason = "needs the Flutter SDK and a simulator, emulator or device; #1107 tests its flows"
 
+# The self-hosting READMEs, beside the files they describe.
+
+[documents."charts/experimently/README.md"]
+scope = "in"
+class = "workflow"
+workflow = "chart-kind"
+reason = "the Helm chart's README: chart-kind installs the chart on kind with the Kubernetes guide's blocks, signs in and runs helm test"
+
+[documents."deploy/compose/README.md"]
+scope = "in"
+class = "workflow"
+workflow = "compose-production"
+reason = "how to run deploy/compose/compose.yml: compose-production runs generate-env.sh and docker compose up --wait on that file and signs in"
+
 # Not for users of the product.
 
 [documents.".github/pull_request_template.md"]
@@ -937,21 +951,22 @@ reason = "describes the SDK contract tests: the golden vectors and the live cont
 
 [documents."charts/experimently/templates/NOTES.txt"]
 scope = "in"
-class = "reference"
+class = "workflow"
+workflow = "chart-kind"
 extractor = "text"
-reason = "printed by helm install; not walked as written: chart-kind installs the chart and runs helm test, but nothing reads this text"
+reason = "printed by helm install, which renders it: chart-kind installs the chart, signs in as the first administrator and runs the helm test it names"
 
 [documents."deploy/compose/compose.yml#header"]
 scope = "in"
 class = "reference"
 extractor = "leading-hash-comments"
-reason = "the production compose file's header; not walked as written: compose-production runs generate-env.sh and docker compose up --wait on this file, but nothing reads the header"
+reason = "the production compose file's header, which points at deploy/compose/README.md; test_production_compose.py holds what it says"
 
 [documents."deploy/compose/generate-env.sh#header"]
 scope = "in"
 class = "reference"
 extractor = "leading-hash-comments"
-reason = "the script's usage header; not walked as written: compose-production runs the script and checks that a second run refuses, but nothing reads the header"
+reason = "the script's usage header, which points at deploy/compose/README.md; test_production_compose.py runs the script twice"
 
 [documents."frontend/src/pages/docs/index.tsx#desc"]
 scope = "in"
