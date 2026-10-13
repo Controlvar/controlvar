@@ -4,20 +4,13 @@ This example demonstrates using the Experimently Android SDK with Jetpack Compos
 
 ## Setup
 
-Add the SDK dependency to your `build.gradle.kts`:
+**Not yet published.** `com.getexperimently:experimently-android` is not on Maven Central, so
+build the SDK from source: include `sdk/android/sdk` of this repository in your Gradle build (see
+[`sdk/android/README.md`](../../README.md) for the `settings.gradle.kts` lines) and add the
+dependency to your app module's `build.gradle.kts`:
 
 ```kotlin
 implementation(project(":sdk"))
-```
-
-Or, when published to Maven:
-
-**Not yet published.** `com.getexperimently:experimently-android` is not on Maven Central yet, so
-the line below fails today. Use the `project(":sdk")` dependency above, which builds the SDK from
-this repository (see [`sdk/android/README.md`](../../README.md) for the `settings.gradle.kts` lines).
-
-```kotlin
-implementation("com.getexperimently:experimently-android:1.0.0")
 ```
 
 ## Usage
@@ -41,8 +34,13 @@ LaunchedEffect(Unit) {
 ## Running the Example
 
 1. Start the backend server from the repo root: `ENVIRONMENT=development uvicorn backend.app.main:app --port 8000`
-   and create an API key (for example with `python backend/scripts/seed_sdk_contract.py`).
-2. Open the project in Android Studio and paste the key into `ExampleActivity.kt`.
-3. Run on an emulator (use `http://10.0.2.2:8000` to reach localhost).
-4. The app evaluates the `new-dashboard` flag and assigns `user-123` to `checkout-flow` on
+   and create an API key (for example with `python backend/scripts/seed_sdk_contract.py`, which
+   writes one to `tests/sdk-contract/live/.api_key`).
+2. Create an ACTIVE feature flag with the key `new-dashboard` and an ACTIVE experiment with the key
+   `checkout-flow`. The seed script above creates neither: its flag is `sdk_contract_flag` and its
+   experiment `sdk_contract_ab`.
+3. This directory holds `ExampleActivity.kt` and no Android Studio project: add the file to an app
+   module of your own that depends on the SDK (Setup above), and paste the key into it.
+4. Run on an emulator (use `http://10.0.2.2:8000` to reach localhost).
+5. The app evaluates the `new-dashboard` flag and assigns `user-123` to `checkout-flow` on
    launch; the button tracks a `purchase_clicked` event attributed to that experiment.

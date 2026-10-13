@@ -8,14 +8,11 @@ Flag evaluation and experiment assignment are decided **by the server**: every c
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key for a TTL. Nothing is bucketed on device.
 
-> **Beta: flag targeting on user attributes does not work in this SDK yet.** Flag
-> evaluation sends only the user id (`GET /api/v1/feature-flags/evaluate/{key}?user_id=…`),
-> not the user's attributes, so a flag targeting rule on an attribute (app version, OS,
-> country, plan) never matches here, and the flag's rollout percentage alone decides. Experiment
-> assignment is not affected: `getAssignment`, with `user.attributes`, sends the attributes as `context`, so experiment
-> targeting works. Until this is fixed ([#438](https://github.com/getexperimently/experimently/issues/438)), an app that needs attribute targeting on a
-> flag can call the evaluate endpoint itself with a `context` query parameter (a URL-encoded
-> JSON object of the attributes).
+> **Flag evaluation sends only the user id.** `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`
+> carries none of the user's attributes, so the server evaluates a flag's targeting rules against
+> an empty context. Experiment assignment sends them: `getAssignment`, with `user.attributes`, sends the attributes as
+> `context`. To evaluate a flag with attributes, call the evaluate endpoint with a `context`
+> query parameter (a URL-encoded JSON object of the attributes).
 
 Source: `sdk/ios`. A SwiftUI demo lives in `sdk/ios/Examples/SwiftUIExample/ExampleApp.swift`.
 
@@ -23,7 +20,8 @@ Source: `sdk/ios`. A SwiftUI demo lives in `sdk/ios/Examples/SwiftUIExample/Exam
 
 ## Installation
 
-The manifest lives in `sdk/ios`, so add the SDK as a local package:
+**Not yet published.** Build it from source: the manifest lives in `sdk/ios` of a clone of this
+repository, so add the SDK as a local package:
 
 ```swift
 // Package.swift
@@ -121,7 +119,7 @@ let client = ExperimentationClient(config: config, session: .shared, offlineStor
 | `getEvaluatedFlags(for userId: String)` | — | `[String]` | cached flag keys |
 | `clearCache()` | — | `Void` | drops the in-memory caches (offline store kept) |
 | `clearOfflineCache()` | — | `Void` | wipes everything the SDK wrote to `UserDefaults` |
-| `close()` | — | `Void` | clears memory caches and cancels in-flight requests |
+| `close()` | — | `Void` | clears memory caches and calls `cancel()` on its in-flight tasks; a request already sent is not stopped, and its caller still gets the answer |
 | `refreshFlags() async throws` | — | `Void` | **deprecated** no-op (no flag list to download) |
 | `FeatureFlagEvaluator.hashUser(_ userId: String, flagKey: String)` | — | `Double` in `[0, 1)` | pure |
 

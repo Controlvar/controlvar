@@ -14,21 +14,17 @@ Source: `sdk/ruby`.
 
 ## Installation
 
-**Not yet published.** The `experimently` gem is not on RubyGems yet, so the first line below
-fails today. Take it from this repository with the second block instead.
+**Not yet published.** The `experimently` gem is not on RubyGems, so build it from source: this
+Gemfile line takes `sdk/ruby` from this repository.
 
 ```ruby
 # Gemfile
-gem 'experimently', '~> 0.1'
-```
-
-```ruby
-# Gemfile, until the gem is published
 gem 'experimently', git: 'https://github.com/getexperimently/experimently.git', branch: 'main', glob: 'sdk/ruby/*.gemspec'
 ```
 
-The gemspec declares `required_ruby_version = ">= 2.6.0"`; the spec suite in this repository was
-run on Ruby 2.6.10. Inside the monorepo, run scripts with `ruby -Isdk/ruby/lib ...` (no install).
+The gemspec declares `required_ruby_version = ">= 2.6.0"`; CI runs the spec suite
+(`bundle exec rspec`) on Ruby 3.2 in the SDK Unit Tests workflow. Inside the monorepo, run scripts
+with `ruby -Isdk/ruby/lib ...` (no install).
 
 ---
 
@@ -95,7 +91,7 @@ client = Experimently::Client.new(
 | `track_batch(events)` | `/tracking/batch` (chunks of 100) | `BatchResult` | failures counted; never raises |
 | `assignments(user_id)` | — | `Array<Assignment>` | cached, unexpired only |
 | `evaluated_flags(user_id)` | — | `Array<String>` | cached flag keys |
-| `clear_cache`, `close` | — | `nil` | drop the cache (`at_exit { client.close }`) |
+| `clear_cache`, `close` | — | `{}` (an empty Hash) | drop the cache (`at_exit { client.close }`) |
 | `FeatureFlagEvaluator.hash_user(user_id, key)` | — | `Float` in `[0, 1)` | pure |
 
 ### Structs
@@ -107,7 +103,8 @@ client = Experimently::Client.new(
 | `BatchResult` | `success_count: Integer`, `failure_count: Integer`, `errors: Array, nil`, `ok?` |
 
 `attributes` on `get_assignment` become the assignment `context` (targeting rules); on
-`evaluate_flag` they are accepted for API symmetry only. For `track`: `properties` → `metadata`,
+`evaluate_flag` they are accepted for API symmetry only and not sent: the request carries the user
+id alone, so the server evaluates the flag's targeting rules against an empty context. For `track`: `properties` → `metadata`,
 `event_type` defaults to `event_name`, `timestamp` (`Time` or ISO-8601 string) defaults to now
 (UTC). `track_batch` takes Hashes (symbol or string keys) with `event_name` and `user_id` plus
 optional `experiment_key`, `feature_flag_key`, `properties`, `value`, `event_type`, `timestamp`;
@@ -200,8 +197,9 @@ In your own specs stub HTTP with WebMock (as `sdk/ruby/spec` does) or double the
 
 `Experimently::FeatureFlagEvaluator.hash_user(user_id, key)` = `MD5("{user_id}:{key}")`,
 first 4 bytes as little-endian uint32, divided by 2^32 (`0.6927449859213084` for `'user-123'`,
-`'my-flag'`). It is kept only so the golden vectors in `tests/sdk-contract/` stay identical across
-SDKs. **Nothing in the SDK calls it to pick a variant** — the server decides.
+`'my-flag'`). It is a compatibility utility: the SDK's own specs pin that one vector, and the
+cross-SDK golden vectors in `tests/sdk-contract/` are not run against this SDK. **Nothing in the
+SDK calls it to pick a variant** — the server decides.
 
 ---
 

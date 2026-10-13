@@ -11,20 +11,17 @@ Full reference: [`docs/sdk/ruby.md`](../../docs/sdk/ruby.md).
 
 ## Installation
 
-**Not yet published.** The `experimently` gem is not on RubyGems yet, so the first line below
-fails today. Take it from this repository with the second block instead.
+**Not yet published.** The `experimently` gem is not on RubyGems, so build it from source: this
+Gemfile line takes `sdk/ruby` from this repository.
 
 ```ruby
-gem "experimently", "~> 0.1"
-```
-
-```ruby
-# Gemfile, until the gem is published
+# Gemfile
 gem "experimently", git: "https://github.com/getexperimently/experimently.git", branch: "main", glob: "sdk/ruby/*.gemspec"
 ```
 
-The gemspec requires **Ruby >= 2.6.0** (`required_ruby_version`); the specs in this repo were run
-on Ruby 2.6.10. Inside the monorepo, no install is needed: `ruby -Isdk/ruby/lib your_script.rb`.
+The gemspec requires **Ruby >= 2.6.0** (`required_ruby_version`); CI runs the specs
+(`bundle exec rspec`) on Ruby 3.2 in the SDK Unit Tests workflow. Inside the monorepo, no install
+is needed: `ruby -Isdk/ruby/lib your_script.rb`.
 
 ## Quick Start
 
@@ -82,11 +79,12 @@ Missing `base_url`/`api_key` raise `ArgumentError` from `Client.new`.
 | `track(event_name, user_id, properties: {}, experiment_key: nil, feature_flag_key: nil, value: nil, event_type: nil, timestamp: nil)` | `Boolean` | `false`; never raises |
 | `track_batch(events)` | `BatchResult` (`success_count`, `failure_count`, `errors`, `ok?`) | failures counted; never raises |
 | `assignments(user_id)` / `evaluated_flags(user_id)` | `Array<Assignment>` / `Array<String>` | cached, unexpired entries only |
-| `clear_cache` / `close` | `nil` | drop every cached entry (`close` for shutdown hooks) |
+| `clear_cache` / `close` | `{}` (an empty Hash) | drop every cached entry (`close` for shutdown hooks) |
 | `Experimently::FeatureFlagEvaluator.hash_user(user_id, key)` | `Float` in `[0, 1)` | pure (parity utility) |
 
 `attributes` on `get_assignment` are sent as the assignment `context` (targeting rules); on
-`evaluate_flag` they are accepted for symmetry only: the evaluate endpoint takes a `context`, which this SDK does not send yet.
+`evaluate_flag` they are accepted for symmetry only and not sent: the request carries the user id
+alone, so the server evaluates the flag's targeting rules against an empty context.
 `track`: `properties` → `metadata`, `event_type` defaults to `event_name`, `timestamp` (`Time` or
 ISO-8601 string) defaults to now (UTC). `track_batch` events are Hashes with `event_name` and
 `user_id` plus optional `experiment_key`/`feature_flag_key`; malformed Hashes are counted as
@@ -117,9 +115,10 @@ returned. Batches are chunked at 100 events. Metrics match events by **event nam
 ## Consistent hash (compatibility utility)
 
 `FeatureFlagEvaluator.hash_user(user_id, key)` = `MD5("{user_id}:{key}")`, first 4 bytes as a
-little-endian uint32, divided by 2^32 (`0.6927449859213084` for `user-123`/`my-flag`). It is kept
-only so the cross-SDK golden vectors in `tests/sdk-contract/` keep passing — **nothing in the SDK
-buckets locally**; the server decides.
+little-endian uint32, divided by 2^32 (`0.6927449859213084` for `user-123`/`my-flag`). It is a
+compatibility utility: the SDK's own specs pin that one vector, and the cross-SDK golden vectors in
+`tests/sdk-contract/` are not run against this SDK. **Nothing in the SDK buckets locally**; the
+server decides.
 
 ## Backend endpoints used
 
