@@ -292,8 +292,10 @@ The public methods never throw on network or HTTP errors. The one exception is c
 ## Consistent Hash Utility
 
 `hashUser(String userId, String key): double` implements the cross-SDK formula —
-`MD5("{userId}:{key}")`, first 4 bytes as little-endian uint32, divided by 2^32 — and is pinned by
-the golden-vector tests in `tests/sdk-contract/`:
+`MD5("{userId}:{key}")`, first 4 bytes as little-endian uint32, divided by 2^32. The SDK's own
+`test/hash_compatibility_test.dart` pins it with its own copy of the vectors (seven of its eight are
+in `tests/sdk-contract/golden-vectors.json`); the cross-SDK golden-vector job does not run this
+SDK:
 
 ```dart
 import 'package:experimently/experimently.dart';

@@ -94,8 +94,23 @@ def text(page: str) -> str:
 
 
 def fold(value: str) -> str:
-    """Prose as one line: a line break (and a blockquote's ``>``) is a space."""
-    return re.sub(r"[ \t]*\n[ \t]*(?:>[ \t]?)?", " ", value)
+    """Prose as one line: a line break (and a blockquote's ``>``) is a space.
+
+    Split and joined rather than matched: a pattern that starts with an
+    unbounded run of blanks retries at every position of a long run of spaces,
+    which is quadratic.
+    """
+    lines = value.split("\n")
+    joined = []
+    for index, line in enumerate(lines):
+        if index:
+            line = line.lstrip(" \t")
+            if line.startswith(">"):
+                line = line[2:] if line[1:2] in (" ", "\t") else line[1:]
+        if index < len(lines) - 1:
+            line = line.rstrip(" \t")
+        joined.append(line)
+    return " ".join(joined)
 
 
 def test_the_deferred_pages_are_the_ones_this_file_reads():
@@ -116,7 +131,7 @@ LICENCE_NAME = re.compile(
 )
 #: A heading for a licence section, and the text up to the next heading.
 LICENCE_SECTION = re.compile(
-    r"^#{1,4}[ \t]+Licen[cs]e[ \t]*\n(?P<body>(?:(?!#{1,4}[ \t]).*\n?){0,12})",
+    r"^#{1,4}[ \t]{1,40}Licen[cs]e[ \t]{0,40}\n(?P<body>(?:(?!#{1,4}[ \t])[^\n]{0,500}\n?){0,12})",
     re.MULTILINE | re.IGNORECASE,
 )
 #: A sentence that names a licence beside the word, either order; the names in
@@ -171,8 +186,12 @@ def manifest_licences(sdk: str) -> Iterator[Tuple[str, str]]:
             (tomllib.loads(t)["project"].get("license") or {}).get("text")
         ],
         "composer.json": lambda t: [json.loads(t).get("license")],
-        "mix.exs": lambda t: re.findall(r"licenses:\s*\[\s*\"([^\"]{1,40})\"", t),
-        "pom.xml": lambda t: re.findall(r"<license>\s*<name>([^<]{1,60})</name>", t),
+        "mix.exs": lambda t: re.findall(
+            r"licenses:\s{0,40}\[\s{0,40}\"([^\"]{1,40})\"", t
+        ),
+        "pom.xml": lambda t: re.findall(
+            r"<license>\s{0,40}<name>([^<]{1,60})</name>", t
+        ),
     }
     for name, read in found.items():
         path = directory / name
@@ -182,7 +201,7 @@ def manifest_licences(sdk: str) -> Iterator[Tuple[str, str]]:
                     yield name, value
     for path in sorted(directory.glob("*.gemspec")):
         for value in re.findall(
-            r"\.license\s*=\s*\"([^\"]{1,40})\"", path.read_text("utf-8")
+            r"\.license\s{0,40}=\s{0,40}\"([^\"]{1,40})\"", path.read_text("utf-8")
         ):
             yield path.name, value
     for path in sorted(directory.glob("src/*/*.csproj")):
@@ -243,44 +262,54 @@ INSTALLS: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
     (
         "npm",
         re.compile(
-            r"\b(?:npm[ \t]+(?:install|i|add)|yarn[ \t]+add|pnpm[ \t]+add|bun[ \t]+add)"
+            r"\b(?:npm[ \t]{1,40}(?:install|i|add)|yarn[ \t]{1,40}add|pnpm[ \t]{1,40}add|bun[ \t]{1,40}add)"
             r"\b(?P<args>[^\n`;&|]{0,300})"
         ),
     ),
     ("npm", re.compile(r"\bnpm:(?P<name>@getexperimently/[A-Za-z0-9._-]{1,60})")),
-    ("pypi", re.compile(r"\bpip3?[ \t]+install\b(?P<args>[^\n`;&|]{0,300})")),
+    ("pypi", re.compile(r"\bpip3?[ \t]{1,40}install\b(?P<args>[^\n`;&|]{0,300})")),
     (
         "rubygems",
         re.compile(
-            r"^[ \t]*gem[ \t]+['\"](?P<name>[\w.-]{1,60})['\"](?P<rest>[^\n]{0,200})$",
+            r"^[ \t]{0,40}gem[ \t]{1,40}['\"](?P<name>[\w.-]{1,60})['\"](?P<rest>[^\n]{0,200})$",
             re.MULTILINE,
         ),
     ),
-    ("rubygems", re.compile(r"\bgem[ \t]+install[ \t]+(?P<name>[\w.-]{1,60})")),
-    ("hex", re.compile(r"\{:(?P<name>\w{1,60}),[ \t]*\"[^\"\n]{0,40}\"")),
+    (
+        "rubygems",
+        re.compile(r"\bgem[ \t]{1,40}install[ \t]{1,40}(?P<name>[\w.-]{1,60})"),
+    ),
+    ("hex", re.compile(r"\{:(?P<name>\w{1,60}),[ \t]{0,40}\"[^\"\n]{0,40}\"")),
     (
         "pub",
-        re.compile(r"\b(?:flutter|dart)[ \t]+pub[ \t]+add[ \t]+(?P<name>\w{1,60})"),
+        re.compile(
+            r"\b(?:flutter|dart)[ \t]{1,40}pub[ \t]{1,40}add[ \t]{1,40}(?P<name>\w{1,60})"
+        ),
     ),
     (
         "pub",
         re.compile(
-            r"^[ \t]+(?P<name>\w{1,60}):[ \t]*['\"]?[\^~>=<]{0,2}\d[\w.+-]{0,30}['\"]?[ \t]*$",
+            r"^[ \t]{1,40}(?P<name>\w{1,60}):[ \t]{0,40}['\"]?[\^~>=<]{0,2}\d[\w.+-]{0,30}['\"]?[ \t]{0,40}$",
             re.MULTILINE,
         ),
     ),
     (
         "packagist",
-        re.compile(r"\bcomposer[ \t]+require[ \t]+(?P<name>[\w.-]{1,60}/[\w.-]{1,60})"),
+        re.compile(
+            r"\bcomposer[ \t]{1,40}require[ \t]{1,40}(?P<name>[\w.-]{1,60}/[\w.-]{1,60})"
+        ),
     ),
     (
         "nuget",
         re.compile(
-            r"\bdotnet[ \t]+add[ \t]+(?:\S{1,200}[ \t]+)?package[ \t]+(?P<name>[\w.]{1,60})"
+            r"\bdotnet[ \t]{1,40}add[ \t]{1,40}(?:\S{1,200}[ \t]{1,40})?package[ \t]{1,40}(?P<name>[\w.]{1,60})"
         ),
     ),
-    ("nuget", re.compile(r"\bInstall-Package[ \t]+(?P<name>[\w.]{1,60})")),
-    ("nuget", re.compile(r"<PackageReference[ \t]+Include=\"(?P<name>[\w.]{1,60})\"")),
+    ("nuget", re.compile(r"\bInstall-Package[ \t]{1,40}(?P<name>[\w.]{1,60})")),
+    (
+        "nuget",
+        re.compile(r"<PackageReference[ \t]{1,40}Include=\"(?P<name>[\w.]{1,60})\""),
+    ),
     (
         "maven",
         re.compile(
@@ -291,33 +320,37 @@ INSTALLS: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
     (
         "gradle",
         re.compile(
-            r"\b(?:implementation|api|compileOnly|runtimeOnly)[ \t]*\(?[ \t]*['\"]"
+            r"\b(?:implementation|api|compileOnly|runtimeOnly)[ \t]{0,40}\(?[ \t]{0,40}['\"]"
             r"(?P<group>[\w.-]{1,60}):(?P<name>[\w.-]{1,60})(?::[\w.-]{1,30})?['\"]"
         ),
     ),
     (
         "cocoapods",
-        re.compile(r"^[ \t]*pod[ \t]+['\"](?P<name>[\w.-]{1,60})['\"]", re.MULTILINE),
+        re.compile(
+            r"^[ \t]{0,40}pod[ \t]{1,40}['\"](?P<name>[\w.-]{1,60})['\"]", re.MULTILINE
+        ),
     ),
     (
         "swiftpm",
         re.compile(
-            r"\.package\([ \t]*(?:name:[ \t]*\"[^\"\n]{0,60}\",[ \t]*)?url:[ \t]*\"(?P<name>[^\"\n]{1,200})\""
+            r"\.package\([ \t]{0,40}(?:name:[ \t]{0,40}\"[^\"\n]{0,60}\",[ \t]{0,40})?url:[ \t]{0,40}\"(?P<name>[^\"\n]{1,200})\""
         ),
     ),
 )
 
 #: Builds a Maven artifact into the local repository (``~/.m2``).
 MAVEN_LOCAL_INSTALL = re.compile(
-    r"\b(?:\./)?mvnw?[ \t]+(?:-\S{1,40}[ \t]+){0,6}install\b"
+    r"\b(?:\./)?mvnw?[ \t]{1,40}(?:-\S{1,40}[ \t]{1,40}){0,6}install\b"
 )
 #: Composer reads a package from a directory.
 COMPOSER_PATH_REPO = re.compile(
-    r"\bcomposer[ \t]+config[ \t]+repositories\.[\w-]{1,40}[ \t]+path\b"
+    r"\bcomposer[ \t]{1,40}config[ \t]{1,40}repositories\.[\w-]{1,40}[ \t]{1,40}path\b"
 )
-FENCE = re.compile(r"^```[^\n]*\n(?P<body>.*?)^```", re.MULTILINE | re.DOTALL)
+FENCE = re.compile(
+    r"^```[^\n]{0,200}\n(?P<body>.{0,20000}?)^```", re.MULTILINE | re.DOTALL
+)
 INSTALL_HEADING = re.compile(
-    r"^#{2,4}[ \t]+(?:Install(?:ation)?|Setup)\b", re.MULTILINE
+    r"^#{2,4}[ \t]{1,40}(?:Install(?:ation)?|Setup)\b", re.MULTILINE
 )
 
 
@@ -348,13 +381,16 @@ def ours(ecosystem: str, name: str, group: Optional[str] = None) -> bool:
         }
     if ecosystem == "rubygems":
         return name in re.findall(
-            r"\.name\s*=\s*\"([^\"]{1,40})\"", _manifest("ruby", "experimently.gemspec")
+            r"\.name\s{0,40}=\s{0,40}\"([^\"]{1,40})\"",
+            _manifest("ruby", "experimently.gemspec"),
         )
     if ecosystem == "hex":
-        return name in re.findall(r"app:\s*:(\w{1,40})", _manifest("elixir", "mix.exs"))
+        return name in re.findall(
+            r"app:\s{0,40}:(\w{1,40})", _manifest("elixir", "mix.exs")
+        )
     if ecosystem == "pub":
         return name in re.findall(
-            r"^name:\s*(\w{1,40})", _manifest("flutter", "pubspec.yaml"), re.M
+            r"^name:\s{0,40}(\w{1,40})", _manifest("flutter", "pubspec.yaml"), re.M
         )
     if ecosystem == "packagist":
         return name == json.loads(_manifest("php", "composer.json"))["name"]
@@ -385,7 +421,7 @@ def _arguments(ecosystem: str, args: str) -> Iterator[str]:
         if "/" in token and not token.startswith("@"):
             continue
         if ecosystem == "npm":
-            name = re.sub(r"(?<=.)@.*$", "", token)
+            name = re.sub(r"(?<=.)@.{0,200}$", "", token)
         else:
             name = re.split(r"[\[=<>~!;]", token, maxsplit=1)[0]
         if name:
@@ -540,7 +576,7 @@ def test_every_deferred_page_with_an_install_section_is_read():
 #: The quoted evaluate path in code: a string literal, not a comment or a
 #: docstring line such as "GET /api/v1/feature-flags/evaluate/...".
 EVALUATE_LITERAL = re.compile(r"[\"'`]/?api/v1/feature-flags/evaluate")
-COMMENT_LINE = re.compile(r"^\s*(?://|/\*|\*|#|--)")
+COMMENT_LINE = re.compile(r"^\s{0,40}(?://|/\*|\*|#|--)")
 SOURCE_SUFFIXES = {
     ".kt",
     ".cs",
@@ -578,7 +614,7 @@ DELEGATES: Dict[str, Tuple[str, "re.Pattern[str]"]] = {
     "openfeature": (
         "src/ExperimentationProvider.ts",
         re.compile(
-            r"\.evaluateFlag\(\s*flagKey\s*,\s*(?P<args>\{[^{}()]{0,120}\})\s*\)"
+            r"\.evaluateFlag\(\s{0,40}flagKey\s{0,40},\s{0,40}(?P<args>\{[^{}()]{0,120}\})\s{0,40}\)"
         ),
     ),
     "openfeature-python": (
@@ -644,8 +680,8 @@ CLAIMS: Tuple[Tuple[str, "re.Pattern[str]", str], ...] = (
     (
         "sent as context on flag evaluation",
         re.compile(
-            r"\b(?:sent|passed|forwarded)\s+as\s+`?context`?(?:(?!\bnot\b)[^.|;]){0,60}?"
-            r"\bflag\s+evaluation\b",
+            r"\b(?:sent|passed|forwarded)\s{1,40}as\s{1,40}`?context`?(?:(?!\bnot\b)[^.|;]){0,60}?"
+            r"\bflag\s{1,40}evaluation\b",
             re.I,
         ),
         "Sent as `context` on experiment assignment and on flag evaluation (targeting rules)",
@@ -653,8 +689,8 @@ CLAIMS: Tuple[Tuple[str, "re.Pattern[str]", str], ...] = (
     (
         "flag evaluation sends the attributes",
         re.compile(
-            r"\bflag\s+evaluation\s+(?:also\s+)?(?:sends|passes|forwards|carries)\s+"
-            r"(?:the\s+)?(?:user'?s?\s+)?(?:attributes|context)\b",
+            r"\bflag\s{1,40}evaluation\s{1,40}(?:also\s{1,40})?(?:sends|passes|forwards|carries)\s{1,40}"
+            r"(?:the\s{1,40})?(?:user'?s?\s{1,40})?(?:attributes|context)\b",
             re.I,
         ),
         "Flag evaluation sends the user's attributes as `context`.",
@@ -662,14 +698,14 @@ CLAIMS: Tuple[Tuple[str, "re.Pattern[str]", str], ...] = (
     (
         "attribute targeting works",
         re.compile(
-            r"\b(?:attribute|flag)\s+targeting\b[^.|;]{0,40}?(?<!not )(?<!n't )\b(?:works?|is\s+supported)\b",
+            r"\b(?:attribute|flag)\s{1,40}targeting\b[^.|;]{0,40}?(?<!not )(?<!n't )\b(?:works?|is\s{1,40}supported)\b",
             re.I,
         ),
         "so attribute targeting works on flags too",
     ),
     (
         "attributes = context",
-        re.compile(r"\battributes\s*=\s*context\b", re.I),
+        re.compile(r"\battributes\s{0,40}=\s{0,40}context\b", re.I),
         "// attributes = context",
     ),
 )
