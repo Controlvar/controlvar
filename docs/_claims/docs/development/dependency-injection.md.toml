@@ -1,0 +1,101 @@
+# What verifies each unit of docs/development/dependency-injection.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/development/dependency-injection.md"
+
+[[unit]]
+text = "Dependency Injection"
+by = ["exempt:label"]
+
+[[unit]]
+text = "How an API route gets its database session, its caller and its permission checks."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "They are FastAPI dependencies, in backend/app/api/deps.py."
+by = [
+    "test:backend/tests/unit/api/test_dependency_injection.py::TestDatabaseDependency::test_get_db_yields_session",
+    "test:backend/tests/unit/api/test_dependency_injection.py::TestAuthDependencies::test_get_current_active_user_inactive",
+]
+
+[[unit]]
+text = "The dependencies"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Dependency | What the route gets"
+by = ["exempt:label"]
+
+[[unit]]
+text = "get_db | a database session, closed when the request ends"
+by = [
+    "test:backend/tests/unit/api/test_dependency_injection.py::TestDatabaseDependency::test_get_db_yields_session",
+    "test:backend/tests/unit/api/test_dependency_injection.py::TestDatabaseDependency::test_db_session_is_closed",
+]
+
+[[unit]]
+text = "get_current_active_user | the signed-in caller; an inactive account is refused with 400"
+by = ["test:backend/tests/unit/api/test_dependency_injection.py::TestAuthDependencies::test_get_current_active_user_inactive"]
+
+[[unit]]
+text = "get_current_superuser | the caller, who must be a superuser; anyone else is refused with 403"
+by = ["test:backend/tests/unit/api/test_dependency_injection.py::TestAuthDependencies::test_get_current_superuser_not_superuser"]
+
+[[unit]]
+text = "get_api_key | the user an X-API-Key header belongs to; a missing or invalid key is refused with 401"
+by = [
+    "test:backend/tests/unit/api/test_dependency_injection.py::TestAPIKeyDependency::test_get_api_key_valid",
+    "test:backend/tests/unit/api/test_dependency_injection.py::TestAPIKeyDependency::test_get_api_key_invalid",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_no_key_is_401",
+]
+
+[[unit]]
+text = "Permission checks"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Experiments."
+by = ["exempt:label"]
+
+[[unit]]
+text = "The route loads the experiment, then calls deps.get_experiment_read_access(experiment, current_user) to read it, or deps.get_experiment_change_access(experiment, current_user) to change it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Both are synchronous and refuse with 403, and neither looks at who created the experiment."
+by = [
+    "test:backend/tests/unit/api/test_permission_deps.py::TestExperimentPermissionDeps::test_read_access_refuses_a_role_without_read",
+    "test:backend/tests/unit/api/test_permission_deps.py::TestExperimentPermissionDeps::test_change_access_refuses_a_role_without_update_even_as_the_owner",
+]
+
+[[unit]]
+text = "Feature flags."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Access is by role, not by owner."
+by = ["test:backend/tests/unit/core/test_feature_flag_access_rule.py::test_the_shipped_table_on_someone_elses_flag"]
+
+[[unit]]
+text = "A route that changes a flag calls can_act_on_feature_flag(user, owner_id, action) from backend/app/core/permissions.py, and creating one goes through the async deps.can_create_feature_flag."
+by = [
+    "test:backend/tests/smoke/test_flag_change_routes_guarded.py::test_the_inventory_is_exact",
+    "test:backend/tests/smoke/test_flag_change_routes_guarded.py::test_each_route_is_guarded_as_classified",
+    "test:backend/tests/unit/api/test_permission_deps.py::TestFeatureFlagPermissionDeps::test_can_create_feature_flag_with_permission",
+]
+
+[[unit]]
+text = "Build a new route on those two, not on the other flag helpers in deps.py."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Reports."
+by = ["exempt:label"]
+
+[[unit]]
+text = "The report checks in deps.py, get_report_access, can_create_report, can_update_report and can_delete_report, are async: await them."
+by = [
+    "test:backend/tests/unit/api/test_permission_deps.py::TestReportPermissionDeps::test_the_report_checks_are_coroutines",
+    "test:backend/tests/unit/api/test_permission_deps.py::TestReportPermissionDeps::test_get_report_access_owner",
+    "test:backend/tests/unit/api/test_permission_deps.py::TestReportPermissionDeps::test_can_update_report_with_permission",
+]

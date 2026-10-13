@@ -50,6 +50,7 @@ ENVIRONMENTS = [
     ((None, None, "experimentation"), "experimentation"),
     (("test", "true", None), "test_experimentation"),
     ((None, "true", None), "test_experimentation"),
+    (("test", None, None), "test_experimentation"),
     # POSTGRES_SCHEMA names the schema: a deployment, the ECS migration task,
     # scripts/core_build.sh's scratch schema, the integration tests' own.
     (("test", "true", "experimentation"), "experimentation"),
