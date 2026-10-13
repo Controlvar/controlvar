@@ -246,6 +246,34 @@ def test_before_the_first_ruleset_evaluations_go_to_the_server(no_thread):
     assert client.get_feature_flag("all-on", "user-1").source == "local"
 
 
+def test_experiments_are_assigned_by_the_server_in_local_mode(no_thread):
+    server = FakeServer(ok())
+    client, _ = loaded(server)
+    answer_ruleset_and_flags = server.send
+
+    def send(method, url, headers, body, timeout):
+        if urlsplit(url).path != "/api/v1/tracking/assign":
+            return answer_ruleset_and_flags(method, url, headers, body, timeout)
+        server.requests.append({"method": method, "path": urlsplit(url).path, "body": json.loads(body)})
+        return make_response(
+            200,
+            {
+                "experiment_key": "checkout_flow",
+                "user_id": "user-1",
+                "variant_id": "v-2",
+                "variant_name": "treatment",
+                "is_control": False,
+                "configuration": None,
+            },
+        )
+
+    server.send = send
+    assert client.get_assignment("checkout_flow", "user-1", US).variant_name == "treatment"
+    assert [(c["method"], c["body"]["experiment_key"]) for c in server.calls("/api/v1/tracking/assign")] == [
+        ("POST", "checkout_flow")
+    ]
+
+
 def test_server_mode_is_unchanged():
     server = FakeServer(ok())
     client = ExperimentationClient("http://test", "k", transport=server)

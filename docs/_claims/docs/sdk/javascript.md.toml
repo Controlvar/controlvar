@@ -1,0 +1,793 @@
+# What verifies each unit of docs/sdk/javascript.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/sdk/javascript.md"
+
+[[unit]]
+text = "JavaScript SDK"
+by = ["exempt:label"]
+
+[[unit]]
+text = "@getexperimently/js-sdk (v0.1.0) is the JavaScript/TypeScript client for the Experimently public API: experiment assignment, feature flag evaluation and event tracking for Node >= 18 and browsers."
+by = [
+    "mechanism:sdk-doc-versions",
+    "test:sdk/js/__tests__/package.test.ts::runs on Node 18 or later and in browsers: no source imports a module",
+    "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/assign with the contract headers",
+    "test:sdk/js/__tests__/client.test.ts::GETs /api/v1/feature-flags/evaluate/{key}?user_id=… with the contract headers and no body",
+    "test:sdk/js/__tests__/client.test.ts::POSTs one event to /api/v1/tracking/track with the exact body",
+]
+
+[[unit]]
+text = "Zero runtime dependencies — it uses the global fetch."
+by = [
+    "test:sdk/js/__tests__/package.test.ts::has no runtime dependencies",
+    "test:sdk/js/__tests__/client.test.ts::uses the global fetch when config.fetch is not given",
+]
+
+[[unit]]
+text = "By default, flag evaluation and experiment assignment are decided by the server: every call goes to the public API with your X-API-Key, the server buckets the user (sticky per user + experiment), and the SDK caches the answer per user + key."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::is sticky: the second call is served from the cache without a request",
+    "test:sdk/js/__tests__/client.test.ts::GETs /api/v1/feature-flags/evaluate/{key}?user_id=… with the contract headers and no body",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky",
+]
+
+[[unit]]
+text = "In server-side code you can opt in to local evaluation (evaluation: 'local'): flags are then answered in-process from the server's ruleset, with the server's answers, and experiments stay on the server."
+by = [
+    "test:sdk/js/__tests__/evaluator.test.ts::no local answer differs from the server",
+    "test:sdk/js/__tests__/local.test.ts::local answers equal the server, and only non-must_local cases reach it",
+    "test:sdk/js/__tests__/local.test.ts::experiments are assigned by the server in local mode",
+]
+
+[[unit]]
+text = "Source: sdk/js."
+by = ["test:sdk/js/__tests__/package.test.ts::builds CommonJS with type declarations into dist/"]
+
+[[unit]]
+text = "For React apps use the React SDK; for edge runtimes the Edge SDK; for the vendor-neutral API the OpenFeature provider, which delegates to this package."
+by = [
+    "test:sdk/openfeature/__tests__/provider.test.ts::exposes the underlying JS SDK client",
+    "test:sdk/openfeature/__tests__/provider.test.ts::reuses an injected JS SDK client (apiKey not required then)",
+]
+
+[[unit]]
+text = "CI runs this SDK's contract smoke against a real API: js is in the sdks: list of the SDK Live Contract job in pr-qa-gate.yml."
+by = ["mechanism:sdk-live-contract-sentence"]
+
+[[unit]]
+text = "Installation"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The @getexperimently/js-sdk package is on npm."
+by = [
+    "journey:sdk-javascript#quick-start-user-on",
+    "journey:sdk-javascript#quick-start-user-off",
+]
+
+[[unit]]
+text = "0.1.0 is a beta release."
+by = [
+    "mechanism:sdk-doc-versions",
+    "journey:sdk-javascript#quick-start-user-on",
+]
+
+[[unit]]
+text = "To work on the SDK itself, build it from a clone of this repository instead."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "npm pack writes getexperimently-js-sdk-0.1.0.tgz:"
+by = ["mechanism:sdk-doc-versions"]
+
+[[unit]]
+text = "Then, in your app, install the packed tarball:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "CommonJS build (dist/index.js) with type declarations; import/require both work."
+by = ["test:sdk/js/__tests__/package.test.ts::builds CommonJS with type declarations into dist/"]
+
+[[unit]]
+text = "Quick start"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The block is TypeScript and uses top-level await, so it runs as an ES module."
+by = [
+    "journey:sdk-javascript#quick-start-user-on",
+    "journey:sdk-javascript#quick-start-user-off",
+]
+
+[[unit]]
+text = "To run it as it is, save it as quick-start.mts in the project where you installed the package, set EXPERIMENTLY_API_KEY, and run it with node --experimental-strip-types quick-start.mts (Node 22.6 or later; it may print an ExperimentalWarning)."
+by = [
+    "journey:sdk-javascript#quick-start-user-on",
+    "journey:sdk-javascript#quick-start-user-off",
+]
+
+[[unit]]
+text = "As plain JavaScript, delete the !"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "after process.env.EXPERIMENTLY_API_KEY, save it as quick-start.mjs and run node quick-start.mjs."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Configuration (ClientConfig)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Field | Type | Default | Description"
+by = ["exempt:label"]
+
+[[unit]]
+text = "apiUrl | string | — | Backend origin, e.g. https://api.example.com; the SDK appends /api/v1/..."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/assign with the contract headers",
+    "test:sdk/js/__tests__/client.test.ts::strips trailing slashes from apiUrl",
+]
+
+[[unit]]
+text = "apiKey | string | — | API key, sent as X-API-Key"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/assign with the contract headers",
+    "test:sdk/js/__tests__/client.test.ts::requires apiKey",
+]
+
+[[unit]]
+text = "timeoutMs | number | 5000 | Per-request timeout (AbortController); also caps the 429 retry delay"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::defaults to a 5000 ms timeout",
+    "test:sdk/js/__tests__/client.test.ts::aborts after timeoutMs and throws a TIMEOUT error",
+    "test:sdk/js/__tests__/client.test.ts::caps a long Retry-After at timeoutMs",
+]
+
+[[unit]]
+text = "cacheTtlMs | number | 300000 | TTL of successful evaluations/assignments, per user + key"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/js/__tests__/client.test.ts::serves from cache until the TTL elapses, then re-fetches",
+]
+
+[[unit]]
+text = "defaultVariant | string | 'control' | Variant name getVariant returns on failure"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::returns 'control' by default when assignment fails",
+    "test:sdk/js/__tests__/client.test.ts::returns the configured defaultVariant on failure",
+]
+
+[[unit]]
+text = "fetch | typeof fetch | global fetch | Custom fetch implementation"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::uses config.fetch when provided instead of the global",
+    "test:sdk/js/__tests__/client.test.ts::uses the global fetch when config.fetch is not given",
+]
+
+[[unit]]
+text = "onError | (error: ExperimentationError, op: 'track' | 'trackBatch' | 'refresh' | 'flush' | 'evaluate') => void | — | Only way to observe swallowed failures; a throwing handler is itself swallowed. 'refresh', 'flush' and 'evaluate' occur only in local mode"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::reports swallowed failures through onError",
+    "test:sdk/js/__tests__/client.test.ts::survives a throwing onError handler",
+    "test:sdk/js/__tests__/local.test.ts::a failed report goes to onError as flush",
+    "test:sdk/js/__tests__/local.test.ts::is reported as evaluate, and the call goes to the server",
+    "test:sdk/js/__tests__/local.test.ts::5xx after a load keeps serving the last ruleset and reports each failure",
+]
+
+[[unit]]
+text = "evaluation | 'server' | 'local' | 'server' | 'local': answer flags in-process from GET /api/v1/sdk/ruleset; needs a key with the sdk:ruleset scope; throws in a browser"
+by = [
+    "test:sdk/js/__tests__/local.test.ts::local mode refuses to start in a browser",
+    "test:sdk/js/__tests__/local.test.ts::after ready, evaluations make no request and follow the attributes passed",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_a_key_without_the_exact_scope_is_refused",
+]
+
+[[unit]]
+text = "refreshIntervalMs | number | 30000 | Local mode: ruleset refresh interval (minimum 5000, ±10% jitter)"
+by = [
+    "test:sdk/js/__tests__/local.test.ts::defaults to 30 seconds",
+    "test:sdk/js/__tests__/local.test.ts::is at least 5 seconds",
+    "test:sdk/js/__tests__/local.test.ts::is jittered by ±10%",
+]
+
+[[unit]]
+text = "maxStaleMs | number | none | Local mode: evaluate on the server once the ruleset has not been refreshed for this long"
+by = ["test:sdk/js/__tests__/local.test.ts::maxStaleMs: a ruleset older than that is not used"]
+
+[[unit]]
+text = "The constructor throws a plain Error (apiKey is required / apiUrl is required) when either required field is missing, when evaluation is not 'server' or 'local', and when evaluation: 'local' is used in a browser."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::requires apiKey",
+    "test:sdk/js/__tests__/client.test.ts::requires apiUrl",
+    "test:sdk/js/__tests__/local.test.ts::rejects a bad evaluation mode or refresh interval",
+    "test:sdk/js/__tests__/local.test.ts::local mode refuses to start in a browser",
+]
+
+[[unit]]
+text = "UserContext"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Targeting context"
+by = ["exempt:label"]
+
+[[unit]]
+text = "attributes is what the platform's targeting rules evaluate against."
+by = [
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+    "test:sdk/js/__tests__/client.test.ts::appends context=<url-encoded JSON of user.attributes> when the user has attributes",
+]
+
+[[unit]]
+text = "It is sent as context in the POST /api/v1/tracking/assign body and, when it is a non-empty object, as context=<url-encoded JSON> on GET /api/v1/feature-flags/evaluate/{flagKey} (and on getAllFlags(userId, attributes)), so a flag whose dashboard rule says os_version semver_gte 17.0.0 AND tier equals premium turns on only for matching users."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::sends {experiment_key, user_id, context: attributes} as the JSON body",
+    "test:sdk/js/__tests__/client.test.ts::appends context=<url-encoded JSON of user.attributes> when the user has attributes",
+    "test:sdk/js/__tests__/client.test.ts::omits context when attributes is an empty object",
+    "test:sdk/js/__tests__/client.test.ts::sends attributes as ?context=<url-encoded JSON> when given",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+]
+
+[[unit]]
+text = "Top-level keys are also reachable under user."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_prefix_aliases_for_top_level_keys",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_dotted_keys_for_nested_dicts",
+]
+
+[[unit]]
+text = "/ device."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_prefix_aliases_for_top_level_keys",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_dotted_keys_for_nested_dicts",
+]
+
+[[unit]]
+text = "/ app."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_prefix_aliases_for_top_level_keys",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_dotted_keys_for_nested_dicts",
+]
+
+[[unit]]
+text = "aliases in rules (country matches user.country), and nested objects flatten to dotted keys ({ app: { version: '3.2.1' } } answers app.version)."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_prefix_aliases_for_top_level_keys",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_dotted_keys_for_nested_dicts",
+]
+
+[[unit]]
+text = "Attributes are assumed stable per user: evaluations and assignments are cached by user + key only, so call clearCache() after changing a user's attributes."
+by = ["test:sdk/js/__tests__/client.test.ts::is cached by user + flag only: changed attributes hit the cache until clearCache"]
+
+[[unit]]
+text = "getAssignment and evaluateFlag reject with ExperimentationError (code: 'INVALID_RESPONSE', user.userId is required) when userId is missing or empty; getVariant / isFeatureEnabled turn that into their safe default."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::rejects an empty userId",
+    "test:sdk/js/__tests__/client.test.ts::returns false on failure",
+    "test:sdk/js/__tests__/client.test.ts::returns 'control' by default when assignment fails",
+]
+
+[[unit]]
+text = "API"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Method | Signature | Returns | On failure"
+by = ["exempt:label"]
+
+[[unit]]
+text = "getAssignment | (experimentKey, user: UserContext) => Promise<Assignment> | { experimentKey, userId, variantId, variantName, isControl, configuration, assigned?, reason? } | Rejects with ExperimentationError (404 when the experiment is not ACTIVE)"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::maps the server response to an Assignment",
+    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when the experiment is not ACTIVE",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_unknown_key_returns_404",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_inactive_experiment_returns_404",
+]
+
+[[unit]]
+text = "getVariant | (experimentKey, user) => Promise<string> | assignment.variantName | defaultVariant ('control'); never rejects"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::returns the assigned variant name",
+    "test:sdk/js/__tests__/client.test.ts::returns 'control' by default when assignment fails",
+]
+
+[[unit]]
+text = "evaluateFlag | (flagKey, user) => Promise<FlagEvaluation> | { key, enabled, config, reason? } (user.attributes sent as context) | Rejects with ExperimentationError (404 for an unknown key); a flag that exists but is not ACTIVE resolves enabled: false, reason: \"inactive\""
+by = [
+    "test:sdk/js/__tests__/client.test.ts::maps {key, enabled, config}",
+    "test:sdk/js/__tests__/client.test.ts::exposes the server reason when the response carries one",
+    "test:sdk/js/__tests__/client.test.ts::appends context=<url-encoded JSON of user.attributes> when the user has attributes",
+    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when the flag is not ACTIVE",
+    "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
+]
+
+[[unit]]
+text = "isFeatureEnabled | (flagKey, user) => Promise<boolean> | evaluation.enabled | false; never rejects"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::returns true for an enabled flag and false for a disabled one",
+    "test:sdk/js/__tests__/client.test.ts::returns false on failure",
+]
+
+[[unit]]
+text = "getAllFlags | (userId, attributes?) => Promise<Record<string, boolean>> | { flagKey: enabled }; attributes sent as context; not cached, not part of the fan-out | Rejects"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::GETs /api/v1/feature-flags/user/{user_id} and returns {key: boolean}",
+    "test:sdk/js/__tests__/client.test.ts::sends attributes as ?context=<url-encoded JSON> when given",
+    "test:sdk/js/__tests__/client.test.ts::throws on a non-2xx response and does not populate the evaluation cache",
+]
+
+[[unit]]
+text = "track | (userId, eventName, options?: TrackOptions) => Promise<void> | — | Never rejects; onError(err, 'track')"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::reports swallowed failures through onError",
+    "test:sdk/js/__tests__/client.test.ts::never rejects when the batch request fails",
+]
+
+[[unit]]
+text = "trackBatch | (events: TrackEvent[]) => Promise<BatchResult> | { successCount, failureCount, errors } | Never rejects; a failed chunk counts all its events as failures and calls onError(err, 'trackBatch')"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::never rejects: a failed chunk counts its events as failures and reports through onError",
+    "test:sdk/js/__tests__/client.test.ts::POSTs keyed events to /api/v1/tracking/batch and aggregates the server counts",
+]
+
+[[unit]]
+text = "fetchAssignments | (userId, { activeOnly?: boolean } = { activeOnly: true }) => Promise<AssignmentRecord[]> | Server-side assignment rows (raw objects); not cached | Rejects"
+by = ["test:sdk/js/__tests__/client.test.ts::fetchAssignments GETs /api/v1/tracking/assignments/{user_id}?active_only=true"]
+
+[[unit]]
+text = "getAssignments | (userId) => Assignment[] | Cached, unexpired assignments in assignment order (no network) | —"
+by = ["test:sdk/js/__tests__/client.test.ts::getAssignments returns cached assignments for the user only, in order"]
+
+[[unit]]
+text = "getEvaluatedFlags | (userId) => string[] | Keys of cached, successfully evaluated flags (no network) | —"
+by = ["test:sdk/js/__tests__/client.test.ts::getEvaluatedFlags returns cached flag keys for the user only"]
+
+[[unit]]
+text = "clearCache | () => void | Drops both caches | —"
+by = ["test:sdk/js/__tests__/client.test.ts::clearCache empties both caches"]
+
+[[unit]]
+text = "ready | ({ timeoutMs? }?) => Promise<ReadyResult> | { ok: true, rulesetVersion } or { ok: false, error }; { ok: true, rulesetVersion: null } at once in server mode | Never rejects"
+by = [
+    "test:sdk/js/__tests__/local.test.ts::server mode is unchanged: no ruleset request, no source field",
+    "test:sdk/js/__tests__/local.test.ts::ready({ timeoutMs }) resolves ok: false when the first load takes longer",
+    "test:sdk/js/__tests__/local.test.ts::a network failure before the first load: ready() resolves ok: false, evaluations go to the server",
+]
+
+[[unit]]
+text = "status | () => LocalEvaluationStatus | { evaluation, ready, rulesetVersion, lastRefreshAt, lastError, serverEvaluatedFlags } | —"
+by = ["test:sdk/js/__tests__/local.test.ts::status() reports the ruleset"]
+
+[[unit]]
+text = "close | () => Promise<void> | Local mode: stops the ruleset refresh and sends the remaining evaluation counts; later calls are evaluated by the server. A no-op in server mode | Never rejects"
+by = [
+    "test:sdk/js/__tests__/local.test.ts::close() sends one entry per flag; deferred evaluations are not counted",
+    "test:sdk/js/__tests__/local.test.ts::server mode is unchanged: no ruleset request, no source field",
+]
+
+[[unit]]
+text = "Enrolment: assigned and reason"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An Assignment also carries assigned and reason."
+by = ["test:sdk/js/__tests__/client.test.ts::carries assigned: true and reason from a server that enrolled the user"]
+
+[[unit]]
+text = "assigned: false means the server did not enrol the user (reason is 'holdout', 'mutual_exclusion' or 'targeting') and returned the control variant so you render the default experience; no exposure was recorded."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_reason_order_is_holdout_then_mutual_exclusion_then_targeting",
+    "test:sdk/js/__tests__/client.test.ts::fans out to an assignment the global holdout answered (assigned: false)",
+]
+
+[[unit]]
+text = "When you export exposures to a warehouse, exclude assignments with assigned: false: the user was not enrolled, and reason says why."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A server that predates the fields sends neither, so assigned is undefined (never false)."
+by = ["test:sdk/js/__tests__/client.test.ts::leaves assigned and reason undefined (not false) when an older server omits them"]
+
+[[unit]]
+text = "Decide deliberately how to treat those rows rather than dropping them with an assigned === true filter."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "TrackOptions: value?"
+by = ["test:sdk/js/__tests__/client.test.ts::POSTs one event to /api/v1/tracking/track with the exact body"]
+
+[[unit]]
+text = "(number), properties?"
+by = ["test:sdk/js/__tests__/client.test.ts::POSTs one event to /api/v1/tracking/track with the exact body"]
+
+[[unit]]
+text = "(sent as metadata), experimentKey?, featureFlagKey?, eventType?"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one event to /api/v1/tracking/track with the exact body",
+    "test:sdk/js/__tests__/client.test.ts::sends feature_flag_key (and no experiment_key) and accepts a string timestamp",
+]
+
+[[unit]]
+text = "(defaults to the event name), timestamp?"
+by = ["test:sdk/js/__tests__/client.test.ts::uses eventType as event_type and keeps eventName as event_name; omits optional fields"]
+
+[[unit]]
+text = "(Date or string, sent as ISO-8601)."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one event to /api/v1/tracking/track with the exact body",
+    "test:sdk/js/__tests__/client.test.ts::sends feature_flag_key (and no experiment_key) and accepts a string timestamp",
+]
+
+[[unit]]
+text = "TrackEvent = TrackOptions & { userId, eventName }."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs keyed events to /api/v1/tracking/batch and aggregates the server counts",
+    "test:sdk/js/__tests__/client.test.ts::expands keyless entries with the fan-out rule and drops those with nothing cached",
+]
+
+[[unit]]
+text = "Tracking and the fan-out rule"
+by = ["exempt:label"]
+
+[[unit]]
+text = "With experimentKey and/or featureFlagKey: exactly one POST /api/v1/tracking/track."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one event to /api/v1/tracking/track with the exact body",
+    "test:sdk/js/__tests__/client.test.ts::does not fan out to cached assignments when a key is given",
+]
+
+[[unit]]
+text = "Without a key: one POST /api/v1/tracking/batch (chunked at 100) containing one entry per experiment the user has been assigned to in this client (experiment_key) plus one per flag evaluated for the user (feature_flag_key), taken from the cache."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/batch with one entry per assignment plus one per evaluated flag",
+    "test:sdk/js/__tests__/client.test.ts::splits more than 100 entries into multiple batch requests",
+    "test:sdk/js/__tests__/client.test.ts::does not fan out to a failed assignment or an expired one",
+    "test:sdk/js/__tests__/client.test.ts::fans out to an assignment the global holdout answered (assigned: false)",
+]
+
+[[unit]]
+text = "If nothing is cached, nothing is sent."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::sends nothing when nothing is cached for the user",
+    "test:sdk/js/__tests__/client.test.ts::sends nothing when only another user has cached data",
+]
+
+[[unit]]
+text = "This is what makes a single track(userId, 'purchase', …) count as a conversion for every experiment the user is in."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/batch with one entry per assignment plus one per evaluated flag",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestBatch::test_reports_success_and_failure_per_event",
+    "test:backend/tests/integration/services/test_conversion_event_matching.py::TestConversionEventFilter::test_matches_both_producer_shapes_and_excludes_exposures",
+]
+
+[[unit]]
+text = "trackBatch applies the same expansion to keyless entries, then sends everything in chunks of 100 and sums the server's success_count / failure_count / errors."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::expands keyless entries with the fan-out rule and drops those with nothing cached",
+    "test:sdk/js/__tests__/client.test.ts::chunks at 100 events per request",
+    "test:sdk/js/__tests__/client.test.ts::collects server-reported per-event errors",
+]
+
+[[unit]]
+text = "Conversions are matched to metrics by event name."
+by = ["test:backend/tests/integration/services/test_conversion_event_matching.py::TestConversionEventFilter::test_matches_both_producer_shapes_and_excludes_exposures"]
+
+[[unit]]
+text = "Caching, dedupe and retries"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Successful assignments and evaluations are cached per user + key for cacheTtlMs; failures are never cached, so the next call retries."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::serves from cache until the TTL elapses, then re-fetches",
+    "test:sdk/js/__tests__/client.test.ts::never caches a failure — the next call re-fetches",
+]
+
+[[unit]]
+text = "Concurrent calls for the same user + key share one in-flight request (one assignment, one exposure event)."
+by = ["test:sdk/js/__tests__/client.test.ts::shares one in-flight request between concurrent callers"]
+
+[[unit]]
+text = "A 429 is retried once after the server's Retry-After (seconds or HTTP date; default 1 s, capped at timeoutMs)."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::retries once after Retry-After and returns the second response",
+    "test:sdk/js/__tests__/client.test.ts::waits Retry-After seconds (capped at timeoutMs) before retrying",
+    "test:sdk/js/__tests__/client.test.ts::caps a long Retry-After at timeoutMs",
+    "test:sdk/js/__tests__/client.test.ts::gives up after the single retry and surfaces status 429",
+    "test:sdk/js/__tests__/client.test.ts::also retries tracking requests",
+    "test:sdk/js/__tests__/client.test.ts::waits 1 s when the 429 carries no Retry-After",
+    "test:sdk/js/__tests__/client.test.ts::reads a Retry-After given as an HTTP date",
+]
+
+[[unit]]
+text = "Errors"
+by = ["exempt:label"]
+
+[[unit]]
+text = "getAssignment, evaluateFlag, getAllFlags and fetchAssignments reject with ExperimentationError (name === 'ExperimentationError'):"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when the experiment is not ACTIVE",
+    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when the flag is not ACTIVE",
+    "test:sdk/js/__tests__/client.test.ts::throws on a non-2xx response and does not populate the evaluation cache",
+]
+
+[[unit]]
+text = "code | Meaning | status"
+by = ["exempt:label"]
+
+[[unit]]
+text = "HTTP_ERROR | Non-2xx response; body holds the parsed JSON error (e.g. {detail}) | HTTP status (401 bad key, 404 an experiment unknown or not ACTIVE, or an unknown flag key, 422, 429 after the retry)"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when the flag is not ACTIVE",
+    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 401 for a bad key",
+    "test:sdk/js/__tests__/client.test.ts::gives up after the single retry and surfaces status 429",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
+    "test:backend/tests/integration/api/test_tracking_failure_messages.py::test_an_invalid_event_in_a_batch_names_the_field_only",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_unknown_key_returns_404",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_inactive_experiment_returns_404",
+]
+
+[[unit]]
+text = "NETWORK_ERROR | fetch rejected (DNS, connection refused, CORS, no fetch available) | undefined"
+by = ["test:sdk/js/__tests__/client.test.ts::wraps network failures as NETWORK_ERROR without a status"]
+
+[[unit]]
+text = "TIMEOUT | The request exceeded timeoutMs | undefined"
+by = ["test:sdk/js/__tests__/client.test.ts::aborts after timeoutMs and throws a TIMEOUT error"]
+
+[[unit]]
+text = "INVALID_RESPONSE | 2xx but the body is not what the SDK expects (or userId missing) | HTTP status or undefined"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::throws INVALID_RESPONSE when the 2xx body is not JSON",
+    "test:sdk/js/__tests__/client.test.ts::rejects an empty userId",
+]
+
+[[unit]]
+text = "Backend endpoints used"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every request carries X-API-Key, Content-Type: application/json and Accept: application/json."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/assign with the contract headers",
+    "test:sdk/js/__tests__/client.test.ts::GETs /api/v1/feature-flags/evaluate/{key}?user_id=… with the contract headers and no body",
+]
+
+[[unit]]
+text = "apiUrl is the origin only; the SDK appends the paths below."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/assign with the contract headers",
+    "test:sdk/js/__tests__/client.test.ts::strips trailing slashes from apiUrl",
+]
+
+[[unit]]
+text = "SDK call | Method and path | Body / query | 200 response"
+by = ["exempt:label"]
+
+[[unit]]
+text = "getAssignment, getVariant | POST /api/v1/tracking/assign | {\"experiment_key\",\"user_id\",\"context\"?: object} | {\"experiment_key\",\"user_id\",\"variant_id\",\"variant_name\",\"is_control\",\"configuration\"}"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::sends {experiment_key, user_id, context: attributes} as the JSON body",
+    "test:sdk/js/__tests__/client.test.ts::maps the server response to an Assignment",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "evaluateFlag, isFeatureEnabled | GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<id>&context=<url-encoded JSON> | context = user.attributes (omitted when empty) | {\"key\",\"enabled\",\"config\",\"reason\"}"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::appends context=<url-encoded JSON of user.attributes> when the user has attributes",
+    "test:sdk/js/__tests__/client.test.ts::omits context when attributes is an empty object",
+    "test:sdk/js/__tests__/client.test.ts::maps {key, enabled, config}",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
+]
+
+[[unit]]
+text = "getAllFlags | GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON> | context = attributes (omitted when empty) | {\"<flag_key>\": bool, ...}"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::GETs /api/v1/feature-flags/user/{user_id} and returns {key: boolean}",
+    "test:sdk/js/__tests__/client.test.ts::omits context for an empty attributes object",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "track with a key | POST /api/v1/tracking/track | {\"event_type\",\"event_name\",\"user_id\",\"experiment_key\"?,\"feature_flag_key\"?,\"value\"?,\"metadata\"?,\"timestamp\"?} | stored event (ignored)"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one event to /api/v1/tracking/track with the exact body",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "track without a key, trackBatch | POST /api/v1/tracking/batch | {\"events\":[<track body>...]} (max 100) | {\"success_count\",\"failure_count\",\"errors\"}"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::chunks at 100 events per request",
+    "test:sdk/js/__tests__/client.test.ts::POSTs keyed events to /api/v1/tracking/batch and aggregates the server counts",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "fetchAssignments | GET /api/v1/tracking/assignments/{user_id}?active_only=true | — | list of assignment rows"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::fetchAssignments GETs /api/v1/tracking/assignments/{user_id}?active_only=true",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "local mode: ruleset refresh | GET /api/v1/sdk/ruleset (beta) | If-None-Match: \"<version>\" | the ruleset, ETag; 304 when unchanged"
+by = [
+    "test:sdk/js/__tests__/local.test.ts::polls send the ETag, and a 304 keeps the ruleset",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestVersioning::test_a_matching_if_none_match_is_304_with_no_body",
+]
+
+[[unit]]
+text = "local mode: evaluation counts | POST /api/v1/tracking/evaluations (beta) | {\"evaluations\":[{\"flag_key\",\"count\",\"enabled_count\",\"window_start\",\"window_end\"}]} | {\"accepted\",\"errors\"}"
+by = [
+    "test:sdk/js/__tests__/local.test.ts::close() sends one entry per flag; deferred evaluations are not counted",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Errors: 401 bad key; 404 an experiment unknown or not ACTIVE, or an unknown flag key; 422 invalid event; 429 rate limited (Retry-After header, retried once)."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 401 for a bad key",
+    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when the experiment is not ACTIVE",
+    "test:sdk/js/__tests__/client.test.ts::gives up after the single retry and surfaces status 429",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_unknown_key_returns_404",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_inactive_experiment_returns_404",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
+    "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
+    "test:backend/tests/integration/api/test_tracking_failure_messages.py::test_an_invalid_event_in_a_batch_names_the_field_only",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitMiddleware::test_returns_429_when_limit_exceeded",
+]
+
+[[unit]]
+text = "TypeScript types"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The raw wire shapes (AssignResponse, FlagEvaluateResponse, BatchResponse, TrackBody) are exported too."
+by = ["test:sdk/js/__tests__/package.test.ts::exports the client, the error, the hash utilities and the raw wire shapes"]
+
+[[unit]]
+text = "Hash utilities (compatibility only)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "consistentHash(userId, flagKey), md5Hex(input) and md5Bytes(input) are exported so the cross-SDK golden-vector tests and custom integrations can verify parity:"
+by = [
+    "test:sdk/js/__tests__/package.test.ts::exports the client, the error, the hash utilities and the raw wire shapes",
+    "test:sdk/js/__tests__/hash.test.ts::md5Bytes returns 16 bytes",
+    "test:sdk/js/__tests__/hash.test.ts::is deterministic and in [0, 1)",
+]
+
+[[unit]]
+text = "Nothing in the SDK calls consistentHash to pick a variant or decide a flag."
+by = ["test:sdk/js/__tests__/package.test.ts::nothing in the SDK calls consistentHash"]
+
+[[unit]]
+text = "It is not the function the server buckets flag rollouts with: that is md5-mod100-v1, the whole MD5 digest of \"{userId}:{flagKey}\" read as a big-endian integer, mod 100, which local evaluation reproduces internally (consistentHash('user-123', 'my-flag') is bucket 69; the server puts that user in bucket 79)."
+by = [
+    "test:sdk/js/__tests__/evaluator.test.ts::is the server bucket: the whole digest, big-endian, mod 100",
+    "test:sdk/js/__tests__/evaluator.test.ts::is not the cross-SDK consistentHash",
+]
+
+[[unit]]
+text = "Local evaluation (server-side, beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "With evaluation: 'local' the client downloads the flag ruleset (GET /api/v1/sdk/ruleset), refreshes it every refreshIntervalMs (30 s by default, 5 s minimum), and answers evaluateFlag, isFeatureEnabled and getAllFlags in-process whenever it can give exactly the server's answer; otherwise it makes the usual request."
+by = [
+    "test:sdk/js/__tests__/local.test.ts::defaults to 30 seconds",
+    "test:sdk/js/__tests__/local.test.ts::is at least 5 seconds",
+    "test:sdk/js/__tests__/local.test.ts::after ready, evaluations make no request and follow the attributes passed",
+    "test:sdk/js/__tests__/local.test.ts::an unknown key and a remote flag are evaluated by the server",
+    "test:sdk/js/__tests__/local.test.ts::getAllFlags: one remote flag sends the whole call to the server",
+]
+
+[[unit]]
+text = "Experiments are always assigned by the server."
+by = ["test:sdk/js/__tests__/local.test.ts::experiments are assigned by the server in local mode"]
+
+[[unit]]
+text = "It needs an Experimently server at 0.11.0 or later and a key with the sdk:ruleset scope, and it is for server-side code only: the constructor throws in a browser."
+by = [
+    "test:sdk/js/__tests__/local.test.ts::404 names the minimum server release; after a load it discards",
+    "test:sdk/js/__tests__/local.test.ts::local mode refuses to start in a browser",
+    "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
+]
+
+[[unit]]
+text = "A change made in the dashboard reaches the process at its next successful refresh."
+by = [
+    "test:sdk/js/__tests__/local.test.ts::polls send the ETag, and a 304 keeps the ruleset",
+    "test:sdk/js/__tests__/local.test.ts::5xx after a load keeps serving the last ruleset and reports each failure",
+]
+
+[[unit]]
+text = "While the API is unreachable the last ruleset keeps being served (set maxStaleMs to bound that); a 401 or 403 on refresh discards it."
+by = [
+    "test:sdk/js/__tests__/local.test.ts::5xx after a load keeps serving the last ruleset and reports each failure",
+    "test:sdk/js/__tests__/local.test.ts::maxStaleMs: a ruleset older than that is not used",
+    "test:sdk/js/__tests__/local.test.ts::404 names the minimum server release; after a load it discards",
+]
+
+[[unit]]
+text = "What is answered locally, the refresh failure table, safety monitoring and troubleshooting: Local evaluation."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Browser vs Node.js"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The SDK is isomorphic."
+by = ["test:sdk/js/__tests__/package.test.ts::runs on Node 18 or later and in browsers: no source imports a module"]
+
+[[unit]]
+text = "In the browser the API key is visible to end users, and keys are not scoped for browser use: every active key, including one shipped to a browser, can evaluate flags and track events as the user who created it."
+by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these"]
+
+[[unit]]
+text = "Use a dedicated key for browser traffic so it can be revoked on its own, and never give it the sdk:ruleset scope, which lets a key download every flag's targeting rules."
+by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestContents::test_every_owners_flags_and_nothing_else"]
+
+[[unit]]
+text = "Server-side, lower timeoutMs if the SDK sits on a request path:"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Contract smoke"
+by = ["exempt:label"]
+
+[[unit]]
+text = "It prints one line:"
+by = ["test:sdk/js/__tests__/contract-smoke.test.ts::it assigns twice, evaluates the flag, tracks with and without a key and sends a 2-event batch"]
+
+[[unit]]
+text = "Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
+by = [
+    "test:sdk/js/__tests__/contract-smoke.test.ts::it reads its settings from the environment, with these defaults",
+    "test:sdk/js/__tests__/contract-smoke.test.ts::it assigns twice, evaluates the flag, tracks with and without a key and sends a 2-event batch",
+    "test:sdk/js/__tests__/contract-smoke.test.ts::it stops without a key and sends nothing",
+]
+
+[[unit]]
+text = "The script assigns twice (sticky), evaluates the flag, tracks purchase with a key, tracks page_view without a key (fan-out) and sends a 2-event trackBatch."
+by = ["test:sdk/js/__tests__/contract-smoke.test.ts::it assigns twice, evaluates the flag, tracks with and without a key and sends a 2-event batch"]
+
+[[unit]]
+text = "npm run smoke is a shortcut."
+by = ["test:sdk/js/__tests__/package.test.ts::npm test runs jest and npm run smoke builds and runs the contract smoke"]
+
+[[unit]]
+text = "With a seeded backend (python backend/scripts/seed_sdk_contract.py): python tests/sdk-contract/live/run_live_contract.py --sdk js --strict."
+by = [
+    "test:backend/tests/unit/scripts/test_run_live_contract.py::test_the_seed_creates_the_fixtures_the_runner_defaults_to",
+    "test:backend/tests/unit/scripts/test_run_live_contract.py::test_each_sdk_runs_its_own_contract_smoke",
+    "test:backend/tests/unit/scripts/test_run_live_contract.py::test_strict_fails_on_a_missing_toolchain_and_the_default_skips_it",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestContractSeed::test_the_seed_writes_a_plain_and_a_scoped_key",
+]
+
+[[unit]]
+text = "That also runs examples/local_eval_smoke.mjs with the seed's sdk:ruleset key (the js (local) row): 40 evaluations answered locally, the counts sent on close(), then two error reports sent with the same key, and the runner checks in the database that no evaluate call was made, that the safety monitor's denominator grew by exactly 40 and that both reports were counted."
+by = [
+    "test:backend/tests/unit/scripts/test_run_live_contract.py::test_each_sdk_runs_its_own_contract_smoke",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestContractSeed::test_the_seed_writes_a_plain_and_a_scoped_key",
+]
+
+[[unit]]
+text = "Development"
+by = ["exempt:label"]
+
+[[unit]]
+text = "npx jest runs the unit tests, with fetch mocked; npm run build runs tsc into dist/ (CommonJS and .d.ts):"
+by = [
+    "test:sdk/js/__tests__/package.test.ts::npm test runs jest and npm run smoke builds and runs the contract smoke",
+    "test:sdk/js/__tests__/package.test.ts::builds CommonJS with type declarations into dist/",
+]

@@ -585,6 +585,8 @@ class Mechanism:
 
 _VERSION = r"\(?v?[0-9]{1,4}(?:\.[0-9]{1,4}){1,2}"
 _TARBALL = r"getexperimently-[A-Za-z0-9-]{1,60}-[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}\.tgz"
+#: "0.1.0 is a beta release.", after the sentence naming the registry.
+_BETA = r"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4} is a beta release\.$"
 
 
 MECHANISMS: Dict[str, Mechanism] = {
@@ -604,7 +606,9 @@ MECHANISMS: Dict[str, Mechanism] = {
         "::test_every_claim_about_what_the_platform_does_is_on_the_list",
         quotes=True,
     ),
-    # A quoted package version (a bare `experimently` only on the Python page).
+    # A quoted package version (a bare `experimently` only on the Python page),
+    # and the version after the sentence naming the registry, in the SDK
+    # pages, the guide, the FAQ and the READMEs the packages carry.
     "sdk-doc-versions": Mechanism(
         "backend/tests/unit/docs/test_sdk_doc_versions.py"
         "::test_quoted_sdk_versions_match_the_manifests",
@@ -617,6 +621,20 @@ MECHANISMS: Dict[str, Mechanism] = {
             ("docs/sdk/*.md", _TARBALL),
             ("docs/sdk-guide.md", _TARBALL),
             ("docs/sdk/python.md", r"(?<![\w@/-])experimently " + _VERSION),
+            # The sentence before it names the package: the test reads the two.
+            ("docs/sdk/python.md", _BETA),
+            ("docs/sdk/javascript.md", _BETA),
+            ("sdk/python/README.md", _BETA),
+            ("sdk/js/README.md", _BETA),
+            (
+                "docs/sdk-guide.md",
+                r" package is on (?:PyPI|npm) " + _VERSION + r", beta\):$",
+            ),
+            (
+                "docs/getting-started/faq.md",
+                r"\((?:npm|pip) install (?:@getexperimently/[A-Za-z0-9_-]{1,60}"
+                r"|experimently), [0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}, beta\)",
+            ),
         ),
     ),
     # The one sentence per SDK page about the live contract job.
@@ -629,6 +647,48 @@ MECHANISMS: Dict[str, Mechanism] = {
                 r"^CI (?:runs|does not run) this SDK's contract smoke against a real"
                 r" API: [a-z0-9-]{1,40} (?:is|is not) in the sdks: list of the SDK Live"
                 r" Contract job in pr-qa-gate\.yml\.$",
+            ),
+        ),
+    ),
+    # The same sentence in an SDK's README.
+    "sdk-live-contract-readme": Mechanism(
+        "backend/tests/unit/docs/test_sdk_live_contract_sentence.py"
+        "::test_every_sdk_readme_agrees_with_the_gate",
+        holds=(
+            (
+                "sdk/*/README.md",
+                r"^CI (?:runs|does not run) this SDK's contract smoke against a real"
+                r" API: [a-z0-9-]{1,40} (?:is|is not) in the sdks: list of the SDK Live"
+                r" Contract job in pr-qa-gate\.yml\.$",
+            ),
+        ),
+    ),
+    # The SDK guide's status table, and the two sentences about what CI runs.
+    "sdk-guide-status": Mechanism(
+        "backend/tests/unit/docs/test_sdk_guide_status.py"
+        "::test_the_status_table_agrees_with_ci",
+        holds=(
+            (
+                "docs/sdk-guide.md",
+                r"^[^|]{1,60} \| sdk/[a-z-]{1,40} \| [^|]{1,40} \| [^|]{1,300} \| [^|]{1,300}$",
+            ),
+            (
+                "docs/sdk-guide.md",
+                r'^"Verified live" means the SDK\'s contract_smoke entry point passed',
+            ),
+            (
+                "docs/sdk-guide.md",
+                r'^Rows marked "not yet" have a contract_smoke entry point',
+            ),
+        ),
+    ),
+    # The Python README's quick start, run as written against a fake API.
+    "python-readme-quick-start": Mechanism(
+        "sdk/python/tests/test_readme.py::test_the_readme_quick_start_runs_as_written",
+        holds=(
+            (
+                "sdk/python/README.md",
+                r"^Set EXPERIMENTLY_API_KEY to an API key, then run the block as it is",
             ),
         ),
     ),
@@ -761,14 +821,9 @@ CLAIMS_PENDING: Tuple[str, ...] = (
     "docs/llm-evaluation/overview.md",
     "docs/llm-evaluation/quickstart.md",
     "docs/logging_standards.md",
-    "docs/mcp-server.md",
     "docs/performance/load-testing.md",
     "docs/rbac/README.md",
-    "docs/sdk-guide.md",
-    "docs/sdk/go.md",
-    "docs/sdk/javascript.md",
     "docs/sdk/local-evaluation.md",
-    "docs/sdk/python.md",
     "docs/security/README.md",
     "docs/security/api-keys.md",
     "docs/security/hardening-changes.md",
@@ -785,10 +840,6 @@ CLAIMS_PENDING: Tuple[str, ...] = (
     "docs/workspaces/overview.md",
     "frontend/src/pages/docs/index.tsx#desc",
     "infrastructure/cdk/README.md",
-    "sdk/go/README.md",
-    "sdk/js/README.md",
-    "sdk/openfeature-python/README.md",
-    "sdk/python/README.md",
 )
 
 

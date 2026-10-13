@@ -577,6 +577,15 @@ class TestRateLimit:
         assert no_sleep.call_count == 1
         assert len(transport.requests) == 2
 
+    @pytest.mark.parametrize("status", [400, 401, 404, 500, 503])
+    def test_any_other_error_status_raises_at_once(self, client, transport, no_sleep, status):
+        transport.respond(status, json={"detail": "no"}).respond(200, json=FLAG_RESPONSE)
+        with pytest.raises(ExperimentationError) as info:
+            client.get_feature_flag("new_search", "user-1")
+        assert info.value.status == status
+        assert len(transport.requests) == 1
+        no_sleep.assert_not_called()
+
     def test_track_returns_false_after_retry(self, client, transport, no_sleep):
         transport.respond(429).respond(429)
         assert client.track("user-1", "purchase", experiment_key="x") is False

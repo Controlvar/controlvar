@@ -7,7 +7,7 @@ Flag evaluation and experiment assignment are decided **by the server**: every c
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key for a TTL. Nothing is bucketed locally.
 
-Full reference: [`docs/sdk/go.md`](../../docs/sdk/go.md).
+Full reference: [`docs/sdk/go.md`](https://github.com/getexperimently/experimently/blob/main/docs/sdk/go.md).
 
 ## Installation
 
