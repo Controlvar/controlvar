@@ -1,41 +1,32 @@
 # Multi-Armed Bandit
 
-Multi-armed bandit (MAB) experiments dynamically reallocate traffic toward better-performing variants as data accumulates, rather than maintaining fixed allocations throughout the experiment. This maximizes reward during the experiment itself at the cost of some statistical power.
-
----
-
-## A/B Test vs. Bandit — When to Use Which
-
-| Scenario | Use A/B Test | Use Bandit |
-|----------|-------------|------------|
-| Need unbiased causal estimates for a permanent change | ✅ | ❌ |
-| Regulatory or compliance reporting | ✅ | ❌ |
-| Short-lived promotions where maximizing conversions matters | ❌ | ✅ |
-| Content recommendation / personalization | ❌ | ✅ |
-| Rapidly iterating with many variants | ❌ | ✅ |
-| Statistical power and precise effect sizes required | ✅ | ❌ |
+Multi-armed bandit (MAB) experiments dynamically reallocate traffic toward better-performing variants as data accumulates, rather than maintaining fixed allocations throughout the experiment.
 
 ---
 
 ## Algorithms
 
-### Thompson Sampling (Default)
+Each algorithm turns every variant's pulls and successes into a weight; the weights add up
+to 1 and decide where new users go (see [How the weights affect traffic](#how-the-weights-affect-traffic)).
+An experiment is a bandit only when it names one of the three; `optimization_type` defaults
+to `fixed`.
 
-Maintains a Beta distribution for each variant based on its observed successes and total pulls. At each assignment, samples from each distribution and routes the user to the variant with the highest sample. Naturally balances exploration and exploitation.
+### Thompson Sampling
 
-Best for: most MAB use cases, especially when you want smooth convergence.
+Each variant has a Beta posterior, Beta(1 + successes, 1 + failures). A weight update draws
+10,000 samples from every posterior, and each variant's weight is the share of draws in which
+it is highest.
 
 ### UCB1 (Upper Confidence Bound)
 
-Selects the variant with the highest upper confidence bound: `mean + sqrt(2 * ln(total_pulls) / variant_pulls)`. Explores variants with high uncertainty (few pulls) while exploiting high-performing ones.
-
-Best for: situations where you want a deterministic, easily auditable algorithm.
+Each variant's score is `mean + sqrt(2 * ln(total_pulls) / variant_pulls)`, and its weight is
+its score divided by the sum of the scores, so every variant keeps some traffic. While any
+variant has no pulls, the variants with none share all the weight equally.
 
 ### Epsilon-Greedy
 
-With probability `epsilon`, selects a random variant (exploration). Otherwise selects the current best variant (exploitation). Simple and fast.
-
-Best for: high-volume, low-latency scenarios where simplicity matters.
+The variant with the highest conversion rate gets the weight `0.9 + 0.1 / n`, and each of
+the other variants `0.1 / n`, for `n` variants: epsilon is 0.1, and it is not a setting.
 
 ---
 
@@ -57,10 +48,8 @@ curl -s localhost:8000/api/v1/auth/me -H "Authorization: Bearer $TOKEN" | jq .ro
 It prints `"ADMIN"`.
 
 Set `optimization_type` to one of `thompson_sampling`, `ucb1` or `epsilon_greedy` when you
-create the experiment. Everything else (variants, metrics, targeting) works as for a standard
-A/B experiment. The bandit counts a conversion as an event matching the experiment's primary
-metric. The collection URL ends with a slash, `/api/v1/experiments/`; without it the API
-answers `307`, which `curl` doesn't follow. This saves the experiment's id in `$EXP_ID`:
+create the experiment. The bandit counts a conversion as an event matching the experiment's primary
+metric. This saves the experiment's id in `$EXP_ID`:
 
 ```{.bash exec}
 EXP=$(curl -s -X POST localhost:8000/api/v1/experiments/ \
@@ -87,11 +76,6 @@ jq '{name, status}' <<<"$EXP"
 
 The experiment is created in `draft`. Variants' `traffic_allocation`s are whole percentages
 that add up to 100; they decide the split until the bandit's first weight update.
-
-**The experiment's own response reports `"optimization_type": "fixed"`** in this release,
-whatever you created it with
-([#197](https://github.com/getexperimently/experimently/issues/197)). The algorithm is
-stored correctly: read it from the bandit endpoint below.
 
 ---
 
@@ -247,7 +231,6 @@ For each variant the scheduler needs pulls (assignments) and successes (conversi
    `/results` counts them: users assigned to the variant with at least one event, tagged with that variant, whose
    `event_name` matches the experiment's primary metric (see the event-matching rule in the tracking API docs). A
    user who converts three times counts once. With no metric configured, every event other than an experiment view is a success.
-   This is the path used in local and single-region deployments.
 3. The previously persisted `BanditState`.
 4. Zero-count priors (equal weights).
 
@@ -258,9 +241,6 @@ according to the current weights (a deterministic hash of the user id is looked 
 distribution, so repeated calls agree before the assignment row exists). Users who already have an assignment
 keep it. Variants whose weight is `0` receive no new traffic. Until the first refresh has run, new users are
 split by the variants' `traffic_allocation`.
-
-`POST /api/v1/bandit/{experiment_id}/update` forces an immediate refresh. It is an API call: the
-dashboard has no control for it.
 
 ---
 

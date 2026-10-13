@@ -1,0 +1,87 @@
+# What verifies each unit of docs/statistics/post-stratification.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/statistics/post-stratification.md"
+
+[[unit]]
+text = "Post-Stratification Variance Reduction"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Not available through the API yet"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "POST /api/v1/results/{experiment_id}/post-stratification answers 501 Not Implemented."
+by = [
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratificationEndpoint::test_post_strat_with_assignments_answers_501_not_numbers",
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratificationEndpoint::test_post_strat_with_no_data_answers_501",
+]
+
+[[unit]]
+text = "The estimator exists as a Python service (PostStratificationService), but nothing yet builds its input -- one metric value and the stratum attributes per assigned user -- from an experiment's recorded assignments and events."
+by = [
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratificationEndpoint::test_post_strat_with_assignments_answers_501_not_numbers",
+    "test:backend/tests/unit/services/test_post_stratification.py",
+]
+
+[[unit]]
+text = "REST API Reference"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "POST /api/v1/results/{experiment_id}/post-stratification"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Not available yet: answers 501 for every existing experiment, with"
+by = ["test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratificationEndpoint::test_post_strat_with_assignments_answers_501_not_numbers"]
+
+[[unit]]
+text = "The request body is still validated, so a malformed request answers 422 first:"
+by = ["test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratificationEndpoint::test_post_strat_missing_stratum_cols_returns_422"]
+
+[[unit]]
+text = "Field | Type | Required | Default | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "stratum_cols | list[str] | Yes | — | Column names defining strata. Non-empty."
+by = [
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratificationEndpoint::test_post_strat_missing_stratum_cols_returns_422",
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratificationEndpoint::test_post_strat_empty_stratum_cols_returns_422",
+]
+
+[[unit]]
+text = "metric_col | str | No | \"metric_value\" | Name of the outcome column."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "alpha | float | No | 0.05 | Significance level for CI (exclusive: 0–1)."
+by = [
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratificationEndpoint::test_post_strat_invalid_alpha_returns_422",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Status codes:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Status | Condition"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "404 | Experiment not found"
+by = ["test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratificationEndpoint::test_post_strat_nonexistent_experiment_returns_404"]
+
+[[unit]]
+text = "422 | Missing/invalid stratum_cols or invalid alpha"
+by = [
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratificationEndpoint::test_post_strat_missing_stratum_cols_returns_422",
+    "test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratificationEndpoint::test_post_strat_invalid_alpha_returns_422",
+]
+
+[[unit]]
+text = "501 | Any existing experiment: post-stratification is not available yet"
+by = ["test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratificationEndpoint::test_post_strat_with_no_data_answers_501"]

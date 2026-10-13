@@ -1,0 +1,370 @@
+# What verifies each unit of docs/api/multi-armed-bandit.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/multi-armed-bandit.md"
+
+[[unit]]
+text = "Multi-Armed Bandit"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Multi-armed bandit (MAB) experiments dynamically reallocate traffic toward better-performing variants as data accumulates, rather than maintaining fixed allocations throughout the experiment."
+by = [
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerIntegration::test_thompson_weights_shift_toward_better_variant",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_new_users_follow_bandit_weights",
+]
+
+[[unit]]
+text = "Algorithms"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each algorithm turns every variant's pulls and successes into a weight; the weights add up to 1 and decide where new users go (see How the weights affect traffic)."
+by = [
+    "test:backend/tests/unit/services/test_bandit_service.py::TestBanditService::test_weights_sum_to_approximately_one",
+    "test:backend/tests/unit/services/test_bandit_routing.py::TestSelectBanditVariant::test_distribution_roughly_matches_weights",
+]
+
+[[unit]]
+text = "An experiment is a bandit only when it names one of the three; optimization_type defaults to fixed."
+by = [
+    "test:backend/tests/unit/services/test_experiment_response_dict.py::test_an_unset_type_reads_as_fixed",
+    "test:backend/tests/unit/services/test_bandit_routing.py::TestSelectBanditVariant::test_fixed_experiment_returns_none",
+]
+
+[[unit]]
+text = "Thompson Sampling"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Each variant has a Beta posterior, Beta(1 + successes, 1 + failures)."
+by = ["untested:T"]
+
+[[unit]]
+text = "A weight update draws 10,000 samples from every posterior, and each variant's weight is the share of draws in which it is highest."
+by = [
+    "docex:docs/api/multi-armed-bandit.md#\"n_samples\": 10000",
+    "test:backend/tests/unit/services/test_bandit_service.py::TestThompsonSampling::test_dominant_arm_wins_nearly_always",
+]
+
+[[unit]]
+text = "UCB1 (Upper Confidence Bound)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each variant's score is mean + sqrt(2 ln(total_pulls) / variant_pulls), and its weight is its score divided by the sum of the scores, so every variant keeps some traffic."
+by = ["untested:T"]
+
+[[unit]]
+text = "While any variant has no pulls, the variants with none share all the weight equally."
+by = ["untested:T"]
+
+[[unit]]
+text = "Epsilon-Greedy"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The variant with the highest conversion rate gets the weight 0.9 + 0.1 / n, and each of the other variants 0.1 / n, for n variants: epsilon is 0.1, and it is not a setting."
+by = [
+    "test:backend/tests/unit/services/test_bandit_service.py::TestEpsilonGreedy::test_best_variant_gets_largest_weight",
+    "test:backend/tests/unit/services/test_bandit_service.py::TestEpsilonGreedy::test_non_best_variants_get_epsilon_over_n",
+]
+
+[[unit]]
+text = "Creating a MAB Experiment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in first; creating an experiment takes the DEVELOPER or ADMIN role:"
+by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Set optimization_type to one of thompson_sampling, ucb1 or epsilon_greedy when you create the experiment."
+by = ["docex:docs/api/multi-armed-bandit.md#\"name\": \"CTA Button Bandit\""]
+
+[[unit]]
+text = "The bandit counts a conversion as an event matching the experiment's primary metric."
+by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
+
+[[unit]]
+text = "This saves the experiment's id in $EXP_ID:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The experiment is created in draft."
+by = ["docex:docs/api/multi-armed-bandit.md#\"name\": \"CTA Button Bandit\""]
+
+[[unit]]
+text = "Variants' traffic_allocations are whole percentages that add up to 100; they decide the split until the bandit's first weight update."
+by = [
+    "test:backend/tests/unit/services/test_bandit_routing.py::TestBanditChooser::test_no_state_means_default_hashing",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx",
+]
+
+[[unit]]
+text = "API Reference"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/bandit/"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Returns the current bandit state: the algorithm, and each variant's weight, pulls, successes and conversion rate."
+by = ["docex:docs/api/multi-armed-bandit.md#\"algorithm\": \"thompson_sampling\""]
+
+[[unit]]
+text = "Any logged-in user can read it."
+by = ["test:backend/tests/unit/api/test_bandit_endpoints.py::TestBanditStatusForTheDashboard::test_every_role_reads_the_weights"]
+
+[[unit]]
+text = "This also saves each variant's id, for the weight override further down:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Before any update has run, every variant has an equal weight."
+by = ["test:backend/tests/unit/api/test_bandit_endpoints.py::TestGetBanditStatus::test_get_bandit_status_returns_equal_weights_when_no_state"]
+
+[[unit]]
+text = "With traffic, a response looks like this:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Response Fields"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Field | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "algorithm | The experiment's optimization_type"
+by = ["docex:docs/api/multi-armed-bandit.md#\"algorithm\": \"thompson_sampling\""]
+
+[[unit]]
+text = "current_weight | Current traffic allocation fraction (0–1, sums to 1.0 across variants)"
+by = [
+    "test:backend/tests/unit/services/test_bandit_service.py::TestBanditService::test_weights_sum_to_approximately_one",
+    "test:backend/tests/unit/schemas/test_bandit_schemas.py::TestBanditUpdateRequest::test_weights_must_sum_to_one",
+]
+
+[[unit]]
+text = "pulls | Total assignments to this variant"
+by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
+
+[[unit]]
+text = "successes | Converting users in this variant: users assigned to it with at least one conversion event, each counted once"
+by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
+
+[[unit]]
+text = "regret_reduction_pct | Estimated regret reduction compared with a uniform split; null until there is data"
+by = ["untested:T"]
+
+[[unit]]
+text = "recommendation | EXPLORING, CONVERGING, or DEPLOYING_<variant name> once one variant dominates"
+by = [
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerIntegration::test_get_recommendation_deploying_when_weight_above_0_8",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerIntegration::test_get_recommendation_converging_when_weight_0_5_to_0_8",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerIntegration::test_get_recommendation_exploring_when_weight_below_0_5",
+]
+
+[[unit]]
+text = "last_updated | When the weights were last computed; null before the first update"
+by = [
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestBanditStatusForTheDashboard::test_last_updated_is_null_before_the_first_update",
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestBanditStatusForTheDashboard::test_last_updated_is_set_after_an_update",
+]
+
+[[unit]]
+text = "seed, n_samples | The random seed and draws per variant of the last Thompson-sampling update; null for the other algorithms"
+by = [
+    "test:backend/tests/unit/services/test_stats_determinism.py::TestBanditDeterminism::test_scheduler_records_null_seed_for_deterministic_algorithm",
+    "test:backend/tests/unit/services/test_stats_determinism.py::TestBanditDeterminism::test_scheduler_derives_seed_from_tick_day",
+]
+
+[[unit]]
+text = "An experiment whose optimization_type is fixed answers 404 here."
+by = ["test:backend/tests/unit/api/test_bandit_endpoints.py::TestGetBanditStatus::test_get_bandit_status_returns_404_for_fixed_experiment"]
+
+[[unit]]
+text = "POST /api/v1/bandit/{experiment_id}/update"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Recalculates the weights now, outside the scheduler cycle."
+by = [
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestTriggerBanditUpdate::test_trigger_update_returns_200_for_developer",
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestTriggerBanditUpdate::test_viewer_gets_403_on_post_update",
+]
+
+[[unit]]
+text = "Requires the DEVELOPER or ADMIN role:"
+by = [
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestTriggerBanditUpdate::test_trigger_update_returns_200_for_developer",
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestTriggerBanditUpdate::test_viewer_gets_403_on_post_update",
+]
+
+[[unit]]
+text = "It returns the new state, which now has a last_updated time."
+by = ["test:backend/tests/unit/api/test_bandit_endpoints.py::TestBanditStatusForTheDashboard::test_last_updated_is_set_after_an_update"]
+
+[[unit]]
+text = "Thompson sampling draws n_samples (10000) samples per variant, so with no data yet the weights move a little away from equal at random."
+by = ["docex:docs/api/multi-armed-bandit.md#\"n_samples\": 10000"]
+
+[[unit]]
+text = "PUT /api/v1/bandit/{experiment_id}/weights"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Overrides the variant weights."
+by = [
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestOverrideBanditWeights::test_admin_override_requires_admin_role",
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestOverrideBanditWeights::test_non_admin_gets_403_on_weight_override",
+]
+
+[[unit]]
+text = "Requires the ADMIN role."
+by = [
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestOverrideBanditWeights::test_admin_override_requires_admin_role",
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestOverrideBanditWeights::test_non_admin_gets_403_on_weight_override",
+]
+
+[[unit]]
+text = "The body maps each variant's id to its weight; the weights must be at least 0 and add up to 1.0, or the API answers 422."
+by = [
+    "test:backend/tests/unit/schemas/test_bandit_schemas.py::TestBanditUpdateRequest::test_weights_must_sum_to_one",
+    "test:backend/tests/unit/schemas/test_bandit_schemas.py::TestBanditUpdateRequest::test_negative_weight_raises",
+]
+
+[[unit]]
+text = "Use with caution: the scheduler replaces an override on its next cycle while the experiment is active."
+by = ["untested:T"]
+
+[[unit]]
+text = "It prints the new weights:"
+by = ["docex:docs/api/multi-armed-bandit.md#{\"variant_name\":\"red_button\",\"current_weight\":0.8}"]
+
+[[unit]]
+text = "Scheduler"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The bandit scheduler (BanditSchedulerRunner in backend/app/core/bandit_scheduler.py) starts with the API process and recalculates weights for every ACTIVE experiment whose optimization_type is not fixed."
+by = [
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditScheduler::test_run_once_finds_active_mab_experiments",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditScheduler::test_run_once_skips_fixed_optimization_experiments",
+    "test:backend/tests/unit/core/test_lifespan_schedulers.py::test_lifespan_starts_and_stops_them_outside_tests",
+]
+
+[[unit]]
+text = "The cadence is BANDIT_UPDATE_INTERVAL_MINUTES (default 5)."
+by = ["test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_the_bandit_weights_are_recomputed_every_minute_and_every_5_by_default"]
+
+[[unit]]
+text = "It does not run under APP_ENV=test."
+by = ["test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerRunner::test_start_is_skipped_in_test_environment"]
+
+[[unit]]
+text = "Where the counts come from"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For each variant the scheduler needs pulls (assignments) and successes (conversions)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sources are tried in order:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "DynamoDB real-time counters (get_experiment_counters), when the counters stack is deployed and every variant has at least as many pulls and successes there as in PostgreSQL."
+by = ["test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness"]
+
+[[unit]]
+text = "A partial DynamoDB count (a counter that started late, or a manual increment) is ignored in favour of PostgreSQL's complete one."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "PostgreSQL: pulls = assignments rows per variant; successes = converting users, counted exactly as /results counts them: users assigned to the variant with at least one event, tagged with that variant, whose event_name matches the experiment's primary metric (see the event-matching rule in the tracking API docs)."
+by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
+
+[[unit]]
+text = "A user who converts three times counts once."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With no metric configured, every event other than an experiment view is a success."
+by = ["test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerStatsFallback::test_no_metric_counts_non_exposure_events"]
+
+[[unit]]
+text = "The previously persisted BanditState."
+by = ["test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerStatsFallback::test_falls_back_to_bandit_state_when_postgres_is_empty"]
+
+[[unit]]
+text = "Zero-count priors (equal weights)."
+by = ["test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerStatsFallback::test_zero_priors_when_no_source_has_data"]
+
+[[unit]]
+text = "How the weights affect traffic"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "POST /api/v1/tracking/assign reads the latest BanditState for bandit experiments and routes new users according to the current weights (a deterministic hash of the user id is looked up in the cumulative weight distribution, so repeated calls agree before the assignment row exists)."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_new_users_follow_bandit_weights",
+    "test:backend/tests/unit/services/test_bandit_routing.py::TestSelectBanditVariant::test_is_deterministic_per_user",
+]
+
+[[unit]]
+text = "Users who already have an assignment keep it."
+by = ["test:backend/tests/unit/services/test_assignment_service_eligibility.py::TestStickyAssignments::test_existing_row_bypasses_every_gate"]
+
+[[unit]]
+text = "Variants whose weight is 0 receive no new traffic."
+by = [
+    "test:backend/tests/unit/services/test_bandit_routing.py::TestSelectBanditVariant::test_all_weight_on_one_variant",
+    "test:backend/tests/unit/services/test_bandit_routing.py::TestSelectBanditVariant::test_variants_missing_from_weights_get_no_traffic",
+]
+
+[[unit]]
+text = "Until the first refresh has run, new users are split by the variants' traffic_allocation."
+by = ["test:backend/tests/unit/services/test_bandit_routing.py::TestBanditChooser::test_no_state_means_default_hashing"]
+
+[[unit]]
+text = "Permissions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Action | Minimum Role"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "View bandit status | VIEWER"
+by = ["test:backend/tests/unit/api/test_bandit_endpoints.py::TestBanditStatusForTheDashboard::test_every_role_reads_the_weights"]
+
+[[unit]]
+text = "Trigger weight update | DEVELOPER"
+by = [
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestTriggerBanditUpdate::test_trigger_update_returns_200_for_developer",
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestTriggerBanditUpdate::test_trigger_update_requires_developer_role",
+]
+
+[[unit]]
+text = "Override weights | ADMIN"
+by = [
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestOverrideBanditWeights::test_admin_can_override_weights",
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestOverrideBanditWeights::test_admin_override_requires_admin_role",
+]
