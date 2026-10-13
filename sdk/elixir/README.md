@@ -51,9 +51,9 @@ end
 
 # Feature flag — GET /api/v1/feature-flags/evaluate/{key}?user_id=...
 case Experimently.evaluate_flag(client, "dark-mode", "user-123") do
-  {:ok, %Experimently.FlagEvaluation{enabled: true, config: config}} -> render_dark_mode(config)
-  {:ok, _disabled} -> render_default()
-  {:error, _reason} -> render_default()   # network/HTTP failure, flag not ACTIVE
+  {:ok, %Experimently.FlagEvaluation{enabled: true}} -> render_dark_mode()
+  {:ok, _disabled} -> render_default()    # off, or not ACTIVE
+  {:error, _reason} -> render_default()   # network/HTTP failure, unknown flag key
 end
 
 Experimently.feature_enabled?(client, "dark-mode", "user-123")   # => true | false
@@ -95,8 +95,8 @@ Experimently.stop(client)
 | `clear_cache(client)` | `:ok` |
 | `stop(client)` | `:ok` (waits for in-flight track requests) |
 
-Error reasons: `{:auth_error, 401}`, `{:api_error, status, body}` (404 = experiment/flag not
-ACTIVE, 422 = validation, 429 = rate limited), `{:network_error, reason}`,
+Error reasons: `{:auth_error, 401}`, `{:api_error, status, body}` (404 = an experiment unknown or not
+ACTIVE or an unknown flag key, 422 = validation, 429 = rate limited), `{:network_error, reason}`,
 `{:malformed_response, body}`.
 
 **Track fan-out.** With `:experiment_key` and/or `:feature_flag_key` the SDK sends one

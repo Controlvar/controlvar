@@ -636,15 +636,15 @@ The instance types below are what the CDK actually deploys with
 | Aurora PostgreSQL | `db.r5.large` (`MEMORY5`/`LARGE`), 2 instances — writer + reader | ~$300 |
 | ElastiCache Redis | `cache.r6g.large` | ~$150 |
 | ECS Fargate | 3 tasks (`desired_count=3`, autoscaling 3–10), 1 vCPU / 2 GB each, 24/7 | ~$110 |
-| Lambda invocations | 1M events/month | ~$5 |
+| Lambda | placeholders and, in the full profile, the daily Glue ETL trigger; none processes events | ~$0 |
 | Kinesis | 2 shards | ~$30 |
 | OpenSearch | `t3.medium.search` | ~$60 |
 | ALB | one | ~$25 |
-| **Total estimate** | | **~$680/month** |
+| **Total estimate** | | **~$675/month** |
 
 Autoscaling is the figure to watch: Fargate is costed at the floor of three
 tasks. At the ceiling of ten it is roughly $370 rather than $110, so a
-sustained-load month lands nearer $940.
+sustained-load month lands nearer $935.
 
 For development/staging environments, you can significantly reduce costs by:
 - Non-prod environments already size down on their own: the CDK picks a

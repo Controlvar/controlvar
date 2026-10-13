@@ -47,7 +47,7 @@ end
 # Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123
 flag = client.evaluate_flag("new_search", "user-123")
 flag.enabled?                       # => false on any failure
-flag.config                         # => the flag's config payload, or nil
+flag.config                         # => nil: the evaluate endpoint returns config: null
 client.feature_enabled?("new_search", "user-123")
 
 # Track with a key — one POST /api/v1/tracking/track (never raises)
@@ -86,7 +86,7 @@ Missing `base_url`/`api_key` raise `ArgumentError` from `Client.new`.
 | `Experimently::FeatureFlagEvaluator.hash_user(user_id, key)` | `Float` in `[0, 1)` | pure (parity utility) |
 
 `attributes` on `get_assignment` are sent as the assignment `context` (targeting rules); on
-`evaluate_flag` they are accepted for symmetry only — the evaluate endpoint takes just `user_id`.
+`evaluate_flag` they are accepted for symmetry only: the evaluate endpoint takes a `context`, which this SDK does not send yet.
 `track`: `properties` → `metadata`, `event_type` defaults to `event_name`, `timestamp` (`Time` or
 ISO-8601 string) defaults to now (UTC). `track_batch` events are Hashes with `event_name` and
 `user_id` plus optional `experiment_key`/`feature_flag_key`; malformed Hashes are counted as
@@ -97,7 +97,7 @@ experiment's results; tag outcome events.
 
 - Successful evaluations and assignments are cached per **user + key** for `cache_ttl` (default
   300 s, LRU-bounded by `max_cache_size`); a hit makes no request. **Failures are never cached.**
-- Network error / timeout, 401 (bad key), 404 (flag/experiment unknown or not ACTIVE), 422, 429
+- Network error / timeout, 401 (bad key), 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 422, 429
   (rate limited), 5xx: `evaluate_flag` returns a **disabled** evaluation, `get_assignment` returns
   **`nil`**, `track` returns **`false`**, `track_batch` counts the chunk as failed. Each logs one
   line via `Kernel#warn`. There is no stale fallback beyond the TTL.

@@ -154,7 +154,7 @@ accepted for signature compatibility but not sent.
 | `key` | `string` | The key you asked for |
 | `enabled` | `boolean` | Server decision for this user (`false` while loading or on failure) |
 | `value` | `boolean` | Alias of `enabled` (kept from 0.1) |
-| `config` | `unknown \| null` | The flag's `config` payload as returned by the server |
+| `config` | `unknown \| null` | Always `null`: the evaluate endpoint returns `config: null` for every flag |
 | `loading` | `boolean` | `true` until the first response |
 | `error` | `Error \| null` | Only set if the client promise rejects (the client itself never throws, so this is normally `null` — failures come back as `enabled: false`) |
 
@@ -249,8 +249,8 @@ For `evaluateFlag` and `getAssignment`:
 5. **Safe default** — `{ key, enabled: false, config: null }` / `null`. Failures are never cached.
 
 Every swallowed failure is passed to `config.onError(error, operation)`; HTTP failures are
-`ApiError` instances with a `status` field (401 bad key, 404 flag/experiment not ACTIVE, 422 invalid
-event, 429 rate limited).
+`ApiError` instances with a `status` field (401 bad key, 404 an experiment unknown or not ACTIVE, or an unknown flag key, 422
+invalid event, 429 rate limited).
 
 ### AsyncStorage layout
 
@@ -273,7 +273,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | `track` with a key | `POST /api/v1/tracking/track` | `{"event_type","event_name","user_id","experiment_key"?,"feature_flag_key"?,"value"?,"metadata"?,"timestamp"?}` | stored event (ignored) |
 | `track` without a key, `trackBatch` | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` (max 100) | `{"success_count","failure_count","errors"}` |
 
-Errors: 401 bad key; 404 experiment/flag not ACTIVE or unknown; 422 invalid event; 429
+Errors: 401 bad key; 404 an experiment unknown or not ACTIVE, or an unknown flag key; 422 invalid event; 429
 rate limited (`Retry-After` header).
 
 ---
@@ -372,8 +372,8 @@ runtime; the live runner runs it with `python tests/sdk-contract/live/run_live_c
 component in the provider; check for a duplicate copy of React in the bundle.
 
 **Flags always come back disabled / variant is always `null`** — pass an `onError` handler and look
-at the `ApiError.status`: 401 means a bad `apiKey`, 404 means the flag/experiment is not ACTIVE (or
-the key is wrong), a plain `Error` means the network/timeout. Check that `baseUrl` is the origin
+at the `ApiError.status`: 401 means a bad `apiKey`, 404 means an unknown key or an experiment that is not
+ACTIVE (a flag that is not ACTIVE is not an error: it comes back disabled), a plain `Error` means the network/timeout. Check that `baseUrl` is the origin
 only (no `/api/v1`). With `offlineFallback: true` the last-known value is served during outages.
 
 **Type errors with `md5`** — `npm install --save-dev @types/md5`.

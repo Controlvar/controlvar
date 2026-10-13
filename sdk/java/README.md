@@ -136,7 +136,7 @@ scalar / null), `getConfigMap()`. `ExperimentAssignment` → `getExperimentKey()
 
 - Successful evaluations and assignments are cached per **user + key** for `cacheTtlMs`
   (default 5 min); a hit makes no request. **Failures are never cached.**
-- Network error, timeout, 401, 404 (not ACTIVE / unknown), 429: `evaluateFeatureFlag` and
+- Network error, timeout, 401, 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 429: `evaluateFeatureFlag` and
   `getExperimentAssignment` throw `ExperimentationException` (`isApiError()` is true for HTTP
   errors); `isFeatureEnabled` returns `false`. There is no stale fallback beyond the TTL.
 - Async `trackEvent`/`trackBatch` swallow every error; use the `*Sync` variants to observe them.
@@ -196,7 +196,7 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/exp
 cd sdk/java && ./mvnw clean test
 ```
 
-- `cd sdk/java && ./mvnw clean test`: core: 77 tests (MockWebServer); spring-boot-starter: 35 tests
+- `cd sdk/java && ./mvnw clean test`: the core module (MockWebServer) and the spring-boot-starter module
 
 `./mvnw` pins Maven 3.9.9 and verifies the download against a SHA-256 in
 `.mvn/wrapper/maven-wrapper.properties` (no `maven-wrapper.jar` is committed —
