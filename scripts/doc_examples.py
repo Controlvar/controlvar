@@ -184,7 +184,6 @@ PENDING_FROZEN: dict[str, tuple[int, int, int]] = {
     "docs/api/sequential-testing.md": (0, 0, 0),
     "docs/api/split-url.md": (0, 3, 0),
     "docs/api/warehouse-analytics.md": (0, 0, 0),
-    "docs/architecture/models.md": (0, 1, 1),
     "docs/architecture/technical-guide.md": (0, 5, 0),
     "docs/auth/cognito-auth-testing.md": (0, 0, 0),
     "docs/deployment/README.md": (0, 0, 0),

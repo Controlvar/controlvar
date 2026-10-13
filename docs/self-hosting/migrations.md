@@ -187,8 +187,7 @@ downgrade is a no-op — it will not drop populated tables it never made.
 This revision replaces the `warehouse_connections` table with a new one and
 adds `warehouse_sources` and `warehouse_analysis_runs`. **Every row of the
 earlier `warehouse_connections` is deleted** — connections saved through the
-warehouse endpoints removed in 0.9.0 — and nothing is copied into the new
-table. Recreate connections in Warehouse › Connections.
+earlier warehouse endpoints — and nothing is copied into the new table. Recreate connections in Warehouse › Connections.
 
 Downgrading it cannot bring those rows back: `downgrade modules@-1` drops the
 three tables it created and puts back an **empty** table of the earlier shape.
@@ -251,10 +250,8 @@ SELECT count(*) FROM experimentation.events
 ```
 
 If it returns 0, the migration changes nothing. Otherwise it scans the table
-once and rewrites the rows it counted. On a developer laptop that took about
-60 to 80 µs per rewritten row, plus the scan. That is a laptop number: your
-database will be slower or faster, so the first real measure is your own
-staging run's log line.
+once and rewrites the rows it counted. How long that takes depends on your
+database: the first measure of it is your own staging run's log line.
 
 **After upgrading, under Docker Compose or Helm:** this lists what is left. Expect
 exactly the unreadable values the log line counted, which the migration leaves
@@ -441,13 +438,13 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini stamp <r
 
 ## Resolving "Multiple Heads" Errors
 
-If two developers create migrations from the same base revision, Alembic ends up with two "heads" (two branches in the migration graph). This error looks like:
+On a full image, a command that names the singular `head` fails:
 
 ```text
 FAILED: Multiple head revisions are present for given argument 'head'
 ```
 
-### Diagnosis
+Name `heads` (plural) instead. To see the heads the image has:
 
 ```{.bash exec}
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini heads
@@ -455,49 +452,25 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini heads
 <!-- expect: (head) -->
 
 A release image prints its core head, and a full image the `modules` head too,
-labelled `(modules)`. Two unlabelled heads look like this:
-
-```text
-ab1234567890 (head)
-cd1234567890 (head)
-```
-
-### Resolution
-
-The `modules` branch is *not* one of these: it is two heads on purpose, and
-`alembic heads` labels it. Never merge it. For two core revisions cut from the
-same parent, create a merge migration that unifies them. That is a fix in a
-checkout, committed and released, not a command against a deployment:
-
-```{.bash skip reason="dev: writes a merge revision into a development checkout"}
-python -m alembic -c backend/app/db/alembic.ini merge -m "merge heads" ab1234567890 cd1234567890
-```
-
-This creates a new migration file with both revisions as its `down_revision`. The merge migration itself has no SQL operations — it exists only to reunify the graph. Once the release that carries it is running, apply it normally:
-
-```{.bash exec}
-docker compose exec api python -m alembic -c backend/app/db/alembic.ini upgrade heads
-```
+labelled `(modules)`.
 
 ---
 
 ## Environment Variables
 
 Alembic and the bootstrap connect with these settings. In the API container they
-are already set, by the compose file (the values below are its defaults), the
-Helm chart or the task definition; set them yourself only when you run alembic
-somewhere else:
+are already set, by the compose file, the Helm chart or the task definition; set
+them yourself only when you run alembic somewhere else. The defaults below are the
+Quick Start compose file's:
 
-| Variable | Compose default | Description |
+| Variable | Quick Start default | Description |
 |----------|---------|-------------|
 | `POSTGRES_SERVER` | `postgres` | Database host (the compose service; `localhost` from the host) |
 | `POSTGRES_PORT` | `5432` | Database port |
-| `POSTGRES_USER` | `postgres` | Database username |
-| `POSTGRES_PASSWORD` | `postgres` | Database password; set your own outside a local trial |
+| `POSTGRES_USER` | `postgres` (`experimently` in `deploy/compose/compose.yml`) | Database username |
+| `POSTGRES_PASSWORD` | `postgres` (none in `deploy/compose/compose.yml`, which requires it) | Database password; set your own outside a local trial |
 | `POSTGRES_DB` | `experimentation` | Database name |
 | `POSTGRES_SCHEMA` | `experimentation` | PostgreSQL schema name |
-
-On macOS, always use `localhost` (not `127.0.0.1`) for the database host when connecting to a Docker-hosted PostgreSQL instance.
 
 The database server's `TimeZone` must be `UTC`, as it is in the bundled PostgreSQL of both
 compose files and the Helm chart. On another time zone, some times the API stores move by the
@@ -644,10 +617,6 @@ already running keep running. That, and the window in every rolling upgrade
 where the previous release still serves after the new release's migration has
 run, is why a migration must not drop or rename anything the previous
 release's code still uses (see *Migration Guidelines*).
-
-### Rolling back to 0.7.0 after upgrading to a release that adds tables
-
-The release that carries this change adds two tables and changes nothing that 0.7.0 uses. An 0.7.0 image started against the upgraded database refuses at start-up, because the database records a revision 0.7.0 has no file for. The message printed by 0.7.0 and earlier at that point suggests deleting rows from `alembic_version`: do not follow it. Instead, run the 0.7.0 API with `RUN_MIGRATIONS=false`; it then starts without running migrations and works against the upgraded schema. Do not run 0.7.0's migration task against it. On the AWS deployment, check the environment of the revision you roll back to: an API revision registered before the Fargate stack carried `RUN_MIGRATIONS=false` (next section) runs migrations on start and will refuse. For such a revision, register a copy of it with `RUN_MIGRATIONS=false` in its environment and roll back to the copy. To upgrade again, deploy the newer release as usual.
 
 ### On AWS, the API does not migrate
 

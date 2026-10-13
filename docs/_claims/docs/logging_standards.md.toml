@@ -1,0 +1,248 @@
+# What verifies each unit of docs/logging_standards.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/logging_standards.md"
+
+[[unit]]
+text = "Logging Standards"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Logging is structlog, configured once in backend/app/core/logger.py."
+by = ["untested:T"]
+
+[[unit]]
+text = "In production every event renders as a single-line JSON object, which is what CloudWatch Logs Insights expects; in development it renders as colourised text through structlog's dev renderer."
+by = ["untested:T"]
+
+[[unit]]
+text = "The switch is json_logs."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Getting a logger"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Pass structured data as keyword arguments, not string interpolation and not extra={...}:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every keyword becomes its own JSON field, so variant=\"control\" is queryable in Logs Insights."
+by = ["untested:T"]
+
+[[unit]]
+text = "Interpolating it into the message (f\"variant {variant}\") buries it in a string and is not."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Fields on every line"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Added by the shared processor chain, without the caller doing anything:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "field | source"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "timestamp | TimeStamper(fmt=\"iso\")"
+by = ["untested:T"]
+
+[[unit]]
+text = "level | add_log_level"
+by = ["test:backend/tests/unit/core/test_logger.py::test_a_rendered_line_carries_the_level_the_error_log_alarm_counts"]
+
+[[unit]]
+text = "event | the message — structlog's name for it, not message"
+by = ["untested:T"]
+
+[[unit]]
+text = "logger | add_logger_name"
+by = ["untested:T"]
+
+[[unit]]
+text = "service | _add_service, the configured service name"
+by = ["untested:T"]
+
+[[unit]]
+text = "exception | format_exc_info, only in JSON mode and only when exc_info is set"
+by = ["untested:T"]
+
+[[unit]]
+text = "Per-request fields"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "RequestIDMiddleware binds these to the async context, so every log line emitted while handling a request carries them, with no bound logger passed around:"
+by = ["test:backend/tests/unit/middleware/test_request_id_middleware.py::test_bind_log_context_called"]
+
+[[unit]]
+text = "field | value"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "request_id | also returned to the client as the X-Request-ID header"
+by = ["test:backend/tests/unit/middleware/test_request_id_middleware.py::test_request_id_added_to_response_headers"]
+
+[[unit]]
+text = "path | the request path"
+by = ["test:backend/tests/unit/middleware/test_request_id_middleware.py::test_bind_log_context_called"]
+
+[[unit]]
+text = "method | the HTTP method"
+by = ["test:backend/tests/unit/middleware/test_request_id_middleware.py::test_bind_log_context_called"]
+
+[[unit]]
+text = "To add your own for the rest of a request:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "request_id is the field to correlate on."
+by = [
+    "test:backend/tests/unit/middleware/test_request_id_middleware.py::test_request_id_added_to_response_headers",
+    "test:backend/tests/unit/core/test_logger.py::test_failure_detail_adds_only_a_well_formed_request_id",
+]
+
+[[unit]]
+text = "It appears on every line of a request and is handed back to the caller in the response header, so a user reporting an error can quote it."
+by = [
+    "test:backend/tests/unit/middleware/test_request_id_middleware.py::test_request_id_added_to_response_headers",
+    "test:backend/tests/unit/core/test_logger.py::test_failure_detail_adds_only_a_well_formed_request_id",
+]
+
+[[unit]]
+text = "Levels"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "level | use"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "DEBUG | detail for local debugging; not enabled in production"
+by = ["untested:T"]
+
+[[unit]]
+text = "INFO | normal operational events — an assignment made, a rollout stage advanced"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "WARNING | something recoverable that may need attention — a cache miss on a hot path, a retry"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "ERROR | an operation failed and a user saw it; include exc_info=True"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "CRITICAL | the service cannot continue"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What must never be logged"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "No credentials, API keys, tokens, password hashes, or PHI."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A User or a tracking payload carries an email address or an attribute you did not mean to persist."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What flag evaluation and assignment log"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The user_id an SDK sends is your end user's identifier, and it is often an email address."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Evaluation and assignment run on every SDK request, so they log none of it:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "No line carries the end user's id or attribute values, at any level."
+by = [
+    "test:backend/tests/unit/services/test_assignment_evaluation_logs_no_user_id.py",
+    "test:backend/tests/unit/core/test_evaluation_logs_no_attribute_values.py",
+]
+
+[[unit]]
+text = "Routine per-request lines are DEBUG: an assignment made, a sticky assignment reused, a user left out by holdout, mutual exclusion or targeting, a flag evaluated."
+by = ["test:backend/tests/unit/services/test_assignment_evaluation_logs_no_user_id.py"]
+
+[[unit]]
+text = "They name the experiment or flag and the variant, not the user."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "At the production level (INFO) a busy installation writes none of them."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An error on those paths logs the exception's type (for an AWS error, with its error code), not its text."
+by = [
+    "test:backend/tests/unit/services/test_service_errors_carry_type_only.py",
+    "test:backend/tests/unit/services/test_assignment_evaluation_logs_no_user_id.py::test_flag_evaluation_error_logs_the_type_not_the_text",
+]
+
+[[unit]]
+text = "An exception's text can repeat a value, and a database error repeats the row's parameters, the user id among them."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A flag evaluation error's full text still goes to the error_logs table, where the safety monitor reads it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A reassignment, which an operator requests, logs one INFO line naming the experiment and the variant, not the user."
+by = ["test:backend/tests/unit/services/test_assignment_evaluation_logs_no_user_id.py::test_reassignment"]
+
+[[unit]]
+text = "Nothing masks a log line."
+by = ["untested:T"]
+
+[[unit]]
+text = "backend/app/utils/masking.py blanks password, token, api_key, secret, credential, authorization, access_token, refresh_token, private_key and friends, and partially masks emails, phone numbers, credit card numbers and IP addresses."
+by = [
+    "test:backend/tests/unit/utils/test_masking.py::TestMaskSensitiveData::test_mask_sensitive_fields",
+    "test:backend/tests/unit/utils/test_masking.py::TestMaskingFunctions::test_mask_email",
+    "test:backend/tests/unit/utils/test_masking.py::TestMaskingFunctions::test_mask_phone",
+    "test:backend/tests/unit/utils/test_masking.py::TestMaskingFunctions::test_mask_credit_card",
+    "test:backend/tests/unit/utils/test_masking.py::TestMaskingFunctions::test_mask_ip_address",
+]
+
+[[unit]]
+text = "Only LoggingMiddleware (backend/app/middleware/logging_middleware.py) calls it, and the application does not mount that middleware."
+by = ["untested:T"]
+
+[[unit]]
+text = "A keyword you pass to logger.info(...) lands in CloudWatch verbatim."
+by = ["untested:T"]
+
+[[unit]]
+text = "So log the identifier, not the object."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "This covers AssignmentService, FeatureFlagService evaluation, the rules engine and its evaluation cache, EventService's writes (exposures and tracked events), and the flag-evaluation and event-processor code under backend/lambda/, which no stack deploys, including their shared DynamoDB and Kinesis helpers."
+by = [
+    "test:backend/tests/unit/services/test_assignment_evaluation_logs_no_user_id.py",
+    "test:backend/tests/unit/core/test_evaluation_logs_no_attribute_values.py",
+    "test:backend/lambda/event_processor/tests/test_logs_no_user_id.py",
+    "test:backend/lambda/feature_flag_evaluation/tests/unit/test_logs_no_user_id.py",
+    "test:backend/lambda/shared/tests/test_logs_no_user_id.py",
+]
+
+[[unit]]
+text = "To follow one user through the system, use the data that is kept for it: the assignments and events tables, and error_logs."
+by = ["untested:T"]
+
+[[unit]]
+text = "No middleware binds the dashboard user's id to a log line; the audit log records who changed what."
+by = ["untested:T"]

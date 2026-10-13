@@ -1,0 +1,1394 @@
+# What verifies each unit of docs/self-hosting/migrations.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/self-hosting/migrations.md"
+
+[[unit]]
+text = "Database Migrations"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform uses Alembic for PostgreSQL schema management."
+by = ["untested:T"]
+
+[[unit]]
+text = "All schema changes — new tables, columns, indexes, and constraints — are expressed as versioned migration scripts that can be applied forward or rolled back."
+by = ["untested:T"]
+
+[[unit]]
+text = "Overview"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Two branches, two heads."
+by = ["test:backend/tests/integration/database/test_profile_migrations.py::test_fresh_full_bootstrap_records_every_head"]
+
+[[unit]]
+text = "A full-profile checkout also has modules/backend/app/db/migrations/versions/, a separate branch labelled modules for the schema the optional modules own."
+by = ["test:backend/tests/integration/database/test_profile_migrations.py::test_fresh_full_bootstrap_records_every_head"]
+
+[[unit]]
+text = "A core checkout has no modules/ directory and therefore one head; a full checkout has two, and alembic_version holds one row per head."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "That is why every command below says heads (plural) and never head: alembic refuses the singular when more than one head exists."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Where the commands run."
+by = ["test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_migration_command_config_exists_in_the_image_layout"]
+
+[[unit]]
+text = "Every command on this page runs inside the API container, with the image's own alembic and the container's POSTGRES_ settings: docker compose exec api ..., from the directory of your compose file (the repository root for the Quick Start stack, deploy/compose/ for the production compose file)."
+by = ["test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_migration_command_config_exists_in_the_image_layout"]
+
+[[unit]]
+text = "The image keeps the repository's layout under its working directory /app, so -c backend/app/db/alembic.ini is the same path there as in a checkout."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Under Helm, run the same command in an API pod with kubectl exec."
+by = ["untested:S"]
+
+[[unit]]
+text = "On AWS, see Running Migrations in Production."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Running alembic from a checkout instead is a contributor's task: Database Migrations with Alembic."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Running All Migrations"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The API container runs the bootstrap (below) every time it starts, so a stack that is up is already at its heads."
+by = ["untested:T"]
+
+[[unit]]
+text = "To apply all pending migrations by hand:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "heads refers to the latest migration of every branch."
+by = ["untested:T"]
+
+[[unit]]
+text = "This command applies all unapplied migrations in order."
+by = ["untested:T"]
+
+[[unit]]
+text = "Alembic logs what it applies (to stderr); on a database already at its heads it applies nothing."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "On a database with no tables at all, run the bootstrap instead — the historical migration chain cannot be replayed from zero, so a fresh schema is created from the models and stamped."
+by = [
+    "test:backend/tests/integration/database/test_profile_transitions.py::test_a_fresh_full_bootstrap",
+    "test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_the_migration_task_bootstraps_rather_than_replaying_the_chain",
+]
+
+[[unit]]
+text = "On a database that has tables it runs upgrade heads:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It ends with Database bootstrap complete (created) on a new database and Database bootstrap complete (upgraded) on one that had tables."
+by = ["docex:docs/self-hosting/migrations.md#Database bootstrap complete"]
+
+[[unit]]
+text = "The bootstrap reads ENVIRONMENT from the container, which compose sets (development unless ENVIRONMENT was set when the stack was started); for another value, pass it to that one command: docker compose exec -e ENVIRONMENT=production api python -m backend.app.db.bootstrap."
+by = ["untested:T"]
+
+[[unit]]
+text = "ENVIRONMENT is the environment the database belongs to (production, staging, or development for a local trial)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "On a database with no users the bootstrap creates the first administrator from FIRST_SUPERUSER and FIRST_SUPERUSER_PASSWORD, and it refuses a password that is empty, shorter than 8 characters or a well-known default unless ENVIRONMENT is development or test."
+by = [
+    "test:backend/tests/unit/core/test_environment_explicit.py::test_a_weak_first_superuser_password_is_refused_when_the_environment_defaulted",
+    "test:backend/tests/unit/core/test_environment_explicit.py::test_a_weak_password_is_accepted_when_development_or_test_was_chosen",
+]
+
+[[unit]]
+text = "In every environment it also refuses a password longer than 72 bytes when encoded as UTF-8 (a character outside ASCII takes two to four bytes)."
+by = ["test:backend/tests/unit/db/test_first_superuser_password_length.py::test_the_bootstrap_refuses_a_long_password_in_every_environment"]
+
+[[unit]]
+text = "Once the database has users the setting is not read."
+by = ["untested:T"]
+
+[[unit]]
+text = "The bootstrap is also what the API container runs on start-up when RUN_MIGRATIONS=true, the image's default, and it is what makes a profile switch work; see \"Switching profile\" below."
+by = [
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations",
+    "test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_the_deploy_bootstraps_too",
+]
+
+[[unit]]
+text = "The AWS (CDK) deployment sets RUN_MIGRATIONS=false on its API tasks: there, the Deploy workflow's migration task is the only thing that runs the bootstrap (see On AWS, the API does not migrate)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Viewing Migration History"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Show every migration the image carries, newest first:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Output, for example:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "(head) marks the newest revision of each branch in the image; a full image also lists the modules branch, labelled (modules)."
+by = ["untested:T"]
+
+[[unit]]
+text = "history lists the image's revisions whether or not the database has them: current (next) says what the database has."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Checking Current State"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Show which migration is currently applied to the database:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Output, for a full install (a core install prints the first line only):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "One line per head: the revision ID of the last migration applied on each branch, and (head) when it is the newest the image has."
+by = ["test:backend/tests/integration/database/test_profile_migrations.py::test_fresh_full_bootstrap_records_every_head"]
+
+[[unit]]
+text = "Creating a New Migration"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A migration is written in a checkout and ships in a release; it is not created against a deployment."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "See Creating New Migrations."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Applying a Specific Migration"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Apply migrations up to a specific revision (not necessarily the latest), named by its ID from history:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Name the revision rather than a relative step such as upgrade +1."
+by = ["untested:S"]
+
+[[unit]]
+text = "A relative step counts along one line of revisions, and with two heads alembic refuses it: Relative revision +1 didn't produce 1 migrations (measured from a full checkout against a database at the core head, with the modules branch still to apply)."
+by = ["untested:S"]
+
+[[unit]]
+text = "Rolling Back"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Roll back the most recent migration of one branch."
+by = ["untested:T"]
+
+[[unit]]
+text = "With two heads a bare -1 is ambiguous — alembic warns and picks one, which may not be the branch you meant — so name the branch:"
+by = ["untested:T"]
+
+[[unit]]
+text = "modules@-1 unapplies the newest one only; modules@-2 unapplies both, newest first."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The modules branch, one revision back (modules_0002_warehouse_analysis):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "One step back on the core chain:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each modules revision downgrades only the objects its own upgrade() created (it marks them with a PostgreSQL COMMENT as it goes)."
+by = [
+    "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
+    "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_drops_the_tables_the_migration_created",
+]
+
+[[unit]]
+text = "On a database whose tables came from the bootstrap rather than from those migrations, their downgrade is a no-op — it will not drop populated tables it never made."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "modules_0002_warehouse_analysis removes saved warehouse connections"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This revision replaces the warehouse_connections table with a new one and adds warehouse_sources and warehouse_analysis_runs."
+by = [
+    "test:backend/tests/integration/database/test_modules_0002_transitions.py::test_modules_0002_scrubs_legacy_rows",
+    "test:backend/tests/integration/database/test_modules_0002_transitions.py::test_modules_0002_fresh_core_to_full",
+]
+
+[[unit]]
+text = "Recreate connections in Warehouse › Connections."
+by = ["untested:T"]
+
+[[unit]]
+text = "Downgrading it cannot bring those rows back: downgrade modules@-1 drops the three tables it created and puts back an empty table of the earlier shape."
+by = ["test:backend/tests/integration/database/test_modules_0002_transitions.py::test_modules_0002_downgrade_restores_the_earlier_shape"]
+
+[[unit]]
+text = "If you need the rows, take a snapshot of the database before upgrading to the release that carries this revision, and restore that snapshot to go back."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The migration logs how many rows it removed:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "1ab99332f0ba rewrites stored event times to UTC"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "events.created_at is stored as text, so time windows, ordering and \"the earliest conversion\" over events compare text."
+by = [
+    "test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_the_column_stays_text_for_the_previous_release",
+    "test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_existing_offset_rows_sort_and_window_in_utc_after_upgrade",
+]
+
+[[unit]]
+text = "Events stored before this release kept the time exactly as the client sent it: with its own offset (2026-10-01T01:00:00+02:00), with Z, or with no offset at all."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "As text, those sort among each other by the digits, not by the moment, so an event could fall outside a time window it belongs in, and the wrong event could count as a user's first conversion."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Events written by this release are already stored in one form, in UTC."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This revision rewrites every stored value that is not in that form to the same instant in it: 2026-10-01T01:00:00+02:00 becomes 2026-09-30T23:00:00+00:00 (.ffffff is kept when there are microseconds)."
+by = [
+    "test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_every_rewritten_value_is_what_the_normaliser_writes",
+    "test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_a_value_with_no_offset_is_read_as_utc_in_any_session_timezone",
+    "test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_values_that_cannot_be_read_are_left_as_stored_and_counted",
+]
+
+[[unit]]
+text = "A value with no offset is read as UTC, as the API reads it, and gets +00:00."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Values already in the form are not touched, and no other column changes."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A value that cannot be read as a time (an empty string, text that is not a date, or a date out of range) is left exactly as stored and counted."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What readers of results see: a converting user's first-conversion day in the daily results can move by one day."
+by = ["untested:T"]
+
+[[unit]]
+text = "Totals, rates and significance do not change."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The downgrade cannot bring back the offsets clients sent."
+by = [
+    "test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_the_downgrade_changes_no_data_and_says_why",
+    "test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_the_column_stays_text_for_the_previous_release",
+]
+
+[[unit]]
+text = "Each row keeps its instant; the offset it arrived with is not recorded anywhere."
+by = [
+    "test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_the_downgrade_changes_no_data_and_says_why",
+    "test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_the_column_stays_text_for_the_previous_release",
+]
+
+[[unit]]
+text = "If you need the original text, take a snapshot of the database before upgrading, and restore that snapshot to go back."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A previous release runs against the rewritten rows unchanged: the column type is the same and the values are in the form it writes for its own timestamps."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The migration prints one line when it finishes."
+by = ["test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_the_log_counts_exactly_the_rewritten_rows"]
+
+[[unit]]
+text = "It names event ids, never the stored values:"
+by = ["test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_the_log_counts_exactly_the_rewritten_rows"]
+
+[[unit]]
+text = "Before upgrading, under Docker Compose or Helm: how many rows will it rewrite?"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Run this read-only count with psql (see Resolve each group for how to open it)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The statements here use the schema experimentation; if your POSTGRES_SCHEMA is different, replace it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If it returns 0, the migration changes nothing."
+by = ["test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_a_second_run_rewrites_nothing"]
+
+[[unit]]
+text = "Otherwise it scans the table once and rewrites the rows it counted."
+by = ["test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_a_second_run_rewrites_nothing"]
+
+[[unit]]
+text = "After upgrading, under Docker Compose or Helm: this lists what is left."
+by = ["test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_the_documented_sql_selects_exactly_what_the_migration_rewrites"]
+
+[[unit]]
+text = "Expect exactly the unreadable values the log line counted, which the migration leaves as they were:"
+by = ["test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_the_documented_sql_selects_exactly_what_the_migration_rewrites"]
+
+[[unit]]
+text = "A long run is not a failed run."
+by = [
+    "test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_a_failure_at_batch_k_keeps_k_batches_and_a_rerun_finishes",
+    "test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_batches_cover_every_row_exactly_once",
+]
+
+[[unit]]
+text = "Do not kill it."
+by = [
+    "test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_a_failure_at_batch_k_keeps_k_batches_and_a_rerun_finishes",
+    "test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_batches_cover_every_row_exactly_once",
+]
+
+[[unit]]
+text = "The rewrite commits batch by batch, so a run that is stopped keeps every batch it finished, and the next upgrade finishes the rest."
+by = [
+    "test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_a_failure_at_batch_k_keeps_k_batches_and_a_rerun_finishes",
+    "test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_batches_cover_every_row_exactly_once",
+]
+
+[[unit]]
+text = "Killing it only makes you wait twice."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Docker Compose."
+by = ["untested:S"]
+count = 2
+
+[[unit]]
+text = "The API container runs the migration on start and serves once it has finished."
+by = ["untested:T"]
+
+[[unit]]
+text = "If the migration runs longer than about 10 minutes, docker compose up reports the API unhealthy and fails while the migration is still running in the container."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Do not restart it: wait for the line above in docker compose logs api."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Helm."
+by = ["untested:S"]
+count = 2
+
+[[unit]]
+text = "The migrate init container runs it while the old pods keep serving."
+by = ["untested:S"]
+
+[[unit]]
+text = "helm upgrade --wait --timeout 10m can report a failure while the init container is still running."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Do not delete the pod: wait for the line in kubectl logs <pod> -c migrate."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "AWS."
+by = ["untested:T"]
+count = 2
+
+[[unit]]
+text = "The Deploy workflow's migration task runs it before traffic shifts, and the previous release keeps serving meanwhile."
+by = ["test:backend/tests/unit/infrastructure/test_task_definition_scripts.py::test_a_migration_still_running_at_the_deadline_is_not_rerun"]
+
+[[unit]]
+text = "The AWS deployment gives you no psql, so use the migration's log line instead of the queries above, and read the staging deploy's line (rewritten, unreadable, seconds) before you deploy production."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The Deploy workflow waits 30 minutes for the migration, and no setting changes that for one deploy."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A longer run fails the deploy with Migration still running, and nothing shifts."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Do not start another deploy yet: wait until the task named in that error has stopped (the error names its log group and stream; the ECS console shows the task's status as STOPPED), then run the Deploy workflow again for the same tag."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Its migration finishes the rest."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Events written while the upgrade ran."
+by = ["test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_the_rerun_recipe_rewrites_a_value_written_after_the_first_run"]
+
+[[unit]]
+text = "Under Helm and on AWS the previous release keeps serving, and keeps storing times as clients send them, until the new release takes all the traffic."
+by = ["test:backend/tests/integration/database/test_events_created_at_utc_migration.py::test_the_rerun_recipe_rewrites_a_value_written_after_the_first_run"]
+
+[[unit]]
+text = "Rows it writes after the migration's scan stay as they were."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Once the new release serves all traffic, run the migration again: downgrade to the revision before it and upgrade."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The second log line says how many values it rewrote."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Then the downgrade changes no data; it only moves the version row back."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Complete it before you upgrade to the release that adds 806901fb7735, the experiments' stored correction settings."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Past that release the recipe is not offered: downgrade a89544fb1075 would also run 806901fb7735's downgrade, which drops every experiment's stored correction method and confidence level, and the upgrade heads after it puts back the defaults (Benjamini-Hochberg, 0.95), not the choices that were stored."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "On AWS these are two runs of the Database Migration workflow: direction downgrade with target a89544fb1075, then direction upgrade with target heads."
+by = ["untested:T"]
+
+[[unit]]
+text = "Name a89544fb1075; do not use -1."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_migrate_refuses_relative_and_whole_graph_targets"]
+
+[[unit]]
+text = "On a full install downgrade -1 can step back the modules branch instead, and that downgrade drops the warehouse tables modules_0002_warehouse_analysis created."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_migrate_refuses_relative_and_whole_graph_targets"]
+
+[[unit]]
+text = "The Database Migration workflow refuses -1."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Past d29a479daafe that downgrade would also drop the table holdout_population, with every row in it, and three global_holdouts columns (see the next section)."
+by = ["test:backend/tests/integration/database/test_holdout_population_migration.py::test_downgrade_drops_the_table_index_and_columns_and_keeps_the_deactivation"]
+
+[[unit]]
+text = "Past 37dcb2969766 it also runs that revision's downgrade, which drops the table segment_members (the members of every id-list segment) and the column segments.kind."
+by = ["test:backend/tests/integration/database/test_segment_members_migration.py::test_downgrade_with_members_is_refused"]
+
+[[unit]]
+text = "So it now stops while any id list has members: that downgrade refuses, prints how many rows segment_members holds, and changes nothing, because nothing could put the members back and every id-list segment would return as a rules segment with no rules (see 37dcb2969766)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "d29a479daafe records who each global holdout covers"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This revision adds activated_at, deactivated_at and hash_salt to global_holdouts, a partial unique index that allows at most one active holdout, and the table holdout_population, which records each user first seen while a holdout is active and whether the holdout kept them out."
+by = [
+    "test:backend/tests/integration/database/test_holdout_population_migration.py::test_the_migrated_index_is_partial_and_allows_many_inactive_rows",
+    "test:backend/tests/integration/database/test_holdout_population_migration.py::test_the_population_table_is_keyed_by_holdout_and_user",
+]
+
+[[unit]]
+text = "It deactivates all but one active holdout."
+by = ["test:backend/tests/integration/database/test_holdout_population_migration.py::test_upgrade_keeps_one_active_legacy_row_and_salts_the_rest"]
+
+[[unit]]
+text = "Before the index is created, every active holdout except the most recently updated one is deactivated and stamped as ended; an ended holdout cannot be activated again."
+by = ["test:backend/tests/integration/database/test_holdout_population_migration.py::test_upgrade_keeps_one_active_legacy_row_and_salts_the_rest"]
+
+[[unit]]
+text = "The kept row may not be the one the previous release was enforcing."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The migration prints the ids it deactivated:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Before upgrading, this read-only query lists the active holdouts; with more than one row, the first is the one kept:"
+by = ["untested:T"]
+
+[[unit]]
+text = "The holdout active at the upgrade is never measurable."
+by = ["untested:T"]
+
+[[unit]]
+text = "It keeps the salt every holdout used before (so users stay in or out of it exactly as before), and who it kept out before the upgrade was never recorded."
+by = ["untested:T"]
+
+[[unit]]
+text = "To measure, deactivate it and create a new holdout."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The downgrade deletes the recorded memberships."
+by = ["test:backend/tests/integration/database/test_holdout_population_migration.py::test_downgrade_drops_the_table_index_and_columns_and_keeps_the_deactivation"]
+
+[[unit]]
+text = "d29a479daafe's downgrade drops holdout_population with all its rows, the index, and the three columns; nothing can rebuild the table."
+by = ["test:backend/tests/integration/database/test_holdout_population_migration.py::test_downgrade_drops_the_table_index_and_columns_and_keeps_the_deactivation"]
+
+[[unit]]
+text = "The deactivations are not reverted."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rolling back across this revision while a holdout is active also invalidates that holdout: the older release buckets users with the old salt and records nobody, so after upgrading again deactivate it and create a new one."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "37dcb2969766 adds segments made from a list of user ids"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This revision adds segments.kind (rules or id_list, default rules, with the check ck_segments_kind) and the table segment_members, one row per user id in an id-list segment."
+by = [
+    "test:backend/tests/integration/database/test_segment_members_migration.py::test_previous_release_upgraded_with_heads",
+    "test:backend/tests/integration/database/test_segment_members_migration.py::test_an_insert_without_kind_gets_rules",
+]
+
+[[unit]]
+text = "Every segment already stored becomes a rules segment, which is what it was; no row is changed."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The downgrade deletes every id list's members."
+by = ["test:backend/tests/integration/database/test_segment_members_migration.py::test_downgrade_with_members_is_refused"]
+
+[[unit]]
+text = "37dcb2969766's downgrade drops segment_members with all its rows, the check and segments.kind; nothing can rebuild the table, and an id-list segment comes back from a later upgrade as a rules segment with no rules."
+by = ["test:backend/tests/integration/database/test_segment_members_migration.py::test_downgrade_with_members_is_refused"]
+
+[[unit]]
+text = "So while segment_members has any row the downgrade refuses, names the row count, and changes nothing:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "To go on, either remove the members first (POST /api/v1/segments/{id}/members/remove), or, once someone has agreed to lose them, run the same downgrade with the override:"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/database/test_segment_members_migration.py::test_downgrade_with_the_override_runs",
+]
+
+[[unit]]
+text = "The Database Migration workflow does not pass -x, so on AWS it stops at this revision while any id list has members."
+by = ["untested:T"]
+
+[[unit]]
+text = "Roll back to a specific revision:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Roll back all migrations (to the empty database state):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Note: Not all migrations are safely reversible."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If a migration deletes a column, the downgrade drops data."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Review the downgrade() function in each migration file before rolling back in production."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A migration that rewrites data may not be able to undo it at all: see 1ab99332f0ba rewrites stored event times to UTC."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Stamping Without Running Migrations"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The stamp command marks a migration as applied without actually running its SQL."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Use this when:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "You have manually applied schema changes and want to bring Alembic in sync"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "You are setting up Alembic on an existing database"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "You need to skip a problematic migration after fixing it manually"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Mark current database state as \"head\":"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Mark as a specific revision:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Resolving \"Multiple Heads\" Errors"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A release image prints its core head, and a full image the modules head too, labelled (modules)."
+by = ["untested:T"]
+
+[[unit]]
+text = "Environment Variables"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Alembic and the bootstrap connect with these settings."
+by = ["untested:T"]
+
+[[unit]]
+text = "POSTGRES_SERVER | postgres | Database host (the compose service; localhost from the host)"
+by = ["untested:T"]
+
+[[unit]]
+text = "POSTGRES_PORT | 5432 | Database port"
+by = ["untested:T"]
+
+[[unit]]
+text = "POSTGRES_DB | experimentation | Database name"
+by = ["untested:T"]
+
+[[unit]]
+text = "POSTGRES_SCHEMA | experimentation | PostgreSQL schema name"
+by = ["untested:T"]
+
+[[unit]]
+text = "The database server's TimeZone must be UTC, as it is in the bundled PostgreSQL of both compose files and the Helm chart."
+by = ["untested:T"]
+
+[[unit]]
+text = "On another time zone, some times the API stores move by the zone's offset: an experiment's updated_at, for example."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Its start and end dates are stored in UTC whatever the zone."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Migration Guidelines"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Do"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Generate migrations with --autogenerate and always review the output"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Test migrations on a copy of production data before applying to production"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Include both upgrade() and downgrade() functions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Use descriptive migration names: add_bayesian_config_to_experiments"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Commit migration files to version control alongside the model changes that require them"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Expand, then contract."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A migration in release N must not drop or rename anything release N-1's code uses."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Add the new column or table in one release, move the code over, and drop the old one in a later release."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "During a rolling upgrade, release N-1 keeps serving against release N's schema after release N's migration has run."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Do Not"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Edit migration files that have already been applied to production"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Use bare revision IDs in down_revision — always use the actual ID string, not a migration name"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Delete migration files from the versions directory"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Apply migrations without setting the correct POSTGRES_SCHEMA environment variable (the schema namespace will be wrong)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Running Migrations in Production"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "In production (ECS Fargate), migrations run as a one-off ECS task of the family experimentation-migrate-<env>, before the new application version takes any traffic."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_snapshot_is_taken_before_the_migration_from_the_stack_output",
+    "test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_the_deploy_bootstraps_too",
+]
+
+[[unit]]
+text = "You do not normally run it yourself: the Deploy workflow runs it, and the Database Migration workflow (.github/workflows/db-migrate.yml, Actions › Database Migration) runs an upgrade or a downgrade to a target you name, after taking a snapshot."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Both run it the same way:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "register a new revision of experimentation-migrate-<env> whose backend container runs the image being deployed (the Database Migration workflow: the image the API is serving), named by its digest (scripts/register_task_definition.sh);"
+by = [
+    "test:backend/tests/unit/infrastructure/test_task_definition_scripts.py::test_registers_the_digest_and_changes_nothing_else",
+    "test:backend/tests/unit/infrastructure/test_task_definition_scripts.py::test_runs_only_a_registered_revision_arn",
+]
+
+[[unit]]
+text = "run that revision's ARN, never the bare family, which resolves to whichever revision registered last, wait for it to stop, and print its log (scripts/run_migration_task.sh)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The task's command is MIGRATION_COMMAND in infrastructure/cdk/stacks/migration_task_stack.py: the bootstrap, python -m backend.app.db.bootstrap, which creates the schema of an empty database and runs upgrade heads on one with tables."
+by = [
+    "test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_the_migration_task_bootstraps_rather_than_replaying_the_chain",
+    "test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_db_migrate_keeps_raw_alembic_and_names_the_right_config",
+    "test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_migration_command_config_exists_in_the_image_layout",
+]
+
+[[unit]]
+text = "The Database Migration workflow overrides it with python -m alembic -c backend/app/db/alembic.ini <direction> <target>."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The path is relative to the image's WORKDIR /app, under which backend/Dockerfile copies the repository layout unchanged."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "By hand, from a checkout with AWS credentials for the environment, the Deploy workflow's two steps are these."
+by = ["untested:T"]
+
+[[unit]]
+text = "IMAGE is the image by digest (<registry>/<repository>@sha256:<digest>), and NETWORK the task's network configuration, from the Fargate stack's TaskSubnets and TaskSecurityGroup outputs:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Switching Profile"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The same database can be built by one profile and opened by the other."
+by = ["test:backend/tests/integration/database/test_profile_transitions.py::test_a_core_database_switched_to_full_by_the_documented_command"]
+
+[[unit]]
+text = "Both documented paths handle it the same way: python -m backend.app.db.bootstrap with ENVIRONMENT set (what the API container runs on start-up) and alembic upgrade heads (what the migration task runs) share the repairs below, because backend/app/db/migrations/env.py calls them after a command-line upgrade."
+by = ["test:backend/tests/integration/database/test_profile_transitions.py::test_a_core_database_switched_to_full_by_the_documented_command"]
+
+[[unit]]
+text = "Core database, full image."
+by = [
+    "test:backend/tests/integration/database/test_profile_migrations.py::test_switching_to_the_full_profile_creates_every_module_table",
+    "test:backend/tests/integration/database/test_profile_migrations.py::test_upgrade_heads_from_behind_the_core_head_keeps_the_workspace_fks",
+    "test:backend/tests/integration/database/test_profile_transitions.py::test_an_unmigrated_core_model_is_not_created_by_an_upgrade",
+]
+
+[[unit]]
+text = "The core chain marks the revisions that once created workspaces, sso_configs, phi_audit_logs and the rest as applied without creating them, and the modules branch does not re-create them (it owns the three RBAC tables only)."
+by = [
+    "test:backend/tests/integration/database/test_profile_migrations.py::test_switching_to_the_full_profile_creates_every_module_table",
+    "test:backend/tests/integration/database/test_profile_migrations.py::test_upgrade_heads_from_behind_the_core_head_keeps_the_workspace_fks",
+    "test:backend/tests/integration/database/test_profile_transitions.py::test_an_unmigrated_core_model_is_not_created_by_an_upgrade",
+]
+
+[[unit]]
+text = "So after the upgrade reaches this build's heads, the module tables the models declare and the database lacks are created from the models, the two workspace_id foreign keys are added, and a WARNING says so."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Only module tables are ever created this way — an unmigrated core model is not, so a missing core migration still shows up as a missing table rather than being papered over."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "alembic upgrade heads --sql (offline mode) has no reconcile step: the SQL it emits for a profile switch is incomplete."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Full database, core image."
+by = [
+    "test:backend/tests/integration/database/test_profile_transitions.py::test_a_core_build_against_a_full_database_with_nothing_to_apply",
+    "test:backend/tests/integration/database/test_profile_transitions.py::test_a_core_build_refuses_a_full_database_it_has_migrations_for",
+    "test:backend/tests/integration/database/test_profile_transitions.py::test_a_core_build_does_not_pretend_to_downgrade_or_stamp",
+]
+
+[[unit]]
+text = "alembic_version holds a revision a core build has no file for."
+by = [
+    "test:backend/tests/integration/database/test_profile_transitions.py::test_a_core_build_against_a_full_database_with_nothing_to_apply",
+    "test:backend/tests/integration/database/test_profile_transitions.py::test_a_core_build_refuses_a_full_database_it_has_migrations_for",
+    "test:backend/tests/integration/database/test_profile_transitions.py::test_a_core_build_does_not_pretend_to_downgrade_or_stamp",
+]
+
+[[unit]]
+text = "alembic upgrade heads answers in one of two ways: when the core chain is already at its head there is nothing to apply, so it skips alembic, leaves the rows untouched and logs a WARNING naming the foreign revisions (exit 0); when the core chain is behind — a newer core image against a database the full image built — it refuses with a message naming them."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "downgrade and stamp do not skip: they fail with alembic's own \"Can't locate revision identified by 'modules_0002_warehouse_analysis'\" (or modules_0001_rbac, on a database a release before the warehouse tables migrated), and the schema is untouched."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The escape hatch, when you really do want the core image to own that database: take a backup, then from the core image"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "--purge replaces the whole version table with this build's own heads, so the modules row goes and the core row stays."
+by = ["test:backend/tests/integration/database/test_profile_transitions.py::test_a_core_build_can_stamp_a_full_database_with_purge"]
+
+[[unit]]
+text = "The module tables themselves are never dropped by switching down to core."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "They stay, unused, until the database goes back to the full profile."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Use it only when the core chain is already at this release's head, which is the case where upgrade heads skips with a WARNING."
+by = ["untested:T"]
+
+[[unit]]
+text = "stamp records revisions without running them, so after the refusal above it would mark this release's pending core migrations as applied when they are not."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Run the full image of this release first, then stamp."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An Older Image Against a Newer Database"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rolling back to an older image after a release that carried a migration leaves the database recorded at a revision the older image has no file for."
+by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated"]
+
+[[unit]]
+text = "Both documented paths refuse, exit non-zero and leave the database untouched, with a message naming the revision and the image's version: this database was migrated by a newer Experimently release."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The two ways out are the ones it names:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "run the newer release that migrated the database, or"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "restore the backup taken before that upgrade, and run the older image against the restored database."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Do not edit alembic_version to make the older image start."
+by = ["untested:T"]
+
+[[unit]]
+text = "Removing the newer revision's row leaves that release's schema changes in place while alembic no longer knows about them: the older image then re-runs migrations from the wrong position, and rolling forward again fails on a relation that already exists."
+by = ["untested:T"]
+
+[[unit]]
+text = "The refusal is at start-up, so instances of the older image that were already running keep running."
+by = ["untested:T"]
+
+[[unit]]
+text = "That, and the window in every rolling upgrade where the previous release still serves after the new release's migration has run, is why a migration must not drop or rename anything the previous release's code still uses (see Migration Guidelines)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "On AWS, the API does not migrate"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "On the AWS (CDK) deployment the API task definition sets RUN_MIGRATIONS=false and SEED= (empty), for every environment and both profiles."
+by = [
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations",
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_seed",
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_each_profile_really_was_synthesised",
+]
+
+[[unit]]
+text = "An API task never runs the bootstrap; the only thing that writes the schema is the migration task the Deploy workflow runs before it shifts traffic (or the Database Migration workflow, run by hand)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "infrastructure/tests/test_api_task_does_not_migrate.py pins both values."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Why: an image refuses to start against a database a newer release has migrated (above)."
+by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_api_serves_a_database_a_newer_release_migrated"]
+
+[[unit]]
+text = "While the API ran the bootstrap on every start, any API task started from an older revision after a Deploy's migration -- a replaced task, a scale-out, a rollback -- exited instead of serving."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With the bootstrap out of the API task, an older revision starts against the newer schema and serves it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What this means for you:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "cdk deploy alone no longer creates the schema."
+by = ["untested:A"]
+
+[[unit]]
+text = "After the first cdk deploy of an environment, the API runs against an empty database until the first Deploy (or a Database Migration run) creates it."
+by = ["untested:A"]
+
+[[unit]]
+text = "In that window /health answers 200 -- it checks that the database answers, not that the schema is there -- so the load balancer's health checks pass, while real requests answer 500 and the API logs errors."
+by = ["untested:T"]
+
+[[unit]]
+text = "That is expected until the first Deploy."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The first Deploy may be refused by the API's 5xx alarms."
+by = ["untested:A"]
+
+[[unit]]
+text = "Anything that reaches the schema-less API in that window, a scanner included, can put experimentation-api-5xx-blue-<env> or -green-<env> into ALARM, and the Deploy refuses to start while one is."
+by = ["untested:A"]
+
+[[unit]]
+text = "The way through is Deploy's existing break-glass (rollback runbook, \"Fix forward while an alarm is firing\"), and whether to use it is a person's decision at that moment."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Keep the time between the first cdk deploy and the first Deploy short."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rolling back relies on backward-compatible migrations."
+by = ["untested:A"]
+
+[[unit]]
+text = "A rollback runs the older release against the newer schema."
+by = ["untested:A"]
+
+[[unit]]
+text = "That works only when the migrations in between are backward-compatible (see Migration Guidelines)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For one that is not -- a dropped or renamed table or column the older release reads -- undo the migration while the release that contains it is still serving, and only then roll the API back (rollback runbook, Database Rollback Procedure, Step 2)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Once the API has been rolled back, the workflow can no longer undo it; the emergency route is then a point-in-time restore to a new cluster, which the API tasks cannot pick up today (the same procedure, Step 3)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Some data cannot come back without such a restore: modules_0002_warehouse_analysis, which shipped in 0.11.0, drops the earlier warehouse_connections table with its rows, and neither a rollback nor a downgrade restores them."
+by = ["test:backend/tests/integration/database/test_modules_0002_transitions.py::test_modules_0002_scrubs_legacy_rows"]
+
+[[unit]]
+text = "And 1ab99332f0ba rewrites stored event times to UTC: a rollback runs against those rows unchanged, but the offsets clients sent come back only from a restore to a time before it ran."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "d29a479daafe is backward-compatible for a rollback, but undoing it drops holdout_population and its rows."
+by = [
+    "test:backend/tests/integration/database/test_holdout_population_migration.py::test_downgrade_drops_the_table_index_and_columns_and_keeps_the_deactivation",
+    "test:backend/tests/integration/database/test_segment_members_migration.py::test_downgrade_with_members_is_refused",
+]
+
+[[unit]]
+text = "37dcb2969766 is backward-compatible for a rollback too, and undoing it drops segment_members and its rows; it refuses while that table has any."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Docker Compose and the Helm chart are deliberately unchanged."
+by = ["untested:T"]
+
+[[unit]]
+text = "Compose runs one API container, which is the only writer and keeps RUN_MIGRATIONS=true."
+by = ["untested:T"]
+
+[[unit]]
+text = "The chart already keeps the bootstrap out of the serving container: it runs it in an init container."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An environment whose Fargate stack was deployed before this change still has API revisions that run the bootstrap on start."
+by = ["untested:A"]
+
+[[unit]]
+text = "Those revisions keep doing so, and a rollback to one of them after a newer migration refuses to start."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Deploy the Fargate stack from a checkout with this change before relying on rollback."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "By then the migration has run; the revision serving before keeps serving."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The refusal names the fix, a cdk deploy of the Fargate stack from a checkout with this change (rollback runbook)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rollback does not check its target in the same way; the runbook gives the command to check one by hand."
+by = ["untested:T"]
+
+[[unit]]
+text = "Email addresses that differ only in case"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A database can already hold two such accounts if an administrator, SQL or a restore created them."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The upgrade then stops before it changes anything:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "and K more groups; the listing query below shows them all."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every pending migration of that upgrade is rolled back with it, so the database is exactly as the release you upgraded from left it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Where you see it, and how to keep serving:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The API container runs the upgrade on start, exits, and restarts until the database is fixed: docker compose logs api --tail 100."
+by = ["untested:S"]
+
+[[unit]]
+text = "To serve meanwhile, start the previous release's image; nothing was migrated, so it starts normally."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The migrate init container fails and the rolling update stalls; the old pods keep serving."
+by = ["untested:S"]
+
+[[unit]]
+text = "kubectl logs <pod> -c migrate."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The Deploy workflow's migration step fails and nothing shifts; the previous release keeps serving."
+by = ["untested:T"]
+
+[[unit]]
+text = "The step prints the migration task's last 100 log lines as one tab-separated line, so the message above appears inside that line, ending with the docs/self-hosting/migrations.md#email-addresses-that-differ-only-in-case link."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The task's log stream in CloudWatch shows it line by line."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Resolve each group"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For each group, choose the account that keeps the address and retire the others."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Do this with psql, using the API's POSTGRES_ settings."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Under Docker Compose, from deploy/compose/ (or the repository root for the Quick Start stack), this opens it; it reads statements until you type \\q:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The statements below use the schema experimentation."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If your POSTGRES_SCHEMA is different, replace it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Choose the account to keep."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Keep the account the person actually signs in with; if you are not sure, ask them."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "There is no last-sign-in column to go by."
+by = ["untested:T"]
+
+[[unit]]
+text = "Give the kept account the role it needs."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If the account you are about to retire has the role or the superuser flag the person needs, copy them to the account you keep first."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Replace both ids with ids from the listing:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Its address becomes retired-<its id>@<its own domain>:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The retired address keeps the account's own domain because the API refuses addresses under reserved domains such as .invalid, .test or .local; an account given one could no longer be edited through the API."
+by = ["untested:T"]
+
+[[unit]]
+text = "For a longer domain the statement fails with value too long for type character varying(100) and changes nothing."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Then either use the shorter form below, which fits a domain of up to 61 characters, or give the account an address its owner actually holds (with the SQL above, or with PUT /api/v1/admin/users/{id} from the release that is still serving, which needs username and email in the body):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Check that no group is left."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This returns no rows when you are done:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Run the upgrade again the way you ran it the first time."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It builds the index itself."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Do not delete the account instead of retiring it."
+by = ["untested:T"]
+
+[[unit]]
+text = "Deleting a user deletes or detaches what refers to it: its API keys, reports, notification preferences, role assignments and workspace memberships are deleted with it, and the experiments, flags, audit records and everything else that names it lose that reference."
+by = ["untested:T"]
+
+[[unit]]
+text = "Retiring keeps all of that."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An index built another way can be left half-built: a CREATE UNIQUE INDEX CONCURRENTLY that fails on a group leaves an index that enforces nothing."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The upgrade refuses to continue past an index called ix_users_email_lower that is not exactly the one it builds, and names the DROP INDEX to run before you try again."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Nothing has been changed; run it again when that session has finished."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Migration files live in backend/app/db/migrations/versions/."
+by = ["untested:T"]
+
+[[unit]]
+text = "Each file represents one atomic schema change, identified by a unique revision ID."
+by = ["untested:T"]
+
+[[unit]]
+text = "Alembic tracks which migrations have been applied in the alembic_version table in your database."
+by = ["untested:T"]
+
+[[unit]]
+text = "CI runs this page's exec blocks as written against the Quick Start stack."
+by = ["untested:T"]
+
+[[unit]]
+text = "The modules branch has two revisions: modules_0001_rbac and, after it, modules_0002_warehouse_analysis."
+by = ["untested:T"]
+
+[[unit]]
+text = "Not modules@base."
+by = ["untested:T"]
+
+[[unit]]
+text = "modules_0001_rbac is a child of the core revision a7b8c9d0e1f2, not an alembic base, and with a single tree root alembic cannot filter a downgrade by branch label: downgrade modules@base resolves to the whole core chain to base, and drops every table in the schema."
+by = ["untested:T"]
+
+[[unit]]
+text = "Every row of the earlier warehouse_connections is deleted — connections saved through the earlier warehouse endpoints — and nothing is copied into the new table."
+by = ["test:backend/tests/integration/database/test_modules_0002_transitions.py::test_modules_0002_scrubs_legacy_rows"]
+
+[[unit]]
+text = "It is the migration's own selection, copied exactly."
+by = ["untested:T"]
+
+[[unit]]
+text = "How long that takes depends on your database: the first measure of it is your own staging run's log line."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "This re-run applies only while alembic current shows 1ab99332f0ba as the core head (with modules_0002_warehouse_analysis on a full install)."
+by = ["untested:T"]
+
+[[unit]]
+text = "On a full image, a command that names the singular head fails:"
+by = ["untested:T"]
+
+[[unit]]
+text = "Name heads (plural) instead."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "To see the heads the image has:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "In the API container they are already set, by the compose file, the Helm chart or the task definition; set them yourself only when you run alembic somewhere else."
+by = ["untested:T"]
+
+[[unit]]
+text = "The defaults below are the Quick Start compose file's:"
+by = ["untested:T"]
+
+[[unit]]
+text = "Variable | Quick Start default | Description"
+by = ["exempt:label"]
+
+[[unit]]
+text = "POSTGRES_USER | postgres (experimently in deploy/compose/compose.yml) | Database username"
+by = ["untested:T"]
+
+[[unit]]
+text = "POSTGRES_PASSWORD | postgres (none in deploy/compose/compose.yml, which requires it) | Database password; set your own outside a local trial"
+by = ["untested:T"]
+
+[[unit]]
+text = "The Deploy workflow checks the revision it is about to deploy."
+by = ["untested:T"]
+
+[[unit]]
+text = "After it registers the API revision it reads back what ECS stored, and refuses to create the CodeDeploy deployment unless the backend container sets RUN_MIGRATIONS=false exactly."
+by = ["untested:T"]
+
+[[unit]]
+text = "From this release an email address belongs to one account whatever its letter case: Bob@acme.com and bob@acme.com are the same address, and the database refuses a second account holding it (the unique index ix_users_email_lower)."
+by = ["untested:T"]
+
+[[unit]]
+text = "The message names account ids only, never an address."
+by = ["untested:T"]
+
+[[unit]]
+text = "It lists at most 20 groups, then ..."
+by = ["untested:T"]
+
+[[unit]]
+text = "List every group."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Save this output somewhere private before you change anything: its email column is the record of each address as it was, which is what you need to undo a step by hand."
+by = ["untested:T"]
+
+[[unit]]
+text = "Retire the other account."
+by = ["exempt:label"]
+
+[[unit]]
+text = "It keeps its history and everything it owns, but it can no longer sign in and no longer holds the address."
+by = ["untested:T"]
+
+[[unit]]
+text = "email holds at most 100 characters, and retired-<id>@ takes 45 of them, so this works when the domain is at most 55 characters."
+by = ["untested:T"]
+
+[[unit]]
+text = "Do not build the index by hand."
+by = ["untested:T"]
+
+[[unit]]
+text = "Run the upgrade, which locks the table, checks for groups and builds the index in one transaction."
+by = ["untested:T"]
+
+[[unit]]
+text = "If the upgrade says another session is writing to users."
+by = ["exempt:label"]
+
+[[unit]]
+text = "The upgrade waits at most 30 seconds for the lock on users, so that it never holds up the API's writes for long."
+by = ["untested:T"]
