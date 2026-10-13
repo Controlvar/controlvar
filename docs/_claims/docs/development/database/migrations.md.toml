@@ -1,0 +1,236 @@
+# What verifies each unit of docs/development/database/migrations.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/development/database/migrations.md"
+
+[[unit]]
+text = "Guide to Using the SQLAlchemy Models and Database Migrations"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This guide explains how to use the SQLAlchemy models that we've created for the experimentation platform, and how to manage database migrations with Alembic."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Table of Contents"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Project Structure"
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "Using the SQLAlchemy Models"
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "Database Migrations with Alembic"
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "Working with Experiments"
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "The parts of the repository this guide uses:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Basic Usage"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Here's how to use the models in your application code:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With FastAPI Dependency Injection"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "In a FastAPI application, you can use dependency injection:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Before You Start"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Run every command in this section from the repository root, in the development virtual environment that Python Virtual Environment Setup makes:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Alembic connects with the POSTGRES_ settings."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Their defaults (localhost:5432, user and password postgres, database experimentation, schema experimentation) are the PostgreSQL that make db starts, which is also the Quick Start stack's."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Set them only for another server."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "CI runs this section as written against the Quick Start stack."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A New Database"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A new database gets its schema from the bootstrap, never from the migrations: the historical chain cannot be replayed from an empty database."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Do not autogenerate an \"initial migration\" for one either."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Against an empty database --autogenerate writes a revision that creates every table again, beside the chain that already does."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The bootstrap creates the schema from the models and records the heads."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "On a database that already has tables it runs upgrade heads instead, so it is safe to run again:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It ends with Database bootstrap complete (created) on a new database and Database bootstrap complete (upgraded) on one that had tables."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "ENVIRONMENT=development lets it create the first administrator with the development default password (FIRST_SUPERUSER, FIRST_SUPERUSER_PASSWORD) when the database has no users."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The Quick Start stack runs the core images, so the database it makes has the core chain only."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A full checkout's bootstrap against it also applies the modules branch and creates the module tables, and logs a WARNING saying so (see Switching Profile)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A full checkout has two heads, the core chain and the modules branch, and heads labels the second:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The database records one row per head:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Creating New Migrations"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Whenever you make changes to the models, generate a new migration script."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Name the head the revision extends: the core head is the line of heads without (modules), and a module's change extends modules@head."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The file lands next to that head."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Without --head, alembic refuses with \"Multiple heads are present\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Never answer that with alembic merge: the merge file lands in the core chain with the module head in its down_revision, and a core checkout then cannot load its migrations at all."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Autogenerate compares the models with the database, so run it against a database at the heads."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Its file is a starting point, not a finished migration."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Open and review it before applying it:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Check for:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "a down_revision that is the revision ID of the head it extends;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "the schema name (schema='experimentation') on every operation;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "no table dropped, and no data lost, that you did not mean;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "the data types and constraints you meant."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Apply the migration:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "alembic revision runs backend/app/db/migrations/env.py here (revision_environment = true in alembic.ini), so it needs the same database connection --autogenerate does."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A core checkout has one head and needs no --head."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Migration Commands Reference"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Upgrade to the latest version:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Downgrade the previous revision of one branch."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With two heads a bare downgrade -1 is ambiguous -- alembic warns and picks one -- so name the branch: modules@-1 for a module's, the revision id for a core one."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "NOT modules@base: modules_0001_rbac is a child of core a7b8c9d0e1f2, not an alembic base, and modules@base resolves to the whole core chain, every table dropped:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Downgrade to a specific version:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Show current version (one row per head):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Show migration history, newest first, down to the first revision (<base> -> ...):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The modules branch has two revisions, modules_0001_rbac and then modules_0002_warehouse_analysis: downgrade modules@-1 unapplies modules_0002_warehouse_analysis only, and downgrade modules@-2 the whole branch."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Creating an Experiment"
+by = ["exempt:baseline"]
