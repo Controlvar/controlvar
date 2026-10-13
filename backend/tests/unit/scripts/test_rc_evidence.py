@@ -55,7 +55,7 @@ JEST_FN = "test:frontend/src/tests/alpha.test.tsx::renders the card"
 JEST_FILE = "test:frontend/src/tests/beta.test.tsx"
 SDK_PY = "test:sdk/python/tests/test_client.py::TestFlags::test_maps_the_flag"
 SDK_JS = "test:sdk/js/__tests__/client.test.ts::maps the flag"
-DEMO_JEST = "test:demo/shoplab/src/__tests__/search.test.tsx::flag on: fuzzy"
+DEMO_JEST = "test:demo/shoplab/src/__tests__/search.test.tsx::flag on: fuzzy engine"
 DEMO_SIM = "test:demo/streampulse/simulator/test_story.py::test_the_story_runs"
 SDK_GO = "test:sdk/go/client_test.go::TestClient_Flags"
 SDK_JAVA = "test:sdk/java/core/src/test/java/ClientTest.java"
@@ -129,16 +129,19 @@ def _job(name: str, conclusion: str = "success", status: str = "completed"):
     return {"name": name, "status": status, "conclusion": conclusion, "html_url": ""}
 
 
-def _junit(cases: List[Tuple[str, str, str]]) -> str:
+def _junit(cases: List[Tuple[str, ...]]) -> str:
+    """A JUnit report of (classname, name, outcome[, jest's own title])."""
     body = []
-    for classname, name, outcome in cases:
+    for classname, name, outcome, *title in cases:
         inner = {
             "passed": "",
             "failed": '<failure message="assert 1 == 2">boom</failure>',
+            "errored": '<error message="fixture failed">trace</error>',
             "skipped": '<skipped type="pytest.skip" message="no reason"/>',
         }[outcome]
+        own = f' title="{title[0]}"' if title else ""
         body.append(
-            f'<testcase classname="{classname}" name="{name}">{inner}</testcase>'
+            f'<testcase classname="{classname}" name="{name}"{own}>{inner}</testcase>'
         )
     return (
         '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest">'
@@ -147,10 +150,21 @@ def _junit(cases: List[Tuple[str, str, str]]) -> str:
     )
 
 
+#: (file, full name, outcome, own title), as jest_junit writes them.
 JEST_CASES = [
-    ("frontend/src/tests/alpha.test.tsx", "Alpha renders the card", "passed"),
-    ("frontend/src/tests/alpha.test.tsx", "Alpha renders the cards list", "passed"),
-    ("frontend/src/tests/beta.test.tsx", "Beta loads", "passed"),
+    (
+        "frontend/src/tests/alpha.test.tsx",
+        "Alpha renders the card",
+        "passed",
+        "renders the card",
+    ),
+    (
+        "frontend/src/tests/alpha.test.tsx",
+        "Alpha renders the cards list",
+        "passed",
+        "renders the cards list",
+    ),
+    ("frontend/src/tests/beta.test.tsx", "Beta loads", "passed", "loads"),
 ]
 #: The cases the new suites report, holding the SDK and demo targets.
 SUITE_CASES = {
@@ -159,13 +173,19 @@ SUITE_CASES = {
         ("sdk.python.tests.test_client.TestFlags", "test_other", "passed"),
     ],
     "sdk-js.xml": [
-        ("sdk/js/__tests__/client.test.ts", "Client maps the flag", "passed"),
+        (
+            "sdk/js/__tests__/client.test.ts",
+            "Client maps the flag",
+            "passed",
+            "maps the flag",
+        ),
     ],
     "demo-shoplab.xml": [
         (
             "demo/shoplab/src/__tests__/search.test.tsx",
-            "flag on: fuzzy engine",
+            "Search flag on: fuzzy engine",
             "passed",
+            "flag on: fuzzy engine",
         ),
     ],
     "demo-streampulse-simulator.xml": [
@@ -1053,23 +1073,24 @@ def test_the_new_suites_cover_the_targets_they_were_added_for():
         ("test:demo/streampulse/src/__tests__/a.test.tsx::x", "demo-streampulse"),
         ("test:sdk/js/__tests__/client.test.ts::x", "sdk-js"),
         ("test:frontend/src/tests/a.test.tsx::x", "frontend"),
-        ("test:modules/frontend/src/tests/sso.test.ts", "frontend"),
         ("test:backend/tests/unit/x/test_a.py::test_x", "unit"),
     ):
         assert rc.suite_of(target) == suite, target
-    module_test = "test:modules/frontend/src/tests/sso.test.ts::signs in"
-    cases = [
-        rc.Case("modules/frontend/src/tests/sso.test.ts", "SSO signs in", "passed")
-    ]
-    assert rc.target_problem(module_test, cases, "x") is None
+    # The frontend session's other tree, read from SUITES (a core file does
+    # not spell a module path).
+    (extra,) = rc.SUITES["frontend"][0].also
+    module_file = f"{extra}/tests/sso.test.ts"
+    assert rc.suite_of(f"test:{module_file}") == "frontend"
+    cases = [rc.Case(module_file, "SSO signs in", "passed", "signs in")]
+    assert rc.target_problem(f"test:{module_file}::signs in", cases, "x") is None
     assert rc.suite_of("test:infrastructure/cdk/x.test.ts") is None
     assert rc.suite_of("test:backend/tests/unitx/test_a.py") is None  # a prefix only
 
 
 @pytest.mark.parametrize("outcome", ["skipped", "failed"])
 def test_a_jest_target_that_did_not_pass_fails(world, outcome):
-    path, name, _ = world.jest_cases[0]
-    world.jest_cases[0] = (path, name, outcome)
+    path, name, _, title = world.jest_cases[0]
+    world.jest_cases[0] = (path, name, outcome, title)
     _fails(world, f"{JEST_FN}: {outcome} at {RC[:12]}")
 
 
@@ -1077,6 +1098,93 @@ def test_a_jest_name_is_matched_only_as_a_whole_word(world):
     """'renders the card' is not held by 'renders the cards list' alone."""
     world.jest_cases = [c for c in world.jest_cases if c[1] != "Alpha renders the card"]
     _fails(world, f"{JEST_FN}: not in the suites' JUnit at {RC[:12]}")
+
+
+def test_a_longer_named_sibling_does_not_stand_in_for_a_removed_jest_test(world):
+    """The target's test is gone; a sibling whose title holds its name as whole
+    words passes. Only the exact full name or title is the target."""
+    world.jest_cases = [
+        c for c in world.jest_cases if c[1] != "Alpha renders the card"
+    ] + [
+        (
+            "frontend/src/tests/alpha.test.tsx",
+            "Alpha renders the card on mobile",
+            "passed",
+            "renders the card on mobile",
+        )
+    ]
+    _fails(world, f"{JEST_FN}: not in the suites' JUnit at {RC[:12]}")
+
+
+def test_a_jest_target_matches_its_full_name_or_its_own_title_exactly():
+    case = rc.Case(
+        "frontend/src/tests/a.test.tsx", "Card renders it", "passed", "renders it"
+    )
+    for name in ("Card renders it", "renders it"):
+        assert (
+            rc.target_problem(
+                f"test:frontend/src/tests/a.test.tsx::{name}", [case], "x"
+            )
+            is None
+        )
+    for name in ("renders", "Card", "Card renders", "it"):
+        assert rc.target_problem(
+            f"test:frontend/src/tests/a.test.tsx::{name}", [case], "x"
+        )
+
+
+def test_a_jest_each_title_matches_every_test_that_fills_it_in():
+    """``it.each([...])('judges a %s metric')``: the registry quotes the title
+    as written; jest reports one test per value. All of them must pass."""
+    path = "frontend/src/tests/a.test.tsx"
+    target = f"test:{path}::judges a %s metric, 100%% of the time"
+    cases = [
+        rc.Case(
+            path,
+            f"Banner judges a {v} metric, 100% of the time",
+            "passed",
+            f"judges a {v} metric, 100% of the time",
+        )
+        for v in ("count", "revenue")
+    ]
+    assert rc.target_problem(target, cases, "x") is None
+    one_skipped = cases + [
+        rc.Case(
+            path,
+            "Banner judges a ratio metric, 100% of the time",
+            "skipped",
+            "judges a ratio metric, 100% of the time",
+        )
+    ]
+    assert rc.target_problem(target, one_skipped, "x") == f"{target}: skipped at x"
+    longer = [
+        rc.Case(
+            path, "x", "passed", "judges a count metric, 100% of the time on mobile"
+        )
+    ]
+    assert (
+        rc.target_problem(target, longer, "x")
+        == f"{target}: not in the suites' JUnit at x"
+    )
+    assert rc.target_problem(f"test:{path}::judges a metric", cases, "x")
+
+
+@pytest.mark.parametrize("outcome", ["failed", "errored"])
+def test_a_failing_test_no_target_names_fails_the_rc(world, outcome):
+    """Any failure or error in a suite's report, registry target or not."""
+    world.cases.append(("backend.tests.unit.x.test_gamma", "test_unrelated", outcome))
+    _fails(
+        world,
+        "suite unit: 1 tests failed or errored in unit.xml (first:"
+        " backend.tests.unit.x.test_gamma::test_unrelated)",
+    )
+
+
+def test_a_failing_jest_test_no_target_names_fails_the_rc(world):
+    world.report_cases["sdk-js.xml"].append(
+        ("sdk/js/__tests__/other.test.ts", "Other breaks", "failed", "breaks")
+    )
+    _fails(world, "suite sdk-js: 1 tests failed or errored in sdk-js.xml")
 
 
 def test_a_jest_file_target_with_a_skipped_test_fails(world):
@@ -1104,9 +1212,21 @@ def test_jest_json_is_written_as_junit(tmp_path):
                         "name": alpha,
                         "status": "failed",
                         "assertionResults": [
-                            {"fullName": "Alpha renders the card", "status": "passed"},
-                            {"fullName": "Alpha later", "status": "todo"},
-                            {"fullName": "Alpha broken", "status": "failed"},
+                            {
+                                "fullName": "Alpha renders the card",
+                                "title": "renders the card",
+                                "status": "passed",
+                            },
+                            {
+                                "fullName": "Alpha later",
+                                "title": "later",
+                                "status": "todo",
+                            },
+                            {
+                                "fullName": "Alpha broken",
+                                "title": "broken",
+                                "status": "failed",
+                            },
                         ],
                     },
                     {
@@ -1127,6 +1247,7 @@ def test_jest_json_is_written_as_junit(tmp_path):
         ("frontend/src/tests/alpha.test.tsx", "Alpha broken", "failed"),
         ("frontend/src/tests/gone.test.tsx", "(the file did not run)", "failed"),
     ]
+    assert [c.title for c in cases] == ["renders the card", "later", "broken", ""]
     assert rc.target_problem(JEST_FN, cases, "x") is None
     assert rc.target_problem("test:frontend/src/tests/alpha.test.tsx", cases, "x")
 
@@ -1433,7 +1554,11 @@ def test_the_sdk_js_suite_runs_jest_in_its_own_tree(tmp_path):
         seen["command"], seen["cwd"] = command, cwd
         out = next(a for a in command if a.startswith("--outputFile=")).split("=", 1)[1]
         test = str(rc.ROOT / "sdk/js/__tests__/client.test.ts")
-        result = {"fullName": "Client maps the flag", "status": "passed"}
+        result = {
+            "fullName": "Client maps the flag",
+            "title": "maps the flag",
+            "status": "passed",
+        }
         pathlib.Path(out).write_text(
             json.dumps(
                 {
@@ -1478,15 +1603,21 @@ def test_the_sdk_and_demo_targets_pass_test_by_test_and_the_residual_is_named(wo
         ),
         (
             "sdk-js.xml",
-            ("sdk/js/__tests__/client.test.ts", "Client maps the flag", "failed"),
+            (
+                "sdk/js/__tests__/client.test.ts",
+                "Client maps the flag",
+                "failed",
+                "maps the flag",
+            ),
             f"{SDK_JS}: failed at {RC[:12]}",
         ),
         (
             "demo-shoplab.xml",
             (
                 "demo/shoplab/src/__tests__/search.test.tsx",
-                "flag on: fuzzy engine",
+                "Search flag on: fuzzy engine",
                 "skipped",
+                "flag on: fuzzy engine",
             ),
             f"{DEMO_JEST}: skipped at {RC[:12]}",
         ),

@@ -58,8 +58,12 @@ Then:
   ``test:`` target of the registries (``docs/_claims``), and the test of every
   ``mechanism:`` they use, is in them, passed and was not skipped. A Python
   function matches itself and its parametrized cases; a jest target's name
-  matches the tests of its file whose full name holds it as a whole word; a
-  whole-file or whole-class target needs one pass and no failure or skip. A
+  matches the tests of its file whose full name or own title is exactly it
+  (a ``test.each`` title as written, ``%s`` and the like, matches every test
+  that fills it in); a
+  whole-file or whole-class target needs one pass and no failure or skip. Any
+  failed or errored case in any report fails E4, whether or not a target names
+  it. A
   target no suite reports fails until one does, except a target in another
   SDK's tree (``sdk/<name>``, one of ``SDK_JOBS`` but the two published ones):
   no suite here runs those test by test, so they are held at job level, by
@@ -685,6 +689,7 @@ class Case:
     classname: str
     name: str
     outcome: str  # passed, failed, skipped
+    title: str = ""  # jest: the test's own title (``name`` is its full name)
 
 
 def read_junit(path: pathlib.Path) -> List[Case]:
@@ -696,7 +701,14 @@ def read_junit(path: pathlib.Path) -> List[Case]:
             outcome = "skipped"
         else:
             outcome = "passed"
-        cases.append(Case(case.get("classname") or "", case.get("name") or "", outcome))
+        cases.append(
+            Case(
+                case.get("classname") or "",
+                case.get("name") or "",
+                outcome,
+                case.get("title") or "",
+            )
+        )
     return cases
 
 
@@ -712,8 +724,17 @@ def target_problem(target: str, cases: Sequence[Case], short: str) -> Optional[s
     ):
         hits = [c for c in cases if c.classname == path]
         if name is not None:
-            word = re.compile(r"(?<![\w$])" + re.escape(name) + r"(?![\w$])")
-            hits = [c for c in hits if word.search(c.name)]
+            # Exactly as the registry writes it: the test's full name (its
+            # describe titles and its own) or its own title. A sibling whose
+            # name only contains it does not stand in for it. A ``.each``
+            # title as written (``%s``) is every test that fills it in, like
+            # a parametrized Python function.
+            pattern = jest_title_pattern(name)
+            hits = [
+                c
+                for c in hits
+                if pattern.fullmatch(c.title) or pattern.fullmatch(c.name)
+            ]
         return _outcome(target, hits, short)
     if not path.endswith(".py"):
         return (
@@ -757,6 +778,23 @@ def target_problem(target: str, cases: Sequence[Case], short: str) -> Optional[s
     return _outcome(target, hits, short)
 
 
+#: jest's printf placeholders, which ``test.each`` fills in.
+JEST_PLACEHOLDER = re.compile(r"%[psdifjo#$%]")
+
+
+def jest_title_pattern(name: str) -> "re.Pattern[str]":
+    """*name* exactly, except that each ``.each`` placeholder (``%s``, ``%d``,
+    ``%p`` ...) stands for the value jest put there; ``%%`` is a ``%``."""
+    parts: List[str] = []
+    end = 0
+    for found in JEST_PLACEHOLDER.finditer(name):
+        parts.append(re.escape(name[end : found.start()]))
+        parts.append("%" if found.group() == "%%" else r"[^\n]{1,500}?")
+        end = found.end()
+    parts.append(re.escape(name[end:]))
+    return re.compile("".join(parts))
+
+
 def sdk_job_of(target: str) -> Optional[str]:
     """The sdk-unit-tests.yml job that holds *target* at job level: its SDK's,
     when the target is in an SDK tree no suite here runs test by test; None
@@ -786,9 +824,10 @@ def jest_junit(
     """Jest's ``--json`` report written as JUnit; the number of test cases.
 
     One case per test: its classname the test file's repository path, its name
-    the test's full name (the describe titles and its own). A failed test has a
-    failure; one that is pending, todo, skipped or disabled is skipped; a file
-    that did not run is one failed case.
+    the test's full name (the describe titles and its own), and a ``title``
+    attribute, its own title. A failed test has a failure; one that is
+    pending, todo, skipped or disabled is skipped; a file that did not run is
+    one failed case.
     """
     data = json.loads(report.read_text(encoding="utf-8"))
     suite = ET.Element("testsuite", name="jest")
@@ -808,7 +847,10 @@ def jest_junit(
             count += 1
         for test in tests:
             name = str(test.get("fullName") or test.get("title") or "")[:2000]
-            case = ET.SubElement(suite, "testcase", classname=path, name=name)
+            title = str(test.get("title") or "")[:2000]
+            case = ET.SubElement(
+                suite, "testcase", classname=path, name=name, title=title
+            )
             status = test.get("status")
             if status == "failed":
                 ET.SubElement(case, "failure", message="failed")
@@ -1516,6 +1558,14 @@ class Verifier:
                     continue
                 if not found:
                     problems.append(f"suite {suite}: {invocation.report} holds no test")
+                failed = [c for c in found if c.outcome == "failed"]
+                if failed:
+                    first = failed[0]
+                    problems.append(
+                        f"suite {suite}: {len(failed)} tests failed or errored in"
+                        f" {invocation.report} (first: {first.classname}"
+                        f"::{first.name[:200]})"
+                    )
                 cases += found
         failing = outside + [
             problem

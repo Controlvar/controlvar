@@ -282,12 +282,15 @@ def test_the_frontend_session_searches_the_trees_its_jest_config_adds():
     config = (REPO_ROOT / "frontend" / "jest.config.js").read_text(encoding="utf-8")
     alias = (REPO_ROOT / "frontend" / "modules-alias.js").read_text(encoding="utf-8")
     assert "roots: full ? ['<rootDir>', MODULES_DIR] : ['<rootDir>']" in config
-    assert (
-        "const MODULES_DIR = path.join(REPO_ROOT, 'modules', 'frontend', 'src');"
-        in alias
+    # MODULES_DIR as modules-alias.js defines it, read from there, not spelled.
+    defined = re.search(
+        r"const MODULES_DIR = path\.join\(REPO_ROOT, ((?:'[^']{1,40}'(?:, )?){1,8})\);",
+        alias,
     )
-    assert session.also == ("modules/frontend/src",)
-    assert "modules/frontend/src" in rc.JEST_ROOTS
+    assert defined, "modules-alias.js no longer defines MODULES_DIR as this reads it"
+    modules_dir = "/".join(re.findall(r"'([^']{1,40})'", defined.group(1)))
+    assert session.also == (modules_dir,)
+    assert modules_dir in rc.JEST_ROOTS
 
 
 def test_every_pytest_session_names_trees_that_exist():
@@ -397,6 +400,15 @@ def test_the_verify_job_reads_every_leg_and_keeps_its_record(doc):
     assert upload["if"] == "always()"
     installs = [s for s in steps if "pip install" in str(s.get("run", ""))]
     assert installs == [], "the verify job installs nothing"
+
+
+def test_no_step_or_job_may_fail_without_failing_the_run(doc):
+    """A suite that fails reddens its job, and the verifier fails a job that
+    did not succeed (and any failed case in a report)."""
+    for name, job in doc["jobs"].items():
+        assert "continue-on-error" not in job, name
+        for step in job["steps"]:
+            assert "continue-on-error" not in step, (name, step.get("name"))
 
 
 def test_no_script_holds_an_expression_and_no_checkout_keeps_the_token(doc):
