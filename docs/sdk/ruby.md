@@ -102,7 +102,7 @@ client = Experimently::Client.new(
 
 | Struct | Members |
 |---|---|
-| `FlagEvaluation` | `key: String` (the key you asked for), `enabled: Boolean` + `enabled?`, `config: Object, nil` (the server's `config` payload as-is) |
+| `FlagEvaluation` | `key: String` (the key you asked for), `enabled: Boolean` + `enabled?`, `config: Object, nil` (always `nil`: the evaluate endpoint returns `config: null` for every flag) |
 | `Assignment` | `experiment_key: String`, `variant_id: String, nil` (UUID), `variant_name: String` (`"control"`, `"treatment"`, …), `is_control: Boolean` + `control?`, `configuration: Hash, nil` |
 | `BatchResult` | `success_count: Integer`, `failure_count: Integer`, `errors: Array, nil`, `ok?` |
 
@@ -129,7 +129,7 @@ result.ok?   # => true when failure_count == 0
 - Successful evaluations and assignments are cached per **user + key** for `cache_ttl` (default
   300 s), LRU-bounded by `max_cache_size`; a hit makes no request. **Failures are never cached**,
   so the next call retries. There is no stale fallback beyond the TTL.
-- Network error / timeout, `401` (bad key), `404` (flag/experiment unknown or not ACTIVE), `422`,
+- Network error / timeout, `401` (bad key), `404` (an experiment unknown or not ACTIVE, or an unknown flag key), `422`,
   `429` (rate limited), `5xx`: `evaluate_flag` returns a disabled evaluation, `get_assignment`
   returns `nil`, `track` returns `false`, `track_batch` counts the chunk as failed. Each failure
   is logged once with `Kernel#warn` (`[Experimently] ... error: ...`).
@@ -216,7 +216,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp}` | ignored |
 | `track` without keys, `track_batch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | `{success_count, failure_count, errors}` (`track_batch` only) |
 
-Errors: 401 bad key, 404 experiment/flag unknown or not ACTIVE, 422 invalid event, 429
+Errors: 401 bad key, 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 422 invalid event, 429
 rate limited (`Retry-After`). These paths share the backend's per-IP `SDK_RATE_LIMIT_PER_MINUTE`
 ceiling (default 6000).
 
@@ -255,5 +255,5 @@ bundle install && bundle exec rspec
 ruby test_standalone.rb
 ```
 
-- `bundle install && bundle exec rspec`: 109 examples (run here on Ruby 2.6.10); HTTP stubbed with WebMock
+- `bundle install && bundle exec rspec`: RSpec (run here on Ruby 2.6.10); HTTP stubbed with WebMock
 - `ruby test_standalone.rb`: stdlib only: hash vector, types, cache, config, track safety

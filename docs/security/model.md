@@ -24,6 +24,6 @@ report a vulnerability, follow
 
 ## Response headers
 
-- Every response carries `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`.
+- Every response except a CORS preflight carries `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`.
 - The two API reference pages, `/api/v1/docs` and `/api/v1/redoc`, get a policy that also allows the scripts, styles and fonts they load.
-- Outside development, every response also carries `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`.
+- Outside development, every response except a CORS preflight also carries `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`.

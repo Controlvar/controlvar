@@ -9,7 +9,7 @@ This page records how the API was hardened. What is in place now is on [Security
 The existing `SecurityHeadersMiddleware` was rewritten to:
 
 - Apply a **strict Content-Security-Policy** (`default-src 'none'; frame-ancestors 'none'`) instead of the permissive policy that allowed `unsafe-inline` and `unsafe-eval`.  An API-only service has no need to serve scripts, styles, or frames. The one exception is the two API reference pages, `/api/v1/docs` and `/api/v1/redoc`, which allow the jsdelivr assets they load (see below).
-- Emit **HSTS** (`max-age=31536000; includeSubDomains; preload`) on every response outside development.
+- Emit **HSTS** (`max-age=31536000; includeSubDomains; preload`) on every response outside development, except a CORS preflight.
 - **Remove server fingerprinting headers** (`server`, `x-powered-by`) to reduce the information available to an attacker.
 - Expand **Permissions-Policy** to additionally restrict `usb` and `magnetometer`.
 

@@ -137,7 +137,7 @@ accepts a custom `OkHttpClient` (used with `MockWebServer`).
 - Successful evaluations and assignments are cached per **user + key** in two LRU caches
   (`AssignmentCache<FlagEvaluation>`, `AssignmentCache<ExperimentAssignment>`) for `cacheTtlMs`.
   A hit makes no request. **Failures are never cached** — the next call retries.
-- Non-2xx responses (401 bad key, 404 flag/experiment unknown or not ACTIVE, 422, 429 rate
+- Non-2xx responses (401 bad key, 404 for an experiment unknown or not ACTIVE, or an unknown flag key, 422, 429 rate
   limited, 5xx) and `IOException`s become `ExperimentationException`; `evaluateFeatureFlag` and
   `getExperimentAssignment` **throw**, `isFeatureEnabled` returns `false`. There is no stale
   fallback beyond the TTL — a request that fails after the entry expired surfaces the error.
@@ -220,7 +220,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `trackEvent` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
 
-Errors: 401 bad key, 404 experiment/flag unknown or not ACTIVE, 422 invalid event, 429
+Errors: 401 bad key, 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 422 invalid event, 429
 rate limited (`Retry-After`). These paths share the backend's per-IP `SDK_RATE_LIMIT_PER_MINUTE`
 ceiling (default 6000).
 
@@ -260,4 +260,4 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/exp
 cd sdk/java && mvn test
 ```
 
-- `cd sdk/java && mvn test`: core: 77 tests (JUnit 5, MockWebServer); spring-boot-starter: 30 tests
+- `cd sdk/java && mvn test`: the core module (JUnit 5, MockWebServer) and the spring-boot-starter module

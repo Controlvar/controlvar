@@ -42,9 +42,7 @@ await OpenFeature.setProviderAndWait(provider);
 const client = OpenFeature.getClient();
 const ctx = { targetingKey: 'user-123' };                       // targetingKey → user_id (required)
 const enabled = await client.getBooleanValue('dark-mode', false, ctx);        // → enabled
-const variant = await client.getStringValue('checkout-experiment', 'control', ctx); // → config.variant
-const size = await client.getNumberValue('page-size', 20, ctx);              // → config.value
-const cfg = await client.getObjectValue('feature-config', {}, ctx);          // → config
+// Only boolean flags carry a value: string, number and object calls return your default.
 
 // Experiments and tracking are not OpenFeature concepts: use the JS SDK client underneath.
 const assignment = await provider.client.getAssignment('checkout_flow', { userId: 'user-123', attributes: { plan: 'pro' } });
@@ -62,13 +60,14 @@ await provider.client.track('user-123', 'page_view'); // no key → fans out to 
 | Call | Value | Reason |
 |---|---|---|
 | boolean | `enabled` | `TARGETING_MATCH` / `CACHED`, or `DISABLED` |
-| string | `config.variant` (or `config` when it is a string) | `DEFAULT` when absent, `DISABLED` when the flag is off |
-| number | `config.value` (or `config` when it is a number) | same |
-| object | `config` when it is an object | same |
+| string, number, object | the caller's default | `DEFAULT`, or `DISABLED` when the flag is off |
+
+Only boolean flags carry a value: the evaluate endpoint returns `config: null` for every flag.
 
 Errors never throw: 404 → `FLAG_NOT_FOUND`, bad body → `PARSE_ERROR`, missing `targetingKey` →
 `TARGETING_KEY_MISSING`, anything else → `GENERAL`; the default is returned with reason `ERROR` and
-nothing is cached. Context attributes are **not** sent (the evaluate endpoint takes only `user_id`).
+nothing is cached. Context attributes are **not** sent: the evaluate endpoint takes a `context`, which this provider
+does not send yet.
 `provider.hashUser(userId, flagKey)` exposes the cross-SDK MD5 hash as a compatibility utility only.
 
 ## Backend endpoints used
@@ -82,7 +81,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json`, `Accept: ap
 | `provider.client.track` with a key | `POST /api/v1/tracking/track` | ignored |
 | `provider.client.track` without a key, `trackBatch` | `POST /api/v1/tracking/batch` `{events: [...]}` (≤ 100) | `{success_count, failure_count, errors}` |
 
-Errors: 401 bad key, 404 flag/experiment not ACTIVE (never cached), 422 invalid event, 429 rate limited.
+Errors: 401 bad key, 404 an experiment unknown or not ACTIVE, or an unknown flag key (never cached), 422 invalid event, 429 rate limited.
 
 ## Contract smoke
 
@@ -104,5 +103,5 @@ npm test
 npm run build
 ```
 
-- `npm test`: 51 Jest tests (fetch mocked; builds ../js first)
+- `npm test`: Jest, fetch mocked; builds ../js first
 - `npm run build`: tsc → dist/ (CommonJS + .d.ts)

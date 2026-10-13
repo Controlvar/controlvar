@@ -381,6 +381,33 @@ lists every route with its own limit. Over a limit the API answers `429` with a
 
 ### Request Size Limits
 - Maximum request body size: 5 MiB (5,242,880 bytes); a larger body is answered `413`, with or without a `Content-Length` header
+- A targeting `context` has limits of its own, below
+
+### Targeting Context Limits
+The routes that take a targeting `context` hold it to two limits before it is matched against
+any rule: `GET` and `POST /api/v1/feature-flags/evaluate/{flag_key}`,
+`GET /api/v1/feature-flags/user/{user_id}`, `POST /api/v1/tracking/assign`, and each user's
+`context` in `POST /api/v1/tracking/assign/batch`. `POST /api/v1/segments/{segment_id}/evaluate`
+and `POST /api/v1/segments/bulk-evaluate` hold their `user_context` to the same limits.
+
+| Limit | At most | `detail` of the 422 |
+|---|---|---|
+| Depth: every JSON object and array is a level, the context itself the first (`{"a": 1}` is 1 level, `{"a": [1]}` and `{"a": {"b": 1}}` are 2) | 10 levels | `Targeting context nested more than 10 levels deep` |
+| Size: the context as compact JSON (no spaces) in UTF-8 | 8,192 bytes | `Targeting context larger than 8192 bytes` |
+
+- Depth is checked first, so a context over both limits answers the depth `detail`.
+- On a `GET`, the `context` parameter is held to 8,192 bytes as sent (its JSON text after URL
+  decoding, spaces included) before it is parsed, and a parameter nested too deeply to parse
+  answers the depth 422.
+- In the batch, every user's context is checked before the first user is assigned. One over a limit
+  refuses the whole request with 422, its `detail` prefixed with the user's position
+  (`users[3]: Targeting context larger than 8192 bytes`), and nobody is assigned.
+- A refused request is not evaluated or assigned, and nothing is recorded for it.
+- A `POST` body nested too deeply to parse at all answers 400 (`There was an error parsing
+  the body`), as before.
+
+Every context in the SDKs' shared test vectors is a few hundred bytes at most and no more than
+three levels deep.
 
 ### Pagination
 - List endpoints that page take `skip` and `limit` parameters
@@ -390,9 +417,9 @@ lists every route with its own limit. Over a limit the API answers `429` with a
   maximum
 
 ### Caching
-- Experiment data is cached for 1 hour when `CACHE_ENABLED` is on (it is off by default)
+- `GET /api/v1/experiments/{experiment_id}` and its `daily-results` and `segmented-results` are cached for 3,600 seconds (an hour) when `CACHE_ENABLED` is on (it is off by default). A change to the experiment clears its cached detail; its cached daily and segmented results stay until they expire
 - Feature flags are not cached: the flag list and a flag's detail are read from the database on every request, whatever `CACHE_ENABLED` says
-- Results are cached for 5 minutes while the experiment is running, and for 24 hours otherwise
+- `GET /api/v1/results/{experiment_id}` and `GET /api/v1/experiments/{experiment_id}/results` are cached for 5 minutes while the experiment is running, and for 24 hours otherwise, whenever Redis is reachable
 
 ## Authentication Endpoints
 
@@ -838,7 +865,8 @@ response.
 - **Path Parameters**:
   - user_id: string
 - **Query Parameters**:
-  - context: object (optional)
+  - context: object (optional), URL-encoded JSON; at most 8,192 bytes and 10 levels deep
+    ([Targeting Context Limits](#targeting-context-limits))
 - **Response**: 200 OK
   ```json
   {
@@ -888,7 +916,8 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
   200 OK with the control variant, `assigned: false` and `reason` set to `holdout`, `mutual_exclusion` or
   `targeting`; nothing is recorded for them. A user who already has an assignment keeps it.
 - **Headers**: X-API-Key: {api_key}
-- **Body**: `{"experiment_key": string, "user_id": string, "context": object?}`
+- **Body**: `{"experiment_key": string, "user_id": string, "context": object?}`; `context` at most
+  8,192 bytes and 10 levels deep ([Targeting Context Limits](#targeting-context-limits))
 - **Response**: 200 OK
   ```json
   {
@@ -904,7 +933,8 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
   ```
   `assigned` is `false` when the user was not enrolled; `reason` is `assigned`, `holdout`,
   `mutual_exclusion` or `targeting`.
-- **Errors**: 404 when no ACTIVE experiment has that key
+- **Errors**: 404 when no ACTIVE experiment has that key; 422 when `context` is over a
+  [limit](#targeting-context-limits)
 
 ### Assign a List of Users to an Experiment (beta)
 - **Endpoint**: `POST /api/v1/tracking/assign/batch`
@@ -925,6 +955,8 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
   - `users`: 1 to 1,000 entries; each `user_id` 1 to 255 characters and different from every other
     in the request.
   - Unknown fields are refused, in the body and in each user.
+  - Each user's `context`: at most 8,192 bytes and 10 levels deep
+    ([Targeting Context Limits](#targeting-context-limits)).
 - **Response**: 200 OK
   ```json
   {
@@ -965,6 +997,7 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
 | 422 | more than 1,000 users | loc `["body","users"]`, msg `at most 1,000 users per request; split the list` |
 | 422 | a `user_id` appears twice | loc `["body","users",4,"user_id"]`, msg `duplicate user_id; each user may appear once per request (first seen at users[1])` |
 | 422 | a `user_id` empty or over 255 characters, an unknown field, or text the database cannot store | pydantic's message at the field's loc |
+| 422 | a user's `context` over a [limit](#targeting-context-limits) | `users[3]: Targeting context nested more than 10 levels deep` or `users[3]: Targeting context larger than 8192 bytes`, with that user's position |
 | 429 | over 60 requests a minute | `Too Many Requests. Please slow down and retry after a moment.`, with `Retry-After` |
 | 500 | anything else | `Could not assign the users to the experiment (request ID: <id>).` |
 
@@ -1850,6 +1883,11 @@ condition, in any group, that the context satisfies on its own, as
 `"<attribute> <operator> <value>"`; it is empty when the user is not a member. A `regex`
 condition that cannot be evaluated makes the user not a member.
 
+Evaluate and bulk-evaluate hold `user_context` to the
+[Targeting Context Limits](#targeting-context-limits): at most 8,192 bytes and 10 levels deep.
+Over either, they answer 422 with the same `detail` as the flag routes, and no segment is
+evaluated. Bulk-evaluate checks its one `user_context` once, whatever the number of segments.
+
 `POST /api/v1/segments/{id}/preview` evaluates the rules in its body against the stored
 contexts of up to `sample_size` assignments (10 to 10,000, default 1,000). Only assignments
 that carry a context are counted, and `sample_size` in the answer is how many there were.
@@ -1894,7 +1932,10 @@ segment that is not archived and whose rules are not valid,
 (2 when it cannot read the database). Rewrite each listed segment's rules in the format
 above with `PUT /api/v1/segments/{id}`.
 
-No flag or experiment changes behaviour: no targeting rule can refer to a segment.
+A flag or an experiment whose targeting rules name such a segment (with `in_segment` or
+`not_in_segment`) is not evaluated against it: the flag answers `enabled: false` with
+`reason: "error"`, and a new user is not assigned (`reason: "targeting"`). Creating or
+updating a flag or an experiment that names one answers `422`.
 
 #### Segments made from a list of user IDs (beta)
 

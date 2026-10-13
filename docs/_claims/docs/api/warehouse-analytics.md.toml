@@ -709,8 +709,8 @@ text = "As of v0.9.0, the earlier /api/v1/warehouse endpoints (saved connections
 by = ["test:modules/backend/tests/smoke/test_warehouse_routes_contract.py::test_the_operations_are_the_route_set"]
 
 [[unit]]
-text = "Rotate every credential that was ever saved there."
-by = ["exempt:baseline"]
+text = "Rotate every credential that was ever saved there, and every credential sent to those endpoints in a query parameter: it may be in your access logs."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "See Modules and profiles for what each profile includes."

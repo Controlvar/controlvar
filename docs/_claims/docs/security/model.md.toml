@@ -101,11 +101,12 @@ text = "Response headers"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Every response carries X-Frame-Options: DENY, X-Content-Type-Options: nosniff and Content-Security-Policy: default-src 'none'; frame-ancestors 'none'."
+text = "Every response except a CORS preflight carries X-Frame-Options: DENY, X-Content-Type-Options: nosniff and Content-Security-Policy: default-src 'none'; frame-ancestors 'none'."
 by = [
     "test:backend/tests/smoke/test_wiring.py::TestSecurityHeaders::test_security_headers_on_health",
     "test:backend/tests/unit/api/test_docs_page_csp.py::test_every_other_path_keeps_the_strict_policy",
     "test:backend/tests/unit/middleware/test_preflight_and_429_cors.py::test_the_429_keeps_its_security_headers",
+    "test:backend/tests/unit/api/test_hsts_header.py::test_a_cors_preflight_carries_none_of_the_four_headers",
 ]
 
 [[unit]]
@@ -116,8 +117,9 @@ by = [
 ]
 
 [[unit]]
-text = "Outside development, every response also carries Strict-Transport-Security: max-age=31536000; includeSubDomains; preload."
+text = "Outside development, every response except a CORS preflight also carries Strict-Transport-Security: max-age=31536000; includeSubDomains; preload."
 by = [
     "test:backend/tests/unit/api/test_hsts_header.py::test_outside_development_every_response_carries_the_whole_hsts_value",
+    "test:backend/tests/unit/api/test_hsts_header.py::test_a_cors_preflight_carries_none_of_the_four_headers",
     "test:backend/tests/unit/api/test_security_headers.py::TestSecurityMiddleware::test_hsts_not_in_dev",
 ]

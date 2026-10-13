@@ -28,6 +28,11 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.segment_rules import refuse_unusable_segments
+from backend.app.core.context_limits import (
+    CONTEXT_TOO_DEEP,
+    check_context,
+    check_context_text,
+)
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.metrics import record_flag_evaluation
 from backend.app.core.permissions import (
@@ -968,6 +973,12 @@ def _parse_context_param(context: Optional[str]) -> Optional[Dict[str, Any]]:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Query parameter 'context' must be a URL-encoded JSON object",
         )
+    except RecursionError:
+        # Nested too deeply for the parser itself: far past the depth limit.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=CONTEXT_TOO_DEEP,
+        )
     if not isinstance(parsed, dict):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -1072,7 +1083,11 @@ async def evaluate_feature_flag(
         HTTPException 404: If the feature flag doesn't exist or is not active
         HTTPException 422: If ``context`` is not valid JSON object
     """
+    # The limits of backend.app.core.context_limits, outside the evaluation:
+    # its answer is the 422, and nothing about the request is recorded.
+    check_context_text(context)
     parsed_context = _parse_context_param(context)
+    check_context(parsed_context)
     return _evaluate_flag_by_key(db, flag_key, user_id, parsed_context)
 
 
@@ -1108,6 +1123,8 @@ async def evaluate_feature_flag_post(
         HTTPException 404: If the feature flag doesn't exist or is not active
         HTTPException 422: If the body is invalid
     """
+    # The limits of backend.app.core.context_limits, outside the evaluation.
+    check_context(request.context)
     return _evaluate_flag_by_key(db, flag_key, request.user_id, request.context)
 
 
@@ -1147,7 +1164,10 @@ async def get_user_flags(
         HTTPException 401: If the API key is invalid
         HTTPException 422: If ``context`` is not a valid JSON object
     """
+    # The limits of backend.app.core.context_limits, outside the evaluation.
+    check_context_text(context)
     parsed_context = _parse_context_param(context)
+    check_context(parsed_context)
 
     # Create feature flag service
     feature_flag_service = FeatureFlagService(db)

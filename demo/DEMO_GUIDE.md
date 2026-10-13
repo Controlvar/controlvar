@@ -216,7 +216,7 @@ See `demo/streampulse/README.md`.
 **RBAC:**
 - Navigate to `/admin/users`
 - Show 4 roles: Admin, Developer, Analyst, Viewer
-  - "Analyst can view everything but can't create or modify. Viewer is read-only."
+  - "Analyst can view everything but can't create or modify. Viewer can view experiments, flags and results. Any role can create an API key, and an API key writes tracking data."
 - Four built-in roles are enforced today. Custom roles and resource-level grants exist in the data model but are
   not yet enforced by the permission checks, so do not demo them (tracked in the launch plan, P5).
 

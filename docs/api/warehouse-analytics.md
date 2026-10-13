@@ -275,7 +275,8 @@ As of v0.9.0, the earlier `/api/v1/warehouse` endpoints (saved connections,
 sync, and the ClickHouse, MySQL and Databricks connectors) are removed, and the
 migration to the warehouse analysis tables deletes the connections they saved
 (see [Upgrading and migrations](../self-hosting/migrations.md)). Rotate every
-credential that was ever saved there.
+credential that was ever saved there, and every credential sent to those endpoints in a
+query parameter: it may be in your access logs.
 
 See [Modules and profiles](../getting-started/modules.md) for what each
 profile includes.

@@ -106,17 +106,17 @@ Calls `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…` and returns a `
 |----------|------|-------------|
 | `key` | `string` | The flag key you asked for |
 | `enabled` | `bool` | Server decision for this user (`false` on any failure) |
-| `config` | `mixed`, `null` | The flag's `config` payload as returned by the server |
+| `config` | `mixed`, `null` | Always `null`: the evaluate endpoint returns `config: null` for every flag |
 
 ```php
 $flag = $client->evaluateFlag('dark-mode', 'user-456');
 if ($flag->enabled) {
-    $theme = $flag->config['theme'] ?? 'dark';
+    enableDarkMode();
 }
 ```
 
-On a network/HTTP failure (including `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key) a cached evaluation is
-returned when one exists; otherwise the flag is reported as disabled. Failures are never cached,
+A flag that is not ACTIVE is not a failure: it answers `enabled: false`. On a network/HTTP
+failure (a 404 is an unknown flag key) a cached evaluation is returned when one exists; otherwise the flag is reported as disabled. Failures are never cached,
 so the next call retries. `FlagEvaluation::toArray()` gives `['key', 'enabled', 'config']`.
 
 ### `isFeatureEnabled(string $flagKey, string $userId): bool`

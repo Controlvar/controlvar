@@ -24,8 +24,8 @@ You'll need an account with one of the following roles:
 |------|----------------|
 | **ADMIN** | Create, change, schedule and delete any experiment (scheduling is through the API; [which actions have a screen](dashboard-and-api.md)); create and manage any feature flag |
 | **DEVELOPER** | Create, change, schedule and delete any experiment (scheduling is through the API; [which actions have a screen](dashboard-and-api.md)); create and manage any feature flag |
-| **ANALYST** | View all experiments, results, and reports, and every feature flag (read-only) |
-| **VIEWER** | View every experiment and its results, and every feature flag (read-only) |
+| **ANALYST** | View all experiments, results, and reports, and every feature flag, and change no experiment or flag; like every role, create an API key, which writes tracking data |
+| **VIEWER** | View every experiment and its results, and every feature flag, and change no experiment or flag; like every role, create an API key, which writes tracking data |
 
 The ADMIN role does not, by itself, open the dashboard's Users, API Keys, Safety settings
 or Roles pages, manage user accounts, or change a flag's per-flag safety config or roll it

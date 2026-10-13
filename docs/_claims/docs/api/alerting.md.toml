@@ -106,7 +106,10 @@ by = ["test:backend/tests/unit/services/test_slack_notifier.py"]
 
 [[unit]]
 text = "SLACK_DEFAULT_CHANNEL | The channel every event's message goes to (default #platform-alerts)."
-by = ["test:backend/tests/unit/services/test_notification_delivery_rules.py::test_every_slack_message_goes_to_the_default_channel"]
+by = [
+    "test:backend/tests/unit/services/test_slack_notifier.py::TestSendMessage::test_send_message_uses_default_channel",
+    "test:backend/tests/unit/services/test_notification_delivery_rules.py::test_every_slack_message_goes_to_the_default_channel",
+]
 
 [[unit]]
 text = "EMAIL_ENABLED | true turns email on; the default is false."
@@ -156,6 +159,10 @@ by = [
     "test:backend/tests/unit/services/test_notification_delivery_rules.py::test_preferences_are_not_read_when_sending",
     "test:backend/tests/unit/services/test_notification_delivery_rules.py::test_every_slack_message_goes_to_the_default_channel",
 ]
+
+[[unit]]
+text = "Only the test notification below can name another channel."
+by = ["test:backend/tests/unit/api/test_notifications_api.py::test_test_notification_slack_channel"]
 
 [[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."

@@ -338,6 +338,28 @@ by = [
 ]
 
 [[unit]]
+text = "GET/POST /api/v1/feature-flags/evaluate/{flag_key}, GET /api/v1/feature-flags/user/{user_id}, POST /api/v1/tracking/assign, POST /api/v1/tracking/assign/batch | #1178 | A targeting context nested more than 10 levels deep or larger than 8,192 bytes answers 422, where it used to be accepted. Every JSON object and array is a level, the context itself the first, and the size is the context as compact JSON in UTF-8. Depth is checked first; the detail is Targeting context nested more than 10 levels deep or Targeting context larger than 8192 bytes, and nothing is evaluated, assigned or recorded for the request. On the two GET routes the context parameter is held to 8,192 bytes as sent, before it is parsed, and a parameter nested too deeply to parse answers the same 422. The batch checks every user's context before it assigns the first user: one over a limit refuses the whole request, its detail prefixed with the user's position (users[3]: ), and nobody is assigned. A POST body nested too deeply to parse still answers 400. Every other request answers as before; the contexts the SDKs send are a few hundred bytes. The OpenAPI document does not change. See Targeting Context Limits."
+by = [
+    "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_context_over_the_limits_answers_422_and_nothing_is_recorded",
+    "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_context_over_both_limits_answers_the_depth_detail",
+    "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_get_context_is_held_to_the_size_limit_as_sent",
+    "test:backend/tests/integration/api/test_targeting_context_limits.py::test_the_batch_is_refused_whole_before_the_first_user_is_assigned",
+    "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_post_body_too_deep_to_parse_still_answers_400",
+    "test:backend/tests/integration/api/test_targeting_context_limits.py::test_exactly_the_size_limit_is_served_and_one_byte_more_is_refused",
+    "test:backend/tests/integration/api/test_targeting_context_limits.py::test_exactly_the_depth_limit_is_served_and_one_level_more_is_refused",
+]
+
+[[unit]]
+text = "POST /api/v1/segments/{segment_id}/evaluate, POST /api/v1/segments/bulk-evaluate | #1183 | A user_context nested more than 10 levels deep or larger than 8,192 bytes answers 422, where it used to be accepted. The limits and the detail are the flag evaluation routes': every JSON object and array is a level, the context itself the first, the size is the context as compact JSON in UTF-8, depth is checked first, and the detail is Targeting context nested more than 10 levels deep or Targeting context larger than 8192 bytes. No segment is read or evaluated for the request. Bulk-evaluate checks its one user_context once, whatever the number of segments. A body nested too deeply to parse still answers 400. Every other request answers as before, an id list's user_context.user_id included. The OpenAPI document does not change. See Targeting Context Limits."
+by = [
+    "test:backend/tests/integration/api/test_segment_context_limits.py::test_a_user_context_over_the_limits_answers_422_and_is_not_evaluated",
+    "test:backend/tests/integration/api/test_segment_context_limits.py::test_a_user_context_over_both_limits_answers_the_depth_detail",
+    "test:backend/tests/integration/api/test_segment_context_limits.py::test_exactly_the_limits_are_served_and_one_more_is_refused",
+    "test:backend/tests/integration/api/test_segment_context_limits.py::test_bulk_evaluate_checks_its_one_user_context_once",
+    "test:backend/tests/integration/api/test_segment_context_limits.py::test_a_body_too_deep_to_parse_still_answers_400",
+]
+
+[[unit]]
 text = "Deprecated operations"
 by = ["exempt:baseline"]
 

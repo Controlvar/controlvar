@@ -33,12 +33,12 @@ Detailed implementation reference for Experimently. Covers architecture, data mo
 │  └──────────────────────────────┬────────────────────────────┘  │
 └─────────────────────────────────│───────────────────────────────┘
                                   │
-          ┌───────────────────────┼───────────────────────┐
-          ▼                       ▼                       ▼
-  ┌──────────────┐      ┌──────────────────┐    ┌──────────────┐
-  │ PostgreSQL   │      │ Redis (Cache)    │    │ AWS Lambda   │
-  │ (Aurora)     │      │ (ElastiCache)    │    │ Functions    │
-  └──────────────┘      └──────────────────┘    └──────────────┘
+                    ┌─────────────┴─────────────┐
+                    ▼                           ▼
+            ┌──────────────┐          ┌──────────────────┐
+            │ PostgreSQL   │          │ Redis (Cache)    │
+            │ (Aurora)     │          │ (ElastiCache)    │
+            └──────────────┘          └──────────────────┘
 ```
 
 ---
@@ -149,8 +149,9 @@ On the Quick Start stack it prints the names of its three demo experiments, amon
 - Passed via `X-API-Key` header
 - Required for all `/api/v1/tracking/*` endpoints
 
-An administrator or developer creates a key with the token above (see
-[API Keys](../security/api-keys.md)); the full key is shown only in this response:
+Any signed-in user, whatever their role, can create a key, and an API key writes tracking
+data. This creates one with the token above (see [API Keys](../security/api-keys.md)); the
+full key is shown only in this response:
 
 ```{.bash exec}
 KEY=$(curl -s -X POST http://localhost:8000/api/v1/api-keys \
@@ -814,7 +815,7 @@ none will be given here until one has. What decides throughput today:
 | ECS Fargate | API container hosting |
 | Aurora PostgreSQL | Primary database |
 | ElastiCache Redis | Caching layer |
-| Kinesis Data Streams | Event ingestion |
+| Kinesis Data Streams | Full profile only: a stream feeding Firehose and the S3 data lake; the API does not write to it |
 | Lambda | Two placeholder functions and the Glue ETL trigger; the code under `backend/lambda/` is not deployed |
 | Cognito | User authentication |
 | CloudWatch | Monitoring + alerting |

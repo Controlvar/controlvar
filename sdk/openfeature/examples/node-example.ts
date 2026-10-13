@@ -30,16 +30,8 @@ async function main(): Promise<void> {
   const darkModeEnabled = await client.getBooleanValue('dark-mode', false, userContext);
   console.log('dark-mode enabled:', darkModeEnabled);
 
-  // string / number / object values come from the flag's `config`
-  // (config.variant, config.value, or the whole config object respectively).
-  const searchEngine = await client.getStringValue('new-search', 'legacy', userContext);
-  console.log('new-search variant:', searchEngine);
-
-  const maxItems = await client.getNumberValue('cart-max-items', 10, userContext);
-  console.log('cart-max-items:', maxItems);
-
-  const config = await client.getObjectValue('feature-config', {}, userContext);
-  console.log('feature-config:', config);
+  // Only boolean flags carry a value: the evaluate endpoint returns `config: null`
+  // for every flag, so string, number and object calls return the default you pass.
 
   // 5. Experiments and tracking are not OpenFeature concepts: use the JS SDK client.
   const assignment = await provider.client.getAssignment('checkout_flow', {

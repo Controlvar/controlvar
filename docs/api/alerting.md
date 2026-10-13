@@ -51,7 +51,8 @@ from starting, with `error parsing value for field "NOTIFICATION_ADMIN_EMAILS"`.
 
 Each user can store which events they want to be notified about, a Slack channel of their
 own and another email address. The preferences are stored and returned; sending does not
-read them, so every event's Slack message goes to `SLACK_DEFAULT_CHANNEL`.
+read them, so every event's Slack message goes to `SLACK_DEFAULT_CHANNEL`. Only the test
+notification below can name another channel.
 
 Run the commands on this page in one terminal, in order, against the stack from the
 [Quick Start](../getting-started/quick-start.md). Each uses the shell variables set by the
