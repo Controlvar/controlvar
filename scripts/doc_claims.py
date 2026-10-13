@@ -811,11 +811,17 @@ MECHANISMS: Dict[str, Mechanism] = {
             ),
             (
                 "docs/sdk-guide.md",
-                r'^"Verified live" means the SDK\'s contract_smoke entry point passed',
+                r'^"Verified live" means the SDK\'s contract_smoke entry point passed'
+                r" tests/sdk-contract/live/run_live_contract\.py against a running"
+                r" backend \(see tests/sdk-contract/README\.md\); the SDK Live Contract"
+                r" CI job repeats this on every pull request, with --strict, for"
+                r" [a-z, -]{1,200} \(the sdks: list of the job in pr-qa-gate\.yml\)\.$",
             ),
             (
                 "docs/sdk-guide.md",
-                r'^Rows marked "not yet" have a contract_smoke entry point',
+                r'^Rows marked "not yet" have a contract_smoke entry point that no CI'
+                r" job runs against a live backend; their unit tests run in the nightly"
+                r" tier and on pull requests that touch them\.$",
             ),
         ),
     ),
@@ -849,7 +855,7 @@ MECHANISMS: Dict[str, Mechanism] = {
             (
                 "docs/development/doc-examples.md",
                 r"^Every problem is reported in the same run, one line each, naming"
-                r" the page",
+                r" the page \(and the line, where there is one\) and what to change\.$",
             ),
         ),
     ),
