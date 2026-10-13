@@ -1,14 +1,13 @@
 # experimently (Python)
 
-**0.x beta.** The API may change between 0.x minor versions; pin the exact version
-you test against.
+**Beta.** This is a 0.x release: pin the exact version you test against.
 
 Synchronous, dependency-free Python client for the Experimently public API.
 Experiment assignment and feature-flag evaluation are decided **by the server** by default (sticky
 per user + experiment); the SDK caches the answers per user + key. Server-side code can opt in to
 **local evaluation** (`evaluation="local"`, beta): flags are answered in-process from the server's
 ruleset, with the server's answers, and anything that cannot be answered exactly goes to the
-server. See [`docs/sdk/local-evaluation.md`](../../docs/sdk/local-evaluation.md).
+server. See [`docs/sdk/local-evaluation.md`](https://github.com/getexperimently/experimently/blob/main/docs/sdk/local-evaluation.md).
 
 Requires Python 3.9+. HTTP goes through the standard library (`urllib`), so there is nothing
 else to install.
@@ -16,7 +15,7 @@ else to install.
 ## Install
 
 The `experimently` package is on [PyPI](https://pypi.org/project/experimently/). 0.1.0 is a
-beta release.
+beta release. It installs as `experimently` and imports as `experimentation`.
 
 ```bash
 pip install experimently==0.1.0
@@ -30,31 +29,35 @@ pip install -e sdk/python
 
 ## Quick start
 
+Set `EXPERIMENTLY_API_KEY` to an API key, then run the block as it is; the two `print` calls
+stand for your own code.
+
 ```python
-from experimentation import ExperimentationClient
+import os
+from experimentation import ExperimentationClient, ExperimentationError
 
 client = ExperimentationClient(
-    api_url="http://localhost:8000",       # backend origin; the SDK appends /api/v1/...
+    api_url=os.environ.get("EXPERIMENTLY_API_URL", "http://localhost:8000"),  # origin only
     api_key=os.environ["EXPERIMENTLY_API_KEY"],
 )
 
-# Experiments — sticky assignment made by the server
+# Experiments — sticky assignment made by the server (POST /api/v1/tracking/assign)
 variant = client.get_variant("checkout_flow", user_id="user-123", user_attributes={"plan": "pro"})
 if variant == "treatment":
-    ...
+    print("show the new checkout")   # your own code
 
-assignment = client.get_assignment("checkout_flow", "user-123")     # raises ExperimentationError on failure
+assignment = client.get_assignment("checkout_flow", "user-123")   # raises on failure
 assignment.variant_name, assignment.is_control, assignment.configuration
 
-# Feature flags — user_attributes (optional) is sent as ?context=<url-encoded JSON> for targeting rules
+# Feature flags (GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=<url-encoded attributes>)
 if client.is_feature_enabled("new_search", "user-123", user_attributes={"plan": "pro"}):
-    ...
-flag = client.get_feature_flag("new_search", "user-123")            # FlagEvaluation(key, enabled, config, reason)
-flags = client.get_all_flags("user-123", {"plan": "pro"})            # {"new_search": True, ...}
+    print("use the new search")      # your own code
+flag = client.get_feature_flag("new_search", "user-123")          # FlagEvaluation(key, enabled, config, reason)
+flags = client.get_all_flags("user-123", {"plan": "pro"})          # {"new_search": True, ...}
 
 # Tracking (never raises)
 client.track("user-123", "purchase", event_value=49.99, experiment_key="checkout_flow")
-client.track("user-123", "page_view", properties={"page": "/"})     # no key: fanned out, see below
+client.track("user-123", "page_view", properties={"page": "/"})   # no key: fanned out, see below
 ```
 
 Constructor: `ExperimentationClient(api_url, api_key, timeout_seconds=5.0, cache_ttl_seconds=300,
@@ -165,4 +168,4 @@ source venv/bin/activate
 python -m pytest sdk/python/tests -q -o addopts="" -p no:cacheprovider
 ```
 
-- `python -m pytest sdk/python/tests -q -o addopts="" -p no:cacheprovider`: HTTP is faked; runs on Python 3.9+
+- `python -m pytest sdk/python/tests -q -o addopts="" -p no:cacheprovider`: HTTP is faked; CI runs them on Python 3.11

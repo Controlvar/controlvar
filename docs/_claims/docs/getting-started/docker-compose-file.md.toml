@@ -1,0 +1,257 @@
+# What verifies each unit of docs/getting-started/docker-compose-file.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/getting-started/docker-compose-file.md"
+
+[[unit]]
+text = "The Docker Compose stack"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The repository ships one development compose file, docker-compose.yml at the repository root."
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_file_has_exactly_these_services"]
+
+[[unit]]
+text = "This page lists its services, profiles and the settings you are most likely to change."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Every host port below is published on 127.0.0.1 only."
+by = ["test:backend/tests/unit/infrastructure/test_dev_stack_loopback.py::test_every_published_port_is_bound_to_loopback"]
+
+[[unit]]
+text = "For a server, use deploy/compose/compose.yml: the README beside it says how to run it and lists its settings; see Releases, images and verification for the versions and how to verify the images."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version"]
+
+[[unit]]
+text = "Services"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Service | Image | Host port | Profile | Notes"
+by = ["exempt:label"]
+
+[[unit]]
+text = "postgres | postgres:16-alpine | 5432 | default | data in the postgres_data volume"
+by = [
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_database_is_the_postgres_data_volume",
+]
+
+[[unit]]
+text = "redis | redis:7-alpine | 6379 | default | caching and rate-limit counters"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "api | experimently-api:core (built from backend/Dockerfile; EXPERIMENTLY_PROFILE=full builds the full target with the modules) | 8000 | default | runs bootstrap and seeds on first start, then uvicorn"
+by = [
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_profile_picks_the_api_build_target",
+    "test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_entrypoint_allows_the_seeds_it_should",
+]
+
+[[unit]]
+text = "frontend | experimently-web:core (built from frontend/Dockerfile; full likewise) | 3000 | default | nginx serving the static dashboard and proxying /api to api"
+by = [
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_profile_picks_the_api_build_target",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_dashboard_proxies_the_api",
+]
+
+[[unit]]
+text = "shoplab | built from demo/shoplab | 3200 | demo | sample e-commerce app"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "shoplab-simulator | python:3.11-slim, running demo/shoplab/simulator | none | demo | ShopLab's traffic generator"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "streampulse | built from demo/streampulse | 3300 | demo | sample streaming app"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "streampulse-simulator | python:3.11-slim, running demo/streampulse/simulator | none | demo | StreamPulse's device simulator"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "pgadmin | dpage/pgadmin4 | 5050 | tools | database browser"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "localstack | localstack/localstack:3 | 4566 | aws | only for developing the optional AWS integrations"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "Start the core stack, the four default services:"
+by = ["docex:docs/getting-started/docker-compose-file.md#api"]
+
+[[unit]]
+text = "Check that those four are the ones running:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints api, frontend, postgres and redis, one per line."
+by = ["docex:docs/getting-started/docker-compose-file.md#api"]
+
+[[unit]]
+text = "The demo profile's applications also need the shoplab and streampulse seeds: without them, both simulators exit at start."
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_a_demo_simulator_exits_without_its_seed"]
+
+[[unit]]
+text = "To run the demo, use ./demo/setup-local.sh, which the Demo guide walks through."
+by = ["journey:demo-guide#dashboard-address"]
+
+[[unit]]
+text = "Add pgAdmin and LocalStack with the tools and aws profiles:"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_profiles_add_what_the_guide_says"]
+
+[[unit]]
+text = "Stop everything and drop the volumes, which deletes the database:"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_database_is_the_postgres_data_volume"]
+
+[[unit]]
+text = "First start"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The api container's entrypoint (backend/docker-entrypoint.sh) waits for Postgres, runs python -m backend.app.db.bootstrap when RUN_MIGRATIONS=true (creates the schema on a fresh database, upgrades an existing one, and creates FIRST_SUPERUSER), then applies each seed listed in SEED once per database."
+by = [
+    "docex:docs/getting-started/docker-guide.md#admin@demo.com",
+    "test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_entrypoint_allows_the_seeds_it_should",
+    "test:backend/tests/unit/scripts/test_entrypoint_seed_force_and_workers.py::test_a_recorded_seed_is_skipped_and_seed_force_applies_it_again",
+    "test:backend/tests/unit/db/test_bootstrap_schema_env.py::test_the_fresh_database_branch_stamps_the_schema_it_chose",
+    "test:backend/tests/unit/db/test_bootstrap_schema_env.py::test_the_existing_database_branch_upgrades_the_schema_it_chose",
+    "test:backend/tests/integration/database/test_bootstrap_concurrency.py::test_the_bootstrap_says_whether_it_created_the_first_administrator",
+]
+
+[[unit]]
+text = "Applied seeds are recorded in the seed_markers table; set SEED_FORCE=true to re-run them."
+by = [
+    "test:backend/tests/integration/database/test_seed_markers.py::TestSeedMarkerScript::test_mark_and_query",
+    "test:backend/tests/unit/scripts/test_entrypoint_seed_force_and_workers.py::test_a_recorded_seed_is_skipped_and_seed_force_applies_it_again",
+]
+
+[[unit]]
+text = "Seed | What it adds"
+by = ["exempt:label"]
+
+[[unit]]
+text = "demo (default) | admin@demo.com / Demo1234!, three experiments, two flags"
+by = [
+    "test:backend/tests/unit/scripts/test_demo_seed_accounts.py::test_the_demo_seed_adds_one_account_per_role_with_one_password",
+    "test:backend/tests/unit/scripts/test_demo_seed_accounts.py::test_the_demo_seed_adds_three_experiments_and_two_flags",
+    "test:backend/tests/unit/scripts/test_demo_seed_accounts.py::test_main_runs_exactly_those_three_experiment_seeds",
+    "test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_entrypoint_allows_the_seeds_it_should",
+]
+
+[[unit]]
+text = "shoplab, streampulse | the demo applications' experiments, flags and API keys"
+by = ["test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_entrypoint_allows_the_seeds_it_should"]
+
+[[unit]]
+text = "sdk-contract | the fixtures the SDK live-contract suite expects"
+by = [
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestContractSeed::test_the_seed_writes_a_plain_and_a_scoped_key",
+    "test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_entrypoint_allows_the_seeds_it_should",
+]
+
+[[unit]]
+text = "The seeds (demo, shoplab, streampulse, sdk-contract) are development-only."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_entrypoint_refuses_demo_seeds_outside_development",
+    "test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_script_refuses_outside_development",
+]
+
+[[unit]]
+text = "They run when ENVIRONMENT is development (the default) or test."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_entrypoint_allows_the_seeds_it_should",
+    "test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_script_runs_in_development_and_test",
+]
+
+[[unit]]
+text = "With ENVIRONMENT=staging or production the container exits before it waits for Postgres, printing SEED=<value> is for development and is refused when ENVIRONMENT=<env>."
+by = ["test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_entrypoint_refuses_demo_seeds_outside_development"]
+
+[[unit]]
+text = "Remove SEED."
+by = ["test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_entrypoint_refuses_demo_seeds_outside_development"]
+
+[[unit]]
+text = "Set SEED= (empty) in .env there: an empty value applies no seeds, while leaving SEED out applies demo."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_compose_lets_an_empty_seed_apply_none",
+    "test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_entrypoint_without_seed_is_unaffected",
+]
+
+[[unit]]
+text = "The seed scripts make the same check when they are run by hand."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_script_refuses_outside_development",
+    "test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_script_run_as_a_program_refuses_production",
+]
+
+[[unit]]
+text = "Variables you should set before sharing the stack"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Put them in a .env file next to docker-compose.yml:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Other useful knobs: POSTGRES_HOST_PORT, REDIS_HOST_PORT, API_HOST_PORT, FRONTEND_HOST_PORT when a port is taken; SEED; LOG_FORMAT=json; METRICS_TOKEN to require a token on /metrics; WEB_CONCURRENCY for more uvicorn workers."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_host_ports_can_be_moved",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_api_reads_the_settings_the_page_names",
+    "test:backend/tests/unit/core/test_logger.py::test_configure_logging_json_mode",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestMetricsEndpoint::test_token_required_when_configured",
+    "test:backend/tests/unit/scripts/test_entrypoint_seed_force_and_workers.py::test_web_concurrency_is_the_number_of_uvicorn_workers",
+]
+
+[[unit]]
+text = "AUTH_PROVIDER=cognito switches authentication to Amazon Cognito; add COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID and the AWS credentials to the api service's environment yourself, the compose file does not pass them through."
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestGetCurrentUserLocal::test_cognito_provider_still_uses_cognito",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_api_is_not_given_cognito_or_aws_keys",
+]
+
+[[unit]]
+text = "The dashboard does not yet sign in with Cognito."
+by = ["test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_404_under_cognito_provider"]
+
+[[unit]]
+text = "Sign in through the API with POST /api/v1/auth/token."
+by = ["test:backend/tests/integration/auth/test_token_challenge.py::test_temporary_password_user_gets_401_naming_the_new_password_step"]
+
+[[unit]]
+text = "SSO sign-in needs AUTH_PROVIDER=local."
+by = ["test:backend/tests/unit/api/test_local_auth.py::TestGetCurrentUserLocal::test_cognito_provider_still_uses_cognito"]
+
+[[unit]]
+text = "See Signing in under Cognito."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "DEV_AUTH_BYPASS defaults to false in the compose file and is refused by the API unless ENVIRONMENT is development or test."
+by = [
+    "test:backend/tests/unit/core/test_config_environment.py::TestAuthSettings::test_bypass_rejected_in_staging_and_production",
+    "test:backend/tests/unit/core/test_config_environment.py::TestAuthSettings::test_bypass_allowed_in_dev_and_test",
+]
+
+[[unit]]
+text = "Running the API or dashboard outside Docker"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Start only the data services and follow \"Running outside Docker\" in the Quick Start:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Then check that they are the two running:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints postgres redis."
+by = ["docex:docs/getting-started/docker-compose-file.md#postgres redis"]

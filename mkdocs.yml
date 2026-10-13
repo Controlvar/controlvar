@@ -146,7 +146,7 @@ nav:
 - Self-Hosting:
   - AWS CDK Deployment: self-hosting/cdk.md
   - Kubernetes (Helm): self-hosting/kubernetes.md
-  - Docker Compose (self-hosting stack): https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml
+  - Docker Compose (self-hosting stack): https://github.com/getexperimently/experimently/blob/main/deploy/compose/README.md
   - Environment Variables: getting-started/environment-setup.md
   - Database Migrations: self-hosting/migrations.md
   - Releases & Image Verification: self-hosting/releases.md

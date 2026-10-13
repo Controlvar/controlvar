@@ -1,0 +1,102 @@
+# What verifies each unit of docs/self-hosting/kubernetes.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/self-hosting/kubernetes.md"
+
+[[unit]]
+text = "Kubernetes (Helm)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Experimently installs on Kubernetes with the Helm chart in charts/experimently: a one-time secret step, then one install command."
+by = ["workflow:chart-kind.yml"]
+
+[[unit]]
+text = "The four blocks on this page are tested as written on kind with ingress-nginx: the chart-kind CI job extracts them from this page and runs them in order."
+by = ["workflow:chart-kind.yml"]
+
+[[unit]]
+text = "They need kubectl, helm 3.14 or later, openssl, curl and jq, and read four shell variables that you set first:"
+by = ["workflow:chart-kind.yml"]
+
+[[unit]]
+text = "Variable | Value"
+by = ["exempt:label"]
+
+[[unit]]
+text = "CHART | the chart: a path to charts/experimently, or a packaged chart"
+by = ["workflow:chart-kind.yml"]
+
+[[unit]]
+text = "PUBLIC_BASE_URL | the origin people open, such as https://experimently.example.com: a DNS name, no port, no path"
+by = [
+    "test:backend/tests/unit/chart/test_chart_render.py::test_an_ip_or_port_origin_is_refused_with_the_ingress_on",
+    "test:backend/tests/unit/chart/test_chart_render.py::test_schema_refuses",
+]
+
+[[unit]]
+text = "ADMIN_EMAIL | the email of the first administrator"
+by = ["workflow:chart-kind.yml"]
+
+[[unit]]
+text = "PROFILE | core or full"
+by = ["workflow:chart-kind.yml"]
+
+[[unit]]
+text = "Secrets"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Run this once."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It creates the namespace and a Secret with generated values, and never replaces one: run again, it fails with AlreadyExists and leaves the Secret as it was."
+by = ["workflow:chart-kind.yml"]
+
+[[unit]]
+text = "The full profile signs its audit log with AUDIT_HMAC_KEY; the core profile does not read it."
+by = [
+    "test:backend/tests/unit/chart/test_chart_render.py::test_audit_hmac_key_is_required_exactly_when_full",
+    "test:backend/tests/unit/core/test_config_environment.py::TestHardenedSecrets::test_a_core_production_start_needs_no_module_secret",
+]
+
+[[unit]]
+text = "Install"
+by = ["exempt:label"]
+
+[[unit]]
+text = "ingress.className=nginx is ingress-nginx's IngressClass; name your cluster's."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "--wait returns once the database schema is created and the API and dashboard are ready."
+by = ["workflow:chart-kind.yml"]
+
+[[unit]]
+text = "Sign in as the first administrator"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The first line prints 401: the API answered through your Ingress, on your host, and asks for a login."
+by = ["workflow:chart-kind.yml"]
+
+[[unit]]
+text = "The last prints ADMIN, signed in with the password from the Secret."
+by = ["workflow:chart-kind.yml"]
+
+[[unit]]
+text = "In the first seconds after the install, ingress-nginx can still answer 503 while it picks up the new pods; run the block again."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Upgrade"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Point CHART at the new chart."
+by = ["workflow:chart-kind.yml"]
+
+[[unit]]
+text = "The values given at install are kept."
+by = ["workflow:chart-kind.yml"]

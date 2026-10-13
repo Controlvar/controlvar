@@ -2,6 +2,7 @@
  * @jest-environment node
  */
 import { ServerClient } from '../client/ServerClient';
+import * as packageRoot from '../index';
 import {
   SdkConfig,
   UserContext,
@@ -380,5 +381,11 @@ describe('ServerClient — no browser-specific API usage', () => {
 
   it('handles timeout configuration', () => {
     expect(() => new ServerClient({ ...baseConfig, timeoutMs: 1000 })).not.toThrow();
+  });
+});
+
+describe('the package root', () => {
+  it('exports ServerClient, so Node and SSR code import it from @getexperimently/react-sdk', () => {
+    expect(packageRoot.ServerClient).toBe(ServerClient);
   });
 });

@@ -1,0 +1,363 @@
+# What verifies each unit of docs/getting-started/environment-setup.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/getting-started/environment-setup.md"
+
+[[unit]]
+text = "Environment Configuration Setup Guide"
+by = ["exempt:label"]
+
+[[unit]]
+text = "This guide explains how to set up the environment configuration for Experimently."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Overview"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The API reads its settings with Pydantic Settings, in backend/app/core/config.py:"
+by = ["test:backend/tests/unit/core/test_environment_settings_classes.py::test_each_environment_class_derives_from_settings_and_changes_defaults"]
+
+[[unit]]
+text = "One Settings class, with the settings and their defaults"
+by = ["test:backend/tests/unit/core/test_environment_settings_classes.py::test_each_environment_class_derives_from_settings_and_changes_defaults"]
+
+[[unit]]
+text = "A class for each environment, DevSettings, TestSettings and ProdSettings, derived from it, that changes some of those defaults"
+by = ["test:backend/tests/unit/core/test_environment_settings_classes.py::test_each_environment_class_derives_from_settings_and_changes_defaults"]
+
+[[unit]]
+text = "An environment file for each environment, and one template, .env.example"
+by = [
+    "test:backend/tests/unit/core/test_config_environment.py::TestEnvFileTable::test_each_settings_class_reads_the_table_entry",
+    "test:backend/tests/unit/core/test_environment_settings_classes.py::test_the_template_is_at_the_root_and_sets_what_the_guide_shows",
+]
+
+[[unit]]
+text = "The ENVIRONMENT variable, which chooses the class and the file"
+by = [
+    "test:backend/tests/unit/core/test_config_environment.py::TestEnvFileTable::test_each_settings_class_reads_the_table_entry",
+    "test:backend/tests/unit/core/test_config_environment.py::TestModuleImportSelection::test_environment_development_selects_dev_settings",
+    "test:backend/tests/unit/core/test_config_environment.py::TestModuleImportSelection::test_environment_staging_uses_prod_settings_but_keeps_name",
+]
+
+[[unit]]
+text = "Setup Steps"
+by = ["exempt:label"]
+
+[[unit]]
+text = "1. Create Environment Files"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The settings class for each environment reads its own file from the directory you start the application in (the repository root):"
+by = [
+    "test:backend/tests/unit/core/test_config_environment.py::TestEnvFileTable::test_each_settings_class_reads_the_table_entry",
+    "test:modules/backend/tests/unit/test_modules_settings.py::TestTheEnvFile::test_development_reads_env_dev",
+    "test:backend/tests/unit/core/test_environment_settings_classes.py::test_the_process_environment_overrides_the_file",
+]
+
+[[unit]]
+text = "ENVIRONMENT | File"
+by = ["exempt:label"]
+
+[[unit]]
+text = "development | .env.dev"
+by = ["test:backend/tests/unit/core/test_config_environment.py::TestEnvFileTable::test_each_settings_class_reads_the_table_entry"]
+
+[[unit]]
+text = "test | .env.test"
+by = ["test:backend/tests/unit/core/test_config_environment.py::TestEnvFileTable::test_each_settings_class_reads_the_table_entry"]
+
+[[unit]]
+text = "staging, production | .env.prod"
+by = ["test:backend/tests/unit/core/test_config_environment.py::TestEnvFileTable::test_staging_shares_the_production_file"]
+
+[[unit]]
+text = "Variables set in the process environment override the file."
+by = ["test:backend/tests/unit/core/test_environment_settings_classes.py::test_the_process_environment_overrides_the_file"]
+
+[[unit]]
+text = ".env.example at the repository root lists the variables and is a starting point."
+by = ["test:backend/tests/unit/core/test_environment_settings_classes.py::test_the_template_is_at_the_root_and_sets_what_the_guide_shows"]
+
+[[unit]]
+text = "Docker Compose reads a different file, .env next to docker-compose.yml; see The Docker Compose stack."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "2. Environment Variables"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The most important environment variables to configure:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Database Connection"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Choose your own POSTGRES_PASSWORD for anything but a local database."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Redis Connection"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Set REDIS_PASSWORD as well if your Redis requires one; the local stack's does not."
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_redis_has_no_password"]
+
+[[unit]]
+text = "Application Settings"
+by = ["exempt:label"]
+
+[[unit]]
+text = "These are development values."
+by = ["exempt:example"]
+
+[[unit]]
+text = "In production, set LOG_LEVEL to INFO, WARNING or ERROR."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Security Settings"
+by = ["exempt:label"]
+
+[[unit]]
+text = "SECRET_KEY signs login tokens."
+by = ["test:backend/tests/unit/api/test_local_auth.py::TestLocalTokens::test_wrong_secret_rejected"]
+
+[[unit]]
+text = "It must be a random string of at least 32 characters, and staging and production refuse a shorter one or one of the placeholders in this repository."
+by = [
+    "test:backend/tests/unit/core/test_config_environment.py::TestHardenedSecrets::test_committed_placeholders_are_refused",
+    "test:backend/tests/unit/core/test_config_environment.py::TestModuleImportSelection::test_weak_secret_key_in_production_refuses_to_boot",
+]
+
+[[unit]]
+text = "Generate one:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints 64, the key's length."
+by = ["docex:docs/getting-started/environment-setup.md#64"]
+
+[[unit]]
+text = "Put SECRET_KEY= followed by the key (echo \"$SECRET_KEY\" shows it) in your environment file, next to these:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "CORS_ORIGINS lists the browser origins, other than the API's own, that may call the API: a comma-separated list or a JSON array, such as CORS_ORIGINS=https://shop.example.com,https://www.example.com."
+by = [
+    "test:backend/tests/unit/core/test_config_cors.py::TestCorsOriginsSettings::test_comma_separated_env_value_is_split",
+    "test:backend/tests/unit/core/test_config_cors.py::TestCorsOriginsSettings::test_json_list_is_still_accepted",
+]
+
+[[unit]]
+text = "BACKEND_CORS_ORIGINS is also accepted, in either form, and wins when both are set."
+by = [
+    "test:backend/tests/unit/core/test_cors_origin_normalisation.py::test_backend_cors_origins_takes_the_comma_form_too",
+    "test:backend/tests/unit/core/test_environment_settings_classes.py::test_backend_cors_origins_wins_when_both_are_set",
+]
+
+[[unit]]
+text = "Every origin in DASHBOARD_ORIGINS is added as well."
+by = ["test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_dashboard_origins_are_added_after_cors_origins_once_each"]
+
+[[unit]]
+text = "When neither is set, development and test allow the local apps: http://localhost ports 3100, 3000, 3001, 3200 and 3300 (development's own default adds port 8000)."
+by = [
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_the_localhost_defaults_are_the_five_local_apps",
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_development_keeps_its_own_defaults",
+]
+
+[[unit]]
+text = "Staging and production allow no other origin: the dashboard is served from the API's own origin and needs none."
+by = ["test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_a_staging_or_production_api_allows_no_origin_it_was_not_given"]
+
+[[unit]]
+text = "To call a staging or production API from a browser on another origin -- a site running the browser SDK, a demo app, or a local dashboard -- add that origin to CORS_ORIGINS."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Credentials (cookies) are never allowed on a cross-origin request."
+by = ["test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_credentials_are_never_allowed_cross_origin"]
+
+[[unit]]
+text = "CORS_ORIGINS= in staging or production is accepted, allows every origin without credentials, and is reported with a WARNING at start-up; every staging or production start-up logs the effective list in one INFO line."
+by = [
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_a_wildcard_however_spelled_is_kept",
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_start_up_warns_about_a_wildcard",
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_start_up_names_the_effective_list",
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_start_up_names_an_empty_list",
+]
+
+[[unit]]
+text = "SDK_RATE_LIMIT_PER_MINUTE is the per-IP ceiling for SDK traffic (/api/v1/tracking/ and flag evaluation)."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_sdk_limit_is_configurable",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_tracking_endpoints_have_higher_limits",
+]
+
+[[unit]]
+text = "The default is 6000 a minute."
+by = ["test:backend/tests/unit/core/test_environment_settings_classes.py::test_the_sdk_rate_limit_is_6000_a_minute_by_default"]
+
+[[unit]]
+text = "Background Jobs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "BANDIT_UPDATE_INTERVAL_MINUTES is how often multi-armed bandit weights are refreshed."
+by = ["test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerRunner::test_interval_defaults_from_settings"]
+
+[[unit]]
+text = "EXPERIMENT_SCHEDULER_INTERVAL_MINUTES is how often the experiment scheduler starts and completes experiments whose scheduled start_date or end_date has passed."
+by = ["test:backend/tests/unit/core/test_experiment_scheduler_interval.py::test_lifespan_passes_the_setting_to_the_experiment_scheduler"]
+
+[[unit]]
+text = "The default is 15; a value below 1 is refused when the settings load, so the API does not start."
+by = [
+    "test:backend/tests/unit/core/test_experiment_scheduler_interval.py::test_the_default_is_15_minutes",
+    "test:backend/tests/unit/core/test_experiment_scheduler_interval.py::test_a_value_below_one_is_refused",
+]
+
+[[unit]]
+text = "3. Environment Selection"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The application determines which environment to use based on the ENVIRONMENT variable:"
+by = [
+    "test:backend/tests/unit/core/test_config_environment.py::TestModuleImportSelection::test_environment_development_selects_dev_settings",
+    "test:backend/tests/unit/core/test_config_environment.py::TestModuleImportSelection::test_environment_staging_uses_prod_settings_but_keeps_name",
+]
+
+[[unit]]
+text = "If it is not set, the API refuses to start and logs ENVIRONMENT is not set: set it to development, test, staging or production before starting the API."
+by = [
+    "test:backend/tests/unit/core/test_environment_explicit.py::test_the_api_refuses_to_serve_when_the_environment_was_not_set",
+    "test:backend/tests/unit/core/test_environment_explicit.py::test_the_refusal_is_one_plain_line_naming_the_setting_and_its_values",
+]
+
+[[unit]]
+text = "Valid values: development, test, staging, production (the older spellings dev and prod still work, with a deprecation warning)"
+by = [
+    "test:backend/tests/unit/core/test_config_environment.py::TestSettingsEnvironmentField::test_accepts_every_canonical_value",
+    "test:backend/tests/unit/core/test_config_environment.py::TestCanonicalEnvironment::test_legacy_aliases_map_with_deprecation_warning",
+    "test:backend/tests/unit/core/test_config_environment.py::TestSettingsEnvironmentField::test_unknown_value_is_rejected",
+]
+
+[[unit]]
+text = "Set it in your shell, in your deployment configuration, or in the environment file."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "In the shell, for development:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "For the others, give test, staging or production instead of development."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "4. Production Configuration"
+by = ["exempt:label"]
+
+[[unit]]
+text = "For production deployment:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Never commit production credentials to version control"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Use a secure method to provide the .env.prod file or environment variables"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Ensure the following production values are properly set:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "SECRET_KEY (generate a strong random string)"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "POSTGRES_PASSWORD (use a strong password)"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "REDIS_PASSWORD (if applicable)"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "FIRST_SUPERUSER_PASSWORD (for the admin user)"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "LOG_LEVEL=WARNING or ERROR"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Accessing Settings in Code"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The settings are accessible throughout the application by importing the settings instance:"
+by = ["test:backend/tests/unit/core/test_environment_settings_classes.py::test_the_application_imports_one_settings_instance"]
+
+[[unit]]
+text = "Extending the Configuration"
+by = ["exempt:label"]
+
+[[unit]]
+text = "To add new configuration options:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Add the new setting to the Settings class in backend/app/core/config.py"
+by = ["test:backend/tests/unit/core/test_environment_settings_classes.py::test_each_environment_class_derives_from_settings_and_changes_defaults"]
+
+[[unit]]
+text = "Provide a default value"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Override it in DevSettings, TestSettings or ProdSettings if one environment needs another default"
+by = ["test:backend/tests/unit/core/test_environment_settings_classes.py::test_each_environment_class_derives_from_settings_and_changes_defaults"]
+
+[[unit]]
+text = "Add it to .env.example"
+by = ["test:backend/tests/unit/core/test_environment_settings_classes.py::test_the_template_is_at_the_root_and_sets_what_the_guide_shows"]
+
+[[unit]]
+text = "Example:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Troubleshooting"
+by = ["exempt:label"]
+
+[[unit]]
+text = "If settings aren't loading correctly, check that your environment file exists and has the correct format"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Verify environment variables are set correctly"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Check file permissions on the .env files"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Set LOG_LEVEL=DEBUG to see more detailed logs"
+by = [
+    "test:backend/tests/unit/core/test_environment_settings_classes.py::test_log_level_is_the_level_the_api_logs_at",
+    "test:backend/tests/unit/core/test_logger.py::test_configure_logging_sets_level",
+]

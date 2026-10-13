@@ -233,6 +233,69 @@ change with a shell block has to be tagged and enrolled; see
 [Runnable Documentation Examples](docs/development/doc-examples.md), and run
 `python scripts/doc_examples.py --check` before you push.
 
+## Releasing
+
+Releases are cut by CI from a tag. [Releases, images and
+verification](docs/self-hosting/releases.md) says what a release publishes and
+how to check it; this section is how a maintainer cuts one.
+
+1. Merge work to `main` with [conventional commit](https://www.conventionalcommits.org/)
+   subjects (`feat:`, `fix:`, `perf:`, `deps:`, `docs:`, `build:`).
+2. `release-please` keeps a standing pull request that accumulates them.
+   Merging it writes `CHANGELOG.md`, bumps `VERSION` and the manifest, tags the
+   merge commit `vX.Y.Z` and opens a GitHub release.
+3. `release.yml` then builds, signs and publishes. It is *called* by
+   `release-please.yml` rather than triggered by the tag, because a tag pushed
+   with the default `GITHUB_TOKEN` does not start another workflow.
+
+A pre-release is cut by pushing the tag by hand, `git tag v1.2.0-rc.1 && git
+push origin v1.2.0-rc.1`, which does start `release.yml`. It publishes the
+versioned image tags only: `:core` and `:full` stay on the newest final release,
+and a tag with a `-` in it does not deploy the documentation site.
+
+### When a release's image scan fails
+
+Each image job scans its image with trivy's secret scanner before anything is
+pushed. When a scan finds something, the job's summary lists each finding's
+file path in the image, rule, severity and line; the matched text is never
+printed, because the log of a public repository's run is public.
+
+1. **Know what was published.** The failed image was not pushed. The other
+   image jobs may have pushed their versioned tags, because each image is
+   built separately. No SBOMs or chart are attached to the GitHub release,
+   and `:core` and `:full` stay on the previous release. The git tag exists,
+   and release-please may already have opened the GitHub release.
+2. **Revoke and replace the secret first.** An image is built from the tagged
+   tree, so a secret in the image is almost certainly in the repository's
+   public history too. Removing the file does not undo that.
+3. **Remove the file from the image and cut a new patch release.**
+   Re-running the release for the same tag rebuilds the same tree and fails
+   the same way.
+4. **There is no allow-list.** The workflow passes trivy its own empty
+   ignore file, so a finding is fixed by taking the file out of the image,
+   never by listing it.
+5. **Versioned tags already pushed for the failed version stay** until an
+   organization owner deletes those package versions in GitHub Packages. That
+   is a manual step.
+
+If "The pushed image is the scanned image" fails instead, the pushed layers
+differ from the scanned ones. That image's versioned tag has already been
+pushed, but it is not signed and nothing else in the release continues. An
+organization owner deletes that package version, and the release is then
+re-run for the same tag: `gh workflow run release.yml -f tag=vX.Y.Z`.
+
+### SDK releases
+
+Each SDK is released by its own tag, `sdk/<name>/vX.Y.Z`, through
+`sdk-release.yml`. An SDK with no registry account yet is listed as `unwired`
+in `scripts/check_sdk_version.py`, and tagging one is refused rather than
+quietly publishing nothing. Write a Python version in its PEP 440 spelling
+(`1.0.0rc1`, not `1.0.0-rc.1`), in the manifest and the tag alike; the build
+job refuses any other spelling. Publish `sdk/js` before `sdk/openfeature`: the
+provider's release refuses until the matching `@getexperimently/js-sdk` is on
+npm. If a publish job fails after approval, use **Re-run failed jobs**, not
+**Re-run all jobs**.
+
 ## Layer map
 
 ```text

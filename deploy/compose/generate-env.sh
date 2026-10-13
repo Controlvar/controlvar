@@ -1,24 +1,9 @@
 #!/bin/sh
-# deploy/compose/generate-env.sh -- write the .env that compose.yml reads,
-# with freshly generated secrets. Run it once, before the first start.
+# deploy/compose/generate-env.sh: write the .env that compose.yml reads, with
+# generated secrets. Run it once, before the first start: it refuses to
+# overwrite an existing .env.
 #
-#   ./generate-env.sh
-#   PUBLIC_BASE_URL=https://experimently.example.com \
-#   FIRST_SUPERUSER=you@example.com ./generate-env.sh
-#
-# It REFUSES to overwrite an existing file. A second run would otherwise rotate
-# SECRET_KEY (signing everyone out) and write a new FIRST_SUPERUSER_PASSWORD
-# that no longer matches the administrator already in the database, and a new
-# POSTGRES_PASSWORD the existing database volume does not accept. To start
-# again from nothing, `docker compose down -v` and delete .env first.
-#
-# Inputs (environment, all optional):
-#   ENV_FILE              where to write     (default: .env beside this script)
-#   PUBLIC_BASE_URL       the URL people open (default: http://localhost:8080)
-#   FIRST_SUPERUSER       the first administrator's email (default: admin@example.com)
-#   EXPERIMENTLY_PROFILE  core or full        (default: core)
-#
-# Needs openssl, or python3 when openssl is absent.
+# README.md beside this file says how to use it.
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)

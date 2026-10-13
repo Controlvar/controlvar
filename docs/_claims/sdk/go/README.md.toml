@@ -1,0 +1,367 @@
+# What verifies each unit of sdk/go/README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "sdk/go/README.md"
+
+[[unit]]
+text = "Experimently Go SDK"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Go client for the Experimently A/B testing and feature flag platform."
+by = [
+    "test:sdk/go/client_test.go::TestClient_EvaluateFlag_RequestAndMapping",
+    "test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping",
+]
+
+[[unit]]
+text = "Zero dependencies outside the standard library, safe for concurrent use."
+by = [
+    "test:sdk/go/module_test.go::TestModule_StandardLibraryOnly",
+    "test:sdk/go/client_test.go::TestClient_Concurrent",
+    "test:sdk/go/client_test.go::TestCache_Concurrent",
+]
+
+[[unit]]
+text = "Flag evaluation and experiment assignment are decided by the server: every call goes to the public API with your X-API-Key, the server buckets the user (sticky per user + experiment), and the SDK caches the answer per user + key for a TTL."
+by = [
+    "test:sdk/go/client_test.go::TestClient_GetAssignment_Sticky_CacheHit",
+    "test:sdk/go/client_test.go::TestClient_EvaluateFlag_CacheHit",
+]
+
+[[unit]]
+text = "Nothing is bucketed locally."
+by = [
+    "test:sdk/go/module_test.go::TestConsistentHash_NotCalledByTheClient",
+    "test:sdk/go/client_test.go::TestClient_EvaluateFlag_RequestAndMapping",
+    "test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping",
+]
+
+[[unit]]
+text = "Full reference: docs/sdk/go.md."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Installation"
+by = ["exempt:label"]
+
+[[unit]]
+text = "go get github.com/getexperimently/experimently/sdk/go: Go 1.21+"
+by = [
+    "test:sdk/go/module_test.go::TestModule_RequiresGo121",
+    "journey:sdk-go#quick-start-user-on",
+]
+
+[[unit]]
+text = "Quick Start"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Configuration"
+by = ["exempt:label"]
+
+[[unit]]
+text = "exp.New takes functional options:"
+by = [
+    "test:sdk/go/client_test.go::TestNew_AllOptions",
+    "test:sdk/go/client_test.go::TestNew_Defaults",
+]
+
+[[unit]]
+text = "Option | Type | Default | Description"
+by = ["exempt:label"]
+
+[[unit]]
+text = "WithBaseURL | string | http://localhost:8000 | Backend origin; the SDK appends /api/v1/.... A trailing / is stripped; empty is an error"
+by = [
+    "test:sdk/go/client_test.go::TestNew_TrimsTrailingSlash",
+    "test:sdk/go/client_test.go::TestNew_EmptyBaseURL",
+]
+
+[[unit]]
+text = "WithAPIKey | string | \"\" | Sent as X-API-Key on every request"
+by = ["test:sdk/go/client_test.go::TestClient_RequestHeaders"]
+
+[[unit]]
+text = "WithTimeout | time.Duration | 10s | Per-request HTTP timeout (also honours ctx)"
+by = [
+    "test:sdk/go/client_test.go::TestWithTimeout",
+    "test:sdk/go/client_test.go::TestHTTPClient_ContextCancellation",
+]
+
+[[unit]]
+text = "WithCacheTTL | time.Duration | 5m | How long a successful evaluation/assignment is reused; <= 0 never expires"
+by = [
+    "test:sdk/go/client_test.go::TestCache_NoTTL",
+    "test:sdk/go/client_test.go::TestClient_EvaluateFlag_CacheTTLExpiry",
+]
+
+[[unit]]
+text = "WithCacheSize | int | 1000 | Max cached evaluations + assignments (LRU eviction)"
+by = ["test:sdk/go/client_test.go::TestCache_LRUEviction"]
+
+[[unit]]
+text = "WithLocalEval | bool | — | Deprecated no-op kept for source compatibility"
+by = ["test:sdk/go/client_test.go::TestNew_AllOptions"]
+
+[[unit]]
+text = "API"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Method | Returns | On failure"
+by = ["exempt:label"]
+
+[[unit]]
+text = "EvaluateFlag(ctx, flagKey, User) | (EvalResult, error) | &EvalResult{Key, Enabled: false} + error (nil result only for empty flagKey/user.ID)"
+by = [
+    "test:sdk/go/client_test.go::TestClient_EvaluateFlag_NotFound",
+    "test:sdk/go/client_test.go::TestClient_EvaluateFlag_Validation",
+]
+
+[[unit]]
+text = "GetAssignment(ctx, experimentKey, User) | (Assignment, error) | (nil, error)"
+by = ["test:sdk/go/client_test.go::TestClient_GetAssignment_NotFound"]
+
+[[unit]]
+text = "Track(ctx, TrackEvent) | error | Informational error; never panics"
+by = ["test:sdk/go/client_test.go::TestClient_Track_NeverPanics"]
+
+[[unit]]
+text = "TrackBatch(ctx, []TrackEvent) | error | Informational error; at most 100 events per request"
+by = ["test:sdk/go/client_test.go::TestClient_TrackBatch_ChunksAt100"]
+
+[[unit]]
+text = "Close() | error (always nil) | Clears the cache, closes idle connections; idempotent"
+by = ["test:sdk/go/client_test.go::TestClient_Close"]
+
+[[unit]]
+text = "ConsistentHash(userID, key) | float64 in [0, 1) | Pure function (parity utility, see below)"
+by = [
+    "test:sdk/go/client_test.go::TestConsistentHash_RangeAndDistribution",
+    "test:sdk/go/client_test.go::TestConsistentHash_Deterministic",
+]
+
+[[unit]]
+text = "Types (types.go):"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Type | Fields"
+by = ["exempt:label"]
+
+[[unit]]
+text = "User | ID string, Attributes map[string]interface{} (sent as assignment context)"
+by = ["test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping"]
+
+[[unit]]
+text = "EvalResult | Key string, Enabled bool, Config map[string]any (always nil: the evaluate endpoint returns config: null for every flag)"
+by = [
+    "test:sdk/go/client_test.go::TestClient_EvaluateFlag_RequestAndMapping",
+    "test:sdk/go/client_test.go::TestClient_EvaluateFlag_NonObjectConfig",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+    "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
+]
+
+[[unit]]
+text = "Assignment | ExperimentKey, UserID, VariantID, VariantName string, IsControl bool, Configuration map[string]any"
+by = ["test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping"]
+
+[[unit]]
+text = "TrackEvent | UserID, EventName (required), EventType (defaults to EventName), ExperimentKey, FeatureFlagKey, Value float64 (exp.Float64(v)), Properties (sent as metadata), Timestamp time.Time (ISO-8601 when non-zero)"
+by = [
+    "test:sdk/go/client_test.go::TestClient_Track_WithExperimentKey",
+    "test:sdk/go/client_test.go::TestClient_Track_WithFeatureFlagKeyAndEventType",
+]
+
+[[unit]]
+text = "APIError | StatusCode int, Message string, RetryAfter string (429); use errors.As"
+by = ["test:sdk/go/client_test.go::TestHTTPClient_Get_ServerError"]
+
+[[unit]]
+text = "Caching and failure behaviour"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Successful evaluations and assignments are cached per user + key for CacheTTL (default 5 min, LRU-bounded by CacheSize)."
+by = [
+    "test:sdk/go/client_test.go::TestClient_GetAssignment_Sticky_CacheHit",
+    "test:sdk/go/client_test.go::TestClient_EvaluateFlag_CacheHit",
+    "test:sdk/go/client_test.go::TestCache_LRUEviction",
+]
+
+[[unit]]
+text = "A cache hit makes no request; the second GetAssignment for the same user + experiment is served locally."
+by = [
+    "test:sdk/go/client_test.go::TestClient_GetAssignment_Sticky_CacheHit",
+    "test:sdk/go/client_test.go::TestClient_EvaluateFlag_CacheHit",
+]
+
+[[unit]]
+text = "Failures are never cached, so the next call retries."
+by = ["test:sdk/go/client_test.go::TestClient_EvaluateFlag_FailureNotCached"]
+
+[[unit]]
+text = "Network error, timeout, 401 (bad key), 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 429 (rate limited, APIError.RetryAfter): EvaluateFlag returns a disabled result plus the error; GetAssignment returns nil plus the error."
+by = [
+    "test:sdk/go/client_test.go::TestClient_EvaluateFlag_NotFound",
+    "test:sdk/go/client_test.go::TestClient_GetAssignment_NotFound",
+    "test:sdk/go/client_test.go::TestHTTPClient_Get_ServerError",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_unknown_key_returns_404",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_inactive_experiment_returns_404",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
+    "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
+    "test:backend/tests/integration/api/test_tracking_failure_messages.py::test_an_invalid_event_in_a_batch_names_the_field_only",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitMiddleware::test_returns_429_when_limit_exceeded",
+    "test:sdk/go/client_test.go::TestClient_EvaluateFlag_ContextCancelled",
+]
+
+[[unit]]
+text = "Non-2xx responses are APIError."
+by = [
+    "test:sdk/go/client_test.go::TestHTTPClient_Get_ServerError",
+    "test:sdk/go/client_test.go::TestClient_EvaluateFlag_NotFound",
+]
+
+[[unit]]
+text = "Track/TrackBatch never panic; the returned error is safe to ignore."
+by = ["test:sdk/go/client_test.go::TestClient_Track_NeverPanics"]
+
+[[unit]]
+text = "Tracking fan-out"
+by = ["exempt:label"]
+
+[[unit]]
+text = "With ExperimentKey and/or FeatureFlagKey set, Track sends one POST /api/v1/tracking/track."
+by = [
+    "test:sdk/go/client_test.go::TestClient_Track_WithExperimentKey",
+    "test:sdk/go/client_test.go::TestClient_Track_WithoutKey_FansOutToCachedEntries",
+    "test:sdk/go/client_test.go::TestClient_Track_WithoutKey_NothingCached_SendsNothing",
+]
+
+[[unit]]
+text = "Without a key it sends one POST /api/v1/tracking/batch containing one entry per experiment the user was assigned to through this client (experiment_key) plus one per flag evaluated for the user (feature_flag_key), taken from the cache."
+by = ["test:sdk/go/client_test.go::TestClient_Track_WithoutKey_FansOutToCachedEntries"]
+
+[[unit]]
+text = "Nothing cached → nothing is sent."
+by = ["test:sdk/go/client_test.go::TestClient_Track_WithoutKey_NothingCached_SendsNothing"]
+
+[[unit]]
+text = "This is what makes a single Track(\"purchase\") count as a conversion for every experiment the user is in."
+by = [
+    "test:sdk/go/client_test.go::TestClient_Track_WithoutKey_FansOutToCachedEntries",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestBatch::test_reports_success_and_failure_per_event",
+    "test:backend/tests/integration/services/test_conversion_event_matching.py::TestConversionEventFilter::test_matches_both_producer_shapes_and_excludes_exposures",
+]
+
+[[unit]]
+text = "Conversions are matched to metrics by event name."
+by = ["test:backend/tests/integration/services/test_conversion_event_matching.py::TestConversionEventFilter::test_matches_both_producer_shapes_and_excludes_exposures"]
+
+[[unit]]
+text = "Consistent hash (compatibility utility)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "exp.ConsistentHash(userID, key) computes MD5(\"{userID}:{key}\"), reads the first 4 bytes as a little-endian uint32 and divides by 2^32."
+by = ["test:sdk/go/client_test.go::TestConsistentHash_GoldenVectorFile"]
+
+[[unit]]
+text = "It is exported only so the cross-SDK golden vectors in tests/sdk-contract/ keep passing — nothing in the SDK buckets locally; the server decides."
+by = [
+    "test:sdk/go/client_test.go::TestConsistentHash_GoldenVectorFile",
+    "test:sdk/go/module_test.go::TestConsistentHash_NotCalledByTheClient",
+]
+
+[[unit]]
+text = "Backend endpoints used"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every request carries X-API-Key, Content-Type: application/json and Accept: application/json."
+by = [
+    "test:sdk/go/client_test.go::TestClient_RequestHeaders",
+    "test:sdk/go/client_test.go::TestHTTPClient_Headers",
+]
+
+[[unit]]
+text = "SDK call | Method and path | Body / query | Response used"
+by = ["exempt:label"]
+
+[[unit]]
+text = "EvaluateFlag | GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=… | — | {key, enabled, config}; off with reason: \"inactive\" when the flag exists but is not ACTIVE; 404 only for an unknown key"
+by = [
+    "test:sdk/go/client_test.go::TestClient_EvaluateFlag_RequestAndMapping",
+    "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
+]
+
+[[unit]]
+text = "GetAssignment | POST /api/v1/tracking/assign | {experiment_key, user_id, context?} | {experiment_key, user_id, variant_id, variant_name, is_control, configuration}; 404 when the experiment is not ACTIVE"
+by = [
+    "test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Track with a key | POST /api/v1/tracking/track | {event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?} | ignored"
+by = [
+    "test:sdk/go/client_test.go::TestClient_Track_WithExperimentKey",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Track without keys, TrackBatch | POST /api/v1/tracking/batch | {events: [<track body>, …]} (max 100 per request) | ignored"
+by = [
+    "test:sdk/go/client_test.go::TestClient_TrackBatch_ChunksAt100",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Contract smoke"
+by = ["exempt:label"]
+
+[[unit]]
+text = "It prints:"
+by = ["test:sdk/go/examples/contract_smoke/main_test.go::TestContractSmoke_AssignsThreeTimesEvaluatesTracksAndBatches"]
+
+[[unit]]
+text = "Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
+by = [
+    "test:sdk/go/examples/contract_smoke/main_test.go::TestContractSmoke_ReadsTheEnvironmentWithTheseDefaults",
+    "test:sdk/go/examples/contract_smoke/main_test.go::TestContractSmoke_AssignsThreeTimesEvaluatesTracksAndBatches",
+]
+
+[[unit]]
+text = "Seed the fixtures with backend/scripts/seed_sdk_contract.py; the repo-wide runner is python tests/sdk-contract/live/run_live_contract.py --sdk go --strict."
+by = [
+    "test:backend/tests/unit/scripts/test_run_live_contract.py::test_the_seed_creates_the_fixtures_the_runner_defaults_to",
+    "test:backend/tests/unit/scripts/test_run_live_contract.py::test_each_sdk_runs_its_own_contract_smoke",
+    "test:backend/tests/unit/scripts/test_run_live_contract.py::test_strict_fails_on_a_missing_toolchain_and_the_default_skips_it",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestContractSeed::test_the_seed_writes_a_plain_and_a_scoped_key",
+]
+
+[[unit]]
+text = "CI runs this SDK's contract smoke against a real API: go is in the sdks: list of the SDK Live Contract job in pr-qa-gate.yml."
+by = ["mechanism:sdk-live-contract-readme"]
+
+[[unit]]
+text = "Tests"
+by = ["exempt:label"]
+
+[[unit]]
+text = "cd sdk/go && go vet ./..."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "&& go test -race ./...: HTTP mocked with httptest"
+by = [
+    "test:sdk/go/client_test.go::TestHTTPClient_Get_Success",
+    "test:sdk/go/client_test.go::TestHTTPClient_Post_Success",
+    "test:sdk/go/client_test.go::TestClient_RequestHeaders",
+]
+
+[[unit]]
+text = "A longer walkthrough lives in examples/main.go (go run ./examples)."
+by = ["test:sdk/go/examples/main_test.go::TestWalkthrough_RunsAgainstTheBackend"]

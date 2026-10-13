@@ -305,6 +305,7 @@ by = ["exempt:label"]
 [[unit]]
 text = "The JavaScript SDK is on npm (npm install @getexperimently/js-sdk, 0.1.0, beta) and the Python SDK is on PyPI (pip install experimently, 0.1.0, beta)."
 by = [
+    "mechanism:sdk-doc-versions",
     "journey:sdk-javascript#quick-start-user-on",
     "journey:sdk-python#quick-start-user-on",
 ]

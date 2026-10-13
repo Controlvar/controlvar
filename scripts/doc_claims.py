@@ -123,8 +123,14 @@ Every in-scope document (``tests/acceptance/docs/inventory.toml``) that has an
 extractor has a registry, or is in ``CLAIMS_PENDING`` (the rollout: it only
 shrinks) or ``CLAIMS_DEFERRED`` (the mobile and not-yet-published SDK pages,
 #1107; it moves only with a founder decision), never two of these. A document
-a journey holds (no extractor) has none. This file reads Markdown only; a
-surface stays pending until its extractor is added here.
+a journey holds (no extractor) has none. This file reads Markdown pages and
+two of the named surfaces (``EXTRACTORS``): ``text``, a file read whole
+(``charts/experimently/templates/NOTES.txt``), and ``leading-hash-comments``,
+the comment block at the top of a file after a ``#!`` line, each line's ``#``
+and the white space around the rest removed (the two ``deploy/compose``
+headers). That is the inventory test's rule for both. The splitter then reads
+the extracted text like a page. A surface with another extractor stays pending
+until its extractor is added here.
 
 THE GENERATOR (``generate``; a developer tool, its input is private)
 
@@ -206,6 +212,10 @@ ENROLMENT = "scripts/doc_examples.toml"
 #: Doc Examples' own fence and tag parser, from this checkout: one parser.
 DOC_EXAMPLES = pathlib.Path(__file__).resolve().parent / "doc_examples.py"
 MARKDOWN = "markdown"
+#: The named surfaces this file reads, by the inventory's extractor name: a
+#: file read whole, and the comment block at the top of a file.
+TEXT = "text"
+HEADER = "leading-hash-comments"
 HASH_LENGTH = 12
 
 
@@ -496,6 +506,42 @@ def unit_lines(text: str) -> List[Tuple[Unit, int, int]]:
     return found
 
 
+def leading_hash_comments(text: str) -> str:
+    """The comment block at the top of *text*, after a ``#!`` line: each line
+    up to the first that does not start with ``#``, with its ``#`` and the white
+    space around the rest removed (test_docs_inventory.py's rule). The ``#!``
+    line is read as a blank line, so a unit keeps its line in the file."""
+    lines = text.replace("\r\n", "\n").split("\n")
+    block: List[str] = []
+    if lines and lines[0].startswith("#!"):
+        block.append("")
+        lines = lines[1:]
+    for line in lines:
+        if not line.startswith("#"):
+            break
+        block.append(line[1:].strip())
+    return "\n".join(block) + "\n"
+
+
+#: What each extractor gives the splitter, from the file's text.
+EXTRACTORS: Dict[str, Any] = {
+    MARKDOWN: lambda text: text,
+    TEXT: lambda text: text,
+    HEADER: leading_hash_comments,
+}
+
+
+def extracted(document: str, extractor: Optional[str], text: str) -> str:
+    """The text of *document* the splitter reads; refused for an extractor
+    this file does not have."""
+    if extractor not in EXTRACTORS:
+        raise SplitError(
+            f"scripts/doc_claims.py has no {extractor!r} extractor yet; {document}"
+            " stays in CLAIMS_PENDING until it has"
+        )
+    return EXTRACTORS[extractor](text)
+
+
 def unit_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:HASH_LENGTH]
 
@@ -585,6 +631,8 @@ class Mechanism:
 
 _VERSION = r"\(?v?[0-9]{1,4}(?:\.[0-9]{1,4}){1,2}"
 _TARBALL = r"getexperimently-[A-Za-z0-9-]{1,60}-[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}\.tgz"
+#: "0.1.0 is a beta release.", after the sentence naming the registry.
+_BETA = r"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4} is a beta release\.$"
 
 
 MECHANISMS: Dict[str, Mechanism] = {
@@ -604,7 +652,9 @@ MECHANISMS: Dict[str, Mechanism] = {
         "::test_every_claim_about_what_the_platform_does_is_on_the_list",
         quotes=True,
     ),
-    # A quoted package version (a bare `experimently` only on the Python page).
+    # A quoted package version (a bare `experimently` only on the Python page),
+    # and the version after the sentence naming the registry, in the SDK
+    # pages, the guide, the FAQ and the READMEs the packages carry.
     "sdk-doc-versions": Mechanism(
         "backend/tests/unit/docs/test_sdk_doc_versions.py"
         "::test_quoted_sdk_versions_match_the_manifests",
@@ -617,6 +667,20 @@ MECHANISMS: Dict[str, Mechanism] = {
             ("docs/sdk/*.md", _TARBALL),
             ("docs/sdk-guide.md", _TARBALL),
             ("docs/sdk/python.md", r"(?<![\w@/-])experimently " + _VERSION),
+            # The sentence before it names the package: the test reads the two.
+            ("docs/sdk/python.md", _BETA),
+            ("docs/sdk/javascript.md", _BETA),
+            ("sdk/python/README.md", _BETA),
+            ("sdk/js/README.md", _BETA),
+            (
+                "docs/sdk-guide.md",
+                r" package is on (?:PyPI|npm) " + _VERSION + r", beta\):$",
+            ),
+            (
+                "docs/getting-started/faq.md",
+                r"\((?:npm|pip) install (?:@getexperimently/[A-Za-z0-9_-]{1,60}"
+                r"|experimently), [0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}, beta\)",
+            ),
         ),
     ),
     # The one sentence per SDK page about the live contract job.
@@ -651,6 +715,74 @@ MECHANISMS: Dict[str, Mechanism] = {
             (
                 "docs/getting-started/quick-start.md",
                 r"user-2 is inside the 10%, user-123 is not",
+            ),
+        ),
+    ),
+    # The signature identity the release page verifies with (its IDENTITY=
+    # line): the release paths it accepts, and every other signer it refuses.
+    "release-identity-accepts": Mechanism(
+        "backend/tests/unit/docs/test_release_identity_regexp.py"
+        "::test_the_identity_accepts_every_release_path",
+        holds=(
+            (
+                "docs/self-hosting/releases.md",
+                r"^It accepts release\.yml run from main, which is how release-please"
+                r" cuts a release and how gh workflow run release\.yml -f tag=vX\.Y\.Z"
+                r" runs one again, and run from a v tag, which is how a tag pushed by"
+                r" hand starts it\.$",
+            ),
+        ),
+    ),
+    "release-identity-refuses": Mechanism(
+        "backend/tests/unit/docs/test_release_identity_regexp.py"
+        "::test_the_identity_refuses_anything_else",
+        holds=(
+            (
+                "docs/self-hosting/releases.md",
+                r"^IDENTITY names one workflow, this repository's release\.yml\.$"
+                r"|^A signature made by any other workflow, repository or branch fails\.$",
+            ),
+        ),
+    ),
+    # The same sentence in an SDK's README.
+    "sdk-live-contract-readme": Mechanism(
+        "backend/tests/unit/docs/test_sdk_live_contract_sentence.py"
+        "::test_every_sdk_readme_agrees_with_the_gate",
+        holds=(
+            (
+                "sdk/*/README.md",
+                r"^CI (?:runs|does not run) this SDK's contract smoke against a real"
+                r" API: [a-z0-9-]{1,40} (?:is|is not) in the sdks: list of the SDK Live"
+                r" Contract job in pr-qa-gate\.yml\.$",
+            ),
+        ),
+    ),
+    # The SDK guide's status table, and the two sentences about what CI runs.
+    "sdk-guide-status": Mechanism(
+        "backend/tests/unit/docs/test_sdk_guide_status.py"
+        "::test_the_status_table_agrees_with_ci",
+        holds=(
+            (
+                "docs/sdk-guide.md",
+                r"^[^|]{1,60} \| sdk/[a-z-]{1,40} \| [^|]{1,40} \| [^|]{1,300} \| [^|]{1,300}$",
+            ),
+            (
+                "docs/sdk-guide.md",
+                r'^"Verified live" means the SDK\'s contract_smoke entry point passed',
+            ),
+            (
+                "docs/sdk-guide.md",
+                r'^Rows marked "not yet" have a contract_smoke entry point',
+            ),
+        ),
+    ),
+    # The Python README's quick start, run as written against a fake API.
+    "python-readme-quick-start": Mechanism(
+        "sdk/python/tests/test_readme.py::test_the_readme_quick_start_runs_as_written",
+        holds=(
+            (
+                "sdk/python/README.md",
+                r"^Set EXPERIMENTLY_API_KEY to an API key, then run the block as it is",
             ),
         ),
     ),
@@ -699,13 +831,7 @@ CLAIMS_DEFERRED: Tuple[str, ...] = (
 #: In-scope documents not registered yet. The rollout: it only shrinks, and a
 #: document leaves it in the pull request that registers it.
 CLAIMS_PENDING: Tuple[str, ...] = (
-    "charts/experimently/templates/NOTES.txt",
-    "demo/DEMO_GUIDE.md",
-    "demo/shoplab/README.md",
-    "demo/streampulse/README.md",
     "demo/streampulse/simulator/README.md",
-    "deploy/compose/compose.yml#header",
-    "deploy/compose/generate-env.sh#header",
     "docs/Enhanced_Rules_Engine_Reference.md",
     "docs/api/README.md",
     "docs/api/alerting.md",
@@ -754,9 +880,6 @@ CLAIMS_PENDING: Tuple[str, ...] = (
     "docs/feature-flags/create.md",
     "docs/feature-flags/rollouts.md",
     "docs/feature-flags/safety.md",
-    "docs/getting-started/docker-compose-file.md",
-    "docs/getting-started/docker-guide.md",
-    "docs/getting-started/environment-setup.md",
     "docs/guides/assign-customer-list.md",
     "docs/guides/dashboard-and-api.md",
     "docs/guides/experiment-wizard.md",
@@ -774,23 +897,16 @@ CLAIMS_PENDING: Tuple[str, ...] = (
     "docs/llm-evaluation/overview.md",
     "docs/llm-evaluation/quickstart.md",
     "docs/logging_standards.md",
-    "docs/mcp-server.md",
     "docs/performance/load-testing.md",
     "docs/rbac/README.md",
-    "docs/sdk-guide.md",
-    "docs/sdk/go.md",
-    "docs/sdk/javascript.md",
     "docs/sdk/local-evaluation.md",
-    "docs/sdk/python.md",
     "docs/security/README.md",
     "docs/security/api-keys.md",
     "docs/security/hardening-changes.md",
     "docs/security/incident-response.md",
     "docs/self-hosting/cdk.md",
-    "docs/self-hosting/kubernetes.md",
     "docs/self-hosting/migrations.md",
     "docs/self-hosting/monitoring.md",
-    "docs/self-hosting/releases.md",
     "docs/statistics/fdr-correction.md",
     "docs/statistics/post-stratification.md",
     "docs/statistics/power-analysis.md",
@@ -798,10 +914,6 @@ CLAIMS_PENDING: Tuple[str, ...] = (
     "docs/workspaces/overview.md",
     "frontend/src/pages/docs/index.tsx#desc",
     "infrastructure/cdk/README.md",
-    "sdk/go/README.md",
-    "sdk/js/README.md",
-    "sdk/openfeature-python/README.md",
-    "sdk/python/README.md",
 )
 
 
@@ -954,6 +1066,15 @@ class Context:
                 else None
             )
         return self._text[rel]
+
+    def document_text(self, document: "Document") -> Optional[str]:
+        """What the splitter reads of *document*: its file, through its
+        extractor (a surface's file is the path before ``#``); None when the
+        file is missing. SplitError for an extractor this file does not have."""
+        text = self.text(document.path.partition("#")[0])
+        if text is None:
+            return None
+        return extracted(document.path, document.extractor, text)
 
     def tree(self, rel: str) -> Any:
         """The parsed module, None when the file is missing, or the error text."""
@@ -1538,15 +1659,15 @@ def _registry_problems(
         problems.append(
             f"{rel}: document = {document.path!r}, the path it is the registry of"
         )
-    if document.extractor != MARKDOWN:
+    if document.extractor not in EXTRACTORS:
         return problems + [
             f"{rel}: scripts/doc_claims.py has no {document.extractor!r} extractor yet;"
             f" {document.path} stays in CLAIMS_PENDING until it has"
         ], []
-    text = ctx.text(document.path)
-    if text is None:
-        return problems + [f"{rel}: {document.path} does not exist"], []
     try:
+        text = ctx.document_text(document)
+        if text is None:
+            return problems + [f"{rel}: {document.path} does not exist"], []
         on_page = units(text)
     except SplitError as error:
         return problems + [f"{document.path}: {error}"], []
@@ -2461,7 +2582,7 @@ def sync_lines(root: pathlib.Path, document: str) -> Tuple[List[str], int]:
     rel = registry_path(document)
     try:
         data = tomllib.loads((root / rel).read_text(encoding="utf-8"))
-        page = units((root / document).read_text(encoding="utf-8"))
+        page = units(read_document(root, document))
     except (OSError, tomllib.TOMLDecodeError, SplitError) as error:
         return [f"{document}: {error}"], 2
     entries = {
@@ -2558,7 +2679,10 @@ def generate_refusal(
     if path not in documents:
         return f"not an in-scope document ({INVENTORY})"
     if documents[path].extractor != MARKDOWN:
-        return "scripts/doc_claims.py has no extractor for it yet"
+        return (
+            "generate maps the audit to Markdown pages only; register a surface"
+            " by hand (units prints its skeleton)"
+        )
     if path in CLAIMS_DEFERRED:
         return "in CLAIMS_DEFERRED (#1107): it has no registry"
     if (out / registry_path(path)).is_file() and not replace:
@@ -2710,6 +2834,19 @@ def report_lines(counts: Mapping[str, Any]) -> List[str]:
     return lines
 
 
+def read_document(root: pathlib.Path, document: str) -> str:
+    """The text the splitter reads of *document*, a page or a surface, through
+    the extractor the inventory names for it (Markdown when it names none)."""
+    try:
+        documents, _ = inventory_documents(root)
+    except (OSError, tomllib.TOMLDecodeError):
+        documents = {}
+    found = documents.get(document)
+    extractor = found.extractor if found is not None else MARKDOWN
+    raw = (root / document.partition("#")[0]).read_text(encoding="utf-8")
+    return extracted(document, extractor, raw)
+
+
 def skeleton(document: str, text: str) -> str:
     """A registry for *document* with every unit and no targets, to fill in."""
     counted = collections.Counter(u.text for u in units(text))
@@ -2771,12 +2908,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         targets = list(args.documents)
         if args.all:
             documents, _ = inventory_documents(ROOT)
-            targets = sorted(p for p, d in documents.items() if d.extractor == MARKDOWN)
+            targets = sorted(
+                p for p, d in documents.items() if d.extractor in EXTRACTORS
+            )
         for document in targets:
             try:
                 sys.stdout.write(
-                    skeleton(document, (ROOT / document).read_text(encoding="utf-8"))
-                    + "\n"
+                    skeleton(document, read_document(ROOT, document)) + "\n"
                 )
             except (OSError, SplitError) as error:
                 print(f"{document}: {error}", file=sys.stderr)
