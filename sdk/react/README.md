@@ -6,13 +6,8 @@ answers per user + key and never buckets locally.
 
 ## Install
 
-**Not yet published.** `@getexperimently/react-sdk` is not on npm yet, so the command below fails
-today. Build it from a clone of this repository and install the packed tarball instead (the
-blocks below).
-
-```bash
-npm install @getexperimently/react-sdk
-```
+**Not yet published.** `@getexperimently/react-sdk` is not on npm, so build it from source in a
+clone of this repository and install the packed tarball (the blocks below).
 
 Its peer dependencies are `react` >= 17 and `react-dom` >= 17.
 
@@ -137,7 +132,7 @@ HOC that injects `flagEvaluation: FeatureFlagEvaluation` into `Component`.
 `ServerClient` (Node/SSR) — same requests, `(key, user)` argument order, **never throws**:
 
 ```ts
-import { ServerClient } from '@getexperimently/react-sdk/ssr';
+import { ServerClient } from '@getexperimently/react-sdk';
 
 export async function getServerSideProps({ req }) {
   const client = new ServerClient({ apiKey: process.env.EXPERIMENTLY_API_KEY!, baseUrl: process.env.EXPERIMENTLY_API_URL! });

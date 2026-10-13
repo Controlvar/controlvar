@@ -8,20 +8,18 @@ Flag evaluation and experiment assignment are decided **by the server**: every c
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key for a TTL. Nothing is bucketed on device.
 
-> **Beta: flag targeting on user attributes does not work in this SDK yet.** Flag
-> evaluation sends only the user id (`GET /api/v1/feature-flags/evaluate/{key}?user_id=…`),
-> not the user's attributes, so a flag targeting rule on an attribute (app version, OS,
-> country, plan) never matches here, and the flag's rollout percentage alone decides. Experiment
-> assignment is not affected: `getAssignment`, with `user.attributes`, sends the attributes as `context`, so experiment
-> targeting works. Until this is fixed ([#438](https://github.com/getexperimently/experimently/issues/438)), an app that needs attribute targeting on a
-> flag can call the evaluate endpoint itself with a `context` query parameter (a URL-encoded
-> JSON object of the attributes).
+> **Flag evaluation sends only the user id.** `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`
+> carries none of the user's attributes, so the server evaluates a flag's targeting rules against
+> an empty context. Experiment assignment sends them: `getAssignment`, with `user.attributes`, sends the attributes as
+> `context`. To evaluate a flag with attributes, call the evaluate endpoint with a `context`
+> query parameter (a URL-encoded JSON object of the attributes).
 
 Full reference: [`docs/sdk/ios.md`](../../docs/sdk/ios.md).
 
 ## Installation
 
-The package manifest lives in `sdk/ios` (not the repository root), so add it as a local package:
+**Not yet published.** Build it from source: the package manifest lives in `sdk/ios` (not the
+repository root) of a clone of this repository, so add it as a local package:
 
 ```swift
 // Package.swift
@@ -95,7 +93,7 @@ let delivered = await client.trackWithStatus(TrackEvent(userId: user.id, eventNa
 | `trackWithStatus(_ event: TrackEvent) async` | `Bool` | `false` when a request failed |
 | `trackBatch(_ events: [TrackEvent]) async` | `Bool` | `false` when a chunk failed; 100 events per request |
 | `getAssignments(for userId: String)` / `getEvaluatedFlags(for userId: String)` | `[Assignment]` / `[String]` | cached, unexpired entries only |
-| `clearCache()` / `clearOfflineCache()` / `close()` | `Void` | memory caches / UserDefaults / caches + in-flight tasks |
+| `clearCache()` / `clearOfflineCache()` / `close()` | `Void` | memory caches / UserDefaults / caches, plus `cancel()` on in-flight tasks (a request already sent still completes) |
 | `refreshFlags() async throws` | `Void` | deprecated no-op |
 | `FeatureFlagEvaluator.hashUser(_:flagKey:)` | `Double` in `[0, 1)` | pure (parity utility) |
 
