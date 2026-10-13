@@ -16,8 +16,9 @@ pinned rather than reviewed once:
 * the journeys job installs the runner's pinned requirements and Chromium,
   checks out the deployed site's source by the commit
   ``docs_journeys_report.py deployed`` names, and runs the runner's own pytest
-  root with its run directory, that source, the ref it was taken from (the
-  crawls say which they compared the site with) and the video switch, on in
+  root with its run directory, that source, the ref and commit it was taken
+  from (the crawls say which they compared the site with, and verdicts.json
+  records both for the release's evidence) and the video switch, on in
   every run that can count toward the production-deploy checklist (scheduled,
   or on ``main`` or a release tag) and in a dispatch that asks; every upload is
   of the run directory or a file in it, kept 14 days (90 on a release tag);
@@ -90,6 +91,7 @@ WALK_ENV = {
     "DOCS_JOURNEY_RUN_DIR": RUN_DIR,
     "DOCS_JOURNEY_PUBLISHED_SOURCE": SOURCE,
     "DOCS_JOURNEY_PUBLISHED_REF": "${{ steps.source.outputs.ref }}",
+    "DOCS_JOURNEY_PUBLISHED_SHA": "${{ steps.source.outputs.sha }}",
     "DOCS_JOURNEY_RECORD_VIDEO": "${{ " + RECORDS + " && '1' || '0' }}",
     "PYTHONDONTWRITEBYTECODE": "1",
 }
@@ -132,6 +134,7 @@ SOURCE_LINES = [
     'python3 scripts/docs_journeys_report.py deployed --out "$RUNNER_TEMP/deployed"',
     'SHA="$(head -n 1 "$RUNNER_TEMP/deployed/sha")"',
     r'''printf 'ref=%s\n' "$(head -n 1 "$RUNNER_TEMP/deployed/ref")" >> "$GITHUB_OUTPUT"''',
+    r'''printf 'sha=%s\n' "$SHA" >> "$GITHUB_OUTPUT"''',
     'git fetch --no-tags --depth=1 origin "$SHA"',
     'mkdir -p "$RUNNER_TEMP/published-source"',
     'git archive "$SHA" mkdocs.yml docs | tar -x -C "$RUNNER_TEMP/published-source"',

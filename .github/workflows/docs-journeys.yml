@@ -27,7 +27,9 @@ name: Docs journeys
 # journeys job first asks which commit the live site was built from (the
 # newest successful deployment to `github-pages`) and gives the runner that
 # commit's mkdocs.yml and docs/ to compare the site with
-# (scripts/docs_journeys_report.py `deployed`).
+# (scripts/docs_journeys_report.py `deployed`). Its verdicts.json records that
+# deployment's ref and commit as `published`, which the release's evidence
+# compares with the tag (scripts/rc_evidence.py).
 #
 # Everything the run writes (results.jsonl, a report per guide, summary.md,
 # screenshots, ARIA snapshots, videos, walkthroughs) goes to one run directory
@@ -159,6 +161,7 @@ jobs:
           python3 scripts/docs_journeys_report.py deployed --out "$RUNNER_TEMP/deployed"
           SHA="$(head -n 1 "$RUNNER_TEMP/deployed/sha")"
           printf 'ref=%s\n' "$(head -n 1 "$RUNNER_TEMP/deployed/ref")" >> "$GITHUB_OUTPUT"
+          printf 'sha=%s\n' "$SHA" >> "$GITHUB_OUTPUT"
           git fetch --no-tags --depth=1 origin "$SHA"
           mkdir -p "$RUNNER_TEMP/published-source"
           git archive "$SHA" mkdocs.yml docs | tar -x -C "$RUNNER_TEMP/published-source"
@@ -168,6 +171,7 @@ jobs:
           DOCS_JOURNEY_RUN_DIR: ${{ runner.temp }}/docs-journeys-run
           DOCS_JOURNEY_PUBLISHED_SOURCE: ${{ runner.temp }}/published-source
           DOCS_JOURNEY_PUBLISHED_REF: ${{ steps.source.outputs.ref }}
+          DOCS_JOURNEY_PUBLISHED_SHA: ${{ steps.source.outputs.sha }}
           DOCS_JOURNEY_RECORD_VIDEO: ${{ (github.event_name == 'schedule' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || inputs.record_video) && '1' || '0' }}
           PYTHONDONTWRITEBYTECODE: '1'
         run: python -m pytest -c tests/acceptance/docs/pytest.ini tests/acceptance/docs

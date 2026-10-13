@@ -2052,6 +2052,29 @@ def test_the_verdicts_record_carries_each_header_template_and_its_values(tmp_pat
     assert local["journeys"]["sample"]["values"] == {}
 
 
+def test_the_verdicts_record_names_the_published_site_it_read(tmp_path):
+    """verdicts.json says which ref and commit the published site was built
+    from, as the workflow named them; scripts/rc_evidence.py compares them with
+    the release tag. A value that is not a ref or a commit is recorded empty."""
+    run = _failed_run(tmp_path)
+    info = report.RunInfo("2026-10-06", SHA, LINK)
+    named = report.published_source(
+        {"DOCS_JOURNEY_PUBLISHED_REF": "v0.30.0", "DOCS_JOURNEY_PUBLISHED_SHA": SHA}
+    )
+    assert report.verdicts_record([run], info, named)["published"] == {
+        "ref": "v0.30.0",
+        "sha": SHA,
+    }
+    assert report.verdicts_record([run], info)["published"] == {"ref": "", "sha": ""}
+    odd = report.published_source(
+        {
+            "DOCS_JOURNEY_PUBLISHED_REF": "v0.30.0 main",
+            "DOCS_JOURNEY_PUBLISHED_SHA": "abc",
+        }
+    )
+    assert odd == {"ref": "", "sha": ""}
+
+
 def test_the_real_inventory_maps_every_flow_and_names_where_each_journey_waits():
     inventory = loader.context_for(REPO_ROOT).inventory
     rows, waiting = report.flow_rows(inventory, {})
