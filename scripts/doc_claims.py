@@ -879,7 +879,6 @@ CLAIMS_PENDING: Tuple[str, ...] = (
     "demo/streampulse/simulator/README.md",
     "docs/Enhanced_Rules_Engine_Reference.md",
     "docs/README.md",
-    "docs/architecture/technical-guide.md",
     "docs/auth/cognito-auth-testing.md",
     "docs/cognito_integration.md",
     "docs/deployment/README.md",
