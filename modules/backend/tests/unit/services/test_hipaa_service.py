@@ -825,6 +825,21 @@ class TestGetHipaaStatus:
             result = svc.get_hipaa_status(db=mock_db)
             assert result["overall_hipaa_ready"] is True
 
+    def test_overall_hipaa_ready_false_with_no_allowed_regions(self, svc, mock_db):
+        """An active BAA and a PHI key are not enough with HIPAA_ALLOWED_REGIONS empty."""
+        self._setup_status_query(mock_db, active_baa_count=1)
+        with patch(
+            "modules.backend.app.services.hipaa_service.settings"
+        ) as mock_settings:
+            mock_settings.PHI_ENCRYPTION_KEY = "valid_key"
+            mock_settings.HIPAA_ALLOWED_REGIONS = []
+
+            result = svc.get_hipaa_status(db=mock_db)
+            assert result["has_active_baa"] is True
+            assert result["phi_encryption_configured"] is True
+            assert result["data_residency_configured"] is False
+            assert result["overall_hipaa_ready"] is False
+
     def test_audit_logging_always_enabled(self, svc, mock_db):
         """audit_logging_enabled is always True in the HIPAA service."""
         self._setup_status_query(mock_db, active_baa_count=0)

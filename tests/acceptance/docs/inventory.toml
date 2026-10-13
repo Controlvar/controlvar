@@ -290,7 +290,7 @@ reason = "its blocks run on a stack in Doc Examples"
 
 [pages."api/auth.md"]
 class = "exec"
-reason = "its blocks run on a stack in Doc Examples; the skipped one needs a Cognito user pool"
+reason = "its blocks run on a stack in Doc Examples"
 
 [pages."api/endpoints.md"]
 class = "exec"
@@ -318,7 +318,7 @@ reason = "runs an analysis on tables in your own Snowflake or BigQuery warehouse
 
 [pages."integrations/salesforce.md"]
 class = "exec"
-reason = "its setup and webhook examples run on a full-profile stack in Doc Examples; the callout set up in Salesforce and the credentials check need a Salesforce org and are not run"
+reason = "its setup and webhook examples run on a full-profile stack in Doc Examples; the callout set up in Salesforce needs a Salesforce org and is not run"
 
 [pages."integrations/github.md"]
 class = "exec"
@@ -478,6 +478,10 @@ reason = "logging conventions; no steps to follow"
 class = "reference"
 reason = "a record of hardening changes; no steps to follow"
 
+[pages."security/model.md"]
+class = "reference"
+reason = "what the API does to protect a deployment, each point held by a test; no steps to follow"
+
 [pages."security/incident-response.md"]
 class = "reference"
 reason = "what to do after an incident on your deployment; no steps to run"
@@ -574,7 +578,7 @@ reason = "how the API wires its dependencies; no steps to follow"
 
 [pages."development/workflow-explanation.md"]
 class = "reference"
-reason = "what each CI workflow does; no steps to follow"
+reason = "the required checks, and how to run two of them; no reader flow"
 
 [pages."development/database/migrations.md"]
 class = "exec"
@@ -582,7 +586,7 @@ reason = "its Alembic commands run in Doc Examples from a development virtual en
 
 [pages."development/database/usage.md"]
 class = "reference"
-reason = "code examples for the data layer; no steps to run"
+reason = "where the data layer's code is; no steps to run"
 
 [pages."development/database/backup.md"]
 class = "aws"

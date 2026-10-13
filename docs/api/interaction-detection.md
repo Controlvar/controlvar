@@ -21,9 +21,7 @@ across pairs.
 
 An interaction does not mean either experiment is wrong. Each experiment's own result is
 still a valid average over the other's current split; it may change once the other
-experiment ships one of its variants. Most pairs do not interact, and large interactions
-are rare: see Microsoft's
-[A/B Interactions: A Call to Relax](https://www.microsoft.com/en-us/research/group/experimentation-platform-exp/articles/a-b-interactions-a-call-to-relax/).
+experiment ships one of its variants.
 
 ---
 
@@ -54,8 +52,7 @@ curl -s localhost:8000/api/v1/auth/me -H "Authorization: Bearer $TOKEN" | jq .ro
 <!-- expect: "ADMIN" -->
 
 It prints `"ADMIN"`. The demo data's running experiments share no users, so this creates
-two experiments that will, and starts them. The collection URL ends with a slash,
-`/api/v1/experiments/`; without it the API answers `307`, which `curl` doesn't follow.
+two experiments that will, and starts them.
 This saves their ids in `$PRICING_ID` and `$ONBOARDING_ID`:
 
 ```{.bash exec}
@@ -141,7 +138,7 @@ The scan measures overlap only. Each entry in `analyses` has `overlap_coefficien
 always `null`, because the scan does not test interactions. To test one pair, call the
 pair route.
 
-The scan ranks pairs by Jaccard overlap, so a small experiment that sits entirely inside a
+The scan lists only pairs whose Jaccard overlap is above 0.3, so a small experiment that sits entirely inside a
 large one has a low overlap and is not listed. To check one experiment against another,
 call the pair route: it answers for any two experiments, however little they overlap.
 
@@ -300,12 +297,7 @@ Because the lift is measured in percentage points, **a constant relative lift is
 interaction.** A treatment that lifts conversion by 50% everywhere, 10% → 15% in one
 variant of B and 20% → 30% in the other, is +5 points in one and +10 in the other. With
 2,000 users in each of the four groups that gives X² = 8.46 and p = 0.0036: an
-interaction. `relative_lift` (`effect / control_rate`) is in each arm for reading; the
-test does not use it.
-
-With two variants in each experiment and one event tagged with both experiments, A's row
-and B's row are the same test and give the same p-value. Tag an outcome event with every
-experiment that measures it (here each signup is tagged with one).
+interaction.
 
 ### The decision
 
@@ -317,8 +309,6 @@ experiment that measures it (here each signup is tagged with one).
   1 − `confidence_level`, the experiment's stored level.
 - `has_interaction` is `true` when any row is significant, `false` only when every row
   was tested and none is, and `null` otherwise.
-
-There is no correction across the two experiments, across pairs, or across metrics.
 
 ### Rows that are not tested
 
@@ -339,29 +329,6 @@ wins, in this order:
 A reason that applies to the whole experiment gives one row with `variant_id` `null`.
 Below those minimums the test's false-positive rate is not what its p-value says on
 uneven splits (95/5, 99/1), so the row is not tested.
-
-### How much the test can see
-
-The test needs many users. The share of simulated pairs in which it finds an interaction
-(power) at a 95% confidence level, with no correction, for two experiments of two variants
-each. A's treatment lifts conversion by 20% of the base rate (1 percentage point at 5%)
-either only in B's control ("only in B's control") or in B's control while lowering it by
-as much in B's treatment ("opposite"). The users column is the number in the smallest of
-the four combinations; 20,000 simulated pairs per line (seed 2192027):
-
-| Split of each experiment | Pattern | Base rate | 1,000 users | 5,000 users | 25,000 users |
-|---|---|---|---|---|---|
-| 50/50 | only in B's control | 5% | 0.11 | 0.35 | 0.94 |
-| 50/50 | opposite | 5% | 0.31 | 0.91 | 1.00 |
-| 50/50 | only in B's control | 20% | 0.34 | 0.93 | 1.00 |
-| 50/50 | opposite | 20% | 0.89 | 1.00 | 1.00 |
-| 95/5 | only in B's control | 5% | 0.24 | 0.83 | 1.00 |
-| 95/5 | opposite | 5% | 0.76 | 1.00 | 1.00 |
-| 95/5 | only in B's control | 20% | 0.82 | 1.00 | 1.00 |
-
-So at a 5% base rate an interaction the size of A's own lift needs about 25,000 users in
-every combination to be found reliably, and a "no interaction found" with fewer is weak
-evidence. The 95/5 lines have more users in total for the same smallest combination.
 
 ### When an interaction is found
 
@@ -416,13 +383,6 @@ The pair route also reports `shared_users`, and `share_of_a` and `share_of_b`: t
 fraction of each experiment's users who are also in the other. For a small experiment
 inside a large one the overlap is low and `share_of_a` is 1.
 
-| Value | Interpretation |
-|-------|---------------|
-| 0.0–0.1 | Negligible overlap — no action needed |
-| 0.1–0.3 | Low overlap — monitor |
-| 0.3–0.6 | Moderate overlap — run the pair route |
-| 0.6–1.0 | High overlap — run the pair route |
-
 `has_significant_overlap` means an overlap above 0.3, not a statistical test.
 
 ---
@@ -447,13 +407,3 @@ they interact. The pair route does not return it.
 | Scan and pair analysis | ADMIN, DEVELOPER or ANALYST |
 
 A VIEWER gets `403` on every interaction endpoint.
-
----
-
-## Recommended workflow
-
-1. Run `/scan` weekly or when launching a new experiment.
-2. For a pair with a high overlap, or any two experiments you suspect, call the pair
-   route, and act on `has_interaction` and the rows, not on the overlap.
-3. Sharing users is normal. Use [Mutual Exclusion Groups](./mutual-exclusion-groups.md)
-   only for experiments that change the same thing, so that no user sees both.

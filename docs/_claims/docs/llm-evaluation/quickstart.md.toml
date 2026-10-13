@@ -1,0 +1,233 @@
+# What verifies each unit of docs/llm-evaluation/quickstart.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/llm-evaluation/quickstart.md"
+
+[[unit]]
+text = "LLM/AI Model Evaluation — Quick Start"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This guide creates an experiment that compares two models on a customer support task: claude-3-5-sonnet-20241022 is the control and gpt-4o the treatment."
+by = ["docex:docs/llm-evaluation/quickstart.md#\"name\": \"Customer Support: Claude vs GPT-4o\""]
+
+[[unit]]
+text = "Run the commands in one terminal, in order, against the stack from the Quick Start."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Steps 3 to 5 need a provider key."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "They call the models, so the API needs a key for each provider your variants use."
+by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestGeminiComplete::test_missing_key_is_the_documented_502"]
+
+[[unit]]
+text = "Steps 1, 2 and 6 need no key, and only they are commands to run here."
+by = ["docex:docs/llm-evaluation/quickstart.md#\"total_evaluations\": 0"]
+
+[[unit]]
+text = "1. Create an Experiment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in first."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Creating and starting an experiment takes the DEVELOPER or ADMIN role:"
+by = [
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestCreateLLMExperiment::test_viewer_cannot_create_experiment",
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestCreateLLMExperiment::test_analyst_cannot_create_experiment",
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestStartPauseLLMExperiment::test_viewer_cannot_start",
+]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Create the experiment, with one variant per model."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The collection URL ends with a slash, /api/v1/llm-experiments/; without it the API answers 307, which curl doesn't follow."
+by = ["test:backend/tests/unit/middleware/test_relative_slash_redirect.py"]
+
+[[unit]]
+text = "This saves the experiment's id in $EXPERIMENT_ID:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The API answers 201 Created:"
+by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestCreateLLMExperiment::test_admin_can_create_experiment"]
+
+[[unit]]
+text = "The response also carries the experiment's id, description, task_type, evaluation_metric, and each variant's full settings and id."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "2. Start the Experiment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ACTIVE\"."
+by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestStartPauseLLMExperiment::test_start_draft_experiment"]
+count = 2
+
+[[unit]]
+text = "3. Route User Requests Through the Experiment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For each incoming customer message, call the /complete endpoint."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform assigns the user to a variant deterministically (the same user always gets the same model), renders the variant's prompt template with input_variables, and calls the model."
+by = [
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestLLMComplete::test_complete_returns_response",
+    "test:backend/tests/unit/services/test_llm_experiment_service.py::TestVariantAssignment::test_same_user_always_same_variant",
+    "test:backend/tests/unit/services/test_llm_experiment_service.py::TestPromptRendering::test_render_with_single_variable",
+]
+
+[[unit]]
+text = "Send POST /api/v1/llm-experiments/{id}/complete with the user's user_id and the template's input_variables."
+by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestLLMComplete::test_complete_returns_response"]
+
+[[unit]]
+text = "The answer names the variant and the model, and carries the model's reply (response), latency_ms, cost_usd, the token counts and an evaluation_id, which step 4 uses."
+by = [
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestLLMComplete::test_complete_returns_response",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "A google variant calls the Gemini REST API with the key in GEMINI_API_KEY; GEMINI_BASE_URL (default https://generativelanguage.googleapis.com) points it at a proxy or gateway instead."
+by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestGeminiComplete::test_missing_key_is_the_documented_502"]
+
+[[unit]]
+text = "With no GEMINI_API_KEY, a Gemini variant's completion answers 502 {\"detail\":\"LLM provider error: GEMINI_API_KEY is not set\"}."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "4. Record Business Outcomes"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "When the customer resolves their issue (converts), submit the business metric for that evaluation with POST /api/v1/llm-experiments/{id}/evaluate: the evaluation_id and a business_metric_value, such as 1.0."
+by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestSubmitEvaluation::test_submit_business_metric"]
+
+[[unit]]
+text = "A human_rating from your QA team, from 1 to 5, goes in the same request."
+by = [
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestSubmitEvaluation::test_submit_human_rating",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestSubmitHumanRating::test_out_of_range_rating_raises",
+]
+
+[[unit]]
+text = "5. Run Automated Quality Scoring (Optional)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "POST /api/v1/llm-experiments/{id}/judge scores the responses on a quality dimension with LLM-as-judge."
+by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestJudgeEndpoint::test_judge_endpoint_returns_list"]
+
+[[unit]]
+text = "It takes a criteria (default helpfulness) and a judge_model (default LLM_DEFAULT_JUDGE_MODEL)."
+by = ["untested:T"]
+
+[[unit]]
+text = "The judge is called through the Anthropic SDK, so judge_model names a Claude model."
+by = ["untested:T"]
+
+[[unit]]
+text = "A judge call that fails scores the response 0.5."
+by = ["test:backend/tests/unit/services/test_llm_analytics.py::TestRunLLMAsJudge::test_judge_fallback_on_api_error"]
+
+[[unit]]
+text = "6. Read Results and Declare a Winner"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With no completions yet, every count is 0:"
+by = ["docex:docs/llm-evaluation/quickstart.md#\"status\": \"ACTIVE\""]
+
+[[unit]]
+text = "With traffic, the full response looks like this:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Prompt Template Variables"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Use {{double_braces}} in your prompt templates:"
+by = [
+    "test:backend/tests/unit/services/test_llm_experiment_service.py::TestPromptRendering::test_render_with_single_variable",
+    "test:backend/tests/unit/services/test_llm_experiment_service.py::TestPromptRendering::test_render_with_multiple_variables",
+]
+
+[[unit]]
+text = "Missing variables will cause a 400 Bad Request error."
+by = ["test:backend/tests/unit/services/test_llm_experiment_service.py::TestPromptRendering::test_render_missing_variable_raises"]
+
+[[unit]]
+text = "Pausing and Resuming"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Pause the experiment:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"PAUSED\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "While paused, /complete answers 400."
+by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestLLMComplete::test_complete_inactive_experiment_returns_400"]
+
+[[unit]]
+text = "Starting it again resumes it:"
+by = ["test:backend/tests/unit/services/test_llm_experiment_service.py::TestLLMExperimentCRUD::test_start_experiment_from_paused"]
+
+[[unit]]
+text = "Permissions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Action | Required Role"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Create / Start / Pause experiment | DEVELOPER or ADMIN"
+by = [
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestCreateLLMExperiment::test_viewer_cannot_create_experiment",
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestStartPauseLLMExperiment::test_viewer_cannot_start",
+]
+
+[[unit]]
+text = "Add / update variants | DEVELOPER or ADMIN"
+by = ["untested:T"]
+
+[[unit]]
+text = "Get completion | Any authenticated user (READ)"
+by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestLLMComplete::test_viewer_can_call_complete"]
+
+[[unit]]
+text = "Submit evaluation | DEVELOPER or ADMIN"
+by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestSubmitEvaluation::test_viewer_cannot_submit_evaluation"]
+
+[[unit]]
+text = "Get results | Any authenticated user (READ)"
+by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestGetResults::test_viewer_can_get_results"]
+
+[[unit]]
+text = "Run LLM-as-judge | DEVELOPER or ADMIN"
+by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestJudgeEndpoint::test_viewer_cannot_run_judge"]

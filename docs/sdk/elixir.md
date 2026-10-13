@@ -24,16 +24,8 @@ Source: `sdk/elixir`.
 
 Add to your `mix.exs` dependencies and run `mix deps.get`.
 
-**Not yet published.** The `experimently` package is not on Hex yet, so the first block below
-fails today. Take it from this repository with the second block instead.
-
-```elixir
-defp deps do
-  [
-    {:experimently, "~> 0.1.0"}
-  ]
-end
-```
+**Not yet published.** The `experimently` package is not on Hex, so build it from source: this
+dependency takes `sdk/elixir` from this repository.
 
 ```elixir
 defp deps do
@@ -141,8 +133,8 @@ Returns `{:error, reason}` on a network/HTTP failure (including `{:api_error, 40
 unknown flag key). A flag that is not ACTIVE is not an error: it returns `enabled: false`.
 A cached evaluation, when present and unexpired, is returned without calling
 the server; failures are never cached, so the next call retries. Options: `skip_cache: true` to
-skip the cache; `:attributes` is accepted for symmetry but not sent: the evaluate endpoint takes a
-`context`, which this SDK does not send yet.
+skip the cache; `:attributes` is accepted for symmetry and not sent: the request carries the user
+id alone, so the server evaluates the flag's targeting rules against an empty context.
 
 ### `feature_enabled?(client, flag_key, user_id)`
 
@@ -285,7 +277,7 @@ The public functions never raise on network or HTTP errors; they return tagged t
 |--------|------|
 | `{:auth_error, 401}` | Invalid API key |
 | `{:api_error, status, body}` | Other 4xx/5xx — 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 422 validation, 429 rate limited |
-| `{:network_error, reason}` | `:httpc` connection failures and timeouts (`:econnrefused`, `:timeout`, …) |
+| `{:network_error, reason}` | `:httpc` connection failures and timeouts, with `:httpc`'s own reason (a refused connection is `{:failed_connect, [...]}`, a timeout `:timeout`) |
 | `{:malformed_response, body}` | 2xx body without the expected fields (assignment without `variant_name`) |
 
 `Experimently.Config.new/1` raises `ArgumentError` for a missing `:base_url`/`:api_key`.
@@ -297,8 +289,9 @@ are available for callers who prefer to raise.
 ## Consistent Hash Utility
 
 `Experimently.Evaluator.hash_user/2` implements the cross-SDK formula —
-`MD5("{user_id}:{flag_key}")`, first 4 bytes as little-endian uint32, divided by 2^32 — and is
-pinned by the golden-vector tests in `tests/sdk-contract/`:
+`MD5("{user_id}:{flag_key}")`, first 4 bytes as little-endian uint32, divided by 2^32. The SDK's
+own `hash_compatibility_test.exs` pins one vector; the cross-SDK golden vectors in
+`tests/sdk-contract/` are not run against this SDK:
 
 ```elixir
 Experimently.Evaluator.hash_user("user-123", "my-flag")   # 0.6927449859213084
@@ -412,7 +405,8 @@ elixir test_standalone.exs
 ```
 
 - `mix test`: ExUnit; HTTP mocked through HttpBehaviour modules
-- `elixir test_standalone.exs`: hash parity without mix
+- `elixir test_standalone.exs`: checks its own copy of the hash formula without mix; it does not
+  load the SDK
 
 CI runs `mix deps.get` and `mix test` on Elixir 1.16.3 in the SDK Unit Tests workflow
 ([sdk-unit-tests.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/sdk-unit-tests.yml)), daily and on a pull request that changes `sdk/elixir/`. No workflow runs

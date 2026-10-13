@@ -1,0 +1,279 @@
+# What verifies each unit of docs/rbac/README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/rbac/README.md"
+
+[[unit]]
+text = "Role-Based Access Control (RBAC) System"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Overview"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every deployment, core or full profile, decides what a signed-in user may do from four roles and a separate superuser flag."
+by = [
+    "test:backend/tests/unit/core/test_permissions.py",
+    "test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route",
+]
+
+[[unit]]
+text = "This page explains them."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Custom roles, the rbac module's (full profile only), are on the RBAC API page."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "User Roles"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Users in the system can have one of the following roles:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Admin: Can create and manage experiments, and create and manage any feature flag"
+by = ["test:modules/backend/tests/unit/api/test_rbac_integration.py::TestRBACIntegration::test_admin_role_has_all_permissions"]
+
+[[unit]]
+text = "Developer: Can create and manage experiments, and create and manage any feature flag"
+by = [
+    "test:modules/backend/tests/unit/api/test_rbac_integration.py::TestRBACIntegration::test_developer_role_permissions",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py",
+]
+
+[[unit]]
+text = "Analyst: Can view experiments and feature flags, and create analytics reports"
+by = ["test:modules/backend/tests/unit/api/test_rbac_integration.py::TestRBACIntegration::test_analyst_role_permissions"]
+
+[[unit]]
+text = "Viewer: Can view experiments and every feature flag, and change neither"
+by = ["test:backend/tests/unit/core/test_permissions.py"]
+
+[[unit]]
+text = "Every role, Viewer included, can create an API key for itself, and an API key writes tracking data: assignments and events."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key",
+    "journey:api-key-first-assignment#track",
+]
+
+[[unit]]
+text = "See API Key Management."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Feature flags are governed by role, not by who created them: an owner is recorded on each flag and shown, but owning a flag does not let an Analyst or Viewer change it."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py",
+    "test:backend/tests/smoke/test_flag_change_routes_guarded.py",
+]
+
+[[unit]]
+text = "Each role has a specific set of permissions that determine what actions they can perform on various resources."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The Admin role is not a superuser."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Managing user accounts (/api/v1/admin/users), global safety settings, and a flag's per-flag safety config (error-rate and latency thresholds, rollback percentage) and its rollback are gated on the separate is_superuser account flag, not on a role: an Admin without it is refused these the same as any other role."
+by = [
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchRefusals::test_a_non_superuser_is_refused_and_nothing_changes",
+    "test:backend/tests/integration/api/test_safety_api.py::TestSafetySettings::test_non_superuser_cannot_update_settings",
+    "test:backend/tests/integration/api/test_safety_api.py::TestFeatureFlagSafetyConfig::test_non_superuser_cannot_set_config",
+]
+
+[[unit]]
+text = "The dashboard's Users, API Keys, Safety settings and Roles pages also require a superuser."
+by = ["untested:T"]
+
+[[unit]]
+text = "Through the API, the Admin role alone may list and delete other users' API keys (GET /api/v1/api-keys?all=true, DELETE /api/v1/api-keys/{id}) and manage custom Roles; only the dashboard pages for those need the superuser flag."
+by = [
+    "test:backend/tests/unit/core/test_permissions.py::TestCheckPermission::test_only_admin_may_act_on_other_users_api_keys",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_admin_all_sees_everyone",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_admin_can_create_role",
+]
+
+[[unit]]
+text = "Resources and Actions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Permissions are defined as combinations of resources and actions:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Resource types"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Experiment: A/B tests and experiments"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "FeatureFlag: Feature flags and toggles"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "User: User accounts"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Role: User roles"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Permission: Permission assignments"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Report: Analytics reports and dashboards"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "APIKey: API keys (who may list or delete other users' keys)"
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_admin_all_sees_everyone",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestDelete::test_admin_can_delete_anyones",
+]
+
+[[unit]]
+text = "Actions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "CREATE: Create new resources"
+by = ["test:backend/tests/unit/core/test_permissions.py"]
+
+[[unit]]
+text = "READ: View existing resources"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "UPDATE: Modify existing resources"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "DELETE: Remove resources"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "LIST: Retrieve lists of resources"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Permission Matrix"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The following table shows which roles can perform which actions on which resources:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Role | Experiment | Feature Flag | User | Report"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Admin | Create, Read, Update, Delete | Create, Read, Update, Delete | Create, Read, Update, Delete | Create, Read, Update, Delete"
+by = ["test:modules/backend/tests/unit/api/test_rbac_integration.py::TestRBACIntegration::test_admin_role_has_all_permissions"]
+
+[[unit]]
+text = "Developer | Create, Read, Update, Delete | Create, Read, Update, Delete | Read | Read"
+by = [
+    "test:modules/backend/tests/unit/api/test_rbac_integration.py::TestRBACIntegration::test_developer_role_permissions",
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_developer_permissions",
+]
+
+[[unit]]
+text = "Analyst | Read | Read | Read | Create, Read, Update, Delete"
+by = [
+    "test:modules/backend/tests/unit/api/test_rbac_integration.py::TestRBACIntegration::test_analyst_role_permissions",
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_analyst_permissions",
+]
+
+[[unit]]
+text = "Viewer | Read | Read | Read | Read"
+by = ["test:modules/backend/tests/unit/api/test_rbac_integration.py::TestRBACIntegration::test_viewer_role_permissions"]
+
+[[unit]]
+text = "The User column is ROLE_PERMISSIONS' entry for the User resource (backend/app/core/permissions.py); it is not what the dashboard or the /api/v1/admin/ routes enforce."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Those routes -- list, read, update, delete and deactivate a user, and the dashboard's Users page -- depend on deps.get_current_superuser directly and ignore this table entirely: an Admin without is_superuser gets a 403 from every one of them, the same as every other role."
+by = [
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchRefusals::test_a_non_superuser_is_refused_and_nothing_changes",
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchRefusals::test_exactly_four_non_superuser_roles_are_checked",
+]
+
+[[unit]]
+text = "Ownership-Based Access"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A user who creates a resource is recorded as its owner."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What that record decides depends on the resource."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Feature flags."
+by = ["test:backend/tests/integration/api/test_flag_change_routes_access.py"]
+
+[[unit]]
+text = "A flag's owner is recorded and shown, but access to flags is decided by role alone: ADMIN and DEVELOPER may change any flag, and ANALYST and VIEWER may change none, including one they own."
+by = ["test:backend/tests/integration/api/test_flag_change_routes_access.py"]
+
+[[unit]]
+text = "Experiments."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Under /api/v1/experiments/{experiment_id}:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Reading an experiment (GET /{experiment_id}) and its results (/results, /daily-results, /segmented-results/{segment_by}) needs the role's READ on experiments."
+by = ["test:backend/tests/unit/api/v1/endpoints/test_experiment_permissions.py::test_experiment_endpoint_permissions"]
+
+[[unit]]
+text = "Who owns the experiment is not considered."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Changing one -- PUT /{experiment_id}, schedule, start, pause, complete, archive and metadata -- needs the role's READ and UPDATE on experiments."
+by = [
+    "test:backend/tests/unit/api/v1/endpoints/test_experiment_permissions.py::test_experiment_endpoint_permissions",
+    "test:backend/tests/unit/api/v1/endpoints/test_experiment_permissions.py::test_experiment_state_permissions",
+]
+
+[[unit]]
+text = "Who owns the experiment is not considered, so ANALYST and VIEWER change no experiment, including one they own."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Deleting one (DELETE /{experiment_id}) needs the role's READ and DELETE on experiments, and the experiment must be in DRAFT."
+by = ["test:backend/tests/unit/api/v1/endpoints/test_experiment_permissions.py::test_experiment_endpoint_permissions"]
+
+[[unit]]
+text = "Who owns the experiment is not considered: ADMIN and DEVELOPER may delete any DRAFT experiment."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A clone (POST /{experiment_id}/clone) needs READ on the source and the role's CREATE on experiments."
+by = [
+    "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestCloneExperiment::test_admin_can_clone_experiment",
+    "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestCloneExperiment::test_analyst_cannot_clone_other_users_experiment",
+]
+
+[[unit]]
+text = "A superuser passes every one of these checks."
+by = ["test:backend/tests/unit/core/test_permissions.py::TestCheckPermission::test_superuser_permission"]

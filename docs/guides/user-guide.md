@@ -4,19 +4,7 @@ Guide for product managers, experimenters, and analysts using Experimently.
 
 ---
 
-## Introduction
-
-Experimently enables you to:
-- **A/B test** product changes with statistical rigor
-- **Feature flag** new functionality for controlled rollouts
-- **Analyze results** with real-time statistical significance reporting
-- **Target users** with precise rules-based segmentation
-
----
-
 ## Accessing the Platform
-
-Open the dashboard at http://localhost:3000 (development) or your production URL.
 
 You'll need an account with one of the following roles:
 
@@ -24,8 +12,8 @@ You'll need an account with one of the following roles:
 |------|----------------|
 | **ADMIN** | Create, change, schedule and delete any experiment (scheduling is through the API; [which actions have a screen](dashboard-and-api.md)); create and manage any feature flag |
 | **DEVELOPER** | Create, change, schedule and delete any experiment (scheduling is through the API; [which actions have a screen](dashboard-and-api.md)); create and manage any feature flag |
-| **ANALYST** | View all experiments, results, and reports, and every feature flag (read-only) |
-| **VIEWER** | View every experiment and its results, and every feature flag (read-only) |
+| **ANALYST** | View all experiments, results, and reports, and every feature flag, and change no experiment or flag; like every role, create an API key, which writes tracking data |
+| **VIEWER** | View every experiment and its results, and every feature flag, and change no experiment or flag; like every role, create an API key, which writes tracking data |
 
 The ADMIN role does not, by itself, open the dashboard's Users, API Keys, Safety settings
 or Roles pages, manage user accounts, or change a flag's per-flag safety config or roll it
@@ -36,37 +24,12 @@ to request access, a role change, or superuser access.
 
 ### What the dashboard does not do yet
 
-Everything below works through the API today; the dashboard has no screen for it yet:
-
-- global holdouts, and mutual exclusion groups
-- scheduling an experiment's start and end dates
-- creating, editing, activating, pausing or advancing a rollout schedule (the flag's page shows
-  the schedule)
-- deleting, archiving or unarchiving a feature flag
-- changing a draft experiment's variants or metrics after it is created
-- creating a bandit experiment, or setting its weights by hand
-- split-URL experiments (full profile)
-- CUPED-adjusted results (beta), and the interaction scan and pair test
-- downloading results as CSV
-- Bayesian priors and stopping thresholds
-
-[What the dashboard does, and what is API only](dashboard-and-api.md) is the full list, row by
-row, with the guide for each. Screens for these are planned for after launch, tracked in
-[issue #442](https://github.com/getexperimently/experimently/issues/442).
+[What the dashboard does, and what is API only](dashboard-and-api.md) lists, row by row, what
+has a screen and what works through the API only, with the guide for each.
 
 ---
 
 ## Experiments
-
-### What Is an A/B Test?
-
-An A/B test (experiment) splits your users into groups, shows each group a different version of a feature, and measures which version performs better on a defined metric.
-
-**Key concepts:**
-- **Control** — the current/existing experience (your baseline)
-- **Treatment/Variant** — the new experience you're testing
-- **Metric** — what you're measuring (conversion rate, revenue, clicks)
-- **Statistical significance** — confidence that the difference is real, not random noise
 
 ### Creating an Experiment
 
@@ -77,8 +40,8 @@ your answers carry over.
 
 **Step 1: Type**
 
-Choose **A/B Test** or **Multivariate**. Split URL and bandit experiments need settings
-guided setup does not ask for; create those through the API or an SDK.
+Choose **A/B Test** or **Multivariate**. Create a split URL or bandit experiment through the
+API (`POST /api/v1/experiments/`).
 
 **Step 2: Details**
 
@@ -90,12 +53,8 @@ guided setup does not ask for; create those through the API or an SDK.
 Then choose what to measure. Mark one metric as the **primary metric** (the one you decide
 on); any others are tracked alongside it.
 
-| Metric Type | When to Use | Example |
-|-------------|-------------|---------|
-| **CONVERSION** | Binary outcome (did it happen?) | Clicked CTA, completed checkout, signed up |
-| **REVENUE** | Dollar amounts | Order value, LTV increase |
-| **COUNT** | How many times | Page views per session, actions taken |
-| **DURATION** | Time measurements | Session duration, time to first action |
+Every metric is analysed as a conversion today: whatever its type, the results report the
+share of users who sent the metric's event.
 
 The metric's **event name** must match exactly what your engineers track in code (e.g., `checkout_complete`).
 
@@ -227,10 +186,8 @@ any other change of status.
 
 **Complete**: Stop the experiment. Use when you have sufficient data and are ready to make a decision. Existing data is preserved.
 
-**Rules for stopping early:**
-- You need statistical significance (p-value < 0.05) AND practical significance (effect size is meaningful)
-- Resist the urge to stop as soon as significance is reached — this inflates false positive rates
-- Use the **Sample Size** tab to confirm the smallest variant has reached the planned sample before deciding
+Use the **Sample Size** tab to confirm the smallest variant has reached the planned sample
+before deciding.
 
 ---
 
@@ -301,14 +258,13 @@ For each metric and variant pair:
 | Column | Meaning |
 |--------|---------|
 | **Sample Size** | Users assigned to this variant |
-| **Value** | Conversion rate or average value for this variant |
+| **Value** | Conversion rate for this variant: the share of its users who sent the metric's event |
 | **Improvement** | How much better/worse vs. control (e.g., +12.3%) |
 | **p-value** | Probability the difference is due to chance (lower = more confident). Headed **Adjusted p-value** when a correction applies and a metric has two or more treatments with a p-value: the p-value after the experiment's correction, with the unadjusted value beneath it. A footnote under the table names the correction. |
 | **Significance** | (adjusted) p-value < (1 - confidence level), e.g., < 0.05 for 95% confidence |
 
-The table has no effect size or confidence interval column yet. Both are in the API
-response: `GET /api/v1/results/{experiment_id}` returns `effect_size`, `effect_size_label`
-(negligible / small / medium / large) and `confidence_interval` for each variant.
+For each variant, `GET /api/v1/results/{experiment_id}` also returns `effect_size`,
+`effect_size_label` (negligible / small / medium / large) and `confidence_interval`.
 
 **Green** = statistically significant improvement
 **Red** = statistically significant degradation
@@ -320,11 +276,6 @@ Shows conversion rate over time for each variant. Two modes:
 - **Cumulative**: Running total from experiment start (recommended — smooths noise)
 - **Daily**: Day-by-day rate (useful for detecting novelty effects or day-of-week patterns)
 
-Look for:
-- Parallel lines early → diverging lines → stable difference (healthy experiment)
-- Crossing lines → potential interaction effects or bugs
-- Spike on day 1 → novelty effect (users excited about newness)
-
 #### Sample Size
 
 The **Sample Size** tab shows the planned sample size: how many users each variant needs to
@@ -334,8 +285,7 @@ detect the smallest lift you care about, and how far the experiment has got.
 
 - **Baseline conversion rate**: the rate observed in the control variant on the primary metric
   so far ("Observed in control so far: 11.8% (2,140 users)"), or the rate you typed ("Entered by
-  you"). The results are cached for up to five minutes and this tab is not, so for that long its
-  rate can be newer than the one on the Overview.
+  you").
 - **Minimum detectable effect**: 5% relative unless you change it. Relative means 12% → 12.6%,
   not 17%. Experiments do not store a planned effect.
 - **Power** (80%, 90% or 95%) and **significance** (always two-sided, which is what the
@@ -345,9 +295,7 @@ detect the smallest lift you care about, and how far the experiment has got.
   another. Bonferroni or Benjamini-Hochberg plans each comparison with the control at
   significance ÷ (variants − 1).
 
-Change any of them and press **Recalculate**. Nothing is saved and the page address does not
-change, so the plan goes back to the observed rate, the defaults and the experiment's settings
-when you reload.
+Change any of them and press **Recalculate**.
 
 **Progress** is the smallest variant: "Smallest variant: 20,000 of 47,036 (43%)", then either
 "43% of planned sample" or "Planned sample reached". The power shown is the power to detect your
@@ -371,50 +319,27 @@ the tab says so and offers **Try again**; the Overview and the other tabs still 
 
 ---
 
-### Making a Decision
-
-Once your experiment is adequately powered and statistically significant:
-
-1. **Check primary metric**: Is the direction positive? Is the effect meaningful?
-2. **Check secondary metrics**: Did anything unexpected change (e.g., revenue went up but customer satisfaction dropped)?
-3. **Check for novelty effect**: Did the initial spike smooth out? Are trends stable?
-4. **Consult stakeholders**: Share results and the recommendation with the team
-
-**Ship**: Deploy the winning variant to 100% of users. Mark the experiment as **Completed**.
-
-**Keep control**: The change didn't work. Archive or redesign the hypothesis.
-
-**Document your decision**: Add a note in the experiment description with the outcome and rationale. This creates institutional memory.
-
----
-
 ## Feature Flags
 
-Feature flags let you control which users see a feature without deploying new code. They're useful for:
-
-- **Canary releases**: Deploy to 5% of users first, monitor, then expand
-- **Kill switches**: Instant rollback without a code deploy
-- **Beta programs**: Enable features for specific user groups
-- **Gradual rollouts**: Expand from 10% → 50% → 100% over time
+Feature flags let you control which users see a feature without deploying new code.
 
 ### Creating a Feature Flag
 
 Navigate to **Feature Flags → New Flag**:
 
-- **Key**: Identifier used in code, e.g., `new-checkout-flow` (cannot change after creation)
+- **Key**: Identifier used in code, e.g., `new-checkout-flow`
 - **Name**: Human-readable name
 - **Description**: What this flag controls
-- **Rollout Percentage**: Start at 0 for a disabled flag
 
 ### Controlling Rollout
 
 **Manual rollout:**
 
-Open the flag, move the **Rollout percentage** slider to the desired value and press **Save Changes**. Changes take effect within 60 seconds (cache TTL).
+Open the flag, move the **Rollout percentage** slider to the desired value and press **Save Changes**.
 
 | Percentage | Meaning |
 |------------|---------|
-| 0% | Feature disabled for all users |
+| 0% | No user outside a targeting rule gets the feature |
 | 5% | 1 in 20 users sees the feature |
 | 50% | Half of users |
 | 100% | All users see the feature |
@@ -443,9 +368,9 @@ read-only. Saving other changes, such as the rollout percentage, leaves them as 
 
 For gradual rollouts on a schedule:
 
-The dashboard has no screen for creating a rollout schedule yet. Create it through the
-API with `POST /api/v1/rollout-schedules` (the stages go in its `stages` list; see
-[Rollouts](../feature-flags/rollouts.md) for the full contract), then start it with
+Create a rollout schedule through the API with `POST /api/v1/rollout-schedules/` (the stages
+go in its `stages` list; see [Rollouts](../feature-flags/rollouts.md) for the full contract),
+then start it with
 `POST /api/v1/rollout-schedules/{schedule_id}/activate`. The flag's page in the dashboard
 shows the schedule, its status and its stages, read-only. A schedule like this one:
 
@@ -456,14 +381,11 @@ shows the schedule, its status and its stages, read-only. A schedule like this o
 | Stage 3 | 100% | Manual | — |
 
 The platform automatically advances time-based stages. A manual stage waits until you
-advance it. The dashboard has no button for that yet, so it is an API call:
-`POST /api/v1/rollout-schedules/stages/{stage_id}/advance`.
-
-**Best practice:** End your schedule with a manual stage for the final 100% rollout. This gives you a human approval gate before full deployment.
+advance it with `POST /api/v1/rollout-schedules/stages/{stage_id}/advance`.
 
 ### Disabling / Rolling Back
 
-To instantly disable a flag, turn it off with the switch at the top of its page; it then
+To disable a flag, turn it off with the switch at the top of its page; it then
 shows **Not serving**. Setting the rollout percentage to 0 is not the same: users matched by a
 targeting rule keep the flag.
 
@@ -490,95 +412,14 @@ unarchived flag comes back inactive. See
 **Experiments list** shows all experiments with their name, status, type, number of
 variants and creation date.
 
-Filter by status: All / Draft / Active / Paused / Completed. There is no filter by date,
-owner or experiment type yet.
+Filter by status: All / Draft / Active / Paused / Completed.
 
 ### Exporting Results
 
-The Results page has no export button yet. Use the API:
+Export results through the API:
 - **CSV export**: `GET /api/v1/export/variants` downloads per-variant results as CSV
   (`?format=json` for JSON); see [Data Export](../api/data-export.md)
 - **Full results**: `GET /api/v1/results/{experiment_id}` returns JSON with all statistics
-
----
-
-## Targeting Rules Reference
-
-### Basic Rules
-
-```text
-country IN [US, CA, GB]          → User's country is one of the list
-plan EQUALS premium              → Exact match
-age GREATER_THAN 18              → Numeric comparison
-email CONTAINS @company.com     → String match
-app_version SEMVER_GT 2.0.0     → Semantic version comparison
-```
-
-### Logical Operators
-
-```text
-AND: all rules must match
-OR:  at least one rule must match
-NOT: rule must NOT match
-```
-
-### Complex Example
-
-Target US/EU premium users who are active:
-```text
-AND:
-  country IN [US, GB, DE, FR]
-  plan IN [pro, enterprise]
-  days_since_last_login LESS_THAN 30
-```
-
-Target either new users OR power users (but not average users):
-```text
-OR:
-  account_age_days LESS_THAN 7
-  AND:
-    lifetime_purchases GREATER_THAN 20
-    plan EQUALS enterprise
-```
-
----
-
-## Best Practices
-
-### Experiment Design
-
-**Do:**
-- Define your hypothesis and primary metric BEFORE starting the experiment
-- Run the experiment for at least one full week to capture weekly patterns
-- Wait for statistical significance AND adequate sample size before deciding
-- Document your hypothesis, result, and decision for future reference
-- Run one change at a time per experiment (isolate variables)
-
-**Don't:**
-- Stop the experiment as soon as you see significance (peeking inflates false positives)
-- Change the experiment configuration after it's started
-- Run too many concurrent experiments on the same users (interaction effects)
-- Use the novelty effect as evidence (users are excited about newness, not the feature)
-
-### Feature Flags
-
-**Do:**
-- Always start at 0% and ramp up gradually for risky changes
-- Set up safety monitoring for flags that touch payments, auth, or core flows
-- Document what the flag controls and who to contact if issues arise
-- Clean up flags after full rollout — don't leave them in code forever
-
-**Don't:**
-- Jump straight to 100% for significant changes
-- Leave flags enabled indefinitely — schedule cleanup
-- Use flags to hide incomplete features in production without testing
-
-### Statistical Significance
-
-- **p-value < 0.05**: 95% confident the difference is real (not random)
-- **p-value < 0.01**: 99% confident — use for high-stakes decisions
-- **Always check effect size**: A p-value of 0.001 means nothing if the effect is 0.1%
-- **Minimum detectable effect**: Design experiments to detect a meaningful improvement (e.g., 5%), not just any improvement
 
 ---
 
@@ -588,9 +429,8 @@ OR:
 
 Standard A/B tests require a fixed sample size decided upfront. Sequential testing lets you monitor results continuously and stop as soon as you have enough evidence — without inflating your false positive rate.
 
-**When to use it:** When you need results faster, or when you need to stop early if a variant is performing significantly worse.
-
-Access via the **Sequential** tab on any experiment results page, or via:
+When sequential testing is on for an experiment, its results page has a **Sequential** tab.
+The API route is:
 ```text
 GET /api/v1/results/{experiment_id}/sequential
 ```
@@ -620,9 +460,10 @@ After an experiment concludes, use dimensional analysis to understand whether th
 
 **Important:** Segment findings are always exploratory. Use them to generate hypotheses for follow-up experiments, not as final conclusions.
 
-Access via the **Breakdowns** tab on any experiment results page, or via:
+Access via the **Breakdowns** tab on any experiment results page, or via the route below,
+where `segment_by` is the dimension, such as `device`:
 ```text
-GET /api/v1/experiments/{experiment_id}/segmented-results/{segment_by}?dimension=device
+GET /api/v1/experiments/{experiment_id}/segmented-results/{segment_by}
 ```
 
 See the [Dimensional Analysis Guide](../api/dimensional-analysis.md).
@@ -632,8 +473,6 @@ See the [Dimensional Analysis Guide](../api/dimensional-analysis.md).
 ### Multi-Armed Bandit — Maximize Conversions During the Experiment
 
 A bandit experiment automatically shifts traffic toward the better-performing variant as data accumulates. Use this when maximizing conversions during the experiment matters more than getting precise effect size estimates.
-
-**When to use it:** Short-lived promotions, content recommendations, or situations where you have many variants to test quickly.
 
 Set `optimization_type` to `thompson_sampling`, `ucb1`, or `epsilon_greedy` when creating an experiment. See the [Multi-Armed Bandit Guide](../api/multi-armed-bandit.md).
 
@@ -663,6 +502,4 @@ If high-risk pairs are found, add the experiments to a [Mutual Exclusion Group](
 
 - **API Documentation**: http://localhost:8000/api/v1/docs
 - **Technical Guide**: See [Technical Guide](../architecture/technical-guide.md) for implementation details
-- **Testing Guide**: See [Testing Guide](../development/testing-guide.md) for test workflows
 - **Issues**: https://github.com/getexperimently/experimently/issues
-- **Slack**: #experimently channel

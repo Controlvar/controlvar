@@ -23,11 +23,11 @@ Only with `COGNITO_SELF_SIGNUP_ENABLED=true` and a user pool that allows self si
 
 To create an account on Experimently, you will need to provide:
 
-- **Username**: 3-20 characters, alphanumeric with underscores and hyphens only
+- **Username**: 3 to 50 characters
 - **Email**: A valid email address you can access for verification
 - **Password**: Must satisfy the following requirements:
   - At least 8 characters
-  - At most 72 bytes (UTF-8; most characters outside English take two or more bytes)
+  - At most 100 characters
   - At least one uppercase letter
   - At least one lowercase letter
   - At least one digit (0-9)
@@ -48,9 +48,7 @@ answer 404 and an administrator creates your account
 
 ### Email Verification
 
-- Verification codes are valid for 24 hours
 - If you don't receive a verification code, check your spam folder
-- Your account will not be fully active until you verify your email
 
 ## Login Process
 
@@ -65,8 +63,7 @@ sign in; see the note at the top of this page.
 
 ### Login Security Features
 
-- **Multi-Factor Authentication (MFA)**: If enabled, you will be prompted for an additional verification code
-- **Session Management**: Logged in for 24 hours by default before requiring re-authentication
+- **Session Management**: A sign-in lasts 12 hours by default (`LOCAL_AUTH_TOKEN_TTL_MINUTES`); then you sign in again
 - **Account Protection**: Too many failed login attempts will temporarily lock your account
 
 ### After Login
@@ -139,9 +136,8 @@ The platform uses JWT (JSON Web Tokens) for authentication. Here's how they work
 
 ### Token Types
 
-- **Access Token**: Used for API authentication (short-lived, 1 hour)
-- **ID Token**: Contains user identity information
-- **Refresh Token**: Used to obtain new access tokens (longer-lived, 30 days)
+- **With `AUTH_PROVIDER=local`** (the default), `POST /api/v1/auth/login` returns one access token, valid for 12 hours by default; there is no ID token and no refresh token.
+- **With `AUTH_PROVIDER=cognito`**, `POST /api/v1/auth/token` returns Cognito's access token, ID token and refresh token.
 
 ### Sample Token Usage
 
@@ -164,7 +160,7 @@ async function fetchExperiments() {
 
 ### Token Refresh
 
-If your access token expires, use the refresh token to get a new one:
+Under `cognito`, when your access token expires, use the refresh token to get a new one:
 
 ```javascript
 // Example of refreshing an expired token
@@ -196,9 +192,9 @@ async function refreshTokens() {
 
 The dashboard's **Admin → Users** page (`/admin/users`) lists every account and
 lets you invite, edit and delete them. Opening it needs a **superuser** account,
-whatever its role; the table's **Superuser** column shows who has one. An Admin
-role on its own does not open the admin area, and the dashboard cannot make an
-account a superuser.
+whatever its role; the table's **Superuser** column shows who has one. The Admin role
+alone does not open the admin area, and the dashboard cannot make an existing account a
+superuser.
 
 - **Invite User** creates an account with a temporary password, shown once. An
   account invited with the Admin role is also made a superuser.
@@ -245,9 +241,8 @@ deleted the account; closing the dialog refreshes the list.
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| "Username already exists" | The username is taken | Choose a different username |
-| "Invalid email format" | Email address is not valid | Check for typos in your email |
-| "Password doesn't meet requirements" | Password is too weak | Follow the password requirements listed above |
+| `422`, at `["body", "email"]` | Email address is not valid | Check for typos in your email |
+| `422`, at `["body", "password"]`, naming the rule it breaks | The password breaks a requirement above | Follow the password requirements listed above |
 
 ### Login Errors
 
@@ -264,9 +259,7 @@ What the dashboard's sign-in form shows (`AUTH_PROVIDER=local`):
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| "Token expired" | Access token has expired | Refresh the token or log in again |
-| "Invalid token" | Token is malformed or tampered | Log out and log in again |
-| "Refresh token expired" | Refresh token has expired | Log in again to get new tokens |
+| `401` "Could not validate credentials" | The access token has expired, or is malformed or altered | Log in again (under `cognito`, you can also refresh the token) |
 
 ### Password Reset Errors
 
@@ -293,7 +286,6 @@ To keep your account secure:
 
 ### Account Protection
 
-- Enable Multi-Factor Authentication (MFA) for additional security
 - Don't share your verification codes with anyone
 - Log out when using shared or public computers
 - Check for HTTPS in the browser address bar before logging in
@@ -319,8 +311,3 @@ If you notice suspicious activity on your account:
    through SSO, and an administrator's
    changes to your account's role, superuser flag or active status. A password change and other changes
    to your profile are not recorded (#502); keep the account deactivated while you check.
-4. Contact support at support@getexperimently.com
-
----
-
-If you encounter any issues not covered in this guide, please contact our support team.

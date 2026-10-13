@@ -335,9 +335,7 @@ once the problem is fixed writes it once.
 release writes them (`role_unassign` is written only with the modules installed).
 Granting and revoking a direct permission are not recorded because no permission check
 reads direct grants yet
-([#891](https://github.com/getexperimently/experimently/issues/891)). Entries written by an
-earlier release for `PATCH /admin/users/{id}` are `user_update`, with the role and active
-status before and after.
+([#891](https://github.com/getexperimently/experimently/issues/891)).
 
 ### Changes the platform makes on its own
 

@@ -8,7 +8,7 @@ public API with your `X-API-Key`, the server buckets the user (sticky per user +
 the SDK caches the answer per user + key. Nothing is bucketed locally.
 
 **Target frameworks**: `netstandard2.1` / `net6.0`
-**NuGet package**: `Experimently.SDK`
+**Package ID**: `Experimently.SDK` (no release on NuGet: build from source)
 **Version**: 0.2.0
 **Dependencies**: none beyond `System.Text.Json` (framework-provided on `net6.0`; NuGet on `netstandard2.1`)
 
@@ -16,17 +16,9 @@ the SDK caches the answer per user + key. Nothing is bucketed locally.
 
 ## Installation
 
-**Not yet published.** `Experimently.SDK` is not on NuGet yet, so the command below fails today.
-Reference the project from a clone of this repository instead, as described after it
-(`dotnet add reference /path/to/experimently/sdk/dotnet/src/Experimently/Experimently.csproj`;
-this has not been tested here).
-
-```bash
-dotnet add package Experimently.SDK
-```
-
-Or from source: add a `<ProjectReference>` to `sdk/dotnet/src/Experimently/Experimently.csproj`
-(this is what `examples/` and `tests/` do).
+**Not yet published.** `Experimently.SDK` has no release on NuGet, so build it from source: add a
+`<ProjectReference>` to `sdk/dotnet/src/Experimently/Experimently.csproj` in a clone of this
+repository (this is what `examples/` and `tests/` do).
 
 ---
 
@@ -88,7 +80,7 @@ using var client = new ExperimentationClient(config, httpClient);   // never mut
 
 | Method | Backend call | Returns |
 |--------|--------------|---------|
-| `EvaluateFlagAsync(flagKey, userId, attributes?)` | `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…` | `FlagEvaluationResult { Key, Enabled, Config }`. Never throws; disabled on failure. |
+| `EvaluateFlagAsync(flagKey, userId, attributes?)` | `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…` (the user id alone; `attributes` are not sent) | `FlagEvaluationResult { Key, Enabled, Config }`. Never throws; disabled on failure. |
 | `GetAssignmentAsync(experimentKey, userId, attributes?)` | `POST /api/v1/tracking/assign` (`attributes` sent as `context`) | `Assignment? { ExperimentKey, UserId, VariantId, VariantName, IsControl, Configuration }`. Never throws; `null` on failure. |
 | `TrackAsync(eventName, userId, properties?, experimentKey?, featureFlagKey?, value?, eventType?, timestamp?)` | `POST /api/v1/tracking/track` with a key, else `POST /api/v1/tracking/batch` fan-out | `bool` — `false` on any error. Never throws. |
 | `TrackAsync(TrackEvent)` | same rules | `bool` |
@@ -98,9 +90,9 @@ using var client = new ExperimentationClient(config, httpClient);   // never mut
 | `ClearCache()` | — | Drops both caches |
 | `Dispose()` | — | Releases the SDK-created `HttpClient` |
 
-`Config` and `Configuration` are `System.Text.Json.JsonElement?` — the raw JSON the server returned
-(`null` when absent). `Config` is always `null`, because the evaluate endpoint returns `config: null`
-for every flag; a variant's configuration reads as `assignment.Configuration?.GetProperty("headline").GetString()`.
+`Config` and `Configuration` are `System.Text.Json.JsonElement?`. `Configuration` is the raw JSON
+the server returned for the variant (`null` when absent); `Config` is always `null`, because the
+evaluate endpoint returns `config: null` for every flag; a variant's configuration reads as `assignment.Configuration?.GetProperty("headline").GetString()`.
 
 ### Caching and failures
 
@@ -204,7 +196,7 @@ dotnet test --filter "FullyQualifiedName~HashCompatibilityTests"
 
 - `dotnet test`: whole solution
 
-**Test coverage** (by inspection — not executed here):
+**Test coverage** (CI runs `dotnet test` on the solution):
 
 | Test class | Coverage |
 |------------|----------|
@@ -254,4 +246,4 @@ sdk/dotnet/
 
 ## License
 
-Apache 2.0 — see the root `LICENSE` file.
+MIT — see `LICENSE` in this directory.

@@ -93,12 +93,14 @@ class _DictCache:
     def __init__(self) -> None:
         self.store: Dict[str, str] = {}
         self.writes: List[str] = []
+        self.expires: List[int] = []
 
     def get(self, key: str):
         return self.store.get(key)
 
     def set(self, key: str, value: str, expire: int = 0) -> None:
         self.writes.append(key)
+        self.expires.append(expire)
         self.store[key] = value
 
 
@@ -321,3 +323,25 @@ def test_the_export_does_not_read_an_unknown_method_as_no_results(monkeypatch):
     service = ExportService(_FakeSession(experiment, _THREE))
     with pytest.raises(UnknownCorrectionMethodError):
         service._variants_to_rows([experiment])
+
+
+# ---------------------------------------------------------------------------
+# How long an answer is kept: 300 s while running, 86,400 s otherwise,
+# whatever CACHE_ENABLED says (the results cache does not read it)
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("cache_enabled", [False, True])
+@pytest.mark.parametrize(
+    "status, ttl",
+    [("active", 300), ("running", 300), ("completed", 86400), ("draft", 86400)],
+)
+@pytest.mark.parametrize("path", [RESULTS, ALIAS], ids=["results", "alias"])
+def test_results_are_kept_300_seconds_while_running_and_86400_otherwise(
+    harness, monkeypatch, path, status, ttl, cache_enabled
+):
+    monkeypatch.setattr(
+        "backend.app.core.config.settings.CACHE_ENABLED", cache_enabled, raising=False
+    )
+    harness.use(_THREE, _ALL_THREE, "none", 0.95)
+    harness.experiment.status = status
+    harness.get(path)
+    assert harness.cache.expires == [ttl]

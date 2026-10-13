@@ -1,0 +1,90 @@
+# What verifies each unit of docs/api/README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/README.md"
+
+[[unit]]
+text = "API Documentation"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This directory contains the API documentation for Experimently."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Files"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "API Reference: the experiments, feature flags and tracking endpoints, with curl examples"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Using the API Docs: the API documentation the API serves, and its rate limits"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "API stability and the OpenAPI snapshots"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "openapi-v1.stable.json (core profile) and openapi-v1.full.json (full profile), the checked-in contract the smoke suite compares against"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "Marking a route x-stability: beta"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_compare_flags_changes_to_beta_operations_as_warnings_only"]
+
+[[unit]]
+text = "What to do when a stable route has to change"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Quick Start"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The management API (experiments, flags, results) takes a user's access token; the SDK endpoints (/tracking/, flag evaluation) take an API key instead, in the X-API-Key header."
+by = [
+    "docex:docs/api/README.md#Checkout Button Color",
+    "docex:docs/api/endpoints.md#\"new_dashboard_ui\": true",
+]
+
+[[unit]]
+text = "See Authentication for both."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "These commands run as written against the stack from the Quick Start."
+by = [
+    "docex:docs/api/README.md#\"ADMIN\"",
+    "docex:docs/api/README.md#Checkout Button Color",
+]
+
+[[unit]]
+text = "On your own deployment, use its URL wherever they say localhost:8000."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in first; this saves the access token in $TOKEN for the command after it:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["docex:docs/api/README.md#\"ADMIN\""]
+
+[[unit]]
+text = "Then send the token as a bearer token."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This lists the experiments' names; the collection URL ends with a slash, /api/v1/experiments/, because without it the API answers 307, which curl doesn't follow:"
+by = ["test:backend/tests/unit/middleware/test_relative_slash_redirect.py::test_the_real_app_still_redirects_relatively"]
+
+[[unit]]
+text = "It prints the demo data's experiments, among them Checkout Button Color."
+by = ["docex:docs/api/README.md#Checkout Button Color"]
+
+[[unit]]
+text = "Then check the API Reference for detailed usage examples."
+by = ["exempt:navigation"]

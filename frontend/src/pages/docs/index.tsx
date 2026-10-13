@@ -38,15 +38,15 @@ const sections = [
       { label: 'Multi-Armed Bandits', href: docsUrl('api/multi-armed-bandit'), desc: 'Thompson Sampling, UCB1, Epsilon-Greedy (create a bandit through the API)' },
       { label: 'Split URL Testing', href: docsUrl('api/split-url'), desc: 'Full profile: store split URL experiments and preview the URL a user id hashes to. The edge router does not split traffic yet.' },
       { label: 'Mutual Exclusion Groups', href: docsUrl('api/mutual-exclusion-groups'), desc: 'Keep users out of conflicting experiments, and a share of new users out of every experiment' },
-      { label: 'Live Results Streaming', href: docsUrl('websocket-streaming'), desc: 'Live experiment results over WebSocket, sent every 30 seconds by default.' },
+      { label: 'Live Results Streaming', href: docsUrl('websocket-streaming'), desc: 'Live experiment results over WebSocket: a snapshot on connect, then a fresh one after 30 seconds (by default) with no message from the client.' },
     ],
   },
   {
     category: 'LLM / AI Model Evaluation',
     icon: '🤖',
-    description: 'Compare prompt versions, model variants, and agent configs against real business metrics.',
+    description: 'Compare model variants on a task; the winner has the best business metric, or the best LLM-judge score without one.',
     links: [
-      { label: 'Overview', href: docsUrl('llm-evaluation/overview'), desc: 'What LLM evaluation is, and how it differs from a classic A/B test' },
+      { label: 'Overview', href: docsUrl('llm-evaluation/overview'), desc: 'Supported providers, task types, variant assignment, judge scoring, cost estimation and the analysis' },
       { label: 'Quick Start', href: docsUrl('llm-evaluation/quickstart'), desc: 'Compare GPT-4o with Claude 3.5 Sonnet (steps 3–5 need provider API keys)' },
     ],
   },
@@ -95,7 +95,7 @@ const sections = [
       { label: 'Jira', href: docsUrl('api/integrations'), desc: 'Inbound webhooks, signed or with a shared secret' },
       { label: 'Salesforce', href: docsUrl('integrations/salesforce'), desc: 'Inbound webhooks from a Flow or Apex callout' },
       { label: 'GitHub', href: docsUrl('integrations/github'), desc: 'Inbound webhooks, each checked by its HMAC-SHA256 signature' },
-      { label: 'Slack & Email', href: docsUrl('api/alerting'), desc: 'Slack and email notifications of experiment lifecycle changes and custom alerts' },
+      { label: 'Slack & Email', href: docsUrl('api/alerting'), desc: 'Slack messages for scheduled experiment changes and rollout stage advances; email only from the test route' },
     ],
   },
   {
@@ -104,12 +104,12 @@ const sections = [
     description: 'Audit records, compliance reports, roles, API keys and single sign-on.',
     links: [
       { label: 'Compliance audit logging', href: docsUrl('api/compliance'), desc: 'An append-only record of changes to experiments and flags; signing and export in the full profile' },
-      { label: 'Compliance evidence', href: docsUrl('api/compliance'), desc: 'Full profile: evidence reports for your own audit programme' },
+      { label: 'Compliance evidence', href: docsUrl('api/compliance'), desc: 'Full profile: SOC 2 and ISO 27001 reports and an export of the audit events' },
       { label: 'Audit Logging', href: docsUrl('api/audit-logging'), desc: 'Who changed what through the API; no API edits or deletes an entry' },
       { label: 'RBAC', href: docsUrl('api/rbac'), desc: 'Admin, Developer, Analyst and Viewer decide what a user can do; custom roles (full profile) are stored but not applied yet' },
       { label: 'API Key Management', href: docsUrl('security/api-keys'), desc: 'Create, expire and delete keys; the sdk:ruleset scope for local evaluation' },
       { label: 'SSO / SAML / OIDC', href: docsUrl('auth/sso'), desc: 'Full profile: sign in through Okta, Google or GitHub (OIDC). SAML 2.0 sign-in is not available yet; use OIDC.' },
-      { label: 'HIPAA controls', href: docsUrl('hipaa/overview'), desc: 'Full profile: PHI encryption (Fernet), a 6-year retention marker on PHI audit records, BAA records and a data-residency region check.' },
+      { label: 'HIPAA controls', href: docsUrl('hipaa/overview'), desc: 'Full profile: PHI encryption (Fernet), a 6-year retention marker on PHI audit records, BAA records and the data-residency configuration.' },
     ],
   },
   {

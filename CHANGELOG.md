@@ -10,6 +10,24 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.31.1](https://github.com/getexperimently/experimently/compare/v0.31.0...v0.31.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **dashboard:** the first-run card reaches a first assignment, and the docs hub is registered ([#1185](https://github.com/getexperimently/experimently/issues/1185)) ([8d27a10](https://github.com/getexperimently/experimently/commit/8d27a1011accc0fe8bf22c703342e8542236d590))
+
+
+### Documentation
+
+* correct and register the API, sign-in, roles, HIPAA and integration pages ([#1182](https://github.com/getexperimently/experimently/issues/1182)) ([7eb0f22](https://github.com/getexperimently/experimently/commit/7eb0f2228c326315782529831896a5dfc4a6b231))
+* **demo:** register the demo guide and both demo READMEs to their tests and journeys ([#1180](https://github.com/getexperimently/experimently/issues/1180)) ([ebc87be](https://github.com/getexperimently/experimently/commit/ebc87bea870c4433c3237539bfaf62634338f94f))
+* experiments and statistics pages, claims registered (D73 G5b) ([#1191](https://github.com/getexperimently/experimently/issues/1191)) ([6d822b0](https://github.com/getexperimently/experimently/commit/6d822b07de508314b1a80c9925183617e18e5ef0))
+* five false stories fixed in every in-scope document, and a sweep that refuses them ([#1175](https://github.com/getexperimently/experimently/issues/1175)) ([23a0269](https://github.com/getexperimently/experimently/commit/23a0269ced01bafee87a09f6ee1a5f1d98cc68be))
+* register the published SDK pages and the MCP page, with a test for every claim they keep ([#1181](https://github.com/getexperimently/experimently/issues/1181)) ([0c4f237](https://github.com/getexperimently/experimently/commit/0c4f237a5e7df4b8c76587f35b3f71df71cca71b))
+* **sdk:** the unpublished SDK pages say what each client does ([#1196](https://github.com/getexperimently/experimently/issues/1196)) ([1504af5](https://github.com/getexperimently/experimently/commit/1504af50985dbbbaf9fa6281a8b9443df640d833))
+* **self-hosting:** compose and chart READMEs, and the local self-hosting pages registered to their tests ([#1186](https://github.com/getexperimently/experimently/issues/1186)) ([ac43a95](https://github.com/getexperimently/experimently/commit/ac43a954c9b524a97b0cb747d130946ecb581af7))
+
 ## [0.31.0](https://github.com/getexperimently/experimently/compare/v0.30.0...v0.31.0) (2026-10-13)
 
 

@@ -1,0 +1,654 @@
+# What verifies each unit of docs/api/mutual-exclusion-groups.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/mutual-exclusion-groups.md"
+
+[[unit]]
+text = "Mutual Exclusion Groups & Global Holdout"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Mutual exclusion groups prevent users from being enrolled in multiple conflicting experiments simultaneously."
+by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestGroupRules::test_m9_with_both_live_from_the_start_each_user_is_in_exactly_one"]
+
+[[unit]]
+text = "A global holdout keeps a percentage of new users out of every experiment, so you can compare them with everyone else (feature flags ignore it)."
+by = ["test:backend/tests/unit/services/test_assignment_service_eligibility.py::TestHoldout::test_user_in_holdout_is_not_assigned"]
+
+[[unit]]
+text = "The commands on this page run as written against the stack from the Quick Start, in one terminal, top to bottom."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each one uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in first:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Mutual Exclusion Groups"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "How It Works"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Traffic is partitioned using consistent hashing on user ID."
+by = [
+    "test:backend/tests/unit/services/test_mutual_exclusion_service.py::TestSelectExperimentForUser::test_excluded_by_traffic_allocation",
+    "test:backend/tests/unit/services/test_mutual_exclusion_service.py::TestSelectExperimentForUser::test_even_distribution_among_experiments",
+    "test:backend/tests/unit/services/test_mutual_exclusion_service.py::TestSelectExperimentForUser::test_deterministic_same_input",
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestCreateGroup::test_create_group_returns_422_for_invalid_traffic_allocation",
+]
+
+[[unit]]
+text = "Each group has a traffic_allocation (0.0–1.0) that defines the fraction of users eligible for experiments within the group."
+by = [
+    "test:backend/tests/unit/services/test_mutual_exclusion_service.py::TestSelectExperimentForUser::test_excluded_by_traffic_allocation",
+    "test:backend/tests/unit/services/test_mutual_exclusion_service.py::TestSelectExperimentForUser::test_even_distribution_among_experiments",
+    "test:backend/tests/unit/services/test_mutual_exclusion_service.py::TestSelectExperimentForUser::test_deterministic_same_input",
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestCreateGroup::test_create_group_returns_422_for_invalid_traffic_allocation",
+]
+
+[[unit]]
+text = "Users are assigned to at most one experiment within the group."
+by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestGroupRules::test_m9_with_both_live_from_the_start_each_user_is_in_exactly_one"]
+
+[[unit]]
+text = "A user who is not eligible is still answered by POST /api/v1/tracking/assign, with status 200, the control variant, \"assigned\": false and \"reason\": \"mutual_exclusion\"."
+by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestPublicAssignRoute::test_m4_tracking_assign_refuses_with_no_row_and_no_event"]
+
+[[unit]]
+text = "Nothing is recorded for them."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Enrolment is sticky across the group."
+by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestActivatingASibling::test_m1_users_of_a_are_not_enrolled_in_b_after_b_is_activated"]
+
+[[unit]]
+text = "A user enrolled in one experiment of a group is never enrolled in another experiment of that group, even as experiments are activated, paused or resumed."
+by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestActivatingASibling::test_m1_users_of_a_are_not_enrolled_in_b_after_b_is_activated"]
+
+[[unit]]
+text = "The hash divides new users among the experiments that are active at the time of the request; a user who already has an assignment in another experiment of the group that is active, paused or still a draft is answered as not eligible, with the same \"reason\": \"mutual_exclusion\"."
+by = [
+    "test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestSiblingStatus::test_m3_paused_or_draft_sibling_holds_its_users",
+    "test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestActivatingASibling::test_m1b_everyone_lands_in_a_while_b_is_draft",
+]
+
+[[unit]]
+text = "So an experiment activated later in a group fills more slowly than one that started with it: only users not yet enrolled elsewhere in the group can join it."
+by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestActivatingASibling::test_m2_new_users_still_reach_b"]
+
+[[unit]]
+text = "Completing an experiment, or removing it from the group, releases its users, and they can then be enrolled in another experiment of the group."
+by = [
+    "test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestSiblingStatus::test_m3b_completed_or_archived_sibling_releases_its_users",
+    "test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestGroupRules::test_m9_removing_a_from_the_group_releases_its_users",
+]
+
+[[unit]]
+text = "Assignments that already exist are always kept, so a user who was enrolled in two experiments of a group before this rule applied stays in both."
+by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestWhatIsNotAnEnrolment::test_m7_existing_double_enrolment_is_kept"]
+
+[[unit]]
+text = "The check is made per request."
+by = ["untested:T"]
+
+[[unit]]
+text = "If the group's set of active experiments changes while two requests for the same new user are in flight, both can succeed."
+by = ["untested:T"]
+
+[[unit]]
+text = "Mutual Exclusion Group API"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "POST /api/v1/mutual-exclusion-groups"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Create a new mutual exclusion group."
+by = [
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestCreateGroup::test_create_group_returns_201",
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestCreateGroup::test_create_group_returns_201_for_admin",
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestListGroups::test_list_groups_returns_403_for_viewer",
+]
+
+[[unit]]
+text = "Requires DEVELOPER or ADMIN role."
+by = [
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestCreateGroup::test_create_group_returns_201",
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestCreateGroup::test_create_group_returns_201_for_admin",
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestListGroups::test_list_groups_returns_403_for_viewer",
+    "test:backend/tests/integration/api/test_holdout_admin_roles.py::test_developer_may_rename_a_group",
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestUpdateGroup::test_update_group_returns_200",
+]
+count = 2
+
+[[unit]]
+text = "This saves the new group's id in $GROUP_ID:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The response also carries the group's id, description, owner_id, created_at and updated_at."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "GET /api/v1/mutual-exclusion-groups"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "List all mutual exclusion groups."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Query Parameters"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Parameter | Type | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "status | string | Filter by status: active, archived"
+by = ["test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestListGroups::test_list_groups_with_status_filter"]
+
+[[unit]]
+text = "skip | int | Pagination offset (default: 0)"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "limit | int | Page size (default: 100, max: 1000)"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "The response is {\"items\": [...], \"total\": N}."
+by = ["docex:docs/api/mutual-exclusion-groups.md#1"]
+
+[[unit]]
+text = "This prints the total, 1, and each group's name: Checkout Page Experiments."
+by = ["docex:docs/api/mutual-exclusion-groups.md#1"]
+
+[[unit]]
+text = "POST /api/v1/mutual-exclusion-groups/{group_id}/experiments"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Add an experiment to a mutual exclusion group."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This adds the demo data's checkout_button_color experiment, looking up its id by its key:"
+by = ["docex:docs/api/mutual-exclusion-groups.md#\"ok\""]
+
+[[unit]]
+text = "It prints \"ok\"."
+by = ["docex:docs/api/mutual-exclusion-groups.md#\"ok\""]
+
+[[unit]]
+text = "The response also names the experiment_id and group_id."
+by = ["docex:docs/api/mutual-exclusion-groups.md#\"ok\""]
+
+[[unit]]
+text = "GET /api/v1/mutual-exclusion-groups/"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Retrieve a specific group, including its member experiments:"
+by = ["docex:docs/api/mutual-exclusion-groups.md#\"name\":\"Checkout Button Color\""]
+
+[[unit]]
+text = "It prints the member experiments' id, name and status:"
+by = ["docex:docs/api/mutual-exclusion-groups.md#\"name\":\"Checkout Button Color\""]
+
+[[unit]]
+text = "PUT /api/v1/mutual-exclusion-groups/"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Update group name, description, or traffic allocation."
+by = [
+    "test:backend/tests/integration/api/test_holdout_admin_roles.py::test_developer_may_rename_a_group",
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestUpdateGroup::test_update_group_returns_200",
+]
+
+[[unit]]
+text = "Changing status (\"archived\" or \"active\") requires ADMIN role, as archiving with DELETE does; a DEVELOPER gets 403."
+by = [
+    "test:backend/tests/integration/api/test_holdout_admin_roles.py::test_developer_cannot_archive_through_put",
+    "test:backend/tests/integration/api/test_holdout_admin_roles.py::test_developer_cannot_unarchive_through_put",
+    "test:backend/tests/integration/api/test_holdout_admin_roles.py::test_developer_may_send_the_unchanged_status",
+]
+
+[[unit]]
+text = "Sending the group's current status back, as a form that sends every field does, is accepted from a DEVELOPER."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "DELETE /api/v1/mutual-exclusion-groups/"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Archive a group (soft delete)."
+by = [
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestArchiveNeedsAdmin::test_developer_cannot_archive_by_delete",
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestArchiveNeedsAdmin::test_admin_non_superuser_archives_by_delete",
+]
+
+[[unit]]
+text = "Requires ADMIN role."
+by = [
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestArchiveNeedsAdmin::test_developer_cannot_archive_by_delete",
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestArchiveNeedsAdmin::test_admin_non_superuser_archives_by_delete",
+    "test:backend/tests/unit/api/test_global_holdout_endpoints.py::TestListAllHoldouts::test_list_holdouts_returns_403_for_analyst",
+    "test:backend/tests/unit/api/test_global_holdout_endpoints.py::TestAdminRoutesByRole::test_developer_gets_403",
+    "docex:docs/api/mutual-exclusion-groups.md#\"name\": \"Quarterly Holdout\"",
+]
+count = 4
+
+[[unit]]
+text = "An archived group no longer constrains its members: from then on a new user can be enrolled in more than one of them."
+by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestGroupRules::test_m9_archived_group_no_longer_constrains"]
+
+[[unit]]
+text = "DELETE /api/v1/mutual-exclusion-groups/{group_id}/experiments/"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Remove an experiment from the group."
+by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestGroupRules::test_m9_removing_a_from_the_group_releases_its_users"]
+
+[[unit]]
+text = "Its users are released: from their next request they can be enrolled in another experiment of the group."
+by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestGroupRules::test_m9_removing_a_from_the_group_releases_its_users"]
+
+[[unit]]
+text = "Their assignment in the removed experiment is kept."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Global Holdout"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A global holdout keeps a percentage of new users out of all experiments platform-wide."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "New users in the holdout are not assigned to any experiment: POST /api/v1/tracking/assign answers with the control variant."
+by = ["test:backend/tests/unit/services/test_assignment_service_eligibility.py::TestHoldout::test_user_in_holdout_is_not_assigned"]
+
+[[unit]]
+text = "Users who already had an assignment when the holdout was activated keep it."
+by = ["test:backend/tests/unit/services/test_assignment_service_eligibility.py::TestStickyAssignments::test_existing_row_bypasses_every_gate"]
+
+[[unit]]
+text = "Only one holdout can be active at a time, and the database enforces it."
+by = [
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestActivation::test_post_active_stamps_it_and_ends_the_one_that_was_active",
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestActivation::test_put_active_stamps_activated_at",
+]
+
+[[unit]]
+text = "Activating a holdout, with PUT /api/v1/holdout/{holdout_id} or by creating it with \"is_active\": true, deactivates the active one."
+by = [
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestActivation::test_post_active_stamps_it_and_ends_the_one_that_was_active",
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestActivation::test_put_active_stamps_activated_at",
+]
+
+[[unit]]
+text = "If two activations happen at the same moment, the second answers 409 and can be retried."
+by = ["test:backend/tests/integration/api/test_holdout_lifecycle.py::test_an_activation_racing_another_answers_409"]
+
+[[unit]]
+text = "Each holdout buckets users with its own salt, so the users one holdout keeps out are not the same users the next one keeps out."
+by = [
+    "test:backend/tests/unit/services/test_global_holdout_service.py::TestSaltIndependence::test_two_holdouts_overlap_as_independent_draws",
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::test_holdouts_added_and_flushed_together_get_distinct_own_salts",
+]
+
+[[unit]]
+text = "While a holdout is active, the API records each new user POST /api/v1/tracking/assign answers for, and whether the holdout kept them out; that record starts when the holdout is activated."
+by = [
+    "test:backend/tests/unit/services/test_assignment_service_eligibility.py::TestHoldoutPopulation::test_held_out_user_is_recorded_and_committed_once",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestHoldoutPopulation::test_a_batch_records_the_population_the_single_route_records",
+]
+
+[[unit]]
+text = "A holdout that was already active when you upgraded to the release that added this record keeps holding the same users out, but nothing was recorded for it: deactivate it and create a new one to start recording."
+by = [
+    "test:backend/tests/integration/api/test_holdout_results.py::TestReasons::test_a_legacy_holdout_is_never_computed",
+    "test:backend/tests/integration/database/test_holdout_population_migration.py::test_upgrade_keeps_one_active_legacy_row_and_salts_the_rest",
+]
+
+[[unit]]
+text = "Size"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The API accepts 1–20%."
+by = ["test:backend/tests/unit/api/test_global_holdout_endpoints.py::TestCreateHoldout::test_create_holdout_returns_422_for_invalid_percentage"]
+
+[[unit]]
+text = "The percentage cannot change once the holdout has been active, because that would move users between the holdout and everyone else."
+by = [
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestRefusals::test_the_percentage_is_fixed_once_active",
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestRefusals::test_an_ended_holdout_cannot_restart",
+]
+
+[[unit]]
+text = "A holdout that has been deactivated cannot be activated again."
+by = [
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestRefusals::test_the_percentage_is_fixed_once_active",
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestRefusals::test_an_ended_holdout_cannot_restart",
+]
+
+[[unit]]
+text = "In both cases, create a new holdout."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/holdout"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Returns the currently active global holdout, or null if none is active:"
+by = ["docex:docs/api/mutual-exclusion-groups.md#null"]
+
+[[unit]]
+text = "It prints null: the demo data has no holdout."
+by = ["docex:docs/api/mutual-exclusion-groups.md#null"]
+
+[[unit]]
+text = "GET /api/v1/holdout/all"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "List all holdout configurations (active and historical)."
+by = [
+    "test:backend/tests/unit/api/test_global_holdout_endpoints.py::TestListAllHoldouts::test_list_holdouts_returns_403_for_analyst",
+    "test:backend/tests/unit/api/test_global_holdout_endpoints.py::TestAdminRoutesByRole::test_developer_gets_403",
+]
+
+[[unit]]
+text = "POST /api/v1/holdout"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Create a global holdout."
+by = ["docex:docs/api/mutual-exclusion-groups.md#\"name\": \"Quarterly Holdout\""]
+
+[[unit]]
+text = "With \"is_active\": true it becomes the active holdout and the one that was active is deactivated."
+by = ["docex:docs/api/mutual-exclusion-groups.md#\"name\": \"Quarterly Holdout\""]
+
+[[unit]]
+text = "The response also carries the holdout's id, description, owner_id, activated_at, deactivated_at, created_at and updated_at."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "PUT /api/v1/holdout/"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Update holdout configuration."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sending \"is_active\": true deactivates the active holdout and activates this one; sending it to the holdout that is already active changes nothing."
+by = [
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestActivation::test_put_active_stamps_activated_at",
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestActivation::test_deactivating_stamps_deactivated_at",
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestReactivation::test_reactivating_the_active_holdout_changes_nothing",
+]
+
+[[unit]]
+text = "\"is_active\": false deactivates it, and it has then ended."
+by = [
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestActivation::test_put_active_stamps_activated_at",
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestActivation::test_deactivating_stamps_deactivated_at",
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestReactivation::test_reactivating_the_active_holdout_changes_nothing",
+]
+
+[[unit]]
+text = "Refused with 422:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "a different holdout_percentage once the holdout has been active: \"holdout_percentage cannot change once a holdout has been active: it would move users between the holdout and the rest and mix the two groups."
+by = ["test:backend/tests/integration/api/test_holdout_lifecycle.py::TestRefusals::test_the_percentage_is_fixed_once_active"]
+
+[[unit]]
+text = "Create a new holdout instead.\" Sending the same percentage is accepted, so a form that sends every field keeps working;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "\"is_active\": true on a holdout that has ended: \"A holdout that has ended cannot restart."
+by = ["test:backend/tests/integration/api/test_holdout_lifecycle.py::TestRefusals::test_an_ended_holdout_cannot_restart"]
+
+[[unit]]
+text = "Create a new holdout.\""
+by = ["test:backend/tests/integration/api/test_holdout_lifecycle.py::TestRefusals::test_an_ended_holdout_cannot_restart"]
+
+[[unit]]
+text = "GET /api/v1/holdout/check/"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Check whether a specific user is in the active global holdout:"
+by = ["docex:docs/api/mutual-exclusion-groups.md#\"user_id\":\"user-123\""]
+
+[[unit]]
+text = "Each user has a bucket from 0 to 99, a hash of their id with the active holdout's salt, so it stays the same for as long as that holdout is active and is different under the next holdout."
+by = [
+    "test:backend/tests/unit/services/test_global_holdout_service.py::TestDeterministicBucketing::test_bucket_range",
+    "test:backend/tests/unit/services/test_global_holdout_service.py::TestDeterministicBucketing::test_same_user_same_bucket",
+    "test:backend/tests/unit/services/test_global_holdout_service.py::TestDeterministicBucketing::test_holdout_salt_is_used",
+]
+
+[[unit]]
+text = "A user is in the holdout when their bucket is below holdout_percentage: here user-123's bucket is 44, so a 5% holdout leaves them out."
+by = [
+    "test:backend/tests/unit/services/test_global_holdout_service.py::TestIsUserInHoldout::test_user_in_holdout",
+    "test:backend/tests/unit/services/test_global_holdout_service.py::TestIsUserInHoldout::test_user_not_in_holdout",
+]
+
+[[unit]]
+text = "Your bucket will differ, because your holdout has its own salt."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A new user in the holdout is answered by POST /api/v1/tracking/assign with the control variant, \"assigned\": false and \"reason\": \"holdout\"."
+by = ["test:backend/tests/unit/services/test_assignment_service_eligibility.py::TestHoldout::test_user_in_holdout_is_not_assigned"]
+
+[[unit]]
+text = "GET /api/v1/holdout/{holdout_id}/results (beta)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Beta: this measures the combined effect of running experiments' treatment arms on users first seen while the holdout was active."
+by = [
+    "test:backend/tests/integration/api/test_holdout_results.py::TestWindow::test_an_event_at_first_seen_counts",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Feature flags and split-URL experiments ignore the holdout: once a winner ships behind a flag, users in the holdout get it too, so shipped features are not part of this comparison."
+by = ["untested:T"]
+
+[[unit]]
+text = "always_valid_ci_lower and always_valid_ci_upper stay valid however often you check."
+by = ["test:backend/tests/unit/services/test_holdout_results_coverage.py::test_the_confidence_sequence_covers_at_every_look"]
+
+[[unit]]
+text = "See #445."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For one event name (metric, required), it compares the share of users who sent at least one matching event in two groups: in_holdout, the users the holdout kept out, and not_in_holdout, everyone else first seen while it was active."
+by = [
+    "test:backend/tests/integration/api/test_holdout_results.py::TestRequest::test_422",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestWindow::test_another_event_name_or_a_view_record_does_not_count",
+]
+
+[[unit]]
+text = "A user is first seen the first time POST /api/v1/tracking/assign answers for them while the holdout is active."
+by = [
+    "test:backend/tests/unit/services/test_assignment_service_eligibility.py::TestHoldoutPopulation::test_held_out_user_is_recorded_and_committed_once",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestExclusion::test_assigned_by_assign_user_after_first_seen_is_in_the_group",
+]
+
+[[unit]]
+text = "Every user recorded is in their group, including users the targeting rules or a mutual exclusion group turned away."
+by = [
+    "test:backend/tests/unit/services/test_assignment_service_eligibility.py::TestHoldoutPopulation::test_held_out_user_is_recorded_and_committed_once",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestExclusion::test_assigned_by_assign_user_after_first_seen_is_in_the_group",
+]
+
+[[unit]]
+text = "A user who already had an experiment assignment before they were first seen is in neither group; excluded_users counts them, in total and per group."
+by = ["test:backend/tests/integration/api/test_holdout_results.py::TestExclusion::test_assigned_one_second_before_first_seen_is_in_neither_group"]
+
+[[unit]]
+text = "An event counts when its own time and the time the server received it are both between the user's first-seen time and the end of the holdout."
+by = [
+    "test:backend/tests/integration/api/test_holdout_results.py::TestWindow::test_an_event_received_before_first_seen_does_not_count",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestWindow::test_an_event_at_window_end_does_not",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestEnded::test_late_events_and_late_assignments_change_nothing",
+]
+
+[[unit]]
+text = "Events received after a holdout ends never change its results."
+by = [
+    "test:backend/tests/integration/api/test_holdout_results.py::TestWindow::test_an_event_received_before_first_seen_does_not_count",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestWindow::test_an_event_at_window_end_does_not",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestEnded::test_late_events_and_late_assignments_change_nothing",
+]
+
+[[unit]]
+text = "window_end is when the holdout was deactivated, or the time of your request while it is active."
+by = ["test:backend/tests/integration/api/test_holdout_results.py::TestEnded::test_late_events_and_late_assignments_change_nothing"]
+
+[[unit]]
+text = "Events with or without an experiment or flag key count alike, so send the metric event for every user, held out or not: an integration that sends it only for users with \"assigned\": true leaves the holdout group without events and makes the experiments look better than they are."
+by = ["test:backend/tests/integration/api/test_holdout_results.py::TestUntagged::test_an_untagged_event_counts_like_a_tagged_one"]
+
+[[unit]]
+text = "The SDKs' key-less track() sends it for held-out users too."
+by = ["test:sdk/js/__tests__/client.test.ts"]
+
+[[unit]]
+text = "difference is \"not in holdout\" minus \"in holdout\": a positive value means the running experiments raised the metric."
+by = ["test:backend/tests/unit/services/test_holdout_results_estimator.py::test_a1_planted_lift_is_fisher_and_agresti_caffo"]
+
+[[unit]]
+text = "ci_lower and ci_upper are a 95% interval for it (Agresti-Caffo) to read once; always_valid_ci_lower and always_valid_ci_upper are a confidence sequence (mSPRT)."
+by = [
+    "test:backend/tests/unit/services/test_holdout_results_estimator.py::test_a1_planted_lift_is_fisher_and_agresti_caffo",
+    "test:backend/tests/unit/services/test_holdout_results_estimator.py::test_a12_confidence_sequence_uses_the_agresti_caffo_variance",
+]
+
+[[unit]]
+text = "p_value and is_significant (p_value < 0.05) are Fisher's exact test, as on /results; the interval is computed separately, so near the boundary it can include 0 while is_significant is true, or the reverse."
+by = ["test:backend/tests/unit/services/test_holdout_results_estimator.py::test_is_significant_follows_fisher_where_the_interval_disagrees"]
+
+[[unit]]
+text = "Any role that can read experiment results can read this route."
+by = [
+    "test:backend/tests/integration/api/test_holdout_results.py::TestAccess::test_every_role_can_read",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestAccess::test_no_token_is_401",
+]
+
+[[unit]]
+text = "holdout_users_with_assignments counts users in the holdout group who were assigned to an experiment while it was active."
+by = [
+    "test:backend/tests/integration/api/test_holdout_results.py::TestAssignedWhileHeldOut::test_an_assignment_inside_the_window_is_counted_and_named",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestRequest::test_the_notice_names_what_the_holdout_does_not_cover",
+]
+
+[[unit]]
+text = "It is 0 unless a release that does not record holdouts served traffic, after a rollback; those users stay in their group, the difference is then smaller than the real one, and analysis_notice says so."
+by = [
+    "test:backend/tests/integration/api/test_holdout_results.py::TestAssignedWhileHeldOut::test_an_assignment_inside_the_window_is_counted_and_named",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestRequest::test_the_notice_names_what_the_holdout_does_not_cover",
+]
+
+[[unit]]
+text = "difference is null, and unavailable_reason and message say why, in these cases:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "unavailable_reason | When"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "activated_before_measurement | The holdout was active before the release that records who a holdout covers. Create a new holdout."
+by = [
+    "test:backend/tests/integration/api/test_holdout_results.py::TestReasons::test_a_legacy_holdout_is_never_computed",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestReasons::test_the_row_the_upgrade_ended_is_activated_before_measurement",
+]
+
+[[unit]]
+text = "not_activated | The holdout has not been activated since then."
+by = ["test:backend/tests/integration/api/test_holdout_results.py::TestReasons::test_a_holdout_not_activated"]
+
+[[unit]]
+text = "too_few_users | A group has fewer than 100 users. The groups and their counts are filled in."
+by = ["docex:docs/api/mutual-exclusion-groups.md#\"unavailable_reason\": \"too_few_users\""]
+
+[[unit]]
+text = "no_events | Neither group sent an event with this name in the window: check the event name."
+by = ["test:backend/tests/integration/api/test_holdout_results.py::TestReasons::test_no_events_for_the_metric"]
+
+[[unit]]
+text = "On a fresh holdout neither group has 100 users yet:"
+by = ["docex:docs/api/mutual-exclusion-groups.md#\"unavailable_reason\": \"too_few_users\""]
+
+[[unit]]
+text = "Permissions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Action | Minimum Role"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "List groups / view holdout | DEVELOPER"
+by = [
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestListGroups::test_list_groups_returns_403_for_viewer",
+    "test:backend/tests/unit/api/test_global_holdout_endpoints.py::TestGetActiveHoldout::test_get_active_holdout_returns_403_for_viewer",
+]
+
+[[unit]]
+text = "Read holdout results | VIEWER"
+by = ["test:backend/tests/integration/api/test_holdout_results.py::TestAccess::test_every_role_can_read"]
+
+[[unit]]
+text = "Create / update groups (name, description, traffic allocation) | DEVELOPER"
+by = [
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestCreateGroup::test_create_group_returns_201",
+    "test:backend/tests/integration/api/test_holdout_admin_roles.py::test_developer_may_rename_a_group",
+]
+
+[[unit]]
+text = "Add/remove experiments from groups | DEVELOPER"
+by = [
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestAddExperimentToGroup::test_add_experiment_returns_200",
+    "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestRemoveExperimentFromGroup::test_remove_experiment_returns_200",
+]
+
+[[unit]]
+text = "Archive or unarchive groups (DELETE, or status on PUT) / list, create and update holdouts | ADMIN"
+by = [
+    "test:backend/tests/integration/api/test_holdout_admin_roles.py::test_admin_operation_by_role",
+    "test:backend/tests/unit/api/test_global_holdout_endpoints.py::TestAdminRoutesByRole",
+]

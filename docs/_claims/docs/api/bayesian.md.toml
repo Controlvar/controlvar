@@ -1,0 +1,333 @@
+# What verifies each unit of docs/api/bayesian.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/bayesian.md"
+
+[[unit]]
+text = "Bayesian Experimentation API"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "When an experiment has Bayesian analysis turned on, its results carry a Bayesian block beside the frequentist statistics: a posterior for each variant, the probability that each is best, the expected loss of choosing it, and a stopping recommendation."
+by = ["test:backend/tests/unit/api/test_bayesian_results_api.py::TestBayesianResultsField::test_bayesian_results_present_when_bayesian_enabled"]
+
+[[unit]]
+text = "Overview"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform fits a Beta-Binomial model to each variant's conversions on the experiment's primary metric."
+by = [
+    "test:backend/tests/unit/services/test_bayesian_service.py::test_posterior_exact_conjugate_update",
+    "test:backend/tests/unit/services/test_bayesian_api_integration.py::TestAnalysisServiceBayesianIntegration::test_compute_bayesian_results_calls_analyze_with_observations",
+]
+
+[[unit]]
+text = "A conversion is a user: the users assigned to the variant with at least one conversion event, so a user who purchases three times counts once, as in GET /results/{id}."
+by = ["test:backend/tests/integration/api/test_converting_users_consistency.py::test_counts_agree_across_endpoints"]
+
+[[unit]]
+text = "Posterior parameters (alpha, beta), updated from the prior with the observed conversions and non-conversions, and the posterior mean."
+by = ["test:backend/tests/unit/services/test_bayesian_service.py::test_posterior_exact_conjugate_update"]
+
+[[unit]]
+text = "Credible interval (equal-tailed: at 95%, the 2.5th and 97.5th percentiles of the posterior) at the configured level, 95% by default."
+by = [
+    "test:backend/tests/unit/services/test_bayesian_service.py::test_credible_interval_95_default",
+    "test:backend/tests/unit/services/test_bayesian_service.py::test_credible_interval_custom_level_80",
+]
+
+[[unit]]
+text = "Probability to be best: the share of Monte Carlo draws in which this variant has the highest rate."
+by = [
+    "test:backend/tests/unit/services/test_bayesian_service.py::test_ptbb_two_variants_sum_to_one",
+    "test:backend/tests/unit/services/test_bayesian_service.py::test_ptbb_clearly_better_variant_above_95pct",
+]
+
+[[unit]]
+text = "Expected loss: how much conversion rate you would give up, on average, by choosing this variant if it is not the best."
+by = [
+    "test:backend/tests/unit/services/test_bayesian_service.py::test_expected_loss_zero_when_variant_dominates",
+    "test:backend/tests/unit/services/test_bayesian_service.py::test_expected_loss_units_in_same_scale_as_metric",
+]
+
+[[unit]]
+text = "A decision from the stopping rules below."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The Monte Carlo seed is derived from the experiment id, the UTC day and the number of samples, and echoed in the response as seed, so two requests on the same day return the same numbers."
+by = [
+    "test:backend/tests/unit/services/test_stats_determinism.py::TestAnalysisServiceSeed::test_compute_bayesian_results_uses_experiment_day_seed",
+    "test:backend/tests/integration/api/test_analysis_snapshots_api.py::TestBayesianRouteDeterminism::test_two_calls_are_byte_identical_with_same_seed",
+]
+
+[[unit]]
+text = "Reading the Bayesian results"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}/bayesian"
+by = ["docex:docs/api/bayesian.md#\"is_enabled\": false"]
+
+[[unit]]
+text = "Returns the Bayesian block on its own, always freshly computed."
+by = ["untested:T"]
+
+[[unit]]
+text = "Any logged-in user can read it."
+by = [
+    "test:backend/tests/smoke/test_experiment_routes_classified.py",
+    "test:backend/tests/integration/api/test_experiment_errors_fixed_message.py",
+]
+
+[[unit]]
+text = "An experiment that hasn't turned Bayesian analysis on answers 200 with \"is_enabled\": false; an experiment that doesn't exist answers 404."
+by = [
+    "docex:docs/api/bayesian.md#\"is_enabled\": false",
+    "test:backend/tests/integration/api/test_analysis_snapshots_api.py::TestBayesianRouteDeterminism::test_bayesian_route_404_for_unknown",
+]
+
+[[unit]]
+text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in first:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This reads the Bayesian block of the demo data's checkout_button_color experiment, saving its id in $EXP_ID first:"
+by = ["docex:docs/api/bayesian.md#\"is_enabled\": false"]
+
+[[unit]]
+text = "It prints \"is_enabled\": false, with no decision and no variant results, because the demo experiment hasn't turned Bayesian analysis on."
+by = ["docex:docs/api/bayesian.md#\"is_enabled\": false"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id} embeds the same block as bayesian_results, which is null when the experiment hasn't turned it on."
+by = [
+    "test:backend/tests/unit/api/test_bayesian_results_api.py::TestBayesianResultsField::test_bayesian_results_is_null_when_bayesian_disabled",
+    "test:backend/tests/integration/api/test_bayesian_results_api.py::TestBayesianResultsDisabled::test_bayesian_results_null_when_not_enabled",
+]
+
+[[unit]]
+text = "Turning Bayesian analysis on"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Set bayesian_enabled to true on POST /api/v1/experiments/ or PUT /api/v1/experiments/{experiment_id}, and optionally a bayesian_config."
+by = [
+    "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestTurningBayesianOn::test_create_persists_config_and_enables_analysis",
+    "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestTurningBayesianOn::test_update_persists_config_and_enables_analysis",
+]
+
+[[unit]]
+text = "In the dashboard, the new-experiment form's Also analyse the primary metric with Bayesian statistics checkbox sends bayesian_enabled: true with no config."
+by = ["test:frontend/src/tests/components/experiment-form-state.test.ts"]
+
+[[unit]]
+text = "Turning it on without a config stores the defaults in the table below."
+by = [
+    "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestTurningBayesianOn::test_create_enabled_without_config_stores_defaults",
+    "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestTurningBayesianOn::test_update_enabled_without_config_stores_defaults",
+]
+
+[[unit]]
+text = "This creates an experiment with Bayesian analysis on, prints the stored settings, and saves its id in $BAYES_ID:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"bayesian_enabled\": true, the stored config with \"loss_threshold\": 0.001, and \"bayesian_decision\": null, because nothing has been analysed yet."
+by = ["docex:docs/api/bayesian.md#\"bayesian_enabled\": true"]
+
+[[unit]]
+text = "The experiment response carries all three fields."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "bayesian_decision is read-only: a request that sends it is answered as if it had not."
+by = [
+    "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestDecisionIsResponseOnly::test_put_bayesian_decision_is_ignored",
+    "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestDecisionIsResponseOnly::test_post_bayesian_decision_is_ignored",
+]
+
+[[unit]]
+text = "bayesian_config Object"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Field | Type | Default | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "prior_family | string | beta | Stored only: beta, normal or gamma are accepted, and every config is analysed as Beta-Binomial"
+by = ["untested:T"]
+
+[[unit]]
+text = "alpha | float | 1.0 | Prior alpha (> 0)"
+by = [
+    "test:backend/tests/unit/schemas/test_bayesian_schemas.py::test_bayesian_config_default_values",
+    "test:backend/tests/unit/schemas/test_bayesian_schemas.py::test_bayesian_config_alpha_must_be_positive",
+]
+
+[[unit]]
+text = "beta | float | 1.0 | Prior beta (> 0)"
+by = [
+    "test:backend/tests/unit/schemas/test_bayesian_schemas.py::test_bayesian_config_default_values",
+    "test:backend/tests/unit/schemas/test_bayesian_schemas.py::test_bayesian_config_beta_must_be_positive",
+]
+
+[[unit]]
+text = "loss_threshold | float | 0.001 | Expected loss the leading variant must be below to be declared the winner (> 0); it also needs a probability to be best of at least 0.975 (see the decision values)"
+by = [
+    "test:backend/tests/unit/schemas/test_bayesian_schemas.py::test_bayesian_config_loss_threshold_must_be_positive",
+    "test:backend/tests/unit/services/test_bayesian_service.py::test_stop_winner_needs_probability_and_loss",
+]
+
+[[unit]]
+text = "rope | [float, float] | null | Region of Practical Equivalence, [lower, upper] with lower < upper, on the difference in conversion rate"
+by = [
+    "test:backend/tests/unit/schemas/test_bayesian_schemas.py::test_bayesian_config_rope_invalid_order_raises",
+    "test:backend/tests/unit/services/test_bayesian_service.py::test_should_stop_returns_stop_equivalent_with_rope",
+]
+
+[[unit]]
+text = "credible_level | float | 0.95 | Credible interval level, between 0 and 1"
+by = [
+    "test:backend/tests/unit/schemas/test_bayesian_schemas.py::test_bayesian_config_default_values",
+    "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestMalformedConfig",
+]
+
+[[unit]]
+text = "A config that fails these checks is refused with 422, and the error's loc names the field, for example [\"body\", \"bayesian_config\", \"alpha\"]."
+by = [
+    "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestMalformedConfig::test_create_refuses_malformed_config",
+    "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestMalformedConfig::test_update_refuses_malformed_config",
+]
+
+[[unit]]
+text = "So is a PUT that sends \"bayesian_config\": null while Bayesian analysis stays on; to turn it off and clear the config, send \"bayesian_enabled\": false with it."
+by = [
+    "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestClearingTheConfig::test_null_config_while_enabled_is_refused",
+    "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestClearingTheConfig::test_disable_and_null_together_clears",
+]
+
+[[unit]]
+text = "An enabled experiment's results"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For an experiment with Bayesian analysis on, the endpoint answers with a result per variant."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This reads the one just created:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"is_enabled\": true and one result for each variant, \"control\" and \"treatment\"."
+by = ["docex:docs/api/bayesian.md#\"is_enabled\": true"]
+
+[[unit]]
+text = "The new experiment has no traffic yet, so each posterior is still the prior."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With traffic, the full response looks like this; the numbers are illustrative:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "BayesianDecision values"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The rules are checked in this order:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Value | When"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "STOP_WINNER | The variant most likely to be best has a probability to be best of at least 0.975, and its expected loss is below loss_threshold."
+by = [
+    "test:backend/tests/unit/services/test_bayesian_service.py::test_stop_winner_needs_probability_and_loss",
+    "test:backend/tests/unit/stats_validation/test_bayesian_stop_winner.py::test_the_bounds_are_the_binomial_quantiles",
+]
+
+[[unit]]
+text = "STOP_EQUIVALENT | rope is set, and for every other variant the probability that its difference from the best lies inside the ROPE is above 0.95."
+by = ["test:backend/tests/unit/services/test_bayesian_service.py::test_should_stop_returns_stop_equivalent_with_rope"]
+
+[[unit]]
+text = "CONTINUE | Neither of the above. Keep collecting data."
+by = ["test:backend/tests/unit/services/test_bayesian_service.py::test_stop_winner_needs_probability_and_loss"]
+
+[[unit]]
+text = "The decision is a recommendation: nothing stops the experiment or changes its status."
+by = ["test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestSchedulerDoesNotStopOnDecision::test_active_experiment_with_stop_decision_stays_active"]
+
+[[unit]]
+text = "STOP_FUTILE is defined but no rule returns it."
+by = ["untested:T"]
+
+[[unit]]
+text = "The example response above answers CONTINUE: the treatment's expected loss, 0.0002, is below the default loss_threshold, but its probability to be best, 0.9731, is under 0.975."
+by = ["test:backend/tests/unit/services/test_bayesian_service.py::test_stop_winner_needs_probability_and_loss"]
+
+[[unit]]
+text = "Reading the decision"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Read the decision once, at the planned sample size."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Like a fixed-horizon p-value, the decision assumes a single look."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For an experiment you want to monitor continuously, use the sequential analysis (GET /results/{id}/sequential), which is built for repeated looks."
+by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_aa_false_rejections_under_peeking"]
+
+[[unit]]
+text = "The 0.975 threshold is deliberately not configurable."
+by = ["test:backend/tests/unit/stats_validation/test_bayesian_stop_winner.py::test_the_bounds_are_the_binomial_quantiles"]
+
+[[unit]]
+text = "bayesian_config has no field for it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A smaller loss_threshold makes the rule stricter; a larger one cannot make it looser than the 0.975 probability allows."
+by = ["test:backend/tests/unit/services/test_bayesian_service.py::test_stop_winner_needs_probability_and_loss"]
+
+[[unit]]
+text = "Error Responses"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Status | Meaning"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "401 Unauthorized | Missing or invalid bearer token"
+by = ["test:backend/tests/unit/api/test_bayesian_results_api.py::TestBayesianResultsAccessControl::test_unauthenticated_request_returns_401"]
+
+[[unit]]
+text = "404 Not Found | The experiment doesn't exist"
+by = ["test:backend/tests/integration/api/test_analysis_snapshots_api.py::TestBayesianRouteDeterminism::test_bayesian_route_404_for_unknown"]
+
+[[unit]]
+text = "500 Internal Server Error | The computation failed; detail is Could not compute the Bayesian results (request ID: <id>)., where <id> is the response's X-Request-ID, and the full error is in the server log under that ID"
+by = ["test:backend/tests/integration/api/test_experiment_errors_fixed_message.py::test_unexpected_error_answers_fixed_message"]

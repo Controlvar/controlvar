@@ -1,0 +1,1300 @@
+# What verifies each unit of docs/guides/user-guide.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/guides/user-guide.md"
+
+[[unit]]
+text = "User Guide"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Guide for product managers, experimenters, and analysts using Experimently."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Accessing the Platform"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "You'll need an account with one of the following roles:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Role | What You Can Do"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "ADMIN | Create, change, schedule and delete any experiment (scheduling is through the API; which actions have a screen); create and manage any feature flag"
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py",
+]
+
+[[unit]]
+text = "DEVELOPER | Create, change, schedule and delete any experiment (scheduling is through the API; which actions have a screen); create and manage any feature flag"
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py",
+]
+
+[[unit]]
+text = "ANALYST | View all experiments, results, and reports, and every feature flag, and change no experiment or flag; like every role, create an API key, which writes tracking data"
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged",
+]
+
+[[unit]]
+text = "VIEWER | View every experiment and its results, and every feature flag, and change no experiment or flag; like every role, create an API key, which writes tracking data"
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged",
+]
+
+[[unit]]
+text = "The ADMIN role does not, by itself, open the dashboard's Users, API Keys, Safety settings or Roles pages, manage user accounts, or change a flag's per-flag safety config or roll it back: those need the separate, superuser account flag (is_superuser), which an ADMIN account may or may not have."
+by = [
+    "test:frontend/src/tests/admin/withAdminGuard.test.tsx",
+    "test:backend/tests/integration/api/test_safety_api.py::TestSafetySettings::test_non_superuser_cannot_update_settings",
+]
+
+[[unit]]
+text = "Through the API, the ADMIN role alone may manage other users' API keys and custom Roles (details)."
+by = [
+    "test:backend/tests/unit/core/test_permissions.py::TestCheckPermission::test_only_admin_may_act_on_other_users_api_keys",
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py",
+]
+
+[[unit]]
+text = "A superuser can do all of the above regardless of role."
+by = ["test:backend/tests/unit/core/test_permissions.py::TestCheckPermission::test_superuser_permission"]
+
+[[unit]]
+text = "Contact your platform admin to request access, a role change, or superuser access."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What the dashboard does not do yet"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What the dashboard does, and what is API only lists, row by row, what has a screen and what works through the API only, with the guide for each."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Experiments"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Creating an Experiment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Experiments → + New Experiment opens guided setup, five short steps."
+by = [
+    "journey:experiment-results#new-experiment",
+    "journey:experiment-results#type-next",
+    "journey:experiment-results#name",
+    "journey:experiment-results#metric-name",
+    "journey:experiment-results#metric-event",
+    "journey:experiment-results#details-next",
+    "journey:experiment-results#variants-next",
+    "journey:experiment-results#estimate-next",
+    "journey:experiment-results#create",
+    "journey:experiment-results#start",
+]
+
+[[unit]]
+text = "Your answers stay in this browser tab until you press Create Experiment; reloading starts over."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "If you prefer every field on one page, choose Use the single-page form (advanced) — your answers carry over."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "Step 1: Type"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Choose A/B Test or Multivariate."
+by = ["journey:experiment-results#new-experiment"]
+
+[[unit]]
+text = "Create a split URL or bandit experiment through the API (POST /api/v1/experiments/)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Step 2: Details"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Name: Descriptive name, e.g., \"Homepage CTA Button Color Q1 2026\""
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Key: generated from the name until you edit it, e.g., homepage_cta_button_color_q1_2026 — your code passes this as experiment_key"
+by = [
+    "journey:experiment-results#name",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_tracking_api.py",
+]
+
+[[unit]]
+text = "Description: Background context, links to design doc, Jira ticket"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Hypothesis: \"Changing the CTA button from blue to green will increase click-through rate by 10%\""
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Then choose what to measure."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Mark one metric as the primary metric (the one you decide on); any others are tracked alongside it."
+by = ["journey:experiment-results#type-next"]
+
+[[unit]]
+text = "Every metric is analysed as a conversion today: whatever its type, the results report the share of users who sent the metric's event."
+by = ["test:frontend/src/tests/components/ResultsTruthfulness.test.tsx::labels the row as a share of users, with no \"$\" and no \"per user\""]
+
+[[unit]]
+text = "The metric's event name must match exactly what your engineers track in code (e.g., checkout_complete)."
+by = ["test:backend/tests/integration/services/test_conversion_event_matching.py"]
+
+[[unit]]
+text = "Step 3: Variants"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every experiment needs a control; mark one variant as it:"
+by = ["untested:T"]
+
+[[unit]]
+text = "Variant | Is Control | Traffic %"
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "Control (Blue Button) | ✅ | 50%"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Treatment (Green Button) | — | 50%"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The traffic split must add up to exactly 100%."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "For multivariate tests, add more variants:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Control | ✅ | 34%"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Green Button | — | 33%"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Red Button | — | 33%"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each variant can also carry a configuration: a JSON object your app receives with the assignment, so code can read values instead of branching on the variant's name."
+by = ["test:backend/tests/integration/api/test_variant_configuration_roundtrip.py::test_configuration_from_create_comes_back_unchanged_from_assign"]
+
+[[unit]]
+text = "Open Configuration (JSON, optional) under the variant and type an object, for example:"
+by = ["test:frontend/src/tests/pages/experiment-new-configuration.test.tsx"]
+
+[[unit]]
+text = "Leave it empty when the variant name is enough; the variant then has no configuration (null, not {})."
+by = ["test:backend/tests/integration/api/test_variant_configuration_roundtrip.py::test_a_variant_created_without_configuration_assigns_null"]
+
+[[unit]]
+text = "The form refuses anything that is not a JSON object, such as a list, a string or text that does not parse, and shows the problem under the field; Next and Create Experiment open the field and move to it."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx",
+    "test:backend/tests/integration/api/test_variant_configuration_roundtrip.py::test_create_refuses_a_configuration_that_is_not_an_object",
+]
+
+[[unit]]
+text = "The dashboard accepts up to 16,384 bytes (UTF-8) per configuration; the API accepts larger ones."
+by = ["test:frontend/src/tests/pages/experiment-new-configuration.test.tsx"]
+
+[[unit]]
+text = "POST /api/v1/tracking/assign, which the SDKs call, returns the configuration as saved, and the experiment's page shows it in the variants table."
+by = [
+    "test:backend/tests/integration/api/test_variant_configuration_roundtrip.py::test_configuration_from_create_comes_back_unchanged_from_assign",
+    "test:frontend/src/tests/pages/experiment-detail-configuration.test.tsx",
+]
+
+[[unit]]
+text = "Only want to test on specific users?"
+by = ["test:frontend/src/tests/pages/experiment-new-targeting.test.tsx"]
+
+[[unit]]
+text = "Add targeting rules on the same step:"
+by = ["test:frontend/src/tests/pages/experiment-new-targeting.test.tsx"]
+
+[[unit]]
+text = "Country is in [US, CA]"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Subscription plan is \"premium\""
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Account age is greater than 30 days"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Users who don't match targeting rules are excluded from the experiment entirely."
+by = ["test:backend/tests/unit/services/test_assignment_service_eligibility.py::TestTargeting::test_non_matching_context_is_not_assigned"]
+
+[[unit]]
+text = "Every condition needs an attribute, an operator and (for most operators) a value."
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "If one is missing, Create Experiment stops and the problem is shown beside the targeting rules; a condition the server cannot apply is reported there too."
+by = ["test:frontend/src/tests/pages/experiment-new-targeting.test.tsx"]
+
+[[unit]]
+text = "Step 4: How results will be judged, and an estimate"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "First, How results will be judged."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "These two settings are saved with the experiment and cannot be changed after it starts:"
+by = ["test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_superuser_cannot_change_the_settings_once_out_of_draft"]
+
+[[unit]]
+text = "Confidence level: 90%, 95% (recommended) or 99%."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "At 95%, a variant is significant when its p-value is below 0.05."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "Correction for several variants: Benjamini-Hochberg (recommended), Bonferroni (stricter) or None."
+by = ["journey:experiment-results#variants-next"]
+
+[[unit]]
+text = "It only matters with three or more variants: each extra variant is another chance for one to look like a winner by luck."
+by = ["journey:experiment-results#results-page"]
+
+[[unit]]
+text = "Benjamini-Hochberg keeps the share of false winners among the variants called significant at about 5% (at 95% confidence); Bonferroni keeps the chance of even one false winner at 5% and needs more users."
+by = ["test:backend/tests/unit/stats_validation/test_multiple_comparison_reference.py::test_adjusted_p_values_match_statsmodels"]
+
+[[unit]]
+text = "The correction applies to the variants of each metric, not across metrics."
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_c2_the_stored_correction_applies_across_three_treatments"]
+
+[[unit]]
+text = "Below them, Also analyse the primary metric with Bayesian statistics is off by default."
+by = ["test:frontend/src/tests/pages/experiment-new-configuration.test.tsx"]
+
+[[unit]]
+text = "Turned on, the results also carry a Bayesian analysis of the primary metric (the probability that each variant is the best) with default priors; the frequentist results and the recommendation do not change."
+by = ["untested:T"]
+
+[[unit]]
+text = "To set the priors, see Bayesian analysis."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The single-page form has the same settings in a collapsed Analysis settings section, whose title shows the current values."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "Then, optionally, the estimate."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Enter your baseline conversion rate and the smallest change worth detecting — a relative change, so 5% on a 12% baseline means 12% → 12.6% — and press Calculate estimate."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "At 80% power and 95% confidence that example needs 47,036 users per variant."
+by = ["test:backend/tests/unit/api/test_sample_size_pinned_answer.py::test_twelve_percent_baseline_five_percent_relative_mde"]
+
+[[unit]]
+text = "Add your daily users to see roughly how many days that takes."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The estimate is advisory and is not saved."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "It plans each comparison at 1 − the confidence level and makes no correction for comparing several variants, so with three or more variants and a correction the experiment needs more users than it says."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+
+[[unit]]
+text = "Step 5: Review and create"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Check the summary, including each variant's configuration and the Analysis row (for example \"95% confidence · Benjamini-Hochberg correction\", with \"· Bayesian analysis on\" when it is on), use Edit to go back to any step, then press Create Experiment."
+by = ["journey:experiment-results#estimate-next"]
+
+[[unit]]
+text = "The experiment is created as a draft and you land on its page."
+by = ["journey:experiment-results#create"]
+
+[[unit]]
+text = "Then: start the experiment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Click Start on the experiment's page."
+by = ["journey:experiment-results#start"]
+
+[[unit]]
+text = "The status changes to ACTIVE."
+by = ["journey:experiment-results#start"]
+
+[[unit]]
+text = "You can also schedule automatic start and end dates."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The dashboard has no schedule screen yet, so this is an API call: PUT /api/v1/experiments/{experiment_id}/schedule, on a DRAFT experiment, with an ADMIN or DEVELOPER token."
+by = [
+    "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestUpdateExperimentSchedule::test_admin_can_schedule_draft_experiment",
+    "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestUpdateExperimentSchedule::test_schedule_active_experiment_returns_400",
+    "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestUpdateExperimentSchedule::test_analyst_cannot_schedule_other_users_experiment",
+]
+
+[[unit]]
+text = "The experiment activates at start_date and completes at end_date, which must be at least an hour later."
+by = [
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p6_due_draft_activates",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_draft_refusal_from_the_stored_start_date_writes_nothing",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_scheduled_end_is_recorded_by_the_experiment_scheduler",
+]
+
+[[unit]]
+text = "A date you leave out of the request is left as it is, and null clears it."
+by = [
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_draft_omitted_start_date_is_kept",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_draft_explicit_null_clears_only_that_field",
+]
+
+[[unit]]
+text = "A date written without a UTC offset is read in time_zone, an IANA name such as America/Los_Angeles (default UTC); a date with an offset, like the ones below, keeps it."
+by = [
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_draft_date_without_offset_is_read_in_the_time_zone",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_date_with_an_offset_keeps_it_whatever_the_time_zone",
+    "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestCompleteExperiment::test_scheduled_dates_are_stored_in_utc_whatever_the_database_time_zone",
+]
+
+[[unit]]
+text = "Dates are stored in UTC."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Clicking Start before the scheduled start starts the experiment right away: its start date becomes the time you clicked, and a scheduled end date is kept."
+by = ["test:backend/tests/integration/api/test_complete_after_early_start.py::test_a_draft_started_before_its_scheduled_start_records_the_actual_start"]
+
+[[unit]]
+text = "Pausing and Stopping"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Pause: Temporarily halt assignment of new users."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail.test.tsx",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestMidBatch::test_experiment_paused_part_way_is_409_and_a_resend_completes",
+]
+
+[[unit]]
+text = "Existing assignments are preserved."
+by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestMidBatch::test_experiment_paused_part_way_is_409_and_a_resend_completes"]
+
+[[unit]]
+text = "Use when you need to investigate anomalies or if there's a critical bug."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A paused experiment stays paused until you click Start again."
+by = [
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p1_paused_experiment_with_past_start_stays_paused",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p4_pause_after_a_resume_sticks",
+]
+
+[[unit]]
+text = "Nothing resumes it behind your back: not the scheduler, and not a restart of the service."
+by = [
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p1_paused_experiment_with_past_start_stays_paused",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p4_pause_after_a_resume_sticks",
+]
+
+[[unit]]
+text = "To have it resume by itself at a set time, schedule a resume after pausing: the same PUT /api/v1/experiments/{experiment_id}/schedule call, where start_date is the time to resume at."
+by = ["test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p2_scheduled_resume_is_recorded_and_fires"]
+
+[[unit]]
+text = "It is stored as resume_at (returned with the experiment); the experiment's own start date does not move."
+by = ["test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p2_scheduled_resume_is_recorded_and_fires"]
+
+[[unit]]
+text = "On a paused experiment:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "\"start_date\": null cancels a scheduled resume;"
+by = ["test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_paused_start_date_null_cancels_the_resume"]
+
+[[unit]]
+text = "a field you leave out is left as it is, as on a draft;"
+by = [
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_paused_omitted_start_date_keeps_the_resume",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_paused_omitted_end_date_is_kept",
+]
+
+[[unit]]
+text = "end_date must be later than the experiment's start date and, with a resume scheduled, at least an hour after the resume time."
+by = [
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_paused_end_date_before_the_stored_start_date_is_400",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_paused_resume_after_the_stored_end_date_is_400",
+]
+
+[[unit]]
+text = "Starting, completing or archiving the experiment cancels a scheduled resume, and so does any other change of status."
+by = ["test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p5_status_change_clears_the_resume"]
+
+[[unit]]
+text = "Complete: Stop the experiment."
+by = ["test:frontend/src/tests/pages/experiment-detail.test.tsx"]
+
+[[unit]]
+text = "Use when you have sufficient data and are ready to make a decision."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Existing data is preserved."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Use the Sample Size tab to confirm the smallest variant has reached the planned sample before deciding."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Reading Results"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Open the experiment from Experiments and choose View results (it cannot be chosen while the experiment is a draft), or go to http://localhost:3000/results/EXPERIMENT_ID."
+by = [
+    "journey:experiment-results#start",
+    "journey:experiment-results#results-page",
+    "journey:experiment-results#ratio-results-page",
+    "test:frontend/src/tests/pages/experiment-detail.test.tsx",
+]
+
+[[unit]]
+text = "Experiment Summary Card"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Shows at a glance:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Status: Active / Completed"
+by = ["test:frontend/src/tests/components/ExperimentSummary.test.tsx"]
+
+[[unit]]
+text = "Duration: Days running"
+by = ["test:frontend/src/tests/components/ExperimentSummary.test.tsx"]
+
+[[unit]]
+text = "Total Users: Participants across all variants"
+by = [
+    "journey:experiment-results#results-page",
+    "journey:experiment-results#ratio-results-page",
+    "journey:experiment-results#floor-results-page",
+]
+
+[[unit]]
+text = "Minimum sample: Reached when every variant has at least the primary metric's minimum sample size (100 users unless the metric sets another), otherwise Not reached."
+by = [
+    "journey:experiment-results#floor-results-api",
+    "journey:experiment-results#floor-results-page",
+]
+
+[[unit]]
+text = "A variant is recommended for shipping only once this is reached: until then a significantly better variant is shown as Leading, and the recommendation is CONTINUE TESTING, with the reason \"Not every variant has reached the minimum sample size yet\"."
+by = [
+    "journey:experiment-results#floor-results-api",
+    "journey:experiment-results#floor-results-page",
+]
+
+[[unit]]
+text = "It is a floor, not the planned sample size: the Sample Size tab shows that, and the card's \"See the Sample Size tab for the planned sample.\" link opens it."
+by = [
+    "test:frontend/src/tests/components/ExperimentSummary.test.tsx",
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx",
+]
+
+[[unit]]
+text = "Recommendation: SHIP VARIANT / KEEP CONTROL / CONTINUE TESTING / INCONCLUSIVE"
+by = [
+    "journey:experiment-results#results-page",
+    "journey:experiment-results#ratio-results-page",
+    "journey:experiment-results#floor-results-page",
+]
+
+[[unit]]
+text = "Analysis: the confidence level and correction the results use, which are the experiment's own settings."
+by = ["journey:experiment-results#results-page"]
+
+[[unit]]
+text = "For example \"95% confidence · Benjamini-Hochberg correction for the 2 comparisons with the control on each metric\", or, with one treatment, \"one comparison with the control on each metric, so no correction is needed\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "To see the uncorrected numbers for an experiment with several variants and a correction, ask the API with ?correction_method=none (GET /api/v1/results/{experiment_id})."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/stats_validation/test_multiple_comparison_reference.py::test_no_correction_adjusts_nothing",
+]
+
+[[unit]]
+text = "Sample Ratio Check"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The results page compares how many users each variant received with its traffic allocation (a chi-square test of the assignment counts)."
+by = [
+    "journey:experiment-results#ratio-results-api",
+    "journey:experiment-results#ratio-results-page",
+]
+
+[[unit]]
+text = "If they differ by more than chance allows (p < 0.001), a notice above the tabs says so, with each variant's users and the number expected."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The recommendation is then INCONCLUSIVE, and a \"Leading\" variant and the Bayesian analysis carry a warning."
+by = [
+    "journey:experiment-results#ratio-results-api",
+    "journey:experiment-results#ratio-results-page",
+]
+
+[[unit]]
+text = "A mismatch usually means assignment or tracking is broken, so do not use the numbers for a decision until you find out why."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "When the split matches, one line below the summary card says so, with the check's p-value."
+by = [
+    "journey:experiment-results#results-page",
+    "journey:experiment-results#floor-results-page",
+]
+
+[[unit]]
+text = "Nothing is shown for a bandit, which moves traffic on purpose, for an experiment with no users yet, or when the check could not be run; that is not a pass."
+by = ["test:backend/tests/unit/services/test_srm.py"]
+
+[[unit]]
+text = "The API returns the check as srm in GET /api/v1/results/{experiment_id}."
+by = [
+    "journey:experiment-results#results-api",
+    "journey:experiment-results#ratio-results-api",
+]
+
+[[unit]]
+text = "Bayesian Analysis"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For an experiment with Bayesian analysis on, the end of the Overview tab shows a Bayesian analysis of the primary metric: its decision (Continue, Stop: a winner is clear, Stop: the variants are equivalent or Stop: a meaningful difference is unlikely) and, for each variant, the chance it is the best, the expected loss, the posterior mean and the credible interval."
+by = ["untested:T"]
+
+[[unit]]
+text = "It is a second analysis and does not change the recommendation."
+by = ["untested:T"]
+
+[[unit]]
+text = "When Bayesian analysis is on but the results carry none, a line says it could not be computed."
+by = ["untested:T"]
+
+[[unit]]
+text = "The method is described in Bayesian analysis."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Recommendation Meanings"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Recommendation | Meaning | Action"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "SHIP VARIANT | Treatment is significantly better | Deploy the treatment to all users"
+by = [
+    "journey:experiment-results#results-page",
+    "journey:experiment-results#results-api",
+]
+
+[[unit]]
+text = "KEEP CONTROL | Control is significantly better | Do not ship the treatment"
+by = ["test:backend/tests/unit/services/test_srm.py"]
+
+[[unit]]
+text = "CONTINUE TESTING | Not enough data yet | Wait for more data before deciding"
+by = [
+    "journey:experiment-results#floor-results-api",
+    "journey:experiment-results#floor-results-page",
+]
+
+[[unit]]
+text = "INCONCLUSIVE | The sample-ratio check failed: users were not split the way the traffic allocation says, so the numbers cannot be trusted | Do not ship on these results. Find and fix the cause of the uneven split, then run the experiment again"
+by = [
+    "journey:experiment-results#ratio-results-api",
+    "journey:experiment-results#ratio-results-page",
+]
+
+[[unit]]
+text = "Metric Comparison Table"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For each metric and variant pair:"
+by = ["journey:experiment-results#results-page"]
+
+[[unit]]
+text = "Column | Meaning"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sample Size | Users assigned to this variant"
+by = [
+    "journey:experiment-results#results-page",
+    "journey:experiment-results#results-api",
+]
+
+[[unit]]
+text = "Value | Conversion rate for this variant: the share of its users who sent the metric's event"
+by = ["test:frontend/src/tests/components/ResultsTruthfulness.test.tsx::labels the row as a share of users, with no \"$\" and no \"per user\""]
+
+[[unit]]
+text = "Improvement | How much better/worse vs. control (e.g., +12.3%)"
+by = ["journey:experiment-results#results-page"]
+
+[[unit]]
+text = "p-value | Probability the difference is due to chance (lower = more confident). Headed Adjusted p-value when a correction applies and a metric has two or more treatments with a p-value: the p-value after the experiment's correction, with the unadjusted value beneath it. A footnote under the table names the correction."
+by = ["test:frontend/src/tests/pages/results-detail.test.tsx"]
+
+[[unit]]
+text = "Significance | (adjusted) p-value < (1 - confidence level), e.g., < 0.05 for 95% confidence"
+by = ["journey:experiment-results#results-api"]
+
+[[unit]]
+text = "For each variant, GET /api/v1/results/{experiment_id} also returns effect_size, effect_size_label (negligible / small / medium / large) and confidence_interval."
+by = [
+    "test:backend/tests/unit/api/test_results_api.py",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Green = statistically significant improvement Red = statistically significant degradation Gray = not statistically significant"
+by = ["untested:T"]
+
+[[unit]]
+text = "Trend Chart"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Shows conversion rate over time for each variant."
+by = ["test:frontend/src/tests/components/TrendChart.test.tsx"]
+
+[[unit]]
+text = "Two modes:"
+by = ["test:frontend/src/tests/components/TrendChart.test.tsx"]
+
+[[unit]]
+text = "Cumulative: Running total from experiment start (recommended — smooths noise)"
+by = ["test:frontend/src/tests/components/TrendChart.test.tsx"]
+
+[[unit]]
+text = "Daily: Day-by-day rate (useful for detecting novelty effects or day-of-week patterns)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sample Size"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The Sample Size tab shows the planned sample size: how many users each variant needs to detect the smallest lift you care about, and how far the experiment has got."
+by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
+
+[[unit]]
+text = "Calculated from."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every number the plan uses is shown, with where it came from:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Baseline conversion rate: the rate observed in the control variant on the primary metric so far (\"Observed in control so far: 11.8% (2,140 users)\"), or the rate you typed (\"Entered by you\")."
+by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
+
+[[unit]]
+text = "Minimum detectable effect: 5% relative unless you change it."
+by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
+
+[[unit]]
+text = "Relative means 12% → 12.6%, not 17%."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Experiments do not store a planned effect."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Power (80%, 90% or 95%) and significance (always two-sided, which is what the results test): 1 − the experiment's confidence level unless you choose 5%, 1% or 10%."
+by = [
+    "test:frontend/src/tests/components/SampleSizeMeter.test.tsx",
+    "test:backend/tests/unit/api/test_sample_size_critical_values.py",
+]
+
+[[unit]]
+text = "A level set through the API, such as 92%, shows as \"8% (this experiment's setting)\"."
+by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
+
+[[unit]]
+text = "Correction, for three or more variants: the experiment's correction unless you choose another."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Bonferroni or Benjamini-Hochberg plans each comparison with the control at significance ÷ (variants − 1)."
+by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
+
+[[unit]]
+text = "Change any of them and press Recalculate."
+by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
+
+[[unit]]
+text = "Progress is the smallest variant: \"Smallest variant: 20,000 of 47,036 (43%)\", then either \"43% of planned sample\" or \"Planned sample reached\"."
+by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
+
+[[unit]]
+text = "The power shown is the power to detect your planned lift at the current size, not the effect seen so far."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The tab also says when:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "no users have been assigned yet, or there is no rate to plan from (no control conversions, or every control user converted): type the rate you expect;"
+by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
+
+[[unit]]
+text = "the metric is not a conversion: every metric is analysed as a conversion today, so the plan is for a conversion rate."
+by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
+
+[[unit]]
+text = "The Power Calculator plans conversion rates only too, and the tab says so;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "a fixed sample size is a guide only: a bandit, an uneven split, sequential testing or Bayesian analysis."
+by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
+
+[[unit]]
+text = "This is not the same check as Minimum sample on the Overview card, which is the floor the recommendation needs."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The tab loads its numbers separately from the rest of the page."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If they cannot be loaded, the tab says so and offers Try again; the Overview and the other tabs still work."
+by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx"]
+
+[[unit]]
+text = "Feature Flags"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Feature flags let you control which users see a feature without deploying new code."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Creating a Feature Flag"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Navigate to Feature Flags → New Flag:"
+by = ["test:frontend/src/tests/pages/feature-flag-new.test.tsx"]
+
+[[unit]]
+text = "Key: Identifier used in code, e.g., new-checkout-flow"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Name: Human-readable name"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Description: What this flag controls"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Controlling Rollout"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Manual rollout:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Open the flag, move the Rollout percentage slider to the desired value and press Save Changes."
+by = ["test:frontend/src/tests/pages/feature-flag-detail.test.tsx"]
+
+[[unit]]
+text = "Percentage | Meaning"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "0% | No user outside a targeting rule gets the feature"
+by = ["test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestDashboardRules::test_matched_rule_uses_rule_percentage_unmatched_uses_global"]
+
+[[unit]]
+text = "5% | 1 in 20 users sees the feature"
+by = ["test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches"]
+
+[[unit]]
+text = "50% | Half of users"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "100% | All users see the feature"
+by = ["test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches"]
+
+[[unit]]
+text = "Who gets the feature?"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform uses a deterministic hash of the user's ID."
+by = ["test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches"]
+
+[[unit]]
+text = "The same user always gets the same result (sticky assignment)."
+by = ["test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches"]
+
+[[unit]]
+text = "This means:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If you set 5%, the same 5% of users will consistently see the feature"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If you increase to 50%, the original 5% are still included (plus 45% more)"
+by = ["untested:T"]
+
+[[unit]]
+text = "Adding targeting rules:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Optionally restrict to specific users:"
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_in_and_not_in_evaluate",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_equals_not_equals",
+]
+
+[[unit]]
+text = "Enable only for users in the US"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Only for users on the \"enterprise\" plan"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Only for users who signed up before a certain date"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If one is missing, Create Feature Flag or Save Changes stops and the problem is shown beside the targeting rules; a condition the server cannot apply is reported there too."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-new.test.tsx",
+    "test:frontend/src/tests/pages/feature-flag-detail-targeting.test.tsx",
+]
+
+[[unit]]
+text = "Rules written through the API in a shape the rule builder cannot show are displayed read-only."
+by = ["test:frontend/src/tests/pages/feature-flag-detail-targeting.test.tsx"]
+
+[[unit]]
+text = "Saving other changes, such as the rollout percentage, leaves them as they are; Replace rules starts again with the builder."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Scheduled Rollouts"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For gradual rollouts on a schedule:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Create a rollout schedule through the API with POST /api/v1/rollout-schedules/ (the stages go in its stages list; see Rollouts for the full contract), then start it with POST /api/v1/rollout-schedules/{schedule_id}/activate."
+by = [
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestCreateRolloutSchedule::test_created_schedule_stores_stages_and_owner",
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutScheduleLifecycle::test_activate_draft_schedule",
+]
+
+[[unit]]
+text = "The flag's page in the dashboard shows the schedule, its status and its stages, read-only."
+by = ["test:frontend/src/tests/pages/feature-flag-detail.test.tsx"]
+
+[[unit]]
+text = "A schedule like this one:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Stage | Target % | Trigger Type | Start Date"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Stage 1 | 5% | Time-based | Apr 1, 2026"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Stage 2 | 25% | Time-based | Apr 8, 2026"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Stage 3 | 100% | Manual | —"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform automatically advances time-based stages."
+by = ["test:backend/tests/unit/core/test_rollout_scheduler.py"]
+
+[[unit]]
+text = "A manual stage waits until you advance it with POST /api/v1/rollout-schedules/stages/{stage_id}/advance."
+by = ["test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutStages::test_advance_manual_stage_on_active_schedule"]
+
+[[unit]]
+text = "Disabling / Rolling Back"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "To disable a flag, turn it off with the switch at the top of its page; it then shows Not serving."
+by = ["test:frontend/src/tests/pages/feature-flag-detail.test.tsx"]
+
+[[unit]]
+text = "Setting the rollout percentage to 0 is not the same: users matched by a targeting rule keep the flag."
+by = ["test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestDashboardRules::test_matched_rule_uses_rule_percentage_unmatched_uses_global"]
+
+[[unit]]
+text = "If you have safety monitoring configured, the platform can roll the flag back automatically if error rates spike."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+]
+
+[[unit]]
+text = "A rollback to 0% turns the flag off for every user and pauses its rollout schedule (see Safety Monitoring)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Archived Flags"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An archived flag is retired and never served."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It cannot be turned on until it is unarchived: the API refuses every request that would turn it on with \"This flag is archived."
+by = [
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py",
+    "test:backend/tests/unit/models/test_feature_flag_archive_guard.py",
+]
+
+[[unit]]
+text = "Unarchive it before turning it on.\" Turning it off succeeds and changes nothing."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Archiving and unarchiving are API calls for now (bulk toggle with archive, and POST /api/v1/feature-flags/{id}/unarchive, which is beta); an unarchived flag comes back inactive."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py",
+]
+
+[[unit]]
+text = "See Archived flags."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Analytics & Reporting"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Viewing All Experiments"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Experiments list shows all experiments with their name, status, type, number of variants and creation date."
+by = ["test:frontend/src/tests/pages/experiments-index.test.tsx"]
+
+[[unit]]
+text = "Filter by status: All / Draft / Active / Paused / Completed."
+by = ["test:frontend/src/tests/pages/experiments-index.test.tsx"]
+
+[[unit]]
+text = "Exporting Results"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Export results through the API:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "CSV export: GET /api/v1/export/variants downloads per-variant results as CSV (?format=json for JSON); see Data Export"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_export_api.py",
+]
+
+[[unit]]
+text = "Full results: GET /api/v1/results/{experiment_id} returns JSON with all statistics"
+by = ["journey:experiment-results#results-api"]
+
+[[unit]]
+text = "Advanced Statistical Methods"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sequential Testing — Stop Experiments Early"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Standard A/B tests require a fixed sample size decided upfront."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sequential testing lets you monitor results continuously and stop as soon as you have enough evidence — without inflating your false positive rate."
+by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_aa_false_rejections_under_peeking"]
+
+[[unit]]
+text = "When sequential testing is on for an experiment, its results page has a Sequential tab."
+by = [
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::is asked for from the dedicated route when the experiment says it is on and the results carry no block",
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::is not asked for from the dedicated route when the experiment says sequential testing is off",
+]
+
+[[unit]]
+text = "The API route is:"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The platform uses mSPRT (mixture Sequential Probability Ratio Test)."
+by = ["docex:docs/api/sequential-testing.md#\"method\": \"msprt\""]
+
+[[unit]]
+text = "When recommended_action is stop_for_effect, it is safe to stop: there is an effect, but it may be a harm, so the sign of the confidence sequence and the metric's lower_is_better decide whether to ship."
+by = [
+    "test:frontend/src/tests/components/EarlyStoppingBanner.test.tsx::a higher-is-better metric with a worse variant (10% -> 7%) shows harm, not ship",
+    "test:frontend/src/tests/components/EarlyStoppingBanner.test.tsx::a lower-is-better metric (bounce, latency) with a negative difference shows success",
+]
+
+[[unit]]
+text = "An experiment running well past its expected duration is flagged at_risk; that is advisory, not a reason to conclude there is no effect."
+by = [
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_long_running_inconclusive_is_at_risk_and_continue",
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_long_running_with_a_clear_effect_still_stops_for_effect",
+]
+
+[[unit]]
+text = "See the Sequential Testing Guide for details."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "CUPED — Reach Significance Faster"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "CUPED reduces result noise by adjusting for each user's own events in the days before they were assigned; how much depends on how well that history predicts the outcome."
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_recovers_the_seeded_history"]
+
+[[unit]]
+text = "When to use it: When your users sent the metric's event before the experiment (returning customers who bought before, say)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Send that history to the tracking API with no experiment key, before you start the experiment: history the server receives after a user was assigned is ignored for that user."
+by = [
+    "test:backend/tests/integration/services/test_cuped_covariate_window.py::test_receive_guard_stored_after_assignment_is_not_history",
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::TestUntaggedTrack::test_an_event_with_no_key_is_stored_as_history",
+]
+
+[[unit]]
+text = "The dashboard has no CUPED tab; it is available through the API:"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "See the CUPED Guide for sending history and reading the result."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Dimensional Analysis — Did the Effect Vary by Segment?"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "After an experiment concludes, use dimensional analysis to understand whether the treatment worked differently for different groups (mobile vs desktop, new vs returning users, etc.)."
+by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx"]
+
+[[unit]]
+text = "Important: Segment findings are always exploratory."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Use them to generate hypotheses for follow-up experiments, not as final conclusions."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Access via the Breakdowns tab on any experiment results page, or via the route below, where segment_by is the dimension, such as device:"
+by = [
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::renders Breakdowns tab in the tab list",
+    "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestSegmentedExperimentResults::test_get_segmented_results_for_active_experiment",
+]
+
+[[unit]]
+text = "See the Dimensional Analysis Guide."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Multi-Armed Bandit — Maximize Conversions During the Experiment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A bandit experiment automatically shifts traffic toward the better-performing variant as data accumulates."
+by = [
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerIntegration::test_thompson_weights_shift_toward_better_variant",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_new_users_follow_bandit_weights",
+]
+
+[[unit]]
+text = "Use this when maximizing conversions during the experiment matters more than getting precise effect size estimates."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Set optimization_type to thompson_sampling, ucb1, or epsilon_greedy when creating an experiment."
+by = [
+    "test:backend/tests/unit/schemas/test_bandit_schemas.py::TestOptimizationType",
+    "docex:docs/api/multi-armed-bandit.md#\"name\": \"CTA Button Bandit\"",
+]
+
+[[unit]]
+text = "See the Multi-Armed Bandit Guide."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A bandit experiment's page has a Current traffic weights panel: each variant's share of new users, with its pulls, successes and conversion rate, and when the weights were last computed."
+by = ["test:frontend/src/tests/pages/experiment-detail-bandit.test.tsx"]
+
+[[unit]]
+text = "Every role can read it, and nothing in it changes the experiment."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-bandit.test.tsx",
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestBanditStatusForTheDashboard::test_every_role_reads_the_weights",
+]
+
+[[unit]]
+text = "It loads once and again when you press Refresh."
+by = [
+    "test:backend/tests/unit/services/test_bandit_routing.py::TestBanditChooser::test_no_state_means_default_hashing",
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestBanditStatusForTheDashboard::test_last_updated_is_null_before_the_first_update",
+]
+
+[[unit]]
+text = "Before the first update it says so, and new users follow each variant's starting allocation until then."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The dashboard shows the current weights only, with no history."
+by = ["test:frontend/src/tests/components/BanditWeightsSection.test.tsx::reads GET /api/v1/bandit/{id} once on load, with no options, and again on Refresh"]
+
+[[unit]]
+text = "Interaction Detection — Are Your Experiments Interfering?"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "When multiple experiments run simultaneously on overlapping user populations, they can distort each other's results."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Run an interaction scan to find the pairs that share users, then ask the pair route whether one experiment's effect differs across the other's arms (beta)."
+by = [
+    "test:backend/tests/unit/api/test_interaction_endpoints.py::TestScanEndpoint::test_scan_returns_active_interaction_scan_response_shape",
+    "test:backend/tests/integration/api/test_interaction_pair_api.py::test_r1_arm_counts_are_the_results_counts",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "The scan measures overlap only."
+by = [
+    "test:backend/tests/unit/api/test_interaction_endpoints.py::TestScanEndpoint::test_scan_returns_active_interaction_scan_response_shape",
+    "test:backend/tests/integration/api/test_interaction_pair_api.py::test_r1_arm_counts_are_the_results_counts",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Access via:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If high-risk pairs are found, add the experiments to a Mutual Exclusion Group to prevent overlap in future runs."
+by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestGroupRules::test_m9_with_both_live_from_the_start_each_user_is_in_exactly_one"]
+
+[[unit]]
+text = "See the Interaction Detection Guide."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Getting Help"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "API Documentation: http://localhost:8000/api/v1/docs"
+by = ["test:backend/tests/unit/models/test_fast_api_setup.py::test_api_docs_available"]
+
+[[unit]]
+text = "Technical Guide: See Technical Guide for implementation details"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Issues: https://github.com/getexperimently/experimently/issues"
+by = ["exempt:baseline"]

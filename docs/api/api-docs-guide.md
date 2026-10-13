@@ -8,13 +8,9 @@ The API documentation is available in two formats:
 
 1. **Swagger UI**: Interactive documentation where you can try out API endpoints
    - URL: `/api/v1/docs`
-   - Best for: Developers who want to test API endpoints directly
 
 2. **ReDoc**: Clean, responsive documentation with better navigation
    - URL: `/api/v1/redoc`
-   - Best for: Reviewing API structure and understanding request/response formats
-
-> **Note**: In production environments, these documentation endpoints may be disabled for security reasons.
 
 ## Understanding the API Structure
 
@@ -41,93 +37,41 @@ The API uses two authentication methods:
 2. **API Key**: For tracking endpoints called from client applications
    - Include the API key in the `X-API-Key: <api-key>` header
 
-## Using Swagger UI
-
-Swagger UI provides an interactive interface to:
-
-1. **Explore Endpoints**: Browse all available endpoints organized by tags
-2. **Read Documentation**: View detailed descriptions, parameters, and response formats
-3. **Try Endpoints**: Execute API calls directly from the browser
-4. **View Models**: Examine request and response data structures
-
-### Steps to Test an Endpoint
-
-1. Click on the endpoint you want to test
-2. Click the "Try it out" button
-3. Fill in the required parameters
-4. For endpoints requiring authentication, click the "Authorize" button at the top and enter your credentials
-5. Click "Execute" to send the request
-6. View the response below
-
-## Using ReDoc
-
-ReDoc provides a cleaner reading experience with:
-
-1. **Three-panel layout**: Navigation sidebar, API description, and request/response examples
-2. **Search functionality**: Quickly find endpoints by keyword
-3. **Deep linking**: Share links to specific endpoints
-4. **Responsive design**: Works well on mobile devices
-
 ## API Versioning
 
-The API uses versioning to ensure backward compatibility:
-
 - Current version: v1 (accessed via `/api/v1/...`)
-- Future versions will be accessible via `/api/v2/...`, etc.
 
-## Common Response Formats
+See [API stability](stability.md) for what may change within v1.
 
-All API endpoints follow a consistent response format:
+## Error Responses
 
-1. **Success Responses**: Return HTTP 200/201/204 status codes with data in the response body
-2. **Error Responses**: Return appropriate HTTP error codes (400, 401, 403, 404, 422, 500) with a standardized error format:
+An error answers with a `detail` field: a message such as `{"detail": "Not Found"}`,
+or, when a request does not validate (`422`), a list of the problems, each with its
+`type`, `loc` and `msg`:
 
 ```json
 {
-  "error": {
-    "status_code": 400,
-    "message": "Detailed error message",
-    "details": [...] // Additional details for validation errors
-  }
+  "detail": [
+    {"type": "missing", "loc": ["body", "email"], "msg": "Field required"}
+  ]
 }
 ```
 
 ## Pagination
 
-List endpoints support pagination with the following query parameters:
+List endpoints page in different ways: most take `skip` and `limit`, some take `page`
+with `limit` or `page_size`, and a few take no paging parameter. The route's entry in
+the API documentation names its parameters.
 
-- `skip`: Number of records to skip (default: 0)
 - `limit`: Maximum number of records to return (default: 100; the largest value allowed
   differs by route, and some lists have none: the route's OpenAPI entry gives it)
 
-Paginated responses include metadata:
-
-```json
-{
-  "items": [...],
-  "total": 150,
-  "skip": 0,
-  "limit": 100
-}
-```
-
 ## Filtering and Sorting
 
-Many list endpoints support filtering and sorting:
+Some list endpoints support filtering, and one supports sorting:
 
 - Filtering: Use query parameters (e.g., `status_filter=active`)
-- Sorting: Use `sort_by` and `sort_order` parameters (e.g., `sort_by=created_at&sort_order=desc`)
-
-## Data Models
-
-The API uses Pydantic models to define request and response data structures. These models:
-
-1. **Validate Data**: Ensure all fields meet validation rules
-2. **Document Types**: Provide type information for all fields
-3. **Set Defaults**: Supply default values where appropriate
-4. **Enforce Constraints**: Apply business rules to data
-
-You can view the complete data model definitions in both Swagger UI and ReDoc.
+- Sorting: `GET /api/v1/experiments/` takes `sort_by` and `sort_order` (e.g., `sort_by=created_at&sort_order=desc`)
 
 ## Common Workflows
 
@@ -185,20 +129,10 @@ the SDK prefixes, then the default.
 The SDK ceiling is high on purpose: one server-side SDK, or one office behind
 a NAT, is a single IP sending thousands of requests a minute.
 
-## Security Best Practices
-
-When using the API, follow these security best practices:
-
-1. **Keep credentials secure**: Never expose API keys or tokens in client-side code
-2. **Use HTTPS**: Always connect to the API over HTTPS
-3. **Minimize permissions**: Use the least privileged role necessary
-4. **Validate inputs**: Even though the API validates inputs, also validate on the client side
-5. **Handle errors gracefully**: Properly handle API errors in your application
-
 ## Webhooks
 
 The webhook endpoints are **inbound** — the platform receives callbacks from
-third-party services, it does not send event notifications to yours:
+third-party services:
 
 ```text
 POST /api/v1/integrations/webhooks/github
@@ -206,38 +140,13 @@ POST /api/v1/integrations/webhooks/jira
 POST /api/v1/integrations/webhooks/salesforce
 ```
 
-There is no `POST /api/v1/webhooks` and no outbound event-notification
-feature. For notifications on experiment events, use the Slack and email
-alerting built into the platform instead.
+There is no `POST /api/v1/webhooks`: no API registers a webhook for the platform to
+call. For Slack messages about platform events, see
+[Slack & Email Alerting](alerting.md).
 
-## SDK Support
+## SDKs
 
-For easier integration, the platform provides official SDKs:
+The SDKs, and which of them are published, are listed in
+[SDK contract & status](../sdk-guide.md).
 
-- JavaScript/TypeScript SDK
-- Python SDK
-- Java SDK
-- iOS/Swift SDK
-- Android/Kotlin SDK
-
-The SDKs simplify API integration and handle authentication, retries, and caching.
-
-## Additional Resources
-
-For more information:
-
-1. **Developer Guides**: Detailed tutorials for common use cases
-2. **API Changelog**: History of API changes and versioning
-3. **Sample Applications**: Reference implementations using the API
-4. **Community Forum**: Get help from other developers
-
-## Support and Feedback
-
-If you need assistance with the API:
-
-- Check the documentation first
-- Search the community forum for similar issues
-- Report bugs or request features using the GitHub repository
-- Contact support for critical issues
-
-We welcome your feedback to improve the API and documentation!
+Report bugs or request features using the GitHub repository.

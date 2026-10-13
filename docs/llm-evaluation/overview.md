@@ -1,53 +1,22 @@
 # LLM/AI Model Evaluation — Overview
 
-EP-046 extends the platform to become the first open-source experimentation platform with **native LLM experiment support**. Users can compare prompt versions, model variants (GPT-4 vs Claude vs Gemini), agent configurations, and system prompts against real business metrics — all without leaving the platform.
-
----
-
-## Why LLM Evaluation is Different from Traditional A/B Testing
-
-Traditional A/B tests compare binary outcomes (conversion yes/no) or continuous metrics (revenue). LLM experiments introduce new dimensions:
-
-| Dimension | Traditional A/B | LLM Experiment |
-|-----------|----------------|----------------|
-| Unit | Page / feature variant | Prompt / model config |
-| Response | Binary or numeric | Free-form text |
-| Latency | Milliseconds (deterministic) | 500 ms – 30 s (variable) |
-| Cost | Fixed infra cost | Per-token billing |
-| Quality | Implicit (conversion) | Explicit (human rating / LLM judge) |
-| Reproducibility | High | Low (temperature / sampling) |
-
-The platform handles all of this automatically: it tracks latency, estimates cost, supports human rating collection, and can run automated LLM-as-judge scoring.
-
----
-
 ## Supported Providers and Models
 
 | Provider | Models | Notes |
 |----------|--------|-------|
 | **Anthropic** | claude-opus-5, claude-sonnet-5, claude-haiku-4-5, claude-fable-5-1, and the 4.5/4.6 and Claude 3 generations | Recommended judge model. The priced set is `COST_PER_1K_TOKENS` in `backend/app/core/llm_pricing.py`; a model missing from it records $0.00 and logs a warning. |
-| **OpenAI** | gpt-4o, gpt-4o-mini, gpt-3.5-turbo | Cost-efficient options available |
-| **Google** | gemini-1.5-pro, gemini-1.5-flash | Flash: lowest cost per token |
-| **Local** | Any Ollama-compatible model | Privacy / cost-free option |
-
-Configure API keys in the API's environment. The provider SDKs read their own
-standard variables; the platform passes nothing to them:
-
-```dotenv
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-```
+| **OpenAI** | gpt-4o, gpt-4o-mini, gpt-3.5-turbo | Priced in the same table |
+| **Google** | gemini-1.5-pro, gemini-1.5-flash | Priced in the same table |
+| **Local** | A model served by Ollama at `http://localhost:11434` on the API's own host | The address is fixed; token counts are word counts, and cost is $0.00 |
 
 - `ANTHROPIC_API_KEY` enables Anthropic variants in `POST /llm-experiments/{id}/complete`,
   the LLM-as-judge (`POST /llm-experiments/{id}/judge`), and the platform's own AI
   features (`POST /ai/design` and `POST /ai/interpret/{id}`).
-- `OPENAI_API_KEY` enables OpenAI variants in `/complete`.
+- `OPENAI_API_KEY`, which the OpenAI SDK reads, enables OpenAI variants in `/complete`.
 - With neither set, no provider is called: `/complete` answers 502 for that variant,
   the judge records its fallback score of 0.5, and the AI features use their templates.
 
 `ANTHROPIC_BASE_URL` and `OPENAI_BASE_URL` point the SDKs at a proxy or gateway.
-`LLM_ANTHROPIC_API_KEY`, `LLM_OPENAI_API_KEY` and `LLM_GOOGLE_API_KEY`, which earlier
-versions of this page listed, are not settings: nothing reads them.
 
 The Google provider needs no extra package: a `google` variant calls the Gemini REST
 API with the key in `GEMINI_API_KEY`, and `GEMINI_BASE_URL` (default
@@ -57,41 +26,21 @@ API with the key in `GEMINI_API_KEY`, and `GEMINI_BASE_URL` (default
 
 ---
 
-## Task Types
+## Task types and evaluation metrics
 
-Each LLM experiment is associated with a task type that describes what the model does:
+`task_type` is one of `chat_completion`, `text_generation`, `classification`,
+`summarization`, `code_generation` or `embedding`.
 
-| Task Type | Description | Example Use Case |
-|-----------|-------------|-----------------|
-| `chat_completion` | Multi-turn conversational interaction | Customer support chatbot |
-| `text_generation` | Single-turn open-ended generation | Product description writer |
-| `classification` | Categorise input into predefined classes | Sentiment analyser |
-| `summarization` | Condense long text into shorter form | Document summariser |
-| `code_generation` | Produce executable code | Programming assistant |
-| `embedding` | Produce vector representations | Semantic search |
-
----
-
-## Evaluation Metrics
-
-Choose the primary metric that defines "winning" for your experiment:
-
-| Metric | Description | When to Use |
-|--------|-------------|-------------|
-| `business_metric` | Downstream KPI (conversion, revenue, engagement) | Most production scenarios |
-| `human_rating` | Human expert 1–5 score | High-stakes quality evaluation |
-| `auto_eval_score` | LLM-as-judge 0–1 score | Scalable quality evaluation |
-| `latency` | Response time in milliseconds | Latency-sensitive applications |
-| `cost` | Estimated USD per request | Budget-constrained deployments |
-| `accuracy` | Binary correctness on ground truth | Classification / QA tasks |
-| `relevance` | Relevance to the query | Search / retrieval tasks |
-| `fluency` | Natural language quality | Text generation tasks |
+`evaluation_metric` is one of `business_metric`, `human_rating`, `latency`, `cost`,
+`accuracy`, `relevance` or `fluency`. It does not choose the winner: the winner is always
+the variant with the highest mean business metric, or, with no business metric, the highest
+mean auto-eval score.
 
 ---
 
 ## Variant Assignment
 
-Variants are assigned using **consistent MD5 hashing** (the same algorithm used by all platform SDKs). The same `user_id` always receives the same variant, ensuring reproducibility and preventing confounding from re-assignment.
+Variants are assigned on the server using **consistent MD5 hashing**. The same `user_id` always receives the same variant, ensuring reproducibility and preventing confounding from re-assignment.
 
 The hash key is `"{experiment_id}:{user_id}"`, mapped to a bucket in [0, 1) and distributed across variants according to their `traffic_split` values.
 
@@ -102,13 +51,16 @@ The hash key is `"{experiment_id}:{user_id}"`, mapped to a bucket in [0, 1) and 
 The platform supports automated quality evaluation using a judge LLM. The default is `settings.LLM_DEFAULT_JUDGE_MODEL` (`claude-sonnet-5`), overridable per request and by the `LLM_DEFAULT_JUDGE_MODEL` environment variable. The judge is prompted:
 
 ```text
-Rate the following AI response on '{criteria}' using a score from 0 (terrible)
-to 1 (excellent).
+You are an impartial evaluator.  Rate the following AI response on '{criteria}'
+using a score from 0 (terrible) to 1 (excellent).
 
-Original prompt: {prompt}
-Response: {response}
+Original prompt:
+{prompt}
 
-Reply with ONLY: {"score": <float 0-1>, "reasoning": "<one sentence>"}
+Response:
+{response}
+
+Reply with ONLY a JSON object: {"score": <float 0-1>, "reasoning": "<one sentence>"}
 ```
 
 Judge scores are stored as `auto_eval_score` on each evaluation record and included in the results analytics.
@@ -127,12 +79,8 @@ gpt-4o:          $0.0025/1k input + $0.010/1k output
 gemini-1.5-flash:$0.000075/1k input + $0.0003/1k output
 ```
 
-These are Anthropic first-party list prices; a deployment routing Claude
-through Amazon Bedrock or Vertex AI pays that partner's rates, which this table
-does not model. The non-Anthropic figures above have not been re-checked
-against their providers' current pricing.
-
-Cost data is visible per-variant in the results dashboard, enabling cost/quality trade-off analysis.
+Per-variant cost is in `GET /api/v1/llm-experiments/{id}/results` (`mean_cost_usd`); the
+dashboard has no LLM screen.
 
 ---
 
@@ -140,6 +88,7 @@ Cost data is visible per-variant in the results dashboard, enabling cost/quality
 
 Results include:
 - **Mean and 95% confidence interval** for latency, cost, auto-eval score, and business metric
-- **Welch's t-test p-value** (treatment vs control) for continuous metrics
+- **A p-value** (treatment vs control) from Welch's t statistic: a normal approximation at
+  30 or more degrees of freedom, and below 30 one of 0.01, 0.02, 0.05, 0.15 or 0.30
 - **Cohen's d effect size** for business metric and auto-eval score
 - **Winner determination** based on the highest mean business metric (falls back to auto-eval score)

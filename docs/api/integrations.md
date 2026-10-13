@@ -277,7 +277,7 @@ POST /api/v1/integrations/webhooks/salesforce
 POST /api/v1/integrations/webhooks/github
 ```
 
-These three are the only routes in the platform an anonymous caller can reach with a body of its own choosing, so every one of them **authenticates the sender against the integration's `webhook_secret` before the payload is parsed**. There is no path parameter: the handler uses the single *active* configuration of that type.
+These three routes take no sign-in and no API key. Each one **authenticates the sender against the integration's `webhook_secret` before the payload is parsed**. There is no path parameter: the handler uses the single *active* configuration of that type.
 
 **Authenticating a delivery.** A sender presents the secret one of two ways:
 
@@ -291,7 +291,7 @@ expected = "sha256=" + HMAC-SHA256(webhook_secret, raw_body)
 ```
 
 - **GitHub** signs every delivery, so only `X-Hub-Signature-256` is accepted. The legacy SHA-1 `X-Hub-Signature` GitHub also sends is ignored.
-- **Jira** and **Salesforce** accept either. A delivery that carries a signature header is judged on the signature alone, and a SHA-1 value (`sha1=...`) is refused. A Jira Server webhook cannot compute an HMAC, so a custom header is what it sets; a Salesforce Flow HTTP Callout or Apex callout sets the header too, and an Apex callout can sign (`Crypto.generateMac`). A native Salesforce Outbound Message sends SOAP/XML with no custom headers, so it cannot call this route. The shared secret is replayable and puts the secret on the wire, so use it only over TLS, and prefer the signature where the sender can produce one.
+- **Jira** and **Salesforce** accept either. A delivery that carries a signature header is judged on the signature alone, and a SHA-1 value (`sha1=...`) is refused. If your sender cannot sign the body, have it send the shared-secret header instead; a Salesforce Flow HTTP Callout can set one. The body must be a JSON object: a SOAP/XML body is refused with `400` even with the right secret. The shared secret is replayable and puts the secret on the wire, so use it only over TLS, and prefer the signature where the sender can produce one.
 
 Both comparisons are constant-time. An integration with **no `webhook_secret` configured cannot authenticate anybody** and every delivery to it is refused — an anonymous write path fails closed.
 
@@ -347,7 +347,7 @@ curl -s -X POST localhost:8000/api/v1/integrations/webhooks/jira \
 ```
 <!-- expect: {"status":"received"} -->
 
-It prints `{"status":"received"}`. `printf '%s'` adds no newline and `--data-binary` sends the body byte for byte, so the signature covers exactly what is sent. `openssl dgst` prints the digest as the last field of its line (after `SHA2-256(stdin)= ` with OpenSSL 3, on its own with LibreSSL), which `awk` keeps. Jira Cloud sends the same value in `X-Hub-Signature`.
+It prints `{"status":"received"}`. `printf '%s'` adds no newline and `--data-binary` sends the body byte for byte, so the signature covers exactly what is sent. `openssl dgst` prints the digest as the last field of its line (after `SHA2-256(stdin)= ` with OpenSSL 3, on its own with LibreSSL), which `awk` keeps. 
 
 Change one byte of the body and the same signature is refused:
 
@@ -363,7 +363,7 @@ It prints `{"detail":"Webhook authentication failed"}`.
 
 ### Upgrading an integration created before webhook authentication
 
-Webhook authentication is **new**. Jira and Salesforce deliveries used to be accepted unauthenticated, and GitHub's signature was checked only when the sender sent one, so an integration configured before this release has no `webhook_secret` and **every delivery to it now answers 401**. The 401 says nothing (by design), so the platform log names the integration instead, once per process:
+An integration configured before webhook authentication has no `webhook_secret`, and **every delivery to it answers 401**. The 401 says nothing (by design), so the platform log names the integration instead, once per process:
 
 ```text
 The active jira integration has no webhook_secret in its encrypted_config, so every
@@ -461,14 +461,13 @@ Receives a JSON object from a Salesforce Flow HTTP Callout, Apex callout or rela
 
 Receives GitHub events (push, pull_request, issues).
 
-**Headers required by GitHub**:
+**Headers**:
 
-| Header | Description |
+| Header | What the platform does with it |
 |---|---|
-| `X-GitHub-Event` | Event type (e.g., `push`, `pull_request`) |
 | `X-Hub-Signature-256` | HMAC-SHA256 signature of the raw request body, prefixed with `sha256=` — **required** |
-| `X-GitHub-Delivery` | Unique delivery GUID |
-| `Content-Type` | `application/json` |
+| `X-GitHub-Event` | Read as the event type (e.g., `push`, `pull_request`) when it is sent |
+| `X-GitHub-Delivery`, `Content-Type` | Not checked |
 
 **Example Payload** (pull request opened):
 

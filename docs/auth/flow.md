@@ -61,17 +61,10 @@ sequenceDiagram
         API-->>Client: Return tokens + metadata
         Client->>Client: Store tokens securely
         Client-->>User: Redirect to dashboard/home
-    else Authentication Challenge
-        Cognito-->>API: Return challenge (MFA, new password required)
-        API-->>Client: Return challenge details
-        Client-->>User: Show challenge UI
-        User->>Client: Complete challenge
-        Client->>API: POST /auth/challenge
-        API->>Cognito: RespondToAuthChallenge API call
-        Cognito-->>API: Return tokens
-        API-->>Client: Return tokens + metadata
-        Client->>Client: Store tokens securely
-        Client-->>User: Redirect to dashboard/home
+    else Cognito asks for another step (a new password, MFA)
+        Cognito-->>API: Return challenge
+        API-->>Client: 401 (this API does not answer challenges)
+        Client-->>User: Show error message
     else Failed Authentication
         Cognito-->>API: Authentication error
         API-->>Client: Return error message
@@ -161,53 +154,8 @@ flowchart TD
     E -->|Invalid| D
     
     F -->|Not expired| G{Check permissions/roles}
-    F -->|Expired| H{Has refresh token?}
+    F -->|Expired| D
     
     G -->|Has permission| I[Process request]
     G -->|No permission| J[Return 403 Forbidden]
-    
-    H -->|Yes| K[Attempt token refresh]
-    H -->|No| D
-    
-    K -->|Success| E
-    K -->|Failure| D
 ```
-
-## 6. Error Handling Flow
-
-```mermaid
-flowchart TD
-    A[Authentication error occurs] --> B{Error type?}
-    
-    B -->|Invalid credentials| C[Return 401 - Wrong username/password]
-    B -->|User not confirmed| D[Return 400 - Account not verified]
-    B -->|Password reset required| E[Return 401 - Password reset required]
-    B -->|Invalid token| F[Return 401 - Invalid token]
-    B -->|Expired token| G[Return 401 - Token expired]
-    B -->|Invalid code| H[Return 400 - Invalid verification code]
-    B -->|Code expired| I[Return 400 - Verification code expired]
-    B -->|User not found| J[Return 404 - User not found]
-    B -->|Internal error| K[Return 500 - Internal server error]
-    
-    C --> L[Log authentication failure]
-    D --> M[Log unconfirmed account attempt]
-    E --> N[Log password reset needed]
-    F --> O[Log invalid token]
-    G --> P[Log expired token]
-    H --> Q[Log invalid code]
-    I --> R[Log expired code]
-    J --> S[Log user not found]
-    K --> T[Log internal error details]
-    
-    L --> U[Return appropriate error response to client]
-    M --> U
-    N --> U
-    O --> U
-    P --> U
-    Q --> U
-    R --> U
-    S --> U
-    T --> U
-```
-
-These diagrams provide a comprehensive visual documentation of the authentication flows in the system. They can be used for developer reference, onboarding, and architectural documentation.
