@@ -35,7 +35,7 @@ Both channels are off until you turn them on.
 |---------|--------------|
 | `SLACK_ENABLED` | `true` turns Slack messages on; the default is `false`. |
 | `SLACK_BOT_TOKEN` | The bot token messages are sent with. |
-| `SLACK_DEFAULT_CHANNEL` | The channel every message goes to (default `#platform-alerts`). |
+| `SLACK_DEFAULT_CHANNEL` | The channel every event's message goes to (default `#platform-alerts`). |
 | `EMAIL_ENABLED` | `true` turns email on; the default is `false`. |
 | `SENDGRID_API_KEY` | Email goes through SendGrid with this key; when it is empty, through SMTP. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | The SMTP server (port 587 by default). |
@@ -51,7 +51,7 @@ from starting, with `error parsing value for field "NOTIFICATION_ADMIN_EMAILS"`.
 
 Each user can store which events they want to be notified about, a Slack channel of their
 own and another email address. The preferences are stored and returned; sending does not
-read them, so every Slack message goes to `SLACK_DEFAULT_CHANNEL`.
+read them, so every event's Slack message goes to `SLACK_DEFAULT_CHANNEL`.
 
 Run the commands on this page in one terminal, in order, against the stack from the
 [Quick Start](../getting-started/quick-start.md). Each uses the shell variables set by the

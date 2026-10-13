@@ -29,11 +29,14 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "frontend/src/tests/fixtures/openapi.json | Paths and methods only, for the dashboard's URL-literal guard (frontend/src/tests/services/url-literals.test.ts). A full dump: the guard subtracts openapi.module-paths.json from it for a core run, so a core dump here would make it subtract them twice. | python -m backend.scripts.dump_openapi --profile full …"
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_make_openapi_regenerates_all_three",
+    "test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_the_dashboard_fixture_is_paths_and_methods_only",
+]
 
 [[unit]]
 text = "make openapi regenerates all three."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_make_openapi_regenerates_all_three"]
 
 [[unit]]
 text = "--profile core hides the modules package from the import system before the application is imported, so the core document can be produced from a full checkout; it is byte-identical to the document a tree with modules/ deleted produces (scripts/core_build.sh checks that tree the long way round)."
@@ -41,7 +44,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_
 
 [[unit]]
 text = "--profile full requires the modules registration to load and fails otherwise."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_profile_full_fails_without_the_modules"]
 
 [[unit]]
 text = "The rule"
@@ -356,7 +359,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The API sends no Deprecation or Sunset response header; the OpenAPI document and this page are where a deprecation is declared."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_no_response_carries_a_deprecation_or_sunset_header"]
 
 [[unit]]
 text = "Removed operations"
@@ -406,7 +409,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_
 
 [[unit]]
 text = "A fix that changes its numbers gets a row in the table of changed stable operations above naming all three operations, and bumps ENGINE_VERSION (backend/app/core/stats_engine.py): the results routes cache their answer under a key that includes it, so without the bump the embedded copy is served with the old numbers for up to 24 hours."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_the_results_cache_key_names_the_engine_and_a_finished_answer_lasts_a_day"]
 
 [[unit]]
 text = "Profiles"
@@ -418,7 +421,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_
 
 [[unit]]
 text = "That is why the statistics (Bayesian, CUPED, sequential testing) are core and not a module — a results response whose shape depended on an optional module could not have one stable document (see the manifest, modules-manifest.txt, \"DELIBERATELY NOT IN THIS MANIFEST\")."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_the_statistics_are_core_and_the_manifest_says_why"]
 
 [[unit]]
 text = "The three routes that exist in both profiles but answer 501 in the core profile without the module body (/compliance/reports/{standard}, /compliance/export, /experiments/{id}/split-url/preview) are in the core snapshot, because their URL and shape are."

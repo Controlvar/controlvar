@@ -17,19 +17,29 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The password-reset and token-refresh endpoints (POST /api/v1/auth/forgot-password, /reset-password and /refresh) are available only when AUTH_PROVIDER=cognito."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_local_provider_answers_fixed_404",
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_cognito_provider_reaches_the_service",
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_exactly_the_five_routes_carry_the_gate",
+]
 
 [[unit]]
 text = "The sign-up and confirmation endpoints (POST /api/v1/auth/signup and /confirm) also need COGNITO_SELF_SIGNUP_ENABLED=true; without it they answer 404 and an administrator creates users (Adding a user)."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_cognito_self_signup_gate.py::test_cognito_default_answers_fixed_404",
+    "test:backend/tests/unit/api/test_cognito_self_signup_gate.py::test_cognito_setting_true_reaches_the_service",
+]
 
 [[unit]]
 text = "With any other provider, including the default local, all five answer 404."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_local_provider_answers_fixed_404",
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_any_other_provider_answers_fixed_404",
+]
 
 [[unit]]
 text = "With local, sign in with POST /api/v1/auth/login; an administrator creates accounts and resets passwords."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_local_auth_path.py::TestLoginFlow::test_full_flow"]
 
 [[unit]]
 text = "The dashboard does not yet sign in with Cognito."
@@ -41,11 +51,11 @@ count = 2
 
 [[unit]]
 text = "Sign in through the API with POST /api/v1/auth/token."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_cognito_sign_in_with_an_account_is_recorded"]
 
 [[unit]]
 text = "SSO sign-in needs AUTH_PROVIDER=local."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_sso_session_is_a_local_token_that_cognito_does_not_accept"]
 
 [[unit]]
 text = "Account Registration"
@@ -53,7 +63,10 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Only with COGNITO_SELF_SIGNUP_ENABLED=true and a user pool that allows self sign-up; otherwise see Adding a user."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_cognito_self_signup_gate.py::test_cognito_default_answers_fixed_404",
+    "test:backend/tests/unit/api/test_cognito_self_signup_gate.py::test_cognito_setting_true_reaches_the_service",
+]
 
 [[unit]]
 text = "Registration Requirements"
@@ -80,7 +93,10 @@ by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_we
 
 [[unit]]
 text = "At least 8 characters"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_the_password_rules",
+    "test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_registration_needs_an_email_a_strong_password_and_a_name",
+]
 
 [[unit]]
 text = "At most 100 characters"
@@ -88,19 +104,28 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_
 
 [[unit]]
 text = "At least one uppercase letter"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_the_password_rules",
+    "test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_registration_needs_an_email_a_strong_password_and_a_name",
+]
 
 [[unit]]
 text = "At least one lowercase letter"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_the_password_rules",
+    "test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_registration_needs_an_email_a_strong_password_and_a_name",
+]
 
 [[unit]]
 text = "At least one digit (0-9)"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_the_password_rules",
+    "test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_registration_needs_an_email_a_strong_password_and_a_name",
+]
 
 [[unit]]
 text = "First Name and Last Name: Your real name or preferred name"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_registration_needs_an_email_a_strong_password_and_a_name"]
 
 [[unit]]
 text = "Registration Process"
@@ -112,7 +137,10 @@ by = ["test:backend/tests/integration/auth/test_self_signup_gate.py"]
 
 [[unit]]
 text = "Without it, both endpoints below answer 404 and an administrator creates your account (Adding a user)."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_cognito_self_signup_gate.py::test_cognito_default_answers_fixed_404",
+    "test:backend/tests/unit/api/test_cognito_self_signup_gate.py::test_cognito_setting_true_reaches_the_service",
+]
 
 [[unit]]
 text = "POST /api/v1/auth/signup with username, password, email, given_name and family_name."
@@ -128,7 +156,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "POST /api/v1/auth/confirm with username and the confirmation_code from the email."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_registration_needs_an_email_a_strong_password_and_a_name"]
 
 [[unit]]
 text = "Sign in with POST /api/v1/auth/token (form fields username and password)."
@@ -216,11 +244,11 @@ by = ["journey:onboarding-and-password#demo-admin-signed-in"]
 
 [[unit]]
 text = "An access token is stored in your browser"
-by = ["untested:T"]
+by = ["test:frontend/src/tests/contexts/AuthContext.test.tsx::login posts credentials without a bearer, stores only the token and sets the user"]
 
 [[unit]]
 text = "This token is used for all subsequent API requests"
-by = ["exempt:baseline"]
+by = ["test:frontend/src/tests/services/api.test.ts::adds the bearer header when a token is stored"]
 
 [[unit]]
 text = "Password Management"
@@ -240,7 +268,7 @@ by = ["test:frontend/src/tests/pages/login.test.tsx::shows the \"forgot password
 
 [[unit]]
 text = "only says \"Ask an administrator to reset it.\" What happens next depends on the provider."
-by = ["exempt:baseline"]
+by = ["test:frontend/src/tests/pages/login.test.tsx::shows the \"forgot password\" copy without a reset link"]
 
 [[unit]]
 text = "With AUTH_PROVIDER=local (the default) there is no self-service reset."
@@ -292,7 +320,7 @@ by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_we
 
 [[unit]]
 text = "Under cognito, a password set in the dashboard's database (the local route above) does not change the Cognito password, so it does not change how you sign in"
-by = ["untested:A"]
+by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_a_password_set_in_the_database_never_reaches_cognito"]
 
 [[unit]]
 text = "Changing Your Password"
@@ -457,11 +485,14 @@ by = ["test:frontend/src/tests/admin/EditUserModal.test.tsx"]
 
 [[unit]]
 text = "After a save the list reloads on the page and search you were on."
-by = ["untested:T"]
+by = ["test:frontend/src/tests/admin/UserTable.test.tsx::a reload from the page keeps the current page and search term"]
 
 [[unit]]
 text = "Delete removes the account after you confirm it."
-by = ["untested:T"]
+by = [
+    "test:frontend/src/tests/admin/UserTable.test.tsx::shows confirmation before delete",
+    "test:frontend/src/tests/admin/UserTable.test.tsx::clicking delete button calls AdminService.deleteUser with user id",
+]
 
 [[unit]]
 text = "The four roles are Admin, Developer, Analyst and Viewer."
@@ -478,8 +509,12 @@ by = [
 ]
 
 [[unit]]
-text = "Custom roles in the full edition are assigned on the Roles page, not here."
-by = ["untested:T"]
+text = "Custom roles in the full edition are assigned through the RBAC API (POST /api/v1/rbac/roles/assign), not here."
+by = [
+    "test:frontend/src/tests/admin/EditUserModal.test.tsx::offers exactly the four base roles",
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_custom_roles_are_assigned_through_the_api_and_no_dashboard_page",
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestAssignRevoke::test_assign_role_returns_200",
+]
 
 [[unit]]
 text = "Rules the page and the API both apply:"
@@ -494,7 +529,7 @@ by = [
 
 [[unit]]
 text = "You can't delete your own account either."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_a_superuser_cannot_delete_their_own_account"]
 
 [[unit]]
 text = "Through the API (PUT /api/v1/admin/users/{user_id} or PUT /api/v1/users/{user_id}) you also can't remove your own superuser access, so keep at least two superusers; with Cognito role sync on, though, a superuser removed from the admin group in Cognito loses superuser access on their next request, and nothing here stops that."
@@ -524,7 +559,10 @@ by = [
 
 [[unit]]
 text = "Change this user's group in Cognito instead.\" Deactivating still works."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchUnderCognitoRoleSync::test_a_role_change_is_409",
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchUnderCognitoRoleSync::test_deactivation_is_saved_under_sync",
+]
 
 [[unit]]
 text = "With SSO (full edition), a role set here lasts until the user's next SSO sign-in with a group in the configuration's role_mapping, which replaces it (see Group-to-Role Mapping)."
@@ -540,7 +578,7 @@ by = ["test:frontend/src/tests/admin/EditUserModal.test.tsx"]
 
 [[unit]]
 text = "\"This user no longer exists\" means someone deleted the account; closing the dialog refreshes the list."
-by = ["exempt:baseline"]
+by = ["test:frontend/src/tests/admin/EditUserModal.test.tsx::after a 404, closing asks the page to reload the list"]
 
 [[unit]]
 text = "Common Error Scenarios and Solutions"
@@ -716,7 +754,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Ask an administrator to deactivate the account (is_active set to false)."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_a_deactivated_account_is_refused"]
 
 [[unit]]
 text = "That ends every session straight away; changing the password alone does not."
@@ -731,7 +769,7 @@ by = ["test:backend/tests/unit/core/test_config_environment.py"]
 
 [[unit]]
 text = "A deactivated account's tokens are refused only while it stays deactivated."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_a_deactivated_accounts_token_works_again_once_it_is_reactivated"]
 
 [[unit]]
 text = "The audit log records sign-ins with a password, through Cognito (POST /auth/token) or through SSO, and an administrator's changes to your account's role, superuser flag or active status."

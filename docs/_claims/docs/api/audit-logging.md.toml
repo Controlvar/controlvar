@@ -17,7 +17,26 @@ by = ["test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_e
 
 [[unit]]
 text = "It records the changes people make through the API: creating, changing and deleting feature flags and experiments, turning flags on and off, starting, pausing and completing experiments, rollout schedule changes, API keys, holdouts, mutual exclusion groups, segments, creating and deleting users, changes to a user's role, superuser flag or active status, signing in with a password or through Cognito (POST /auth/token; a sign-in through the Cognito Hosted UI does not pass through the API and is not recorded), and safety rollbacks."
-by = ["untested:A"]
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_create",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_update_records_only_what_changed",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_delete",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_status_verbs",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_create_update_delete",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_lifecycle",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_rollout_schedule_routes_record_on_the_flag",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_api_key_create_and_revoke_hold_no_part_of_the_key",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_holdout_create_update_and_activation",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_exclusion_group_routes",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_segment_create_update_archive",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_user_create",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_user_delete",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_patch_role_and_active",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_superuser_flag_through_put_is_recorded",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_local_sign_in",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_cognito_sign_in_with_an_account_is_recorded",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_manual_rollback_is_recorded_by_the_calling_user",
+]
 
 [[unit]]
 text = "In the full profile it also records custom roles assigned and revoked, a workspace member's role changes, and single sign-on (SSO) sign-ins."
@@ -118,7 +137,10 @@ by = [
 
 [[unit]]
 text = "A flag the caller may not change (an ANALYST or VIEWER changes none) fails with \"Not enough permissions to change this feature flag\" and is left as it was."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_audit_log_rules.py::test_a_flag_the_caller_may_not_change_is_refused_and_left_as_it_was",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_refuses_flags_the_user_cannot_update",
+]
 
 [[unit]]
 text = "Audit Log API"
@@ -149,7 +171,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "entity_type | string | feature_flag, experiment, user, role, permission, safety_config, rollout_schedule, api_key, holdout, mutual_exclusion_group, segment"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_audit_log_rules.py::test_the_entity_types"]
 
 [[unit]]
 text = "entity_id | UUID | Filter by specific entity ID"
@@ -211,7 +233,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Every entry recorded against one entity, most recent first."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_audit_log_rules.py::test_an_entitys_history_is_newest_first"]
 
 [[unit]]
 text = "There is no fetch-one-by-id route; query by entity, by actor (/audit-logs/user/{user_id}), or filter the collection (/audit-logs/):"
@@ -587,7 +609,11 @@ by = [
 
 [[unit]]
 text = "experiment_start, experiment_complete | experiment | The experiment scheduler starts an experiment at its start date or scheduled resume, or completes it at its end date (also when POST /experiments/schedules/process runs it). reason is scheduled start, scheduled resume or scheduled end"
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_audit_log_rules.py::test_the_scheduler_records_a_start_a_resume_and_an_end_with_their_reasons",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_scheduled_start_is_recorded_by_the_experiment_scheduler",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_scheduled_end_is_recorded_by_the_experiment_scheduler",
+]
 
 [[unit]]
 text = "feature_flag_update | feature_flag | The rollout scheduler starts a rollout stage and sets the flag's rollout percentage. reason is rollout schedule stage started"
@@ -687,7 +713,10 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Granting and revoking a direct permission are not recorded because no permission check reads direct grants yet (#891)."
-by = ["untested:T"]
+by = [
+    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_granting_and_revoking_a_direct_permission_write_no_audit_entry",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
+]
 
 [[unit]]
 text = "Changes the platform makes on its own"
@@ -792,11 +821,11 @@ by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_free_
 
 [[unit]]
 text = "error text;"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_audit_log_rules.py::test_no_entry_holds_error_text"]
 
 [[unit]]
 text = "changes made directly in the database rather than through the platform."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_audit_log_rules.py::test_changes_made_directly_in_the_database_write_no_entry"]
 
 [[unit]]
 text = "When an entry can be missing"
@@ -861,11 +890,17 @@ by = [
 
 [[unit]]
 text = "In a deployed stack that line is the only signal that an entry is missing."
-by = ["untested:A"]
+by = [
+    "test:backend/tests/unit/services/test_audit_log_rules.py::test_a_failed_write_logs_one_error_line_and_counts_it",
+    "test:infrastructure/tests/test_api_task_and_data_resources.py::test_nothing_collects_the_apis_prometheus_metrics",
+]
 
 [[unit]]
 text = "The API also counts these failures in a Prometheus counter, audit_write_failures_total, but do not rely on it there: the AWS deployment does not collect it."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_audit_log_rules.py::test_a_failed_write_logs_one_error_line_and_counts_it",
+    "test:infrastructure/tests/test_api_task_and_data_resources.py::test_nothing_collects_the_apis_prometheus_metrics",
+]
 
 [[unit]]
 text = "Keeping entries, and deleted users"
@@ -873,7 +908,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Nothing deletes audit entries: they are kept until someone removes them from the database."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_audit_log_rules.py::test_nothing_deletes_an_audit_entry"]
 
 [[unit]]
 text = "Deleting a user empties user_id on their entries and keeps user_email, so a deleted user's email address stays in the log, readable by everyone who reads every entry (see Permissions)."
@@ -897,7 +932,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_
 
 [[unit]]
 text = "It prints the two toggle_disable entries, then the end event:"
-by = ["untested:T"]
+by = ["docex:docs/api/audit-logging.md#data: {\"event\": \"end\"}"]
 
 [[unit]]
 text = "Feature Flag Change History"

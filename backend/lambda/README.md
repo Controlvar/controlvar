@@ -102,8 +102,8 @@ Common helper functions:
 ## 🚀 Deployment
 
 No stack deploys these functions. `cdk deploy --all` deploys the platform, and
-`infrastructure/tests/test_lambda_functions_doc.py` fails if a stack starts
-deploying code from this directory without the docs describing it.
+`infrastructure/tests/test_lambda_functions_deployed.py` fails if a stack starts
+deploying code from this directory.
 
 ## 📊 Monitoring
 
