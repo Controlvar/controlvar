@@ -1,6 +1,6 @@
 # API Endpoints Documentation
 
-This document provides detailed information about all available API endpoints in Experimently.
+This document describes the API's main endpoints, with examples. Every route is listed in the API's own reference at `/api/v1/docs`.
 
 ## Authentication and Authorization
 
@@ -41,8 +41,9 @@ no token.
 API keys are used by client applications for the tracking and feature flag evaluation
 endpoints.
 
-**1. Obtain an API key.** An ADMIN or a DEVELOPER creates one (see
-[API Keys](../security/api-keys.md)); the full key is shown only in this response. This
+**1. Obtain an API key.** Any signed-in user can create one, whatever their role (see
+[API Keys](../security/api-keys.md)), and an API key writes tracking data. The full key is
+shown only in this response. This
 creates one and saves it in `$KEY`:
 
 ```{.bash exec}
@@ -391,8 +392,7 @@ lists every route with its own limit. Over a limit the API answers `429` with a
 ### Caching
 - Experiment data is cached for 1 hour when `CACHE_ENABLED` is on (it is off by default)
 - Feature flags are not cached: the flag list and a flag's detail are read from the database on every request, whatever `CACHE_ENABLED` says
-- Results data is cached for 5 minutes
-- Cache-Control headers are included in responses
+- Results are cached for 5 minutes while the experiment is running, and for 24 hours otherwise
 
 ## Authentication Endpoints
 
@@ -461,7 +461,8 @@ lists every route with its own limit. Over a limit the API answers `429` with a
   {
     "access_token": "string",
     "token_type": "bearer",
-    "expires_in": 3600
+    "expires_in": 43200,
+    "user": {"id": "uuid", "email": "string", "username": "string", "role": "ADMIN"}
   }
   ```
 
@@ -472,10 +473,14 @@ lists every route with its own limit. Over a limit the API answers `429` with a
 - **Response**: 200 OK
   ```json
   {
-    "username": "string",
+    "id": "uuid",
     "email": "string",
-    "given_name": "string",
-    "family_name": "string"
+    "username": "string",
+    "full_name": "string",
+    "role": "ADMIN",
+    "is_superuser": true,
+    "is_active": true,
+    "auth_provider": "local"
   }
   ```
 
@@ -869,8 +874,8 @@ Each 400 carries the detail `This flag is archived. Unarchive it before turning 
 
 ## Tracking Endpoints
 
-All tracking endpoints use API-key authentication (`X-API-Key`) and address experiments and flags by their
-public `key`. They share the per-IP `SDK_RATE_LIMIT_PER_MINUTE` ceiling (default 6000/min), except
+All tracking endpoints use API-key authentication (`X-API-Key`). They address experiments and flags by
+their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They share the per-IP `SDK_RATE_LIMIT_PER_MINUTE` ceiling (default 6000/min), except
 `POST /api/v1/tracking/assign/batch`, which has its own limit of 60 requests a minute.
 
 ### Assign User to Experiment
@@ -1191,9 +1196,12 @@ All endpoints may return the following error responses:
 ### 404 Not Found
 ```json
 {
-  "detail": "Resource not found"
+  "detail": "Experiment not found"
 }
 ```
+
+The detail names what was not found. A path the API does not have answers
+`{"detail": "Not Found"}`.
 
 ### 500 Internal Server Error
 
@@ -1558,8 +1566,7 @@ A feature flag is not an experiment type: flags have their own endpoints, under
 ## SDK Usage
 
 The SDKs call the tracking and evaluation endpoints above for you. Their own pages show how
-to install each one and the methods it has, with a quick start that CI runs against a real
-API:
+to install each one and the methods it has:
 
 - [Python SDK](../sdk/python.md)
 - [JavaScript SDK](../sdk/javascript.md), and [React SDK](../sdk/react.md) for its hooks
@@ -1740,8 +1747,8 @@ POST /api/v1/wizard/drafts/{id}/submit  — Submit → create experiment (deprec
 ### Rollout Schedules
 
 ```text
-POST   /api/v1/rollout-schedules                      — Create schedule
-GET    /api/v1/rollout-schedules                      — List schedules
+POST   /api/v1/rollout-schedules/                     — Create schedule
+GET    /api/v1/rollout-schedules/                     — List schedules
 GET    /api/v1/rollout-schedules/{id}                 — Get schedule
 PUT    /api/v1/rollout-schedules/{id}                 — Update schedule
 DELETE /api/v1/rollout-schedules/{id}                 — Delete schedule
@@ -1783,7 +1790,7 @@ own entries on the list, user, stream and history routes. See
 See [Safety Monitoring](../feature-flags/safety.md).
 
 ```text
-GET  /api/v1/safety/settings                              — Global settings (superuser)
+GET  /api/v1/safety/settings                              — Global settings (any signed-in user)
 POST /api/v1/safety/settings                              — Create/update global settings (superuser)
 GET  /api/v1/safety/feature-flags/{flag_id}/config        — Per-flag safety config (defaults when none)
 POST /api/v1/safety/feature-flags/{flag_id}/config        — Create/update per-flag config (rollback_percentage 0–100, else 422; 0 = off)
@@ -2171,19 +2178,3 @@ request header, which nothing sets in this release, so it passes every request t
 hashes the viewer's IP address and User-Agent, answers `302 Found` to the variant URL and sets a
 `split_url_{experiment_key}` cookie holding that URL for 30 days unless `cookie_ttl_days` says
 otherwise. See [Split URL Testing](split-url.md).
-
----
-
-### Java SDK
-
-The Java SDK and Spring Boot starter are distributed as Maven/Gradle artifacts. No new backend API endpoints are introduced; the SDK communicates with the existing experiment assignment and feature flag evaluation endpoints.
-
-See [SDK Integration Guide](../sdk-guide.md#java-sdk) for installation, Spring Boot auto-configuration (`@EnableExperimentation`), and the Spring Boot properties reference (`experimentation.api-url`, `experimentation.api-key`, `experimentation.cache-ttl-seconds`, `experimentation.cache-max-size`).
-
----
-
-### React SDK
-
-The React SDK is distributed as an npm package (`@experimentation/react-sdk`). No new backend API endpoints are introduced; the SDK consumes the existing assignment and feature flag endpoints.
-
-See [SDK Integration Guide](../sdk-guide.md#react-sdk) for `ExperimentationProvider` setup, all hooks (`useFeatureFlag`, `useExperiment`, `useTrackEvent`, `useVariant`, `useMultipleFlags`), the `withExperimentation` HOC, and SSR/Next.js `ServerClient` usage.

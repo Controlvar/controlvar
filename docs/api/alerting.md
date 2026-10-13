@@ -1,6 +1,6 @@
 # Slack & Email Alerting
 
-The alerting system sends notifications to Slack channels and email addresses when significant platform events occur: safety rollbacks, experiment lifecycle changes, rollout stage advances, and custom alerts.
+The platform sends a Slack message for each event in the table below. Email is sent only by the test route described on this page.
 
 Notification failure is always non-fatal — if a Slack message or email cannot be sent, the platform operation that triggered it continues normally and the failure is logged.
 
@@ -19,10 +19,9 @@ Notification failure is always non-fatal — if a Slack message or email cannot 
 
 | Event | Slack | Email | Description |
 |-------|-------|-------|-------------|
-| Safety rollback | ✅ | ✅ | Feature flag auto-rolled back due to error rate or latency threshold |
-| Experiment lifecycle | ✅ | ✅ | Experiment started, paused, stopped, or completed |
+| Safety rollback | ✅ | ❌ | Feature flag auto-rolled back due to error rate or latency threshold |
+| Scheduled experiment change | ✅ | ❌ | The scheduler started, resumed or completed an experiment; the start, pause and complete routes send nothing |
 | Rollout stage advance | ✅ | ❌ | Rollout schedule progressed to next stage |
-| Generic alert | ✅ | ✅ | Custom alert from any platform service |
 
 ---
 
@@ -32,48 +31,27 @@ These are settings of the API process: put them in its environment (on the Quick
 stack, the `api` service's `environment:` in `docker-compose.yml`), then restart it.
 Both channels are off until you turn them on.
 
-### Slack
-
-```dotenv
-SLACK_ENABLED=true
-SLACK_BOT_TOKEN=xoxb-your-bot-token
-SLACK_DEFAULT_CHANNEL="#platform-alerts"
-```
-
-**Required Slack App Permissions**: `chat:write`, `chat:write.public`
-
-### Email via SendGrid
+| Setting | What it does |
+|---------|--------------|
+| `SLACK_ENABLED` | `true` turns Slack messages on; the default is `false`. |
+| `SLACK_BOT_TOKEN` | The bot token messages are sent with. |
+| `SLACK_DEFAULT_CHANNEL` | The channel every message goes to (default `#platform-alerts`). |
+| `EMAIL_ENABLED` | `true` turns email on; the default is `false`. |
+| `SENDGRID_API_KEY` | Email goes through SendGrid with this key; when it is empty, through SMTP. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | The SMTP server (port 587 by default). |
+| `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME` | The sender of every email. |
+| `NOTIFICATION_ADMIN_EMAILS` | A JSON array of addresses. No notification is sent to them. |
 
 `NOTIFICATION_ADMIN_EMAILS` is a JSON array. A plain comma-separated list stops the API
 from starting, with `error parsing value for field "NOTIFICATION_ADMIN_EMAILS"`.
-
-```dotenv
-EMAIL_ENABLED=true
-SENDGRID_API_KEY=SG.your-api-key
-EMAIL_FROM_ADDRESS=platform@yourcompany.com
-EMAIL_FROM_NAME=Experimently
-NOTIFICATION_ADMIN_EMAILS=["eng-team@yourcompany.com","oncall@yourcompany.com"]
-```
-
-### Email via SMTP (fallback)
-
-If `SENDGRID_API_KEY` is empty, the service falls back to SMTP:
-
-```dotenv
-EMAIL_ENABLED=true
-SMTP_HOST=smtp.yourcompany.com
-SMTP_PORT=587
-SMTP_USERNAME=platform-alerts@yourcompany.com
-SMTP_PASSWORD=your-smtp-password
-EMAIL_FROM_ADDRESS=platform-alerts@yourcompany.com
-```
 
 ---
 
 ## Notification Preferences API
 
-Each user chooses which events they are notified about, and can send their Slack alerts to
-a channel of their own or their email to another address.
+Each user can store which events they want to be notified about, a Slack channel of their
+own and another email address. The preferences are stored and returned; sending does not
+read them, so every Slack message goes to `SLACK_DEFAULT_CHANNEL`.
 
 Run the commands on this page in one terminal, in order, against the stack from the
 [Quick Start](../getting-started/quick-start.md). Each uses the shell variables set by the
@@ -120,9 +98,6 @@ and no channel of your own. The full response:
 }
 ```
 
-`slack_channel: null` and `email_override: null` use the platform defaults
-(`SLACK_DEFAULT_CHANNEL` and the user's own email).
-
 ---
 
 ### PUT /api/v1/notifications/preferences
@@ -154,7 +129,7 @@ Lists every user's preferences. Requires the ADMIN role.
 
 ### GET /api/v1/notifications/delivery-log
 
-Lists the notifications that were sent, most recent first. Requires the ADMIN role.
+Lists the notification delivery log, most recent first. Requires the ADMIN role. No notification is written to it, so it is empty.
 
 **Query Parameters**
 
@@ -171,22 +146,7 @@ curl -s "localhost:8000/api/v1/notifications/delivery-log?status=failed" \
 ```
 <!-- expect: "total": 0 -->
 
-On a new stack it prints `"total": 0`, since nothing has been sent. Each entry in `items`
-looks like this:
-
-```json
-{
-  "id": "0b8f3c9e-3c3a-4d5e-9c0e-1f2a3b4c5d6e",
-  "event_type": "safety_rollback",
-  "channel": "slack",
-  "recipient": "#platform-alerts",
-  "subject": null,
-  "status": "failed",
-  "error_message": "channel_not_found",
-  "payload": null,
-  "created_at": "2026-03-02T14:32:00Z"
-}
-```
+It prints `"total": 0`.
 
 ---
 
@@ -205,9 +165,7 @@ curl -s -X POST localhost:8000/api/v1/notifications/test \
 ```
 <!-- expect: false -->
 
-On the Quick Start stack it prints `false`, because Slack is not configured there. With
-`SLACK_ENABLED=true` and a valid bot token, it prints `true` and the message arrives in
-`SLACK_DEFAULT_CHANNEL`. A test is not written to the delivery log.
+On the Quick Start stack it prints `false`, because Slack is not configured there.
 
 ---
 
@@ -225,14 +183,9 @@ On the Quick Start stack it prints `false`, because Slack is not configured ther
 ## Troubleshooting
 
 **Slack messages not arriving**
-1. Confirm `SLACK_ENABLED=true` in environment
-2. Verify the bot token is valid: `GET https://slack.com/api/auth.test`
-3. Ensure the bot is invited to the target channel (`/invite @your-bot`)
-4. Check the delivery log for `channel_not_found` or `not_authed` errors
+1. Confirm that `SLACK_ENABLED` is `true` in the API's environment
+2. Ensure the bot is invited to `SLACK_DEFAULT_CHANNEL` (`/invite @your-bot`)
 
 **Emails not arriving**
-1. Confirm `EMAIL_ENABLED=true`
-2. For SendGrid: check API key has `Mail Send` permission
-3. For SMTP: verify host, port and credentials from the API container with `python -c "import smtplib; smtplib.SMTP('$SMTP_HOST', $SMTP_PORT).starttls()"`
-4. Check spam folder — add `EMAIL_FROM_ADDRESS` domain to allowlist
-5. Delivery log errors like `unauthorized` indicate a bad API key
+1. Confirm that `EMAIL_ENABLED` is `true`
+2. Check the spam folder, and add the `EMAIL_FROM_ADDRESS` domain to the allowlist

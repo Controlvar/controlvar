@@ -1,0 +1,44 @@
+# What verifies each unit of docs/security/incident-response.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/security/incident-response.md"
+
+[[unit]]
+text = "Responding to an incident on your deployment"
+by = ["exempt:label"]
+
+[[unit]]
+text = "You run your own Experimently deployment, so your team runs its incident response."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "This page points to the two things the project provides for that."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "If the cause may be a vulnerability in Experimently"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Report it privately, as SECURITY.md describes: through GitHub private vulnerability reporting, or by email."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Do not open a public issue."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "SECURITY.md also says what happens after you report and on what timeline; this page adds nothing to it."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "If a deploy caused it"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Roll back to the last known-good release with the rollback runbook."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "It covers the GitHub Actions rollback, the AWS CLI rollback for when Actions is unavailable, and a database restore."
+by = ["exempt:navigation"]

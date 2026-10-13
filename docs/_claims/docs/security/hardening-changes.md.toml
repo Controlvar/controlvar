@@ -1,0 +1,335 @@
+# What verifies each unit of docs/security/hardening-changes.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/security/hardening-changes.md"
+
+[[unit]]
+text = "Backend Security Hardening Changes"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This page records how the API was hardened."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "What is in place now is on Security model, and the rate limits are listed on Using the API Docs."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "1. Security Response Headers (backend/app/middleware/security_middleware.py)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What changed"
+by = ["exempt:baseline"]
+count = 5
+
+[[unit]]
+text = "The existing SecurityHeadersMiddleware was rewritten to:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Apply a strict Content-Security-Policy (default-src 'none'; frame-ancestors 'none') instead of the permissive policy that allowed unsafe-inline and unsafe-eval."
+by = [
+    "test:backend/tests/unit/api/test_docs_page_csp.py::test_the_docs_paths_are_exactly_the_two_pages",
+    "test:backend/tests/unit/api/test_docs_page_csp.py::test_every_other_path_keeps_the_strict_policy",
+]
+
+[[unit]]
+text = "An API-only service has no need to serve scripts, styles, or frames."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The one exception is the two API reference pages, /api/v1/docs and /api/v1/redoc, which allow the jsdelivr assets they load (see below)."
+by = [
+    "test:backend/tests/unit/api/test_docs_page_csp.py::test_the_docs_paths_are_exactly_the_two_pages",
+    "test:backend/tests/unit/api/test_docs_page_csp.py::test_every_other_path_keeps_the_strict_policy",
+]
+
+[[unit]]
+text = "Emit HSTS (max-age=31536000; includeSubDomains; preload) on every response outside development."
+by = [
+    "test:backend/tests/unit/api/test_security_headers.py::TestSecurityMiddleware::test_hsts_in_production",
+    "test:backend/tests/unit/api/test_security_headers.py::TestSecurityMiddleware::test_hsts_not_in_dev",
+    "test:backend/tests/unit/api/test_hsts_header.py::test_outside_development_every_response_carries_the_whole_hsts_value",
+]
+
+[[unit]]
+text = "Remove server fingerprinting headers (server, x-powered-by) to reduce the information available to an attacker."
+by = ["test:backend/tests/unit/security/test_security_hardening.py::TestSecurityHeadersHardening::test_server_header_removed"]
+
+[[unit]]
+text = "Expand Permissions-Policy to additionally restrict usb and magnetometer."
+by = ["untested:T"]
+
+[[unit]]
+text = "The API reference pages, /api/v1/docs (Swagger UI) and /api/v1/redoc (ReDoc), matched by exact path, get a different Content-Security-Policy instead (DOCS_CSP in the middleware): scripts and stylesheets from https://cdn.jsdelivr.net, ReDoc's Google Fonts and its logo image, Swagger UI's one inline script by its sha256 hash, and the OpenAPI document from the same origin."
+by = [
+    "test:backend/tests/unit/api/test_docs_page_csp.py::test_every_inline_script_on_the_page_is_hashed_in_script_src",
+    "test:backend/tests/unit/api/test_docs_page_csp.py::test_the_docs_policy_allows_no_inline_or_eval_script",
+    "test:backend/tests/unit/api/test_docs_page_csp.py::test_the_docs_policy_names_only_the_origins_the_pages_load",
+]
+
+[[unit]]
+text = "It allows no other inline script and no eval."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The dashboard's nginx proxies these two paths without adding its own policy, so the API's is the only one the browser sees."
+by = [
+    "test:backend/tests/unit/security/test_dashboard_csp.py::test_docs_block_proxies_to_the_api",
+    "test:backend/tests/unit/security/test_dashboard_csp.py::test_docs_block_sets_no_csp_and_so_inherits_none",
+]
+
+[[unit]]
+text = "2. Rate Limiting (backend/app/middleware/rate_limiter.py)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "RateLimitMiddleware enforces per-IP, per-path sliding-window limits."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Counters live in Redis (RedisRateLimiter, shared across API instances); when Redis is unreachable the middleware falls back to an in-process sliding window so requests are never rejected because the limiter is down."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRateLimiter::test_falls_back_on_redis_error",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRateLimiter::test_falls_back_when_redis_unavailable",
+]
+
+[[unit]]
+text = "Each process counts on its own while Redis is unavailable, so per-IP limits are multiplied by the number of API processes (the running task count)."
+by = ["untested:T"]
+
+[[unit]]
+text = "The limiter tries Redis again every 30 s, with redis-py's client retries turned off so a retry holds a request for at most one connect timeout (2 s), and returns to shared counts within 30 s of Redis recovering."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRetry::test_a_runtime_error_then_redis_again_after_the_window",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRetry::test_the_client_is_built_with_client_retries_off",
+]
+
+[[unit]]
+text = "Each switch is logged once per process (a rate_limiter field), and the state is on /metrics as rate_limit_redis_fallback_active."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestFallbackVisibility::test_one_warning_on_entry_and_one_on_recovery",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestFallbackVisibility::test_the_metrics_follow_the_state",
+]
+
+[[unit]]
+text = "Limits are resolved by resolve_rate_limit(path): exact entries first, then the shared export prefix, then the AI interpretation prefix, then SDK path prefixes, then the default."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_exact_config_wins_over_prefix_and_default",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLimit::test_neighbouring_paths_keep_their_limits",
+    "test:backend/tests/unit/middleware/test_ai_rate_limits.py::test_the_neighbouring_paths_keep_their_limits",
+]
+
+[[unit]]
+text = "Rate-limited responses return HTTP 429 with Retry-After, X-RateLimit-Limit, X-RateLimit-Remaining, and X-RateLimit-Window headers."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitMiddleware::test_returns_429_when_limit_exceeded",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitMiddleware::test_returns_rate_limit_headers",
+]
+
+[[unit]]
+text = "Successful responses also carry the X-RateLimit- informational headers."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitMiddleware::test_returns_429_when_limit_exceeded",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitMiddleware::test_returns_rate_limit_headers",
+]
+
+[[unit]]
+text = "3. CORS Hardening (backend/app/main.py)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The CORS middleware configuration was tightened:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "allow_methods changed from [\"\"] to an explicit list: [\"GET\", \"POST\", \"PUT\", \"DELETE\", \"PATCH\"]."
+by = ["untested:T"]
+
+[[unit]]
+text = "OPTIONS is handled automatically by the CORS middleware; HEAD and TRACE are not needed."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "allow_headers changed from [\"\"] to an explicit list: [\"Authorization\", \"Content-Type\", \"X-API-Key\"]."
+by = ["untested:T"]
+
+[[unit]]
+text = "Only headers the API actually uses are permitted."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "expose_headers lists X-Request-ID, Retry-After, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Window and X-Total-Count, so clients can read these response headers cross-origin."
+by = [
+    "test:backend/tests/unit/middleware/test_preflight_and_429_cors.py::test_the_browser_may_read_retry_after",
+    "test:backend/tests/unit/api/test_audit_export_format.py::test_the_browser_may_read_x_total_count",
+]
+
+[[unit]]
+text = "The allowed origins come from BACKEND_CORS_ORIGINS, else CORS_ORIGINS, plus any DASHBOARD_ORIGINS."
+by = [
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_a_staging_or_production_api_allows_no_origin_it_was_not_given",
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_dashboard_origins_are_added_after_cors_origins_once_each",
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_credentials_are_never_allowed_cross_origin",
+]
+
+[[unit]]
+text = "With neither set, development and test fall back to the local apps' http://localhost origins, and staging and production allow no other origin (#130)."
+by = [
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_a_staging_or_production_api_allows_no_origin_it_was_not_given",
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_dashboard_origins_are_added_after_cors_origins_once_each",
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_credentials_are_never_allowed_cross_origin",
+]
+
+[[unit]]
+text = "Credentials are not allowed cross-origin."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "4. Input Length Constraints (backend/app/schemas/)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "experiment.py"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Field | Before | After"
+by = ["exempt:baseline"]
+count = 3
+
+[[unit]]
+text = "ExperimentBase.description | no constraint | max_length=2000"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "ExperimentBase.hypothesis | no constraint | max_length=2000"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "ExperimentUpdate.description | no constraint | max_length=2000"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "ExperimentUpdate.hypothesis | no constraint | max_length=2000"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "feature_flag.py"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "FeatureFlagBase.description | no constraint | max_length=2000"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "FeatureFlagBase.key validator | lowercase + alnum check | stricter regex ^a-z0-9$"
+by = [
+    "test:backend/tests/unit/security/test_owasp_compliance.py::TestInjectionPrevention::test_feature_flag_key_rejects_special_chars",
+    "test:backend/tests/unit/security/test_owasp_compliance.py::TestInjectionPrevention::test_feature_flag_key_accepts_valid_chars",
+]
+
+[[unit]]
+text = "tracking.py"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "EventBase.user_id | no constraint | max_length=255"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "EventBase.session_id | no constraint | max_length=255"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "EventBase.experiment_id | no constraint | max_length=255"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "EventBase.feature_flag_id | no constraint | max_length=255"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "EventBase.variant_id | no constraint | max_length=255"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "AssignmentBase. | same as above | max_length=255"
+by = ["untested:T"]
+
+[[unit]]
+text = "AssignmentRequest.experiment_key | min_length=1 only | + max_length=100"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "AssignmentRequest.user_id | min_length=1 only | + max_length=255"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "EventRequest.event_type | no constraint | min_length=1, max_length=100"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "EventQueryParams.user_id | no constraint | max_length=255"
+by = ["untested:T"]
+
+[[unit]]
+text = "EventQueryParams.event_type | no constraint | max_length=100"
+by = ["untested:T"]
+
+[[unit]]
+text = "Why it matters"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Unbounded string fields can be exploited to:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Cause excessively large database rows / index entries."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Trigger O(n) processing in downstream logic (e.g., logging, serialisation)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "In the absence of a WAF, provide a vector for simple denial-of-service via large payloads."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Pydantic validates these limits before any database interaction occurs."
+by = ["untested:T"]
+
+[[unit]]
+text = "5. Configuration Hardening (backend/app/core/config.py)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Added CORS_ORIGINS: List[str] as an alternative plain-string CORS origins config that can be set via env var as a comma-separated string."
+by = ["untested:T"]
+
+[[unit]]
+text = "Added a validate_secret_key field validator that raises a ValueError at application startup if:"
+by = ["test:backend/tests/unit/security/test_security_hardening.py::TestConfigSecurity::test_secret_key_validated_in_production"]
+
+[[unit]]
+text = "ENVIRONMENT == \"prod\" and TESTING env var is not set"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "SECRET_KEY is shorter than 32 characters or is one of the well-known weak defaults (default-secret-key-for-testing, secret, changeme, etc.)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This prevents the application from starting in production with a weak key."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Later, TESTING stopped being an exception: the settings now refuse TESTING together with ENVIRONMENT=staging or production outright, so the check applies in every staging and production start."
+by = [
+    "test:backend/tests/unit/core/test_config_environment.py::TestModuleImportSelection::test_testing_with_production_refuses_to_import",
+    "test:backend/tests/unit/core/test_settings_rules_testing_flag.py",
+]

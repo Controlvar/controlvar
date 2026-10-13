@@ -169,6 +169,7 @@ nav:
   - Secrets Management: deployment/secrets-management.md
   - Logging Standards: logging_standards.md
 - Security:
+  - Security Model: security/model.md
   - Hardening Changes: security/hardening-changes.md
   - Incident Response: security/incident-response.md
   - API Keys: security/api-keys.md

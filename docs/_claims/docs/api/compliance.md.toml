@@ -1,0 +1,478 @@
+# What verifies each unit of docs/api/compliance.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/compliance.md"
+
+[[unit]]
+text = "Compliance Audit Trail API"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Partly in the compliance module"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The event listing, GET /api/v1/compliance/audit-events, is core and answers in every profile."
+by = ["test:backend/tests/unit/core/test_optional_modules.py::TestComplianceRoutesRefusedWithoutTheModule::test_audit_event_listing_stays_core"]
+
+[[unit]]
+text = "The SOC 2 / ISO 27001 reports and the export are the compliance module's: a core deployment still declares those two routes but answers them 501, after the role check."
+by = ["untested:T"]
+
+[[unit]]
+text = "HMAC signing of new events is also the module's; in a core deployment events are recorded unsigned."
+by = ["untested:T"]
+
+[[unit]]
+text = "See Modules and profiles for what each profile includes and how to run the full one."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The compliance audit trail is an append-only table of changes to experiments, feature flags and (in the full profile) warehouse connections, sources and analysis runs."
+by = ["untested:T"]
+
+[[unit]]
+text = "It is a separate record from the audit log at /api/v1/audit-logs, which records feature-flag status changes (toggle, enable, disable, bulk toggle)."
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py",
+    "test:backend/tests/integration/api/test_audit_route_events.py",
+]
+
+[[unit]]
+text = "A flag toggled on or off is written there, not here."
+by = ["untested:T"]
+
+[[unit]]
+text = "What is recorded"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each row is a ComplianceAuditEvent with outcome SUCCESS."
+by = ["untested:T"]
+
+[[unit]]
+text = "These are the only actions that write one in this release:"
+by = ["untested:T"]
+
+[[unit]]
+text = "Action | resource_type | Written when | Profile"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "CREATE | feature_flag | POST /api/v1/feature-flags/ | every"
+by = ["test:backend/tests/integration/api/test_change_audit_saved.py::test_audit_record_is_saved"]
+
+[[unit]]
+text = "UPDATE | feature_flag | PUT /api/v1/feature-flags/{id} | every"
+by = ["test:backend/tests/integration/api/test_change_audit_saved.py::test_audit_record_is_saved"]
+
+[[unit]]
+text = "DELETE | feature_flag | DELETE /api/v1/feature-flags/{id} | every"
+by = ["test:backend/tests/integration/api/test_change_audit_saved.py::test_audit_record_is_saved"]
+
+[[unit]]
+text = "CREATE | experiment | POST /api/v1/experiments/ | every"
+by = ["test:backend/tests/integration/api/test_change_audit_saved.py::test_audit_record_is_saved"]
+
+[[unit]]
+text = "UPDATE | experiment | PUT /api/v1/experiments/{id} | every"
+by = ["test:backend/tests/integration/api/test_change_audit_saved.py::test_audit_record_is_saved"]
+
+[[unit]]
+text = "DELETE | experiment | DELETE /api/v1/experiments/{id} | every"
+by = ["test:backend/tests/integration/api/test_change_audit_saved.py::test_audit_record_is_saved"]
+
+[[unit]]
+text = "CREATE, UPDATE, DELETE | warehouse_connection | creating, changing or deleting a warehouse connection | full"
+by = ["test:modules/backend/tests/integration/warehouse/test_connections_api.py::test_connection_changes_are_audited_without_credentials"]
+
+[[unit]]
+text = "KEY_CREATE | warehouse_connection | a new key is generated (/regenerate-key), or a pending key becomes current after a passing connection test | full"
+by = ["untested:T"]
+
+[[unit]]
+text = "CREATE, UPDATE, DELETE | warehouse_source | creating, changing, validating or deleting a warehouse source | full"
+by = ["test:modules/backend/tests/integration/warehouse/test_sources_api.py::test_source_audit_has_full_definition"]
+
+[[unit]]
+text = "CREATE | warehouse_analysis_run | POST /api/v1/warehouse/analysis/experiments/{experiment_id}/runs starts a warehouse analysis | full"
+by = ["test:modules/backend/tests/integration/warehouse/test_runs_api.py::test_starting_a_run_is_audited"]
+
+[[unit]]
+text = "Each event carries the actor's id, the resource id, and a snapshot of a few fields in old_value and new_value: for a flag update, its key, name, status and rollout percentage; for an experiment update, its name, status and targeting rules; a create records the new key and name (a flag) or name (an experiment), and a delete the old key, name and status (a flag) or name, status and owner (an experiment)."
+by = ["untested:T"]
+
+[[unit]]
+text = "Field names containing password, token, api_key or secret are replaced with [REDACTED]."
+by = [
+    "test:backend/tests/unit/services/test_audit_log_service.py::TestRedactSensitive",
+    "test:backend/tests/unit/services/test_audit_log_service.py::TestAuditLogServiceLog::test_log_event_redacts_sensitive_fields_in_old_value",
+]
+
+[[unit]]
+text = "Not recorded here: sign-ins, role changes, API key changes, flag status changes and experiment start, pause and completion, which go to the audit log; sign-outs and failed sign-ins, which neither records; and reading, reporting on or exporting this trail."
+by = ["untested:T"]
+
+[[unit]]
+text = "AuditAction defines READ, LOGIN, LOGOUT, LOGIN_FAILED, ROLE_GRANT, ROLE_REVOKE, KEY_REVOKE, EXPORT and REPORT_GENERATED, and you can filter on them, but nothing in this release writes them."
+by = ["untested:T"]
+
+[[unit]]
+text = "For flags, experiments and warehouse analysis runs, a failure to write the event does not fail the request that made the change: the change is kept and the failure is logged as a warning."
+by = ["test:backend/tests/integration/api/test_change_audit_saved.py::test_failed_audit_write_keeps_the_answer_and_the_change"]
+
+[[unit]]
+text = "Base path: /api/v1/compliance."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/smoke/test_wiring.py::TestAuthWiring::test_unauthenticated_request_returns_401_when_bypass_off",
+]
+
+[[unit]]
+text = "Every route needs a Bearer token; without one it answers 401."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/smoke/test_wiring.py::TestAuthWiring::test_unauthenticated_request_returns_401_when_bypass_off",
+]
+
+[[unit]]
+text = "Try it"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Run these in one terminal, in order, against the full profile (Modules and profiles), which serves the report and the export."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each step uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sign in as the stack's administrator, which saves a token in $TOKEN:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If it prints null, the sign-in failed and $TOKEN holds no token."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A new stack's trail is empty, so make a change for it to record."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This changes the description of the Quick Start stack's Checkout Button Color experiment:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints Checkout Button Color, and the trail now holds one UPDATE of an experiment."
+by = ["docex:docs/api/compliance.md#\"action\": \"UPDATE\""]
+
+[[unit]]
+text = "The experiment is active, so only a superuser, such as this administrator, may change its description."
+by = [
+    "docex:docs/api/compliance.md#Checkout Button Color",
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+]
+
+[[unit]]
+text = "Endpoints"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "List Audit Events"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Core, every profile."
+by = [
+    "test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_admin_can_list_audit_events",
+    "test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_analyst_can_list_audit_events",
+    "test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_developer_cannot_list_audit_events",
+    "test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_viewer_cannot_list_audit_events",
+]
+
+[[unit]]
+text = "ADMIN or ANALYST (or a superuser); DEVELOPER and VIEWER get 403."
+by = [
+    "test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_admin_can_list_audit_events",
+    "test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_analyst_can_list_audit_events",
+    "test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_developer_cannot_list_audit_events",
+    "test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_viewer_cannot_list_audit_events",
+]
+
+[[unit]]
+text = "Events are listed most recent first."
+by = ["test:backend/tests/unit/services/test_audit_log_service.py::TestAuditLogServiceGetEvents::test_get_audit_events_orders_by_timestamp_desc"]
+
+[[unit]]
+text = "Query Parameters"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Parameter | Type | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "page | int | Page number, from 1 (default 1)"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/services/test_audit_log_service.py::TestAuditLogServiceGetEvents::test_get_audit_events_default_page_is_1",
+]
+
+[[unit]]
+text = "limit | int | Page size (default 50, max 200; more answers 422)"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_invalid_page_size_returns_422",
+]
+
+[[unit]]
+text = "action | string | An AuditAction value, e.g. CREATE; an unknown value answers 422"
+by = [
+    "test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_invalid_action_filter_returns_422",
+    "test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_filter_by_action",
+]
+
+[[unit]]
+text = "resource_type | string | e.g. experiment, feature_flag"
+by = ["test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_filter_by_resource_type"]
+
+[[unit]]
+text = "actor_id | UUID | The user who made the change"
+by = ["test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_filter_by_actor_id"]
+
+[[unit]]
+text = "start_time | datetime | Events at or after this time (ISO 8601)"
+by = ["test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_filter_by_start_date"]
+
+[[unit]]
+text = "end_time | datetime | Events at or before this time (ISO 8601)"
+by = ["test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_filter_by_end_date"]
+
+[[unit]]
+text = "Example Request"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Response: 200 OK"
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "It lists the one change made above: \"action\": \"UPDATE\", \"resource_type\": \"experiment\", \"outcome\": \"SUCCESS\" and \"total\": 1."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "hmac_signature is null for an event written without the compliance module."
+by = ["untested:T"]
+
+[[unit]]
+text = "Compliance Report"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Compliance module."
+by = [
+    "test:modules/backend/tests/unit/api/test_compliance_reports_api.py::TestComplianceReportPermissions",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_analyst_cannot_export",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_developer_cannot_export",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_viewer_cannot_export",
+]
+count = 2
+
+[[unit]]
+text = "ADMIN or ANALYST (or a superuser)."
+by = ["test:modules/backend/tests/unit/api/test_compliance_reports_api.py::TestComplianceReportPermissions"]
+
+[[unit]]
+text = "standard is soc2 or iso27001; any other value answers 400."
+by = ["test:modules/backend/tests/unit/api/test_compliance_reports_api.py::TestComplianceReportStructure::test_unknown_standard_returns_400"]
+
+[[unit]]
+text = "start_time and end_time (ISO 8601) set the period; by default it ends now and starts AUDIT_RETENTION_DAYS_SOC2 (365) or AUDIT_RETENTION_DAYS_ISO27001 (730) days earlier."
+by = [
+    "test:modules/backend/tests/unit/services/test_compliance_report_service.py::TestGenerateSoc2Report::test_soc2_report_covers_365_days_by_default",
+    "test:modules/backend/tests/unit/services/test_compliance_report_service.py::TestGenerateSoc2Report::test_iso27001_report_covers_730_days_by_default",
+]
+
+[[unit]]
+text = "On the stack above it counts the one event (\"total_events\": 1), finds its signature intact (\"tampered_events\": 0) and says new events are signed (\"signing_enabled\": true)."
+by = ["docex:docs/api/compliance.md#\"standard\": \"soc2\""]
+
+[[unit]]
+text = "The report counts the events in the period and checks each signature:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Field | Meaning"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "integrity_checks | Events that carry a signature, all of which were checked"
+by = [
+    "test:modules/backend/tests/unit/services/test_compliance_report_service.py::TestGenerateSoc2Report::test_report_includes_integrity_check_count",
+    "test:modules/backend/tests/unit/services/test_compliance_report_service.py::TestGenerateSoc2Report::test_events_without_hmac_not_counted_in_integrity_checks",
+]
+
+[[unit]]
+text = "tampered_events | Signed events whose signature no longer matches"
+by = ["test:modules/backend/tests/unit/services/test_compliance_report_service.py::TestGenerateSoc2Report::test_report_flags_tampered_events"]
+
+[[unit]]
+text = "integrity_pass_rate | (integrity_checks - tampered_events) / integrity_checks; 1.0 when nothing was checked"
+by = [
+    "test:modules/backend/tests/unit/services/test_compliance_report_service.py::TestGenerateSoc2Report::test_integrity_pass_rate_is_1_when_all_pass",
+    "test:modules/backend/tests/unit/services/test_compliance_report_service.py::TestGenerateSoc2Report::test_integrity_pass_rate_is_0_when_all_tampered",
+]
+
+[[unit]]
+text = "unsigned_events | Events with no signature, which cannot be checked"
+by = ["test:modules/backend/tests/unit/services/test_compliance_report_service.py::TestUnsignedRowsAreReported::test_unsigned_events_and_coverage_are_counted"]
+
+[[unit]]
+text = "integrity_coverage | integrity_checks / total_events: 1.0 only when every event in the period is signed"
+by = ["test:modules/backend/tests/unit/services/test_compliance_report_service.py::TestUnsignedRowsAreReported::test_unsigned_events_and_coverage_are_counted"]
+
+[[unit]]
+text = "signing_enabled | Whether this process signs new events"
+by = ["test:modules/backend/tests/unit/services/test_compliance_report_service.py::TestUnsignedRowsAreReported::test_signing_disabled_is_reported_when_the_null_signer_is_installed"]
+
+[[unit]]
+text = "Export Audit Events"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "ADMIN (or a superuser) only; ANALYST gets 403."
+by = [
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_analyst_cannot_export",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_developer_cannot_export",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_viewer_cannot_export",
+]
+
+[[unit]]
+text = "format is json (default) or csv, and start_time / end_time narrow it."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_export_json_default_format",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_invalid_format_rejected",
+    "test:modules/backend/tests/unit/services/test_compliance_report_service.py::TestExportAuditEvents::test_export_filters_by_date_range",
+]
+
+[[unit]]
+text = "The response is a download (Content-Disposition: attachment; filename=audit_export.json or .csv) of every matching event, oldest first, with the fields id, timestamp, action, resource_type, resource_id, actor_id, outcome and hmac_signature."
+by = ["untested:T"]
+
+[[unit]]
+text = "old_value and new_value are not included."
+by = ["untested:T"]
+
+[[unit]]
+text = "curl saves the download as audit_export.csv, and cut prints its action and resource_type columns: the header, then UPDATE,experiment."
+by = ["docex:docs/api/compliance.md#action,resource_type"]
+
+[[unit]]
+text = "Signing"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With the compliance module installed, every new event is signed with HMAC-SHA256 before it is stored, and the hex digest (64 characters) is kept in hmac_signature."
+by = [
+    "docex:docs/api/compliance.md#\"standard\": \"soc2\"",
+    "test:modules/backend/tests/unit/api/test_compliance_signing.py::TestAuditEventSignature::test_audit_event_hmac_is_64_hex_chars",
+]
+
+[[unit]]
+text = "The signature covers the event's id, timestamp, action, resource_type, resource_id, actor_id and outcome; old_value and new_value are not covered."
+by = ["test:modules/backend/tests/unit/services/test_audit_signing_service.py::TestAuditSigningServiceSign::test_sign_includes_all_canonical_fields"]
+
+[[unit]]
+text = "The key is the AUDIT_HMAC_KEY setting."
+by = ["test:modules/backend/tests/unit/services/test_audit_signing_service.py::TestAuditSigningServiceInstantiation::test_service_reads_key_from_settings"]
+
+[[unit]]
+text = "In staging and production the API refuses to start with the development default or with a key shorter than the minimum secret length."
+by = [
+    "test:backend/tests/unit/core/test_preflight.py::test_each_secret_refusal_names_the_setting_and_how_to_generate_it",
+    "test:modules/backend/tests/unit/test_modules_settings.py::TestHardenedAuditKey::test_placeholder_or_short_key_is_refused",
+]
+
+[[unit]]
+text = "The signatures are checked by the platform, in the compliance report above (integrity_checks, tampered_events)."
+by = ["test:modules/backend/tests/unit/services/test_compliance_report_service.py::TestVerifierIsTheInstalledSigner::test_report_verifies_through_hooks_audit_signer"]
+
+[[unit]]
+text = "Responses carry no signature header, and the canonical form signed is not a published format, so check integrity through the report rather than by recomputing a signature yourself."
+by = ["untested:T"]
+
+[[unit]]
+text = "AuditAction Values"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Value | Written in this release"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "CREATE | Yes, see What is recorded"
+by = ["test:backend/tests/integration/api/test_change_audit_saved.py::test_audit_record_is_saved"]
+
+[[unit]]
+text = "UPDATE | Yes"
+by = ["test:backend/tests/integration/api/test_change_audit_saved.py::test_audit_record_is_saved"]
+
+[[unit]]
+text = "DELETE | Yes"
+by = ["test:backend/tests/integration/api/test_change_audit_saved.py::test_audit_record_is_saved"]
+
+[[unit]]
+text = "KEY_CREATE | Yes, warehouse connections only (full profile)"
+by = ["untested:T"]
+
+[[unit]]
+text = "READ, LOGIN, LOGOUT, LOGIN_FAILED, ROLE_GRANT, ROLE_REVOKE, KEY_REVOKE, EXPORT, REPORT_GENERATED | No"
+by = ["untested:T"]
+
+[[unit]]
+text = "outcome is one of SUCCESS, FAILURE and DENIED; every event written in this release is SUCCESS."
+by = ["untested:T"]
+
+[[unit]]
+text = "Error Responses"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Status | Meaning"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "400 Bad Request | Unknown report standard"
+by = ["test:modules/backend/tests/unit/api/test_compliance_reports_api.py::TestComplianceReportStructure::test_unknown_standard_returns_400"]
+
+[[unit]]
+text = "401 Unauthorized | Missing or invalid Bearer token"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/smoke/test_wiring.py::TestAuthWiring::test_invalid_bearer_token_returns_401_when_bypass_off",
+]
+
+[[unit]]
+text = "403 Forbidden | The caller's role may not use the route (see each route)"
+by = [
+    "test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_developer_cannot_list_audit_events",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_analyst_cannot_export",
+]
+
+[[unit]]
+text = "422 Unprocessable Entity | An invalid query parameter, e.g. an unknown action, a limit over 200, a bad date"
+by = [
+    "test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_invalid_action_filter_returns_422",
+    "test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_invalid_page_size_returns_422",
+]
+
+[[unit]]
+text = "501 Not Implemented | The report or export, on a deployment without the compliance module"
+by = ["test:backend/tests/unit/core/test_optional_modules.py::TestComplianceRoutesRefusedWithoutTheModule::test_report_route_returns_501_without_handler"]

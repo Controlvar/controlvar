@@ -1,0 +1,713 @@
+# What verifies each unit of docs/api/warehouse-analytics.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/warehouse-analytics.md"
+
+[[unit]]
+text = "Warehouse analysis (beta)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Beta: Snowflake and BigQuery are available"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Warehouse analysis runs an experiment's analysis on tables in your own data warehouse instead of on events sent to Experimently."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py",
+    "test:modules/backend/tests/integration/warehouse/test_bigquery_run.py",
+]
+
+[[unit]]
+text = "The API below is part of the full profile and every route is x-stability: beta: its shape may still change."
+by = [
+    "test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Snowflake is available (see Setting up Snowflake)."
+by = ["mechanism:warehouse-availability"]
+
+[[unit]]
+text = "BigQuery is available (see Setting up BigQuery)."
+by = ["mechanism:warehouse-availability"]
+
+[[unit]]
+text = "Amazon Athena isn't available yet."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_disabled_connector_refused_with_422",
+    "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_enabled_connectors_exact",
+]
+
+[[unit]]
+text = "GET /api/v1/warehouse/analysis/connectors says which are available on your deployment; creating a connection of any other type answers 422 connector_disabled."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_connectors.py",
+    "test:modules/backend/tests/integration/warehouse/test_connections_api.py",
+]
+
+[[unit]]
+text = "What it does"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "You point Experimently at two of your own tables or views:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "an assignment source: one row per exposure, with the unit id, the experiment key, the variant label and the time of the exposure;"
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_golden_sql.py",
+    "test:modules/backend/tests/integration/warehouse/test_sources_api.py",
+]
+
+[[unit]]
+text = "a metric source per metric: one row per event, with the unit id and the time of the event, and for a mean metric the event's value."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_golden_sql.py",
+    "test:modules/backend/tests/integration/warehouse/test_sources_api.py",
+]
+
+[[unit]]
+text = "Experimently writes the SQL itself (there is no field that takes SQL), runs it as the identity you created for it, and computes the results from what comes back."
+by = ["untested:T"]
+
+[[unit]]
+text = "A metric is one of two types:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "a proportion: the share of exposed units that had at least one event in the conversion window, compared with Fisher's exact test, the statistics /results uses;"
+by = ["untested:T"]
+
+[[unit]]
+text = "a mean: the average per exposed unit of the sum of its event values in the conversion window (0 for a unit with no event; a NULL value is ignored and counted), optionally capped per unit with cap_value, and compared with Welch's t-test."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_mean_runs.py",
+    "test:modules/backend/tests/unit/warehouse/test_mean_sums_duckdb.py",
+    "test:modules/backend/tests/unit/warehouse/test_mean_parity_duckdb.py",
+]
+
+[[unit]]
+text = "Each variant reports its mean and a confidence interval."
+by = ["test:modules/backend/tests/unit/warehouse/test_mean_runs.py"]
+
+[[unit]]
+text = "Every run reports its sample-ratio check against the variants' traffic allocation (skipped for multi-armed bandit experiments, whose split moves on purpose)."
+by = ["test:modules/backend/tests/integration/warehouse/test_runs_api.py"]
+
+[[unit]]
+text = "What leaves your warehouse"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "No row of your data."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_golden_sql.py",
+    "test:modules/backend/tests/unit/warehouse/test_result_parsing.py",
+]
+
+[[unit]]
+text = "A run returns only aggregates:"
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_golden_sql.py",
+    "test:modules/backend/tests/unit/warehouse/test_result_parsing.py",
+]
+
+[[unit]]
+text = "per variant label: the label (cut to 64 characters; at most 51 labels), the number of units, the number of converting units, and two sums;"
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_result_parsing.py",
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py",
+]
+
+[[unit]]
+text = "per statement: the grand mean and diagnostic counts (units seen in more than one variant, rows with no unit or variant, metric rows in the window and how many matched an exposed unit);"
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_diagnostics_statement_reads_back",
+    "test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_real_diagnostics_results_are_read_and_parsed",
+]
+
+[[unit]]
+text = "the query's job id, bytes billed or elapsed time."
+by = ["test:modules/backend/tests/unit/warehouse/test_run_out.py"]
+
+[[unit]]
+text = "A preview returns counts, the number of units per variant label, and the earliest and latest time in the window."
+by = ["test:modules/backend/tests/integration/warehouse/test_sources_api.py"]
+
+[[unit]]
+text = "Validation reads column names and types from the warehouse's metadata; it queries no data."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_table_columns_from_show_columns",
+    "test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_table_columns_from_tables_get",
+]
+
+[[unit]]
+text = "The connection's role decides what can be read."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Anyone who can author a source can compute aggregates, and read short text such as variant labels, over anything the connection's role can read."
+by = ["untested:T"]
+
+[[unit]]
+text = "Grant that role only the tables and views analysis needs, and read-only access to them."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "How it counts, and how that differs from /results"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A unit's exposure is its first exposure in the analysis window."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_grain_duckdb.py",
+    "test:modules/backend/tests/unit/warehouse/test_golden_sql.py",
+]
+
+[[unit]]
+text = "A unit converts when it has an event at or after that exposure and within the metric's conversion window (and before the end of the analysis window)."
+by = ["test:modules/backend/tests/unit/warehouse/test_grain_duckdb.py"]
+
+[[unit]]
+text = "Units seen in more than one variant are left out and counted in the diagnostics."
+by = ["test:modules/backend/tests/unit/warehouse/test_grain_duckdb.py"]
+
+[[unit]]
+text = "/results counts converting users with no bound on the exposure time and no conversion window."
+by = ["untested:T"]
+
+[[unit]]
+text = "So the two agree only on data with no event before a unit's exposure, no unit in two variants and no event outside the window; otherwise the warehouse numbers are the stricter ones."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Setting up Snowflake"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Experimently signs in to Snowflake's SQL API as a user in your account, with a key pair it generates."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_each_request_carries_the_key_pair_jwt",
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py",
+]
+
+[[unit]]
+text = "There is no password field."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "In Snowflake, give Experimently a user and a role of its own."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Grant the role USAGE on the warehouse, the database and the schema, and SELECT on each table or view analysis reads, and nothing else."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "A connection whose role is ACCOUNTADMIN or another of Snowflake's built-in administrative roles is refused."
+by = ["test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_administrative_roles_refused_whatever_their_case"]
+
+[[unit]]
+text = "Create the connection in Warehouse › Connections (ADMIN)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The account is the organisation-account identifier, for example MYORG-MYACCOUNT (Snowsight › Admin › Accounts), not a locator or a URL."
+by = ["test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_account_must_be_the_organisation_account_identifier"]
+
+[[unit]]
+text = "Saving generates the key pair and shows the statement that registers its public key, for example ALTER USER EXPERIMENTLY SET RSA_PUBLIC_KEY='…';."
+by = ["test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_only_the_public_key_and_statement_are_shown"]
+
+[[unit]]
+text = "Run it as an administrator."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The private key never leaves Experimently."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_only_the_public_key_and_statement_are_shown",
+    "test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_repr_never_shows_the_key",
+]
+
+[[unit]]
+text = "Test the connection."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The test signs in and runs one statement that reads no table."
+by = ["test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_connection_test_runs_no_table_query_and_checks_utc"]
+
+[[unit]]
+text = "Name tables in full in a source: DATABASE.SCHEMA.TABLE, each part as Snowflake stores it (upper case unless it was created quoted)."
+by = ["test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_object_names_fully_match"]
+
+[[unit]]
+text = "Every statement runs with the session time zone set to UTC and is stopped by Snowflake at the connection's query_timeout_seconds."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_snowflake_request_sets_timezone_utc",
+    "test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_the_server_side_limit_never_exceeds_the_time_left_and_is_never_zero",
+]
+
+[[unit]]
+text = "A resource monitor on the Snowflake warehouse is a good second limit."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "To replace the key, choose Generate a new key."
+by = ["test:modules/frontend/src/tests/warehouse/connection-detail.test.tsx::generates a pending key and shows its statement; a passing test switches to it"]
+
+[[unit]]
+text = "It shows the statement that registers the new public key as RSA_PUBLIC_KEY_2; the old key keeps working until a test with the new one passes."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_a_replacement_key_goes_in_the_second_slot",
+    "test:modules/frontend/src/tests/warehouse/connection-detail.test.tsx::generates a pending key and shows its statement; a passing test switches to it",
+]
+
+[[unit]]
+text = "Setting up BigQuery"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Experimently signs in to BigQuery with a service-account key you create for it, and runs every query as a job in a project you choose."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_connection_fields_fully_match",
+    "test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_run_query_sends_the_limits_and_returns_the_rows",
+]
+
+[[unit]]
+text = "In Google Cloud, create a service account for Experimently with these two roles only:"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "BigQuery Job User on the project that runs and pays for the queries (the connection's billing project);"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "BigQuery Data Viewer on each dataset analysis reads, granted on each dataset rather than on the project."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Create a JSON key for the service account and paste it into the connection form in Warehouse › Connections (ADMIN)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It is sent only in the request body and stored encrypted, and it is never shown again."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_the_stored_credential_holds_exactly_the_four_fields",
+    "test:modules/backend/tests/integration/warehouse/test_connections_api.py",
+]
+
+[[unit]]
+text = "A key whose token_uri is not Google's own token endpoint is refused."
+by = ["test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_token_uri_other_than_google_refused"]
+
+[[unit]]
+text = "Set the location to where your datasets are: US, EU, or a region such as europe-west2."
+by = ["test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_connection_locations_accepted"]
+
+[[unit]]
+text = "Set the bytes cap (\"Most data a query may read\")."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Before each query Experimently runs a dry run: anything that is not a single SELECT, or that would read more than the cap, is refused before it runs."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_dry_run_uses_jobs_insert_and_requires_select",
+    "test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_bytes_over_cap_refused_before_run",
+]
+
+[[unit]]
+text = "The real query is also sent with the cap as its billing limit, so BigQuery stops it rather than bill more."
+by = ["test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_run_query_sends_the_limits_and_returns_the_rows"]
+
+[[unit]]
+text = "Test the connection, then name tables in full in a source: project.dataset.table."
+by = ["test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_table_reference_checked_before_anything_is_sent"]
+
+[[unit]]
+text = "Every job carries the label experimently: analysis, so you can find its cost in your billing."
+by = ["test:modules/backend/tests/unit/warehouse/test_bigquery.py"]
+
+[[unit]]
+text = "Who can do what"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Action | ADMIN | DEVELOPER | ANALYST | VIEWER"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "See which warehouses are available | yes | yes | yes | yes"
+by = ["test:modules/backend/tests/integration/warehouse/test_roles.py::test_role_matrix"]
+
+[[unit]]
+text = "List connections (never their credentials) | yes | yes | yes | no"
+by = ["test:modules/backend/tests/integration/warehouse/test_roles.py::test_role_matrix"]
+
+[[unit]]
+text = "Create, change, test or delete a connection | yes | no | no | no"
+by = ["test:modules/backend/tests/integration/warehouse/test_roles.py::test_role_matrix"]
+
+[[unit]]
+text = "Create, edit, validate, preview or delete an assignment source | yes | yes | no | no"
+by = ["test:modules/backend/tests/integration/warehouse/test_roles.py::test_role_matrix"]
+
+[[unit]]
+text = "Create, edit, validate or preview a metric source | yes | yes | yes | no"
+by = ["test:modules/backend/tests/integration/warehouse/test_roles.py::test_role_matrix"]
+
+[[unit]]
+text = "Delete a metric source | yes | yes | no | no"
+by = ["test:modules/backend/tests/integration/warehouse/test_roles.py::test_role_matrix"]
+
+[[unit]]
+text = "Start an analysis | yes | yes | no | no"
+by = ["test:modules/backend/tests/integration/warehouse/test_roles.py::test_role_matrix"]
+
+[[unit]]
+text = "Read analyses and their results | yes | yes | yes | no"
+by = ["test:modules/backend/tests/integration/warehouse/test_roles.py::test_role_matrix"]
+
+[[unit]]
+text = "Read the SQL an analysis or preview sent | yes | yes | yes | no"
+by = ["test:modules/backend/tests/integration/warehouse/test_run_sql_roles.py"]
+
+[[unit]]
+text = "A superuser counts as ADMIN."
+by = ["test:modules/backend/tests/integration/warehouse/test_roles.py::test_a_superuser_counts_as_admin"]
+
+[[unit]]
+text = "A preview is stored as a run, so reading an analysis or a preview by its id (GET /runs/{run_id}) and listing an experiment's analyses both need ADMIN, DEVELOPER or ANALYST; a VIEWER gets 403 role_required from both (D50)."
+by = ["test:modules/backend/tests/integration/warehouse/test_roles.py::test_role_matrix"]
+
+[[unit]]
+text = "Everyone who can read a run also gets its statements."
+by = ["test:modules/backend/tests/integration/warehouse/test_run_sql_roles.py"]
+
+[[unit]]
+text = "A refusal names the role needed and yours, for example Creating a warehouse connection requires the ADMIN role; you are DEVELOPER."
+by = ["test:modules/backend/tests/integration/warehouse/test_roles.py::test_the_refusal_names_both_roles"]
+
+[[unit]]
+text = "Every change to a connection or a source, and every analysis started, is recorded in the compliance audit trail; a source's entry carries its full definition, and a connection's entry never carries its credentials."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_connections_api.py::test_connection_changes_are_audited_without_credentials",
+    "test:modules/backend/tests/integration/warehouse/test_sources_api.py::test_source_audit_has_full_definition",
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py::test_starting_a_run_is_audited",
+]
+
+[[unit]]
+text = "Limits and cost"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every connection has limits, and each connection in the API shows its worst case per day (worst_case_bytes_per_day or worst_case_seconds_per_day):"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/warehouse/test_connections_api.py",
+]
+
+[[unit]]
+text = "Per query: a byte limit where the warehouse bills by bytes read, and a time limit (query_timeout_seconds, default 300) everywhere."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Per run: a run is one diagnostics statement plus one statement per metric, at most 10 metrics."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py",
+]
+
+[[unit]]
+text = "A run can cost at most (1 + metrics) × the per-query limit."
+by = ["test:modules/backend/tests/integration/warehouse/test_runs_api.py"]
+
+[[unit]]
+text = "Per day: max_runs_per_day (default 20) analyses and previews on the connection per UTC day, whatever their outcome."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_admission.py::test_daily_run_limit_429",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "The count resets at 00:00 UTC."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The worst case for a day is max_runs_per_day × 11 × the per-query limit."
+by = ["untested:T"]
+
+[[unit]]
+text = "At once: one analysis or preview per connection, and at most WAREHOUSE_MAX_CONCURRENT_RUNS (default 2) across the deployment."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_admission.py::test_a_second_run_on_a_busy_connection_409",
+    "test:modules/backend/tests/integration/warehouse/test_admission.py::test_deployment_run_cap",
+]
+
+[[unit]]
+text = "Connection tests and source validation are not counted by the daily limit."
+by = ["test:modules/backend/tests/integration/warehouse/test_admission.py::test_connection_tests_and_validation_are_not_counted"]
+
+[[unit]]
+text = "They are ADMIN-only (validation: the source's editors) and each has a 30-second limit."
+by = ["untested:T"]
+
+[[unit]]
+text = "When a limit is reached the API answers:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Status | code | When"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "429 | daily_run_limit_reached | The connection has used max_runs_per_day today. Retry-After is the seconds until 00:00 UTC, and the body carries limit and resets_at."
+by = ["test:modules/backend/tests/integration/warehouse/test_admission.py::test_daily_run_limit_429"]
+
+[[unit]]
+text = "429 | warehouse_busy | This deployment is already running as many warehouse jobs as it allows. Retry-After: 30. A refusal for capacity does not use a slot of the daily limit."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_admission.py::test_warehouse_busy_consumes_no_daily_slot",
+    "test:modules/backend/tests/unit/warehouse/test_executor.py",
+]
+
+[[unit]]
+text = "409 | run_in_progress | An analysis or preview on this connection has not finished."
+by = ["test:modules/backend/tests/integration/warehouse/test_admission.py::test_a_second_run_on_a_busy_connection_409"]
+
+[[unit]]
+text = "For operators"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Setting | Default | Meaning"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "WAREHOUSE_CREDENTIALS_KEYS | unset | Fernet keys, comma-separated, newest first, that encrypt stored warehouse credentials. While unset, storing or using a credential answers 503 credentials_unavailable. In staging and production a malformed value is refused when the API starts, and the full profile's modules do not load until it is fixed."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_connections_api.py",
+    "test:modules/backend/tests/unit/test_modules_settings.py::TestRegistrationValidates::test_malformed_credential_keys_in_production_fail_the_registration",
+    "test:backend/tests/unit/core/test_preflight.py",
+]
+
+[[unit]]
+text = "WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS | 1800 | The highest query_timeout_seconds a connection may set."
+by = ["untested:T"]
+
+[[unit]]
+text = "WAREHOUSE_MAX_BYTES_PER_QUERY | 214748364800 (200 GiB) | The highest byte limit a connection may set."
+by = ["untested:T"]
+
+[[unit]]
+text = "WAREHOUSE_MAX_RUNS_PER_DAY | 200 | The highest max_runs_per_day a connection may set."
+by = ["untested:T"]
+
+[[unit]]
+text = "WAREHOUSE_MAX_CONCURRENT_JOBS | 4 | Threads per API process for warehouse calls. A call that finds none free is refused at once with 429 warehouse_busy; it never waits."
+by = ["test:modules/backend/tests/unit/warehouse/test_executor.py"]
+
+[[unit]]
+text = "WAREHOUSE_MAX_CONCURRENT_RUNS | 2 | Analyses and previews in flight across the deployment."
+by = ["test:modules/backend/tests/integration/warehouse/test_admission.py::test_deployment_run_cap"]
+
+[[unit]]
+text = "A stored credential that none of the configured keys can open answers 409 credentials_undecryptable and the connection shows needs_new_credentials; an admin replaces it."
+by = ["test:modules/backend/tests/integration/warehouse/test_connections_api.py"]
+
+[[unit]]
+text = "Deleting a connection deletes its row and its credentials; its sources go with it, and its past analyses keep their results and the connection's name."
+by = ["test:modules/backend/tests/integration/warehouse/test_connections_api.py::test_delete_connection_leaves_no_ciphertext"]
+
+[[unit]]
+text = "API"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "All routes are under /api/v1/warehouse/analysis, need a signed-in user, and take credentials only in a request body."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py",
+]
+
+[[unit]]
+text = "Method and path | What it does"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /connectors | The warehouses this code knows and whether each is available here"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/unit/warehouse/test_connectors.py",
+]
+
+[[unit]]
+text = "GET, POST /connections | List connections; create one"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/warehouse/test_roles.py::test_role_matrix",
+]
+
+[[unit]]
+text = "GET, PUT, DELETE /connections/{connection_id} | Read, change or delete a connection"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/warehouse/test_roles.py::test_role_matrix",
+]
+
+[[unit]]
+text = "POST /connections/{connection_id}/test | Sign in and run a statement that reads no table"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_connection_test_runs_no_table_query_and_checks_utc",
+]
+
+[[unit]]
+text = "POST /connections/test | Test a connection's settings before saving them (nothing is stored)"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/warehouse/test_roles.py::test_role_matrix",
+]
+
+[[unit]]
+text = "POST /connections/{connection_id}/regenerate-key | Generate a new key pair, for warehouses whose key the platform generates"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/warehouse/test_snowflake_keys.py",
+]
+
+[[unit]]
+text = "GET, POST /sources | List sources; create one"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/warehouse/test_roles.py::test_role_matrix",
+]
+
+[[unit]]
+text = "GET, PUT, DELETE /sources/{source_id} | Read, change or delete a source"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/warehouse/test_roles.py::test_role_matrix",
+]
+
+[[unit]]
+text = "POST /sources/{source_id}/validate | Check the table and columns against the warehouse's metadata"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/warehouse/test_sources_api.py",
+]
+
+[[unit]]
+text = "POST /sources/{source_id}/preview | Counts and time bounds for the last 7 days, or a window you give"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/warehouse/test_sources_api.py",
+]
+
+[[unit]]
+text = "POST /experiments/{experiment_id}/runs | Start an analysis (answers 202 with the run id)"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py",
+]
+
+[[unit]]
+text = "GET /experiments/{experiment_id}/runs | The experiment's analyses, newest first"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py",
+]
+
+[[unit]]
+text = "GET /runs/{run_id} | One analysis or preview: its status, results and, for ANALYST and above, the SQL sent"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/warehouse/test_run_sql_roles.py",
+]
+
+[[unit]]
+text = "A source names a table or view and maps its columns:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each part of the table name and each column must match the warehouse's identifier rules, and a filter's text value may contain only letters, digits, spaces and _ ."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_schema_tampers_refused",
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_bodies_outside_the_contract_are_refused",
+    "test:modules/backend/tests/unit/warehouse/test_identifier_gate.py",
+]
+
+[[unit]]
+text = ": @ / + -; anything else is refused with 422, never escaped."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A source must be validated before a preview or an analysis uses it, and editing it clears its validation."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_sources_api.py",
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py",
+]
+
+[[unit]]
+text = "An analysis names the sources, and optionally the window and which warehouse variant label is which experiment variant (labels not listed are matched to a variant by its name):"
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py",
+    "test:modules/backend/tests/unit/warehouse/test_mean_runs.py",
+]
+
+[[unit]]
+text = "The window defaults to the experiment's start date up to its end date or now; a time without an offset is read as UTC."
+by = ["test:modules/backend/tests/integration/warehouse/test_runs_api.py"]
+
+[[unit]]
+text = "The run moves from queued to running to succeeded or failed."
+by = ["test:modules/backend/tests/integration/warehouse/test_runs_api.py"]
+
+[[unit]]
+text = "A failed run carries an error_code from a fixed set and reports no numbers; a metric that could not be computed says Not computed: and why, never 0."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py",
+    "test:modules/backend/tests/unit/warehouse/test_errors.py",
+]
+
+[[unit]]
+text = "A mean metric needs at least 2 units in every variant (Not computed: fewer than 2 units otherwise)."
+by = ["test:modules/backend/tests/unit/warehouse/test_mean_runs.py"]
+
+[[unit]]
+text = "When the values vary in neither the control nor a treatment, that treatment has no p-value and its note says Not computed: no variation."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_mean_runs.py",
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py",
+]
+
+[[unit]]
+text = "Errors are {\"detail\": {\"code\": ..., \"message\": ...}}."
+by = ["test:modules/backend/tests/unit/warehouse/test_errors.py"]
+
+[[unit]]
+text = "A request that fails validation lists where and why, but never repeats the value you sent."
+by = [
+    "test:backend/tests/unit/core/test_validation_errors.py",
+    "test:backend/tests/integration/api/test_validation_errors_omit_input.py",
+]
+
+[[unit]]
+text = "If you ran an earlier full-profile release"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "As of v0.9.0, the earlier /api/v1/warehouse endpoints (saved connections, sync, and the ClickHouse, MySQL and Databricks connectors) are removed, and the migration to the warehouse analysis tables deletes the connections they saved (see Upgrading and migrations)."
+by = ["test:modules/backend/tests/smoke/test_warehouse_routes_contract.py::test_the_operations_are_the_route_set"]
+
+[[unit]]
+text = "Rotate every credential that was ever saved there."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "See Modules and profiles for what each profile includes."
+by = ["exempt:baseline"]

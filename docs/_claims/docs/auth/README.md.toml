@@ -1,0 +1,36 @@
+# What verifies each unit of docs/auth/README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/auth/README.md"
+
+[[unit]]
+text = "Authentication Documentation"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Page | What it covers"
+by = ["exempt:label"]
+
+[[unit]]
+text = "How Auth Works | The sign-in, token and password-reset flows"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "For Users | Signing in, managing users and roles, and changing your own password"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "SSO (OIDC, the sso module) | Single sign-on with an OIDC provider, and group-to-role mapping"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Cognito settings | Signing in through an Amazon Cognito user pool"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Testing Cognito Auth | Running the Cognito tests"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "SAML 2.0 sign-in is not available yet; use OIDC."
+by = ["test:modules/backend/tests/integration/api/test_saml_acs_answers.py::test_the_token_the_acs_returns_is_not_a_session"]

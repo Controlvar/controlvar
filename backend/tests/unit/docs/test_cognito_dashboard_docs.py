@@ -51,10 +51,16 @@ COGNITO_ONLY_BOX = re.compile(r'^\s*!!!\s+\w+\s+"Cognito only"', re.M)
 
 
 def _doc_files() -> List[Path]:
-    """Every file under docs/ except the generated OpenAPI snapshots."""
+    """Every file under docs/ except the generated OpenAPI snapshots and the
+    claims registries (docs/_claims/, which mkdocs does not publish: they quote
+    the pages' sentences, so reading them would count each page twice)."""
     found = []
     for dirpath, dirnames, filenames in os.walk(DOCS):
-        dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+        dirnames[:] = sorted(
+            d
+            for d in dirnames
+            if not d.startswith(".") and not (dirpath == str(DOCS) and d == "_claims")
+        )
         for name in sorted(filenames):
             if name.startswith("openapi") and name.endswith(".json"):
                 continue

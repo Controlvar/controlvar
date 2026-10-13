@@ -4,21 +4,8 @@ This directory contains the API documentation for Experimently.
 
 ## Files
 
-1. [API Reference](endpoints.md)
-   - Comprehensive guide to using the API
-   - Authentication and authorization
-   - Usage examples with curl commands
-   - Rate limiting and constraints
-   - SDK usage examples
-   - Framework integrations
-
-2. [API Development Guide](api-docs-guide.md)
-   - Guidelines for API development
-   - Best practices
-   - Versioning strategy
-   - Testing requirements
-   - Documentation standards
-
+1. [API Reference](endpoints.md): the experiments, feature flags and tracking endpoints, with curl examples
+2. [Using the API Docs](api-docs-guide.md): the API documentation the API serves, and its rate limits
 3. [API stability and the OpenAPI snapshots](stability.md)
    - `openapi-v1.stable.json` (core profile) and `openapi-v1.full.json` (full profile),
      the checked-in contract the smoke suite compares against
@@ -58,28 +45,3 @@ curl -s localhost:8000/api/v1/experiments/ \
 It prints the demo data's experiments, among them `Checkout Button Color`.
 
 Then check the [API Reference](endpoints.md) for detailed usage examples.
-
-## Common Tasks
-
-1. **Authentication**
-   - [OAuth2 Authentication](endpoints.md#oauth2-authentication)
-   - [API Key Authentication](endpoints.md#api-key-authentication)
-
-2. **Experiments**
-   - [Creating and managing experiments](endpoints.md#2-managing-experiments)
-   - [Analysing results](sequential-testing.md) — and
-     [Bayesian](bayesian.md), [CUPED](cuped.md),
-     [dimensional breakdowns](dimensional-analysis.md)
-
-3. **Feature Flags**
-   - [Creating flags and evaluating them](endpoints.md#3-feature-flag-management)
-   - [Targeting rules](../Enhanced_Rules_Engine_Reference.md)
-
-4. **Event Tracking**
-   - [Tracking events](endpoints.md#4-tracking-events)
-
-## Need Help?
-
-- Check the [API Reference](endpoints.md) for usage examples
-- Follow the [API Development Guide](api-docs-guide.md) for best practices
-- Contact support for additional assistance

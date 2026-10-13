@@ -214,8 +214,8 @@ Download feature flag usage data.
 | `status`              | string  | INACTIVE, ACTIVE, or ARCHIVED                        |
 | `rollout_percentage`  | integer | Configured rollout percentage (0-100)                |
 | `total_evaluations`   | integer | Total number of times the flag was evaluated         |
-| `enabled_evaluations` | integer | Number of evaluations where the flag was enabled     |
-| `enabled_rate`        | float   | Ratio of enabled evaluations to total [0, 1]         |
+| `enabled_evaluations` | integer | Always `0`: no record says whether an evaluation returned enabled |
+| `enabled_rate`        | float   | Always `0.0`, because `enabled_evaluations` is always `0` |
 | `created_at`          | string  | ISO 8601 creation timestamp                          |
 | `updated_at`          | string  | ISO 8601 last-updated timestamp                      |
 
@@ -280,7 +280,7 @@ Returns a JSON summary of platform-wide activity. Always returns `application/js
 | `active_feature_flags`             | integer | Feature flags in ACTIVE status                           |
 | `total_assignments`                | integer | Total user-experiment assignments                        |
 | `total_events`                     | integer | Total tracking events                                    |
-| `experiments_with_winners`         | integer | Experiments that have a winner identified                |
+| `experiments_with_winners`         | integer | Counts saved reports that have a summary; nothing saves one in this release, so it is `0` |
 | `average_experiment_duration_days` | float   | Average duration (days) of completed experiments, or null |
 
 #### Example curl
@@ -430,7 +430,7 @@ value that was sent:
 
 ## Notes
 
-- All date/time values in export files are in ISO 8601 format with UTC offset.
+- Times are ISO 8601. `generated_at`, `period_start` and `period_end` carry a UTC offset; experiment `start_date` and `end_date`, and flag `created_at` and `updated_at`, are written as stored, without one.
 - UUIDs are included in exports as plain strings (not resolved to names where the ID is already paired with a human-readable name in an adjacent column).
 - Date filtering is **inclusive on both ends** (`created_at >= start_date AND created_at <= end_date`).
 - CSV exports use Python's `csv.DictWriter` with `\r\n` line endings (RFC 4180).
@@ -438,6 +438,5 @@ value that was sent:
   `@`, a tab or a carriage return is written with a single quote (`'`) in front of it, so
   a spreadsheet shows it as text. Numbers, and every value in the JSON exports, are
   written as they are.
-- For large datasets, exports are **streamed** (`StreamingResponse`) to keep memory usage constant.
 - The `scope` parameter of the experiment and variant exports takes only `summary`;
   `events` and `assignments` are reserved and answer `422`.

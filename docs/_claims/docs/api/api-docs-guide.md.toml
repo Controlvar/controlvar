@@ -1,0 +1,357 @@
+# What verifies each unit of docs/api/api-docs-guide.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/api-docs-guide.md"
+
+[[unit]]
+text = "Experimently API Documentation Guide"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This guide explains how to access and use the API documentation for the experimentation platform."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Accessing the Documentation"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The API documentation is available in two formats:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Swagger UI: Interactive documentation where you can try out API endpoints"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "URL: /api/v1/docs"
+by = ["test:backend/tests/unit/models/test_fast_api_setup.py::test_api_docs_available"]
+
+[[unit]]
+text = "ReDoc: Clean, responsive documentation with better navigation"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "URL: /api/v1/redoc"
+by = ["untested:T"]
+
+[[unit]]
+text = "Understanding the API Structure"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The API is organized into the following sections:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Authentication (/api/v1/auth): Endpoints for user authentication"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "Experiments (/api/v1/experiments): Manage experiments and variants"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "Tracking (/api/v1/tracking): Track user assignments and events"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "Feature Flags (/api/v1/feature-flags): Manage feature flags"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "Administration (/api/v1/admin): Admin-only operations"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/integration/api/test_admin_users_api.py",
+]
+
+[[unit]]
+text = "Health (/health): System health check"
+by = [
+    "test:backend/tests/unit/models/test_fast_api_setup.py",
+    "test:backend/tests/smoke/test_wiring.py",
+]
+
+[[unit]]
+text = "The /api/v1/events and /api/v1/assignments routers only expose an informational GET /; use the /api/v1/tracking/ endpoints above."
+by = ["test:backend/tests/integration/api/test_assignments_api.py::TestAssignmentsEndpoint::test_assignments_endpoint_returns_200"]
+
+[[unit]]
+text = "Authentication"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The API uses two authentication methods:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "OAuth2 Bearer Token: For authenticated user endpoints"
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestTokenFormEndpoint::test_form_login_returns_same_shape",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "docex:docs/api/auth.md#\"token_type\": \"bearer\"",
+    "docex:docs/api/auth.md#\"email\": \"admin@demo.com\"",
+]
+
+[[unit]]
+text = "Obtain a token via /api/v1/auth/token endpoint"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Include the token in the Authorization: Bearer <token> header"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "API Key: For tracking endpoints called from client applications"
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key",
+    "docex:docs/api/auth.md#\"purchase_completed\"",
+]
+
+[[unit]]
+text = "Include the API key in the X-API-Key: <api-key> header"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "API Versioning"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Current version: v1 (accessed via /api/v1/...)"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "See API stability for what may change within v1."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Error Responses"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An error answers with a detail field: a message such as {\"detail\": \"Not Found\"}, or, when a request does not validate (422), a list of the problems, each with its type, loc and msg:"
+by = ["test:backend/tests/unit/core/test_validation_errors.py::test_input_is_dropped_and_the_rest_kept"]
+
+[[unit]]
+text = "Pagination"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "List endpoints page in different ways: most take skip and limit, some take page with limit or page_size, and a few take no paging parameter."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "The route's entry in the API documentation names its parameters."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "limit: Maximum number of records to return (default: 100; the largest value allowed differs by route, and some lists have none: the route's OpenAPI entry gives it)"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "Filtering and Sorting"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Some list endpoints support filtering, and one supports sorting:"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Filtering: Use query parameters (e.g., status_filter=active)"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "Sorting: GET /api/v1/experiments/ takes sort_by and sort_order (e.g., sort_by=created_at&sort_order=desc)"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Common Workflows"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Here are the key API workflows for the experimentation platform:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Experiment Management Workflow"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Create experiment (POST /api/v1/experiments)"
+by = [
+    "test:backend/tests/integration/api/test_experiments_lifecycle_api.py",
+    "test:backend/tests/integration/api/test_experiment_update_required_fields.py",
+]
+
+[[unit]]
+text = "Update experiment details (PUT /api/v1/experiments/{experiment_id})"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "Start experiment (POST /api/v1/experiments/{experiment_id}/start)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Monitor results (GET /api/v1/experiments/{experiment_id}/results)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Complete experiment (POST /api/v1/experiments/{experiment_id}/complete)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "User Assignment and Tracking Workflow"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Assign user to experiment (POST /api/v1/tracking/assign)"
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestTrack",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestBatch",
+]
+
+[[unit]]
+text = "Track user events (POST /api/v1/tracking/track or POST /api/v1/tracking/batch)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Analyze results (GET /api/v1/experiments/{experiment_id}/results)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Feature Flag Workflow"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Create feature flag (POST /api/v1/feature-flags)"
+by = [
+    "test:backend/tests/integration/api/test_feature_flags_api.py",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py",
+    "docex:docs/api/auth.md#true",
+]
+
+[[unit]]
+text = "Update flag configurations (PUT /api/v1/feature-flags/{feature_flag_id})"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Evaluate a flag for a user (GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=..., with an API key; user attributes go in context as URL-encoded JSON)"
+by = [
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py",
+    "docex:docs/api/auth.md#true",
+]
+
+[[unit]]
+text = "There is no per-user override endpoint."
+by = ["untested:T"]
+
+[[unit]]
+text = "Target individual users with the flag's targeting_rules instead — see Targeting & Rules."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rate Limiting"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The API implements rate limiting to ensure fair usage and system stability:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Limits are per IP, resolved in backend/app/middleware/rate_limiter.py: an exact path match wins, then the export and AI interpretation prefixes, then the SDK prefixes, then the default."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_exact_config_wins_over_prefix_and_default",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLimit",
+]
+
+[[unit]]
+text = "paths | limit"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "/api/v1/auth/token, /auth/login | 10 / min"
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_is_rate_limited",
+    "test:backend/tests/unit/security/test_owasp_compliance.py",
+]
+
+[[unit]]
+text = "/api/v1/auth/signup, /auth/forgot-password, /auth/reset-password | 5 / min"
+by = ["test:backend/tests/unit/middleware/test_route_rate_limits.py::test_sign_up_and_the_password_reset_routes_take_five_a_minute"]
+
+[[unit]]
+text = "/api/v1/users/me/password | 5 / min"
+by = ["test:backend/tests/unit/middleware/test_own_password_rate_limit.py::test_the_sixth_attempt_in_a_minute_is_429"]
+
+[[unit]]
+text = "/api/v1/auth/sso/exchange (full image) | 10 / min"
+by = ["test:backend/tests/unit/middleware/test_route_rate_limits.py::test_the_sso_routes_take_ten_and_thirty_a_minute"]
+
+[[unit]]
+text = "/api/v1/auth/sso/login (full image) | 30 / min"
+by = ["test:backend/tests/unit/middleware/test_route_rate_limits.py::test_the_sso_routes_take_ten_and_thirty_a_minute"]
+
+[[unit]]
+text = "/api/v1/export/ (all export endpoints share one count) | 10 / min"
+by = ["test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLimit"]
+
+[[unit]]
+text = "/api/v1/audit-logs/export (its own count) | 10 / min"
+by = ["test:backend/tests/unit/middleware/test_route_rate_limits.py::test_the_audit_log_export_takes_ten_a_minute_on_its_own_count"]
+
+[[unit]]
+text = "/api/v1/ai/design | 10 / min"
+by = ["test:backend/tests/unit/middleware/test_ai_rate_limits.py"]
+
+[[unit]]
+text = "/api/v1/ai/interpret/ (every experiment id shares one count) | 10 / min"
+by = ["test:backend/tests/unit/middleware/test_ai_rate_limits.py"]
+
+[[unit]]
+text = "/api/v1/tracking/assign/batch (its own count) | 60 / min"
+by = ["test:backend/tests/unit/api/test_assign_batch_contract.py"]
+
+[[unit]]
+text = "/api/v1/tracking/, /api/v1/feature-flags/evaluate/, /api/v1/feature-flags/user/, /api/v1/sdk/ | SDK_RATE_LIMIT_PER_MINUTE, default 6000 / min"
+by = [
+    "test:backend/tests/unit/api/test_assign_batch_contract.py",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig",
+]
+
+[[unit]]
+text = "everything else | 300 / min"
+by = ["test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_default_rate_limit"]
+
+[[unit]]
+text = "The SDK ceiling is high on purpose: one server-side SDK, or one office behind a NAT, is a single IP sending thousands of requests a minute."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Webhooks"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The webhook endpoints are inbound — the platform receives callbacks from third-party services:"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "There is no POST /api/v1/webhooks: no API registers a webhook for the platform to call."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "For Slack messages about platform events, see Slack & Email Alerting."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "SDKs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The SDKs, and which of them are published, are listed in SDK contract & status."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Report bugs or request features using the GitHub repository."
+by = ["exempt:navigation"]

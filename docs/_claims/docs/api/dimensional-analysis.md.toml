@@ -1,0 +1,320 @@
+# What verifies each unit of docs/api/dimensional-analysis.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/dimensional-analysis.md"
+
+[[unit]]
+text = "Dimensional Analysis & Segment Breakdown (Issue #28)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Dimensional analysis breaks experiment results down by user segments (e.g., by device, country, plan tier, browser) to reveal heterogeneous treatment effects (HTE) — cases where the treatment works differently for different groups."
+by = [
+    "test:backend/tests/unit/api/test_dimensional_analysis_api.py::TestBreakdownQueryParam::test_breakdown_response_contains_segments",
+    "test:backend/tests/unit/api/test_dimensional_analysis_api.py::TestBreakdownQueryParam::test_hte_detected_sets_flag_and_warning",
+]
+
+[[unit]]
+text = "Overview"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "When you run an experiment, the top-level result shows the average effect across all users."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Dimensional analysis answers: \"Did the effect differ by segment?\""
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This is useful for:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Discovering that a feature performs well for mobile users but poorly for desktop"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Identifying segments where the treatment has a negative effect (safety check)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Informing rollout decisions (e.g., roll out to the winning segment first)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Statistical Approach"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Bonferroni Correction"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "When testing multiple segments simultaneously, running standard p-value tests at α = 0.05 per segment inflates the overall false positive rate."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The service applies Bonferroni correction:"
+by = ["test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestGetAdjustedAlpha::test_bonferroni_divides_alpha_by_num_segments"]
+
+[[unit]]
+text = "For example, testing 10 segments at α = 0.05 gives an adjusted threshold of α = 0.005 per segment."
+by = ["test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestGetAdjustedAlpha::test_bonferroni_divides_alpha_by_num_segments"]
+
+[[unit]]
+text = "All segment results are marked is_exploratory: true — they should be treated as hypothesis-generating, not confirmatory."
+by = ["docex:docs/api/dimensional-analysis.md#\"dimension\": \"device\""]
+
+[[unit]]
+text = "A significant segment finding should be validated with a dedicated follow-up experiment."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "HTE Detection"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Heterogeneous treatment effect detection compares the first treatment with the control."
+by = ["test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestDetectHTE::test_hte_detected_when_effects_differ_strongly"]
+
+[[unit]]
+text = "It flags the experiment when a chi-squared test on their conversion counts across the segments gives p < 0.05, when the lift varies widely between segments, or when the lift is positive in one segment and negative in another."
+by = [
+    "test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestDetectHTE::test_hte_detected_when_effects_differ_strongly",
+    "test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestDetectHTE::test_no_hte_when_effects_are_homogeneous",
+    "test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestDetectHTE::test_single_segment_never_has_hte",
+]
+
+[[unit]]
+text = "Where the segments come from"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A segment is a value of a key in the events' metadata."
+by = ["test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestComputeSegmentResults::test_missing_dimension_values_grouped_as_unknown"]
+
+[[unit]]
+text = "Send the dimension with the events you track, as in \"metadata\": {\"device\": \"mobile\"}, and the breakdown groups the experiment's users by it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A user whose events don't carry the key is counted under the segment unknown."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in first:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["docex:docs/api/dimensional-analysis.md#\"ADMIN\""]
+
+[[unit]]
+text = "The examples use the demo data's checkout_button_color experiment, whose primary metric counts checkout_completed events."
+by = ["untested:S"]
+
+[[unit]]
+text = "Its demo events carry no metadata, so this page tracks a few that do."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "That takes an API key, which this saves in $KEY, with the experiment's id in $EXP_ID."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The collection URL ends with a slash, /api/v1/experiments/; without it the API answers 307, which curl doesn't follow:"
+by = ["untested:T"]
+
+[[unit]]
+text = "It prints eptk_, the start of every API key."
+by = ["docex:docs/api/dimensional-analysis.md#eptk_"]
+
+[[unit]]
+text = "This assigns eight users to the experiment:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints 8 true: all eight were enrolled."
+by = ["docex:docs/api/dimensional-analysis.md#8 true"]
+
+[[unit]]
+text = "Then each completes a checkout, the odd numbers on desktop and the even ones on mobile."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "jq builds the batch of eight events:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints 8."
+by = ["docex:docs/api/dimensional-analysis.md#8"]
+
+[[unit]]
+text = "API Reference"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}?breakdown="
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "The experiment's results, with a breakdown field that splits the primary metric by one dimension, with the Bonferroni-corrected significance test above."
+by = [
+    "test:backend/tests/unit/api/test_dimensional_analysis_api.py::TestBreakdownQueryParam::test_no_breakdown_still_works",
+    "test:backend/tests/unit/api/test_dimensional_analysis_api.py::TestBreakdownQueryParam::test_breakdown_adjusted_alpha_is_bonferroni_corrected",
+]
+
+[[unit]]
+text = "Without breakdown, the field is null."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Any logged-in user can read it."
+by = ["untested:T"]
+
+[[unit]]
+text = "Parameter | Type | Required | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "breakdown | string | ❌ | The metadata key to break down by (e.g. device, country, plan)"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "docex:docs/api/dimensional-analysis.md#\"is_exploratory\": true",
+]
+
+[[unit]]
+text = "confidence_level | float | ❌ | 0.80–0.99, default 0.95"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "It prints the dimension, \"is_exploratory\": true, the corrected threshold and the segments: desktop, mobile, and unknown for the users' assignment events, which carry no device."
+by = ["untested:S"]
+
+[[unit]]
+text = "With three segments the threshold is 0.05 / 3, about 0.0167."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A variant's conversions in a segment are users, as in the rest of /results: the users assigned to it with at least one conversion event in that segment, each counted once."
+by = ["test:backend/tests/integration/api/test_results_breakdown_variants.py"]
+
+[[unit]]
+text = "Every segment lists every variant of the experiment by name, with zero counts where the segment has none of its users, and is_control is the flag the experiment gives the variant."
+by = ["docex:docs/api/dimensional-analysis.md#[{\"variant_name\":\"blue_button\",\"is_control\":true},{\"variant_name\":\"green_button\",\"is_control\":false}]"]
+
+[[unit]]
+text = "The control comes first:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints blue_button, the control, then green_button."
+by = ["docex:docs/api/dimensional-analysis.md#[{\"variant_name\":\"blue_button\",\"is_control\":true},{\"variant_name\":\"green_button\",\"is_control\":false}]"]
+
+[[unit]]
+text = "One segment in full:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The control's p_value is null; every other variant's is its test against the control in the same segment."
+by = ["untested:T"]
+
+[[unit]]
+text = "The breakdown also carries has_heterogeneous_effects and hte_warning."
+by = [
+    "test:backend/tests/unit/api/test_dimensional_analysis_api.py::TestBreakdownQueryParam::test_hte_detected_sets_flag_and_warning",
+    "test:backend/tests/unit/api/test_dimensional_analysis_api.py::TestBreakdownQueryParam::test_no_hte_sets_flag_false_and_warning_none",
+]
+
+[[unit]]
+text = "GET /api/v1/experiments/{experiment_id}/segmented-results/"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Counts per segment, variant and metric, with no significance test."
+by = ["untested:T"]
+
+[[unit]]
+text = "Only segments with the key are listed (no unknown), conversion_rate is a percentage, and an experiment in draft answers 400."
+by = ["untested:T"]
+
+[[unit]]
+text = "metric_id narrows it to one metric:"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "It prints the desktop and mobile segments, each with the users and conversions of blue_button and green_button."
+by = ["docex:docs/api/dimensional-analysis.md#\"segment_value\": \"desktop\""]
+
+[[unit]]
+text = "Reading the Results"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "adjusted_alpha is the per-segment significance threshold after Bonferroni correction."
+by = ["test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestComputeSegmentResults::test_bonferroni_correction_applied_to_alpha"]
+
+[[unit]]
+text = "A segment is is_significant: true only if its p-value is below this threshold."
+by = ["test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestComputeSegmentResults::test_bonferroni_correction_applied_to_alpha"]
+
+[[unit]]
+text = "is_exploratory: true on all segments means treat findings as signals, not conclusions."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Run a dedicated follow-up experiment to confirm."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Segments with small sample sizes (< ~200 per variant) will rarely show significance even with large effects."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The p-values are still valid but the confidence intervals will be wide."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Common Dimensions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Dimension Key | Example Values"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "device | mobile, desktop, tablet"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "country | US, GB, DE"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "plan | free, pro, enterprise"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "browser | chrome, safari, firefox"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "new_user | true, false"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Permissions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Any logged-in user can read both breakdowns, whatever the role."
+by = ["untested:T"]

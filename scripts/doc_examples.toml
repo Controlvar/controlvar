@@ -134,6 +134,7 @@ universe = [
     "docs/security/api-keys.md",
     "docs/security/hardening-changes.md",
     "docs/security/incident-response.md",
+    "docs/security/model.md",
     "docs/self-hosting/cdk.md",
     "docs/self-hosting/kubernetes.md",
     "docs/self-hosting/migrations.md",
@@ -240,7 +241,7 @@ expects = 10
 path = "docs/api/auth.md"
 environment = "stack"
 exec = 12
-skip = 1
+skip = 0
 expects = 15
 
 [[document]]
@@ -446,7 +447,6 @@ reason = "run on a kind cluster by the chart-kind workflow (scripts/chart_kind.s
 "docs/getting-started/pre-commit-hooks.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/getting-started/python-virtual-env-setup.md" = { comments = 0, unlabelled = 1, syntax = 0 }
 "docs/getting-started/vscode-settings.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"docs/hipaa/overview.md" = { comments = 0, unlabelled = 0, syntax = 1 }
 "docs/infrastructure/aws-iam-setup.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/infrastructure/cloudwatch-setup.md" = { comments = 0, unlabelled = 4, syntax = 0 }
 "docs/infrastructure/dynamodb-readme.md" = { comments = 0, unlabelled = 0, syntax = 0 }
@@ -595,5 +595,5 @@ expects = 9
 path = "docs/integrations/salesforce.md"
 environment = "stack-full"
 exec = 6
-skip = 1
+skip = 0
 expects = 13
