@@ -289,6 +289,37 @@ def test_user_contexts_around_the_parsers_own_depth_limit_are_refused_cleanly(
     assert spy == []
 
 
+def test_an_unknown_segment_with_a_user_context_over_the_limit_answers_422(
+    client, segment, spy
+):
+    """No segment is read before the check: an id that names no segment
+    answers the limit's 422, not 404."""
+    url = f"/api/v1/segments/{uuid.uuid4()}/evaluate"
+    body = {"user_context": sized(MAX_CONTEXT_BYTES + 1, **MATCHING)}
+    assert _answer(client.post(url, json=body)) == (
+        422,
+        {"detail": CONTEXT_TOO_LARGE},
+    )
+    assert spy == []
+
+
+def _over_both():
+    context = object_chain(MAX_CONTEXT_DEPTH + 1, **MATCHING)
+    context["pad"] = "x" * (MAX_CONTEXT_BYTES + 1)
+    return context
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_a_user_context_over_both_limits_answers_the_depth_detail(
+    route, client, segment, spy
+):
+    """Depth is checked first. These handlers run in a worker thread, where the
+    sweep cannot see the order; this case holds it at the route."""
+    response = _send(route, client, segment, _over_both())
+    assert _answer(response) == (422, {"detail": CONTEXT_TOO_DEEP})
+    assert spy == []
+
+
 def test_bulk_evaluate_checks_its_one_user_context_once(
     client, segment, spy, db_session, admin_user, monkeypatch
 ):
