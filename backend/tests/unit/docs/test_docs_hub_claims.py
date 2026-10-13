@@ -307,7 +307,7 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("how each AWS service is used", "docs/integrations/aws.md"),
         lede("a webhook endpoint for each", "docs/api/integrations.md"),
         lede(
-            "sends notifications to Slack channels and email addresses",
+            "sends a Slack message for each event",
             "docs/api/alerting.md",
         ),
     ),
@@ -334,10 +334,11 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         ),
         says("HMAC-SHA256 signature"),
     ),
-    "Slack and email notifications of experiment lifecycle changes and custom alerts": (
-        lede("sends notifications to Slack channels and email addresses"),
-        lede("experiment lifecycle changes"),
-        lede("custom alerts"),
+    "Slack messages for scheduled experiment changes and rollout stage advances; email only from the test route": (
+        lede("sends a Slack message for each event"),
+        lede("Email is sent only by the test route"),
+        says("Scheduled experiment change"),
+        says("Rollout stage advance"),
     ),
     # Compliance, roles, API keys and sign-in
     "Audit records, compliance reports, roles, API keys and single sign-on.": (
@@ -354,11 +355,12 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("HMAC signing of new events is also the module's"),
         lede("the export are the compliance module's"),
     ),
-    "Full profile: evidence reports for your own audit programme": (
+    "Full profile: SOC 2 and ISO 27001 reports and an export of the audit events": (
         lede(
             "The SOC 2 / ISO 27001 reports and the export are the compliance module's"
         ),
-        lede("It is evidence for a customer's SOC 2 or ISO 27001 program"),
+        says("### Export Audit Events"),
+        says("GET /api/v1/compliance/export"),
     ),
     "Who changed what through the API; no API edits or deletes an entry": (
         lede("The audit log is a record of who changed what"),
@@ -385,12 +387,12 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("Use an OIDC configuration (okta, google or github) for sign-in"),
         lede("SAML 2.0 sign-in is not available yet; use OIDC"),
     ),
-    "Full profile: PHI encryption (Fernet), a 6-year retention marker on PHI audit records, BAA records and a data-residency region check.": (
+    "Full profile: PHI encryption (Fernet), a 6-year retention marker on PHI audit records, BAA records and the data-residency configuration.": (
         lede("present in the full profile"),
         says("Protected Health Information (PHI) using Fernet"),
         says("Retention marker (retention_years = 6"),
         says("Business Associate Agreements are tracked"),
-        says("check_data_residency(...) | Validate AWS region"),
+        says("Data residency configuration"),
     ),
     # Self-Hosting
     "Run Experimently yourself: Docker Compose on one machine, Helm on Kubernetes, or a CDK app that deploys to AWS.": (

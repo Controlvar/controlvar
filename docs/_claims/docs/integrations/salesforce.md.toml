@@ -1,0 +1,397 @@
+# What verifies each unit of docs/integrations/salesforce.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/integrations/salesforce.md"
+
+[[unit]]
+text = "Salesforce Integration"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Part of the integrations module"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Third-party integrations is one of the optional modules -- present in the full profile, absent from the core one."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A core deployment does not serve these routes."
+by = ["test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route"]
+
+[[unit]]
+text = "See Modules and profiles for what each profile includes and how to run the full one."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The Salesforce integration receives the events a Salesforce Flow or Apex callout sends to the platform, and authenticates each one."
+by = ["mechanism:integrations-claims"]
+
+[[unit]]
+text = "It also stores your Connected App's credentials for calls to Salesforce, but nothing in the platform calls Salesforce yet, and a delivery is acknowledged without changing anything in the platform."
+by = [
+    "test:modules/backend/tests/unit/services/test_integration_wiring.py::test_nothing_calls_jira_salesforce_or_github",
+    "test:modules/backend/tests/unit/services/test_integration_wiring.py::test_a_webhook_delivery_writes_no_row",
+]
+
+[[unit]]
+text = "What the Integration Does"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Outbound (Platform → Salesforce): not wired yet."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Nothing in the platform calls Salesforce, so no experiment's status or result reaches a Salesforce record; the Connected App's credentials are stored but not used."
+by = ["test:modules/backend/tests/unit/services/test_integration_wiring.py::test_nothing_calls_jira_salesforce_or_github"]
+
+[[unit]]
+text = "Inbound (Salesforce → Platform): Receive events from Salesforce via webhook, posted as JSON by a Flow HTTP Callout, an Apex callout or a relay."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform authenticates and answers each delivery; nothing in the platform acts on the event yet."
+by = [
+    "test:modules/backend/tests/unit/services/test_integration_wiring.py::test_a_webhook_delivery_writes_no_row",
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestSalesforceWebhook::test_salesforce_webhook_with_the_shared_secret_returns_200",
+]
+
+[[unit]]
+text = "Prerequisites"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The Connected App's credentials are stored for calls to Salesforce, which nothing in the platform makes yet, so an integration that only receives webhooks needs nothing but a webhook_secret."
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestReceiveOnlyIntegrations::test_salesforce_receive_only_integration_authenticates"]
+
+[[unit]]
+text = "Creating the Integration"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Creating, changing and deleting an integration needs an ADMIN bearer token; an ADMIN or a DEVELOPER can read it."
+by = [
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestCreateIntegration::test_developer_cannot_create_integration",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestListIntegrations::test_developer_can_list_integrations",
+]
+
+[[unit]]
+text = "is_active defaults to false, and only an active integration answers webhook deliveries, so send true."
+by = ["untested:T"]
+
+[[unit]]
+text = "The examples on this page run against a local full-profile stack (see Modules and profiles); on your own deployment, use its URL instead of localhost:8000."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sign in as the stack's administrator, which saves a token in $TOKEN:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If it prints null, the sign-in failed and $TOKEN holds no token."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This generates a webhook secret, keeps it in $WEBHOOK_SECRET, and creates the integration with it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The instance URL and the Connected App's key and secret are examples: use your own."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Response: 201 Created"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "There is one Salesforce configuration, and it is addressed by its type, salesforce, not by the id: GET, PUT and DELETE use /api/v1/integrations/salesforce, and the webhook URL below has no id in it either."
+by = ["docex:docs/integrations/salesforce.md#\"client_id\": \"3MVG9-new-key...\""]
+
+[[unit]]
+text = "The request and response are described in Create Integration."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Configuration Fields"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Field | Type | Required | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "instance_url | string | Yes | Your Salesforce instance URL, e.g., https://your-org.my.salesforce.com"
+by = ["test:modules/backend/tests/unit/services/test_integration_workflow.py::TestIntegrationConfigFactory::test_salesforce_service_from_config_stores_credentials"]
+
+[[unit]]
+text = "client_id | string | Yes | OAuth 2.0 Consumer Key from the Connected App"
+by = ["test:modules/backend/tests/unit/services/test_integration_workflow.py::TestIntegrationConfigFactory::test_salesforce_service_from_config_stores_credentials"]
+
+[[unit]]
+text = "client_secret | string | Yes | OAuth 2.0 Consumer Secret from the Connected App"
+by = ["test:modules/backend/tests/unit/services/test_integration_workflow.py::TestIntegrationConfigFactory::test_salesforce_service_from_config_stores_credentials"]
+
+[[unit]]
+text = "webhook_secret | string | Yes | A secret you choose (for example openssl rand -hex 32). An inbound delivery to the webhook endpoint below must present it; see Webhook Endpoints"
+by = [
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestSalesforceWebhook::test_salesforce_webhook_without_a_secret_is_401",
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestSalesforceWebhook::test_salesforce_webhook_with_the_shared_secret_returns_200",
+]
+
+[[unit]]
+text = "access_token | string | No | Not read by the platform; you do not need to supply it."
+by = ["untested:T"]
+
+[[unit]]
+text = "The Salesforce client in the platform is written for the OAuth 2.0 Client Credentials flow, and nothing calls it yet."
+by = [
+    "test:modules/backend/tests/unit/services/test_salesforce_service.py::TestSalesforceOAuth::test_get_access_token_sends_client_credentials",
+    "test:modules/backend/tests/unit/services/test_integration_wiring.py",
+]
+
+[[unit]]
+text = "The credentials are stored in the database as given; they are not encrypted."
+by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::TestStoredSecretsAreNotReturned::test_withheld_values_stay_stored"]
+
+[[unit]]
+text = "The client_secret, an access_token and the webhook_secret are not returned in any response, not even masked: a response shows instance_url and client_id and lists the names of the other keys in stored_secrets (see What a response shows)."
+by = [
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestStoredSecretsAreNotReturned::test_reads_return_no_stored_secret_value",
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestStoredSecretsAreNotReturned::test_a_key_not_on_the_shown_list_is_named_not_returned",
+]
+
+[[unit]]
+text = "Webhook Endpoint"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "To receive incoming events from Salesforce, configure a Salesforce Flow with an HTTP Callout (or an Apex callout, or a relay in front of the platform) to POST a JSON object to:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Configuring a Salesforce callout"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Send the event from something that can post a JSON object and set a header: a Flow with an HTTP Callout action, an Apex callout (HttpRequest.setHeader), or a relay in front of the platform."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Build the sender in Salesforce, for example a Flow on the record change you care about with an HTTP Callout action, or set up your relay"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Set the method to POST and the URL to your webhook URL: https://your-platform.example.com/api/v1/integrations/webhooks/salesforce"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Set the Content-Type header to application/json"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Set the body to a JSON object with the fields you want to include (see Incoming Webhook Payload Format)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Add the integration's webhook_secret as a header on the callout, as described next"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Authenticating a delivery"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform parses a delivery only after the sender has presented the integration's webhook_secret, in one of two forms."
+by = [
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_salesforce_webhook_without_a_secret_is_refused",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_jira_webhook_unauthenticated_malformed_body_is_401_not_400",
+]
+
+[[unit]]
+text = "Without it the answer is 401 and the body is not parsed."
+by = [
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_salesforce_webhook_without_a_secret_is_refused",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_jira_webhook_unauthenticated_malformed_body_is_401_not_400",
+]
+
+[[unit]]
+text = "How | Header | Value"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Shared secret | X-Experimently-Webhook-Secret | The webhook_secret itself"
+by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::TestSalesforceWebhook::test_salesforce_webhook_with_the_shared_secret_returns_200"]
+
+[[unit]]
+text = "Signature, from a callout that can compute one | X-Hub-Signature-256, or X-Hub-Signature | sha256= followed by the hex HMAC-SHA256 of the raw request body, keyed with the webhook_secret (a SHA-1 value, sha1=..., is refused)"
+by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::TestJiraWebhook::test_jira_webhook_with_a_valid_signature_returns_200"]
+
+[[unit]]
+text = "Set the shared-secret header on the callout."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "The secret then travels with every delivery, so the endpoint must be HTTPS."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If the callout can sign the raw body (in Apex, with Crypto.generateMac), send the signature instead."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "A delivery that carries either signature header is judged on the signature alone: a wrong signature is refused even when the shared-secret header is right."
+by = ["docex:docs/integrations/salesforce.md#{\"detail\":\"Webhook authentication failed\"}"]
+
+[[unit]]
+text = "The body must be a JSON object: a SOAP/XML body is refused with 400 even when the secret is right."
+by = ["docex:docs/integrations/salesforce.md#{\"detail\":\"Webhook authentication failed\"}"]
+
+[[unit]]
+text = "Every refused delivery gets the same answer, 401 with the body {\"detail\": \"Webhook authentication failed\"}: a wrong or missing secret, an integration that is not active, an integration with no webhook_secret, and no Salesforce integration at all are not told apart."
+by = [
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_salesforce_webhook_without_a_secret_is_refused",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_salesforce_webhook_with_the_wrong_secret_is_refused",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_salesforce_webhook_without_an_integration_is_refused",
+]
+
+[[unit]]
+text = "If every delivery is refused, check with GET /api/v1/integrations/salesforce that is_active is true and that stored_secrets lists webhook_secret."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "See Webhook Endpoints for the whole contract."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sending a delivery"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "To see both forms accepted, send a delivery with the secret created above."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A Flow HTTP Callout sends the secret itself:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints {\"status\":\"received\"}."
+by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::TestSalesforceWebhook::test_salesforce_webhook_with_the_shared_secret_returns_200"]
+count = 2
+
+[[unit]]
+text = "An Apex callout that signs sends the HMAC-SHA256 of the raw body, keyed with the webhook_secret, in hex, after sha256=:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "printf '%s' adds no newline and --data-binary sends the body byte for byte, so the signature covers exactly what is sent."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "openssl dgst prints the digest as the last field of its line (after SHA2-256(stdin)= with OpenSSL 3, on its own with LibreSSL), which awk keeps."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A wrong signature is refused even beside the right shared secret, and an XML body is refused with 400 even with the right secret:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "They print {\"detail\":\"Webhook authentication failed\"} and {\"detail\":\"Invalid JSON payload\"}."
+by = ["docex:docs/integrations/salesforce.md#{\"detail\":\"Webhook authentication failed\"}"]
+
+[[unit]]
+text = "Incoming Webhook Payload Format"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform accepts JSON objects from a Salesforce Flow HTTP Callout, an Apex callout or a relay."
+by = ["mechanism:integrations-claims"]
+
+[[unit]]
+text = "Any JSON object is accepted, and nothing reads its fields yet."
+by = ["test:modules/backend/tests/unit/services/test_integration_wiring.py::test_a_webhook_delivery_writes_no_row"]
+
+[[unit]]
+text = "For example:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Response: 200 OK"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A delivery from an authenticated sender is answered 200 even when the platform could not process the event: the failure is logged, so the provider does not retry something it cannot fix."
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_jira_webhook_service_failure_is_still_200"]
+
+[[unit]]
+text = "A body that is not a JSON object is 400 Bad Request, and that is checked only after the sender is authenticated."
+by = ["docex:docs/integrations/salesforce.md#{\"detail\":\"Webhook authentication failed\"}"]
+
+[[unit]]
+text = "Syncing to Salesforce"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Nothing in the platform calls Salesforce yet: no experiment's status or result is written to a Salesforce record, and the instance_url, client_id and client_secret are stored for a sync that is not wired."
+by = ["test:modules/backend/tests/unit/services/test_integration_wiring.py::test_nothing_calls_jira_salesforce_or_github"]
+
+[[unit]]
+text = "The webhook above is the part of the integration that works today."
+by = ["test:modules/backend/tests/unit/services/test_integration_wiring.py::test_nothing_calls_jira_salesforce_or_github"]
+
+[[unit]]
+text = "Troubleshooting"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Webhook Not Receiving Events"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Confirm the URL in the Salesforce callout (the Flow HTTP Callout, the Apex callout or the relay) matches your integration webhook URL exactly"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Make sure the webhook URL is HTTPS and can be called from outside your network"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Check the API's access log: it logs each delivery with its path and status, for example \"POST /api/v1/integrations/webhooks/salesforce HTTP/1.1\" 401"
+by = ["untested:T"]
+
+[[unit]]
+text = "In Salesforce, check the callout's response in the Flow's debug details or the Apex debug log (Setup → Debug Logs): 401 means the secret header is missing or wrong, or the integration is not active; 400 means the body is not a JSON object"
+by = ["docex:docs/integrations/salesforce.md#{\"detail\":\"Webhook authentication failed\"}"]
+
+[[unit]]
+text = "Updating Integration Credentials"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If you rotate your Salesforce Connected App credentials, send the new values with PUT /api/v1/integrations/salesforce and an ADMIN token."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The integration is addressed by its type, not by an id."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "PUT merges encrypted_config key by key, so send only the keys that changed: the keys you leave out, such as instance_url and webhook_secret, are kept."
+by = ["docex:docs/integrations/salesforce.md#\"client_id\": \"3MVG9-new-key...\""]
+
+[[unit]]
+text = "The response shows the new client_id beside the old instance_url, and still names client_secret and webhook_secret: the webhook keeps working with the secret it had."
+by = ["docex:docs/integrations/salesforce.md#\"client_id\": \"3MVG9-new-key...\""]
+
+[[unit]]
+text = "The whole request is described in Update Integration."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "To change the webhook_secret instead, use the recipe in Upgrading an integration created before webhook authentication with TYPE=salesforce."
+by = ["docex:docs/api/integrations.md#New webhook_secret for jira:"]

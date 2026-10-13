@@ -1,6 +1,6 @@
 # AWS Integration
 
-Experimently works with AWS. This document describes how each AWS service is used and how to configure the integration.
+This document describes how each AWS service is used and how to configure the integration.
 
 ---
 
@@ -11,8 +11,6 @@ The FastAPI application runs on **Amazon ECS Fargate** — a serverless containe
 ### Deployment Architecture
 
 - The Fargate service runs multiple task replicas behind an Application Load Balancer (ALB)
-- Task health is monitored via the `/health` endpoint; unhealthy tasks are automatically replaced
-- Horizontal scaling is configured via ECS service auto-scaling based on CPU and memory utilization
 
 ### Blue/Green Deployments
 
@@ -31,17 +29,7 @@ task-definition change through UpdateService on such a service.
 
 ### Environment Variables
 
-The ECS task reads configuration from AWS Secrets Manager at startup. Set the following as ECS task environment variables or Secrets Manager references:
-
-| Variable | Description |
-|----------|-------------|
-| `POSTGRES_SERVER` / `POSTGRES_PORT` / `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Aurora PostgreSQL connection (the image does not read `DATABASE_URL`) |
-| `REDIS_HOST` / `REDIS_PORT` | ElastiCache primary endpoint and port (from the Redis stack) |
-| `REDIS_SSL` | `true` on AWS: the replication group requires TLS |
-| `SECRET_KEY` | Application secret key (min 32 chars) |
-| `COGNITO_USER_POOL_ID` | AWS Cognito User Pool ID |
-| `COGNITO_CLIENT_ID` | Cognito app client ID |
-| `AWS_REGION` | AWS region for DynamoDB and Kinesis calls |
+The ECS task reads configuration from AWS Secrets Manager at startup. The variables are listed in the [Environment Variables Reference](#environment-variables-reference) below.
 
 ---
 
@@ -61,35 +49,15 @@ POSTGRES_PASSWORD=password
 POSTGRES_DB=experimentation
 ```
 
-### Read Replicas
+### Instances and connections
 
-Aurora automatically maintains a read replica. To direct read-heavy queries to the replica, set:
+In `prod` the cluster has a writer and a reader; in the other environments it has one instance. The API sends every query to `POSTGRES_SERVER`, and routes none to the reader.
 
-```bash
-DATABASE_REPLICA_URL=postgresql://username:password@aurora-cluster.cluster-ro-xxxx.region.rds.amazonaws.com:5432/experimentation
-```
-
-The API uses the replica URL for read-only queries (results pages, audit log reads) to reduce load on the primary.
-
-### Connection Pooling
-
-The application uses SQLAlchemy with a connection pool. For production, configure:
-
-```bash
-DATABASE_POOL_SIZE=20
-DATABASE_MAX_OVERFLOW=10
-DATABASE_POOL_TIMEOUT=30
-```
+The API keeps a pool of 20 database connections, opens up to 20 more when they are all busy, and waits up to 30 seconds for a free one; no setting changes these numbers.
 
 ---
 
 ## ElastiCache Redis
-
-**Amazon ElastiCache for Redis** provides two functions:
-
-### Session Storage
-
-User JWT sessions are stored in Redis with a TTL matching the token expiry time. This allows the API service to scale horizontally without sticky sessions — any task can validate any user's session.
 
 `REDIS_HOST` is the cluster's primary endpoint. `REDIS_SSL` is `true` because
 in-transit encryption is on, and a plaintext client is refused.
@@ -102,15 +70,7 @@ REDIS_SSL=true
 
 ### Application Cache
 
-Experiment assignments are cached in Redis. The default TTL is 60 seconds, and changes to experiments propagate to all users within one cache cycle. The API does not cache feature flags: it reads them from the database on every request, so a flag change is served on the next one.
-
-`REDIS_CACHE_TTL` is the cache TTL in seconds, and `REDIS_CACHE_MAX_SIZE` the
-maximum number of items in the cache:
-
-```bash
-REDIS_CACHE_TTL=60
-REDIS_CACHE_MAX_SIZE=10000
-```
+With `CACHE_ENABLED` on (it is off by default), `GET /api/v1/experiments/{experiment_id}` and its `daily-results` and `segmented-results` are cached in Redis for 3,600 seconds (an hour). A change to the experiment clears its cached detail; its cached daily and segmented results stay until they expire. `GET /api/v1/results/{experiment_id}` and `GET /api/v1/experiments/{experiment_id}/results` are cached in Redis whenever it is reachable, `CACHE_ENABLED` or not: for 5 minutes while the experiment is running, and for 24 hours otherwise. The API does not cache feature flags: it reads them from the database on every request, so a flag change is served on the next one.
 
 ---
 
@@ -119,12 +79,6 @@ REDIS_CACHE_MAX_SIZE=10000
 The `counters` module (full profile) keeps real-time assignment, event and conversion counters
 in **Amazon DynamoDB**, and increments them with atomic `ADD` update expressions so that
 concurrent writers never contend on a row.
-
-### Table Structure
-
-| Table | Partition Key | Sort Key | Purpose |
-|-------|--------------|----------|---------|
-| `experiment-counters-<env>` | `pk` | `sk` | Per-variant counters, with an `experiment-id-index` GSI |
 
 ### Atomic Increment
 
@@ -160,7 +114,6 @@ The core profile creates no table and sets neither variable.
 The repository has Lambda code for event processing and flag evaluation under
 `backend/lambda/`, but no stack deploys it. SDKs call the API (`/api/v1/tracking/*`,
 `/api/v1/feature-flags/evaluate/*`) for assignment and evaluation.
-`infrastructure/tests/test_lambda_functions_doc.py` pins this list against a synth.
 
 ---
 
@@ -185,7 +138,7 @@ gets it only if you add it to a stack yourself. The router
 3. Returns a `302 Found` redirect to the variant URL
 4. Sets a `Set-Cookie` header recording the assignment (30 days by default; `cookie_ttl_days` in the experiment config)
 
-Lambda@Edge functions must be deployed to `us-east-1` (a CloudFront requirement) and are globally replicated to all edge locations.
+AWS requires a Lambda@Edge function to be created in `us-east-1`.
 
 The construct is Python, like the rest of the CDK app. Its usage, and how the
 router receives its configuration, are in
@@ -210,34 +163,7 @@ either, because the Lambda on the stream is a placeholder (see
 
 All infrastructure is defined in `infrastructure/cdk` using AWS CDK v2, in Python.
 
-### Prerequisites
-
-- AWS account with appropriate IAM permissions
-- Node.js 18+
-- AWS CDK v2: `npm install -g aws-cdk`
-- AWS CLI configured: `aws configure`
-
-### Deploy
-
-One-time bootstrap (per account/region):
-
-```bash
-cd infrastructure
-cdk bootstrap aws://YOUR_ACCOUNT_ID/YOUR_REGION
-```
-
-Deploy all stacks:
-
-```bash
-export ALARM_EMAIL=ops@your-domain.com
-cdk deploy --all
-```
-
-Deploy a specific stack (a stack id from `cdk list`):
-
-```bash
-cdk deploy experimentation-fargate-prod
-```
+How to bootstrap the account and deploy the stacks is in [AWS CDK Deployment](../self-hosting/cdk.md).
 
 `ALARM_EMAIL` is the address every alarm emails, including the API rollback
 alarms. It is required for `staging` and `prod`, and synth refuses to run
@@ -245,26 +171,7 @@ without it. Confirm the subscription it creates from the inbox; see
 [AWS CDK Deployment](../self-hosting/cdk.md#required-environment-variables) for
 that and for the other required settings.
 
-### Stacks Deployed
-
-| Stack (`<env>` is `dev`, `staging` or `prod`) | Contents |
-|---|---|
-| `experimentation-vpc-<env>` | VPC, public/private/isolated subnets, NAT, route tables, network ACLs, gateway endpoints, security groups |
-| `experimentation-auth-<env>` | Cognito user pool, app client and groups |
-| `experimentation-database-<env>` | Aurora PostgreSQL cluster, parameter group, KMS key, security group |
-| `experimentation-redis-<env>` | ElastiCache Redis replication group, subnet group, security group |
-| `experimentation-dynamodb-<env>` | Three DynamoDB tables (events, feature flags, overrides) |
-| `experimentation-compute-<env>` | ECS cluster, task security group, a placeholder Lambda (`DatabaseAccessLambda`) |
-| `experimentation-fargate-<env>` | ALB, HTTPS + test listeners, blue/green target groups, Fargate service, CodeDeploy application and deployment group, auto-scaling |
-| `experimentation-migrations-<env>` | One-off ECS task definition that runs the alembic upgrade |
-| `experimentation-monitoring-<env>` | CloudWatch dashboards, alarms, log groups, metric filters, SNS topic |
-| `experimentation-dynamodb-counters-<env>` | **Full profile only** — the real-time experiment-counters table |
-| `experimentation-analytics-<env>` | **Full profile only** — Kinesis stream, Firehose, S3 data lake, OpenSearch domain, a placeholder consumer Lambda |
-| `experimentation-glue-etl-<env>` | **Full profile only** — Glue database and crawler, two ETL jobs, Athena results bucket, daily trigger |
-
-A core deployment builds the first nine; a full one builds all twelve. The
-names are the stack **ids** `cdk deploy` takes, not class names -- run
-`cdk list` to see them for your environment.
+The stacks a deployment builds are listed in [AWS CDK Deployment](../self-hosting/cdk.md).
 
 ---
 
@@ -325,8 +232,8 @@ answers 404.
 | `REDIS_PORT` | No | ElastiCache port (default `6379`) |
 | `REDIS_SSL` | Yes, on AWS | `true` to connect over TLS (default `false`) |
 | `SECRET_KEY` | Yes | Application secret key (min 32 chars) |
-| `COGNITO_USER_POOL_ID` | Yes | AWS Cognito User Pool ID |
-| `COGNITO_CLIENT_ID` | Yes | Cognito app client ID |
+| `COGNITO_USER_POOL_ID` | Only for Cognito sign-in | AWS Cognito User Pool ID |
+| `COGNITO_CLIENT_ID` | Only for Cognito sign-in | Cognito app client ID |
 | `AWS_REGION` | Yes | Primary AWS region, read by Cognito and the other settings that name it. The Glue and DynamoDB counter clients do not read it |
 | `AWS_DEFAULT_REGION` | Full profile: yes, for the ETL routes | The region the Glue client (see [Glue](#glue-the-etl-routes)) and the DynamoDB counter client (see [DynamoDB](#dynamodb)) use. The CDK sets it to the stack's region. Outside the CDK set it yourself (Helm: `api.extraEnv`); without it the job and crawler routes answer 500 |
 | `GLUE_ETL_JOB_NAME`, `GLUE_METRICS_JOB_NAME`, `GLUE_CRAWLER_NAME`, `GLUE_DATABASE` | Full profile, for the ETL routes | The Glue job, crawler and database names the ETL routes accept. The CDK sets them to the glue-etl stack's `-<env>` names |
@@ -334,5 +241,5 @@ answers 404.
 | `DYNAMODB_COUNTERS_TABLE` | No | Full profile: the counters table, set by the CDK to `experiment-counters-<env>` (default `experiment-counters`; see [DynamoDB](#dynamodb)) |
 | `SLACK_BOT_TOKEN` | No | Slack bot token for alerting |
 | `SENDGRID_API_KEY` | No | SendGrid API key for email alerts |
-| `AUDIT_HMAC_SECRET` | Yes | Secret for HMAC-SHA256 audit event signing |
+| `AUDIT_HMAC_KEY` | Full profile: yes | Key for HMAC-SHA256 audit event signing |
 | `ANTHROPIC_API_KEY` | No | Claude API key for AI experiment design |

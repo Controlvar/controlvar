@@ -93,7 +93,7 @@ and say in the pull request which stable operations changed and why; the
 smoke test's failure message lists them by method and path, with the first
 differing keys.
 
-Stable operations changed this way, before any user depended on them:
+Stable operations changed this way:
 
 | Operations | Changed by | What changed |
 |---|---|---|
@@ -130,8 +130,8 @@ Stable operations changed this way, before any user depended on them:
 
 A deprecated operation keeps its URL, shape and behaviour. It carries
 `"deprecated": true` in the snapshots (`deprecated=True` on the route
-decorator), its summary ends in "(deprecated)", and its description says what
-to use instead. Marking a stable operation deprecated, or rewording its
+decorator), its summary ends in "(deprecated)", and its description says why
+it is deprecated. Marking a stable operation deprecated, or rewording its
 description, changes its operation object, so it is a change to a stable route
 under the rule above: regenerate with `make openapi` and name the operation in
 the pull request. Removing a deprecated operation later is a breaking change.

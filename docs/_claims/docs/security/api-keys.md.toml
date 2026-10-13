@@ -1,0 +1,557 @@
+# What verifies each unit of docs/security/api-keys.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/security/api-keys.md"
+
+[[unit]]
+text = "API Key Management"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "API keys give programs access to the platform: SDK clients, server-side applications and scripts."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Unlike a user's login token, which expires (after 12 hours by default), an API key lasts until you delete it or it reaches its own expires_at."
+by = [
+    "test:backend/tests/unit/core/test_config_environment.py",
+    "test:backend/tests/unit/api/test_local_auth.py",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_expired_or_inactive_key_is_401",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_a_deleted_key_is_401",
+]
+
+[[unit]]
+text = "It is meant for service-to-service calls."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The commands on this page run as written against the stack from the Quick Start, in one terminal, top to bottom."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each one uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What API Keys Are Used For"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "SDK integration: the SDKs authenticate with an API key to evaluate feature flags, assign users to experiments and track events."
+by = [
+    "journey:api-key-first-assignment#evaluate",
+    "journey:api-key-first-assignment#assign",
+    "journey:api-key-first-assignment#track",
+]
+
+[[unit]]
+text = "Server-to-server calls: backend services that track conversions or evaluate flags."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Event ingestion: the tracking endpoints (/api/v1/tracking/) take an API key."
+by = [
+    "journey:api-key-first-assignment#assign",
+    "journey:api-key-first-assignment#track",
+]
+
+[[unit]]
+text = "An API key authenticates as the user who created it, and only on the endpoints an SDK calls: tracking, flag evaluation and the flag ruleset."
+by = [
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_inactive_owner_is_401",
+    "journey:api-key-first-assignment#management-route",
+]
+
+[[unit]]
+text = "Creating or changing flags and experiments, and managing users, take a user login; an API key there is refused with 401 and {\"detail\":\"Not authenticated\"}, the answer to a request with no login at all."
+by = ["journey:api-key-first-assignment#management-route"]
+
+[[unit]]
+text = "API keys are not for signing people in: user-facing applications use the login described in Authentication."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Creating an API Key"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Creating a key takes a user login."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_requires_auth"]
+
+[[unit]]
+text = "Log in first; this saves the token in $TOKEN:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Any role can create keys for itself."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged"]
+
+[[unit]]
+text = "Then create the key."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The collection URL has no trailing slash: /api/v1/api-keys/ answers 307 Temporary Redirect, which curl doesn't follow."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/unit/middleware/test_relative_slash_redirect.py",
+]
+
+[[unit]]
+text = "The API answers 201 Created."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "The response carries the key's id, name, key, prefix (the key's first nine characters, eptk_ and four more), created_at and expires_at."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "This saves the key in $KEY and its id in $KEY_ID, and prints:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The key value is shown only once."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_lists_only_own_keys_without_secret",
+]
+
+[[unit]]
+text = "Only a hash of it is stored, so nobody can show it to you again."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_lists_only_own_keys_without_secret",
+]
+
+[[unit]]
+text = "Store it immediately in a secure location (a secrets manager, not a code repository)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If you lose it, create a new key."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The request takes:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "name (required, up to 100 characters);"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_validation",
+]
+
+[[unit]]
+text = "description;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "scopes, a list of names (see Scopes);"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "expires_at, an ISO 8601 time after which the key stops working."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_with_expiry",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_expired_or_inactive_key_is_401",
+]
+
+[[unit]]
+text = "Leave it out for a key that doesn't expire."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_with_expiry",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_expired_or_inactive_key_is_401",
+]
+
+[[unit]]
+text = "Scopes"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Scopes are stored with the key and returned when you list keys."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_scopes_round_trip_as_list"]
+
+[[unit]]
+text = "One scope is enforced: sdk:ruleset."
+by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these"]
+
+[[unit]]
+text = "Every endpoint that accepts an API key, except the three below, accepts any active key, whatever its scopes."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Names such as read, write or admin on existing keys are labels only; nothing checks them."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_near_misses_are_labels_not_the_scope"]
+
+[[unit]]
+text = "sdk:ruleset is for a server: one that evaluates flags locally, or one that assigns lists of users to an experiment."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "These routes answer 403 to a key that does not carry it:"
+by = [
+    "journey:api-key-first-assignment#ruleset-scope",
+    "test:backend/tests/smoke/test_sdk_scoped_routes.py",
+]
+
+[[unit]]
+text = "GET /api/v1/sdk/ruleset (beta), which returns every feature flag's targeting rules in the form a server-side SDK evaluates locally;"
+by = [
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py",
+    "test:backend/tests/unit/services/test_sdk_ruleset_vectors.py",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/evaluations (beta), where a server-side SDK reports how many times it evaluated each flag locally, so safety monitoring can still compute each flag's error rate;"
+by = ["test:backend/tests/integration/api/test_flag_evaluations_api.py"]
+
+[[unit]]
+text = "POST /api/v1/tracking/assign/batch (beta), which assigns up to 1,000 users to an experiment in one request (see Assign a customer list to an experiment)."
+by = [
+    "test:backend/tests/unit/api/test_assign_batch_contract.py",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py",
+]
+
+[[unit]]
+text = "The 403 says This API key does not have the 'sdk:ruleset' scope."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py",
+]
+
+[[unit]]
+text = "Create a key with the 'sdk:ruleset' scope for server-side SDK use."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A key with sdk:ruleset can therefore download every feature flag's targeting rules, including the values in them, so keep such a key on a server and never ship it to a browser or a mobile app."
+by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py"]
+
+[[unit]]
+text = "In the dashboard (Admin → API Keys → Create API Key), tick Server-side local evaluation (sdk:ruleset); the same checkbox is the one for assigning lists of users."
+by = ["untested:T"]
+
+[[unit]]
+text = "Leave it unticked for any other key; the key is then created with no scopes."
+by = ["journey:api-key-first-assignment#dismiss"]
+
+[[unit]]
+text = "The dashboard's API Keys page needs a superuser account; any other user creates keys through the API."
+by = [
+    "test:frontend/src/tests/admin/withAdminGuard.test.tsx::refuses a non-superuser by default, whatever their role",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged",
+]
+
+[[unit]]
+text = "Through the API, send \"scopes\": [\"sdk:ruleset\"]."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role"]
+
+[[unit]]
+text = "Only users who can change feature flags can create a key with the sdk:ruleset scope: the ADMIN and DEVELOPER roles, and superusers."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role"]
+
+[[unit]]
+text = "For anyone else (ANALYST or VIEWER) the request is refused with 403 Forbidden, whose message names the roles that may create such a key, and no key is created."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role"]
+
+[[unit]]
+text = "Keys without that scope can be created by every role, as before."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged"]
+
+[[unit]]
+text = "Using such a key follows the same rule: both routes above accept a key with sdk:ruleset only while its owner can change feature flags, checked on every request, so a key whose owner is moved to ANALYST or VIEWER is refused with 403 from then on."
+by = [
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py",
+    "test:backend/tests/integration/api/test_flag_evaluations_api.py",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py",
+]
+
+[[unit]]
+text = "Scope names are matched exactly and case-sensitively: the stored list is split on commas and each entry is trimmed, so \"read, sdk:ruleset \" carries sdk:ruleset, while SDK:RULESET, xsdk:ruleset and sdk:ruleset-ro do not."
+by = [
+    "test:backend/tests/unit/core/test_api_key_scopes.py::test_has_scope_is_exact_case_sensitive_membership",
+    "test:backend/tests/unit/core/test_api_key_scopes.py::test_parse_scopes",
+]
+
+[[unit]]
+text = "Using an API Key"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Pass the key in the X-API-Key header on every request."
+by = ["docex:docs/security/api-keys.md#\"key\": \"beta_features\""]
+
+[[unit]]
+text = "This evaluates the demo data's beta_features flag for one user:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"enabled\": true: the flag is on for everyone."
+by = ["docex:docs/security/api-keys.md#\"key\": \"beta_features\""]
+
+[[unit]]
+text = "This tracks a purchase by the same user in the demo data's checkout_button_color experiment."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A tracked event names the experiment (experiment_key) or the flag (feature_flag_key) it belongs to:"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "It prints the stored event's event_type and value."
+by = [
+    "docex:docs/security/api-keys.md#\"event_type\": \"purchase\"",
+    "docex:docs/security/api-keys.md#\"value\": 49.99",
+]
+
+[[unit]]
+text = "In an SDK, the key is a setting of the client."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Load it from the environment rather than writing it into the code:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Listing Keys"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "List your keys."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_lists_only_own_keys_without_secret"]
+
+[[unit]]
+text = "The secret values are never shown:"
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_lists_only_own_keys_without_secret"]
+
+[[unit]]
+text = "It prints each of your keys, including the one created above:"
+by = ["journey:api-key-first-assignment#dismiss"]
+
+[[unit]]
+text = "Each key also carries its id, description, user_id, created_at, expires_at and last_used_at."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+
+[[unit]]
+text = "The list holds only your own keys."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_lists_only_own_keys_without_secret",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_admin_all_sees_everyone",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_all_requires_admin",
+]
+
+[[unit]]
+text = "An ADMIN can add ?all=true to list every user's keys."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_lists_only_own_keys_without_secret",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_admin_all_sees_everyone",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_all_requires_admin",
+]
+
+[[unit]]
+text = "The list leaves out inactive keys unless you add ?include_inactive=true."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_inactive_keys_hidden_by_default"]
+
+[[unit]]
+text = "last_used_at is when the key last authenticated a request, and null for a key that was never used."
+by = [
+    "journey:api-key-first-assignment#last-used",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestLastUsedAt::test_using_a_key_sets_last_used_at",
+]
+
+[[unit]]
+text = "The API writes it at most once a minute per key, so it can trail the last request by up to a minute."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestLastUsedAt::test_a_recent_value_is_not_rewritten",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestLastUsedAt::test_a_stale_value_is_advanced",
+]
+
+[[unit]]
+text = "Use it to find keys that are no longer used."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Deleting a Key"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Delete a key when it is no longer needed, or if you suspect it has leaked."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Only its owner or an ADMIN can delete it:"
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestDelete::test_owner_can_delete",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestDelete::test_other_user_cannot_delete",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestDelete::test_admin_can_delete_anyones",
+]
+
+[[unit]]
+text = "It prints 204: the key is deleted permanently, and can't be restored."
+by = [
+    "journey:api-key-first-assignment#delete",
+    "journey:api-key-first-assignment#confirm-delete",
+]
+
+[[unit]]
+text = "From then on, requests with the key are refused:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints {\"detail\":\"Invalid API Key\"}, with status 401 Unauthorized."
+by = ["journey:api-key-first-assignment#refused"]
+
+[[unit]]
+text = "A service still using the key starts failing at once, so delete a key only after its services use a new one."
+by = ["journey:api-key-first-assignment#refused"]
+
+[[unit]]
+text = "Key Rotation Best Practices"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rotate API keys on a regular schedule to limit the window of exposure if a key leaks."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Recommended Rotation Schedule"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Environment | Recommended Rotation"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Production | Every 90 days"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Staging / Development | Every 180 days"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "CI/CD pipelines | On every major deployment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Setting expires_at when you create a key makes the schedule hard to forget: the key stops working on that date."
+by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_expired_or_inactive_key_is_401"]
+
+[[unit]]
+text = "Zero-Downtime Rotation Procedure"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Create a new API key with the same name and scopes as the old key."
+by = ["untested:T"]
+
+[[unit]]
+text = "Update your service's secrets (Secrets Manager, environment variables, and so on) to the new key."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Deploy or restart the service so it uses the new key."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Check that the service works with the new key."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Delete the old key."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The service always has a valid key during the rotation."
+by = ["untested:T"]
+
+[[unit]]
+text = "Security Best Practices"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Never commit keys to source control"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "API keys in source code can be exposed in logs, error messages or git history."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Load keys from environment variables or a secrets manager:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "and never write the key itself into the code."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Use a secrets manager"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Store production API keys in a dedicated secrets manager:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "AWS Secrets Manager: integrates with ECS task definitions and Lambda environment variables"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "HashiCorp Vault: for multi-cloud or on-premise setups"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Kubernetes Secrets: for Kubernetes-based deployments"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Separate keys per service"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Use one API key per service or application, and name it after the service."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "That limits the blast radius of a leaked key: you can delete that service's key without affecting the others."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Grant sdk:ruleset only where it is needed"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Give the sdk:ruleset scope only to a server that will evaluate flags locally or assign lists of users."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every other key, including any key used in a browser or a mobile app, should be created without it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Because no other scope limits a key, a separate key per service is what lets you revoke one integration without touching the others."
+by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these"]
+
+[[unit]]
+text = "Remember that a key acts as its owner"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A key authenticates as the user who created it."
+by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_inactive_owner_is_401"]
+
+[[unit]]
+text = "Create keys from an account whose role is no broader than the services need, and delete the keys of a user who leaves."
+by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_inactive_owner_is_401"]

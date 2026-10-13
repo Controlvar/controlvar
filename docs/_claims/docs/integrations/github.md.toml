@@ -1,0 +1,481 @@
+# What verifies each unit of docs/integrations/github.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/integrations/github.md"
+
+[[unit]]
+text = "GitHub Integration"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Part of the integrations module"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Third-party integrations is one of the optional modules -- present in the full profile, absent from the core one."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A core deployment does not serve these routes."
+by = ["test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route"]
+
+[[unit]]
+text = "See Modules and profiles for what each profile includes and how to run the full one."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The GitHub integration receives your repository's webhook deliveries and checks each one's signature."
+by = ["docex:docs/integrations/github.md#{\"status\":\"received\"}"]
+
+[[unit]]
+text = "It also stores a token and a repository for calls to GitHub, but nothing in the platform calls GitHub yet, and a delivery is acknowledged without changing anything in the platform."
+by = [
+    "test:modules/backend/tests/unit/services/test_integration_wiring.py::test_nothing_calls_jira_salesforce_or_github",
+    "test:modules/backend/tests/unit/services/test_integration_wiring.py::test_a_webhook_delivery_writes_no_row",
+]
+
+[[unit]]
+text = "What the Integration Does"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Inbound (GitHub → Platform): Receive webhook events from GitHub (push, pull_request, issues)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform checks each delivery's HMAC-SHA256 signature and answers it."
+by = ["docex:docs/integrations/github.md#{\"status\":\"received\"}"]
+
+[[unit]]
+text = "Nothing in the platform acts on the event yet: no pull request is linked to an experiment, and no experiment changes."
+by = [
+    "test:modules/backend/tests/unit/services/test_integration_wiring.py::test_nothing_calls_jira_salesforce_or_github",
+    "test:modules/backend/tests/unit/services/test_integration_wiring.py::test_a_webhook_delivery_writes_no_row",
+]
+
+[[unit]]
+text = "Outbound (Platform → GitHub): not wired yet."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Nothing in the platform calls GitHub, so the token and the repository are stored but not used."
+by = ["test:modules/backend/tests/unit/services/test_integration_wiring.py::test_nothing_calls_jira_salesforce_or_github"]
+
+[[unit]]
+text = "Prerequisites"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Before creating the integration, you need:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A GitHub Personal Access Token (PAT) with appropriate repository scopes, or a GitHub App installation token"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A strong webhook secret that you will configure both in the platform and in the GitHub webhook settings"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A GitHub repository where you will configure the webhook"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The GitHub token"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The token is stored for calls to GitHub, which nothing in the platform makes yet, so an integration that only receives webhooks can leave it out."
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestReceiveOnlyIntegrations::test_github_receive_only_integration_authenticates"]
+
+[[unit]]
+text = "Creating the Integration"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Creating, changing and deleting an integration needs an ADMIN bearer token; an ADMIN or a DEVELOPER can read it."
+by = [
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestCreateIntegration::test_developer_cannot_create_integration",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestListIntegrations::test_developer_can_list_integrations",
+]
+
+[[unit]]
+text = "is_active defaults to false, and only an active integration answers webhook deliveries, so send true."
+by = ["untested:T"]
+
+[[unit]]
+text = "The examples on this page run against a local full-profile stack (see Modules and profiles); on your own deployment, use its URL instead of localhost:8000."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sign in as the stack's administrator, which saves a token in $TOKEN:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If it prints null, the sign-in failed and $TOKEN holds no token."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This generates a webhook secret, keeps it in $WEBHOOK_SECRET, and creates the integration with it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The token and the repository are examples: use your own."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Response: 201 Created"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "There is one GitHub configuration, and it is addressed by its type, github, not by the id: GET, PUT and DELETE use /api/v1/integrations/github, and the webhook URL below has no id in it either."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestCreateIntegration::test_duplicate_type_returns_409",
+]
+
+[[unit]]
+text = "The request and response are described in Create Integration."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Configuration Fields"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Field | Type | Required | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "token | string | Yes | GitHub PAT or GitHub App installation token, stored for calls to GitHub, which nothing in the platform makes yet."
+by = [
+    "test:modules/backend/tests/unit/services/test_integration_workflow.py::TestIntegrationConfigFactory::test_github_service_from_config_stores_credentials",
+    "test:modules/backend/tests/unit/services/test_integration_wiring.py",
+]
+
+[[unit]]
+text = "repo_owner | string | Yes | Owner (user or organisation) of the repository"
+by = ["test:modules/backend/tests/unit/services/test_integration_workflow.py::TestIntegrationConfigFactory::test_github_service_from_config_stores_credentials"]
+
+[[unit]]
+text = "repo_name | string | Yes | Repository name"
+by = ["test:modules/backend/tests/unit/services/test_integration_workflow.py::TestIntegrationConfigFactory::test_github_service_from_config_stores_credentials"]
+
+[[unit]]
+text = "webhook_secret | string | Yes | A secret string used to verify incoming webhook payloads. Must match what you set in GitHub's webhook configuration."
+by = ["docex:docs/integrations/github.md#{\"status\":\"received\"}"]
+
+[[unit]]
+text = "Neither the token nor the webhook_secret is returned in any response: a response shows repo_owner and repo_name and lists the names of the other keys in stored_secrets (see What a response shows)."
+by = [
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestStoredSecretsAreNotReturned::test_reads_return_no_stored_secret_value",
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestStoredSecretsAreNotReturned::test_writes_return_no_stored_secret_value",
+]
+
+[[unit]]
+text = "Both are stored in the database as given; they are not encrypted."
+by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::TestStoredSecretsAreNotReturned::test_withheld_values_stay_stored"]
+
+[[unit]]
+text = "Configuring the Webhook in GitHub"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Add a webhook to your GitHub repository (Settings → Webhooks → Add webhook)"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Set the Payload URL to:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Set Content type to application/json"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Set the Secret to the same value you used as webhook_secret when creating the integration (printf '%s\\n' \"$WEBHOOK_SECRET\" prints it)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Under Which events would you like to trigger this webhook?, select:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Individual events: Push, Pull requests, Issues"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Or \"Send me everything\" if you want all events"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Ensure Active is checked and click Add webhook"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Webhook Endpoint"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Headers"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The platform reads these headers of a delivery:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Header | What the platform does with it"
+by = ["exempt:label"]
+
+[[unit]]
+text = "X-Hub-Signature-256 | HMAC-SHA256 signature of the raw request body: required"
+by = [
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestGitHubWebhook::test_github_webhook_no_signature_is_401",
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestGitHubWebhook::test_github_webhook_valid_signature_returns_200",
+]
+
+[[unit]]
+text = "X-GitHub-Event | The event type (e.g., push, pull_request, issues); optional"
+by = ["untested:T"]
+
+[[unit]]
+text = "X-GitHub-Delivery, Content-Type | Not checked"
+by = ["untested:T"]
+
+[[unit]]
+text = "HMAC-SHA256 Signature Validation"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform validates every incoming webhook using the X-Hub-Signature-256 header."
+by = ["docex:docs/integrations/github.md#{\"status\":\"received\"}"]
+
+[[unit]]
+text = "The validation algorithm:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Requests with a missing or invalid X-Hub-Signature-256 header receive 401 Unauthorized and are not processed."
+by = ["docex:docs/integrations/github.md#{\"detail\":\"Webhook authentication failed\"}"]
+
+[[unit]]
+text = "This prevents spoofed webhook deliveries."
+by = ["docex:docs/integrations/github.md#{\"detail\":\"Webhook authentication failed\"}"]
+
+[[unit]]
+text = "Every refused delivery gets the same answer, whatever the reason: 401 with the body {\"detail\": \"Webhook authentication failed\"}."
+by = ["docex:docs/integrations/github.md#{\"detail\":\"Webhook authentication failed\"}"]
+
+[[unit]]
+text = "A wrong or missing signature, an integration that is not active, an integration with no webhook_secret, and no GitHub integration at all are not told apart."
+by = [
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_without_an_integration_is_refused",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_with_no_configured_secret_is_refused",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_rejects_an_invalid_signature",
+]
+
+[[unit]]
+text = "Sending a signed delivery"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GitHub signs each delivery for you."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "To see the check pass, sign one the same way, with the secret created above: the HMAC-SHA256 of the raw body, keyed with the webhook_secret, in hex, after sha256=:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints {\"status\":\"received\"}."
+by = ["docex:docs/integrations/github.md#{\"status\":\"received\"}"]
+
+[[unit]]
+text = "printf '%s' adds no newline and --data-binary sends the body byte for byte, so the signature covers exactly what is sent."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "openssl dgst prints the digest as the last field of its line (after SHA2-256(stdin)= with OpenSSL 3, on its own with LibreSSL), which awk keeps."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The same signature on a body with one byte changed (43 for 42) is refused, and so is the body with no signature:"
+by = ["docex:docs/integrations/github.md#{\"detail\":\"Webhook authentication failed\"}"]
+
+[[unit]]
+text = "Each prints {\"detail\":\"Webhook authentication failed\"}."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Supported Event Types"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Push Events"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An example push delivery:"
+by = ["exempt:example"]
+
+[[unit]]
+text = "Pull Request Events"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An example pull_request delivery:"
+by = ["exempt:example"]
+
+[[unit]]
+text = "Issues Events"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An example issues delivery:"
+by = ["exempt:example"]
+
+[[unit]]
+text = "Response: 200 OK"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A delivery from an authenticated sender is answered 200 even when the platform could not process the event: the failure is logged, so the provider does not retry something it cannot fix."
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_jira_webhook_service_failure_is_still_200"]
+
+[[unit]]
+text = "A body that is not a JSON object is 400 Bad Request, and that is checked only after the sender is authenticated."
+by = [
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_jira_webhook_authenticated_but_malformed_body_is_400",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_jira_webhook_unauthenticated_malformed_body_is_401_not_400",
+]
+
+[[unit]]
+text = "An answered delivery changes nothing in the platform yet: a pull request is not linked to an experiment, whatever its body says."
+by = ["test:modules/backend/tests/unit/services/test_integration_wiring.py::test_a_webhook_delivery_writes_no_row"]
+
+[[unit]]
+text = "Troubleshooting"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "401 Unauthorized"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Symptom: GitHub's delivery log shows status 401 and the body {\"detail\": \"Webhook authentication failed\"}."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every refused delivery is answered the same way, so the status does not say which of these it is:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Secret mismatch: The webhook_secret in the platform does not match the secret in GitHub's webhook settings."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Set it again with the recipe in Rotating the Webhook Secret and use the same value in GitHub."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "As a last resort you can DELETE /api/v1/integrations/github and create the integration again, but that removes the stored token and repository settings too, so you send them again."
+by = [
+    "docex:docs/api/integrations.md#204",
+    "docex:docs/api/integrations.md#{\"integration_type\":\"jira\",\"is_active\":true,\"stored_secrets\":[\"webhook_secret\"]}",
+]
+
+[[unit]]
+text = "No secret in GitHub: a delivery without an X-Hub-Signature-256 header is refused."
+by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::TestGitHubWebhook::test_github_webhook_no_signature_is_401"]
+
+[[unit]]
+text = "Open the webhook's settings in GitHub and check its Secret field."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Not active, or no webhook_secret stored: GET /api/v1/integrations/github must show \"is_active\": true and list webhook_secret in stored_secrets."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform log also names an active integration that has no secret, once per process."
+by = [
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestTheUpgradePathIsAnnounced::test_a_config_with_no_secret_is_named_in_the_log",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestTheUpgradePathIsAnnounced::test_the_warning_is_said_once_not_once_per_delivery",
+]
+
+[[unit]]
+text = "Encoding issue: Ensure the secret does not contain leading or trailing whitespace."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Copy-paste carefully."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "400 Bad Request"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Symptom: GitHub's delivery log shows status 400 with the body {\"detail\": \"Invalid JSON payload\"}."
+by = ["docex:docs/integrations/salesforce.md#{\"detail\":\"Webhook authentication failed\"}"]
+
+[[unit]]
+text = "The signature was accepted, but the body is not a JSON object."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Confirm the webhook's Content type is application/json, not application/x-www-form-urlencoded."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Webhook Deliveries Not Reaching the Platform"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Confirm the webhook payload URL is reachable from the public internet"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Check GitHub's webhook delivery logs: Repository → Settings → Webhooks → [Your Webhook] → Recent Deliveries"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Verify the integration is active: GET /api/v1/integrations/github (an ADMIN or a DEVELOPER can call it) and check that is_active is true"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Check the platform's application logs for any processing errors"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rotating the Webhook Secret"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If you need to rotate the webhook secret:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Step 1: Set a new secret in the platform."
+by = ["docex:docs/api/integrations.md#New webhook_secret for jira:"]
+
+[[unit]]
+text = "Use the recipe in Upgrading an integration created before webhook authentication with TYPE=github and an ADMIN token."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It sends one PUT /api/v1/integrations/github that carries only the new webhook_secret; the stored token and repository settings are kept, and it prints the new secret."
+by = [
+    "docex:docs/api/integrations.md#New webhook_secret for jira:",
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestStoredSecretsAreNotReturned::test_put_merges_key_by_key_and_null_removes",
+]
+
+[[unit]]
+text = "Step 2: Set the same secret in the GitHub webhook's settings at once: until you do, GitHub's deliveries are refused with 401."
+by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::TestGitHubWebhook::test_github_webhook_invalid_signature_is_401"]

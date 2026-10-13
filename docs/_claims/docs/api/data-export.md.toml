@@ -1,0 +1,617 @@
+# What verifies each unit of docs/api/data-export.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/data-export.md"
+
+[[unit]]
+text = "Data Export & Reporting API (EP-020)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This document describes the data export and reporting endpoints available under /api/v1/export/."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Authentication"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every export endpoint takes a user's access token, from POST /api/v1/auth/login, in the Authorization: Bearer header."
+by = ["docex:docs/api/data-export.md#\"ADMIN\""]
+
+[[unit]]
+text = "Every role (ADMIN, DEVELOPER, ANALYST, VIEWER) may use them."
+by = ["untested:T"]
+
+[[unit]]
+text = "Without a token they answer 401 Unauthorized."
+by = [
+    "test:backend/tests/unit/api/test_export_endpoints.py::TestExportExperimentsEndpoint::test_export_requires_authentication",
+    "test:backend/tests/unit/api/test_export_endpoints.py::TestPlatformOverviewEndpoint::test_overview_report_requires_authentication",
+]
+
+[[unit]]
+text = "The result columns (each variant's assignments, conversions, rate, p-value and significance, and each experiment's winner and recommendation) are the numbers GET /api/v1/results/{experiment_id} reports for the experiment's primary metric with no options: the experiment's stored correction_method and confidence_level (Benjamini-Hochberg at 0.95 unless it was created with others; see How results are judged)."
+by = ["untested:T"]
+
+[[unit]]
+text = "The export takes no such parameters."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Asked with another correction_method or confidence_level, /results can report a different is_significant, winner and recommendation than the export; the counts, rates and unadjusted p-values are the same."
+by = ["untested:T"]
+
+[[unit]]
+text = "p_value is the unadjusted p-value, while is_significant is decided on the corrected one."
+by = ["untested:T"]
+
+[[unit]]
+text = "With two or more treatments a row can therefore show p_value 0.035 and is_significant false: under Benjamini-Hochberg that treatment's adjusted p-value can be 0.071."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The export has no adjusted p-value column; /results reports it as adjusted_p_value."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Empty in this release: experiments_with_winners in the overview is 0 (#244)."
+by = ["untested:T"]
+
+[[unit]]
+text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in first:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["docex:docs/api/data-export.md#\"ADMIN\""]
+
+[[unit]]
+text = "The downloads below are written to the current directory, so this moves to a new, empty one first:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints 0."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rate Limiting"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Export endpoints allow 10 requests a minute per client address, shared by all export endpoints, because each export computes results for every experiment it covers."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLimit::test_the_constant_is_ten_a_minute",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLimit::test_every_export_path_resolves_to_the_export_limit",
+]
+
+[[unit]]
+text = "The count is shared: 4 calls to /experiments, 3 to /variants and 3 to /reports/experiments/{id} (for any ids) use up the minute."
+by = ["test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLimit::test_export_paths_share_one_counter_across_routes_and_ids"]
+
+[[unit]]
+text = "Above it every export endpoint answers 429 Too Many Requests with a Retry-After: 60 header; the rest of the API keeps its own limits."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitMiddleware::test_returns_429_when_limit_exceeded",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLimit::test_neighbouring_paths_keep_their_limits",
+]
+
+[[unit]]
+text = "For bulk data pipelines, consider exporting once and caching the result."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Export Endpoints"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The export URLs have no trailing slash: with one, the API answers 307, which curl doesn't follow."
+by = ["untested:T"]
+
+[[unit]]
+text = "GET /api/v1/export/experiments"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Download all experiments as a CSV (default) or JSON file."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Query Parameters"
+by = ["exempt:baseline"]
+count = 5
+
+[[unit]]
+text = "Parameter | Type | Default | Description"
+by = ["exempt:baseline"]
+count = 4
+
+[[unit]]
+text = "format | string | csv | Output format. Accepted values: csv, json"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+count = 2
+
+[[unit]]
+text = "scope | string | summary | Data scope. Only summary is available: events and assignments answer 422"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_export_api.py::test_scope_other_than_summary_is_422",
+]
+
+[[unit]]
+text = "start_date | datetime | null | Inclusive start filter on created_at (ISO 8601, UTC)"
+by = [
+    "test:backend/tests/unit/services/test_export_service.py::TestDateFiltering::test_start_date_filter_is_applied",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+count = 2
+
+[[unit]]
+text = "end_date | datetime | null | Inclusive end filter on created_at (ISO 8601, UTC)"
+by = [
+    "test:backend/tests/unit/services/test_export_service.py::TestDateFiltering::test_end_date_filter_is_applied",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+count = 2
+
+[[unit]]
+text = "CSV Column Names"
+by = ["exempt:baseline"]
+count = 3
+
+[[unit]]
+text = "Column | Type | Description"
+by = ["exempt:baseline"]
+count = 3
+
+[[unit]]
+text = "experiment_id | string | UUID of the experiment"
+by = [
+    "docex:docs/api/data-export.md#experiment_id,experiment_name,status,experiment_type,start_date,end_date,duration_days,total_assignments,total_events,winner_variant,recommendation",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+count = 2
+
+[[unit]]
+text = "experiment_name | string | Human-readable experiment name"
+by = [
+    "docex:docs/api/data-export.md#experiment_id,experiment_name,status,experiment_type,start_date,end_date,duration_days,total_assignments,total_events,winner_variant,recommendation",
+    "docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct",
+]
+count = 2
+
+[[unit]]
+text = "status | string | Current status (draft, active, completed, etc.)"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,status,experiment_type,start_date,end_date,duration_days,total_assignments,total_events,winner_variant,recommendation"]
+
+[[unit]]
+text = "experiment_type | string | Type: a_b, mv, split_url, bandit"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,status,experiment_type,start_date,end_date,duration_days,total_assignments,total_events,winner_variant,recommendation"]
+
+[[unit]]
+text = "start_date | string | ISO 8601 start date, or empty"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,status,experiment_type,start_date,end_date,duration_days,total_assignments,total_events,winner_variant,recommendation"]
+
+[[unit]]
+text = "end_date | string | ISO 8601 end date, or empty"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,status,experiment_type,start_date,end_date,duration_days,total_assignments,total_events,winner_variant,recommendation"]
+
+[[unit]]
+text = "duration_days | float | Days between start and end, or empty"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,status,experiment_type,start_date,end_date,duration_days,total_assignments,total_events,winner_variant,recommendation"]
+
+[[unit]]
+text = "total_assignments | integer | Total user assignments to this experiment"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,status,experiment_type,start_date,end_date,duration_days,total_assignments,total_events,winner_variant,recommendation"]
+
+[[unit]]
+text = "total_events | integer | Total events tracked for this experiment"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,status,experiment_type,start_date,end_date,duration_days,total_assignments,total_events,winner_variant,recommendation"]
+
+[[unit]]
+text = "winner_variant | string | Name of the winning variant, as /results reports it, or empty"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,status,experiment_type,start_date,end_date,duration_days,total_assignments,total_events,winner_variant,recommendation"]
+
+[[unit]]
+text = "recommendation | string | SHIP_VARIANT, KEEP_CONTROL, CONTINUE_TESTING or INCONCLUSIVE (the sample-ratio check failed), as /results reports it; empty when the experiment's results cannot be computed (it has no control variant)"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,status,experiment_type,start_date,end_date,duration_days,total_assignments,total_events,winner_variant,recommendation"]
+
+[[unit]]
+text = "Example curl"
+by = ["exempt:baseline"]
+count = 5
+
+[[unit]]
+text = "This downloads the CSV, which has a header row and one row per experiment."
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,status,experiment_type,start_date,end_date,duration_days,total_assignments,total_events,winner_variant,recommendation"]
+
+[[unit]]
+text = "start_date and end_date filter on when the experiment was created; this asks for the ones created since the start of 2024:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints the header row, then the demo data's Checkout Button Color experiment's status, type, winner and recommendation, active,a_b,green_button,SHIP_VARIANT: on the demo data the green button converts better, and the results API recommends shipping it."
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,status,experiment_type,start_date,end_date,duration_days,total_assignments,total_events,winner_variant,recommendation"]
+
+[[unit]]
+text = "The response carries the file name:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With format=json, the same rows are a JSON array; the variants example below asks for JSON."
+by = ["test:backend/tests/unit/services/test_export_service.py::TestExportExperimentsJSON::test_json_is_parseable_list"]
+
+[[unit]]
+text = "GET /api/v1/export/variants"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Download per-variant results for all (or filtered) experiments."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each row represents one variant within one experiment."
+by = ["docex:docs/api/data-export.md#same"]
+
+[[unit]]
+text = "Its numbers are the variant's result on the experiment's primary metric, as GET /api/v1/results/{experiment_id} reports it."
+by = ["docex:docs/api/data-export.md#same"]
+
+[[unit]]
+text = "An experiment whose results cannot be computed (it has no control variant) keeps its rows, with the result columns empty."
+by = ["test:backend/tests/integration/api/test_export_api.py::TestExportEqualsResults::test_experiment_without_control_keeps_rows_with_empty_results"]
+
+[[unit]]
+text = "Same as /export/experiments (format, scope, start_date, end_date)."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "experiment_id | string | UUID of the parent experiment"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
+
+[[unit]]
+text = "variant_id | string | UUID of the variant"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
+
+[[unit]]
+text = "variant_name | string | Variant name"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
+
+[[unit]]
+text = "is_control | boolean | Whether this is the control variant"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
+
+[[unit]]
+text = "assignments | integer | Number of users assigned to this variant (sample_size in /results)"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
+
+[[unit]]
+text = "conversions | integer | Number of assigned users with at least one conversion on the primary metric (a repeat purchaser counts once)"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
+
+[[unit]]
+text = "conversion_rate | float | Conversion rate [0, 1] (mean in /results)"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
+
+[[unit]]
+text = "p_value | float | Unadjusted p-value against control; empty for the control"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
+
+[[unit]]
+text = "is_significant | boolean | Whether the result is significant after the experiment's correction, at its confidence level"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
+
+[[unit]]
+text = "relative_improvement_pct | float | Relative improvement over control (%); empty for the control"
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
+
+[[unit]]
+text = "Every result column (assignments to relative_improvement_pct) is empty for all of an experiment's variants when its results cannot be computed (it has no control variant)."
+by = ["test:backend/tests/integration/api/test_export_api.py::TestExportEqualsResults::test_experiment_without_control_keeps_rows_with_empty_results"]
+
+[[unit]]
+text = "It prints the demo experiment's two variants, blue_button (the control) and green_button."
+by = ["docex:docs/api/data-export.md#blue_button true"]
+
+[[unit]]
+text = "Their numbers are the ones the results API gives; this compares the two for the demo experiment and prints same:"
+by = ["docex:docs/api/data-export.md#same"]
+
+[[unit]]
+text = "GET /api/v1/export/feature-flags"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Download feature flag usage data."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "flag_id | string | UUID of the feature flag"
+by = ["untested:T"]
+
+[[unit]]
+text = "flag_key | string | Machine-readable key (e.g. checkout_v2)"
+by = ["docex:docs/api/data-export.md#beta_features,ACTIVE,100"]
+
+[[unit]]
+text = "flag_name | string | Human-readable name"
+by = ["untested:T"]
+
+[[unit]]
+text = "status | string | INACTIVE, ACTIVE, or ARCHIVED"
+by = ["docex:docs/api/data-export.md#beta_features,ACTIVE,100"]
+
+[[unit]]
+text = "rollout_percentage | integer | Configured rollout percentage (0-100)"
+by = ["docex:docs/api/data-export.md#beta_features,ACTIVE,100"]
+
+[[unit]]
+text = "total_evaluations | integer | Total number of times the flag was evaluated"
+by = ["untested:T"]
+
+[[unit]]
+text = "enabled_evaluations | integer | Always 0: no record says whether an evaluation returned enabled"
+by = ["untested:T"]
+
+[[unit]]
+text = "enabled_rate | float | Always 0.0, because enabled_evaluations is always 0"
+by = ["untested:T"]
+
+[[unit]]
+text = "created_at | string | ISO 8601 creation timestamp"
+by = ["untested:T"]
+
+[[unit]]
+text = "updated_at | string | ISO 8601 last-updated timestamp"
+by = ["untested:T"]
+
+[[unit]]
+text = "It prints each flag's key, status and rollout percentage, among them the demo data's beta_features, ACTIVE at 100."
+by = ["docex:docs/api/data-export.md#beta_features,ACTIVE,100"]
+
+[[unit]]
+text = "There is no status filter: to keep only the active flags, filter the file yourself."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Report Endpoints"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/export/reports/overview"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/api/test_export_endpoints.py::TestPlatformOverviewEndpoint::test_overview_report_returns_json",
+]
+
+[[unit]]
+text = "Returns a JSON summary of platform-wide activity."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Always returns application/json."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "start_date | datetime | null | Report period start (inclusive, ISO 8601 UTC)"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "end_date | datetime | null | Report period end (inclusive, ISO 8601 UTC)"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "JSON Response Schema"
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "Field | Type | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "generated_at | string | ISO 8601 timestamp when the report was generated"
+by = ["test:backend/tests/unit/services/test_export_service.py::TestPlatformOverviewReport::test_report_generated_at_is_iso_format"]
+
+[[unit]]
+text = "period_start | string | Report period start, or null if no filter applied"
+by = ["docex:docs/api/data-export.md#\"period_start\": \"2024-01-01T00:00:00+00:00\""]
+
+[[unit]]
+text = "period_end | string | Report period end, or null if no filter applied"
+by = ["untested:T"]
+
+[[unit]]
+text = "total_experiments | integer | Total experiments in the platform (filtered by period)"
+by = [
+    "docex:docs/api/data-export.md#\"total_experiments\": 3",
+    "docex:docs/api/data-export.md#\"period_start\": \"2024-01-01T00:00:00+00:00\"",
+]
+
+[[unit]]
+text = "active_experiments | integer | Experiments currently in ACTIVE status"
+by = ["docex:docs/api/data-export.md#\"total_experiments\": 3"]
+
+[[unit]]
+text = "completed_experiments | integer | Experiments in COMPLETED status"
+by = ["docex:docs/api/data-export.md#\"total_experiments\": 3"]
+
+[[unit]]
+text = "total_feature_flags | integer | Total feature flags"
+by = ["untested:T"]
+
+[[unit]]
+text = "active_feature_flags | integer | Feature flags in ACTIVE status"
+by = ["untested:T"]
+
+[[unit]]
+text = "total_assignments | integer | Total user-experiment assignments"
+by = ["untested:T"]
+
+[[unit]]
+text = "total_events | integer | Total tracking events"
+by = ["untested:T"]
+
+[[unit]]
+text = "experiments_with_winners | integer | Counts saved reports that have a summary; nothing saves one in this release, so it is 0"
+by = ["untested:T"]
+
+[[unit]]
+text = "average_experiment_duration_days | float | Average duration (days) of completed experiments, or null"
+by = ["untested:T"]
+
+[[unit]]
+text = "On the Quick Start's demo data it prints three experiments, two of them active and one completed."
+by = ["docex:docs/api/data-export.md#\"total_experiments\": 3"]
+
+[[unit]]
+text = "With a period, only what was created in it is counted; nothing was created in the first quarter of 2024:"
+by = ["docex:docs/api/data-export.md#\"period_start\": \"2024-01-01T00:00:00+00:00\""]
+
+[[unit]]
+text = "It prints the period's start and \"total_experiments\": 0."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/export/reports/experiments/"
+by = [
+    "test:backend/tests/integration/api/test_export_api.py::TestExportEqualsResults::test_report_json_equals_the_exports",
+    "test:backend/tests/integration/api/test_export_api.py::TestExperimentReport::test_format_csv_is_the_variant_rows_as_csv",
+]
+
+[[unit]]
+text = "Returns a report for a single experiment."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "As JSON (the default) it has the experiment's row from /export/experiments and its variant rows from /export/variants; with format=csv it is the variant rows as CSV, with the same columns as /export/variants."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An id that no experiment has answers 404, and one that is not a UUID answers 422."
+by = [
+    "test:backend/tests/integration/api/test_export_api.py::TestExperimentReport::test_unknown_experiment_is_404",
+    "test:backend/tests/integration/api/test_export_api.py::TestExperimentReport::test_non_uuid_id_is_422",
+]
+
+[[unit]]
+text = "Path Parameters"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Parameter | Type | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "format | string | json | json, or csv for the variant rows as a CSV file"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "As JSON (the default) the report has the shape above: the experiment's row from /export/experiments and its rows from /export/variants, which the examples above already show."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This asks for the demo experiment's report with format=csv, using the id the variants example saved in $EXP_ID; the variant rows come as a CSV file:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints the header row, then each variant's name and whether it is the control."
+by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
+
+[[unit]]
+text = "Error Responses"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Status Code | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "401 | Missing or invalid Bearer token"
+by = ["test:backend/tests/unit/api/test_export_endpoints.py::TestExportExperimentsEndpoint::test_export_requires_authentication"]
+
+[[unit]]
+text = "404 | The report's experiment does not exist"
+by = ["test:backend/tests/integration/api/test_export_api.py::TestExperimentReport::test_unknown_experiment_is_404"]
+
+[[unit]]
+text = "422 | Invalid query parameter (e.g. format=xml), a scope other than summary, or a report id that is not a UUID"
+by = [
+    "test:backend/tests/unit/api/test_export_endpoints.py::TestQueryParameters::test_invalid_format_returns_422",
+    "test:backend/tests/integration/api/test_export_api.py::test_scope_other_than_summary_is_422",
+    "test:backend/tests/integration/api/test_export_api.py::TestExperimentReport::test_non_uuid_id_is_422",
+]
+
+[[unit]]
+text = "429 | Rate limit exceeded"
+by = ["test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLimit::test_export_paths_share_one_counter_across_routes_and_ids"]
+
+[[unit]]
+text = "500 | Internal server error (check application logs)"
+by = ["untested:T"]
+
+[[unit]]
+text = "Example 422 Error"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A scope other than summary is refused, with the reason in detail:"
+by = ["docex:docs/api/data-export.md#scope=events is not supported; the export is available with scope=summary only"]
+
+[[unit]]
+text = "A value the parameter does not accept, such as format=xml, fails validation instead, and the body lists each invalid parameter."
+by = ["untested:T"]
+
+[[unit]]
+text = "It names the parameter and the rule, not the value that was sent:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Notes"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Times are ISO 8601."
+by = ["untested:T"]
+
+[[unit]]
+text = "generated_at, period_start and period_end carry a UTC offset; experiment start_date and end_date, and flag created_at and updated_at, are written as stored, without one."
+by = ["untested:T"]
+
+[[unit]]
+text = "UUIDs are included in exports as plain strings (not resolved to names where the ID is already paired with a human-readable name in an adjacent column)."
+by = ["untested:T"]
+
+[[unit]]
+text = "Date filtering is inclusive on both ends (created_at >= start_date AND created_at <= end_date)."
+by = [
+    "test:backend/tests/unit/services/test_export_service.py::TestDateFiltering::test_start_date_filter_is_applied",
+    "test:backend/tests/unit/services/test_export_service.py::TestDateFiltering::test_end_date_filter_is_applied",
+]
+
+[[unit]]
+text = "CSV exports use Python's csv.DictWriter with \\r\\n line endings (RFC 4180)."
+by = ["untested:T"]
+
+[[unit]]
+text = "CSV cells are written spreadsheet-safe: a text value that begins with =, +, -, @, a tab or a carriage return is written with a single quote (') in front of it, so a spreadsheet shows it as text."
+by = [
+    "test:backend/tests/integration/api/test_export_api.py::TestSpreadsheetSafeCells::test_leading_characters_are_written_as_text",
+    "test:backend/tests/integration/api/test_export_api.py::TestSpreadsheetSafeCells::test_every_leading_character",
+]
+
+[[unit]]
+text = "Numbers, and every value in the JSON exports, are written as they are."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The scope parameter of the experiment and variant exports takes only summary; events and assignments are reserved and answer 422."
+by = ["docex:docs/api/data-export.md#scope=events is not supported; the export is available with scope=summary only"]

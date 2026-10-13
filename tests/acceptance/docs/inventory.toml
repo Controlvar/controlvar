@@ -286,7 +286,7 @@ reason = "its blocks run on a stack in Doc Examples"
 
 [pages."api/auth.md"]
 class = "exec"
-reason = "its blocks run on a stack in Doc Examples; the skipped one needs a Cognito user pool"
+reason = "its blocks run on a stack in Doc Examples"
 
 [pages."api/endpoints.md"]
 class = "exec"
@@ -314,7 +314,7 @@ reason = "runs an analysis on tables in your own Snowflake or BigQuery warehouse
 
 [pages."integrations/salesforce.md"]
 class = "exec"
-reason = "its setup and webhook examples run on a full-profile stack in Doc Examples; the callout set up in Salesforce and the credentials check need a Salesforce org and are not run"
+reason = "its setup and webhook examples run on a full-profile stack in Doc Examples; the callout set up in Salesforce needs a Salesforce org and is not run"
 
 [pages."integrations/github.md"]
 class = "exec"
@@ -473,6 +473,10 @@ reason = "logging conventions; no steps to follow"
 [pages."security/hardening-changes.md"]
 class = "reference"
 reason = "a record of hardening changes; no steps to follow"
+
+[pages."security/model.md"]
+class = "reference"
+reason = "what the API does to protect a deployment, each point held by a test; no steps to follow"
 
 [pages."security/incident-response.md"]
 class = "reference"
@@ -689,7 +693,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 151
+walked = 152
 
 # The front door, and the policy beside it.
 

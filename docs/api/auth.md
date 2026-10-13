@@ -97,17 +97,9 @@ With the `local` provider there is no refresh token: when a token expires, reque
 discard its token. The token itself stays valid until it expires, because nothing is
 revoked on the server.
 
-**Needs an identity provider.** With `AUTH_PROVIDER=cognito`, the login also returns a
-refresh token, and this exchanges it for a new access token. `$REFRESH_TOKEN` is the
-`refresh_token` from the Cognito login's response:
-
-```{.bash skip reason="idp: needs a Cognito user pool and a refresh token it issued"}
-curl -s -X POST localhost:8000/api/v1/auth/refresh \
-  -H 'content-type: application/json' \
-  -d "{\"refresh_token\": \"$REFRESH_TOKEN\"}"
-```
-
-If the refresh token has expired too, the user logs in again.
+With `AUTH_PROVIDER=cognito`, the login also returns a refresh token, and
+`POST /api/v1/auth/refresh` with `{"refresh_token": "..."}` exchanges it for a new access
+token. If the refresh token has expired too, the user logs in again.
 
 ---
 
@@ -190,10 +182,10 @@ Every user has one of four built-in roles. The role decides which operations are
 
 | Role | Description | Typical Users |
 |------|-------------|---------------|
-| **ADMIN** | Full access to all resources and administrative functions | Platform owners, engineering leads |
+| **ADMIN** | Every resource; managing user accounts also needs the separate superuser flag | Platform owners, engineering leads |
 | **DEVELOPER** | Create and manage experiments and feature flags | Engineers, product developers |
 | **ANALYST** | Read experiments, flags and results; create reports | Data analysts, product managers |
-| **VIEWER** | Read-only access | Stakeholders, executives |
+| **VIEWER** | Reads experiments, flags and results; like every role, can create an API key, and an API key writes tracking data | Stakeholders, executives |
 
 ### What Each Role Can Do
 
@@ -204,7 +196,7 @@ Every user has one of four built-in roles. The role decides which operations are
 | Create and change feature flags | — | — | Yes | Yes |
 | Create their own API keys | Yes | Yes | Yes | Yes |
 | View audit logs | Own | All | Own | All |
-| Manage users | — | — | — | Yes |
+| Manage users | — | — | — | Only with the superuser flag |
 
 Access to a feature flag is by role, not by who created it: a DEVELOPER can change any flag,
 and a VIEWER can change none, not even one they created.

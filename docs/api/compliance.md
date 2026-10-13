@@ -9,8 +9,7 @@
     for what each profile includes and how to run the full one.
 
 The compliance audit trail is an append-only table of changes to experiments, feature flags
-and (in the full profile) warehouse connections, sources and analysis runs. It is evidence for a
-customer's SOC 2 or ISO 27001 program; the platform itself holds no certification.
+and (in the full profile) warehouse connections, sources and analysis runs.
 
 It is a separate record from the [audit log](audit-logging.md) at `/api/v1/audit-logs`,
 which records feature-flag status changes (toggle, enable, disable, bulk toggle). A flag

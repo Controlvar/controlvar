@@ -111,8 +111,8 @@ or a mobile app.
 - In the dashboard (**Admin → API Keys → Create API Key**), tick **Server-side local
   evaluation (sdk:ruleset)**; the same checkbox is the one for assigning lists of users.
   Leave it unticked for any other key; the key is then created
-  with no scopes. The checkbox is disabled, with the reason shown beside it, for a user who
-  cannot change feature flags.
+  with no scopes. The dashboard's API Keys page needs a superuser account; any other user
+  creates keys through the API.
 - Through the API, send `"scopes": ["sdk:ruleset"]`.
 
 **Only users who can change feature flags can create a key with the `sdk:ruleset` scope:**

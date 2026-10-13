@@ -1,0 +1,81 @@
+# What verifies each unit of docs/auth/flow.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/auth/flow.md"
+
+[[unit]]
+text = "Authentication Flow Diagrams"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This document contains the flow diagrams for the Cognito authentication system implemented in Experimently."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Cognito only"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The password-reset and token-refresh endpoints (POST /api/v1/auth/forgot-password, /reset-password and /refresh) are available only when AUTH_PROVIDER=cognito."
+by = [
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_local_provider_answers_fixed_404",
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_any_other_provider_answers_fixed_404",
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_exactly_the_five_routes_carry_the_gate",
+]
+
+[[unit]]
+text = "The sign-up and confirmation endpoints (POST /api/v1/auth/signup and /confirm) also need COGNITO_SELF_SIGNUP_ENABLED=true; without it they answer 404 and an administrator creates users (Adding a user)."
+by = [
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_cognito_provider_with_self_signup_off_answers_404",
+    "test:backend/tests/integration/auth/test_self_signup_gate.py",
+]
+
+[[unit]]
+text = "With any other provider, including the default local, all five answer 404."
+by = [
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_local_provider_answers_fixed_404",
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_any_other_provider_answers_fixed_404",
+]
+
+[[unit]]
+text = "With local, sign in with POST /api/v1/auth/login; an administrator creates accounts and resets passwords."
+by = [
+    "test:backend/tests/integration/api/test_local_auth_path.py",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_superuser_resets_another_account",
+]
+
+[[unit]]
+text = "The dashboard does not yet sign in with Cognito."
+by = ["test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_404_under_cognito_provider"]
+
+[[unit]]
+text = "Sign in through the API with POST /api/v1/auth/token."
+by = ["test:backend/tests/integration/auth/test_token.py"]
+
+[[unit]]
+text = "SSO sign-in needs AUTH_PROVIDER=local."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "1. Registration and Confirmation Flow"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Only with COGNITO_SELF_SIGNUP_ENABLED=true and a user pool that allows self sign-up; otherwise see Adding a user."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "2. Sign-in and Token Issuance Flow"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "3. Password Reset Flow"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "4. Token Refresh Mechanism"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "5. Authorization Decision Flow"
+by = ["exempt:baseline"]

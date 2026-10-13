@@ -31,7 +31,7 @@ All segment results are marked `is_exploratory: true` — they should be treated
 
 ### HTE Detection
 
-Heterogeneous treatment effect detection flags cases where the treatment effect differs significantly across segments. This uses a chi-squared test on the segment-level effect estimates.
+Heterogeneous treatment effect detection compares the first treatment with the control. It flags the experiment when a chi-squared test on their conversion counts across the segments gives p < 0.05, when the lift varies widely between segments, or when the lift is positive in one segment and negative in another.
 
 ---
 
@@ -119,7 +119,7 @@ field is `null`. Any logged-in user can read it.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `breakdown` | string | ✅ | The metadata key to break down by (e.g. `device`, `country`, `plan`) |
+| `breakdown` | string | ❌ | The metadata key to break down by (e.g. `device`, `country`, `plan`) |
 | `confidence_level` | float | ❌ | 0.80–0.99, default `0.95` |
 
 ```{.bash exec}

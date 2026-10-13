@@ -1,0 +1,125 @@
+# What verifies each unit of docs/security/model.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/security/model.md"
+
+[[unit]]
+text = "Security model"
+by = ["exempt:label"]
+
+[[unit]]
+text = "What the API does to protect a deployment and its data, as the code does it today."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "To report a vulnerability, follow SECURITY.md."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Sign-in and passwords"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Passwords are stored as bcrypt hashes."
+by = ["test:backend/tests/unit/security/test_owasp_compliance.py::TestCryptographicFailures::test_bcrypt_used_for_password_hashing"]
+
+[[unit]]
+text = "POST /api/v1/auth/login and POST /api/v1/auth/token each take 10 requests a minute from one IP address; the next request in that minute is answered 429 Too Many Requests."
+by = [
+    "test:backend/tests/unit/middleware/test_route_rate_limits.py::test_sign_in_takes_ten_requests_a_minute",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitMiddleware::test_auth_endpoint_stricter_limit",
+]
+
+[[unit]]
+text = "In staging and production, the API does not start with a SECRET_KEY shorter than 32 characters, or with a well-known FIRST_SUPERUSER_PASSWORD such as the demo one."
+by = [
+    "test:backend/tests/unit/core/test_preflight.py::test_each_secret_refusal_names_the_setting_and_how_to_generate_it",
+    "test:backend/tests/unit/core/test_preflight.py::test_main_exits_78_and_prints_the_list",
+    "test:backend/tests/unit/security/test_security_hardening.py::TestConfigSecurity::test_secret_key_validated_in_production",
+]
+
+[[unit]]
+text = "Roles"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A signed-in user's role, ADMIN, DEVELOPER, ANALYST or VIEWER, and a separate superuser flag decide what the user may do (RBAC)."
+by = [
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_developer_permissions",
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_viewer_permissions",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_admin_role_without_superuser_cannot_reset_another",
+]
+
+[[unit]]
+text = "ANALYST and VIEWER cannot create, change or delete experiments or feature flags."
+by = [
+    "test:backend/tests/integration/api/test_experiments_api.py::TestCreateExperiment::test_viewer_cannot_create_experiment",
+    "test:backend/tests/integration/api/test_experiments_api.py::TestExperimentAuthorization::test_analyst_cannot_delete_experiment",
+    "test:backend/tests/integration/api/test_feature_flags_api.py::TestFeatureFlagsPermissions::test_analyst_cannot_create_feature_flag",
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_viewer_permissions",
+]
+
+[[unit]]
+text = "Every role, VIEWER included, can create an API key for itself, and an API key writes tracking data: assignments and events."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key",
+    "journey:api-key-first-assignment#track",
+]
+
+[[unit]]
+text = "API keys"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An API key is stored only as a hash."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+    "test:backend/tests/unit/security/test_security_hardening.py::TestAPIKeySecurity::test_api_key_hash_is_not_plaintext",
+]
+
+[[unit]]
+text = "Its value is shown once, in the response that creates it."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_lists_only_own_keys_without_secret",
+]
+
+[[unit]]
+text = "A request that carries an API key and no sign-in is refused with 401 by the routes that manage experiments, feature flags and users."
+by = ["test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key"]
+
+[[unit]]
+text = "A deleted or expired key is refused with 401."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestDelete::test_deleted_key_no_longer_authenticates",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_expired_or_inactive_key_is_401",
+]
+
+[[unit]]
+text = "Response headers"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every response except a CORS preflight carries X-Frame-Options: DENY, X-Content-Type-Options: nosniff and Content-Security-Policy: default-src 'none'; frame-ancestors 'none'."
+by = [
+    "test:backend/tests/smoke/test_wiring.py::TestSecurityHeaders::test_security_headers_on_health",
+    "test:backend/tests/unit/api/test_docs_page_csp.py::test_every_other_path_keeps_the_strict_policy",
+    "test:backend/tests/unit/middleware/test_preflight_and_429_cors.py::test_the_429_keeps_its_security_headers",
+    "test:backend/tests/unit/api/test_hsts_header.py::test_a_cors_preflight_carries_none_of_the_four_headers",
+]
+
+[[unit]]
+text = "The two API reference pages, /api/v1/docs and /api/v1/redoc, get a policy that also allows the scripts, styles and fonts they load."
+by = [
+    "test:backend/tests/unit/api/test_docs_page_csp.py::test_docs_page_carries_the_docs_policy",
+    "test:backend/tests/unit/api/test_docs_page_csp.py::test_the_docs_policy_names_only_the_origins_the_pages_load",
+]
+
+[[unit]]
+text = "Outside development, every response except a CORS preflight also carries Strict-Transport-Security: max-age=31536000; includeSubDomains; preload."
+by = [
+    "test:backend/tests/unit/api/test_hsts_header.py::test_outside_development_every_response_carries_the_whole_hsts_value",
+    "test:backend/tests/unit/api/test_hsts_header.py::test_a_cors_preflight_carries_none_of_the_four_headers",
+    "test:backend/tests/unit/api/test_security_headers.py::TestSecurityMiddleware::test_hsts_not_in_dev",
+]

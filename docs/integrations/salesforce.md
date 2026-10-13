@@ -16,24 +16,8 @@ The Salesforce integration receives the events a Salesforce Flow or Apex callout
 
 ## Prerequisites
 
-Before creating the integration, you need:
-
-1. A **Salesforce Connected App** configured in your Salesforce org with OAuth 2.0 enabled
-2. The **Consumer Key** (Client ID) and **Consumer Secret** (Client Secret) from the connected app
-3. Your **Salesforce instance URL** (e.g., `https://your-org.my.salesforce.com`)
-4. A Salesforce user account for the Connected App to run as
 
 The Connected App's credentials are stored for calls to Salesforce, which nothing in the platform makes yet, so an integration that only receives webhooks needs nothing but a `webhook_secret`.
-
-### Creating a Salesforce Connected App
-
-1. In Salesforce, go to **Setup → App Manager → New Connected App**
-2. Enable **OAuth Settings**
-3. Set the callback URL (not used for client credentials, but required): `https://login.salesforce.com/services/oauth2/success`
-4. Add the following OAuth scopes:
-   - `api` (Access and manage your data)
-   - `refresh_token, offline_access` (Perform requests at any time)
-5. Save and copy the **Consumer Key** and **Consumer Secret**
 
 ---
 
@@ -128,9 +112,9 @@ POST /api/v1/integrations/webhooks/salesforce
 
 ### Configuring a Salesforce callout
 
-A native Salesforce Outbound Message sends a SOAP/XML envelope and cannot add custom headers, so it cannot be pointed at this endpoint directly. Send the event from something that can post a JSON object and set a header: a Flow with an **HTTP Callout** action, an Apex callout (`HttpRequest.setHeader`), or a relay that turns the message into that request.
+Send the event from something that can post a JSON object and set a header: a Flow with an **HTTP Callout** action, an Apex callout (`HttpRequest.setHeader`), or a relay in front of the platform.
 
-1. In Salesforce, build the sender: a Flow that runs on the record change you care about (for example a Campaign whose status becomes `Completed`) and calls an **HTTP Callout** action, or an Apex callout, or point your relay at the platform
+1. Build the sender in Salesforce, for example a Flow on the record change you care about with an **HTTP Callout** action, or set up your relay
 2. Set the method to `POST` and the URL to your webhook URL:
    `https://your-platform.example.com/api/v1/integrations/webhooks/salesforce`
 3. Set the `Content-Type` header to `application/json`
@@ -146,7 +130,7 @@ The platform parses a delivery only after the sender has presented the integrati
 | Shared secret | `X-Experimently-Webhook-Secret` | The `webhook_secret` itself |
 | Signature, from a callout that can compute one | `X-Hub-Signature-256`, or `X-Hub-Signature` | `sha256=` followed by the hex HMAC-SHA256 of the raw request body, keyed with the `webhook_secret` (a SHA-1 value, `sha1=...`, is refused) |
 
-A Flow HTTP Callout or an Apex callout sets the shared-secret header. The secret then travels with every delivery, so the endpoint must be HTTPS. An Apex callout can sign the raw body instead (`Crypto.generateMac`), and should. A delivery that carries either signature header is judged on the signature alone: a wrong signature is refused even when the shared-secret header is right. The body must be a JSON object: a SOAP/XML body is refused with `400` even when the secret is right.
+Set the shared-secret header on the callout. The secret then travels with every delivery, so the endpoint must be HTTPS. If the callout can sign the raw body (in Apex, with `Crypto.generateMac`), send the signature instead. A delivery that carries either signature header is judged on the signature alone: a wrong signature is refused even when the shared-secret header is right. The body must be a JSON object: a SOAP/XML body is refused with `400` even when the secret is right.
 
 Every refused delivery gets the same answer, `401` with the body `{"detail": "Webhook authentication failed"}`: a wrong or missing secret, an integration that is not active, an integration with no `webhook_secret`, and no Salesforce integration at all are not told apart. If every delivery is refused, check with `GET /api/v1/integrations/salesforce` that `is_active` is `true` and that `stored_secrets` lists `webhook_secret`. See [Webhook Endpoints](../api/integrations.md#webhook-endpoints) for the whole contract.
 
@@ -199,7 +183,7 @@ They print `{"detail":"Webhook authentication failed"}` and `{"detail":"Invalid 
 
 ### Incoming Webhook Payload Format
 
-The platform accepts JSON objects from a Salesforce Flow HTTP Callout, an Apex callout or a relay. The expected format:
+The platform accepts JSON objects from a Salesforce Flow HTTP Callout, an Apex callout or a relay. Any JSON object is accepted, and nothing reads its fields yet. For example:
 
 ```json
 {
@@ -211,13 +195,6 @@ The platform accepts JSON objects from a Salesforce Flow HTTP Callout, an Apex c
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `event_type` | string | Type of event (e.g., `campaign_updated`, `opportunity_closed`) |
-| `campaign_id` | string | Salesforce Campaign record ID |
-| `campaign_name` | string | Human-readable campaign name |
-| `status` | string | New status of the Salesforce record |
-| `experiment_key` | string | Optional. The experiment the event is about; nothing in the platform reads it yet |
 
 **Response: 200 OK**
 
@@ -237,22 +214,10 @@ Nothing in the platform calls Salesforce yet: no experiment's status or result i
 
 ## Troubleshooting
 
-### Checking the Connected App's credentials
-
-This asks Salesforce itself for a token with the Connected App's key and secret, so it needs your org and its values in place of `your-org`, `YOUR_CLIENT_ID` and `YOUR_CLIENT_SECRET`:
-
-```{.bash skip reason="secret: needs a Salesforce org and its Connected App's consumer key and secret"}
-curl -X POST "https://your-org.my.salesforce.com/services/oauth2/token" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=client_credentials&client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET"
-```
-
-If this returns a token, the credentials are correct.
-
 ### Webhook Not Receiving Events
 
 1. Confirm the URL in the Salesforce callout (the Flow HTTP Callout, the Apex callout or the relay) matches your integration webhook URL exactly
-2. Ensure your platform is accessible from the public internet (Salesforce requires a reachable HTTPS endpoint)
+2. Make sure the webhook URL is HTTPS and can be called from outside your network
 3. Check the API's access log: it logs each delivery with its path and status, for example `"POST /api/v1/integrations/webhooks/salesforce HTTP/1.1" 401`
 4. In Salesforce, check the callout's response in the Flow's debug details or the Apex debug log (**Setup → Debug Logs**): `401` means the secret header is missing or wrong, or the integration is not active; `400` means the body is not a JSON object
 

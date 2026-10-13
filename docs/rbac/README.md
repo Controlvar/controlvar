@@ -1,11 +1,8 @@
 # Role-Based Access Control (RBAC) System
 
-!!! info "Part of the `rbac` module"
-    Custom roles is one of the optional modules -- present in the **full profile**, absent from the core one. A core deployment does not serve these routes. See [Modules and profiles](../getting-started/modules.md) for what each profile includes and how to run the full one.
-
 ## Overview
 
-Experimently implements a robust Role-Based Access Control (RBAC) system to manage permissions across different resources. This document explains the permission architecture and how to use it in the application.
+Every deployment, core or full profile, decides what a signed-in user may do from four roles and a separate superuser flag. This page explains them. Custom roles, the `rbac` module's (full profile only), are on the [RBAC API page](../api/rbac.md).
 
 ## User Roles
 
@@ -14,7 +11,10 @@ Users in the system can have one of the following roles:
 - **Admin**: Can create and manage experiments, and create and manage any feature flag
 - **Developer**: Can create and manage experiments, and create and manage any feature flag
 - **Analyst**: Can view experiments and feature flags, and create analytics reports
-- **Viewer**: Read-only access to approved resources; can view every feature flag
+- **Viewer**: Can view experiments and every feature flag, and change neither
+
+Every role, Viewer included, can create an API key for itself, and an API key writes
+tracking data: assignments and events. See [API Key Management](../security/api-keys.md).
 
 Feature flags are governed by role, not by who created them: an owner is recorded on
 each flag and shown, but owning a flag does not let an Analyst or Viewer change it.
@@ -34,7 +34,7 @@ only the dashboard pages for those need the superuser flag.
 
 Permissions are defined as combinations of resources and actions:
 
-### Resources
+### Resource types
 
 - **Experiment**: A/B tests and experiments
 - **FeatureFlag**: Feature flags and toggles
@@ -42,6 +42,7 @@ Permissions are defined as combinations of resources and actions:
 - **Role**: User roles
 - **Permission**: Permission assignments
 - **Report**: Analytics reports and dashboards
+- **APIKey**: API keys (who may list or delete other users' keys)
 
 ### Actions
 
@@ -95,85 +96,3 @@ none, including one they own.
   on experiments.
 
 A superuser passes every one of these checks.
-
-## Usage in Code
-
-### Checking Permissions
-
-To check if a user has permission to perform an action:
-
-```python
-from backend.app.core.permissions import check_permission, ResourceType, Action
-
-# Check if user can create an experiment
-if check_permission(current_user, ResourceType.EXPERIMENT, Action.CREATE):
-    # Allow the user to create an experiment
-else:
-    # Return permission denied error
-```
-
-### Checking Ownership
-
-`check_ownership` says whether a user is a resource's recorded owner. It is not
-how access to experiments or feature flags is decided -- both are decided by
-role -- so do not use it to gate a change to either:
-
-```python
-from backend.app.core.permissions import check_ownership
-
-# True when report.owner_id is the user's id
-if check_ownership(current_user, report):
-    ...
-```
-
-### Getting Error Messages
-
-To generate standardized error messages:
-
-```python
-from backend.app.core.permissions import get_permission_error_message
-
-message = get_permission_error_message(ResourceType.EXPERIMENT, Action.CREATE)
-# Returns: "You don't have permission to create experiments"
-```
-
-### Determining Required Roles
-
-To determine what role is needed for a specific action:
-
-```python
-from backend.app.core.permissions import get_required_role
-
-role = get_required_role(ResourceType.REPORT, Action.CREATE)
-# Returns: UserRole.ANALYST
-```
-
-## Implementation Details
-
-The permission system is implemented in the following files:
-
-- `backend/app/core/permissions.py`: Core permission checking functions
-- `backend/app/models/user.py`: User model with role field
-- `backend/app/api/deps.py`: FastAPI dependency functions for permission checks
-
-## Adding New Resources
-
-To add a new resource type to the permission system:
-
-1. Add the resource to the `ResourceType` enum in `permissions.py`
-2. Update the `ROLE_PERMISSIONS` mapping to include the new resource
-3. Create dependency functions for the new resource in `deps.py`
-
-## Testing Permissions
-
-The permission system includes comprehensive tests in:
-
-- `backend/tests/unit/core/test_permissions.py`: Tests for permission checking functions
-- `backend/tests/unit/api/test_permission_deps.py`: Tests for permission dependency functions
-
-## Best Practices
-
-1. Always use the permission checking functions instead of hardcoding role checks
-2. Include clear error messages when denying access
-3. Test permission checks thoroughly
-4. Consider both role-based permissions and ownership when designing endpoints
