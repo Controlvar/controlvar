@@ -21,7 +21,8 @@ YAML, or not a mapping, stops at that. Refused, besides what ``model`` refuses:
   name as its id, or classifies ``pending = true``: a nav page under
   ``[pages]`` (its path from ``docs/``), or a document under ``[documents]``
   (its path from the repository's root, ``scope = "in"``), such as
-  ``demo/DEMO_GUIDE.md``;
+  ``demo/DEMO_GUIDE.md``, or a dashboard component such as the first-run
+  card (``.tsx``), whose anchors are its ``data-testid`` values;
 * a ``doc`` anchor the guide does not have;
 * an accessible name or label the guide's text does not contain, unless it says
   ``quote: false`` with a reason, so a label renamed in the UI or in the guide
@@ -39,12 +40,13 @@ YAML, or not a mapping, stops at that. Refused, besides what ``model`` refuses:
 * ``ref: doc-examples`` on a section with no shell block Doc Examples runs, or
   on a guide ``scripts/doc_examples.toml`` does not enrol, or on a document
   (only a page's enrolment under ``docs/`` is read here);
-* an ``api`` step on a stack with no API (every stack but compose-dev and
-  compose-sso);
+* an ``api`` step on a stack with no API (every stack but compose-dev,
+  compose-empty, compose-sso and demo-local);
 * an oracle not in ``docs_runner.oracles.ORACLES``;
 * a ``not_run`` reason the registry does not let a journey declare;
 * a ``written`` date after today;
-* ``open`` on any stack but compose-dev and compose-sso, or of a URL whose origin
+* ``open`` on any stack but compose-dev, compose-empty, compose-sso and
+  demo-local, or of a URL whose origin
   (``http://localhost:<port>``) the guide's text does not contain;
 * a ``fill`` that types a ``secret`` no ``passwords`` entry makes up and no
   earlier ``keep`` step keeps, or that does not say ``snapshot: false``;
@@ -124,6 +126,7 @@ from docs_runner.model import (
     API_EXPECTS,
     BROWSER_EXPECTS,
     COMPOSE_STACKS,
+    GUIDE_PATTERN,
     LOCAL_URL,
     SCREEN_ACTIONS,
     SEARCH_EXPECTS,
@@ -949,7 +952,7 @@ def semantic_problems(
 def _parts(data: Dict[str, Any]) -> Dict[str, Any]:
     """What parsed of a journey the model refused: valid fields, valid steps."""
     guide = data.get("guide")
-    guide_ok = isinstance(guide, str) and re.fullmatch(r"[^/\s][^\s]*\.md", guide)
+    guide_ok = isinstance(guide, str) and re.fullmatch(GUIDE_PATTERN, guide)
     stack = data.get("stack")
     written = data.get("written")
     passwords = data.get("passwords")

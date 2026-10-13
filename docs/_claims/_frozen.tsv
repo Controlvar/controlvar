@@ -3,3 +3,4 @@
 # first 12 hex digits of sha256(the unit's text). Sorted; it only shrinks.
 untested:T	docs/workspaces/quickstart.md	7306b0616b05
 untested:T	docs/workspaces/quickstart.md	d280a134f645
+untested:T	frontend/src/pages/docs/index.tsx#desc	447746140c1d

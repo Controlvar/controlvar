@@ -488,6 +488,12 @@ scope = "in"
 class = "reference"
 extractor = "docs-hub-desc"
 reason = "r"
+
+[documents."run.sh#header"]
+scope = "in"
+class = "reference"
+extractor = "leading-hash-comments"
+reason = "r"
 """
 
 ENROLMENT = """[meta]
@@ -566,6 +572,7 @@ def base() -> Dict[str, Any]:
             "CONTRIBUTING.md": "How to help.\n",
             "app/Card.tsx": "export {}\n",
             "hub.tsx": "desc: 'x'\n",
+            "run.sh": "# Runs it.\n",
             "tests/test_things.py": TESTS_PY,
             "tests/test_bench.py": "import pytest\n\npytestmark = pytest.mark.benchmark\n\n\ndef test_x():\n    pass\n",
             "tests/helpers.py": "def test_x():\n    pass\n",
@@ -606,7 +613,7 @@ def base() -> Dict[str, Any]:
         "ledger": [
             ("untested:T", "docs/guide.md", "Retries stop after three attempts."),
         ],
-        "pending": ["docs/later.md", "hub.tsx#desc"],
+        "pending": ["docs/later.md", "hub.tsx#desc", "run.sh#header"],
         "deferred": [],
         "mechanisms": {
             "reads-guide": dc.Mechanism(
@@ -1154,10 +1161,12 @@ PLANTED = [
     (
         "a registry for a surface with no extractor yet",
         lambda t: (
-            t["pending"].remove("hub.tsx#desc"),
-            t["registries"].update({"hub.tsx#desc": [unit("x", "exempt:label")]}),
+            t["pending"].remove("run.sh#header"),
+            t["registries"].update(
+                {"run.sh#header": [unit("Runs it.", "exempt:label")]}
+            ),
         ),
-        "has no 'docs-hub-desc' extractor yet",
+        "has no 'leading-hash-comments' extractor yet",
     ),
     (
         "a registry for a pending page",
@@ -1393,6 +1402,98 @@ def test_a_whole_file_target_is_counted_apart(tmp_path):
 
 
 def test_a_skeleton_lists_every_unit_once_with_its_count():
-    text = dc.skeleton("docs/x.md", "# T\n\nSame. Same.\n")
+    text = dc.skeleton("docs/x.md", dc.units("# T\n\nSame. Same.\n"))
     assert text.count("[[unit]]") == 2
     assert 'text = "Same."\nby = []\ncount = 2\n' in text
+
+
+# ---------------------------------------------------------------------------
+# The docs hub: each desc:/description: literal is a unit (#1142)
+# ---------------------------------------------------------------------------
+HUB_TEXT = """const sections = [
+  {
+    category: 'Start',
+    description: 'Run the stack.',
+    links: [
+      { label: 'A', href: docsUrl('a'), desc: 'Browser and Node.js' },
+      { label: 'B', href: docsUrl('b'), desc: "Each user's own events" },
+      { label: 'C', href: docsUrl('c'), desc: 'It\\'s `fast`' },
+    ],
+  },
+];
+"""
+HUB_UNITS = [
+    "Run the stack.",
+    "Browser and Node.js",
+    "Each user's own events",
+    "It's fast",
+]
+
+
+def hub_tree() -> Dict[str, Any]:
+    tree = base()
+    tree["files"]["hub.tsx"] = HUB_TEXT
+    tree["pending"].remove("hub.tsx#desc")
+    tree["registries"]["hub.tsx#desc"] = [unit(t, "exempt:label") for t in HUB_UNITS]
+    return tree
+
+
+def test_the_hub_extractor_reads_each_literal_as_one_unit():
+    """Both quotings, an escaped quote resolved, markup normalised, in file order."""
+    assert [u.text for u in dc.hub_units(HUB_TEXT)] == HUB_UNITS
+    assert [u.line for u in dc.hub_units(HUB_TEXT)] == [4, 6, 7, 8]
+
+
+def test_a_registered_hub_checks_clean(tmp_path):
+    """The positive control for the hub cases below."""
+    result = build(tmp_path, hub_tree())
+    assert not result.problems, "\n".join(result.problems)
+    assert result.counts["registered"] == 5
+
+
+@pytest.mark.parametrize(
+    "old, new, refusal",
+    [
+        pytest.param(
+            "desc: 'Browser and Node.js' },",
+            "desc: 'Browser and Node.js' },\n      { label: 'D', href: docsUrl('d'), desc: \"Works offline\" },",
+            "hub.tsx#desc:7: unregistered unit 'Works offline'",
+            id="a new double-quoted desc",
+        ),
+        pytest.param(
+            "desc: 'Browser and Node.js'",
+            "desc: 'Browser, Node.js and Deno'",
+            "unregistered unit 'Browser, Node.js and Deno'",
+            id="an edited desc",
+        ),
+        pytest.param(
+            "desc: 'Browser and Node.js'",
+            "desc: `Browser and ${runtime}`",
+            "line 6: a docs-hub-desc value that is not one single- or double-quoted string",
+            id="a value the extractor cannot read",
+        ),
+        pytest.param(
+            "description: 'Run the stack.'",
+            "description: 'Run ' + 'the stack.'",
+            "line 4: a docs-hub-desc value that is not one single- or double-quoted string",
+            id="a concatenation, not its first piece",
+        ),
+    ],
+)
+def test_a_hub_desc_the_registry_does_not_hold_is_refused(tmp_path, old, new, refusal):
+    tree = hub_tree()
+    assert old in tree["files"]["hub.tsx"]
+    tree["files"]["hub.tsx"] = tree["files"]["hub.tsx"].replace(old, new, 1)
+    problems = build(tmp_path, tree).problems
+    assert any(refusal in p for p in problems), "\n".join(problems) or "no problem"
+
+
+def test_the_real_hub_is_read_literal_by_literal():
+    """doc_claims reads exactly the literals the inventory counts on the real hub."""
+    import tomllib
+
+    inventory = tomllib.loads((REPO_ROOT / dc.INVENTORY).read_text(encoding="utf-8"))
+    entry = inventory["documents"]["frontend/src/pages/docs/index.tsx#desc"]
+    text = (REPO_ROOT / "frontend/src/pages/docs/index.tsx").read_text(encoding="utf-8")
+    assert entry["extractor"] == dc.HUB
+    assert len(dc.hub_units(text)) == entry["literals"] > 0

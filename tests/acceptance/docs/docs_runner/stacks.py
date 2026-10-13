@@ -1,4 +1,4 @@
-"""The six stacks a journey runs against. ``conftest.py`` makes each a fixture.
+"""The seven stacks a journey runs against. ``conftest.py`` makes each a fixture.
 
 * ``compose-dev``: the Docker guide's ``docker compose up -d --wait`` at the
   repository root, under its own compose project, with its own host ports, and
@@ -68,6 +68,16 @@
   and images: whichever of the two comes up brings the other down first.
   Before it comes down, what the API and the provider printed is added to its
   log, ``stacks/compose-sso.log``.
+
+* ``compose-empty``: compose-dev's stack with no seed data. ``docker-compose.yml``
+  applies the seeds ``SEED`` names, ``demo`` by default, and none when it is set
+  and empty, so this stack sets ``SEED=`` and nothing else that compose-dev does
+  not: the workspace a new self-hoster opens, with no experiment and no flag,
+  and one account, the administrator the API creates from the compose file's
+  ``FIRST_SUPERUSER`` and ``FIRST_SUPERUSER_PASSWORD`` defaults (the demo
+  administrator's address and password). It shares compose-dev's project,
+  ports and images, so whichever of the compose stacks comes up brings the
+  other down first, and it always starts from an empty database (``down -v``).
 
 A command that cannot be started at all (no ``docker``, no ``npm``) is a
 ``StackError`` like one that fails, so the journey is reported FAIL before its
@@ -370,6 +380,8 @@ class ComposeDev:
     #: The stack's name, its log file's stem, and the host its URLs name.
     NAME = "compose-dev"
     HOST = "127.0.0.1"
+    #: The accounts an api step may call as: the demo seed's.
+    ACCOUNTS: Mapping[str, Tuple[str, str]] = DEMO_ACCOUNTS
     #: Whether the browser accepts any certificate on this stack.
     IGNORE_HTTPS_ERRORS = False
 
@@ -469,7 +481,7 @@ class ComposeDev:
             base_url=f"http://{self.HOST}:{self.ports['FRONTEND_HOST_PORT']}/",
             api_url=api_url,
             profile=profile,
-            accounts=DEMO_ACCOUNTS,
+            accounts=self.ACCOUNTS,
             published=published,
             up_seconds=time.monotonic() - started,
             ignore_https_errors=self.IGNORE_HTTPS_ERRORS,
@@ -715,6 +727,20 @@ class ComposeSso(ComposeDev):
         if self.workdir is not None:
             shutil.rmtree(self.workdir, ignore_errors=True)
             self.workdir = None
+
+
+class ComposeEmpty(ComposeDev):
+    """compose-dev's stack with no seed data (``SEED=``): one administrator, nothing else."""
+
+    NAME = "compose-empty"
+    #: docker-compose.yml's FIRST_SUPERUSER defaults, which are the demo
+    #: administrator's; with no seed there is no other account.
+    ACCOUNTS: Mapping[str, Tuple[str, str]] = {"admin": DEMO_ACCOUNTS["admin"]}
+
+    def env(self, profile: str) -> Dict[str, str]:
+        env = super().env(profile)
+        env["SEED"] = ""
+        return env
 
 
 class DocsLocal:
@@ -1140,6 +1166,7 @@ class DemoLocal:
 
 STACK_CLASSES = {
     "compose-dev": ComposeDev,
+    "compose-empty": ComposeEmpty,
     "compose-sso": ComposeSso,
     "docs-local": DocsLocal,
     "docs-published": DocsPublished,

@@ -1,0 +1,327 @@
+# The first-run card on the experiments page
+# (frontend/src/components/experiments/FirstRunChecklist.tsx, #1142), walked as
+# a new self-hoster meets it: on compose-empty, the development stack with no
+# seed data, so the experiments list is empty and the only account is the
+# administrator the API creates on its first start.
+#
+# The card's three steps, in its order. Admin → API Keys makes a key, which is
+# kept and never written anywhere (the runner's redactor takes it out of every
+# file); back on the empty list the card is still there; + New Experiment opens
+# guided setup, and creating the experiment opens its page, which shows its key
+# and a Start button; Start makes it active; and the card's sample, with that
+# key in place of YOUR_EXPERIMENT_KEY and the API key as X-API-Key, assigns
+# user-123. The page's header offers the same + New Experiment link as the
+# card, to the same address.
+#
+# The key is shown once, so the screen that shows it keeps no screenshot and no
+# ARIA snapshot, and the journey is not recorded.
+guide: frontend/src/components/experiments/FirstRunChecklist.tsx
+stack: compose-empty
+profile: core
+video: false
+written: 2026-10-12
+steps:
+  - id: sign-in-page
+    doc: first-run-checklist
+    do:
+      goto: /login
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - heading "Sign in" [level=1]
+          - textbox "Email"
+          - textbox "Password"
+          - button "Sign in"
+    fail: the dashboard does not answer, or its sign-in page is not there
+  - id: email
+    doc: first-run-checklist
+    do:
+      fill:
+        label: Email
+        value: admin@demo.com
+        quote: false
+        reason: the sign-in form's field; the first administrator docker-compose.yml creates on an empty database
+    expect:
+      aria: |
+        - textbox "Email":
+          - text: admin@demo.com
+    fail: there is no Email field to fill
+  - id: password
+    doc: first-run-checklist
+    do:
+      fill:
+        label: Password
+        value: Demo1234!
+        quote: false
+        reason: the sign-in form's field; docker-compose.yml's default FIRST_SUPERUSER_PASSWORD
+    expect:
+      aria: |
+        - textbox "Password"
+    fail: there is no Password field to fill
+  - id: sign-in
+    doc: first-run-checklist
+    do:
+      click:
+        role: button
+        name: Sign in
+        quote: false
+        reason: the sign-in form's button
+    expect:
+      url: /experiments
+      aria: |
+        - main:
+          - heading "Experiments" [level=1]
+          - heading "Assign your first user in three steps" [level=2]
+          - paragraph: No experiments yet. These steps take you from an empty workspace to a live assignment.
+          - list:
+            - listitem:
+              - heading "Create an API key" [level=3]
+              - link "Open Admin → API Keys"
+            - listitem:
+              - heading "Create an experiment" [level=3]
+              - link "+ New Experiment"
+            - listitem:
+              - heading "Start it, then send an assignment" [level=3]
+    fail: the empty experiments page does not show the first-run card's three steps, API key first, or does not link the administrator to Admin → API Keys
+  - id: api-keys
+    doc: checklist-api-keys
+    do:
+      click:
+        role: link
+        name: Open Admin → API Keys
+    expect:
+      url: /admin/api-keys
+      aria: |
+        - main:
+          - main:
+            - heading "API Keys" [level=1]
+            - button "Create API Key"
+    fail: the card's step 1 link does not open the API Keys page, or the page offers no Create API Key
+  - id: create-form
+    doc: checklist-step-1
+    do:
+      click:
+        role: button
+        name: Create API Key
+        quote: false
+        reason: the API Keys page's button; the card's step 1 is to create an API key
+    expect:
+      aria: |
+        - dialog:
+          - heading "Create API Key" [level=2]
+          - textbox "Name *"
+          - button "Create Key" [disabled]
+    fail: Create API Key does not ask for a name
+  - id: key-name
+    doc: checklist-step-1
+    do:
+      fill:
+        label: Name *
+        value: First run key
+        quote: false
+        reason: the field is labelled "Name *" (required)
+    expect:
+      aria: |
+        - dialog:
+          - textbox "Name *":
+            - text: First run key
+    fail: the key's name cannot be typed
+  - id: create-key
+    doc: checklist-step-1
+    do:
+      click:
+        role: button
+        name: Create Key
+        quote: false
+        reason: the dialog's button; the card says keys are shown once
+    expect:
+      text: Copy this key — it won't be shown again
+    snapshot: false
+    snapshot_reason: the screen shows the new key, which no file of the run may hold
+    fail: the key is not created, or the page does not say it is shown once, as the card does
+  - id: keep-key
+    doc: checklist-step-1
+    do:
+      keep:
+        secret: sdk-key
+        role: code
+        prefix: eptk_
+    fail: the page does not show exactly one key starting eptk_
+  - id: dismiss
+    doc: checklist-step-1
+    do:
+      click:
+        role: button
+        name: Dismiss
+        quote: false
+        reason: the banner's button, once the key is copied
+    expect:
+      aria: |
+        - main:
+          - main:
+            - table:
+              - rowgroup:
+                - row /^First run key /
+    fail: the key is not listed
+  - id: back-to-the-card
+    doc: first-run-checklist
+    do:
+      goto: /experiments
+    expect:
+      aria: |
+        - main:
+          - heading "Assign your first user in three steps" [level=2]
+          - link "+ New Experiment"
+    fail: with the API key made and still no experiment, the experiments page no longer shows the card
+  - id: new-experiment
+    doc: checklist-create-experiment
+    do:
+      click:
+        role: link
+        name: + New Experiment
+    expect:
+      url: /experiments/new
+      aria: |
+        - main:
+          - heading "New Experiment" [level=1]
+          - button "Next"
+    fail: + New Experiment does not open the new-experiment form
+  - id: type-next
+    doc: checklist-step-2
+    do:
+      click:
+        role: button
+        name: Next
+        quote: false
+        reason: guided setup's button; the card's step 2 is to create an experiment
+    expect:
+      url: /experiments/new?step=details
+      aria: |
+        - main:
+          - textbox "Name *"
+          - textbox "Key"
+          - textbox "Metric 1 event name"
+    fail: Next does not move to the step that asks for the name and a metric
+  - id: experiment-name
+    doc: checklist-step-2
+    do:
+      fill:
+        label: Name *
+        value: First run
+        quote: false
+        reason: the field is labelled "Name *"; the card says to give the experiment a name
+    expect:
+      aria: |
+        - textbox "Name *":
+          - text: First run
+        - textbox "Key":
+          - text: first_run
+    fail: the name cannot be typed, or the key is not made from it
+  - id: metric-event
+    doc: checklist-step-2
+    do:
+      fill:
+        label: Metric 1 event name
+        value: purchase
+        quote: false
+        reason: the first metric's event name; the card says to give the experiment at least one metric
+    expect:
+      aria: |
+        - textbox "Metric 1 event name":
+          - text: purchase
+    fail: the metric's event name cannot be typed
+  - id: details-next
+    doc: checklist-step-2
+    do:
+      click:
+        role: button
+        name: Next
+        quote: false
+        reason: guided setup's button
+    expect:
+      url: /experiments/new?step=variants
+      aria: |
+        - main:
+          - textbox "Variant 1 name":
+            - text: Control
+          - textbox "Variant 2 name":
+            - text: Treatment
+    fail: the next step does not offer a control and a treatment variant, as the card says an experiment has
+  - id: variants-next
+    doc: checklist-step-2
+    do:
+      click:
+        role: button
+        name: Next
+        quote: false
+        reason: guided setup's button
+    expect:
+      url: /experiments/new?step=estimate
+      aria: |
+        - main:
+          - button "Next"
+    fail: Next does not leave the variants step
+  - id: estimate-next
+    doc: checklist-step-2
+    do:
+      click:
+        role: button
+        name: Next
+        quote: false
+        reason: guided setup's button
+    expect:
+      url: /experiments/new?step=review
+      aria: |
+        - main:
+          - button "Create Experiment"
+    fail: Next does not reach the step that creates the experiment
+  - id: create-experiment
+    doc: checklist-step-2
+    do:
+      click:
+        role: button
+        name: Create Experiment
+        quote: false
+        reason: guided setup's last button; the card says creating it opens the experiment's page
+    expect:
+      aria: |
+        - main:
+          - heading "First run" [level=1]
+          - text: Draft
+          - term: Key
+          - definition:
+            - text: first_run
+          - button "Start"
+    fail: creating the experiment does not open its page with its key and a Start button, as the card says
+  - id: start
+    doc: checklist-start
+    do:
+      click:
+        role: button
+        name: Start
+    expect:
+      aria: |
+        - main:
+          - heading "First run" [level=1]
+          - text: Active
+          - button "Pause"
+    fail: Start, which the card says to press, does not make the experiment active
+  - id: assign
+    doc: checklist-curl
+    do:
+      api:
+        method: POST
+        path: /api/v1/tracking/assign
+        as: anonymous
+        key: sdk-key
+        body:
+          experiment_key: first_run
+          user_id: user-123
+    expect:
+      status: 200
+      json:
+        experiment_key: first_run
+        user_id: user-123
+        assigned: true
+    fail: the card's sample, with the experiment's key and the API key from step 1, does not assign user-123

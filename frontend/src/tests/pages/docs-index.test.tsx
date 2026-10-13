@@ -35,6 +35,23 @@ const retired: Array<[string[], string]> = [
   [['auto-', 'create'], 'nothing in the platform creates a Jira issue'],
   [['webhook\\s+', 'sync'], 'a Salesforce delivery is answered and changes nothing'],
   [['PR\\s+', 'linking'], 'a pull request is not linked to an experiment'],
+  // Retired when the hub was registered claim by claim (#1142): each said
+  // something its page does not.
+  [['SSR support', '\\s+via\\s+Server', 'Client'], 'the React page describes no ServerClient entry point'],
+  [['change flag', '\\s+vendors'], 'the OpenFeature page shows no vendor switch'],
+  [['Hex', '\\s+package'], 'the Elixir SDK is not on Hex yet'],
+  [['PSR-', '4'], 'the PHP page says nothing of PSR-4'],
+  [['LRU', '\\s+cache'], 'the .NET page describes no LRU cache'],
+  [['DynamoDB', '\\s+and\\s+Lambda'], 'no Lambda function serves requests or processes events'],
+  [['send each variant', '\\s+to a different URL'], 'the edge router does not split traffic yet'],
+  [['record of', '\\s+feature-flag status'], 'the audit log records more than flag status changes'],
+  [['JWT', '\\s+tokens'], 'the authentication page names bearer tokens'],
+  [['Complete', '\\s+endpoint'], 'the endpoint page does not list every endpoint'],
+  [['20\\+', '\\s+operators'], 'nothing counts the operators'],
+  [['statistical', '\\s+rigour'], 'a description says what a page covers'],
+  [['existing data', '\\s+stack'], 'nothing in the platform calls Jira, Salesforce or GitHub'],
+  [['methods used', '\\s+by the platform'], 'post-stratification is not available through the API'],
+  [['Google', '\\s+Workspace'], 'the SSO page names the google provider type'],
 ];
 
 describe('/docs hub', () => {
@@ -75,6 +92,20 @@ describe('/docs hub entries for methods that do not work yet', () => {
     const table = getAllByRole('link').filter((a) => /^Dashboard and API/.test(a.textContent ?? ''));
     expect(table).toHaveLength(1);
     expect(table[0].getAttribute('href')).toMatch(/guides\/dashboard-and-api/);
+  });
+
+  it('links the Python SDK to its own page, not the SDK integration guide', () => {
+    const { getAllByRole } = render(<DocsIndex />);
+    const python = getAllByRole('link').filter((a) => /^Python SDK/.test(a.textContent ?? ''));
+    expect(python).toHaveLength(1);
+    expect(python[0].getAttribute('href')).toMatch(/\/sdk\/python\.md$/);
+  });
+
+  it('says custom roles are not applied yet (#891)', () => {
+    const { getAllByRole } = render(<DocsIndex />);
+    const rbac = getAllByRole('link').filter((a) => /^RBAC/.test(a.textContent ?? ''));
+    expect(rbac).toHaveLength(1);
+    expect(rbac[0].textContent ?? '').toMatch(/custom roles \(full profile\) are stored but not applied yet/);
   });
 
   it('lists the Kubernetes (Helm) self-hosting guide', () => {
