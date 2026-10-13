@@ -17,8 +17,9 @@ name: RC evidence
 # fails rather than skips, so the run cannot read as green.
 #
 # The suites run as the pull request jobs run them (pr-qa-gate.yml,
-# integration-tests.yml), the tag's whole tree, one job each; the list is
-# SUITES in scripts/rc_evidence.py. Their JUnit reports and the verifier's
+# integration-tests.yml), the tag's whole tree, one job each: the Python ones
+# in the python-suites matrix, the frontend's jest in a job of its own, whose
+# report is written as JUnit too. The list is SUITES in scripts/rc_evidence.py. Their JUnit reports and the verifier's
 # record (the run table, the verdicts it read, the reports) are kept 90 days.
 # The table is in the log and the record, not the step summary: it names run
 # ids and test names, which the public QA summaries leave out
@@ -172,9 +173,55 @@ jobs:
           retention-days: 90
           if-no-files-found: warn
 
+  frontend-suite:
+    name: frontend suite (jest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Dispatched at a release tag
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s\n' "$REF" | grep -Eqx 'refs/tags/v[0-9]+\.[0-9]+\.[0-9]+'; then
+            printf '%s\n' '::error title=RC evidence::dispatch this at a release tag: gh workflow run rc-evidence.yml --ref vX.Y.Z'
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install the frontend
+        run: cd frontend && npm ci
+
+      - name: Run the suite
+        env:
+          SUITE: frontend
+        run: python scripts/rc_evidence.py --suite "$SUITE" --junit-dir "$RUNNER_TEMP/junit"
+
+      - name: Upload the JUnit reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rc-evidence-junit-frontend
+          path: ${{ runner.temp }}/junit
+          retention-days: 90
+          if-no-files-found: warn
+
   verify:
     name: RC evidence
-    needs: python-suites
+    needs: [python-suites, frontend-suite]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 30

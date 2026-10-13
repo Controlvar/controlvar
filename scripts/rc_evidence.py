@@ -15,11 +15,13 @@ its JUnit reports.
 
 WHAT IT READS
 
-The tag must be a final release, ``vX.Y.Z``; its commit is the RC. For each
-workflow in ``WORKFLOWS`` it lists EVERY run at the RC commit, whatever its
-event, and counts the newest run with the event and ref the workflow is run
-with at a release (``workflow_dispatch`` at the tag; ``release-gate.yml`` runs
-on the push to ``main``). A workflow passes when:
+The tag must be a final release, ``vX.Y.Z``, and no branch may have its name;
+its commit (an annotated tag is followed to it) is the RC. For each workflow in
+``WORKFLOWS`` it lists EVERY run at the RC commit, whatever its event, every
+page of the list (``MAX_PAGES``), and counts the newest run with the event and
+ref the workflow is run with at a release (``workflow_dispatch`` at the tag;
+``release-gate.yml`` runs on the push to ``main``). A run the list returns at
+another commit is refused. A workflow passes when:
 
 * the counted run exists, concluded ``success`` and was created no earlier than
   the RC commit;
@@ -43,19 +45,21 @@ Then:
   pending journey has none) is PASS.
 * E3 Doc Examples: its run is one of the workflows above (its summary job
   holds every page's expectations).
-* E4 claim tests. Each suite ``rc-evidence.yml`` ran at the tag left its JUnit
-  reports, each with at least one test, and every ``test:`` target of the
-  registries (``docs/_claims``), and the test of every ``mechanism:`` they use,
-  is in them, passed and was not skipped. A function matches itself and its
-  parametrized cases; a whole-file target needs one pass and no failure or
-  skip. A target that is not Python is in none of these reports, so it fails
-  until a suite that reports it is added.
+* E4 claim tests. Each suite ``rc-evidence.yml`` ran at the tag (the Python
+  suites and the frontend's jest) left its JUnit reports, each with at least
+  one test, and every ``test:`` target of the registries (``docs/_claims``),
+  and the test of every ``mechanism:`` they use, is in them, passed and was not
+  skipped. A Python function matches itself and its parametrized cases; a jest
+  target's name matches the tests of its file whose full name holds it as a
+  whole word; a whole-file target needs one pass and no failure or skip. A
+  target no suite reports (another SDK's, say) fails until one does.
 * Registry. ``scripts/doc_claims.py`` of the tag's own tree finds no problem,
   ``CLAIMS_PENDING`` is empty and no unit is ``untested``. The tree must be the
   RC commit (``git rev-parse HEAD``). Deferred documents are listed, not
   counted.
 * E7 staging, with ``--staging DIR``: a directory on the coordinator's machine,
-  never given in the workflow. The newest Deploy run of the tag to staging
+  never given in the workflow. Deploy and Synthetic check runs are listed from
+  the RC commit's time on. The newest Deploy run of the tag to staging
   succeeded (a Deploy run is at ``main``'s commit, so it is found by its run
   name, ``Deploy vX.Y.Z (<profile>) to staging``, not by its commit); at least
   three Synthetic check runs succeeded after it finished, and any that did not
@@ -96,6 +100,7 @@ import shutil
 import subprocess
 import sys
 import tomllib
+import urllib.parse
 import xml.etree.ElementTree as ET
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
@@ -180,11 +185,14 @@ ALLOWED_SKIPS: Dict[Tuple[str, str], str] = {
 
 @dataclasses.dataclass(frozen=True)
 class Invocation:
-    """One pytest session of a suite: its JUnit file, arguments and extra env."""
+    """One session of a suite: its JUnit file, arguments, extra env and runner:
+    ``pytest`` from the repository root, or ``jest`` in ``frontend/``, whose own
+    ``--json`` report is written out as JUnit (``jest_junit``)."""
 
     report: str
     args: Tuple[str, ...]
     env: Tuple[Tuple[str, str], ...] = ()
+    runner: str = "pytest"
 
 
 _INTEGRATION_ENV: Tuple[Tuple[str, str], ...] = (
@@ -195,9 +203,10 @@ _INTEGRATION_ENV: Tuple[Tuple[str, str], ...] = (
         "postgresql://postgres:postgres@localhost:5432/experimentation_test",
     ),
 )
-#: The Python suites rc-evidence.yml runs at the tag, one job each, as the
-#: pull request jobs run them (pr-qa-gate.yml, integration-tests.yml), without
-#: -x or a shard: the tag's whole tree.
+#: The suites rc-evidence.yml runs at the tag, one job each, as the pull
+#: request jobs run them (pr-qa-gate.yml, integration-tests.yml), without -x,
+#: a shard or --passWithNoTests: the tag's whole tree. The Python ones are the
+#: python-suites matrix; the frontend's jest is a job of its own.
 SUITES: Dict[str, Tuple[Invocation, ...]] = {
     "unit": (
         Invocation("unit.xml", ("backend/tests/unit/", "backend/tests/realistic/")),
@@ -226,8 +235,17 @@ SUITES: Dict[str, Tuple[Invocation, ...]] = {
             _INTEGRATION_ENV,
         ),
     ),
+    "frontend": (Invocation("frontend.xml", (), runner="jest"),),
 }
 PYTEST = ("-p", "no:cov", "-q", "--tb=short")
+FRONTEND = "frontend"
+FRONTEND_JOB = "frontend suite (jest)"
+
+
+def suite_job(name: str) -> str:
+    """The rc-evidence.yml job that runs suite *name*."""
+    return FRONTEND_JOB if name == FRONTEND else SUITE_JOB.format(name)
+
 
 #: Jobs that must be in the counted run (a job that never ran is not a pass).
 REQUIRED_JOBS: Dict[str, Tuple[str, ...]] = {
@@ -242,7 +260,7 @@ REQUIRED_JOBS: Dict[str, Tuple[str, ...]] = {
     "chart-kind.yml": ("chart-kind (core)", "chart-kind (full)"),
     "compose-production.yml": ("Compose Production",),
     "docs-journeys.yml": ("Docs journeys", "Demo journeys"),
-    "rc-evidence.yml": tuple(SUITE_JOB.format(name) for name in SUITES) + (VERIFY_JOB,),
+    "rc-evidence.yml": tuple(suite_job(name) for name in SUITES) + (VERIFY_JOB,),
 }
 
 #: The docs-journeys verdicts: the journeys job's (which records the published
@@ -253,8 +271,15 @@ JOURNEYS = "tests/acceptance/docs/journeys"
 CLAIMS = "docs/_claims"
 LEDGER = "docs/_claims/_frozen.tsv"
 TEST_TARGET = re.compile(
-    r"test:(?P<path>[A-Za-z0-9_./@+-]{1,300})(?:::(?P<name>[A-Za-z0-9_:]{1,300}))?"
+    r"test:(?P<path>[A-Za-z0-9_./@+-]{1,300})(?:::(?P<name>[^\n]{1,300}))?"
 )
+PYTHON_TARGET = re.compile(
+    r"[A-Za-z_][A-Za-z0-9_]{0,200}(?:::[A-Za-z_][A-Za-z0-9_]{0,200})?"
+)
+#: A jest test file of the frontend, which the frontend suite reports.
+JEST_FILE = re.compile(r"^frontend/[^\n]{1,300}\.(?:test|spec)\.[cm]?[jt]sx?$")
+#: How many pages of 100 runs a list is read to; beyond that it is refused.
+MAX_PAGES = 10
 DEPLOY_TITLE = re.compile(
     r"Deploy (?P<version>v[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6})"
     r" \((?P<profile>[a-z]{1,20})\) to (?P<env>[a-z]{1,20})(?: -- [A-Z ]{1,40})?"
@@ -423,13 +448,31 @@ class Run:
 
 
 def _runs(github: GitHub, path: str, workflow: str) -> List[Run]:
-    data = github.get(path)
-    if not isinstance(data, dict) or not isinstance(data.get("workflow_runs"), list):
-        raise EvidenceError(f"{workflow}: the runs list is malformed")
-    runs = [Run.of(workflow, item) for item in data["workflow_runs"]]
-    if int(data.get("total_count") or 0) > len(runs):
+    """Every run the list at *path* holds, page by page (100 a page), at most
+    ``MAX_PAGES`` pages; a longer list is refused rather than read in part."""
+    runs: Dict[int, Run] = {}
+    total = 0
+    for page in range(1, MAX_PAGES + 1):
+        data = github.get(f"{path}&page={page}")
+        if not isinstance(data, dict) or not isinstance(
+            data.get("workflow_runs"), list
+        ):
+            raise EvidenceError(f"{workflow}: the runs list is malformed")
+        total = int(data.get("total_count") or 0)
+        for item in data["workflow_runs"]:
+            run = Run.of(workflow, item)
+            runs[run.id] = run
+        if len(runs) >= total or not data["workflow_runs"]:
+            break
+    if total > len(runs):
         raise EvidenceError(f"{workflow}: more than {len(runs)} runs; none is read")
-    return runs
+    return list(runs.values())
+
+
+def since(moment: datetime.datetime) -> str:
+    """The query term for runs created at or after *moment*."""
+    stamp = moment.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return "created=" + urllib.parse.quote(">=" + stamp, safe="")
 
 
 # ---------------------------------------------------------------------------
@@ -461,8 +504,16 @@ def target_problem(target: str, cases: Sequence[Case], short: str) -> Optional[s
     if not match:
         return f"{target}: not test:<path>[::<name>]"
     path, name = match.group("path"), match.group("name")
+    if JEST_FILE.fullmatch(path):
+        hits = [c for c in cases if c.classname == path]
+        if name is not None:
+            word = re.compile(r"(?<![\w$])" + re.escape(name) + r"(?![\w$])")
+            hits = [c for c in hits if word.search(c.name)]
+        return _outcome(target, hits, short)
     if not path.endswith(".py"):
-        return f"{target}: not a Python test; no suite at the RC reports it"
+        return f"{target}: no suite at the RC reports this test (Python and the frontend's jest do)"
+    if name is not None and not PYTHON_TARGET.fullmatch(name):
+        return f"{target}: not a function or Class::method name"
     module = path[: -len(".py")].replace("/", ".")
     if name is None:
         hits = [
@@ -486,12 +537,58 @@ def target_problem(target: str, cases: Sequence[Case], short: str) -> Optional[s
             for c in cases
         ):
             return f"{target}: skipped at {short} (its module skipped while collected)"
+    return _outcome(target, hits, short)
+
+
+def _outcome(target: str, hits: Sequence[Case], short: str) -> Optional[str]:
+    if not hits:
         return f"{target}: not in the suites' JUnit at {short}"
     if any(c.outcome == "failed" for c in hits):
         return f"{target}: failed at {short}"
     if any(c.outcome == "skipped" for c in hits):
         return f"{target}: skipped at {short}"
     return None
+
+
+def jest_junit(
+    report: pathlib.Path, out: pathlib.Path, root: pathlib.Path = ROOT
+) -> int:
+    """Jest's ``--json`` report written as JUnit; the number of test cases.
+
+    One case per test: its classname the test file's repository path, its name
+    the test's full name (the describe titles and its own). A failed test has a
+    failure; one that is pending, todo, skipped or disabled is skipped; a file
+    that did not run is one failed case.
+    """
+    data = json.loads(report.read_text(encoding="utf-8"))
+    suite = ET.Element("testsuite", name="jest")
+    count = 0
+    for result in data["testResults"]:
+        file = pathlib.Path(str(result["name"]))
+        try:
+            path = file.resolve().relative_to(root.resolve()).as_posix()
+        except ValueError:
+            path = file.as_posix()
+        tests = result.get("assertionResults") or []
+        if result.get("status") == "failed" and not tests:
+            case = ET.SubElement(
+                suite, "testcase", classname=path, name="(the file did not run)"
+            )
+            ET.SubElement(case, "failure", message="the test file did not run")
+            count += 1
+        for test in tests:
+            name = str(test.get("fullName") or test.get("title") or "")[:2000]
+            case = ET.SubElement(suite, "testcase", classname=path, name=name)
+            status = test.get("status")
+            if status == "failed":
+                ET.SubElement(case, "failure", message="failed")
+            elif status != "passed":
+                ET.SubElement(case, "skipped", message=str(status)[:40])
+            count += 1
+    top = ET.Element("testsuites")
+    top.append(suite)
+    ET.ElementTree(top).write(out, encoding="utf-8", xml_declaration=True)
+    return count
 
 
 # ---------------------------------------------------------------------------
@@ -637,6 +734,14 @@ class Verifier:
             obj = self.github.get(f"git/tags/{obj['sha']}")["object"]
         if obj.get("type") != "commit" or not SHA.fullmatch(str(obj.get("sha"))):
             raise EvidenceError(f"{self.tag} does not name a commit")
+        heads = self.github.get(f"git/matching-refs/heads/{self.tag}")
+        if not isinstance(heads, list):
+            raise EvidenceError("the list of branches is malformed")
+        if any(
+            isinstance(h, dict) and h.get("ref") == f"refs/heads/{self.tag}"
+            for h in heads
+        ):
+            raise EvidenceError(f"{self.tag} is also the name of a branch")
         self.sha = str(obj["sha"])
         self.short = self.sha[:12]
         commit = self.github.get(f"commits/{self.sha}")
@@ -731,6 +836,13 @@ class Verifier:
                 workflow.label, workflow.file, [f"cannot list its runs: {error}"]
             )
         runs.sort(key=lambda r: (r.created, r.id))
+        for run in runs:
+            if run.sha != self.sha:
+                problems.append(
+                    f"run {run.id} is at {run.sha[:12]}, not the RC {self.short}"
+                )
+                self._row(run, "not at the RC")
+        runs = [r for r in runs if r.sha == self.sha]
         if mine is not None:
             counted = next((r for r in runs if r.id == mine), None)
             if counted is None:
@@ -946,15 +1058,18 @@ class Verifier:
     # -- E7 --------------------------------------------------------------------
     def judge_staging(self, staging: pathlib.Path) -> Check:
         problems: List[str] = []
+        if self.commit_time is None:
+            return Check("E7", "staging", ["the RC commit's time is not known"])
         try:
             deploys = _runs(
                 self.github,
-                "actions/workflows/deploy.yml/runs?event=workflow_dispatch&per_page=100",
+                "actions/workflows/deploy.yml/runs?event=workflow_dispatch"
+                f"&{since(self.commit_time)}&per_page=100",
                 "deploy.yml",
             )
             synthetic = _runs(
                 self.github,
-                "actions/workflows/synthetic.yml/runs?per_page=100",
+                f"actions/workflows/synthetic.yml/runs?{since(self.commit_time)}&per_page=100",
                 "synthetic.yml",
             )
         except (GhError, EvidenceError) as error:
@@ -1181,18 +1296,39 @@ def run_suite(
     for invocation in SUITES[name]:
         env = dict(os.environ)
         env.update(dict(invocation.env))
-        command = [
-            sys.executable,
-            "-m",
-            "pytest",
-            *invocation.args,
-            *PYTEST,
-            f"--junitxml={junit_dir / invocation.report}",
-        ]
-        print(f"rc-evidence: suite {name}: {' '.join(command[1:])}", flush=True)
-        done = runner(command, cwd=str(ROOT), env=env, check=False)
+        report = junit_dir / invocation.report
+        raw = junit_dir / (report.stem + ".jest.json")
+        if invocation.runner == "jest":
+            command = [
+                "npx",
+                "jest",
+                "--watchAll=false",
+                "--json",
+                f"--outputFile={raw}",
+                *invocation.args,
+            ]
+            cwd = ROOT / "frontend"
+        else:
+            command = [
+                sys.executable,
+                "-m",
+                "pytest",
+                *invocation.args,
+                *PYTEST,
+                f"--junitxml={report}",
+            ]
+            cwd = ROOT
+        print(f"rc-evidence: suite {name}: {' '.join(command)}", flush=True)
+        done = runner(command, cwd=str(cwd), env=env, check=False)
         if done.returncode != 0:
             failed.append(f"{invocation.report} (exit {done.returncode})")
+        if invocation.runner == "jest":
+            try:
+                jest_junit(raw, report)
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                failed.append(
+                    f"{invocation.report}: no jest report ({type(error).__name__})"
+                )
     for item in failed:
         print(f"rc-evidence: suite {name}: {item}", flush=True)
     return 1 if failed else 0

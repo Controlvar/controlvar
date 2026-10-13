@@ -18,6 +18,7 @@ import json
 import pathlib
 import sys
 import tomllib
+import urllib.parse
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pytest
@@ -47,6 +48,9 @@ TARGET_FN = "test:backend/tests/unit/x/test_alpha.py::test_one"
 TARGET_PARAM = "test:backend/tests/unit/x/test_alpha.py::test_many"
 TARGET_METHOD = "test:backend/tests/unit/x/test_alpha.py::TestK::test_two"
 TARGET_FILE = "test:backend/tests/unit/x/test_beta.py"
+JEST_FN = "test:frontend/src/tests/alpha.test.tsx::renders the card"
+JEST_FILE = "test:frontend/src/tests/beta.test.tsx"
+TAG_OBJECT = "c3" * 20
 JOURNEYS = ("alpha-guide", "beta-guide")
 DEMO_JOURNEYS = ("demo-tour",)
 
@@ -102,6 +106,11 @@ def _junit(cases: List[Tuple[str, str, str]]) -> str:
     )
 
 
+JEST_CASES = [
+    ("frontend/src/tests/alpha.test.tsx", "Alpha renders the card", "passed"),
+    ("frontend/src/tests/alpha.test.tsx", "Alpha renders the cards list", "passed"),
+    ("frontend/src/tests/beta.test.tsx", "Beta loads", "passed"),
+]
 GOOD_CASES = [
     ("backend.tests.unit.x.test_alpha", "test_one", "passed"),
     ("backend.tests.unit.x.test_alpha", "test_many[a]", "passed"),
@@ -123,6 +132,8 @@ class World:
         self.ids: Dict[str, int] = {}
         self.api[f"git/ref/tags/{TAG}"] = {"object": {"type": "commit", "sha": RC}}
         self.api[f"commits/{RC}"] = {"commit": {"committer": {"date": COMMIT_TIME}}}
+        self.api[f"git/matching-refs/heads/{TAG}"] = []
+        self.runs_db: Dict[str, List[Dict[str, Any]]] = {}
         for number, workflow in zip(range(len(rc.WORKFLOWS)), rc.WORKFLOWS):
             run_id = 1000 + number
             self.ids[workflow.file] = run_id
@@ -155,6 +166,7 @@ class World:
             },
         }
         self.cases = list(GOOD_CASES)
+        self.jest_cases = list(JEST_CASES)
         self.suite_reports: Dict[str, Optional[str]] = {}
         self.root = tmp / "tree"
         (self.root / rc.JOURNEYS).mkdir(parents=True)
@@ -170,6 +182,8 @@ class World:
                 (TARGET_PARAM, "docs/a.md"),
                 (TARGET_METHOD, "docs/a.md"),
                 (TARGET_FILE, "docs/b.md"),
+                (JEST_FN, "docs/c.md"),
+                (JEST_FILE, "docs/c.md"),
             ],
             report=["documents in scope: 2"],
         )
@@ -177,20 +191,42 @@ class World:
         self.staging: Optional[pathlib.Path] = None
 
     # -- editing the world ------------------------------------------------------
-    def runs_path(self, workflow: str) -> str:
-        return f"actions/workflows/{workflow}/runs?head_sha={RC}&per_page=100"
-
     def set_runs(self, workflow: str, runs: List[Dict[str, Any]]) -> None:
-        self.api[self.runs_path(workflow)] = {
-            "total_count": len(runs),
-            "workflow_runs": runs,
-        }
+        self.runs_db[workflow] = runs
 
     def runs(self, workflow: str) -> List[Dict[str, Any]]:
-        return self.api[self.runs_path(workflow)]["workflow_runs"]
+        return self.runs_db[workflow]
 
     def add_run(self, workflow: str, run: Dict[str, Any]) -> None:
-        self.set_runs(workflow, self.runs(workflow) + [run])
+        self.runs_db.setdefault(workflow, []).append(run)
+
+    def list_runs(self, path: str) -> Dict[str, Any]:
+        """A workflow's runs as GitHub lists them: filtered by head_sha, event
+        and created (>=), newest first, per_page to a page. A run marked
+        "stray" is listed whatever head_sha asks: what the check of each run's
+        commit is there for."""
+        workflow = path.split("/")[2]
+        query = urllib.parse.parse_qs(path.split("?", 1)[1])
+        found = list(self.runs_db.get(workflow, []))
+        if "head_sha" in query:
+            found = [
+                r
+                for r in found
+                if r["head_sha"] == query["head_sha"][0] or r.get("stray")
+            ]
+        if "event" in query:
+            found = [r for r in found if r["event"] == query["event"][0]]
+        if "created" in query:
+            assert query["created"][0].startswith(">=")
+            moment = rc._time(query["created"][0][2:])
+            found = [r for r in found if rc._time(r["created_at"]) >= moment]
+        found.sort(key=lambda r: (r["created_at"], r["id"]), reverse=True)
+        size = int(query["per_page"][0])
+        page = int(query.get("page", ["1"])[0])
+        return {
+            "total_count": len(found),
+            "workflow_runs": found[(page - 1) * size : page * size],
+        }
 
     def set_jobs(self, run_id: int, jobs: List[Dict[str, Any]]) -> None:
         self.api[f"actions/runs/{run_id}/jobs?filter=latest&per_page=100"] = {
@@ -225,12 +261,7 @@ class World:
             created="2026-10-20T09:00:00Z",
             title="Deploy v0.29.0 (full) to staging",
         )
-        self.api[
-            "actions/workflows/deploy.yml/runs?event=workflow_dispatch&per_page=100"
-        ] = {
-            "total_count": 2,
-            "workflow_runs": [deploy, older],
-        }
+        self.set_runs("deploy.yml", [deploy, older])
         synthetic = [
             _run(
                 7100 + n,
@@ -253,10 +284,7 @@ class World:
                 created="2026-11-02T08:47:00Z",
             )
         )
-        self.api["actions/workflows/synthetic.yml/runs?per_page=100"] = {
-            "total_count": len(synthetic),
-            "workflow_runs": synthetic,
-        }
+        self.set_runs("synthetic.yml", synthetic)
         staging = self.tmp / "staging-private"
         staging.mkdir()
         (staging / "live-target-group.txt").write_text(
@@ -275,6 +303,8 @@ class World:
             prefix = f"repos/{rc.REPO}/"
             assert args[1].startswith(prefix)
             path = args[1][len(prefix) :]
+            if path.startswith("actions/workflows/") and "/runs?" in path:
+                return json.dumps(self.list_runs(path))
             if path not in self.api:
                 raise rc.GhError(f"gh api {path} failed (exit 1)")
             return json.dumps(self.api[path])
@@ -310,11 +340,12 @@ class World:
                 if text is not None:
                     files[invocation.report] = text
                 continue
-            cases = (
-                self.cases
-                if suite == "unit" and number == 0
-                else [(f"backend.tests.{suite}.test_{number}", "test_ok", "passed")]
-            )
+            if suite == rc.FRONTEND:
+                cases = self.jest_cases
+            elif suite == "unit" and number == 0:
+                cases = self.cases
+            else:
+                cases = [(f"backend.tests.{suite}.test_{number}", "test_ok", "passed")]
             files[invocation.report] = _junit(cases)
         return files
 
@@ -527,6 +558,54 @@ def test_a_run_with_no_jobs_fails(world):
     _fails(world, "has no jobs")
 
 
+def test_a_run_listed_at_another_commit_is_refused(world):
+    """QA E1's plant: the list is filtered by commit on GitHub's side, and each
+    run's own commit is checked here anyway."""
+    world.add_run(
+        "chart-kind.yml", dict(_run(950, "chart-kind.yml", sha=OLD), stray=True)
+    )
+    _fails(world, f"run 950 is at {OLD[:12]}, not the RC {RC[:12]}")
+
+
+def _annotated(world: World) -> None:
+    world.api[f"git/ref/tags/{TAG}"] = {"object": {"type": "tag", "sha": TAG_OBJECT}}
+    world.api[f"git/tags/{TAG_OBJECT}"] = {"object": {"type": "commit", "sha": RC}}
+
+
+def test_an_annotated_tag_is_followed_to_its_commit(world):
+    _annotated(world)
+    code, text = world.main()
+    assert code == 0, text
+    assert text.splitlines()[0] == f"# RC evidence: {TAG} ({RC[:12]})"
+
+
+def test_a_run_at_the_tag_object_and_not_its_commit_is_refused(world):
+    _annotated(world)
+    run = world.counted("docs.yml")
+    run["head_sha"], run["stray"] = TAG_OBJECT, True
+    _fails(
+        world,
+        f"is at {TAG_OBJECT[:12]}, not the RC",
+        f"no workflow_dispatch run at {TAG}",
+    )
+
+
+def test_a_tag_that_is_also_a_branch_name_is_refused(world):
+    world.api[f"git/matching-refs/heads/{TAG}"] = [{"ref": f"refs/heads/{TAG}"}]
+    _fails(world, f"{TAG} is also the name of a branch")
+
+
+def test_a_branch_that_only_starts_with_the_tag_is_another_name(world):
+    world.api[f"git/matching-refs/heads/{TAG}"] = [{"ref": f"refs/heads/{TAG}-notes"}]
+    code, text = world.main()
+    assert code == 0, text
+
+
+def test_an_unreadable_branch_list_fails(world):
+    del world.api[f"git/matching-refs/heads/{TAG}"]
+    _fails(world, f"cannot resolve {TAG}")
+
+
 # ---------------------------------------------------------------------------
 # PE 12: every run at the commit is listed; a FAIL then a PASS needs a reason
 # ---------------------------------------------------------------------------
@@ -703,11 +782,76 @@ def test_a_target_whose_module_skipped_at_collection_fails(world):
     )
 
 
-def test_a_target_that_is_not_python_fails(world):
+def test_a_target_no_suite_reports_fails(world):
     world.registry.targets.append(
-        ("test:frontend/src/tests/a.test.tsx::renders", "docs/c.md")
+        ("test:sdk/js/src/client.test.ts::evaluates", "docs/c.md")
     )
-    _fails(world, "not a Python test; no suite at the RC reports it")
+    _fails(world, "no suite at the RC reports this test")
+
+
+@pytest.mark.parametrize("outcome", ["skipped", "failed"])
+def test_a_jest_target_that_did_not_pass_fails(world, outcome):
+    path, name, _ = world.jest_cases[0]
+    world.jest_cases[0] = (path, name, outcome)
+    _fails(world, f"{JEST_FN}: {outcome} at {RC[:12]}")
+
+
+def test_a_jest_name_is_matched_only_as_a_whole_word(world):
+    """'renders the card' is not held by 'renders the cards list' alone."""
+    world.jest_cases = [c for c in world.jest_cases if c[1] != "Alpha renders the card"]
+    _fails(world, f"{JEST_FN}: not in the suites' JUnit at {RC[:12]}")
+
+
+def test_a_jest_file_target_with_a_skipped_test_fails(world):
+    world.jest_cases.append(
+        ("frontend/src/tests/beta.test.tsx", "Beta later", "skipped")
+    )
+    _fails(world, f"{JEST_FILE}: skipped at {RC[:12]}")
+
+
+def test_a_missing_frontend_report_fails(world):
+    world.suite_reports["frontend.xml"] = None
+    _fails(world, "suite frontend: no readable JUnit report frontend.xml")
+
+
+def test_jest_json_is_written_as_junit(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    report = tmp_path / "jest.json"
+    alpha = str(root / "frontend/src/tests/alpha.test.tsx")
+    report.write_text(
+        json.dumps(
+            {
+                "testResults": [
+                    {
+                        "name": alpha,
+                        "status": "failed",
+                        "assertionResults": [
+                            {"fullName": "Alpha renders the card", "status": "passed"},
+                            {"fullName": "Alpha later", "status": "todo"},
+                            {"fullName": "Alpha broken", "status": "failed"},
+                        ],
+                    },
+                    {
+                        "name": str(root / "frontend/src/tests/gone.test.tsx"),
+                        "status": "failed",
+                        "assertionResults": [],
+                    },
+                ]
+            }
+        )
+    )
+    out = tmp_path / "frontend.xml"
+    assert rc.jest_junit(report, out, root) == 4
+    cases = rc.read_junit(out)
+    assert [(c.classname, c.name, c.outcome) for c in cases] == [
+        ("frontend/src/tests/alpha.test.tsx", "Alpha renders the card", "passed"),
+        ("frontend/src/tests/alpha.test.tsx", "Alpha later", "skipped"),
+        ("frontend/src/tests/alpha.test.tsx", "Alpha broken", "failed"),
+        ("frontend/src/tests/gone.test.tsx", "(the file did not run)", "failed"),
+    ]
+    assert rc.target_problem(JEST_FN, cases, "x") is None
+    assert rc.target_problem("test:frontend/src/tests/alpha.test.tsx", cases, "x")
 
 
 def test_a_suite_without_its_report_fails(world):
@@ -799,6 +943,51 @@ def test_a_green_staging_deploy_passes(world):
     assert "api_live_target_group" not in text  # the private files are read, not copied
 
 
+def _synthetic(run_id: int, created: str) -> Dict[str, Any]:
+    return _run(
+        run_id, "synthetic.yml", event="schedule", ref="main", sha=OLD, created=created
+    )
+
+
+def test_a_synthetic_history_of_more_than_100_runs_passes(world):
+    """The lists start at the RC commit's time, so the runs before it are not
+    read: a workflow's whole history passing 100 runs does not fail E7."""
+    world.with_staging()
+    for n in range(150):
+        created = f"2026-10-{1 + n % 28:02d}T0{n % 10}:17:00Z"
+        world.add_run("synthetic.yml", _synthetic(5000 + n, created))
+    assert len(world.runs("synthetic.yml")) > 100
+    code, text = world.main()
+    assert code == 0, text
+    bound = "created=" + urllib.parse.quote(">=" + COMMIT_TIME, safe="")
+    lists = [
+        c[1]
+        for c in world.calls
+        if c[0] == "api" and "/runs?" in c[1] and "head_sha" not in c[1]
+    ]
+    assert lists and all(bound in path for path in lists), lists
+
+
+def test_more_than_a_page_after_the_commit_is_read_page_by_page(world):
+    world.with_staging()
+    for n in range(120):
+        created = f"2026-11-03T{n // 6:02d}:{(n % 6) * 10:02d}:00Z"
+        world.add_run("synthetic.yml", _synthetic(8000 + n, created))
+    code, text = world.main()
+    assert code == 0, text
+    pages = [c for c in world.calls if c[0] == "api" and "synthetic.yml/runs" in c[1]]
+    assert [c[1].rsplit("&page=", 1)[1] for c in pages] == ["1", "2"]
+
+
+def test_a_list_longer_than_the_pages_read_is_refused(world, monkeypatch):
+    monkeypatch.setattr(rc, "MAX_PAGES", 1)
+    world.with_staging()
+    for n in range(120):
+        created = f"2026-11-03T{n // 6:02d}:{(n % 6) * 10:02d}:00Z"
+        world.add_run("synthetic.yml", _synthetic(8000 + n, created))
+    _fails(world, "synthetic.yml: more than 100 runs; none is read")
+
+
 def test_a_live_image_of_the_previous_release_fails(world):
     world.with_staging()
     (world.staging / "live-image-version.txt").write_text("0.29.0\n")
@@ -807,30 +996,25 @@ def test_a_live_image_of_the_previous_release_fails(world):
 
 def test_no_deploy_of_the_tag_fails(world):
     world.with_staging()
-    path = "actions/workflows/deploy.yml/runs?event=workflow_dispatch&per_page=100"
-    world.api[path]["workflow_runs"] = world.api[path]["workflow_runs"][1:]
-    world.api[path]["total_count"] = 1
+    world.set_runs("deploy.yml", world.runs("deploy.yml")[1:])
     _fails(world, f"no Deploy run of {TAG} to staging")
 
 
 def test_a_failed_deploy_fails(world):
     world.with_staging()
-    path = "actions/workflows/deploy.yml/runs?event=workflow_dispatch&per_page=100"
-    world.api[path]["workflow_runs"][0]["conclusion"] = "failure"
+    world.runs("deploy.yml")[0]["conclusion"] = "failure"
     _fails(world, "Deploy run 7000 concluded failure")
 
 
 def test_too_few_green_synthetic_runs_fail(world):
     world.with_staging()
-    path = "actions/workflows/synthetic.yml/runs?per_page=100"
-    world.api[path]["workflow_runs"][2]["conclusion"] = "skipped"
+    world.runs("synthetic.yml")[2]["conclusion"] = "skipped"
     _fails(world, "2 green Synthetic check runs after the deploy; at least 3")
 
 
 def test_a_failed_synthetic_run_after_the_deploy_needs_a_disposition(world):
     world.with_staging()
-    path = "actions/workflows/synthetic.yml/runs?per_page=100"
-    world.api[path]["workflow_runs"].append(
+    world.runs("synthetic.yml").append(
         _run(
             7200,
             "synthetic.yml",
@@ -888,6 +1072,50 @@ def test_a_suite_runs_every_session_and_fails_if_any_did(tmp_path, monkeypatch):
         for key, value in invocation.env:
             assert env[key] == value
     assert rc.run_suite("smoke", tmp_path, runner=lambda c, **k: Done(0)) == 0
+
+
+def test_the_frontend_suite_runs_jest_and_writes_its_report_as_junit(tmp_path):
+    seen: Dict[str, Any] = {}
+
+    class Done:
+        returncode = 0
+
+    def runner(command, cwd, env, check):
+        seen["command"], seen["cwd"] = command, cwd
+        out = next(a for a in command if a.startswith("--outputFile=")).split("=", 1)[1]
+        beta = str(rc.ROOT / "frontend/src/tests/beta.test.tsx")
+        pathlib.Path(out).write_text(
+            json.dumps(
+                {
+                    "testResults": [
+                        {
+                            "name": beta,
+                            "status": "passed",
+                            "assertionResults": [
+                                {"fullName": "Beta loads", "status": "passed"}
+                            ],
+                        }
+                    ]
+                }
+            )
+        )
+        return Done()
+
+    assert rc.run_suite(rc.FRONTEND, tmp_path, runner=runner) == 0
+    assert seen["cwd"] == str(rc.ROOT / "frontend")
+    assert seen["command"][:3] == ["npx", "jest", "--watchAll=false"]
+    assert "--passWithNoTests" not in seen["command"]
+    cases = rc.read_junit(tmp_path / "frontend.xml")
+    assert [(c.classname, c.outcome) for c in cases] == [
+        ("frontend/src/tests/beta.test.tsx", "passed")
+    ]
+
+
+def test_a_frontend_suite_that_wrote_no_report_fails(tmp_path):
+    class Done:
+        returncode = 0
+
+    assert rc.run_suite(rc.FRONTEND, tmp_path, runner=lambda c, **k: Done()) == 1
 
 
 def test_the_suites_report_names_are_unique():

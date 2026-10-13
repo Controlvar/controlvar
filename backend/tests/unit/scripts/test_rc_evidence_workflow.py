@@ -11,7 +11,8 @@ Pinned, because the verifier's PASS is only as good as these:
   (``actions: write`` would let a job dispatch or re-run the runs it judges);
 * every job starts by refusing a ref that is not a ``vX.Y.Z`` tag, as a step
   that fails, so a dispatch elsewhere is red, never skipped;
-* the matrix is ``SUITES``, each leg runs ``--suite`` and uploads its reports
+* the python-suites matrix is ``SUITES`` but the frontend, which is a job of
+  its own (jest, its report written as JUnit); each runs ``--suite`` and uploads its reports
   as the artifact the verifier downloads, for 90 days; the verify job runs
   after every leg (``always()``), reads them, never ``--staging``, and keeps
   its record for 90 days;
@@ -70,6 +71,7 @@ VERIFY_RUN = (
 )
 JOB_PERMISSIONS = {
     "python-suites": {"contents": "read"},
+    "frontend-suite": {"contents": "read"},
     "verify": {"contents": "read", "actions": "read"},
 }
 
@@ -129,6 +131,9 @@ def test_the_token_reads_and_nothing_writes(doc):
         lambda d: d["permissions"].update({"actions": "write"}),
         lambda d: d.update({"permissions": "write-all"}),
         lambda d: d["jobs"]["python-suites"]["permissions"].update({"actions": "read"}),
+        lambda d: d["jobs"]["frontend-suite"]["permissions"].update(
+            {"actions": "write"}
+        ),
         lambda d: d["jobs"]["verify"].pop("permissions"),
         lambda d: d["jobs"].update({"extra": {"permissions": {"actions": "write"}}}),
     ],
@@ -138,6 +143,7 @@ def test_the_token_reads_and_nothing_writes(doc):
         "actions-write-at-the-top",
         "write-all",
         "actions-read-on-an-installing-job",
+        "actions-write-on-the-frontend-job",
         "verify-inherits",
         "a-new-job-with-actions-write",
     ],
@@ -157,6 +163,7 @@ def test_every_job_fails_first_on_a_ref_that_is_not_a_release_tag(doc):
         lines = [line.strip() for line in first["run"].splitlines()]
         assert TAG_LINE in lines and "exit 1" in lines, name
     assert "if" not in doc["jobs"]["python-suites"]
+    assert "if" not in doc["jobs"]["frontend-suite"]
     assert doc["jobs"]["verify"]["if"] == "always()"
 
 
@@ -164,7 +171,10 @@ def test_the_matrix_is_the_scripts_suites(doc):
     job = doc["jobs"]["python-suites"]
     assert job["name"] == rc.SUITE_JOB.format("${{ matrix.suite }}")
     include = job["strategy"]["matrix"]["include"]
-    assert [leg["suite"] for leg in include] == list(rc.SUITES)
+    assert [leg["suite"] for leg in include] == [
+        s for s in rc.SUITES if s != rc.FRONTEND
+    ]
+    assert all(i.runner == "pytest" for leg in include for i in rc.SUITES[leg["suite"]])
     for leg in include:
         expected = (
             "experimentation_test"
@@ -188,10 +198,31 @@ def test_the_matrix_is_the_scripts_suites(doc):
     assert upload["if"] == "always()"
 
 
+def test_the_frontend_job_runs_its_jest_suite_and_keeps_the_report(doc):
+    job = doc["jobs"]["frontend-suite"]
+    assert job["name"] == rc.suite_job(rc.FRONTEND) == rc.FRONTEND_JOB
+    assert [i.runner for i in rc.SUITES[rc.FRONTEND]] == ["jest"]
+    steps = job["steps"]
+    assert any(s.get("run") == "cd frontend && npm ci" for s in steps)
+    node = next(
+        s for s in steps if str(s.get("uses", "")).startswith("actions/setup-node")
+    )
+    assert node["with"] == {"node-version-file": ".nvmrc"}
+    run = next(s for s in steps if s.get("name") == "Run the suite")
+    assert run["run"].strip() == SUITE_RUN
+    assert run["env"] == {"SUITE": rc.FRONTEND}
+    upload = next(
+        s for s in steps if s.get("uses", "").startswith("actions/upload-artifact")
+    )
+    assert upload["with"]["name"] == rc.JUNIT_ARTIFACT.format(rc.FRONTEND)
+    assert upload["with"]["retention-days"] == 90
+    assert upload["if"] == "always()"
+
+
 def test_the_verify_job_reads_every_leg_and_keeps_its_record(doc):
     job = doc["jobs"]["verify"]
     assert job["name"] == rc.VERIFY_JOB
-    assert job["needs"] == "python-suites"
+    assert job["needs"] == ["python-suites", "frontend-suite"]
     steps = job["steps"]
     download = next(
         s for s in steps if s.get("uses", "").startswith("actions/download-artifact")
@@ -261,7 +292,7 @@ def test_the_required_and_skippable_jobs_are_names_in_their_workflows():
             assert "${{ matrix.sdk }}" in present
             present |= set(rc.SDK_JOBS[:12])
         if workflow == "rc-evidence.yml":
-            present |= {rc.SUITE_JOB.format(s) for s in rc.SUITES}
+            present |= {rc.SUITE_JOB.format(s) for s in rc.SUITES if s != rc.FRONTEND}
         assert set(names) <= present, (workflow, set(names) - present)
     for workflow, name in rc.ALLOWED_SKIPS:
         assert name in _job_names(workflow), (workflow, name)
