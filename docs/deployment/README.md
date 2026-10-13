@@ -53,16 +53,16 @@ checklist in [the deployment guide](deployment-guide.md#1-before-the-first-deplo
    serving before -- and hands you one rollback line that covers both.
 
 > **What has run against a real AWS account.** Deploy has run to success on a
-> staging account, most recently v0.31.0 on 2026-10-13
+> staging account, most recently v0.31.0 on 2026-10-13 (UTC)
 > ([run](https://github.com/getexperimently/experimently/actions/runs/38423251771)).
-> On 2026-10-04 and on 2026-10-11 the Rollback workflow ran there end to end,
+> On 2026-10-04 (UTC) and on 2026-10-11 (UTC) the Rollback workflow ran there end to end,
 > putting the API and the dashboard back on the previous release
 > ([run](https://github.com/getexperimently/experimently/actions/runs/37217043185),
 > [run](https://github.com/getexperimently/experimently/actions/runs/38098724258)).
-> On 2026-10-11 a 5xx alarm forced into ALARM in the hour after a deploy's
+> On 2026-10-11 (UTC) a 5xx alarm forced into ALARM in the hour after a deploy's
 > traffic shift stopped the deployment there, and CodeDeploy moved the API back
 > to the previous revision by itself
-> ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_1), [#148](https://github.com/getexperimently/experimently/issues/148)).
+> ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595), [#148](https://github.com/getexperimently/experimently/issues/148)).
 
 **How the traffic moves.** The deploy creates a CodeDeploy blue/green
 deployment. When CodeDeploy reports it `Ready`, the deploy checks that every

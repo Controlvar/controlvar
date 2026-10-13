@@ -120,19 +120,19 @@ text = "What has run against a real AWS account."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Deploy has run to success on a staging account, most recently v0.31.0 on 2026-10-13 (run)."
+text = "Deploy has run to success on a staging account, most recently v0.31.0 on 2026-10-13 (UTC) (run)."
 by = ["evidence:https://github.com/getexperimently/experimently/actions/runs/38423251771"]
 
 [[unit]]
-text = "On 2026-10-04 and on 2026-10-11 the Rollback workflow ran there end to end, putting the API and the dashboard back on the previous release (run, run)."
+text = "On 2026-10-04 (UTC) and on 2026-10-11 (UTC) the Rollback workflow ran there end to end, putting the API and the dashboard back on the previous release (run, run)."
 by = [
     "evidence:https://github.com/getexperimently/experimently/actions/runs/37217043185",
     "evidence:https://github.com/getexperimently/experimently/actions/runs/38098724258",
 ]
 
 [[unit]]
-text = "On 2026-10-11 a 5xx alarm forced into ALARM in the hour after a deploy's traffic shift stopped the deployment there, and CodeDeploy moved the API back to the previous revision by itself (#295, #148)."
-by = ["evidence:ISSUE295_COMMENT_1"]
+text = "On 2026-10-11 (UTC) a 5xx alarm forced into ALARM in the hour after a deploy's traffic shift stopped the deployment there, and CodeDeploy moved the API back to the previous revision by itself (#295, #148)."
+by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595"]
 
 [[unit]]
 text = "How the traffic moves."

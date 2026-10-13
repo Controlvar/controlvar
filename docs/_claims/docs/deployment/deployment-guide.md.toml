@@ -548,8 +548,8 @@ text = "Do the same once in the hour after a shift."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The state set by hand lasts until the alarm's next evaluation, about a minute:"
-by = ["exempt:third-party"]
+text = "The state set by hand lasts until the alarm's next evaluation; on staging on 2026-10-11 (UTC) the alarm was back to OK within two minutes (#295):"
+by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595"]
 
 [[unit]]
 text = "Tear down, and compare what is left with what cdk destroy leaves behind."
@@ -576,24 +576,24 @@ text = "What has run on staging:"
 by = ["exempt:label"]
 
 [[unit]]
-text = "On 2026-10-02, tag A deployed (run), and tag B, dispatched inside the hour after A's shift, was refused before it changed anything (run)."
+text = "On 2026-10-02 (UTC), tag A deployed (run), and tag B, dispatched inside the hour after A's shift, was refused before it changed anything (run)."
 by = [
     "evidence:https://github.com/getexperimently/experimently/actions/runs/37070072132",
     "evidence:https://github.com/getexperimently/experimently/actions/runs/37074588665",
 ]
 
 [[unit]]
-text = "On 2026-10-04, v0.18.0 deployed and the Rollback workflow put the API and the dashboard back on the previous release (run, run)."
+text = "On 2026-10-04 (UTC), v0.18.0 deployed and the Rollback workflow put the API and the dashboard back on the previous release (run, run)."
 by = [
     "evidence:https://github.com/getexperimently/experimently/actions/runs/37213010211",
     "evidence:https://github.com/getexperimently/experimently/actions/runs/37217043185",
 ]
 
 [[unit]]
-text = "On 2026-10-11, the Rollback workflow did it again (run), and a 5xx alarm forced into ALARM in the hour after a deploy's shift stopped that deployment, and CodeDeploy moved the API back by itself while the dashboard stayed on the new release (#295)."
+text = "On 2026-10-11 (UTC), the Rollback workflow did it again (run), and a 5xx alarm forced into ALARM in the hour after a deploy's shift stopped that deployment, and CodeDeploy moved the API back by itself while the dashboard stayed on the new release (#295)."
 by = [
     "evidence:https://github.com/getexperimently/experimently/actions/runs/38098724258",
-    "evidence:ISSUE295_COMMENT_1",
+    "evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595",
 ]
 
 [[unit]]
@@ -605,7 +605,7 @@ text = "What has run against a real AWS account."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Deploy has run to success on a staging account, most recently v0.31.0 on 2026-10-13 (run), and the Rollback workflow has run there end to end (section 2)."
+text = "Deploy has run to success on a staging account, most recently v0.31.0 on 2026-10-13 (UTC) (run), and the Rollback workflow has run there end to end (section 2)."
 by = [
     "evidence:https://github.com/getexperimently/experimently/actions/runs/38423251771",
     "evidence:https://github.com/getexperimently/experimently/actions/runs/37217043185",
@@ -806,10 +806,10 @@ text = "While either is in ALARM, CodeDeploy stops the deployment and rolls the 
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "On 2026-10-03 an alarm stopped a deployment on staging and CodeDeploy reverted the API with no workflow involved (#295), and on 2026-10-11 an alarm forced in the hour after the shift did the same (#295)."
+text = "On 2026-10-03 (UTC) an alarm stopped a deployment on staging and CodeDeploy reverted the API with no workflow involved (#295), and on 2026-10-11 (UTC) an alarm forced in the hour after the shift did the same (#295)."
 by = [
     "evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-5971647359",
-    "evidence:ISSUE295_COMMENT_1",
+    "evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595",
 ]
 
 [[unit]]
@@ -915,8 +915,8 @@ text = "Rollback's all-at-once --deployment-config-name changes how traffic move
 by = ["untested:T"]
 
 [[unit]]
-text = "On staging on 2026-10-11, the Rollback run's deployment stayed active for about an hour after its traffic shift (#295)."
-by = ["evidence:ISSUE295_COMMENT_1"]
+text = "On staging on 2026-10-11 (UTC), the Rollback run's deployment stayed active for about an hour after its traffic shift (#295)."
+by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595"]
 
 [[unit]]
 text = "One deploy or manual migration per environment at a time."

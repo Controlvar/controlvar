@@ -697,7 +697,7 @@ def test_the_restore_path_is_the_script_and_says_what_it_cannot_do():
     `cutover` together."""
     scenario = _dr_section("Scenario 4: Full Aurora Database Cluster Failure")
     flat = " ".join(scenario.split())
-    assert "**Rehearsed on a staging account on 2026-10-11**" in flat
+    assert "**Rehearsed on a staging account on 2026-10-11 (UTC)**" in flat
     assert "not yet rehearsed" not in flat
     assert "**A cluster in status `failed` has no decided path.**" in flat
     assert "Prod's `readers` step has run only against the fake AWS" in flat

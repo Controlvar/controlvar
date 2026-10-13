@@ -223,8 +223,8 @@ If the failover has not completed within 5 minutes, or no instance is available:
 ## Scenario 4: Full Aurora Database Cluster Failure
 
 **Detection:** `aws rds describe-db-clusters` returns status `failed`, and every database call in the application logs fails.
-**RTO:** in the staging rehearsal on 2026-10-11, on a database holding little data, the restore
-took 11 min 41 s and the cutover took the API down for 12 min 45 s ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_2)). A larger
+**RTO:** in the staging rehearsal on 2026-10-11 (UTC), on a database holding little data, the restore
+took 11 min 41 s and the cutover took the API down for 12 min 45 s ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)). A larger
 database restores more slowly.
 **RPO:** 5 minutes (PITR), and only within the backup retention period (35 days in prod and
 staging, 1 elsewhere; see Backup Strategy). Beyond that, the
@@ -257,8 +257,8 @@ aws rds describe-db-cluster-snapshots \
 
 ### Restore from PITR (preferred)
 
-**Rehearsed on a staging account on 2026-10-11** ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_2)): `read`, `restore`, `cutover`,
-and the cutover undone with `rollback`. Prod's `readers` step has run only against the fake
+**Rehearsed on a staging account on 2026-10-11 (UTC)** ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)): `read`, `restore`, `cutover`,
+and the cutover undone with `rollback`; `readers`, `keep` and `start-api` were not run. Prod's `readers` step has run only against the fake
 AWS in the test suite (`backend/tests/unit/infrastructure/test_restore_repoint.py`), on a
 two-instance cluster: staging runs one instance.
 
@@ -321,7 +321,7 @@ It must equal the migration heads of the release the API runs. If it does not, t
 ([Rollback Runbook](rollback-runbook.md)).
 
 Step 4: Point the stack's names at the restored cluster. **The API is down from the start of this step to its end: 12 min 45 s in the
-staging rehearsal on 2026-10-11, on a database holding little data ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_2)).**
+staging rehearsal on 2026-10-11 (UTC), on a database holding little data ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)).**
 
 ```bash
 scripts/restore_repoint.sh cutover "$EVID"
@@ -335,8 +335,8 @@ what it was, and starts the API only after two probes in a row, from the API tas
 reached the marked database through that endpoint. The API gets back the task count and scaling
 Step 1 recorded.
 
-During the cutover of the staging rehearsal on 2026-10-11, `/health` answered 503 for 11 min
-40 s ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_2)). The composite alarm `experimentation-api-no-healthy-task-$ENV` is expected
+During the cutover of the staging rehearsal on 2026-10-11 (UTC), `/health` answered 503 for 11 min
+40 s ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)). The composite alarm `experimentation-api-no-healthy-task-$ENV` is expected
 to email `ALARM_EMAIL` after about three minutes, then clear; that has not been rehearsed on AWS
 as of v0.31.1. A green `/health` afterwards does not show which cluster answered, because it runs
 `SELECT 1`; the probes do. Writes made to the original between the restore time and the cutover
@@ -363,7 +363,7 @@ Before the cutover the restored cluster is not watched by `AuroraHighCPU-$ENV` e
 reads the cluster identifier from the database stack's parameter
 `/experimentation/$ENV/database/aurora-cluster-identifier`, which names the stack's own cluster.
 The cutover gives the restored cluster that identifier, so from then on the alarm watches it with
-no redeploy, as it did in the staging rehearsal on 2026-10-11 ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_2)). The original, once
+no redeploy, as it did in the staging rehearsal on 2026-10-11 (UTC) ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)). The original, once
 renamed, is watched by no alarm.
 
 #### Undo a cutover
@@ -550,7 +550,7 @@ period (35 days in prod and staging, 1 elsewhere). After that, the newest manual
 ### Response
 
 The restore is the one in [Restore from PITR](#restore-from-pitr-preferred) (Scenario 4),
-rehearsed on a staging account on 2026-10-11, with the API stopped from the start so that nothing more is written to the
+rehearsed on a staging account on 2026-10-11 (UTC), with the API stopped from the start so that nothing more is written to the
 damaged data. The outage therefore lasts from Step 2 until the cutover ends, restore included.
 
 Step 1: Record the environment while the API still runs. `read` records the API's task count and

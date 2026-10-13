@@ -368,8 +368,8 @@ text = "Detection: aws rds describe-db-clusters returns status failed, and every
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "RTO: in the staging rehearsal on 2026-10-11, on a database holding little data, the restore took 11 min 41 s and the cutover took the API down for 12 min 45 s (#295)."
-by = ["evidence:ISSUE295_COMMENT_2"]
+text = "RTO: in the staging rehearsal on 2026-10-11 (UTC), on a database holding little data, the restore took 11 min 41 s and the cutover took the API down for 12 min 45 s (#295)."
+by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822"]
 
 [[unit]]
 text = "A larger database restores more slowly."
@@ -416,8 +416,8 @@ text = "Restore from PITR (preferred)"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Rehearsed on a staging account on 2026-10-11 (#295): read, restore, cutover, and the cutover undone with rollback."
-by = ["evidence:ISSUE295_COMMENT_2"]
+text = "Rehearsed on a staging account on 2026-10-11 (UTC) (#295): read, restore, cutover, and the cutover undone with rollback; readers, keep and start-api were not run."
+by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822"]
 
 [[unit]]
 text = "Prod's readers step has run only against the fake AWS in the test suite (backend/tests/unit/infrastructure/test_restore_repoint.py), on a two-instance cluster: staging runs one instance."
@@ -528,8 +528,8 @@ text = "Step 4: Point the stack's names at the restored cluster."
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "The API is down from the start of this step to its end: 12 min 45 s in the staging rehearsal on 2026-10-11, on a database holding little data (#295)."
-by = ["evidence:ISSUE295_COMMENT_2"]
+text = "The API is down from the start of this step to its end: 12 min 45 s in the staging rehearsal on 2026-10-11 (UTC), on a database holding little data (#295)."
+by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822"]
 
 [[unit]]
 text = "cutover asks you to type the cluster identifier it shows, and refuses input from a pipe or a here-document, so run it on its own line."
@@ -548,8 +548,8 @@ text = "The API gets back the task count and scaling Step 1 recorded."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "During the cutover of the staging rehearsal on 2026-10-11, /health answered 503 for 11 min 40 s (#295)."
-by = ["evidence:ISSUE295_COMMENT_2"]
+text = "During the cutover of the staging rehearsal on 2026-10-11 (UTC), /health answered 503 for 11 min 40 s (#295)."
+by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822"]
 
 [[unit]]
 text = "The composite alarm experimentation-api-no-healthy-task-$ENV is expected to email ALARM_EMAIL after about three minutes, then clear; that has not been rehearsed on AWS as of v0.31.1."
@@ -592,8 +592,8 @@ text = "The alarm reads the cluster identifier from the database stack's paramet
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The cutover gives the restored cluster that identifier, so from then on the alarm watches it with no redeploy, as it did in the staging rehearsal on 2026-10-11 (#295)."
-by = ["evidence:ISSUE295_COMMENT_2"]
+text = "The cutover gives the restored cluster that identifier, so from then on the alarm watches it with no redeploy, as it did in the staging rehearsal on 2026-10-11 (UTC) (#295)."
+by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822"]
 
 [[unit]]
 text = "The original, once renamed, is watched by no alarm."
@@ -864,8 +864,8 @@ text = "After that, the newest manual snapshot is the recovery point."
 by = ["exempt:third-party"]
 
 [[unit]]
-text = "The restore is the one in Restore from PITR (Scenario 4), rehearsed on a staging account on 2026-10-11, with the API stopped from the start so that nothing more is written to the damaged data."
-by = ["evidence:ISSUE295_COMMENT_2"]
+text = "The restore is the one in Restore from PITR (Scenario 4), rehearsed on a staging account on 2026-10-11 (UTC), with the API stopped from the start so that nothing more is written to the damaged data."
+by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822"]
 
 [[unit]]
 text = "The outage therefore lasts from Step 2 until the cutover ends, restore included."

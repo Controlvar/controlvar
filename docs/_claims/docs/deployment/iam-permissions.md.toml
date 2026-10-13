@@ -108,7 +108,7 @@ text = "That is GitHub's immutable subject: the owner and the repository by name
 by = ["exempt:third-party"]
 
 [[unit]]
-text = "On 2026-10-02 a job of this repository bound to the staging environment received repo:getexperimently@328439352/experimently@1367480368:environment:staging (run)."
+text = "On 2026-10-02 (UTC) a job of this repository bound to the staging environment received repo:getexperimently@328439352/experimently@1367480368:environment:staging (run)."
 by = ["evidence:https://github.com/getexperimently/experimently/actions/runs/36972395116"]
 
 [[unit]]
@@ -340,7 +340,7 @@ text = "This is how the first staging deploy stopped."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "codedeploy:GetApplicationRevision (#754) was added after the staging rollback rehearsal on 2026-10-03, where its absence stopped Rollback (#295)."
+text = "codedeploy:GetApplicationRevision (#754) was added after the staging rollback rehearsal on 2026-10-03 (UTC), where its absence stopped Rollback (#295)."
 by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-5963917501"]
 
 [[unit]]

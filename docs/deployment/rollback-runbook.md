@@ -1,7 +1,7 @@
 # Rollback Runbook — Experimently
 
 **Audience:** On-call Engineers
-**Measured:** on 2026-10-11, on a staging account, the Rollback job took 5 min
+**Measured:** on 2026-10-11 (UTC), on a staging account, the Rollback job took 5 min
 56 s once approved: the API was verified on the previous revision after 3 min
 27 s, and the dashboard 2 min 27 s later
 ([run](https://github.com/getexperimently/experimently/actions/runs/38098724258)).
@@ -549,9 +549,9 @@ previous revision by itself: see
 [An alarm rolled the API back](#an-alarm-rolled-the-api-back). A minute counts
 against the API when its target group answers at least 5 target 5xx and at
 least 5% of its requests with a 5xx; two such minutes of three fire the alarm.
-On a staging account an alarm stopped a deployment this way on 2026-10-03
+On a staging account an alarm stopped a deployment this way on 2026-10-03 (UTC)
 ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5971647359)),
-and on 2026-10-11 in the hour after the traffic shift ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_1)).
+and on 2026-10-11 (UTC) in the hour after the traffic shift ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)).
 
 What the alarms do not cover, so **Method 1 is the response**:
 
@@ -568,9 +568,9 @@ active. To ship a fix, run Rollback first (Method 1), then deploy the fix.
 Rollback's own deployment is then the active one, and the next forward deploy
 is refused until it is no longer active: about an hour, because the deployment
 group's 60-minute termination wait applies to every deployment in the group,
-Rollback's included. On a staging account on 2026-10-11, the Rollback run's
+Rollback's included. On a staging account on 2026-10-11 (UTC), the Rollback run's
 deployment stayed active for about an hour after its traffic shift
-([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_1)).
+([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)).
 
 **When CodeDeploy does roll back by itself:**
 - one of the two 5xx alarms is in ALARM while the deployment is active (above);
@@ -712,7 +712,9 @@ ALARM is printed as a warning instead, and the deploy goes on unwatched.
 
 `aws cloudwatch disable-alarm-actions` and `aws cloudwatch set-alarm-state` do
 not unblock a deploy. CodeDeploy reads the alarms' state, not their actions,
-and a state set by hand lasts only until the next evaluation, about a minute.
+and a state set by hand lasts only until the next evaluation: on staging on
+2026-10-11 (UTC) the alarm was back to OK within two minutes
+([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)).
 This is expected, not yet verified: the first staging rehearsal checks it.
 
 To see which alarm is firing, and since when:
@@ -828,8 +830,8 @@ decided way to point the application at it is `scripts/restore_repoint.sh`: it
 renames the restored cluster onto the stack's identifier and the original out
 of it, so the endpoint the tasks carry reaches the restored database with
 nothing redeployed, and it checks the password and the endpoint before the API
-starts. It was rehearsed on a staging account on 2026-10-11: a restore, a
-cutover, and a cutover undone ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_2)).
+starts. It was rehearsed on a staging account on 2026-10-11 (UTC): a restore, a
+cutover, and a cutover undone ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)).
 [Restore from PITR](disaster-recovery.md#restore-from-pitr-preferred)
 in the Disaster Recovery Plan gives it step by step, with what it cannot do.
 
@@ -870,7 +872,7 @@ revision it already serves, with the task count and scaling it had. Before the
 next deploy, change the release: a deploy of the release that contains the
 migration runs it again.
 
-**RTO: on 2026-10-11, on a staging database holding little data, the restore took 11 min 41 s and the cutover took the API down for 12 min 45 s ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_2)); a larger database restores more slowly. The recovery point is the time you restore to.**
+**RTO: on 2026-10-11 (UTC), on a staging database holding little data, the restore took 11 min 41 s and the cutover took the API down for 12 min 45 s ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)); a larger database restores more slowly. The recovery point is the time you restore to.**
 
 ---
 

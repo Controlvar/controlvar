@@ -320,7 +320,8 @@ In **staging**, before prod is ever deployed:
    passed, and while its canary runs set the green or blue alarm (whichever
    watches the new task set's target group) to ALARM by hand. Do the same once
    in the hour after a shift. The state set by hand lasts until the alarm's
-   next evaluation, about a minute:
+   next evaluation; on staging on 2026-10-11 (UTC) the alarm was back to OK within
+   two minutes ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)):
 
     ```{.bash skip reason="aws: forces a real alarm into ALARM in the staging account"}
     aws cloudwatch set-alarm-state --alarm-name experimentation-api-5xx-green-staging --state-value ALARM --state-reason "rehearsal: forced during the canary"
@@ -343,26 +344,26 @@ After that hour, the response to a bad release is the Rollback workflow.
 
 **What has run on staging:**
 
-- On 2026-10-02, tag A deployed
+- On 2026-10-02 (UTC), tag A deployed
   ([run](https://github.com/getexperimently/experimently/actions/runs/37070072132)), and tag B, dispatched inside the
   hour after A's shift, was refused before it changed anything
   ([run](https://github.com/getexperimently/experimently/actions/runs/37074588665)).
-- On 2026-10-04, v0.18.0 deployed and the Rollback workflow put the API and the
+- On 2026-10-04 (UTC), v0.18.0 deployed and the Rollback workflow put the API and the
   dashboard back on the previous release
   ([run](https://github.com/getexperimently/experimently/actions/runs/37213010211),
   [run](https://github.com/getexperimently/experimently/actions/runs/37217043185)).
-- On 2026-10-11, the Rollback workflow did it again
+- On 2026-10-11 (UTC), the Rollback workflow did it again
   ([run](https://github.com/getexperimently/experimently/actions/runs/38098724258)), and a 5xx alarm forced into
   ALARM in the hour after a deploy's shift stopped that deployment, and
   CodeDeploy moved the API back by itself while the dashboard stayed on the new
-  release ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_1)).
+  release ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)).
 
 ---
 
 ## 3. Every deploy
 
 > **What has run against a real AWS account.** Deploy has run to success on a
-> staging account, most recently v0.31.0 on 2026-10-13
+> staging account, most recently v0.31.0 on 2026-10-13 (UTC)
 > ([run](https://github.com/getexperimently/experimently/actions/runs/38423251771)), and the Rollback workflow
 > has run there end to end ([section 2](#2-the-first-deploys-and-the-rollback-rehearsal)).
 > Deploy to staging before prod, and read the run and its summary closely.
@@ -440,11 +441,11 @@ CodeDeploy swaps the two on every deployment. Both are polled for the whole
 deployment: before the approval, in the canary, and in the hour after the
 shift while CodeDeploy keeps the previous task set. While either is in ALARM,
 CodeDeploy stops the deployment and rolls the API back to the previous
-revision by itself. On 2026-10-03 an alarm stopped a deployment on staging and
+revision by itself. On 2026-10-03 (UTC) an alarm stopped a deployment on staging and
 CodeDeploy reverted the API with no workflow involved
 ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5971647359)),
-and on 2026-10-11 an alarm forced in the hour after the shift did the same
-([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_1)). An alarm in the time before the approval has not been rehearsed
+and on 2026-10-11 (UTC) an alarm forced in the hour after the shift did the same
+([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)). An alarm in the time before the approval has not been rehearsed
 on AWS as of v0.31.1. An alarm fires on a minute with at least 5 target 5xx
 **and** at least 5% of that target group's requests, for 2 minutes of 3; a
 minute with no requests counts as fine. What they do not catch:
@@ -486,9 +487,9 @@ group (the synthesised template's
 `TerminateBlueInstancesOnDeploymentSuccess.TerminationWaitTimeInMinutes: 60`)
 and `create-deployment` has no parameter that overrides it. Rollback's
 all-at-once `--deployment-config-name` changes how traffic moves, not how long
-the old task set is kept. On staging on 2026-10-11, the Rollback run's
+the old task set is kept. On staging on 2026-10-11 (UTC), the Rollback run's
 deployment stayed active for about an hour after its traffic shift
-([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_1)).
+([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)).
 
 One deploy or manual migration per environment at a time.
 

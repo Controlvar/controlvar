@@ -63,7 +63,7 @@ repo:getexperimently@328439352/experimently@1367480368:environment:<ENVIRONMENT>
 ```
 
 That is GitHub's **immutable subject**: the owner and the repository by name
-*and* numeric id. On 2026-10-02 a job of this repository bound to the
+*and* numeric id. On 2026-10-02 (UTC) a job of this repository bound to the
 `staging` environment received
 `repo:getexperimently@328439352/experimently@1367480368:environment:staging`
 ([run](https://github.com/getexperimently/experimently/actions/runs/36972395116)).
@@ -211,7 +211,7 @@ and nothing is snapshotted, migrated or shifted. This is how the first
 staging deploy stopped.
 
 `codedeploy:GetApplicationRevision` (#754) was added after the staging
-rollback rehearsal on 2026-10-03, where its absence stopped Rollback
+rollback rehearsal on 2026-10-03 (UTC), where its absence stopped Rollback
 ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5963917501)). AWS's CodeDeploy guide asks for it *or*
 `codedeploy:RegisterApplicationRevision` alongside `CreateDeployment`, and
 only the second was granted. Deploy's `create-deployment`, with an AppSpec for
