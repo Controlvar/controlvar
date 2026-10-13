@@ -96,7 +96,7 @@ Types (`types.go`):
   (default 5 min, LRU-bounded by `CacheSize`). A cache hit makes no request; the second
   `GetAssignment` for the same user + experiment is served locally.
 - **Failures are never cached**, so the next call retries.
-- Network error, timeout, 401 (bad key), 404 (flag/experiment unknown or not ACTIVE), 429
+- Network error, timeout, 401 (bad key), 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 429
   (rate limited, `APIError.RetryAfter`): `EvaluateFlag` returns a **disabled** result plus the
   error; `GetAssignment` returns `nil` plus the error. Non-2xx responses are `*APIError`.
 - `Track`/`TrackBatch` never panic; the returned error is safe to ignore.
@@ -158,6 +158,6 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/exp
 cd sdk/go && go vet ./... && go test -race ./...
 ```
 
-- `cd sdk/go && go vet ./... && go test -race ./...`: 51 tests, HTTP mocked with httptest
+- `cd sdk/go && go vet ./... && go test -race ./...`: HTTP mocked with httptest
 
 A longer walkthrough lives in `examples/main.go` (`go run ./examples`).

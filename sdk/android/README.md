@@ -64,7 +64,7 @@ lifecycleScope.launch {
 
     // Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123
     val flag = client.evaluateFlag("new_search", user)
-    if (flag.enabled) { /* flag.config holds the server's config payload */ }
+    if (flag.enabled) { /* show the feature; flag.config is always null */ }
 
     // Track with a key — one POST /api/v1/tracking/track
     client.track(TrackEvent(user.id, "purchase", mapOf("currency" to "USD"),
@@ -150,7 +150,7 @@ cd sdk/android/jvm && ./mvnw clean test
 cd sdk/android && gradle :sdk:testDebugUnitTest
 ```
 
-- `cd sdk/android/jvm && ./mvnw clean test`: JUnit 5 + MockWebServer, 78 tests — no Android SDK, no emulator
+- `cd sdk/android/jvm && ./mvnw clean test`: JUnit 5 + MockWebServer — no Android SDK, no emulator
 - `cd sdk/android && gradle :sdk:testDebugUnitTest`: the same tests through the AAR build (Gradle 8 + Android SDK)
 
 Both run in `.github/workflows/sdk-unit-tests.yml` (nightly, and on any PR touching `sdk/android/**`).
