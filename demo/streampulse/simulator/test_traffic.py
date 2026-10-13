@@ -577,3 +577,20 @@ def test_the_options_and_their_defaults():
     assert (given.rate, given.duration, given.devices) == (6.0, 300.0, 10)
     with pytest.raises(SystemExit):
         traffic.build_parser().parse_args(["--incident", "ios18"])
+
+
+@pytest.mark.regression
+def test_the_incident_trips_5_percent_beside_as_much_steady_traffic():
+    """setup-local.sh keeps steady traffic running while the story's incident runs (on
+    the demo stack the two ran at about the same sessions a second), and the safety
+    monitor divides the crash reports by every evaluation of the flag, the steady
+    traffic's too. At 25 % the incident's reports must stay well over 5 % of both
+    together: when half of its sessions were Android 12 devices relaunching twice, they
+    came to 6 % here and 2.6 % on the stack, and the flag never went critical."""
+    incident, _, plans = run_ticks(3000, seed=21, incident="android12", player_percentage=25)
+    steady, _, _ = run_ticks(3000, seed=22, player_percentage=25)
+    assert all(plan.device.is_android_12 for plan in plans), "every incident session is an Android 12 device's"
+    evaluations = sum(
+        1 for call in incident.evaluate_calls + steady.evaluate_calls if call[0] == traffic.PLAYER_FLAG
+    )
+    assert len(incident.error_reports) / evaluations > 0.12

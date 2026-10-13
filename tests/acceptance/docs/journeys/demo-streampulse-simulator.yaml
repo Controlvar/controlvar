@@ -31,10 +31,18 @@
 #   check stays healthy, and the monitor's next pass leaves the flag on at
 #   100% with still one rollback: only the server key's reports counted.
 #
-# The waits: the story itself paces its steps (20 s) and waits for the
-# monitor (its step 4, up to 6 min) and for the 15-minute error window to
-# clear (its step 6, up to 16 min); its bound here is 40 min. The journey's
-# polls wait for what the story does: each is bounded and every 5 or 10 s.
+# The waits: the story itself paces its steps (20 s), runs the incident in
+# 90-second rounds until the check is critical (its step 3, at most 5 rounds),
+# and waits for the monitor (its step 4, up to 6 min) and for the error rate
+# to fall back (its step 6, up to 16 min); its bound here is 40 min. The
+# journey's polls wait for what the story does: each is bounded and every 5
+# or 10 s.
+#
+# The first runs of this journey found the incident too weak for the stack:
+# with setup-local.sh's steady traffic beside it, one round left the error
+# rate at 2.6% and the story stopped at its step 4 (run 38445089250). The
+# incident is now Android 12 devices only, relaunching four times, and step
+# 3 repeats it while the check is healthy.
 #
 # Expectations written on 2026-10-13 from the simulator's README, the story
 # (rollout_story.py), traffic.py, the seed (backend/scripts/seed_streampulse.py)

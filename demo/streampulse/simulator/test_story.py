@@ -696,3 +696,33 @@ def test_no_wait_advances_a_critical_flag_without_waiting():
     assert s.sleeps == []
     assert client.flag["rollout_percentage"] == 50
     assert "WARNING: still critical after waiting" in out.getvalue()
+
+
+@pytest.mark.regression
+def test_step_3_runs_the_incident_again_while_the_check_is_still_healthy():
+    """The steady traffic setup-local.sh keeps running dilutes the crashes, so one
+    90-second incident may leave the flag healthy: step 3 runs it again, up to
+    INCIDENT_ROUNDS times, and stops as soon as the check is critical."""
+    client = FakeStoryClient()
+    client.flag["rollout_percentage"] = 25
+    runs: list[list[str]] = []
+
+    def run_traffic(args):
+        runs.append(args)
+        if len(runs) == 3:
+            client.error_rate = 0.07
+        return 0
+
+    s, out = make_story(client, run_traffic=run_traffic)
+    assert s.step_3() is True
+    assert len(runs) == 3
+    text = out.getvalue()
+    assert text.count("Still healthy") == 2 and "now CRITICAL" in text
+
+    client = FakeStoryClient()
+    client.flag["rollout_percentage"] = 25
+    runs.clear()
+    s, out = make_story(client, run_traffic=lambda args: runs.append(args) or 0)
+    assert s.step_3() is True
+    assert len(runs) == story.INCIDENT_ROUNDS == 5
+    assert "still healthy after 5 rounds" in out.getvalue()

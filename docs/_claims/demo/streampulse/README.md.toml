@@ -23,11 +23,26 @@ by = [
 
 [[unit]]
 text = "A Python simulator pretends to be thousands of devices, and a scripted \"rollout story\" walks a feature flag from internal testers to 100 % with a crash incident and an automatic rollback on the way."
-by = ["untested:T"]
+by = [
+    "test:demo/streampulse/simulator/test_traffic.py::test_population_is_deterministic_and_matches_the_spec_mix",
+    "test:demo/streampulse/simulator/test_traffic.py::test_the_options_and_their_defaults",
+    "journey:demo-streampulse-simulator#employee-by-rule",
+    "journey:demo-streampulse-simulator#critical",
+    "journey:demo-streampulse-simulator#rolled-back",
+    "journey:demo-streampulse-simulator#full-rollout",
+]
 
 [[unit]]
 text = "It exercises the feature-flag path of the platform: targeting rules with device context, gradual rollout schedules, safety monitoring + auto-rollback, kill switches, mutual exclusion groups, the global holdout and Bayesian A/B analysis."
-by = ["untested:T"]
+by = [
+    "journey:demo-streampulse#rule-matches-the-premium-iphone",
+    "journey:demo-streampulse-simulator#at-25",
+    "journey:demo-streampulse-simulator#rolled-back",
+    "journey:demo-streampulse#recs-off-evaluated",
+    "journey:demo-streampulse#profile",
+    "journey:demo-streampulse#holdout-push-frequency",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_onboarding_test_is_the_bayesian_one",
+]
 
 [[unit]]
 text = "No audio, no images, no external fonts or CDNs."
@@ -54,7 +69,15 @@ by = [
 
 [[unit]]
 text = "Player | streampulse_player_v2 flag (+ streampulse_offline_mode) | on → redesigned player; off → classic; play {track_id, player}; Download button when offline mode is on | Gradual rollout 5 → 25 → 50 → 100 %, safety monitoring + auto-rollback, employee targeting rule; offline mode = SDK caching / kill switch"
-by = ["untested:T"]
+by = [
+    "test:demo/streampulse/src/__tests__/screens.test.tsx::flag on: redesigned player; Play sends play {track_id, player: v2} attributed to the flag",
+    "test:demo/streampulse/src/__tests__/screens.test.tsx::flag off: classic player, play {player: classic}; Next asks the frame to change track",
+    "test:demo/streampulse/src/__tests__/screens.test.tsx::offline mode flag on: a Download button appears (no event, UI only)",
+    "journey:demo-streampulse-simulator#story-schedule",
+    "journey:demo-streampulse-simulator#rolled-back",
+    "journey:demo-streampulse-simulator#employee-by-rule",
+    "journey:demo-streampulse-simulator#full-rollout",
+]
 
 [[unit]]
 text = "Search | streampulse_ai_search flag | on → \"AI search ✨\" with explanations; off → keyword search; search {query, engine, results} | Targeting rules: os = iOS AND os_version ≥ 17.0.0 AND region = US AND tier = premium"
@@ -151,7 +174,10 @@ by = [
 
 [[unit]]
 text = "The Rollout story button opens a drawer with the 7-step narrative, the command that drives it, and a live readout of streampulse_player_v2 for the current device."
-by = ["untested:T"]
+by = [
+    "test:demo/streampulse/src/__tests__/StreamPulseApp.test.tsx::the rollout story drawer lists the 7 steps, the script command and the live Player v2 readout",
+    "journey:demo-streampulse-simulator#drawer",
+]
 
 [[unit]]
 text = "Running it"
@@ -174,7 +200,11 @@ by = [
 
 [[unit]]
 text = "It does not run the crash incident or the rollout story."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_the_script_runs_neither_the_crash_incident_nor_the_rollout_story",
+    "journey:demo-streampulse-simulator#no-incident-yet",
+    "journey:demo-streampulse-simulator#no-rollback-yet",
+]
 
 [[unit]]
 text = "1."
@@ -193,11 +223,21 @@ by = [
 
 [[unit]]
 text = "It also writes a second key, the StreamPulse server key (scope sdk:ruleset), to demo/streampulse/.api_key_server and nowhere else: the simulator sends its crash reports with it, the way the StreamPulse server would forward them, because only reports sent with a server-side key count toward automatic rollback."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/integration/services/test_seed_streampulse_keys.py::test_the_app_key_has_no_scope_and_the_server_key_stays_out_of_the_app",
+    "test:demo/streampulse/simulator/test_traffic.py::test_the_server_key_is_read_from_its_file_and_passed_to_the_client",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_server_side_key_rolls_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_key_without_the_scope_does_not_roll_back",
+    "journey:demo-streampulse-simulator#critical",
+    "journey:demo-streampulse-simulator#still-on",
+]
 
 [[unit]]
 text = "Never put that key in .env.local: it can also download every flag's targeting rules."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/integration/services/test_seed_streampulse_keys.py::test_the_app_key_has_no_scope_and_the_server_key_stays_out_of_the_app",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestContents::test_every_owners_flags_and_nothing_else",
+]
 
 [[unit]]
 text = "--no-history skips the 7-day backfill, --reset removes everything it created, and the STREAMPULSE_DEMO_DIR environment variable changes where the key files go."
@@ -273,7 +313,10 @@ by = ["test:demo/streampulse/simulator/test_traffic.py::test_help_lists_document
 
 [[unit]]
 text = "The crash incident is the same simulator with --incident android12:"
-by = ["untested:T"]
+by = [
+    "test:demo/streampulse/simulator/test_traffic.py::test_incident_android12_crashes_only_affected_devices_with_the_flag_on",
+    "journey:demo-streampulse-simulator#critical",
+]
 
 [[unit]]
 text = "5."
@@ -285,15 +328,25 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "It calls the dashboard API, so it signs in first as the seeded demo admin; the simulator's README says how to sign in as someone else or pass a token instead."
-by = ["untested:T"]
+by = [
+    "test:demo/streampulse/simulator/test_story.py::test_without_token_the_story_signs_in_as_the_seeded_demo_admin",
+    "test:demo/streampulse/simulator/test_story.py::test_an_explicit_token_skips_the_sign_in",
+    "journey:demo-streampulse-simulator#step-one",
+]
 
 [[unit]]
 text = "--auto runs all seven steps, paced:"
-by = ["untested:T"]
+by = [
+    "test:demo/streampulse/simulator/test_story.py::test_auto_runs_all_seven_steps_in_order_through_main",
+    "journey:demo-streampulse-simulator#story-ended",
+]
 
 [[unit]]
 text = "--step 3 (any of 1 to 7) runs one step instead:"
-by = ["untested:T"]
+by = [
+    "test:demo/streampulse/simulator/test_story.py::test_the_story_takes_the_documented_options_with_their_defaults",
+    "journey:demo-streampulse-simulator#step-one",
+]
 
 [[unit]]
 text = "Other scripts: npm test (jest + Testing Library, SDK mocked), npm run lint, npm run typecheck (type-checks against the SDK source), npm run build, npm start."
@@ -389,11 +442,22 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Internal tester gets Player v2 by rule; the other presets are bucketed by the 5 % rollout."
-by = ["untested:T"]
+by = [
+    "journey:demo-streampulse-simulator#employee-by-rule",
+    "journey:demo-streampulse-simulator#others-by-rollout",
+]
 
 [[unit]]
 text = "Open the Rollout story drawer and run rollout_story.py --auto (or step by step): 25 % → Android 12 crash incident (traffic.py --incident android12 reports the crashes through POST /tracking/errors with the StreamPulse server key) → safety check unhealthy → rollback to 5 % → app_version ≥ 3.2.1 rule → 50 % → 100 %."
-by = ["untested:S"]
+by = [
+    "journey:demo-streampulse-simulator#drawer",
+    "journey:demo-streampulse-simulator#at-25",
+    "journey:demo-streampulse-simulator#critical",
+    "journey:demo-streampulse-simulator#rolled-back",
+    "journey:demo-streampulse-simulator#fixed-build-rule",
+    "journey:demo-streampulse-simulator#story-ended",
+    "journey:demo-streampulse-simulator#full-rollout",
+]
 
 [[unit]]
 text = "Watch the drawer's readout for Galaxy S10 · app 3.1.0 vs iPhone 15 · app 3.2.1, and the Safety and Audit pages in the dashboard."
@@ -401,7 +465,13 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "The Audit page shows the rollback as a Safety rollback by Safety monitor (automatic), or by you when the story rolls back by hand; the seed writes no rollback."
-by = ["untested:T"]
+by = [
+    "test:frontend/src/tests/admin/AuditLogPage.test.tsx::marks the safety monitor automatic and not a deleted user",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_monitor_rollback_is_recorded_by_the_safety_monitor",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_manual_rollback_is_recorded_by_the_calling_user",
+    "journey:demo-streampulse-simulator#by-the-monitor",
+    "journey:demo-streampulse-simulator#no-rollback-yet",
+]
 
 [[unit]]
 text = "Notifications — sequential test + guardrail (streampulse_push_frequency)."
@@ -545,7 +615,12 @@ by = [
 
 [[unit]]
 text = "Player v2 does not change after the story rolls back / advances | The SDK caches for 5 s — wait or press Refresh now. If the schedulers are involved (auto-rollback, time-based stages), they run every SAFETY_CHECK_INTERVAL_MINUTES / ROLLOUT_CHECK_INTERVAL_MINUTES (default 5 / 15) — set both to 1 in the backend .env for the demo (setup-local.sh sets both to 1 unless they are already set)."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_streampulse_keeps_each_flag_answer_for_5_seconds",
+    "journey:demo-streampulse#refresh-now",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults",
+    "test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_the_safety_and_rollout_schedulers_run_every_minute_unless_already_set",
+]
 
 [[unit]]
 text = "A preset shows \"in global holdout streampulse-holdout\" for every experiment | That id hashes into the 2 % holdout. The shipped preset ids do not; if you changed one, pick another id (or use it to demonstrate the holdout)."
@@ -560,7 +635,11 @@ by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_a
 
 [[unit]]
 text = "Simulator exits with code 2 / 3 / 4 | 2 = API key rejected or missing, or --incident without the server key in demo/streampulse/.api_key_server (run the seed), 3 = catalogue not seeded (404), 4 = backend unreachable."
-by = ["untested:T"]
+by = [
+    "test:demo/streampulse/simulator/test_traffic.py::test_fatal_api_errors_exit_non_zero_with_message",
+    "test:demo/streampulse/simulator/test_traffic.py::test_the_incident_needs_the_server_key",
+    "test:demo/streampulse/simulator/test_traffic.py::test_missing_api_key_is_an_error",
+]
 
 [[unit]]
 text = "npm run typecheck fails inside sdk/react/src | The app needs ExperimentAssignment.assigned / .reason and FeatureFlagEvaluation.reason from the React SDK; make sure sdk/react is at the version in this repo."

@@ -876,7 +876,6 @@ CLAIMS_DEFERRED: Tuple[str, ...] = (
 CLAIMS_PENDING: Tuple[str, ...] = (
     "README.md",
     "SECURITY.md",
-    "demo/streampulse/simulator/README.md",
     "docs/Enhanced_Rules_Engine_Reference.md",
     "docs/README.md",
     "docs/api/bayesian.md",

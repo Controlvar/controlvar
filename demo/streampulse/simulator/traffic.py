@@ -18,11 +18,13 @@ Per tick (one app session on one device):
      sent with the StreamPulse server key (``--server-api-key``, default
      ``demo/streampulse/.api_key_server``, scope ``sdk:ruleset``), the way the StreamPulse
      server would forward its devices' crash reports: only reports sent with a server-side
-     key count toward automatic rollback.  Crashed apps get relaunched by their users (crash
-     loop: each relaunch re-evaluates the flag and crashes again), so Android 12 devices
-     dominate traffic while the incident lasts.  At rate ≥ 5 the flag's error rate (crash
-     reports ÷ flag evaluations, 15-minute window) crosses the 5% critical threshold within a
-     couple of minutes once the flag is past its first stage (5%).
+     key count toward automatic rollback.  Every incident session is an Android 12 device's,
+     and a crashed app gets relaunched by its user four times (crash loop: each relaunch
+     re-evaluates the flag and crashes again).  The safety monitor's error rate is crash
+     reports ÷ every evaluation of the flag over 15 minutes, the steady traffic
+     setup-local.sh runs beside the incident included; at 25% the incident's reports come to
+     well over 5% of its own and as much steady traffic's evaluations
+     (``test_the_incident_trips_5_percent_beside_as_much_steady_traffic``).
 
 Usage:
   python demo/streampulse/simulator/traffic.py --rate 6 --duration 300
@@ -126,8 +128,12 @@ PAYMENTS_VISIT_RATE = 0.30
 
 # --- Incident model -------------------------------------------------------------------
 INCIDENT_AFFECTED_SHARE = 0.40  # of Android 12 devices with player v2 ON
-INCIDENT_ANDROID12_SHARE = 0.50  # share of incident ticks drawn from Android 12 devices (crash loops)
-INCIDENT_RELAUNCHES = 2  # relaunches after the first crash: each re-evaluates the flag and crashes again
+# Every incident tick is an Android 12 device's: the incident is their crash loops, and the
+# steady traffic beside it keeps the usual device mix. At half (with 2 relaunches) the reports
+# came to 2.6% of the flag's evaluations on the demo stack, steady traffic included, and the
+# flag never went critical.
+INCIDENT_ANDROID12_SHARE = 1.0  # share of incident ticks drawn from Android 12 devices
+INCIDENT_RELAUNCHES = 4  # relaunches after the first crash: each re-evaluates the flag and crashes again
 CRASH_MESSAGE = "NullPointerException in PlayerV2Fragment"
 INCIDENT_MODES = ("off", "android12")
 
