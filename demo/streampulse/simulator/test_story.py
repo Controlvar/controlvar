@@ -604,3 +604,95 @@ def test_sign_in_posts_the_credentials_and_returns_the_access_token(monkeypatch)
     }
     with pytest.raises(story.ApiError):
         story.sign_in("http://localhost:8000", "admin@demo.com", "Demo1234!")
+
+
+def test_every_step_but_the_incident_writes_nothing_when_run_again():
+    """Each step run a second time, right after it ran: steps 1, 2 and 4-7 print
+    the state and write nothing; step 3 runs the incident traffic again."""
+    client = FakeStoryClient()
+    runs: list[list[str]] = []
+
+    def run_traffic(args):
+        runs.append(args)
+        client.error_rate = 0.12
+        return 0
+
+    s, out = make_story(client, run_traffic=run_traffic, healthy_wait=120)
+    for step in range(1, 8):
+        if step == 4:
+            client.scheduler_after_polls = (
+                client.polls
+            )  # the monitor acts at the next poll
+        if step == 5:
+            client.scheduler_after_polls = None  # and once only
+        if step == 6:
+            client.healthy_after_checks = client.checks + 1
+        assert s.run_step(step) is True
+        writes, traffic = len(client.writes()), len(runs)
+        assert s.run_step(step) is True
+        if step == 3:
+            assert len(runs) == traffic + 1, "re-running step 3 runs the incident again"
+            assert len(client.writes()) == writes
+        else:
+            assert len(client.writes()) == writes, f"re-running step {step} wrote"
+            assert len(runs) == traffic
+    assert (
+        client.flag["rollout_percentage"] == 100
+        and client.schedule["status"] == "completed"
+    )
+    assert len(runs) == 2
+
+
+def test_the_story_takes_the_documented_options_with_their_defaults():
+    defaults = story.build_parser().parse_args(["--step", "1"])
+    assert defaults.token is None and defaults.api_key is None
+    assert (defaults.email, defaults.password) == ("admin@demo.com", "Demo1234!")
+    assert defaults.api_url == "http://localhost:8000"
+    assert defaults.dashboard_url == "http://localhost:3100"
+    assert defaults.app_url == "http://localhost:3300"
+    assert defaults.pace == 15.0
+    assert (defaults.incident_rate, defaults.incident_duration) == (6, 90)
+    assert defaults.rollback_wait == 6 * 60 and defaults.no_wait is False
+    given = story.build_parser().parse_args(
+        [
+            "--auto",
+            "--pace",
+            "20",
+            "--api-key",
+            "k",
+            "--incident-rate",
+            "5",
+            "--incident-duration",
+            "60",
+            "--rollback-wait",
+            "30",
+            "--no-wait",
+            "--dashboard-url",
+            "http://d",
+            "--app-url",
+            "http://a",
+            "--api-url",
+            "http://api",
+        ]
+    )
+    assert given.auto and given.pace == 20.0 and given.no_wait
+    with pytest.raises(SystemExit):
+        story.build_parser().parse_args(["--step", "8"])
+
+
+def test_no_wait_advances_a_critical_flag_without_waiting():
+    """With --no-wait, step 6 resumes and advances at once while the flag is still
+    critical, so the safety monitor rolls it back again."""
+    client = FakeStoryClient()
+    client.schedule["stages"][0].update(
+        {"status": "completed", "trigger_type": "manual"}
+    )
+    client.schedule["stages"][1]["status"] = "in_progress"
+    client.flag["rollout_percentage"] = 5
+    client.schedule["status"] = "paused"
+    client.error_rate = 0.12
+    s, out = make_story(client, healthy_wait=0.0)
+    assert s.step_6() is True
+    assert s.sleeps == []
+    assert client.flag["rollout_percentage"] == 50
+    assert "WARNING: still critical after waiting" in out.getvalue()

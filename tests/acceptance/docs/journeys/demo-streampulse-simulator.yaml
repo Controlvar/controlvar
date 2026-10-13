@@ -7,7 +7,9 @@
 #
 # What it holds:
 # - before the story, the seed's state: Player v2 at 5% with the employee
-#   rule, its four-stage schedule at stage 1, automatic rollbacks on, the
+#   rule, its four-stage schedule active with stages 2 to 4 to come (the
+#   rollout scheduler may already have completed stage 1, which went live two
+#   days before the seed ran), automatic rollbacks on, the
 #   flag's safety configuration (critical 5%, rollback to 5%), no error report
 #   and no rollback yet; an employee's device gets the flag by its rule and
 #   other devices by the 5% rollout;
@@ -76,7 +78,6 @@ steps:
         total: 1
         items.0.status: active
         items.0.stages.0.target_percentage: 5
-        items.0.stages.0.status: in_progress
         items.0.stages.1.target_percentage: 25
         items.0.stages.1.status: pending
         items.0.stages.2.target_percentage: 50
@@ -86,7 +87,7 @@ steps:
     save:
       schedule-id:
         path: items.0.id
-    fail: the flag's four-stage schedule (5, 25, 50, 100%) is not active at stage 1
+    fail: the flag's four-stage schedule (5, 25, 50, 100%) is not active with stages 2 to 4 still to come
   - id: automatic-rollbacks-on
     doc: rollout-story
     do:

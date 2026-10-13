@@ -526,3 +526,30 @@ def test_api_client_request_shape_and_error_mapping(monkeypatch):
         client.batch([{}] * 101)
     with pytest.raises(ValueError):
         client.report_errors([{}] * 101)
+
+
+def test_rate_and_duration_send_that_many_sessions_a_second_for_that_long(monkeypatch):
+    """--rate 6 --duration 300: 6 sessions a second for five minutes, then it stops
+    (on a clock that the paced sleeps move, so the run takes no real time)."""
+    now = [0.0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    monkeypatch.setattr(traffic.time, "monotonic", lambda: now[0])
+    made = []
+
+    def factory(url, key, **kw):
+        made.append(FakeClient(seed=3))
+        return made[-1]
+
+    out = io.StringIO()
+    rc = traffic.main(
+        ["--api-key", "k", "--rate", "6", "--duration", "300", "--no-probe"],
+        client_factory=factory,
+        sleep=sleep,
+        out=out,
+    )
+    assert rc == 0
+    assert "ticks=1800" in out.getvalue()
+    assert 299.0 < now[0] <= 300.0
