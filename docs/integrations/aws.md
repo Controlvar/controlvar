@@ -70,7 +70,7 @@ REDIS_SSL=true
 
 ### Application Cache
 
-With `CACHE_ENABLED` on (it is off by default), the experiment list, `GET /api/v1/experiments/{experiment_id}`, and its `daily-results` and `segmented-results`, are cached in Redis for an hour and cleared when the experiment changes. `GET /api/v1/results/{experiment_id}` and `GET /api/v1/experiments/{experiment_id}/results` are cached in Redis whenever it is reachable, `CACHE_ENABLED` or not: for 5 minutes while the experiment is running, and for 24 hours otherwise. The API does not cache feature flags: it reads them from the database on every request, so a flag change is served on the next one.
+With `CACHE_ENABLED` on (it is off by default), `GET /api/v1/experiments/{experiment_id}` and its `daily-results` and `segmented-results` are cached in Redis for 3,600 seconds (an hour). A change to the experiment clears its cached detail; its cached daily and segmented results stay until they expire. `GET /api/v1/results/{experiment_id}` and `GET /api/v1/experiments/{experiment_id}/results` are cached in Redis whenever it is reachable, `CACHE_ENABLED` or not: for 5 minutes while the experiment is running, and for 24 hours otherwise. The API does not cache feature flags: it reads them from the database on every request, so a flag change is served on the next one.
 
 ---
 

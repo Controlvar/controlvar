@@ -417,7 +417,7 @@ three levels deep.
   maximum
 
 ### Caching
-- The experiment list, `GET /api/v1/experiments/{experiment_id}`, and its `daily-results` and `segmented-results`, are cached for 1 hour when `CACHE_ENABLED` is on (it is off by default)
+- `GET /api/v1/experiments/{experiment_id}` and its `daily-results` and `segmented-results` are cached for 3,600 seconds (an hour) when `CACHE_ENABLED` is on (it is off by default). A change to the experiment clears its cached detail; its cached daily and segmented results stay until they expire
 - Feature flags are not cached: the flag list and a flag's detail are read from the database on every request, whatever `CACHE_ENABLED` says
 - `GET /api/v1/results/{experiment_id}` and `GET /api/v1/experiments/{experiment_id}/results` are cached for 5 minutes while the experiment is running, and for 24 hours otherwise, whenever Redis is reachable
 

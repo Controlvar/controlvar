@@ -140,16 +140,22 @@ text = "Application Cache"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "With CACHE_ENABLED on (it is off by default), the experiment list, GET /api/v1/experiments/{experiment_id}, and its daily-results and segmented-results, are cached in Redis for an hour and cleared when the experiment changes."
+text = "With CACHE_ENABLED on (it is off by default), GET /api/v1/experiments/{experiment_id} and its daily-results and segmented-results are cached in Redis for 3,600 seconds (an hour)."
 by = [
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_an_entry_is_kept_for_an_hour",
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_the_cache_is_off_by_default",
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_with_the_cache_off_nothing_is_written_or_read",
     "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_the_experiment_detail_is_cached_and_served_from_the_cache",
     "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_results_are_cached_and_served_from_the_cache",
-    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_a_change_drops_the_experiment_and_every_cached_list",
 ]
 
 [[unit]]
+text = "A change to the experiment clears its cached detail; its cached daily and segmented results stay until they expire."
+by = ["test:backend/tests/unit/api/test_experiment_cache_scope.py::test_a_change_clears_the_detail_and_leaves_the_daily_and_segmented_results"]
+
+[[unit]]
 text = "GET /api/v1/results/{experiment_id} and GET /api/v1/experiments/{experiment_id}/results are cached in Redis whenever it is reachable, CACHE_ENABLED or not: for 5 minutes while the experiment is running, and for 24 hours otherwise."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/api/test_results_stored_settings.py::test_results_are_kept_300_seconds_while_running_and_86400_otherwise"]
 
 [[unit]]
 text = "The API does not cache feature flags: it reads them from the database on every request, so a flag change is served on the next one."
