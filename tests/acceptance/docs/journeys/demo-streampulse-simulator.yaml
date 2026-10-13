@@ -47,6 +47,20 @@ profile: full
 video: false
 written: 2026-10-13
 steps:
+  - id: dry-run
+    doc: traffic
+    do:
+      run:
+        command: |-
+          python demo/streampulse/simulator/traffic.py --dry-run --seed 1
+          python demo/streampulse/simulator/traffic.py --dry-run --incident android12
+        up_to_seconds: 60
+    expect:
+      exit: 0
+      output:
+        - "# dry run — no network."
+        - '{"POST /tracking/errors": {"error_type": "crash", "feature_flag_key": "streampulse_player_v2", "message": "NullPointerException in PlayerV2Fragment"'
+    fail: the dry runs do not print a session's events, and a crashing one's reports, as the page says
   - id: story-flag
     doc: rollout-story
     do:
@@ -207,18 +221,18 @@ steps:
         - dialog "The rollout story":
           - heading "The rollout story" [level=2]
           - region "Player v2 rollout · this device":
-            - text: "/(on: inside|off: outside) the rollout %/"
+            - text: /(inside|outside) the rollout %/
           - region "Run it":
             - code: python demo/streampulse/simulator/rollout_story.py --auto
           - list:
             - listitem:
-              - heading "Step 1: We are launching a redesigned player" [level=3]
+              - 'heading "Step 1: We are launching a redesigned player" [level=3]'
             - listitem:
-              - heading "Step 4: Crash rate spikes on Android 12" [level=3]
+              - 'heading "Step 4: Crash rate spikes on Android 12" [level=3]'
             - listitem:
-              - heading "Step 5: Safety monitor rolls back to 5 %" [level=3]
+              - 'heading "Step 5: Safety monitor rolls back to 5 %" [level=3]'
             - listitem:
-              - heading "Step 7: Full rollout" [level=3]
+              - 'heading "Step 7: Full rollout" [level=3]'
     fail: the Rollout story drawer does not show the narrative, the command and Player v2 for the device by the 5% rollout
   - id: step-one
     doc: rollout-story

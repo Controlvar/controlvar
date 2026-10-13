@@ -551,5 +551,29 @@ def test_rate_and_duration_send_that_many_sessions_a_second_for_that_long(monkey
         out=out,
     )
     assert rc == 0
-    assert "ticks=1800" in out.getvalue()
+    text = out.getvalue()
+    assert "ticks=1800" in text
     assert 299.0 < now[0] <= 300.0
+    # stats every 10 s: at 10, 20, ... 290 s, and once more at the end
+    assert text.count("ticks=") == 30
+
+
+def test_the_options_and_their_defaults():
+    defaults = traffic.build_parser().parse_args([])
+    assert defaults.api_url == "http://localhost:8000"
+    assert defaults.api_key is None and defaults.server_api_key is None
+    root = Path(traffic.__file__).resolve().parent.parent
+    assert traffic.DEFAULT_API_KEY_FILE == root / ".api_key"
+    assert traffic.DEFAULT_SERVER_KEY_FILE == root / ".api_key_server"
+    assert defaults.duration == 0.0, "0 runs until stopped"
+    assert defaults.devices == 5000 and defaults.population_seed == devices.DEFAULT_SEED
+    assert defaults.incident == "off" and traffic.INCIDENT_MODES == ("off", "android12")
+    assert defaults.max_ticks == 0 and not defaults.no_probe and not defaults.dry_run
+    given = traffic.build_parser().parse_args(
+        ["--rate", "6", "--duration", "300", "--seed", "1", "--devices", "10",
+         "--population-seed", "7", "--incident", "android12", "--max-ticks", "3",
+         "--no-probe", "--dry-run", "--server-api-key", "s", "--api-key", "a"]
+    )
+    assert (given.rate, given.duration, given.devices) == (6.0, 300.0, 10)
+    with pytest.raises(SystemExit):
+        traffic.build_parser().parse_args(["--incident", "ios18"])
