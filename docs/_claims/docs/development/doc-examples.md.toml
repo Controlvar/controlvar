@@ -1,0 +1,400 @@
+# What verifies each unit of docs/development/doc-examples.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/development/doc-examples.md"
+
+[[unit]]
+text = "Runnable Documentation Examples"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The shell examples on an enrolled page run in CI as they are written, in one bash session per page."
+by = ["untested:T"]
+
+[[unit]]
+text = "scripts/doc_examples.py is the check, and the doc-examples workflow runs it on every pull request."
+by = ["untested:T"]
+
+[[unit]]
+text = "A page fails when a command fails, when an example stops printing what the page says it prints, or when a block breaks one of the rules below."
+by = ["untested:T"]
+
+[[unit]]
+text = "Which pages are checked"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every Markdown page in the repository, except CLAUDE.md files and anything under .claude/."
+by = ["untested:T"]
+
+[[unit]]
+text = "The check walks the tree for them, skipping node_modules, venv, site and hidden directories other than .github, and the list it finds must equal [meta] universe in scripts/doc_examples.toml."
+by = ["untested:T"]
+
+[[unit]]
+text = "A new page, or a renamed one, fails the check until that list names it."
+by = ["untested:T"]
+
+[[unit]]
+text = "On every one of those pages:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "every code fence names a language (text for output, a directory tree or anything else that is not code);"
+by = ["untested:T"]
+
+[[unit]]
+text = "a shell fence is bash: sh, shell, console, zsh, powershell and the other shells the check knows are refused;"
+by = ["untested:T"]
+
+[[unit]]
+text = "a page with a bash block is exactly one of enrolled, exempt or pending."
+by = ["untested:T"]
+
+[[unit]]
+text = "The pending pages are the ones not yet enrolled."
+by = ["untested:T"]
+
+[[unit]]
+text = "That list can only shrink, and a pending page's fences that name no language, its shell comment lines and its bash -n failures can only fall."
+by = ["untested:T"]
+
+[[unit]]
+text = "Tagging a shell block"
+by = ["exempt:label"]
+
+[[unit]]
+text = "On an enrolled page, every bash block carries exactly one tag, in braces."
+by = ["untested:T"]
+
+[[unit]]
+text = "Run it:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Don't run it, and say why."
+by = ["exempt:label"]
+
+[[unit]]
+text = "The reason is required, and it starts with a category (see Pages that cannot run here):"
+by = ["untested:T"]
+
+[[unit]]
+text = "exec takes an optional timeout=<seconds>, from 1 to 3600 (120 when it is not given), as in {.bash exec timeout=1200}."
+by = ["untested:T"]
+
+[[unit]]
+text = "Any other form of a shell fence on an enrolled page is refused, with the file and line."
+by = ["untested:T"]
+
+[[unit]]
+text = "Blocks in other languages (json, python, javascript, …) aren't run and need no tag."
+by = ["untested:T"]
+
+[[unit]]
+text = "Saying what the reader should see"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Put one expect line per value directly under the block, with no blank line between, and also say the value in the prose, because the reader never sees the expect line:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The text of an expect line has to appear in what the block prints to stdout, in the order the lines are given, and a match can't start or end inside a word: active doesn't match inactive, and 1 doesn't match 10."
+by = ["untested:T"]
+
+[[unit]]
+text = "A block that prints something needs at least one expect line, except the two blocks that start a stack, docker compose up -d --wait and EXPERIMENTLY_PROFILE=full docker compose up -d --wait."
+by = ["untested:T"]
+
+[[unit]]
+text = "Choose a value that would be different if the step had failed."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "curl -s exits 0 on a 404 or a 422, so an example that doesn't check its output passes when it's broken."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Writing a block that runs as written"
+by = ["exempt:label"]
+
+[[unit]]
+text = "No placeholders."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A reader can't run your-api-key or flag-uuid-here."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Capture the value in an earlier block (KEY=$(curl … | jq -r .key)), or mark the block skip."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The page's blocks share one shell, top to bottom."
+by = ["untested:T"]
+
+[[unit]]
+text = "A variable set in one block is there in the next."
+by = ["untested:T"]
+
+[[unit]]
+text = "Nothing from your own environment is: each page runs with only PATH, HOME, USER, TMPDIR and Docker's own settings."
+by = ["untested:T"]
+
+[[unit]]
+text = "The blocks run under set -euo pipefail."
+by = ["untested:T"]
+
+[[unit]]
+text = "So yes | head -1 and … | grep -q x exit 141 when the pipe closes early, and the block fails; write them another way."
+by = ["untested:T"]
+
+[[unit]]
+text = "Trailing slashes are real."
+by = ["exempt:label"]
+
+[[unit]]
+text = "POST /api/v1/rollout-schedules/ needs its slash: without it the API answers 307, curl doesn't follow it, and nothing is printed."
+by = ["test:backend/tests/unit/middleware/test_relative_slash_redirect.py::test_the_real_app_still_redirects_relatively"]
+
+[[unit]]
+text = "No # comments in a shell block, skip blocks included (see Rewriting a comment)."
+by = ["untested:T"]
+
+[[unit]]
+text = "Every block passes bash -n, with bash 4.4 or later, the one that runs the examples; macOS's /bin/bash is 3.2 and is refused."
+by = ["untested:T"]
+
+[[unit]]
+text = "A skip block whose reason is fragment: … is not syntax-checked, since it is a template to fill in."
+by = ["untested:T"]
+
+[[unit]]
+text = "A block that runs may not:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "end its last line in , which would swallow what follows;"
+by = ["untested:T"]
+
+[[unit]]
+text = "write export X=$(command) (or declare, local, readonly), which reports success even when the command fails: assign first, then export;"
+by = ["untested:T"]
+
+[[unit]]
+text = "run a package manager (pip, npm, yarn, go get, cargo install and the others the check lists), or aws, cdk or sam, however the command is written and even inside a here-document."
+by = ["untested:T"]
+
+[[unit]]
+text = "Tag such a block skip with the registry or aws category;"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "mention COMPOSE_PROJECT_NAME or unset a COMPOSE_ setting, pass -p or --project-name to docker compose, run env -u or env -i, or remove Docker resources directly (docker rm, docker volume rm, … prune)."
+by = ["untested:T"]
+
+[[unit]]
+text = "A plain docker compose down -v is allowed: each page runs under a compose project of its own."
+by = ["untested:T"]
+
+[[unit]]
+text = "Pages that cannot run here"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A skip reason starts with one of these categories, then : and the words a reader of the source will see:"
+by = ["untested:T"]
+
+[[unit]]
+text = "Category | The block…"
+by = ["exempt:label"]
+
+[[unit]]
+text = "checkout | clones or enters the repository (the runner is already inside one)"
+by = ["untested:T"]
+
+[[unit]]
+text = "dev | is a contributor's command in a development checkout (venv, make, pytest, this repository's own tooling)"
+by = ["untested:T"]
+
+[[unit]]
+text = "server | starts a long-running process"
+by = ["untested:T"]
+
+[[unit]]
+text = "aws | needs an AWS account"
+by = ["untested:T"]
+
+[[unit]]
+text = "idp | needs an identity-provider tenant (Cognito, SAML, OIDC)"
+by = ["untested:T"]
+
+[[unit]]
+text = "secret | needs a key, a password or a third-party account the reader holds"
+by = ["untested:T"]
+
+[[unit]]
+text = "registry | installs a package from a public registry; it must name the package manager"
+by = ["untested:T"]
+
+[[unit]]
+text = "toolchain | needs a language toolchain the runner doesn't use (Go, .NET, JVM, Swift, …)"
+by = ["untested:T"]
+
+[[unit]]
+text = "destructive | changes state a reader must choose to change (restore, rollback, delete)"
+by = ["untested:T"]
+
+[[unit]]
+text = "demo | needs the demo applications"
+by = ["untested:T"]
+
+[[unit]]
+text = "fragment | is a template to fill in, not runnable as written"
+by = ["untested:T"]
+
+[[unit]]
+text = "timing | gates on latency or throughput, which one run on a shared runner cannot hold: one command, run_load_tests.py without --sla report, and the page runs the same command with --sla report in an exec block"
+by = ["untested:T"]
+
+[[unit]]
+text = "bug #N | fails because of the product defect in issue N: bug #123: …"
+by = ["untested:T"]
+
+[[unit]]
+text = "The check prints how many skipped blocks each category holds."
+by = ["untested:T"]
+
+[[unit]]
+text = "Rewriting a comment"
+by = ["exempt:label"]
+
+[[unit]]
+text = "macOS's default zsh doesn't treat # as a comment when you paste, so jq .status # \"healthy\" fails with Could not open file #, and a whole-line # step 2 fails with command not found: #."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "ENV=prod # or staging fails the same way, and leaves ENV at whatever it was before."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Say it in the sentence before or after the block instead:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A # inside quotes, in the middle of a word ($#, ${#x}, a URL's #anchor) or inside a here-document is not a comment and is fine."
+by = ["untested:T"]
+
+[[unit]]
+text = "Environments"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Environment | What is true before the page runs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "bare | Docker is available and nothing is running. The page starts its own stack."
+by = ["untested:T"]
+
+[[unit]]
+text = "stack | The Quick Start's docker compose up -d --wait has already run."
+by = ["untested:T"]
+
+[[unit]]
+text = "stack-dev | As stack, and the repository root has a development virtual environment, venv/, with backend/requirements.txt installed, for a contributor's page (source venv/bin/activate). A page whose venv cannot import alembic, locust, backend.app.core.config fails before its stack starts."
+by = ["untested:T"]
+
+[[unit]]
+text = "stack-full | The full profile's EXPERIMENTLY_PROFILE=full docker compose up -d --wait has already run, and GET /api/v1/modules said \"profile\": \"full\". For a page about a module."
+by = ["untested:T"]
+
+[[unit]]
+text = "local | Reserved for the demo applications, and refused as not implemented yet."
+by = ["untested:T"]
+
+[[unit]]
+text = "Checking a page locally"
+by = ["exempt:label"]
+
+[[unit]]
+text = "To run the examples, stop anything that holds the stack's ports first (your own docker compose stop is enough)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "--only runs one page:"
+by = ["untested:T"]
+
+[[unit]]
+text = "For the render check, build the site with the site's own toolchain first:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The render check covers every page under docs/, enrolled or not: a fence the site doesn't show as code fails it on any page."
+by = ["untested:T"]
+
+[[unit]]
+text = "When the check fails"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every problem is reported in the same run, one line each, naming the page (and the line, where there is one) and what to change."
+by = ["mechanism:doc-examples-failure-sample"]
+
+[[unit]]
+text = "For a new page with a zsh block, and a comment left in an enrolled one:"
+by = ["exempt:example"]
+
+[[unit]]
+text = "Enrolling a page"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Add the page's path to [meta] universe if it is new."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Tag every shell block exec or skip, remove its comments, and give every fence a language."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Add expect lines, and say the same values in the prose."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Run python scripts/doc_examples.py --check, and copy the counts it prints into a [[document]] entry in scripts/doc_examples.toml, with the page's environment; add its exec to [meta] exec, add one to [meta] documents, and remove the page's line from [pending] if it has one."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "An entry has exactly these five keys: the page, its environment (see Environments), and its counts of exec blocks, skip blocks and expectations."
+by = ["untested:T"]
+
+[[unit]]
+text = "If an edit changes a count, change the entry in the same pull request."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The check prints the counts it finds, and fails naming both numbers when they differ."
+by = ["untested:T"]
+
+[[unit]]
+text = "A page with no bash block needs no entry, and enrolling one is refused."
+by = ["untested:T"]
+
+[[unit]]
+text = "Exempting a page"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A page whose shell blocks are deliberately left untagged is listed as exempt, with a reason (1–200 characters), instead of enrolled:"
+by = ["untested:T"]
+
+[[unit]]
+text = "An exempt page still obeys the rules for every page (languages named, no other shell) and its bash blocks still carry no comments and pass bash -n."
+by = ["untested:T"]
+
+[[unit]]
+text = "An exempt page with no bash block is refused."
+by = ["untested:T"]
