@@ -271,8 +271,13 @@ _INTEGRATION_ENV: Tuple[Tuple[str, str], ...] = (
 #: root, as every other report does; the two demo simulators each import a
 #: module named ``traffic`` and are a session each.
 SUITES: Dict[str, Tuple[Invocation, ...]] = {
+    # The load-testing framework's tests (docs/performance/load-testing.md's
+    # registry names them) are a session of their own: collecting
+    # test_load_profiles.py imports locust, whose gevent monkey-patching would
+    # otherwise apply to every test in unit.xml.
     "unit": (
         Invocation("unit.xml", ("backend/tests/unit/", "backend/tests/realistic/")),
+        Invocation("performance.xml", ("backend/tests/performance/",)),
     ),
     "smoke": (Invocation("smoke.xml", ("backend/tests/smoke/",)),),
     "lambda": tuple(
