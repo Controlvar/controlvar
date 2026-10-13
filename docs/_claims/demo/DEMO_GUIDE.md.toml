@@ -636,7 +636,7 @@ by = [
 [[unit]]
 text = "CUPED has no tab in the dashboard; it is in the API (GET /api/v1/results/{id}/cuped)."
 by = [
-    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::renders tab navigation",
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::offers no CUPED tab, toggle or control: CUPED-adjusted results are API only",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
 
@@ -905,7 +905,7 @@ by = [
 ]
 
 [[unit]]
-text = "Full REST API + SDKs: Python and JavaScript on PyPI and npm, Go with go get, Java and React built from sdk/ (not published yet)"
+text = "Full REST API + SDKs: Python and JavaScript on PyPI and npm, Go with go get, Java and React built from sdk/"
 by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "journey:sdk-python#quick-start-user-on",
@@ -972,7 +972,7 @@ by = [
 ]
 
 [[unit]]
-text = "The Java SDK (with Spring Boot auto-configuration) and the React SDK (with hooks and SSR support) are in the repository's sdk/ directory and not published yet."
+text = "The Java SDK (with Spring Boot auto-configuration) and the React SDK (with hooks and SSR support) build from the repository's sdk/ directory."
 by = [
     "test:sdk/java/spring-boot-starter/src/test/java/com/getexperimently/sdk/spring/ExperimentationAutoConfigurationTest.java::beansCreatedWhenApiKeyPresent",
     "test:sdk/react/src/__tests__/ServerClient.test.ts::returns an enabled evaluation with the full structure",

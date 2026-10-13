@@ -339,7 +339,7 @@ by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_ch
 
 [[unit]]
 text = "There is no CUPED toggle in the dashboard."
-by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx::renders tab navigation"]
+by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx::offers no CUPED tab, toggle or control: CUPED-adjusted results are API only"]
 
 [[unit]]
 text = "CUPED adjusts for each user's own purchases before assignment, and the simulator's visitors are new, so its covariate_coverage_pct is near 0 and it does not narrow the interval here; the Quick Start's checkout_button_color has history and shows a reduction (CUPED)."

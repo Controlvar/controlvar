@@ -233,7 +233,7 @@ See `demo/streampulse/README.md`.
 - An audit log of changes to flags, experiments, users and roles, and with the
   `compliance` module HMAC-SHA256 signed compliance events and report exports
 - RBAC with four built-in roles (custom roles: roadmap)
-- Full REST API + SDKs: Python and JavaScript on PyPI and npm, Go with `go get`, Java and React built from `sdk/` (not published yet)
+- Full REST API + SDKs: Python and JavaScript on PyPI and npm, Go with `go get`, Java and React built from `sdk/`
 - Deployable to your own AWS account with the AWS CDK
 
 ---
@@ -247,7 +247,7 @@ See `demo/streampulse/README.md`.
 > The platform is not certified and we do not claim it. What it gives you are controls that support your own program: an audit log of changes to flags, experiments, API keys, users and roles, made by people or by the platform itself, in the core profile, where no API edits or deletes an entry, and with the `compliance` module HMAC-SHA256 signed audit events with exportable report packs. Your auditor decides what they satisfy.
 
 **"What about our tech stack?"**
-> The Python and JavaScript/TypeScript SDKs are on PyPI and npm, and the Go SDK installs with `go get`. The Java SDK (with Spring Boot auto-configuration) and the React SDK (with hooks and SSR support) are in the repository's `sdk/` directory and not published yet. The REST API means you can integrate from anything.
+> The Python and JavaScript/TypeScript SDKs are on PyPI and npm, and the Go SDK installs with `go get`. The Java SDK (with Spring Boot auto-configuration) and the React SDK (with hooks and SSR support) build from the repository's `sdk/` directory. The REST API means you can integrate from anything.
 
 **"How do we deploy? What's the infrastructure cost?"**
 > Into your own AWS account with the AWS CDK — ECS Fargate, Aurora PostgreSQL, ElastiCache Redis — following docs/self-hosting/cdk.md, then dispatching the Deploy workflow for staging or prod. You own all the infrastructure. It is not one command, and the stacks create resources that AWS bills for (Aurora, NAT gateways, a load balancer); cdk.md says what a teardown leaves behind.
