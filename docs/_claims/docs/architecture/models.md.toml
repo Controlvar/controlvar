@@ -17,11 +17,11 @@ by = ["test:backend/tests/integration/database/test_constraints.py::TestExperime
 
 [[unit]]
 text = "Experiment end date must be after start date"
-by = ["untested:T"]
+by = ["test:backend/tests/integration/database/test_constraints.py::TestExperimentConstraints::test_end_date_must_be_after_start_date"]
 
 [[unit]]
 text = "The models are SQLAlchemy classes in backend/app/models/, one module per area, and in modules/backend/app/models/ for the optional modules."
-by = ["untested:T"]
+by = ["test:backend/tests/smoke/test_core_model_registry.py::TestCoreModelRegistry::test_every_model_is_a_sqlalchemy_class_under_the_models_packages"]
 
 [[unit]]
 text = "Each table is in the PostgreSQL schema that POSTGRES_SCHEMA names."
@@ -52,7 +52,7 @@ by = ["test:backend/tests/unit/api/test_request_validation.py::TestExperimentVal
 
 [[unit]]
 text = "The database does not check the sum."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/database/test_constraints.py::TestExperimentConstraints::test_the_database_does_not_check_that_allocations_sum_to_100"]
 
 [[unit]]
 text = "Migrations"

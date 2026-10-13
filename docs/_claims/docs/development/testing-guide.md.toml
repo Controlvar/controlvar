@@ -37,15 +37,15 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "The backend suites are directories under backend/tests/, such as unit, integration and smoke."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_contributor_rules.py::test_the_pull_request_checks_run_unit_integration_and_smoke_with_no_marker_filter"]
 
 [[unit]]
 text = "The pull-request checks run backend/tests/unit, backend/tests/integration and backend/tests/smoke with no marker filter, so a test there with no marker still runs."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_contributor_rules.py::test_the_pull_request_checks_run_unit_integration_and_smoke_with_no_marker_filter"]
 
 [[unit]]
 text = "The e2e and contract suites are run with -m e2e and -m contract, so a test there needs that marker."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_contributor_rules.py::test_the_e2e_and_contract_suites_run_with_their_marker"]
 
 [[unit]]
 text = "Run the dashboard's tests from frontend/:"
@@ -57,7 +57,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Markers are declared in markers under [tool.pytest.ini_options] in pyproject.toml."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_contributor_rules.py::test_markers_are_declared_in_pyproject_and_pytest_reads_them_there"]
 
 [[unit]]
 text = "Declare a new one there before you use it."
@@ -81,7 +81,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "In a core build, which has no modules/, such a test is skipped."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_contributor_rules.py::test_a_modules_test_is_skipped_when_the_modules_package_is_absent"]
 
 [[unit]]
 text = "Tests and AWS"

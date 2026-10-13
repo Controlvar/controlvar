@@ -694,6 +694,12 @@ _TARBALL = r"getexperimently-[A-Za-z0-9-]{1,60}-[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,
 _BETA = r"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4} is a beta release\.$"
 
 
+def _whole(document: str, *units: str) -> Tuple[Tuple[str, str], ...]:
+    """``holds`` pairs that each match one unit of *document* exactly: the
+    unit's whole text, every character literal, anchored at both ends."""
+    return tuple((document, "^" + re.escape(unit) + "$") for unit in units)
+
+
 MECHANISMS: Dict[str, Mechanism] = {
     # The table's rows: capability | Dashboard or API only | guide.
     "dashboard-and-api": Mechanism(
@@ -857,6 +863,905 @@ MECHANISMS: Dict[str, Mechanism] = {
                 r"^Every problem is reported in the same run, one line each, naming"
                 r" the page \(and the line, where there is one\) and what to change\.$",
             ),
+        ),
+    ),
+    # D73 TR3: tests that hold units of the contributor, migration and
+    # load-testing pages, each held unit matched whole (_whole).
+    # A page's blocks run in one shell, top to bottom.
+    "doc-examples-one-shell": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_variables_carry_from_block_to_block",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "The shell examples on an enrolled page run in CI as they are written, in one bash session per page.",
+            "The page's blocks share one shell, top to bottom.",
+            "A variable set in one block is there in the next.",
+        ),
+    ),
+    # Every enrolled page that runs is in one shard of the CI run.
+    "doc-examples-shards": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_the_repository_s_shards_are_every_page_that_runs_once",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "The shell examples on an enrolled page run in CI as they are written, in one bash session per page.",
+        ),
+    ),
+    # The doc-examples workflow runs the check and the examples on every pull request.
+    "doc-examples-every-pull-request": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_the_workflow_runs_the_check_and_the_examples_on_every_pull_request",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "scripts/doc_examples.py is the check, and the doc-examples workflow runs it on every pull request.",
+        ),
+    ),
+    # A failing command, a turned-off strict mode and a closed pipe fail the page.
+    "doc-examples-strict-mode": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_the_shapes_that_used_to_pass_silently",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "A page fails when a command fails, when an example stops printing what the page says it prints, or when a block breaks one of the rules below.",
+            "The blocks run under set -euo pipefail.",
+            "So yes | head -1 and … | grep -q x exit 141 when the pipe closes early, and the block fails; write them another way.",
+        ),
+    ),
+    # Expectations: word-bounded, in order.
+    "doc-examples-expectations": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_expectations_are_word_bounded_and_in_order",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "A page fails when a command fails, when an example stops printing what the page says it prints, or when a block breaks one of the rules below.",
+            "The text of an expect line has to appear in what the block prints to stdout, in the order the lines are given, and a match can't start or end inside a word: active doesn't match inactive, and 1 doesn't match 10.",
+        ),
+    ),
+    # Expectations are matched on stdout.
+    "doc-examples-stdout-only": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_expectations_are_matched_on_stdout_only",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "The text of an expect line has to appear in what the block prints to stdout, in the order the lines are given, and a match can't start or end inside a word: active doesn't match inactive, and 1 doesn't match 10.",
+        ),
+    ),
+    # The tag grammar: one tag in braces, a reason for skip, the timeout range.
+    "doc-examples-tags": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_malformed_tags_are_refused",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "A page fails when a command fails, when an example stops printing what the page says it prints, or when a block breaks one of the rules below.",
+            "On an enrolled page, every bash block carries exactly one tag, in braces.",
+            "The reason is required, and it starts with a category (see Pages that cannot run here):",
+            "Any other form of a shell fence on an enrolled page is refused, with the file and line.",
+        ),
+    ),
+    # The pages the check walks, and the directories it skips.
+    "doc-examples-walk": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_the_walk_prunes_by_name_at_any_depth",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "Every Markdown page in the repository, except CLAUDE.md files and anything under .claude/.",
+            "The check walks the tree for them, skipping node_modules, venv, site and hidden directories other than .github, and the list it finds must equal [meta] universe in scripts/doc_examples.toml.",
+        ),
+    ),
+    # CLAUDE.md files are not pages.
+    "doc-examples-working-instructions": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_working_instructions_are_excluded_in_any_case",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "Every Markdown page in the repository, except CLAUDE.md files and anything under .claude/.",
+        ),
+    ),
+    # A page [meta] universe does not name fails the check.
+    "doc-examples-new-page": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_new_page_the_universe_does_not_list_is_refused",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "The check walks the tree for them, skipping node_modules, venv, site and hidden directories other than .github, and the list it finds must equal [meta] universe in scripts/doc_examples.toml.",
+            "A new page, or a renamed one, fails the check until that list names it.",
+        ),
+    ),
+    # A renamed page fails until universe follows.
+    "doc-examples-listed-page-gone": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_listed_page_the_walk_does_not_find_is_refused",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "A new page, or a renamed one, fails the check until that list names it.",
+        ),
+    ),
+    # Every fence names a language, on every page.
+    "doc-examples-no-language": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_fence_that_names_no_language_is_refused_on_every_page",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "every code fence names a language (text for output, a directory tree or anything else that is not code);",
+            "An exempt page still obeys the rules for every page (languages named, no other shell) and its bash blocks still carry no comments and pass bash -n.",
+        ),
+    ),
+    # A shell fence other than bash is refused, with its file and line.
+    "doc-examples-other-shell": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_shell_fence_in_an_unknown_shell_language_is_refused",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "a shell fence is bash: sh, shell, console, zsh, powershell and the other shells the check knows are refused;",
+            "Any other form of a shell fence on an enrolled page is refused, with the file and line.",
+            "An exempt page still obeys the rules for every page (languages named, no other shell) and its bash blocks still carry no comments and pass bash -n.",
+        ),
+    ),
+    # A page is in one of enrolled, exempt or pending.
+    "doc-examples-one-list": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py::test_the_lists_are_disjoint",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "a page with a bash block is exactly one of enrolled, exempt or pending.",
+            "The pending pages are the ones not yet enrolled.",
+        ),
+    ),
+    # A page with a bash block in none of the lists is refused.
+    "doc-examples-unenrolled-shell": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_document_dropped_with_its_count_is_refused",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "a page with a bash block is exactly one of enrolled, exempt or pending.",
+        ),
+    ),
+    # A pending page is not enrolled: nothing on it runs.
+    "doc-examples-pending-exec": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_an_exec_tag_on_a_pending_page_is_refused",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "The pending pages are the ones not yet enrolled.",
+        ),
+    ),
+    # The pending list only shrinks.
+    "doc-examples-pending-cannot-grow": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py::test_pending_cannot_grow",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "That list can only shrink, and a pending page's fences that name no language, its shell comment lines and its bash -n failures can only fall.",
+        ),
+    ),
+    # A pending page's comment lines only fall.
+    "doc-examples-pending-comments-fall": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_pending_residual_can_only_fall",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "That list can only shrink, and a pending page's fences that name no language, its shell comment lines and its bash -n failures can only fall.",
+        ),
+    ),
+    # A pending page's unlabelled fences and bash -n failures only fall.
+    "doc-examples-pending-residuals-fall": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_each_pending_residual_can_only_fall",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "That list can only shrink, and a pending page's fences that name no language, its shell comment lines and its bash -n failures can only fall.",
+        ),
+    ),
+    # A skip reason starts with a category and ': '.
+    "doc-examples-skip-reason": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_skip_reason_names_a_category",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "The reason is required, and it starts with a category (see Pages that cannot run here):",
+            "A skip reason starts with one of these categories, then : and the words a reader of the source will see:",
+            "bug #N | fails because of the product defect in issue N: bug #123: …",
+        ),
+    ),
+    # exec's timeout: 1 to 3600, 120 by default.
+    "doc-examples-timeout": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_an_exec_timeout_is_1_to_3600_seconds_and_120_when_not_given",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "exec takes an optional timeout=<seconds>, from 1 to 3600 (120 when it is not given), as in {.bash exec timeout=1200}.",
+        ),
+    ),
+    # A malformed shell fence is refused with its file and line.
+    "doc-examples-fence-line": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_malformed_shell_fence_on_an_enrolled_page_names_the_file_and_line",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "Any other form of a shell fence on an enrolled page is refused, with the file and line.",
+        ),
+    ),
+    # A block in another language is not a block that runs.
+    "doc-examples-other-languages": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_exec_and_skip_blocks_are_read_with_their_expectations",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "Blocks in other languages (json, python, javascript, …) aren't run and need no tag.",
+        ),
+    ),
+    # A block that prints needs an expect line.
+    "doc-examples-output-needs-expect": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_output_without_an_expectation_fails",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "A block that prints something needs at least one expect line, except the two blocks that start a stack, docker compose up -d --wait and EXPERIMENTLY_PROFILE=full docker compose up -d --wait.",
+        ),
+    ),
+    # The two stack starts may print without one.
+    "doc-examples-stack-starts-print": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_both_stack_starts_may_print_without_an_expectation",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "A block that prints something needs at least one expect line, except the two blocks that start a stack, docker compose up -d --wait and EXPERIMENTLY_PROFILE=full docker compose up -d --wait.",
+        ),
+    ),
+    # The environment a page runs with.
+    "doc-examples-environment": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_page_runs_with_only_path_home_user_tmpdir_and_dockers_settings",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "Nothing from your own environment is: each page runs with only PATH, HOME, USER, TMPDIR and Docker's own settings.",
+        ),
+    ),
+    # Nothing else from the caller's environment reaches a page.
+    "doc-examples-scrubbed": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_the_environment_is_scrubbed",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "Nothing from your own environment is: each page runs with only PATH, HOME, USER, TMPDIR and Docker's own settings.",
+        ),
+    ),
+    # No # comment in a shell block.
+    "doc-examples-comments": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_shell_comment_is_refused",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "No # comments in a shell block, skip blocks included (see Rewriting a comment).",
+        ),
+    ),
+    # A comment in a skip block is refused too.
+    "doc-examples-skip-comment": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_problems_are_annotated_in_github_actions",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "No # comments in a shell block, skip blocks included (see Rewriting a comment).",
+        ),
+    ),
+    # A # that is not a comment is fine.
+    "doc-examples-hash-allowed": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_hash_that_is_not_a_comment_is_allowed",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "A # inside quotes, in the middle of a word ($#, ${#x}, a URL's #anchor) or inside a here-document is not a comment and is fine.",
+        ),
+    ),
+    # A # inside a here-document is fine.
+    "doc-examples-heredoc-data": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_here_document_body_is_data",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "A # inside quotes, in the middle of a word ($#, ${#x}, a URL's #anchor) or inside a here-document is not a comment and is fine.",
+        ),
+    ),
+    # bash -n on every block, fragment skips excepted.
+    "doc-examples-bash-n-skip": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_bash_n_runs_on_skip_blocks_too_except_fragments",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "Every block passes bash -n, with bash 4.4 or later, the one that runs the examples; macOS's /bin/bash is 3.2 and is refused.",
+            "A skip block whose reason is fragment: … is not syntax-checked, since it is a template to fill in.",
+            "fragment | is a template to fill in, not runnable as written",
+        ),
+    ),
+    # bash older than 4.4 is refused.
+    "doc-examples-old-bash": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_bash_n_is_refused_with_a_bash_older_than_4_4",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "Every block passes bash -n, with bash 4.4 or later, the one that runs the examples; macOS's /bin/bash is 3.2 and is refused.",
+        ),
+    ),
+    # What a block that runs may not do.
+    "doc-examples-hidden-failures": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_blocks_that_hide_a_failure_or_escape_the_project_are_refused",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "Every block passes bash -n, with bash 4.4 or later, the one that runs the examples; macOS's /bin/bash is 3.2 and is refused.",
+            "end its last line in , which would swallow what follows;",
+            "mention COMPOSE_PROJECT_NAME or unset a COMPOSE_ setting, pass -p or --project-name to docker compose, run env -u or env -i, or remove Docker resources directly (docker rm, docker volume rm, … prune).",
+        ),
+    ),
+    # export, declare, local and readonly X=$(...) are refused.
+    "doc-examples-masked-keywords": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_masked_substitution_is_refused_for_each_keyword",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "write export X=$(command) (or declare, local, readonly), which reports success even when the command fails: assign first, then export;",
+        ),
+    ),
+    # The package managers the page names are refused.
+    "doc-examples-package-managers": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_the_package_managers_the_page_names_are_refused",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "run a package manager (pip, npm, yarn, go get, cargo install and the others the check lists), or aws, cdk or sam, however the command is written and even inside a here-document.",
+        ),
+    ),
+    # aws, cdk and sam are refused.
+    "doc-examples-aws": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_block_that_runs_may_not_reach_aws",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "run a package manager (pip, npm, yarn, go get, cargo install and the others the check lists), or aws, cdk or sam, however the command is written and even inside a here-document.",
+        ),
+    ),
+    # However the command is written.
+    "doc-examples-normalised": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_command_word_is_normalised_before_it_is_matched",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "run a package manager (pip, npm, yarn, go get, cargo install and the others the check lists), or aws, cdk or sam, however the command is written and even inside a here-document.",
+        ),
+    ),
+    # Even inside a here-document.
+    "doc-examples-heredoc-scanned": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_here_document_body_is_scanned_like_any_other_line",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "run a package manager (pip, npm, yarn, go get, cargo install and the others the check lists), or aws, cdk or sam, however the command is written and even inside a here-document.",
+        ),
+    ),
+    # A plain docker compose down -v is allowed.
+    "doc-examples-own-down": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_the_quick_starts_own_down_is_allowed",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "A plain docker compose down -v is allowed: each page runs under a compose project of its own.",
+        ),
+    ),
+    # Each page runs under a compose project of its own.
+    "doc-examples-own-project": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_each_page_runs_under_a_compose_project_of_its_own",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "A plain docker compose down -v is allowed: each page runs under a compose project of its own.",
+        ),
+    ),
+    # The skip-reason categories the page's table lists.
+    "doc-examples-categories": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_every_category_the_authoring_page_lists_is_accepted",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "A skip reason starts with one of these categories, then : and the words a reader of the source will see:",
+            "checkout | clones or enters the repository (the runner is already inside one)",
+            "dev | is a contributor's command in a development checkout (venv, make, pytest, this repository's own tooling)",
+            "server | starts a long-running process",
+            "aws | needs an AWS account",
+            "idp | needs an identity-provider tenant (Cognito, SAML, OIDC)",
+            "secret | needs a key, a password or a third-party account the reader holds",
+            "registry | installs a package from a public registry; it must name the package manager",
+            "toolchain | needs a language toolchain the runner doesn't use (Go, .NET, JVM, Swift, …)",
+            "destructive | changes state a reader must choose to change (restore, rollback, delete)",
+            "demo | needs the demo applications",
+            "fragment | is a template to fill in, not runnable as written",
+            "timing | gates on latency or throughput, which one run on a shared runner cannot hold: one command, run_load_tests.py without --sla report, and the page runs the same command with --sla report in an exec block",
+            "bug #N | fails because of the product defect in issue N: bug #123: …",
+        ),
+    ),
+    # A registry skip must run a package manager.
+    "doc-examples-registry-skip": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_registry_skip_must_run_a_package_manager",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "registry | installs a package from a public registry; it must name the package manager",
+        ),
+    ),
+    # A timing skip holds one command, the one that gates.
+    "doc-examples-timing-one-command": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_timing_skip_holds_only_the_command_that_gates",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "timing | gates on latency or throughput, which one run on a shared runner cannot hold: one command, run_load_tests.py without --sla report, and the page runs the same command with --sla report in an exec block",
+        ),
+    ),
+    # And the page runs it with --sla report.
+    "doc-examples-timing-report-run": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_timing_skip_needs_the_same_command_run_with_sla_report",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "timing | gates on latency or throughput, which one run on a shared runner cannot hold: one command, run_load_tests.py without --sla report, and the page runs the same command with --sla report in an exec block",
+        ),
+    ),
+    # The check prints the skipped blocks per category.
+    "doc-examples-category-counts": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_the_check_prints_how_many_skipped_blocks_each_category_holds",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "The check prints how many skipped blocks each category holds.",
+        ),
+    ),
+    # What each environment starts before a page runs.
+    "doc-examples-environments": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_each_environment_starts_what_it_needs_before_the_page",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "bare | Docker is available and nothing is running. The page starts its own stack.",
+            "stack | The Quick Start's docker compose up -d --wait has already run.",
+            'stack-full | The full profile\'s EXPERIMENTLY_PROFILE=full docker compose up -d --wait has already run, and GET /api/v1/modules said "profile": "full". For a page about a module.',
+        ),
+    ),
+    # Nothing may be running on the stack's ports.
+    "doc-examples-preflight": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_busy_port_at_preflight_is_refused_naming_what_holds_it",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "bare | Docker is available and nothing is running. The page starts its own stack.",
+        ),
+    ),
+    # stack-dev: the venv is checked before the stack starts.
+    "doc-examples-stack-dev-venv": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_stack_dev_page_needs_the_dev_venv_before_its_stack_starts",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "stack-dev | As stack, and the repository root has a development virtual environment, venv/, with backend/requirements.txt installed, for a contributor's page (source venv/bin/activate). A page whose venv cannot import alembic, locust, backend.app.core.config fails before its stack starts.",
+        ),
+    ),
+    # stack-full: GET /api/v1/modules must say full.
+    "doc-examples-full-profile": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py::test_the_full_profile_probe",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            'stack-full | The full profile\'s EXPERIMENTLY_PROFILE=full docker compose up -d --wait has already run, and GET /api/v1/modules said "profile": "full". For a page about a module.',
+        ),
+    ),
+    # Counts, environments and paths of an entry.
+    "doc-examples-enrolment": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_enrolment_mismatches_are_refused",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "local | Reserved for the demo applications, and refused as not implemented yet.",
+            "The check prints the counts it finds, and fails naming both numbers when they differ.",
+        ),
+    ),
+    # --only runs one page.
+    "doc-examples-only": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py::test_only_runs_one_page",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "--only runs one page:",
+        ),
+    ),
+    # The render check covers every page under docs/.
+    "doc-examples-render-every-page": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_render_covers_a_docs_page_that_is_not_enrolled",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "The render check covers every page under docs/, enrolled or not: a fence the site doesn't show as code fails it on any page.",
+        ),
+    ),
+    # An entry has exactly five keys.
+    "doc-examples-five-keys": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_an_entry_has_exactly_the_five_keys",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "An entry has exactly these five keys: the page, its environment (see Environments), and its counts of exec blocks, skip blocks and expectations.",
+        ),
+    ),
+    # The check prints each page's counts.
+    "doc-examples-counts": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_the_check_prints_the_counts_it_finds",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "The check prints the counts it finds, and fails naming both numbers when they differ.",
+        ),
+    ),
+    # A page with no bash block cannot be enrolled.
+    "doc-examples-zero-fence": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_a_zero_fence_document_cannot_hold_a_place",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "A page with no bash block needs no entry, and enrolling one is refused.",
+        ),
+    ),
+    # An exempt page: a reason, a bash block, the rules.
+    "doc-examples-exempt": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_an_exempt_page_needs_a_reason_and_a_shell_block_and_obeys_the_rules",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "A page whose shell blocks are deliberately left untagged is listed as exempt, with a reason (1–200 characters), instead of enrolled:",
+            "An exempt page still obeys the rules for every page (languages named, no other shell) and its bash blocks still carry no comments and pass bash -n.",
+            "An exempt page with no bash block is refused.",
+        ),
+    ),
+    # An exempt reason is 1-200 characters.
+    "doc-examples-exempt-reason": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_an_exempt_reason_is_1_to_200_characters",
+        holds=_whole(
+            "docs/development/doc-examples.md",
+            "A page whose shell blocks are deliberately left untagged is listed as exempt, with a reason (1–200 characters), instead of enrolled:",
+        ),
+    ),
+    # The runner's default is --sla enforce.
+    "load-test-default-enforce": Mechanism(
+        "backend/tests/unit/scripts/test_load_test_runner.py"
+        "::test_the_default_is_enforce",
+        holds=_whole(
+            "docs/performance/load-testing.md",
+            "Run with --sla enforce (the runner's default), a test passes when all of the following hold simultaneously:",
+        ),
+    ),
+    # A run that measured its targets passes.
+    "load-test-measured-run-passes": Mechanism(
+        "backend/tests/unit/scripts/test_load_test_runner.py"
+        "::test_a_measured_run_passes",
+        holds=_whole(
+            "docs/performance/load-testing.md",
+            "Run with --sla enforce (the runner's default), a test passes when all of the following hold simultaneously:",
+        ),
+    ),
+    # A failed request fails the run, naming the endpoint.
+    "load-test-failed-request": Mechanism(
+        "backend/tests/unit/scripts/test_load_test_runner.py"
+        "::test_a_failed_request_fails_the_run",
+        holds=_whole(
+            "docs/performance/load-testing.md",
+            "no request failed (Locust exits 1 on any failed request, and the runner names the endpoints)",
+            "It passes --sla report: it fails when a request fails, when nothing was recorded, or when a declared target was not recorded, and it prints each endpoint's p50, p95, p99 and requests per second beside its target without checking them.",
+            "Locust counts a 429 as a failed request, so the run fails.",
+            "It exits 1 when a request failed (ERROR: Locust exited with code 1, then one FAIL: line per endpoint with failures), and when the run measured nothing or not what it should: Locust recorded no requests (FAIL: no stats), no recorded endpoint matches a target in performance_targets.py (FAIL: no matched endpoint), or a target the locustfile declares in TARGETS was not recorded, or it declares none (FAIL: unmatched target).",
+        ),
+    ),
+    # A declared target that was not recorded fails the run.
+    "load-test-declared-target": Mechanism(
+        "backend/tests/unit/scripts/test_load_test_runner.py"
+        "::test_a_declared_target_that_was_not_recorded_fails",
+        holds=_whole(
+            "docs/performance/load-testing.md",
+            "every target the locustfile declares in its TARGETS tuple was recorded",
+            "It passes --sla report: it fails when a request fails, when nothing was recorded, or when a declared target was not recorded, and it prints each endpoint's p50, p95, p99 and requests per second beside its target without checking them.",
+            "It exits 1 when a request failed (ERROR: Locust exited with code 1, then one FAIL: line per endpoint with failures), and when the run measured nothing or not what it should: Locust recorded no requests (FAIL: no stats), no recorded endpoint matches a target in performance_targets.py (FAIL: no matched endpoint), or a target the locustfile declares in TARGETS was not recorded, or it declares none (FAIL: unmatched target).",
+            "Add the target's key to the locustfile's TARGETS tuple, so a run that does not record it fails",
+        ),
+    ),
+    # A locustfile that declares no TARGETS fails.
+    "load-test-no-target-list": Mechanism(
+        "backend/tests/unit/scripts/test_load_test_runner.py"
+        "::test_a_locustfile_without_a_target_list_fails",
+        holds=_whole(
+            "docs/performance/load-testing.md",
+            "It exits 1 when a request failed (ERROR: Locust exited with code 1, then one FAIL: line per endpoint with failures), and when the run measured nothing or not what it should: Locust recorded no requests (FAIL: no stats), no recorded endpoint matches a target in performance_targets.py (FAIL: no matched endpoint), or a target the locustfile declares in TARGETS was not recorded, or it declares none (FAIL: unmatched target).",
+        ),
+    ),
+    # A run that recorded nothing fails.
+    "load-test-no-stats": Mechanism(
+        "backend/tests/unit/scripts/test_load_test_runner.py::test_no_stats_fails",
+        holds=_whole(
+            "docs/performance/load-testing.md",
+            "It passes --sla report: it fails when a request fails, when nothing was recorded, or when a declared target was not recorded, and it prints each endpoint's p50, p95, p99 and requests per second beside its target without checking them.",
+            "It exits 1 when a request failed (ERROR: Locust exited with code 1, then one FAIL: line per endpoint with failures), and when the run measured nothing or not what it should: Locust recorded no requests (FAIL: no stats), no recorded endpoint matches a target in performance_targets.py (FAIL: no matched endpoint), or a target the locustfile declares in TARGETS was not recorded, or it declares none (FAIL: unmatched target).",
+            "Without the with block Locust sends the request and never records it",
+        ),
+    ),
+    # A run that matched no target fails.
+    "load-test-no-matched-endpoint": Mechanism(
+        "backend/tests/unit/scripts/test_load_test_runner.py"
+        "::test_no_matched_endpoint_fails",
+        holds=_whole(
+            "docs/performance/load-testing.md",
+            "It exits 1 when a request failed (ERROR: Locust exited with code 1, then one FAIL: line per endpoint with failures), and when the run measured nothing or not what it should: Locust recorded no requests (FAIL: no stats), no recorded endpoint matches a target in performance_targets.py (FAIL: no matched endpoint), or a target the locustfile declares in TARGETS was not recorded, or it declares none (FAIL: unmatched target).",
+        ),
+    ),
+    # The weekly workflow passes --sla report.
+    "load-test-weekly-report": Mechanism(
+        "backend/tests/unit/scripts/test_load_test_runner.py"
+        "::test_report_is_the_weekly_workflows_mode_on_its_run_line",
+        holds=_whole(
+            "docs/performance/load-testing.md",
+            "The weekly Performance Tests workflow does not gate on latency or throughput.",
+            "It passes --sla report: it fails when a request fails, when nothing was recorded, or when a declared target was not recorded, and it prints each endpoint's p50, p95, p99 and requests per second beside its target without checking them.",
+        ),
+    ),
+    # Over budget: enforce fails, report passes.
+    "load-test-enforce-or-report": Mechanism(
+        "backend/tests/unit/scripts/test_load_test_runner.py"
+        "::test_one_over_budget_csv_fails_under_enforce_and_passes_under_report",
+        holds=_whole(
+            "docs/performance/load-testing.md",
+            "The weekly Performance Tests workflow does not gate on latency or throughput.",
+            "It passes --sla report: it fails when a request fails, when nothing was recorded, or when a declared target was not recorded, and it prints each endpoint's p50, p95, p99 and requests per second beside its target without checking them.",
+            "run_load_tests.py runs Locust headless and judges the result.",
+            "Without --sla report it also exits 1 when an endpoint misses a target.",
+        ),
+    ),
+    # A target matches by method and name exactly.
+    "load-test-exact-match": Mechanism(
+        "backend/tests/unit/scripts/test_load_test_runner.py"
+        "::test_an_endpoint_matches_a_target_by_method_and_name_exactly",
+        holds=_whole(
+            "docs/performance/load-testing.md",
+            "A recorded endpoint matches a target when its method and its Locust name= are the target's method and endpoint exactly.",
+        ),
+    ),
+    # Every target is a route in the OpenAPI document.
+    "load-test-target-routes": Mechanism(
+        "backend/tests/unit/scripts/test_load_test_runner.py"
+        "::test_every_target_names_one_route_the_api_serves",
+        holds=_whole(
+            "docs/performance/load-testing.md",
+            "Add a PerformanceTarget entry to PERFORMANCE_TARGETS in performance_targets.py, for a route the API serves (a unit test checks every target against the OpenAPI document)",
+        ),
+    ),
+    # The locustfiles call the seed's experiment and flag.
+    "load-test-seed-keys": Mechanism(
+        "backend/tests/unit/scripts/test_load_test_runner.py"
+        "::test_the_locustfiles_use_the_seeds_experiment_and_flag",
+        holds=_whole(
+            "docs/performance/load-testing.md",
+            "Seed what the locustfiles call: the experiment sdk_contract_ab, the flag sdk_contract_flag, an API key, and the developer account the management tasks sign in as (dev@demo.com, not a superuser).",
+        ),
+    ),
+    # The load-testing page gives no figure.
+    "load-testing-no-figures": Mechanism(
+        "backend/tests/unit/docs/test_load_testing_page.py"
+        "::test_the_page_publishes_no_response_time_or_throughput",
+        holds=_whole(
+            "docs/performance/load-testing.md",
+            "This page publishes no response time or throughput.",
+        ),
+    ),
+    # The environment each of the three pages runs in.
+    "migration-pages-environments": Mechanism(
+        "backend/tests/unit/docs/test_migration_pages.py"
+        "::test_stack_dev_carries_the_two_contributor_pages_and_the_operator_page_is_stack",
+        holds=_whole(
+            "docs/performance/load-testing.md",
+            "CI runs this section and Running Unit Tests for the Load Test Framework as written, against the Quick Start stack.",
+        )
+        + _whole(
+            "docs/self-hosting/migrations.md",
+            "CI runs this page's exec blocks as written against the Quick Start stack.",
+        ),
+    ),
+    # The page's AWS block runs the task as the Deploy does.
+    "migration-page-aws-block": Mechanism(
+        "backend/tests/unit/docs/test_migration_pages.py"
+        "::test_the_operator_page_runs_the_migration_task_as_the_deploy_does",
+        holds=(
+            (
+                "docs/self-hosting/migrations.md",
+                r"^By hand, from a checkout with AWS [a-z]{1,20} for the environment,"
+                r" the Deploy workflow's two steps are these\.$",
+            ),
+        ),
+    ),
+    # heads, and the order upgrade heads applies, in a full checkout.
+    "alembic-plan-full": Mechanism(
+        "backend/tests/unit/db/test_alembic_plan.py"
+        "::test_a_full_checkout_has_two_heads_and_this_plan",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "heads refers to the latest migration of every branch.",
+            "This command applies all unapplied migrations in order.",
+        ),
+    ),
+    # The order upgrade heads applies in a core checkout.
+    "alembic-plan-core": Mechanism(
+        "backend/tests/unit/db/test_alembic_plan.py"
+        "::test_a_core_checkout_has_one_head_and_this_plan",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "This command applies all unapplied migrations in order.",
+        ),
+    ),
+    # The modules branch: its two revisions, in order.
+    "alembic-plan-branch": Mechanism(
+        "backend/tests/unit/db/test_alembic_plan.py"
+        "::test_the_core_plan_is_the_full_plan_without_the_branch",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "The modules branch has two revisions: modules_0001_rbac and, after it, modules_0002_warehouse_analysis.",
+        ),
+    ),
+    # modules_0001_rbac runs after a7b8c9d0e1f2.
+    "alembic-plan-branch-point": Mechanism(
+        "backend/tests/unit/db/test_alembic_plan.py"
+        "::test_the_branch_runs_after_the_revision_it_undoes",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "modules_0001_rbac is a child of the core revision a7b8c9d0e1f2, not an alembic base, and with a single tree root alembic cannot filter a downgrade by branch label: downgrade modules@base resolves to the whole core chain to base, and drops every table in the schema.",
+        ),
+    ),
+    # modules@-1 is one revision; modules@base is the whole chain.
+    "alembic-plan-unapply": Mechanism(
+        "backend/tests/unit/db/test_alembic_plan.py"
+        "::test_unapplying_the_branch_is_one_revision_and_modules_at_base_is_all_of_them",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "Roll back the most recent migration of one branch.",
+            "The modules branch has two revisions: modules_0001_rbac and, after it, modules_0002_warehouse_analysis.",
+            "Not modules@base.",
+            "modules_0001_rbac is a child of the core revision a7b8c9d0e1f2, not an alembic base, and with a single tree root alembic cannot filter a downgrade by branch label: downgrade modules@base resolves to the whole core chain to base, and drops every table in the schema.",
+        ),
+    ),
+    # The page's holdout query orders rows as d29a479daafe keeps one.
+    "holdout-runbook-query": Mechanism(
+        "backend/tests/unit/docs/test_holdout_runbook_query.py"
+        "::test_the_page_query_orders_the_active_holdouts_as_the_revision_keeps_one",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "Before upgrading, this read-only query lists the active holdouts; with more than one row, the first is the one kept:",
+        ),
+    ),
+    # The runbook's command that checks a revision by hand.
+    "rollback-runbook-revision-check": Mechanism(
+        "backend/tests/unit/infrastructure/test_rollback_runbook_env_check.py"
+        "::test_the_runbook_query_returns_the_backend_containers_value",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "Rollback does not check its target in the same way; the runbook gives the command to check one by hand.",
+        ),
+    ),
+    # The Deploy checks the API revision it registered.
+    "deploy-refuses-migrating-revision": Mechanism(
+        "backend/tests/unit/infrastructure/test_refuse_migrating_api_revision.py"
+        "::test_it_runs_after_the_registration_and_immediately_before_create_deployment",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "The Deploy workflow checks the revision it is about to deploy.",
+            "After it registers the API revision it reads back what ECS stored, and refuses to create the CodeDeploy deployment unless the backend container sets RUN_MIGRATIONS=false exactly.",
+        ),
+    ),
+    # It reads back what ECS stored.
+    "deploy-reads-the-stored-revision": Mechanism(
+        "backend/tests/unit/infrastructure/test_refuse_migrating_api_revision.py"
+        "::test_the_stored_revision_is_checked_not_the_json_sent",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "After it registers the API revision it reads back what ECS stored, and refuses to create the CodeDeploy deployment unless the backend container sets RUN_MIGRATIONS=false exactly.",
+        ),
+    ),
+    # Anything but RUN_MIGRATIONS=false exactly is refused.
+    "deploy-refuses-anything-but-false": Mechanism(
+        "backend/tests/unit/infrastructure/test_refuse_migrating_api_revision.py"
+        "::test_anything_but_exactly_false_refuses_and_names_the_fix",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "After it registers the API revision it reads back what ECS stored, and refuses to create the CodeDeploy deployment unless the backend container sets RUN_MIGRATIONS=false exactly.",
+        ),
+    ),
+    # ix_users_email_lower refuses a second account with the address.
+    "email-lower-collision": Mechanism(
+        "backend/tests/integration/database/test_users_email_lower_migration.py"
+        "::test_after_the_upgrade_a_case_only_collision_is_refused",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "From this release an email address belongs to one account whatever its letter case: Bob@acme.com and bob@acme.com are the same address, and the database refuses a second account holding it (the unique index ix_users_email_lower).",
+        ),
+    ),
+    # The refusal names account ids only.
+    "email-lower-no-address": Mechanism(
+        "backend/tests/integration/database/test_users_email_lower_migration.py"
+        "::test_the_refusal_names_no_address_domain_or_username",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "The message names account ids only, never an address.",
+        ),
+    ),
+    # At most 20 groups, then a count.
+    "email-lower-twenty-groups": Mechanism(
+        "backend/tests/integration/database/test_users_email_lower_migration.py"
+        "::test_more_than_twenty_groups_are_capped_with_a_count",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "It lists at most 20 groups, then ...",
+        ),
+    ),
+    # The listing's email column is the address as stored.
+    "email-runbook-listing": Mechanism(
+        "backend/tests/unit/docs/test_email_case_runbook.py"
+        "::test_the_listing_selects_the_address_as_stored",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "Save this output somewhere private before you change anything: its email column is the record of each address as it was, which is what you need to undo a step by hand.",
+        ),
+    ),
+    # The runbook's SQL retires an account and fits the domain limits.
+    "email-runbook-resolves": Mechanism(
+        "backend/tests/integration/database/test_users_email_lower_migration.py"
+        "::test_the_runbook_sql_resolves_a_refused_upgrade",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "It keeps its history and everything it owns, but it can no longer sign in and no longer holds the address.",
+            "email holds at most 100 characters, and retired-<id>@ takes 45 of them, so this works when the domain is at most 55 characters.",
+        ),
+    ),
+    # An index built by hand and left invalid is refused.
+    "email-lower-invalid-index": Mechanism(
+        "backend/tests/integration/database/test_users_email_lower_migration.py"
+        "::test_an_invalid_index_left_by_a_failed_concurrent_build_is_refused",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "Do not build the index by hand.",
+        ),
+    ),
+    # An index of that name in another shape is refused.
+    "email-lower-index-shape": Mechanism(
+        "backend/tests/integration/database/test_users_email_lower_migration.py"
+        "::test_an_index_of_that_name_in_another_shape_is_refused",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "Do not build the index by hand.",
+        ),
+    ),
+    # The upgrade runs in one transaction.
+    "email-lower-one-transaction": Mechanism(
+        "backend/tests/integration/database/test_users_email_lower_migration.py"
+        "::test_a_refusal_rolls_back_an_earlier_pending_revision",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "Each file represents one atomic schema change, identified by a unique revision ID.",
+            "Run the upgrade, which locks the table, checks for groups and builds the index in one transaction.",
+        ),
+    ),
+    # The upgrade locks users and waits at most its lock timeout.
+    "email-lower-lock": Mechanism(
+        "backend/tests/integration/database/test_users_email_lower_migration.py"
+        "::test_a_writer_holding_users_ends_the_upgrade_after_the_lock_timeout",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "Run the upgrade, which locks the table, checks for groups and builds the index in one transaction.",
+            "The upgrade waits at most 30 seconds for the lock on users, so that it never holds up the API's writes for long.",
+        ),
+    ),
+    # The lock timeout is back to its default after.
+    "email-lower-lock-reset": Mechanism(
+        "backend/tests/integration/database/test_users_email_lower_migration.py"
+        "::test_lock_timeout_is_back_to_its_default_after_the_lock",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "The upgrade waits at most 30 seconds for the lock on users, so that it never holds up the API's writes for long.",
         ),
     ),
 }

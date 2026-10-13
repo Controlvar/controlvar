@@ -9,7 +9,7 @@ by = ["test:infrastructure/tests/test_no_world_open_ingress.py::test_nothing_els
 
 [[unit]]
 text = "This is the only entry point the CDK creates: HTTPS, with HTTP redirected to HTTPS, in front of the API."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_public_entry_point.py::test_the_only_entry_point_is_https_with_http_redirected_to_https"]
 
 [[unit]]
 text = "The dashboard is its own ECS service behind the same load balancer: the HTTPS listener sends /api/, /health, /health/ and /metrics to the API and everything else to the dashboard."
@@ -27,7 +27,7 @@ by = [
 
 [[unit]]
 text = "No stack creates CloudFront or API Gateway."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_public_entry_point.py::test_no_stack_creates_cloudfront_or_api_gateway"]
 
 [[unit]]
 text = "The dashboard is a static Next.js export served by nginx; in Docker Compose that nginx also proxies /api/ to the API, and in AWS it proxies nothing."
