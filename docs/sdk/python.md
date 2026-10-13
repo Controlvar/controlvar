@@ -96,7 +96,7 @@ is in.
 |---|---|---|
 | `get_assignment(experiment_key, user_id, user_attributes=None)` | `Assignment(experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason)` | raises `ExperimentationError` (`status == 404` when the experiment is not ACTIVE or unknown) |
 | `get_variant(experiment_key, user_id, user_attributes=None)` | `str` — the variant name | returns `default_variant` (`"control"`) |
-| `get_feature_flag(flag_key, user_id, user_attributes=None)` | `FlagEvaluation(key, enabled, config, reason)` | raises `ExperimentationError` (`status == 404` when the flag is not ACTIVE or unknown) |
+| `get_feature_flag(flag_key, user_id, user_attributes=None)` | `FlagEvaluation(key, enabled, config, reason)` | raises `ExperimentationError` (`status == 404` when the flag key is unknown; a flag that is not ACTIVE returns `enabled=False`, `reason="inactive"`) |
 | `is_feature_enabled(flag_key, user_id, user_attributes=None)` | `bool` | returns `False` |
 | `get_all_flags(user_id, user_attributes=None)` | `dict[str, bool]` (not cached) | raises `ExperimentationError` |
 | `track(user_id, event_name, event_value=None, properties=None, experiment_key=None, feature_flag_key=None, event_type=None, timestamp=None)` | `bool` — `True` when the server accepted it | never raises; `False` on failure or when nothing was sent |
@@ -266,5 +266,5 @@ python -m pytest sdk/python/tests -q -o addopts="" -p no:cacheprovider
 python tests/sdk-contract/hash_contract.py python
 ```
 
-- `python -m pytest sdk/python/tests -q -o addopts="" -p no:cacheprovider`: 182 tests, HTTP is faked
+- `python -m pytest sdk/python/tests -q -o addopts="" -p no:cacheprovider`: HTTP is faked
 - `python tests/sdk-contract/hash_contract.py python`: this SDK's hash vs the golden vectors

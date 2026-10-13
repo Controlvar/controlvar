@@ -119,9 +119,9 @@ The architecture is designed to provide high-performance experiment evaluation, 
 
 ### 4. Analytics & Processing Layer
 
--   **Amazon Kinesis**: Real-time data streaming for event collection
+-   **Amazon Kinesis** (full profile): a stream that Firehose delivers to the S3 data lake; the API does not write to it today
 -   **AWS EventBridge**: Event bus for internal service communication
--   **Amazon OpenSearch Service**: Analytics engine for experiment results and dashboards
+-   **Amazon OpenSearch Service** (full profile): a domain is created; nothing writes to it today, and results are computed by the API from PostgreSQL
 -   **AWS Glue & Athena**: ETL jobs, partitions and crawlers for the data lake
 
 ### 5. Supporting Services
@@ -181,50 +181,30 @@ The architecture is designed to provide high-performance experiment evaluation, 
 │      - Experiment exposure tracking   │
 │      - Conversion events              │
 └─────────────────┬─────────────────────┘
-                  │
+                  │  POST /api/v1/tracking/track
+                  │  POST /api/v1/tracking/batch
                   ▼
 ┌───────────────────────────────────────┐
-│   API Gateway                         │
-│   - Event collection endpoints        │
-│   - Validation & authentication       │
+│   API (ECS service)                   │
+│   - X-API-Key authentication          │
+│   - Event validation                  │
 └─────────────────┬─────────────────────┘
                   │
                   ▼
 ┌───────────────────────────────────────┐
-│   Kinesis Data Streams                │
-│   - High-throughput event ingestion   │
+│   PostgreSQL                          │
+│   - Events and assignments            │
 └─────────────────┬─────────────────────┘
                   │
                   ▼
 ┌───────────────────────────────────────┐
-│   Event processing (Lambda code under │
-│   backend/lambda/, deployed by no     │
-│   stack)                              │
-└─────────────────┬─────────────────────┘
-                  │
-        ┌─────────┴─────────┐
-        │                   │
-        ▼                   ▼
-┌───────────────────┐ ┌────────────────────┐
-│   DynamoDB        │ │   S3 Data Lake     │
-│   - Real-time     │ │   - Historical     │
-│     metrics       │ │     event data     │
-└─────────┬─────────┘ └──────────┬─────────┘
-          │                      │
-          │                      ▼
-          │           ┌────────────────────┐
-          │           │   Glue ETL Jobs    │
-          │           │   - Data transform │
-          │           └──────────┬─────────┘
-          │                      │
-          └──────────┐          │
-                     ▼          ▼
-          ┌────────────────────────────┐
-          │   OpenSearch Service       │
-          │   - Analytics engine       │
-          │   - Visualization          │
-          └────────────────────────────┘
+│   Results, computed by the API        │
+│   (/api/v1/results/...)               │
+└───────────────────────────────────────┘
 ```
+
+Kinesis, Lambda and OpenSearch are not on this path: see
+[Kinesis and OpenSearch](../integrations/aws.md#kinesis-and-opensearch).
 
 ## Key Technical Capabilities
 
@@ -237,14 +217,14 @@ The architecture is designed to provide high-performance experiment evaluation, 
 
 ### 2. High-Performance Event Collection
 
--   **Kinesis Data Streams** for handling millions of events per minute
+-   **Event tracking through the API** (`POST /api/v1/tracking/track` and `/tracking/batch`), stored in PostgreSQL
 -   **Batched event processing** to optimize throughput
 -   **Event schema validation** and enrichment
 -   **Real-time metrics aggregation** using DynamoDB counters
 
 ### 3. Statistical Analysis System
 
--   **Real-time significance testing** using OpenSearch aggregations
+-   **Significance testing** computed by the API from the events in PostgreSQL
 -   **Multi-metric analysis** with correction for multiple testing
 -   **Bayesian analysis** for more nuanced experiment interpretation
 -   **Automated experiment stopping** based on significance thresholds

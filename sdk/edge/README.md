@@ -6,7 +6,7 @@ WinterCG runtime. Zero runtime dependencies, no Node.js built-ins.
 Flag evaluation and experiment assignment are **decided by the server**; results are cached per
 user + key in memory (and optionally in Cloudflare KV / Deno KV). Nothing is bucketed locally.
 
-Full documentation: [`docs/sdk/edge.md`](../../docs/sdk/edge.md).
+Full documentation: [`docs/sdk/edge.md`](https://github.com/getexperimently/experimently/blob/main/docs/sdk/edge.md).
 
 ## Quick start
 
@@ -36,7 +36,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json`, `Accept: ap
 | `track` with a key | `POST /api/v1/tracking/track` | ignored |
 | `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` `{events: [...]}` (≤ 100) | `{success_count, failure_count, errors}` |
 
-Errors: 401 bad key, 404 flag/experiment not ACTIVE (→ disabled / `null`, never cached), 429 rate limited.
+Errors: 401 bad key, 404 an experiment unknown or not ACTIVE, or an unknown flag key (→ disabled / `null`, never cached), 429 rate limited.
 
 ## Contract smoke
 
@@ -58,5 +58,5 @@ npm test
 npm run build
 ```
 
-- `npm test`: 101 Jest tests (fetch mocked)
+- `npm test`: Jest, fetch mocked
 - `npm run build`: ESM + .d.ts → dist/

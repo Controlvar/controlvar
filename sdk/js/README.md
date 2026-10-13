@@ -1,7 +1,6 @@
 # @getexperimently/js-sdk
 
-**0.x beta.** The API may change between 0.x minor versions; pin the exact version
-you test against.
+**Beta.** This is a 0.x release: pin the exact version you test against.
 
 JavaScript/TypeScript client for the Experimently public API. Node >= 18 and browsers,
 zero runtime dependencies (global `fetch`), CommonJS build with type declarations.
@@ -16,14 +15,14 @@ Full documentation: [`docs/sdk/javascript.md`](https://github.com/getexperimentl
 
 ## Install
 
-The package is on [npm](https://www.npmjs.com/package/@getexperimently/js-sdk). 0.1.0 is a
+The `@getexperimently/js-sdk` package is on [npm](https://www.npmjs.com/package/@getexperimently/js-sdk). 0.1.0 is a
 beta release.
 
 ```bash
 npm install @getexperimently/js-sdk@0.1.0
 ```
 
-To work on the SDK itself, see [Development](#development) below.
+To work on the SDK itself, see Development below.
 
 ## Quick start
 
@@ -92,7 +91,8 @@ Every request carries `X-API-Key`, `Content-Type: application/json`, `Accept: ap
 | `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` `{events: [...]}` (≤ 100) | `{success_count, failure_count, errors}` |
 | `fetchAssignments` | `GET /api/v1/tracking/assignments/{user_id}?active_only=true` | list of rows |
 
-Errors: 401 bad key, 404 flag/experiment not ACTIVE (never cached), 422 invalid event, 429 rate limited.
+Errors: 401 bad key, 404 an experiment unknown or not ACTIVE, or an unknown flag key (never cached), 422 invalid event, 429 rate limited.
+A flag that is not ACTIVE is not an error: it answers `enabled: false`, `reason: "inactive"`.
 
 ## Contract smoke
 

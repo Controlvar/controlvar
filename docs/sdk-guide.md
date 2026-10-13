@@ -40,12 +40,12 @@ in the `/tracking/assign` body, and on flag evaluation as `context=<url-encoded 
 A flag's targeting rules — as written in the dashboard rule editor — evaluate against them; the response's
 `reason` (`targeting_rule` / `rollout` / `inactive` / `error`) says which path decided. Attribute lookup is
 aliased: a top-level `country` also matches a rule on `user.country` (likewise `device.` / `app.` prefixes),
-and nested objects flatten to dotted keys (`{"app": {"version": "3.2.1"}}` answers `app.version`). The React,
-JavaScript and Python SDKs send the context today; the other SDKs will follow.
+and nested objects flatten to dotted keys (`{"app": {"version": "3.2.1"}}` answers `app.version`). The
+JavaScript, Python and React SDKs send it on both calls; each SDK's page says what that SDK sends.
 
-## SDK status (2026-09-11)
+## SDK status
 
-Every SDK was rewired to the contract above in September 2026: the server decides assignment and flag
+Every SDK uses the contract above: the server decides assignment and flag
 evaluation, results are cached per user + key, and `track` fans out to the user's cached assignments and
 flags when no key is given. The cached assignments include answers with `"assigned": false` (a user the
 global holdout kept out, for example): holdout results count those users' events like everyone else's. The MD5 consistent hash remains exported by each SDK as a compatibility utility
@@ -64,23 +64,23 @@ Each SDK's own unit tests run in
 the Linux SDKs on pull requests that touch them (js, python and react on every one), and elixir, flutter, android and ios nightly and
 when touched.
 
-| SDK | Location | Unit tests | Verified live | Docs |
+| SDK | Location | Unit test runner | Verified live | Docs |
 |---|---|---|---|---|
-| React | `sdk/react` | 215 (jest) | yes — also runs the ShopLab demo | [react.md](sdk/react.md) |
-| JavaScript / TypeScript | `sdk/js` | 171 (jest) | yes, including local evaluation | [javascript.md](sdk/javascript.md), [local-evaluation.md](sdk/local-evaluation.md) |
-| OpenFeature (JS) | `sdk/openfeature` | 51 (jest) | yes | [openfeature.md](sdk/openfeature.md) |
-| Edge (Cloudflare Workers) | `sdk/edge` | 101 (jest) | yes | [edge.md](sdk/edge.md) |
+| React | `sdk/react` | jest | yes | [react.md](sdk/react.md) |
+| JavaScript / TypeScript | `sdk/js` | jest | yes, including local evaluation | [javascript.md](sdk/javascript.md), [local-evaluation.md](sdk/local-evaluation.md) |
+| OpenFeature (JS) | `sdk/openfeature` | jest | yes | [openfeature.md](sdk/openfeature.md) |
+| Edge (Cloudflare Workers) | `sdk/edge` | jest | yes | [edge.md](sdk/edge.md) |
 | React Native | `sdk/react-native` | jest | yes, in CI — the smoke runs under jest in Node (no device runtime) | [react-native.md](sdk/react-native.md) |
-| Python | `sdk/python` | 182 (pytest, Python 3.9+) | yes, including local evaluation | [python.md](sdk/python.md), [local-evaluation.md](sdk/local-evaluation.md) |
-| OpenFeature (Python) | `sdk/openfeature-python` | 79 (pytest) | yes | [openfeature.md](sdk/openfeature.md) |
-| Go | `sdk/go` | 51 (`go test -race`) | yes | [go.md](sdk/go.md) |
-| Java + Spring Boot starter | `sdk/java` | 77 + 30 (JUnit 5) | yes | [java.md](sdk/java.md) |
-| iOS (Swift) | `sdk/ios` | 71 (XCTest) | not yet (unit tests run in the nightly tier) | [ios.md](sdk/ios.md) |
-| Ruby | `sdk/ruby` | 109 (RSpec) | yes | [ruby.md](sdk/ruby.md) |
-| PHP | `sdk/php` | PHPUnit | in CI only (no PHP on the dev machine) | [php.md](sdk/php.md) |
-| .NET | `sdk/dotnet` | xUnit | in CI only (no .NET on the dev machine) | [dotnet.md](sdk/dotnet.md) |
+| Python | `sdk/python` | pytest | yes, including local evaluation | [python.md](sdk/python.md), [local-evaluation.md](sdk/local-evaluation.md) |
+| OpenFeature (Python) | `sdk/openfeature-python` | pytest | yes | [openfeature.md](sdk/openfeature.md) |
+| Go | `sdk/go` | `go test` | yes | [go.md](sdk/go.md) |
+| Java + Spring Boot starter | `sdk/java` | JUnit 5 | yes | [java.md](sdk/java.md) |
+| iOS (Swift) | `sdk/ios` | XCTest | not yet (unit tests run in the nightly tier) | [ios.md](sdk/ios.md) |
+| Ruby | `sdk/ruby` | RSpec | yes | [ruby.md](sdk/ruby.md) |
+| PHP | `sdk/php` | PHPUnit | yes | [php.md](sdk/php.md) |
+| .NET | `sdk/dotnet` | xUnit | yes | [dotnet.md](sdk/dotnet.md) |
 | Android (Kotlin) | `sdk/android` | JUnit 5 | yes, in CI — the smoke runs the JVM build of the Kotlin sources (no emulator); the Android library tests run in the nightly tier | [android.md](sdk/android.md) |
-| Flutter / Dart | `sdk/flutter` | `dart test` | not yet (unit tests run in the nightly tier) | [flutter.md](sdk/flutter.md) |
+| Flutter / Dart | `sdk/flutter` | `flutter test` | not yet (unit tests run in the nightly tier) | [flutter.md](sdk/flutter.md) |
 | Elixir | `sdk/elixir` | ExUnit | not yet (unit tests run in the nightly tier) | [elixir.md](sdk/elixir.md) |
 
 Rows marked "not yet" have a `contract_smoke` entry point that no CI job runs against a live backend;
@@ -278,7 +278,7 @@ Smoke against a live backend: `cd sdk/js && npm run build && node examples/contr
 
 ### React Integration
 
-Use the dedicated React SDK (`sdk/react`, verified end to end). Full reference: [React SDK](sdk/react.md).
+Use the dedicated React SDK (`sdk/react`). Full reference: [React SDK](sdk/react.md).
 
 ```tsx
 import {
@@ -316,18 +316,6 @@ function CheckoutButton() {
 }
 ```
 
-### Client Configuration
-
-```typescript
-const client = new ExperimentationClient({
-  apiUrl: 'https://your-platform.example.com',
-  apiKey: 'your-api-key',
-  timeoutMs: 2000,          // Default: 5000
-  cacheTtlSeconds: 60,      // Default: 300
-  defaultVariant: 'control', // Fallback on error
-});
-```
-
 ---
 
 ## Java SDK
@@ -337,9 +325,8 @@ const client = new ExperimentationClient({
 
 ### Installation
 
-**Not yet published.** `com.getexperimently:experimently-sdk` and the Spring Boot starter are not
-on Maven Central yet, so the dependency below resolves only after you run `mvn install` in
-`sdk/java` of a clone of this repository, which installs both into your local `~/.m2`.
+Install it from a clone of this repository: `mvn install` in `sdk/java` builds both modules and
+installs them into your local `~/.m2`, where the dependency below resolves.
 
 ```xml
 <dependency>
@@ -417,15 +404,14 @@ experimentation:
 ```
 
 The starter registers an `ExperimentationClient` bean (`@ConditionalOnMissingBean`) that you can inject
-anywhere. Tests: `cd sdk/java && mvn test` (77 core + 30 starter). Smoke against a live backend:
+anywhere. Tests: `cd sdk/java && mvn test`. Smoke against a live backend:
 `bash sdk/java/examples/contract_smoke.sh`.
 
 ---
 
 ## React SDK
 
-The React SDK is the one SDK verified end to end against this backend (the ShopLab demo in `demo/shoplab`
-runs on it). Its full reference — provider, hooks, HOC, SSR client, types and the exact backend calls — lives
+The React SDK's full reference — provider, hooks, HOC, SSR client, types and the exact backend calls — lives
 in [docs/sdk/react.md](sdk/react.md); `sdk/react/README.md` is the package README.
 
 Highlights:
@@ -437,13 +423,14 @@ Highlights:
   `GET /api/v1/feature-flags/evaluate/{key}?user_id=`; `useVariant` and `useMultipleFlags` build on it.
 - `useTrackEvent()` → `track(eventName, properties?, { experimentKey?, featureFlagKey?, value? })`; without a
   key the event fans out to every experiment the user is assigned to.
-- `ServerClient` (from `@getexperimently/react-sdk/ssr`) offers the same calls for Node/SSR and never throws.
+- `ServerClient`, exported from the package root, offers the same calls for Node/SSR and never throws.
 
 ## API Key Authentication
 
 The SDK uses API key authentication, separate from user JWT tokens. API keys are intended for server-side and client-side SDK use.
 
-**Obtaining an API Key**: Contact your platform ADMIN or use the Admin UI under Settings → API Keys.
+**Obtaining an API key**: any signed-in user can create one for themselves with `POST /api/v1/api-keys`;
+superusers can also use **Admin → API Keys** in the dashboard.
 
 The API key is passed as `X-API-Key: your-api-key` in all SDK requests.
 
@@ -465,7 +452,8 @@ const variant = await client.getVariant('my-experiment', { userId: 'user-123' })
 // Returns 'control' (defaultVariant) if API is unreachable
 ```
 
-For event tracking, failures are logged but do not throw exceptions by default. Pass `throwOnError: true` to opt into strict mode.
+Tracking never throws: in Python `track` returns `False` on a failure, and in JavaScript `track` never
+rejects and reports the failure to `onError`.
 
 When the server fails to store an assignment, an event or an error report, it answers 500 with a
 short sentence ending in a request ID, such as `Could not store the event (request ID: <id>).` The

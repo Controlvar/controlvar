@@ -180,6 +180,20 @@ describe('ResultsDashboard', () => {
     expect(screen.getByRole('tab', { name: /sample size/i })).toBeInTheDocument();
   });
 
+  it('offers no CUPED tab, toggle or control: CUPED-adjusted results are API only', async () => {
+    mockGetResults.mockResolvedValue(mockResults);
+    mockGetDailyResults.mockResolvedValue(mockDaily);
+    mockGetSampleSize.mockResolvedValue(mockSampleSize);
+
+    render(<ResultsDashboard experimentId="exp-1" />);
+    await waitFor(() => screen.getByRole('tablist'));
+
+    for (const role of ['tab', 'switch', 'checkbox', 'button', 'radio'] as const) {
+      expect(screen.queryByRole(role, { name: /cuped/i })).toBeNull();
+    }
+    expect(screen.queryByText(/cuped/i)).toBeNull();
+  });
+
   it('switches to trends tab when clicked', async () => {
     mockGetResults.mockResolvedValue(mockResults);
     mockGetDailyResults.mockResolvedValue(mockDaily);

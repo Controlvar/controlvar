@@ -7,7 +7,7 @@ Flag evaluation and experiment assignment are decided **by the server**: every c
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key for a TTL. Nothing is bucketed locally.
 
-Full reference: [`docs/sdk/go.md`](../../docs/sdk/go.md).
+Full reference: [`docs/sdk/go.md`](https://github.com/getexperimently/experimently/blob/main/docs/sdk/go.md).
 
 ## Installation
 
@@ -85,7 +85,7 @@ Types (`types.go`):
 | Type | Fields |
 |---|---|
 | `User` | `ID string`, `Attributes map[string]interface{}` (sent as assignment `context`) |
-| `EvalResult` | `Key string`, `Enabled bool`, `Config map[string]any` (`nil` unless the server returned a JSON object) |
+| `EvalResult` | `Key string`, `Enabled bool`, `Config map[string]any` (always `nil`: the evaluate endpoint returns `config: null` for every flag) |
 | `Assignment` | `ExperimentKey`, `UserID`, `VariantID`, `VariantName string`, `IsControl bool`, `Configuration map[string]any` |
 | `TrackEvent` | `UserID`, `EventName` (required), `EventType` (defaults to `EventName`), `ExperimentKey`, `FeatureFlagKey`, `Value *float64` (`exp.Float64(v)`), `Properties` (sent as `metadata`), `Timestamp time.Time` (ISO-8601 when non-zero) |
 | `APIError` | `StatusCode int`, `Message string`, `RetryAfter string` (429); use `errors.As` |
@@ -96,7 +96,7 @@ Types (`types.go`):
   (default 5 min, LRU-bounded by `CacheSize`). A cache hit makes no request; the second
   `GetAssignment` for the same user + experiment is served locally.
 - **Failures are never cached**, so the next call retries.
-- Network error, timeout, 401 (bad key), 404 (flag/experiment unknown or not ACTIVE), 429
+- Network error, timeout, 401 (bad key), 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 429
   (rate limited, `APIError.RetryAfter`): `EvaluateFlag` returns a **disabled** result plus the
   error; `GetAssignment` returns `nil` plus the error. Non-2xx responses are `*APIError`.
 - `Track`/`TrackBatch` never panic; the returned error is safe to ignore.
@@ -158,6 +158,6 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/exp
 cd sdk/go && go vet ./... && go test -race ./...
 ```
 
-- `cd sdk/go && go vet ./... && go test -race ./...`: 51 tests, HTTP mocked with httptest
+- `cd sdk/go && go vet ./... && go test -race ./...`: HTTP mocked with httptest
 
 A longer walkthrough lives in `examples/main.go` (`go run ./examples`).

@@ -800,7 +800,7 @@ reason = "the Go module's README; not walked: the sdk-go journey walks docs/sdk/
 [documents."sdk/openfeature-python/README.md"]
 scope = "in"
 class = "reference"
-reason = "not walked: the README says the Python OpenFeature provider is not on PyPI yet"
+reason = "not walked: the README installs the Python OpenFeature provider from a clone of this repository"
 
 [documents."sdk/java/README.md"]
 scope = "in"

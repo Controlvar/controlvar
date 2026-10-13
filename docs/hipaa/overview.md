@@ -144,12 +144,13 @@ It creates two tables:
 
 ## Test Coverage
 
-| File | Tests | Coverage |
-|------|-------|----------|
-| `test_phi_encryption.py` | 29 | PHI encryption: key gen, encrypt/decrypt, edge cases |
-| `test_hipaa_service.py` | 51 | Service layer: audit logs, BAA, report, data residency |
-| `test_hipaa_api.py` | 62 | API: all 11 endpoints, RBAC, validation |
-| **Total** | **142** | |
+The Module Tests job of `pr-qa-gate.yml` runs these suites:
+
+| File | Coverage |
+|------|----------|
+| `test_phi_encryption.py` | PHI encryption: key gen, encrypt/decrypt, edge cases |
+| `test_hipaa_service.py` | Service layer: audit logs, BAA, report, data residency |
+| `test_hipaa_api.py` | API: all 11 endpoints, RBAC, validation |
 
 ## Security Notes
 

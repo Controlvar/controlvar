@@ -177,6 +177,12 @@ class TestResolveBooleanDetails:
         flag(transport, "f", config={"variant": "beta"})
         assert provider.resolve_boolean_details("f", False, CTX).variant == "beta"
 
+    def test_no_variant_when_config_is_null(self):
+        provider, transport = make_provider()
+        flag(transport, "f", config=None)
+        result = provider.resolve_boolean_details("f", False, CTX)
+        assert (result.value, result.variant) == (True, None)
+
     def test_not_found_returns_default_with_flag_not_found(self):
         provider, transport = make_provider()
         transport.respond(404, json={"detail": "Feature flag with key 'missing' not found or not active"})

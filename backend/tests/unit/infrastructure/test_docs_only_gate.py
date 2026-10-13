@@ -202,6 +202,10 @@ NOT_DOCS_TESTS = {
     "backend/tests/smoke/test_openapi_release_rewrite.py": "docs/api only",
     # Reads only docs/api/endpoints.md (same reason as above).
     "backend/tests/unit/api/test_wizard_docs_routes.py": "docs/api only",
+    # Runs the quick start of sdk/python/README.md, which is not under docs/:
+    # a change to it is never docs-only (scripts/classify_changes.py), and the
+    # SDK suite it is in runs on every pull request (sdk-unit-tests.yml).
+    "sdk/python/tests/test_readme.py": "reads sdk/python/README.md only",
     # Reads only docs/api/warehouse-analytics.md (same reason as above).
     "modules/backend/tests/unit/test_warehouse_docs_availability.py": "docs/api only",
     # Runs the runbook SQL of docs/self-hosting/migrations.md against
@@ -219,6 +223,13 @@ NOT_DOCS_TESTS = {
     # Builds its own base and head trees in tmp_path with pages such as
     # "docs/a.md" for scripts/removed_units.py; opens no file under docs/.
     "backend/tests/unit/scripts/test_removed_units.py": "fixture strings only",
+    # Names made-up pages such as "docs/a.md" in its fixtures; it reads the
+    # registries only to compare scripts/rc_evidence.py's reading of them with
+    # scripts/doc_claims.py's own, and test_doc_claims.py (DOCS_TESTS) holds
+    # the registries on a docs-only change.
+    "backend/tests/unit/scripts/test_rc_evidence.py": (
+        "fixture strings; compares two readers of the registries"
+    ),
     # Pins docs-journeys.yml's script lines, one of which names mkdocs.yml and
     # docs (the git archive of the published site's source); opens no file
     # under docs/.

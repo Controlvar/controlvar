@@ -752,12 +752,35 @@ def summary_markdown(
     return "\n".join(lines) + "\n"
 
 
-def verdicts_record(runs: Sequence[GuideRun], info: RunInfo) -> Dict[str, Any]:
+_PUBLISHED_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,99}")
+_PUBLISHED_SHA = re.compile(r"[0-9a-f]{40}")
+
+
+def published_source(environ: Mapping[str, str]) -> Dict[str, str]:
+    """The ref and commit the published site was built from, as the workflow
+    named them (``DOCS_JOURNEY_PUBLISHED_REF`` and ``DOCS_JOURNEY_PUBLISHED_SHA``);
+    a value that is not a ref's or a commit's characters is recorded as ""."""
+    ref = environ.get("DOCS_JOURNEY_PUBLISHED_REF", "")
+    sha = environ.get("DOCS_JOURNEY_PUBLISHED_SHA", "")
+    return {
+        "ref": ref if _PUBLISHED_REF.fullmatch(ref) else "",
+        "sha": sha if _PUBLISHED_SHA.fullmatch(sha) else "",
+    }
+
+
+def verdicts_record(
+    runs: Sequence[GuideRun],
+    info: RunInfo,
+    published: Optional[Mapping[str, str]] = None,
+) -> Dict[str, Any]:
     """Each journey's verdict and its header's template and values.
 
     ``verdicts.json`` in the run directory: what ``scripts/docs_journeys_report.py``
     reads, in this run and in the runs before it, to keep each failing guide's
     issue. Empty values when the run is not one the templates accept.
+    ``published`` is the ref and commit the published site was built from
+    (``published_source``; empty when the run names none): what
+    ``scripts/rc_evidence.py`` compares with the release tag.
     """
     journeys: Dict[str, Any] = {}
     for run in runs:
@@ -777,5 +800,9 @@ def verdicts_record(runs: Sequence[GuideRun], info: RunInfo) -> Dict[str, Any]:
         "date": info.date,
         "sha": info.sha,
         "run_link": info.run_link,
+        "published": {
+            "ref": (published or {}).get("ref", ""),
+            "sha": (published or {}).get("sha", ""),
+        },
         "journeys": journeys,
     }
