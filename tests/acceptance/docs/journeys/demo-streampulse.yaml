@@ -13,14 +13,19 @@
 # devices.ts). The key never reaches the browser, so the journey is not
 # recorded. The kill switch is turned off in the dashboard and back on.
 #
+# The last steps turn the same flag off and on through the API while the app
+# stays open, and press Refresh now after each change: the panel's button
+# clears the SDK's cache, so the Home screen follows without a reload.
+#
 # Expectations written on 2026-10-11 from the README, the seed
 # (backend/scripts/seed_streampulse.py) and the app's source, before the first
-# run.
+# run; holdout-flags and the Refresh now steps on 2026-10-12, from the
+# app's source and the flag service.
 guide: demo/streampulse/README.md
 stack: demo-local
 profile: full
 video: false
-written: 2026-10-11
+written: 2026-10-12
 steps:
   - id: app
     doc: running-it
@@ -290,6 +295,20 @@ steps:
         assigned: false
         reason: holdout
     fail: sp-holdout-15 is enrolled in streampulse_upsell_modal
+  - id: holdout-flags
+    doc: demo-script-what-to-show
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/evaluate/streampulse_recs_v2?user_id=sp-holdout-15
+        as: anonymous
+        key: sdk-key
+    expect:
+      status: 200
+      json:
+        enabled: true
+        reason: rollout
+    fail: the holdout keeps sp-holdout-15 from a feature flag; it applies to experiments only
   - id: for-you
     doc: demo-script-what-to-show
     do:
@@ -464,3 +483,76 @@ steps:
       json:
         enabled: true
     fail: streampulse_recs_v2 is not served again once it is turned back on
+  - id: app-again
+    doc: demo-script-what-to-show
+    do:
+      open: http://localhost:3300
+    expect:
+      status: 200
+      text: For you
+      aria: |
+        - heading "StreamPulse" [level=1]
+    fail: the Home screen is not the For you feed once streampulse_recs_v2 is back on
+  - id: recs-flag
+    doc: demo-script-what-to-show
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/?search=streampulse_recs_v2
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: streampulse_recs_v2
+        items.0.status: active
+    save:
+      recs-flag-id:
+        path: items.0.id
+    fail: streampulse_recs_v2 is not on
+  - id: recs-deactivated
+    doc: demo-script-what-to-show
+    do:
+      api:
+        method: POST
+        path: /api/v1/feature-flags/{{recs-flag-id}}/deactivate
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: inactive
+    fail: streampulse_recs_v2 cannot be turned off through the API
+  - id: refresh-now
+    doc: demo-script-what-to-show
+    do:
+      click:
+        role: button
+        name: Refresh now
+    expect:
+      text: Classic
+      aria: |
+        - heading "StreamPulse" [level=1]
+    fail: after Refresh now, the open app's Home screen is not the Classic feed while the flag is off
+  - id: recs-activated
+    doc: demo-script-what-to-show
+    do:
+      api:
+        method: POST
+        path: /api/v1/feature-flags/{{recs-flag-id}}/activate
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: active
+    fail: streampulse_recs_v2 cannot be turned back on through the API
+  - id: refresh-now-again
+    doc: demo-script-what-to-show
+    do:
+      click:
+        role: button
+        name: Refresh now
+    expect:
+      text: For you
+      aria: |
+        - heading "StreamPulse" [level=1]
+    fail: after Refresh now, the open app's Home screen is not the For you feed once the flag is back on

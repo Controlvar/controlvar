@@ -81,8 +81,8 @@ await client.track('user-123', 'page_view', { properties: { page: '/checkout' } 
 
 The block is TypeScript and uses top-level `await`, so it runs as an ES module. To run it as it
 is, save it as `quick-start.mts` in the project where you installed the package, set
-`EXPERIMENTLY_API_KEY`, and run `node --experimental-strip-types quick-start.mts` (Node 22.6 or
-later; checked with Node 22.14, which prints an `ExperimentalWarning`). As plain JavaScript, delete the `!` after
+`EXPERIMENTLY_API_KEY`, and run it with `node --experimental-strip-types quick-start.mts`
+(Node 22.6 or later; it may print an `ExperimentalWarning`). As plain JavaScript, delete the `!` after
 `process.env.EXPERIMENTLY_API_KEY`, save it as `quick-start.mjs` and run `node quick-start.mjs`.
 
 ---
@@ -297,7 +297,7 @@ MD5("{userId}:{flagKey}") → first 4 bytes as little-endian uint32 → ÷ 2^32 
 consistentHash('user-123', 'my-flag') ≈ 0.6927449859
 ```
 
-**Nothing in the SDK calls them to pick a variant or decide a flag.** `consistentHash` is not the
+**Nothing in the SDK calls `consistentHash` to pick a variant or decide a flag.** It is not the
 function the server buckets flag rollouts with: that is `md5-mod100-v1`, the whole MD5 digest of
 `"{userId}:{flagKey}"` read as a big-endian integer, mod 100, which local evaluation reproduces
 internally (`consistentHash('user-123', 'my-flag')` is bucket 69; the server puts that user in

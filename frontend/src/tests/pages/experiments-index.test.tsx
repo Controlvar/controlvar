@@ -134,7 +134,9 @@ describe('ExperimentsPage', () => {
     Object.assign(navigator, { clipboard: { writeText } });
     fireEvent.click(within(card).getByTestId('checklist-copy-curl'));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(curl));
-    expect(await within(card).findByText('Copied')).toBeInTheDocument();
+    await waitFor(() => expect(within(card).getByTestId('checklist-copy-curl')).toHaveTextContent('Copied'));
+    // Announced as well as shown: the status region says it too.
+    expect(within(card).getByRole('status')).toHaveTextContent('Copied');
     expect(screen.queryByTestId('experiments-table')).not.toBeInTheDocument();
   });
 

@@ -1,0 +1,570 @@
+# What verifies each unit of demo/streampulse/README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "demo/streampulse/README.md"
+
+[[unit]]
+text = "StreamPulse — mobile feature-flag demo for Experimently"
+by = ["exempt:label"]
+
+[[unit]]
+text = "StreamPulse is a web page that renders a phone."
+by = [
+    "journey:demo-streampulse#app",
+    "journey:demo-streampulse#premium-iphone",
+]
+
+[[unit]]
+text = "Pick a simulated device (OS, OS version, app version, region, tier, employee) and the phone shows, screen by screen, which feature flags and experiments that device gets from the Experimently platform — with the server's reason for each decision."
+by = [
+    "journey:demo-streampulse#premium-iphone",
+    "journey:demo-streampulse#gb-iphone",
+]
+
+[[unit]]
+text = "A Python simulator pretends to be thousands of devices, and a scripted \"rollout story\" walks a feature flag from internal testers to 100 % with a crash incident and an automatic rollback on the way."
+by = ["untested:T"]
+
+[[unit]]
+text = "It exercises the feature-flag path of the platform: targeting rules with device context, gradual rollout schedules, safety monitoring + auto-rollback, kill switches, mutual exclusion groups, the global holdout and Bayesian A/B analysis."
+by = ["untested:T"]
+
+[[unit]]
+text = "No audio, no images, no external fonts or CDNs."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_app_loads_no_image_font_audio_or_cdn"]
+
+[[unit]]
+text = "Screens ↔ platform features"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Screen | Flag / experiment | What the phone shows | Platform feature showcased"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Home | streampulse_recs_v2 flag | on → \"For you\" feed (recs_impression); off → \"Classic\" chronological feed | Kill switch — turn the flag off in the dashboard, then reload the app or press Refresh now, and the feed flips"
+by = [
+    "journey:demo-streampulse#for-you",
+    "journey:demo-streampulse#recs-off",
+    "journey:demo-streampulse#classic-feed",
+    "journey:demo-streampulse#classic",
+    "journey:demo-streampulse#refresh-now",
+    "test:demo/streampulse/src/__tests__/screens.test.tsx::flag on: \"For you\" feed and one recs_impression attributed to the flag",
+]
+
+[[unit]]
+text = "Player | streampulse_player_v2 flag (+ streampulse_offline_mode) | on → redesigned player; off → classic; play {track_id, player}; Download button when offline mode is on | Gradual rollout 5 → 25 → 50 → 100 %, safety monitoring + auto-rollback, employee targeting rule; offline mode = SDK caching / kill switch"
+by = ["untested:T"]
+
+[[unit]]
+text = "Search | streampulse_ai_search flag | on → \"AI search ✨\" with explanations; off → keyword search; search {query, engine, results} | Targeting rules: os = iOS AND os_version ≥ 17.0.0 AND region = US AND tier = premium"
+by = [
+    "test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestDashboardRules::test_streampulse_ai_search_rule",
+    "test:backend/tests/unit/core/test_flag_builder_outputs.py::test_the_streampulse_fixture_is_the_seed",
+    "journey:demo-streampulse#ai-search",
+    "journey:demo-streampulse#keyword-search",
+]
+
+[[unit]]
+text = "Notifications | streampulse_push_frequency (A/B) | daily vs 3×/week push setting; \"Open notification\" → notification_open, \"Uninstall app\" → app_uninstall | Sequential testing (mSPRT) with an uninstall-rate guardrail"
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_push_frequency_test_is_sequential_with_an_uninstall_guardrail",
+    "test:demo/streampulse/src/__tests__/screens.test.tsx::three_weekly variant: shows \"3× a week\"; buttons send notification_open / app_uninstall with the experiment key",
+]
+
+[[unit]]
+text = "Profile | streampulse_wrapped + streampulse_profile_badges (A/B ×2) | \"Your 2026 Wrapped\" card (wrapped_view, share) / badge row (badge_tap) | Mutual exclusion group streampulse-profile — a device is in at most one of the two"
+by = [
+    "journey:demo-streampulse#profile",
+    "test:demo/streampulse/src/__tests__/screens.test.tsx::wrapped_2026: Wrapped card, wrapped_view on mount, share {surface: wrapped}",
+]
+
+[[unit]]
+text = "Onboarding | streampulse_onboarding_steps (A/B) | 5-step vs 3-step stepper → onboarding_complete {steps} → first_play | Bayesian analysis — probability to be best, expected loss, early stopping"
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_onboarding_test_is_the_bayesian_one",
+    "test:demo/streampulse/src/__tests__/screens.test.tsx::three_step: finishes after 3 steps → onboarding_complete {steps: 3} then first_play",
+]
+
+[[unit]]
+text = "Payments | streampulse_upsell_modal (A/B) | classic price list vs value-first modal → subscribe {plan, modal} | Audit trail — every create/start/change of the experiment is logged"
+by = ["test:backend/tests/integration/services/test_seed_audit_entries.py::test_the_streampulse_seed_writes_the_platform_shapes_once"]
+
+[[unit]]
+text = "Every screen | all of the above | — | Global holdout streampulse-holdout (2 %): held-out devices see control everywhere with the reason holdout"
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "test:backend/tests/integration/services/test_seed_streampulse_holdout.py::test_twice_from_absent_creates_once_and_changes_nothing_after",
+    "journey:demo-streampulse#holdout",
+]
+
+[[unit]]
+text = "Every tracked event is sent with an explicit experimentKey / featureFlagKey (see the table); screen_view {screen} has no key and is fanned out by the SDK to everything cached for the device."
+by = [
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::POSTs one entry per cached assignment to /api/v1/tracking/batch",
+    "test:demo/streampulse/src/__tests__/screens.test.tsx::flag on: \"AI search ✨\" with explanations; search {query, engine: ai, results} attributed to the flag",
+]
+
+[[unit]]
+text = "The right-hand side has two panels:"
+by = ["journey:demo-streampulse#premium-iphone"]
+
+[[unit]]
+text = "Device — five presets (iPhone 15 · iOS 17.4 · US · premium; Pixel 7 · Android 14 · DE · free; Galaxy S10 · Android 12 · US · premium · app 3.1.0; iPhone 14 · iOS 16.7 · GB · free; Internal tester · iPhone 15 · employee) plus custom fields."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_streampulse_offers_the_five_device_presets",
+    "journey:demo-streampulse#premium-iphone",
+    "journey:demo-streampulse#gb-iphone",
+]
+
+[[unit]]
+text = "The device id is the SDK user id and every attribute is sent as targeting context."
+by = [
+    "test:demo/streampulse/src/__tests__/StreamPulseApp.test.tsx::mounts the SDK provider once for the default device with the device as user + attributes and a 5 s cache",
+    "journey:demo-streampulse#premium-iphone",
+]
+
+[[unit]]
+text = "Applying any change re-mounts the SDK provider, which drops the SDK caches and re-fetches everything."
+by = [
+    "test:demo/streampulse/src/__tests__/StreamPulseApp.test.tsx::applying custom fields re-keys the provider with the edited attributes (and not before Apply)",
+    "journey:demo-streampulse#holdout",
+]
+
+[[unit]]
+text = "Otherwise the SDK keeps each answer for 5 s (cacheTtlMs: 5000) and asks again the next time a screen needs it."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_streampulse_keeps_each_flag_answer_for_5_seconds",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::serves from cache until the TTL elapses",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::re-fetches after the TTL has expired",
+]
+
+[[unit]]
+text = "Powered by Experimently — per flag: on/off + the server reason (targeting_rule, rollout, inactive, error) spelled out; per experiment: the variant and whether the device was actually enrolled (assigned: false → \"in global holdout streampulse-holdout\", \"excluded: mutual exclusion group streampulse-profile\", \"excluded: targeting rules\"); the last 8 events; links to the dashboard; Refresh now (clears the SDK cache and re-evaluates)."
+by = [
+    "journey:demo-streampulse#premium-iphone",
+    "journey:demo-streampulse#gb-iphone",
+    "journey:demo-streampulse#profile",
+    "journey:demo-streampulse#holdout",
+    "journey:demo-streampulse#refresh-now",
+]
+
+[[unit]]
+text = "The Rollout story button opens a drawer with the 7-step narrative, the command that drives it, and a live readout of streampulse_player_v2 for the current device."
+by = ["untested:T"]
+
+[[unit]]
+text = "Running it"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Prerequisites: the Experimently backend on http://localhost:8000, the dashboard on http://localhost:3100, Node 20.9 or later (Next.js 16 refuses older versions), and the repo's Python venv."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_is_next_16_on_the_pages_router_with_tailwind",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard",
+]
+
+[[unit]]
+text = "demo/setup-local.sh does steps 1 to 4 for you, with steady traffic only (set STREAMPULSE=0 to skip StreamPulse)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_setting_shoplab_or_streampulse_to_0_skips_that_app",
+    "test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_shoplab_and_streampulse_each_get_a_traffic_simulator_at_3_a_second",
+    "journey:demo-streampulse#app",
+]
+
+[[unit]]
+text = "It does not run the crash incident or the rollout story."
+by = ["untested:T"]
+
+[[unit]]
+text = "1."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Seed the StreamPulse catalogue, from the repository root."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It is idempotent, and writes the API key to demo/streampulse/.api_key and the NEXT_PUBLIC_EXPERIMENTLY_API_KEY line into demo/streampulse/.env.local."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
+    "test:backend/tests/integration/services/test_seed_streampulse_holdout.py::test_twice_from_absent_creates_once_and_changes_nothing_after",
+]
+
+[[unit]]
+text = "It also writes a second key, the StreamPulse server key (scope sdk:ruleset), to demo/streampulse/.api_key_server and nowhere else: the simulator sends its crash reports with it, the way the StreamPulse server would forward them, because only reports sent with a server-side key count toward automatic rollback."
+by = ["untested:T"]
+
+[[unit]]
+text = "Never put that key in .env.local: it can also download every flag's targeting rules."
+by = ["untested:T"]
+
+[[unit]]
+text = "--no-history skips the 7-day backfill, --reset removes everything it created, and the STREAMPULSE_DEMO_DIR environment variable changes where the key files go."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_key_files_go_to_the_apps_folder_unless_the_variable_moves_them",
+]
+
+[[unit]]
+text = "2."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Environment."
+by = ["exempt:label"]
+
+[[unit]]
+text = "cp -n copies .env.example only if .env.local does not exist yet."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "After step 1 it usually does, holding only the key line, so this changes nothing and the two URLs take their defaults:"
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard",
+]
+
+[[unit]]
+text = "Setting | Value"
+by = ["exempt:label"]
+
+[[unit]]
+text = "NEXT_PUBLIC_EXPERIMENTLY_API_URL | defaults to http://localhost:8000"
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard"]
+
+[[unit]]
+text = "NEXT_PUBLIC_EXPERIMENTLY_API_KEY | the plaintext key for streampulse-app, written by the seed"
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
+]
+
+[[unit]]
+text = "NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL | defaults to http://localhost:3100"
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard"]
+
+[[unit]]
+text = "3."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Run the app, still in demo/streampulse."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It is at http://localhost:3300."
+by = [
+    "journey:demo-streampulse#app",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_is_next_16_on_the_pages_router_with_tailwind",
+]
+
+[[unit]]
+text = "4."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Device simulator."
+by = ["exempt:label"]
+
+[[unit]]
+text = "In another terminal, from the repository root with the venv active, this keeps the dashboard moving for ten minutes:"
+by = ["test:demo/streampulse/simulator/test_traffic.py::test_help_lists_documented_arguments"]
+
+[[unit]]
+text = "The crash incident is the same simulator with --incident android12:"
+by = ["untested:T"]
+
+[[unit]]
+text = "5."
+by = ["exempt:label"]
+
+[[unit]]
+text = "The rollout story, in another terminal."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It calls the dashboard API, so it signs in first as the seeded demo admin; the simulator's README says how to sign in as someone else or pass a token instead."
+by = ["untested:T"]
+
+[[unit]]
+text = "--auto runs all seven steps, paced:"
+by = ["untested:T"]
+
+[[unit]]
+text = "--step 3 (any of 1 to 7) runs one step instead:"
+by = ["untested:T"]
+
+[[unit]]
+text = "Other scripts: npm test (jest + Testing Library, SDK mocked), npm run lint, npm run typecheck (type-checks against the SDK source), npm run build, npm start."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_has_the_documented_scripts_and_tests_with_the_sdk_mocked"]
+
+[[unit]]
+text = "The React SDK is consumed straight from ../../sdk/react/src (tsconfig paths + webpack alias + experimental.externalDir), so SDK changes show up without a build step."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_builds_against_the_react_sdk_source_with_its_own_react"]
+
+[[unit]]
+text = "react and react-dom are aliased to this app's copies to avoid the duplicate-React \"Invalid hook call\" trap."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_builds_against_the_react_sdk_source_with_its_own_react"]
+
+[[unit]]
+text = "StreamPulse uses useFeatureFlag(...).reason and useExperiment(...).assigned / .reason (React SDK ≥ 1.1.0 with the assigned/reason fields)."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_1_1_0_with_the_hooks_the_apps_use",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::exposes the server reason when the response carries one",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::maps an ineligible user (assigned: false + reason) onto the control variant the server returned",
+]
+
+[[unit]]
+text = "Demo script — what to show"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Keep traffic.py running in a terminal throughout so the numbers move."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Home — kill switch (streampulse_recs_v2)."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Any preset shows \"For you\"."
+by = [
+    "journey:demo-streampulse#for-you",
+    "journey:demo-streampulse#app-again",
+]
+
+[[unit]]
+text = "In the dashboard, toggle the flag off, then press Refresh now (or reload the page): the feed becomes \"Classic\" and the panel reads off: flag is inactive."
+by = [
+    "journey:demo-streampulse#recs-off",
+    "journey:demo-streampulse#classic-feed",
+    "journey:demo-streampulse#classic",
+    "journey:demo-streampulse#recs-deactivated",
+    "journey:demo-streampulse#refresh-now",
+]
+
+[[unit]]
+text = "Toggle it back on."
+by = [
+    "journey:demo-streampulse#recs-on",
+    "journey:demo-streampulse#recs-on-evaluated",
+    "journey:demo-streampulse#refresh-now-again",
+]
+
+[[unit]]
+text = "Search — targeting rules (streampulse_ai_search, rollout 0 %)."
+by = ["journey:demo-streampulse#rule-leaves-out-the-gb-iphone"]
+
+[[unit]]
+text = "Search \"late night drive\" as iPhone 15 · iOS 17.4 · US · premium: AI results with explanations, panel says on: matched a targeting rule."
+by = [
+    "test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestDashboardRules::test_streampulse_ai_search_rule",
+    "journey:demo-streampulse#premium-iphone",
+    "journey:demo-streampulse#ai-search",
+]
+
+[[unit]]
+text = "Switch to iPhone 14 · iOS 16.7 · GB · free: keyword engine, 0 results, off: outside the rollout % (no rule matched)."
+by = [
+    "journey:demo-streampulse#gb-iphone",
+    "journey:demo-streampulse#keyword-search",
+    "journey:demo-streampulse#rule-leaves-out-the-gb-iphone",
+]
+
+[[unit]]
+text = "Edit the custom fields (e.g."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "OS version 17.0.0, region US, tier premium, then Apply device) to show the rule boundary live."
+by = [
+    "journey:demo-streampulse#rule-boundary",
+    "journey:demo-streampulse#below-the-boundary",
+]
+
+[[unit]]
+text = "Player — rollout + safety (streampulse_player_v2, 5 %, employee rule)."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Internal tester gets Player v2 by rule; the other presets are bucketed by the 5 % rollout."
+by = ["untested:T"]
+
+[[unit]]
+text = "Open the Rollout story drawer and run rollout_story.py --auto (or step by step): 25 % → Android 12 crash incident (traffic.py --incident android12 reports the crashes through POST /tracking/errors with the StreamPulse server key) → safety check unhealthy → rollback to 5 % → app_version ≥ 3.2.1 rule → 50 % → 100 %."
+by = ["untested:S"]
+
+[[unit]]
+text = "Watch the drawer's readout for Galaxy S10 · app 3.1.0 vs iPhone 15 · app 3.2.1, and the Safety and Audit pages in the dashboard."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The Audit page shows the rollback as a Safety rollback by Safety monitor (automatic), or by you when the story rolls back by hand; the seed writes no rollback."
+by = ["untested:T"]
+
+[[unit]]
+text = "Notifications — sequential test + guardrail (streampulse_push_frequency)."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_push_frequency_test_is_sequential_with_an_uninstall_guardrail"]
+
+[[unit]]
+text = "Show the variant, press Open notification a few times and Uninstall app once."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "In the dashboard open Results → sequential testing (mSPRT boundary) and the app_uninstall guardrail."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_push_frequency_test_is_sequential_with_an_uninstall_guardrail"]
+
+[[unit]]
+text = "Profile — mutual exclusion (streampulse_wrapped vs streampulse_profile_badges)."
+by = ["journey:demo-streampulse#profile"]
+
+[[unit]]
+text = "Every device is in at most one: the panel shows the other as excluded: mutual exclusion group streampulse-profile (control shown)."
+by = [
+    "test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestActivatingASibling::test_m1_users_of_a_are_not_enrolled_in_b_after_b_is_activated",
+    "journey:demo-streampulse#profile",
+]
+
+[[unit]]
+text = "In wrapped_2026 the Wrapped card fires wrapped_view on mount; Share fires share."
+by = ["test:demo/streampulse/src/__tests__/screens.test.tsx::wrapped_2026: Wrapped card, wrapped_view on mount, share {surface: wrapped}"]
+
+[[unit]]
+text = "In badges, tap a badge."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Onboarding — Bayesian (streampulse_onboarding_steps)."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_onboarding_test_is_the_bayesian_one"]
+
+[[unit]]
+text = "Walk the 3- or 5-step flow, finish, press Play your first track."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The probability three_step beats five_step and the expected loss are in the API, GET /api/v1/results/{id}/bayesian, and in the results page's Overview tab where your version has a Bayesian panel (which screens exist)."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Payments — audit trail (streampulse_upsell_modal)."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Go Premium → classic vs value modal → Subscribe."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Dashboard → Admin → Audit log: the seed wrote create, change and start entries for this experiment, in the form the platform writes them; every later change is logged too."
+by = ["test:backend/tests/integration/services/test_seed_audit_entries.py::test_the_streampulse_seed_writes_the_platform_shapes_once"]
+
+[[unit]]
+text = "Global holdout."
+by = ["journey:demo-streampulse#holdout"]
+
+[[unit]]
+text = "Type a custom device id such as sp-holdout-15 (bucket 1 under the demo holdout's salt) and Apply device: every experiment reads in global holdout streampulse-holdout (control shown) and no exposure is recorded."
+by = [
+    "test:backend/tests/integration/services/test_seed_streampulse_holdout.py::test_the_demo_salt_keeps_the_documented_ids_where_the_demo_says",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "journey:demo-streampulse#holdout-id",
+    "journey:demo-streampulse#holdout",
+    "journey:demo-streampulse#holdout-push-frequency",
+    "journey:demo-streampulse#holdout-wrapped",
+    "journey:demo-streampulse#holdout-profile-badges",
+    "journey:demo-streampulse#holdout-onboarding",
+    "journey:demo-streampulse#holdout-upsell",
+]
+
+[[unit]]
+text = "The preset ids are chosen to be outside the holdout."
+by = ["test:backend/tests/integration/services/test_seed_streampulse_holdout.py::test_the_demo_salt_keeps_the_documented_ids_where_the_demo_says"]
+
+[[unit]]
+text = "The API records each device first seen while the holdout is active; the seed writes no such records, so a comparison of held-out devices with the rest needs real traffic first (the simulator, or devices you apply) and starts from the moment the holdout was activated."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_first_conflict.py::test_holdout_population_is_recorded_once_under_the_conflict",
+    "test:backend/tests/integration/services/test_seed_streampulse_holdout.py::test_twice_from_absent_creates_once_and_changes_nothing_after",
+]
+
+[[unit]]
+text = "Which variant a preset lands in depends on the seeded experiment ids (assignment hashing is per-experiment), so it can differ after --reset; the holdout bucket does not."
+by = [
+    "test:backend/tests/unit/services/test_bandit_routing.py::TestSelectBanditVariant::test_bucket_is_scoped_to_experiment",
+    "test:backend/tests/integration/services/test_seed_streampulse_holdout.py::test_the_demo_salt_keeps_the_documented_ids_where_the_demo_says",
+]
+
+[[unit]]
+text = "Troubleshooting"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Symptom | Cause / fix"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Yellow banner \"NEXT_PUBLIC_EXPERIMENTLY_API_KEY is not set\"; panel shows error: API error: 401 everywhere | The key is missing or wrong. Run python backend/scripts/seed_streampulse.py (it rewrites .env.local and .api_key), then restart npm run dev — Next reads env vars at startup."
+by = [
+    "test:demo/streampulse/src/__tests__/StreamPulseApp.test.tsx::warns when the API key is missing but still renders the app",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
+]
+
+[[unit]]
+text = "401 in the network tab although .env.local has a key | The key was revoked or belongs to another environment/database. Re-seed."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key"]
+
+[[unit]]
+text = "404 on /tracking/assign or /feature-flags/evaluate/streampulse_... | The StreamPulse experiments are not seeded or not ACTIVE, or the flags are not seeded (--reset removes both; a flag that is not ACTIVE answers enabled: false, not a 404). Run the seed script."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_inactive_experiment_returns_404",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
+    "journey:demo-streampulse#recs-off-evaluated",
+]
+
+[[unit]]
+text = "Browser console: CORS error from localhost:3300 | Port 3300 is not in the backend's CORS allow-list. The development defaults (DEFAULT_CORS_ORIGINS in backend/app/core/config.py) include it; if you set CORS_ORIGINS or BACKEND_CORS_ORIGINS yourself, add http://localhost:3300 and restart the API. Against a staging or production API, add it to that API's CORS_ORIGINS: those allow no other origin by default."
+by = [
+    "test:backend/tests/unit/core/test_config_cors.py::TestCorsOriginsSettings::test_dev_settings_default_allows_streampulse_port",
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_a_staging_or_production_api_allows_no_origin_it_was_not_given",
+]
+
+[[unit]]
+text = "Every flag off, every experiment error, nothing loads | Backend not running on NEXT_PUBLIC_EXPERIMENTLY_API_URL. Start it from the repository root: ENVIRONMENT=development uvicorn backend.app.main:app --reload."
+by = [
+    "test:sdk/react/src/__tests__/useFeatureFlag.test.tsx::sets error on network failure",
+    "test:sdk/react/src/__tests__/useExperiment.test.tsx::sets error and keeps the control defaults on network failure",
+]
+
+[[unit]]
+text = "AI search never turns on | The rule needs os = iOS, os_version ≥ 17.0.0, region = US, tier = premium and the flag's own rollout is 0 %. Check the custom fields; the panel reason tells you whether a rule matched."
+by = [
+    "test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestDashboardRules::test_streampulse_ai_search_rule",
+    "test:backend/tests/unit/core/test_flag_builder_outputs.py::test_the_streampulse_fixture_is_the_seed",
+]
+
+[[unit]]
+text = "Player v2 does not change after the story rolls back / advances | The SDK caches for 5 s — wait or press Refresh now. If the schedulers are involved (auto-rollback, time-based stages), they run every SAFETY_CHECK_INTERVAL_MINUTES / ROLLOUT_CHECK_INTERVAL_MINUTES (default 5 / 15) — set both to 1 in the backend .env for the demo (setup-local.sh sets both to 1 unless they are already set)."
+by = ["untested:T"]
+
+[[unit]]
+text = "A preset shows \"in global holdout streampulse-holdout\" for every experiment | That id hashes into the 2 % holdout. The shipped preset ids do not; if you changed one, pick another id (or use it to demonstrate the holdout)."
+by = [
+    "journey:demo-streampulse#holdout",
+    "test:backend/tests/integration/services/test_seed_streampulse_holdout.py::test_the_demo_salt_keeps_the_documented_ids_where_the_demo_says",
+]
+
+[[unit]]
+text = "\"Invalid hook call\" in the browser | Two React copies. next.config.js aliases react/react-dom to this app's node_modules; run npm install inside demo/streampulse."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_builds_against_the_react_sdk_source_with_its_own_react"]
+
+[[unit]]
+text = "Simulator exits with code 2 / 3 / 4 | 2 = API key rejected or missing, or --incident without the server key in demo/streampulse/.api_key_server (run the seed), 3 = catalogue not seeded (404), 4 = backend unreachable."
+by = ["untested:T"]
+
+[[unit]]
+text = "npm run typecheck fails inside sdk/react/src | The app needs ExperimentAssignment.assigned / .reason and FeatureFlagEvaluation.reason from the React SDK; make sure sdk/react is at the version in this repo."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_1_1_0_with_the_hooks_the_apps_use",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::exposes the server reason when the response carries one",
+]

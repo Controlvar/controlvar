@@ -20,6 +20,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Dict
 
@@ -190,6 +191,93 @@ class TestGenerator:
         assert values["EXPERIMENTLY_PROFILE"] == "core"
         assert stat.S_IMODE(env_file.stat().st_mode) == 0o600
 
+    def test_without_inputs_it_writes_the_local_url_and_the_example_admin(
+        self, tmp_path
+    ):
+        env_file = tmp_path / ".env"
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in REQUIRED + ("EXPERIMENTLY_PROFILE",)
+        }
+        env["ENV_FILE"] = str(env_file)
+        result = subprocess.run(
+            ["sh", str(GENERATOR)], env=env, capture_output=True, text=True
+        )
+        assert result.returncode == 0, result.stderr
+        values = dict(
+            line.split("=", 1)
+            for line in env_file.read_text().splitlines()
+            if line and not line.startswith("#")
+        )
+        assert values["PUBLIC_BASE_URL"] == "http://localhost:8080"
+        assert values["FIRST_SUPERUSER"] == "admin@example.com"
+
+    def test_given_inputs_it_writes_them(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env = {k: v for k, v in os.environ.items() if k not in REQUIRED}
+        env.update(
+            ENV_FILE=str(env_file),
+            PUBLIC_BASE_URL="https://experimently.example.com",
+            FIRST_SUPERUSER="you@example.com",
+            EXPERIMENTLY_PROFILE="full",
+        )
+        result = subprocess.run(
+            ["sh", str(GENERATOR)], env=env, capture_output=True, text=True
+        )
+        assert result.returncode == 0, result.stderr
+        text = env_file.read_text()
+        assert "PUBLIC_BASE_URL=https://experimently.example.com\n" in text
+        assert "FIRST_SUPERUSER=you@example.com\n" in text
+        assert "EXPERIMENTLY_PROFILE=full\n" in text
+
+    def _bin_without_openssl(self, tmp_path: Path, python: bool) -> Path:
+        """A PATH with what the script runs besides openssl: sh's builtins
+        need only dirname and cat, and python3 when *python*."""
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        for tool in ("dirname", "cat"):
+            (bin_dir / tool).symlink_to(shutil.which(tool))
+        if python:
+            (bin_dir / "python3").symlink_to(sys.executable)
+        return bin_dir
+
+    def test_without_openssl_it_generates_with_python3(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env = {
+            "PATH": str(self._bin_without_openssl(tmp_path, python=True)),
+            "ENV_FILE": str(env_file),
+        }
+        result = subprocess.run(
+            [shutil.which("sh"), str(GENERATOR)],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        values = dict(
+            line.split("=", 1)
+            for line in env_file.read_text().splitlines()
+            if line and not line.startswith("#")
+        )
+        assert re.fullmatch(r"[0-9a-f]{64}", values["SECRET_KEY"]), values["SECRET_KEY"]
+
+    def test_with_neither_openssl_nor_python3_it_writes_nothing(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env = {
+            "PATH": str(self._bin_without_openssl(tmp_path, python=False)),
+            "ENV_FILE": str(env_file),
+        }
+        result = subprocess.run(
+            [shutil.which("sh"), str(GENERATOR)],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0
+        assert "Need openssl or python3" in result.stderr
+        assert not env_file.exists()
+
     def test_a_second_run_refuses_and_leaves_the_file_alone(self, tmp_path):
         env_file = tmp_path / ".env"
         assert self._run(env_file).returncode == 0
@@ -235,6 +323,13 @@ class TestWorkflow:
     def test_it_rehearses_in_the_compose_topology(self, runs):
         assert "TOPOLOGY=compose" in runs
         assert "bash tests/alb/rehearse.sh" in runs
+
+    def test_it_refuses_the_demo_login_and_checks_only_the_dashboard_publishes(
+        self, runs
+    ):
+        assert '-d \'{"email":"admin@demo.com","password":"Demo1234!"}\'' in runs
+        assert 'test "$code" = "401"' in runs
+        assert "for svc in postgres:5432 redis:6379 api:8000; do" in runs
 
     def test_compose_is_never_pointed_at_the_file_through_the_environment(self):
         """COMPOSE_FILE in the environment makes compose read .env from the cwd."""

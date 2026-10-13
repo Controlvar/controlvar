@@ -1,0 +1,27 @@
+# What verifies each unit of charts/experimently/templates/NOTES.txt (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "charts/experimently/templates/NOTES.txt"
+
+[[unit]]
+text = "Experimently {{ .Chart.AppVersion }} ({{ .Values.profile }} profile) is installing as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}."
+by = ["workflow:chart-kind.yml"]
+
+[[unit]]
+text = "Check that the API answers on your public host:"
+by = [
+    "test:backend/tests/unit/chart/test_chart_render.py::test_helm_test_checks_the_public_host_and_refuses_another",
+    "workflow:chart-kind.yml",
+]
+
+[[unit]]
+text = "helm test {{ .Release.Name }} -n {{ .Release.Namespace }}"
+by = ["workflow:chart-kind.yml"]
+
+[[unit]]
+text = "Then sign in at {{ .Values.publicBaseUrl }} as {{ .Values.firstSuperuser }}, with the FIRST_SUPERUSER_PASSWORD of your Secret."
+by = ["workflow:chart-kind.yml"]
+
+[[unit]]
+text = "The chart's README says what to do when a pod stays in Init or the Ingress is disabled: https://github.com/getexperimently/experimently/blob/v{{ .Chart.AppVersion }}/charts/experimently/README.md"
+by = ["exempt:navigation"]

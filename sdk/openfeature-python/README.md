@@ -1,29 +1,23 @@
 # experimently-openfeature (Python)
 
-**0.x beta.** The API may change between 0.x minor versions; pin the exact version
-you test against.
+**Beta.** This is a 0.x release: pin the exact version you test against.
 
 [OpenFeature](https://openfeature.dev) provider for Experimently. Flags are
-evaluated **by the server** through the [`experimentation`](../python) Python SDK
+evaluated **by the server** through the [`experimentation`](https://github.com/getexperimently/experimently/tree/main/sdk/python) Python SDK
 (`GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>`) and cached per
 user + flag; nothing is bucketed locally.
 
 ## Install
 
-**Not yet published.** `experimently-openfeature` is not on PyPI yet, so the first line below
-fails today (`experimently` and `openfeature-sdk` are on PyPI). Install both SDKs from the root
-of a clone of this repository with the second line (`openfeature-sdk` is installed as a dependency).
+Install the provider and the Python SDK from the root of a clone of this repository
+(`openfeature-sdk` is installed as a dependency):
 
 ```bash
-pip install openfeature-sdk experimently experimently-openfeature
 pip install -e sdk/python -e sdk/openfeature-python
 ```
 
-- `pip install openfeature-sdk experimently experimently-openfeature`: once published
-- `pip install -e sdk/python -e sdk/openfeature-python`: from this repository
-
-Requires Python 3.9+ and `openfeature-sdk >= 0.9.0` (the version that added the tracking API).
-The only other dependency is [`experimently`](../python), which itself has none.
+Requires Python 3.9+ and `openfeature-sdk` 0.10.0 or later.
+The only other dependency is [`experimently`](https://github.com/getexperimently/experimently/tree/main/sdk/python), which itself has none.
 
 ## Quick start
 

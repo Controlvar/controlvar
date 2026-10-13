@@ -1,10 +1,11 @@
 # The Docker Compose stack
 
-The repository ships one development compose file, `docker-compose.yml` at the repository root. Its
-header comment is the reference for every variable and profile; this page summarises it.
+The repository ships one development compose file, `docker-compose.yml` at the repository root.
+This page lists its services, profiles and the settings you are most likely to change.
 Every host port below is published on `127.0.0.1` only. For a server, use
-[`deploy/compose/compose.yml`](https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml),
-whose header comment lists its commands and settings; see
+[`deploy/compose/compose.yml`](https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml):
+the [README](https://github.com/getexperimently/experimently/blob/main/deploy/compose/README.md)
+beside it says how to run it and lists its settings; see
 [Releases, images and verification](../self-hosting/releases.md) for the versions and
 how to verify the images.
 
@@ -16,8 +17,10 @@ how to verify the images.
 | `redis` | `redis:7-alpine` | 6379 | default | caching and rate-limit counters |
 | `api` | `experimently-api:core` (built from `backend/Dockerfile`; `EXPERIMENTLY_PROFILE=full` builds the `full` target with the modules) | 8000 | default | runs bootstrap and seeds on first start, then uvicorn |
 | `frontend` | `experimently-web:core` (built from `frontend/Dockerfile`; `full` likewise) | 3000 | default | nginx serving the static dashboard and proxying `/api` to `api` |
-| `shoplab`, `shoplab-simulator` | built from `demo/shoplab` | 3200 | `demo` | sample e-commerce app and its traffic generator |
-| `streampulse`, `streampulse-simulator` | built from `demo/streampulse` | 3300 | `demo` | sample streaming app and its device simulator |
+| `shoplab` | built from `demo/shoplab` | 3200 | `demo` | sample e-commerce app |
+| `shoplab-simulator` | `python:3.11-slim`, running `demo/shoplab/simulator` | none | `demo` | ShopLab's traffic generator |
+| `streampulse` | built from `demo/streampulse` | 3300 | `demo` | sample streaming app |
+| `streampulse-simulator` | `python:3.11-slim`, running `demo/streampulse/simulator` | none | `demo` | StreamPulse's device simulator |
 | `pgadmin` | `dpage/pgadmin4` | 5050 | `tools` | database browser |
 | `localstack` | `localstack/localstack:3` | 4566 | `aws` | only for developing the optional AWS integrations |
 
@@ -39,11 +42,11 @@ docker compose ps --services --status running | sort
 
 It prints `api`, `frontend`, `postgres` and `redis`, one per line.
 
-Add the demo applications with the `demo` profile:
-
-```{.bash skip reason="demo: builds and starts the demo applications"}
-docker compose --profile demo up -d
-```
+The `demo` profile's applications also need the `shoplab` and `streampulse` seeds:
+without them, both simulators exit at start. To run the demo, use
+`./demo/setup-local.sh`, which the
+[Demo guide](https://github.com/getexperimently/experimently/blob/main/demo/DEMO_GUIDE.md)
+walks through.
 
 Add pgAdmin and LocalStack with the `tools` and `aws` profiles:
 
@@ -91,7 +94,7 @@ POSTGRES_PASSWORD=<random>
 
 Other useful knobs: `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`, `API_HOST_PORT`,
 `FRONTEND_HOST_PORT` when a port is taken; `SEED`; `LOG_FORMAT=json`; `METRICS_TOKEN` to
-enable `/metrics`; `WEB_CONCURRENCY` for more uvicorn workers. `AUTH_PROVIDER=cognito`
+require a token on `/metrics`; `WEB_CONCURRENCY` for more uvicorn workers. `AUTH_PROVIDER=cognito`
 switches authentication to Amazon Cognito; add `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`
 and the AWS credentials to the `api` service's environment yourself, the compose file
 does not pass them through. The dashboard does not yet sign in with Cognito. Sign in through
@@ -110,12 +113,11 @@ Start only the data services and follow "Running outside Docker" in the
 docker compose up -d --wait postgres redis
 ```
 
-Then check that they are running:
+Then check that they are the two running:
 
 ```{.bash exec}
-docker compose ps --services --status running | sort
+docker compose ps --services --status running | sort | paste -sd ' ' -
 ```
-<!-- expect: postgres -->
-<!-- expect: redis -->
+<!-- expect: postgres redis -->
 
-It prints `postgres` and `redis`.
+It prints `postgres redis`.

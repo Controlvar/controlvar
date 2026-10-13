@@ -112,6 +112,45 @@ describe('constructor', () => {
     expect(call(fetchMock).url).toBe('https://api.example.com/api/v1/feature-flags/evaluate/my-flag?user_id=user-123');
   });
 
+  it('uses the global fetch when config.fetch is not given', async () => {
+    const fetchMock = mockFetch(flagOn);
+    const client = new ExperimentationClient(baseConfig);
+    await expect(client.evaluateFlag('my-flag', user)).resolves.toMatchObject({ enabled: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('defaults to a 5000 ms timeout', async () => {
+    jest.useFakeTimers();
+    global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        (init.signal as AbortSignal).addEventListener('abort', () => reject(new Error('The operation was aborted')));
+      });
+    });
+    const client = new ExperimentationClient(baseConfig);
+    const pending = client.evaluateFlag('my-flag', user);
+    let settled = false;
+    pending.catch(() => undefined).finally(() => { settled = true; });
+    await jest.advanceTimersByTimeAsync(4_999);
+    expect(settled).toBe(false);
+    await jest.advanceTimersByTimeAsync(1);
+    const error = await captureError(pending);
+    expect(error.code).toBe('TIMEOUT');
+    expect(error.message).toContain('5000 ms');
+  });
+
+  it('caches a success for 300000 ms by default', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    const fetchMock = mockFetchSequence({ body: flagOn }, { body: flagOff });
+    const client = new ExperimentationClient(baseConfig);
+    await client.evaluateFlag('my-flag', user);
+    now.mockReturnValue(1_000_000 + 299_999);
+    await expect(client.evaluateFlag('my-flag', user)).resolves.toMatchObject({ enabled: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    now.mockReturnValue(1_000_000 + 300_001);
+    await expect(client.evaluateFlag('my-flag', user)).resolves.toMatchObject({ enabled: false });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('uses config.fetch when provided instead of the global', async () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('global fetch must not be used'));
     const custom = jest.fn().mockResolvedValue(jsonResponse({ body: flagOn }));
@@ -895,6 +934,33 @@ describe('429 rate limiting', () => {
     const pending = client.evaluateFlag('my-flag', user);
 
     await jest.advanceTimersByTimeAsync(1_999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await expect(pending).resolves.toMatchObject({ enabled: true });
+  });
+
+  it('waits 1 s when the 429 carries no Retry-After', async () => {
+    jest.useFakeTimers();
+    const fetchMock = mockFetchSequence({ status: 429 }, { body: flagOn });
+    const client = new ExperimentationClient(baseConfig);
+    const pending = client.evaluateFlag('my-flag', user);
+    await jest.advanceTimersByTimeAsync(999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await expect(pending).resolves.toMatchObject({ enabled: true });
+  });
+
+  it('reads a Retry-After given as an HTTP date', async () => {
+    jest.useFakeTimers({ now: Date.parse('2026-10-12T10:00:00Z') });
+    const fetchMock = mockFetchSequence(
+      { status: 429, headers: { 'Retry-After': 'Mon, 12 Oct 2026 10:00:03 GMT' } },
+      { body: flagOn }
+    );
+    const client = new ExperimentationClient(baseConfig);
+    const pending = client.evaluateFlag('my-flag', user);
+    await jest.advanceTimersByTimeAsync(2_999);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await jest.advanceTimersByTimeAsync(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
