@@ -1,17 +1,20 @@
 """``scripts/rc_evidence.py`` reads a release candidate's runs back and says
 PASS only when every one of them is there and passed (#1142).
 
-Every GitHub answer here is a fixture, made up: a fake ``gh`` that answers the
-GETs the verifier makes from a dict, and writes artifact files for ``gh run
-download``. A good world passes; each FAIL path changes one thing in it and
-the verdict must turn to FAIL with the problem named. Nothing here reaches
-GitHub, and no test asserts a time.
+Every GitHub and registry answer here is a fixture, made up: a fake ``gh``
+that answers the GETs the verifier makes from a dict, and writes artifact files
+for ``gh run download``, and a fake fetch for PyPI's and npm's JSON and
+tarballs. A good world passes; each FAIL path changes one thing in it and the
+verdict must turn to FAIL with the problem named. Nothing here reaches GitHub
+or a registry, and no test asserts a time.
 """
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import copy
+import hashlib
 import importlib.util
 import io
 import json
@@ -50,6 +53,39 @@ TARGET_METHOD = "test:backend/tests/unit/x/test_alpha.py::TestK::test_two"
 TARGET_FILE = "test:backend/tests/unit/x/test_beta.py"
 JEST_FN = "test:frontend/src/tests/alpha.test.tsx::renders the card"
 JEST_FILE = "test:frontend/src/tests/beta.test.tsx"
+SDK_PY = "test:sdk/python/tests/test_client.py::TestFlags::test_maps_the_flag"
+SDK_JS = "test:sdk/js/__tests__/client.test.ts::maps the flag"
+DEMO_JEST = "test:demo/shoplab/src/__tests__/search.test.tsx::flag on: fuzzy"
+DEMO_SIM = "test:demo/streampulse/simulator/test_story.py::test_the_story_runs"
+SDK_GO = "test:sdk/go/client_test.go::TestClient_Flags"
+SDK_JAVA = "test:sdk/java/core/src/test/java/ClientTest.java"
+JS_NAME, PY_NAME = "@getexperimently/js-sdk", "experimently"
+JS_VERSION = PY_VERSION = "0.1.1"
+WHEEL = f"experimently-{PY_VERSION}-py3-none-any.whl"
+SDIST = f"experimently-{PY_VERSION}.tar.gz"
+TGZ = f"getexperimently-js-sdk-{JS_VERSION}.tgz"
+#: Made-up package files: what sdk-release.yml built and recorded.
+FILES = {
+    WHEEL: b"a made-up wheel",
+    SDIST: b"a made-up sdist",
+    TGZ: b"a made-up npm tarball",
+}
+PYPI_URL = "https://pypi.org/pypi/experimently/json"
+NPM_URL = "https://registry.npmjs.org/@getexperimently%2fjs-sdk"
+TARBALL_URL = f"https://registry.npmjs.org/{JS_NAME}/-/js-sdk-{JS_VERSION}.tgz"
+GOOD_DESCRIPTION = {
+    "PyPI": (
+        "# experimently\n\nThe Python client. See the"
+        " [guide](https://getexperimently.github.io/experimently/sdk/python/).\n\n"
+        f"```bash\npip install experimently=={PY_VERSION}\n```\n\n"
+        "```bash\n# from a clone\npip install -e sdk/python\n```\n"
+    ),
+    "npm": (
+        "# @getexperimently/js-sdk\n\nSee the"
+        " [guide](https://getexperimently.github.io/experimently/sdk/javascript/).\n\n"
+        f"```bash\nnpm install @getexperimently/js-sdk@{JS_VERSION}\n```\n"
+    ),
+}
 TAG_OBJECT = "c3" * 20
 JOURNEYS = ("alpha-guide", "beta-guide")
 DEMO_JOURNEYS = ("demo-tour",)
@@ -111,6 +147,26 @@ JEST_CASES = [
     ("frontend/src/tests/alpha.test.tsx", "Alpha renders the cards list", "passed"),
     ("frontend/src/tests/beta.test.tsx", "Beta loads", "passed"),
 ]
+#: The cases the new suites report, holding the SDK and demo targets.
+SUITE_CASES = {
+    "sdk-python.xml": [
+        ("sdk.python.tests.test_client.TestFlags", "test_maps_the_flag", "passed"),
+        ("sdk.python.tests.test_client.TestFlags", "test_other", "passed"),
+    ],
+    "sdk-js.xml": [
+        ("sdk/js/__tests__/client.test.ts", "Client maps the flag", "passed"),
+    ],
+    "demo-shoplab.xml": [
+        (
+            "demo/shoplab/src/__tests__/search.test.tsx",
+            "flag on: fuzzy engine",
+            "passed",
+        ),
+    ],
+    "demo-streampulse-simulator.xml": [
+        ("demo.streampulse.simulator.test_story", "test_the_story_runs", "passed"),
+    ],
+}
 GOOD_CASES = [
     ("backend.tests.unit.x.test_alpha", "test_one", "passed"),
     ("backend.tests.unit.x.test_alpha", "test_many[a]", "passed"),
@@ -167,6 +223,7 @@ class World:
         }
         self.cases = list(GOOD_CASES)
         self.jest_cases = list(JEST_CASES)
+        self.report_cases = copy.deepcopy(SUITE_CASES)
         self.suite_reports: Dict[str, Optional[str]] = {}
         self.root = tmp / "tree"
         (self.root / rc.JOURNEYS).mkdir(parents=True)
@@ -184,11 +241,51 @@ class World:
                 (TARGET_FILE, "docs/b.md"),
                 (JEST_FN, "docs/c.md"),
                 (JEST_FILE, "docs/c.md"),
+                (SDK_PY, "docs/sdk/python.md"),
+                (SDK_JS, "docs/sdk/javascript.md"),
+                (DEMO_JEST, "demo/shoplab/README.md"),
+                (DEMO_SIM, "demo/streampulse/README.md"),
+                (SDK_GO, "docs/sdk/go.md"),
+                (SDK_JAVA, "docs/sdk/java.md"),
             ],
             report=["documents in scope: 2"],
         )
         self.head = RC
         self.staging: Optional[pathlib.Path] = None
+        self.logs: Dict[str, str] = {}
+        self.web: Dict[str, bytes] = {}
+        self.fetched: List[str] = []
+        self.release_ids = {"js": 3000, "python": 3001}
+        self.build_ids = {"js": 4000, "python": 4001}
+        self.manifests = {"js": (JS_NAME, JS_VERSION), "python": (PY_NAME, PY_VERSION)}
+        self.recorded = dict(FILES)
+        self.published = dict(FILES)
+        self.descriptions = dict(GOOD_DESCRIPTION)
+        self.latest = {"js": JS_VERSION, "python": PY_VERSION}
+        self.integrity: Optional[str] = None
+        self.set_runs(
+            rc.SDK_RELEASE,
+            [
+                _run(
+                    self.release_ids[sdk],
+                    rc.SDK_RELEASE,
+                    event="push",
+                    ref=f"sdk/{sdk}/v{self.manifests[sdk][1]}",
+                )
+                for sdk in ("js", "python")
+            ],
+        )
+        for sdk, package in rc.PACKAGES.items():
+            other = rc.PACKAGES["python" if sdk == "js" else "js"]
+            jobs = [_job(rc.RESOLVE_JOB), _job(package.build_job)]
+            jobs[1]["id"] = self.build_ids[sdk]
+            jobs += [
+                _job(package.publish_job),
+                _job(other.build_job, "skipped"),
+                _job(other.publish_job, "skipped"),
+                _job("verify the Go module", "skipped"),
+            ]
+            self.set_jobs(self.release_ids[sdk], jobs)
 
     # -- editing the world ------------------------------------------------------
     def set_runs(self, workflow: str, runs: List[Dict[str, Any]]) -> None:
@@ -295,6 +392,88 @@ class World:
         self.staging = staging
         return staging
 
+    def release_run(self, sdk: str) -> Dict[str, Any]:
+        return next(
+            r for r in self.runs(rc.SDK_RELEASE) if r["id"] == self.release_ids[sdk]
+        )
+
+    def release_jobs(self, sdk: str) -> List[Dict[str, Any]]:
+        return self.api[
+            f"actions/runs/{self.release_ids[sdk]}/jobs?filter=latest&per_page=100"
+        ]["jobs"]
+
+    def build_log(self, sdk: str) -> str:
+        """The build job's log: what its record step printed, among the rest."""
+        stamp = "2026-11-01T10:20:{:02d}.1234567Z "
+        lines = ["Current runner version: '2.0'", "Run set -euo pipefail"]
+        if sdk == "python":
+            listed = [
+                f"{hashlib.sha256(self.recorded[n]).hexdigest()}  {n}"
+                for n in (WHEEL, SDIST)
+            ]
+            listing = "".join(line + "\n" for line in listed)
+            lines += listed
+            lines.append(f"digest {hashlib.sha256(listing.encode()).hexdigest()}")
+        else:
+            lines.append(f"{hashlib.sha256(self.recorded[TGZ]).hexdigest()}  {TGZ}")
+        lines.append("SHA256 digest of uploaded artifact is " + "e" * 64)
+        return "\ufeff" + "".join(
+            stamp.format(n) + line + "\n" for n, line in zip(range(len(lines)), lines)
+        )
+
+    def registry_answer(self, url: str) -> Optional[bytes]:
+        if url in self.web:
+            return self.web[url]
+        if url == PYPI_URL:
+            return json.dumps(
+                {
+                    "info": {
+                        "name": PY_NAME,
+                        "version": self.latest["python"],
+                        "description": self.descriptions["PyPI"],
+                    },
+                    "urls": [
+                        {
+                            "filename": n,
+                            "digests": {
+                                "sha256": hashlib.sha256(self.published[n]).hexdigest()
+                            },
+                        }
+                        for n in (WHEEL, SDIST)
+                        if n in self.published
+                    ],
+                }
+            ).encode()
+        if url == NPM_URL:
+            tarball = self.published[TGZ]
+            integrity = (
+                self.integrity
+                or "sha512-"
+                + base64.b64encode(hashlib.sha512(tarball).digest()).decode()
+            )
+            return json.dumps(
+                {
+                    "name": JS_NAME,
+                    "dist-tags": {"latest": self.latest["js"]},
+                    "readme": self.descriptions["npm"],
+                    "versions": {
+                        JS_VERSION: {
+                            "dist": {"integrity": integrity, "tarball": TARBALL_URL}
+                        }
+                    },
+                }
+            ).encode()
+        if url == TARBALL_URL:
+            return self.published[TGZ]
+        return None
+
+    def fetch(self, url: str) -> bytes:
+        self.fetched.append(url)
+        answer = self.registry_answer(url)
+        if answer is None:
+            raise rc.FetchError(f"GET {url}: HTTPError 404")
+        return answer
+
     # -- the fake gh -------------------------------------------------------------
     def gh(self, args: List[str]) -> str:
         self.calls.append(list(args))
@@ -305,6 +484,20 @@ class World:
             path = args[1][len(prefix) :]
             if path.startswith("actions/workflows/") and "/runs?" in path:
                 return json.dumps(self.list_runs(path))
+            if path in self.logs:
+                return self.logs[path]
+            for sdk, job_id in self.build_ids.items():
+                if path == f"actions/jobs/{job_id}/logs":
+                    return self.build_log(sdk)
+            for sdk, package in rc.PACKAGES.items():
+                if path == f"contents/{package.manifest}?ref={RC}":
+                    name, version = self.manifests[sdk]
+                    if sdk == "js":
+                        text = json.dumps({"name": name, "version": version})
+                    else:
+                        text = f'[project]\nname = "{name}"\nversion = "{version}"\n'
+                    encoded = base64.encodebytes(text.encode()).decode()
+                    return json.dumps({"encoding": "base64", "content": encoded})
             if path not in self.api:
                 raise rc.GhError(f"gh api {path} failed (exit 1)")
             return json.dumps(self.api[path])
@@ -340,10 +533,14 @@ class World:
                 if text is not None:
                     files[invocation.report] = text
                 continue
-            if suite == rc.FRONTEND:
+            if suite == "frontend":
                 cases = self.jest_cases
             elif suite == "unit" and number == 0:
                 cases = self.cases
+            elif invocation.report in self.report_cases:
+                cases = self.report_cases[invocation.report]
+            elif invocation.runner == "jest":
+                cases = [(f"{invocation.cwd}/x.test.ts", "it works", "passed")]
             else:
                 cases = [(f"backend.tests.{suite}.test_{number}", "test_ok", "passed")]
             files[invocation.report] = _junit(cases)
@@ -372,6 +569,7 @@ class World:
                 gh=self.gh,
                 head_of=lambda root: self.head,
                 registry=lambda root: copy.deepcopy(self.registry),
+                fetch=self.fetch,
             )
         return code, buffer.getvalue()
 
@@ -433,6 +631,15 @@ def test_it_only_reads(world):
         assert call[0] == "api" and len(call) == 2 or call[:2] == ["run", "download"], (
             call
         )
+    assert set(world.fetched) == {PYPI_URL, NPM_URL, TARBALL_URL}
+    assert all(url.startswith(rc.REGISTRY_URLS) for url in world.fetched)
+
+
+def test_the_registry_get_refuses_any_other_url():
+    """http_get reads the two registries only; nothing here reaches them."""
+    for url in ("https://example.com/x", "http://pypi.org/pypi/x/json", "file:///etc"):
+        with pytest.raises(rc.FetchError, match="not a registry URL"):
+            rc.http_get(url)
 
 
 def test_plan_prints_one_dispatch_per_workflow_at_the_tag_and_runs_nothing(capsys):
@@ -447,6 +654,12 @@ def test_plan_prints_one_dispatch_per_workflow_at_the_tag_and_runs_nothing(capsy
     assert all(f"--ref {TAG} -R {rc.REPO}" in c for c in commands)
     assert dispatched[-1] == "rc-evidence.yml" and dispatched[0] == "docs.yml"
     assert dispatched.index("docs.yml") < dispatched.index("docs-journeys.yml")
+    checks = [line for line in printed if "--registry" in line]
+    assert checks == [
+        f"python3 scripts/rc_evidence.py {TAG} --registry js --out <dir>",
+        f"python3 scripts/rc_evidence.py {TAG} --registry python --out <dir>",
+    ]
+    assert printed.index(checks[-1]) < printed.index(commands[0])
 
 
 @pytest.mark.parametrize("tag", ["v0.30", "0.30.0", "v0.30.0-rc.1", "v0.30.0 ", "main"])
@@ -784,7 +997,7 @@ def test_a_target_whose_module_skipped_at_collection_fails(world):
 
 def test_a_target_no_suite_reports_fails(world):
     world.registry.targets.append(
-        ("test:sdk/js/src/client.test.ts::evaluates", "docs/c.md")
+        ("test:infrastructure/cdk/test/stack.test.ts::synthesises", "docs/c.md")
     )
     _fails(world, "no suite at the RC reports this test")
 
@@ -1101,7 +1314,7 @@ def test_the_frontend_suite_runs_jest_and_writes_its_report_as_junit(tmp_path):
         )
         return Done()
 
-    assert rc.run_suite(rc.FRONTEND, tmp_path, runner=runner) == 0
+    assert rc.run_suite("frontend", tmp_path, runner=runner) == 0
     assert seen["cwd"] == str(rc.ROOT / "frontend")
     assert seen["command"][:3] == ["npx", "jest", "--watchAll=false"]
     assert "--passWithNoTests" not in seen["command"]
@@ -1115,9 +1328,514 @@ def test_a_frontend_suite_that_wrote_no_report_fails(tmp_path):
     class Done:
         returncode = 0
 
-    assert rc.run_suite(rc.FRONTEND, tmp_path, runner=lambda c, **k: Done()) == 1
+    assert rc.run_suite("frontend", tmp_path, runner=lambda c, **k: Done()) == 1
 
 
 def test_the_suites_report_names_are_unique():
     names = [i.report for invocations in rc.SUITES.values() for i in invocations]
     assert len(names) == len(set(names))
+
+
+def test_the_demo_simulators_run_as_a_session_each(tmp_path):
+    """Both simulators import a module named ``traffic``: one session each."""
+    calls: List[List[str]] = []
+
+    class Done:
+        returncode = 0
+
+    def runner(command, cwd, env, check):
+        calls.append(command)
+        return Done()
+
+    assert rc.run_suite("demo-simulators", tmp_path, runner=runner) == 0
+    assert [c[3] for c in calls] == [
+        "demo/shoplab/simulator",
+        "demo/streampulse/simulator",
+    ]
+    calls.clear()
+    assert rc.run_suite("sdk-python", tmp_path, runner=runner) == 0
+    (command,) = calls
+    assert command[3:7] == ["sdk/python/tests", "--rootdir=.", "-o", "addopts="]
+
+
+def test_the_sdk_js_suite_runs_jest_in_its_own_tree(tmp_path):
+    seen: Dict[str, Any] = {}
+
+    class Done:
+        returncode = 0
+
+    def runner(command, cwd, env, check):
+        seen["command"], seen["cwd"] = command, cwd
+        out = next(a for a in command if a.startswith("--outputFile=")).split("=", 1)[1]
+        test = str(rc.ROOT / "sdk/js/__tests__/client.test.ts")
+        result = {"fullName": "Client maps the flag", "status": "passed"}
+        pathlib.Path(out).write_text(
+            json.dumps(
+                {
+                    "testResults": [
+                        {"name": test, "status": "passed", "assertionResults": [result]}
+                    ]
+                }
+            )
+        )
+        return Done()
+
+    assert rc.run_suite("sdk-js", tmp_path, runner=runner) == 0
+    assert seen["cwd"] == str(rc.ROOT / "sdk" / "js")
+    assert "--ci" in seen["command"]
+    cases = rc.read_junit(tmp_path / "sdk-js.xml")
+    assert rc.target_problem(SDK_JS, cases, "x") is None
+
+
+# ---------------------------------------------------------------------------
+# E4 (PE 13): the published SDKs and the demo apps, test by test; the other
+# SDKs at job level, named as the residual
+# ---------------------------------------------------------------------------
+def test_the_sdk_and_demo_targets_pass_test_by_test_and_the_residual_is_named(world):
+    code, text = world.main()
+    assert code == 0, text
+    row = next(line for line in text.splitlines() if "(residual)" in line)
+    assert "| E4 | other SDKs' targets (residual) | PASS |" in row
+    assert "test level: sdk/js, sdk/python" in row
+    assert "job level only (sdk-unit-tests.yml, no test-level report):" in row
+    assert "go (1)" in row and "java (1)" in row and "ios (0)" in row
+    claim = next(line for line in text.splitlines() if "| claim tests |" in line)
+    assert "10/10 targets passed" in claim
+
+
+@pytest.mark.parametrize(
+    "report, case, needle",
+    [
+        (
+            "sdk-python.xml",
+            ("sdk.python.tests.test_client.TestFlags", "test_maps_the_flag", "skipped"),
+            f"{SDK_PY}: skipped at {RC[:12]}",
+        ),
+        (
+            "sdk-js.xml",
+            ("sdk/js/__tests__/client.test.ts", "Client maps the flag", "failed"),
+            f"{SDK_JS}: failed at {RC[:12]}",
+        ),
+        (
+            "demo-shoplab.xml",
+            (
+                "demo/shoplab/src/__tests__/search.test.tsx",
+                "flag on: fuzzy engine",
+                "skipped",
+            ),
+            f"{DEMO_JEST}: skipped at {RC[:12]}",
+        ),
+        (
+            "demo-streampulse-simulator.xml",
+            ("demo.streampulse.simulator.test_story", "test_the_story_runs", "failed"),
+            f"{DEMO_SIM}: failed at {RC[:12]}",
+        ),
+    ],
+)
+def test_an_sdk_or_demo_target_that_did_not_pass_fails(world, report, case, needle):
+    world.report_cases[report] = [case]
+    _fails(world, needle)
+
+
+def test_an_sdk_target_missing_from_its_report_fails(world):
+    world.report_cases["sdk-python.xml"] = [
+        ("sdk.python.tests.test_client.TestFlags", "test_other", "passed")
+    ]
+    _fails(world, f"{SDK_PY}: not in the suites' JUnit at {RC[:12]}")
+
+
+@pytest.mark.parametrize(
+    "report", ["sdk-python.xml", "sdk-js.xml", "demo-streampulse.xml"]
+)
+def test_a_missing_sdk_or_demo_report_fails(world, report):
+    world.suite_reports[report] = None
+    _fails(world, f"no readable JUnit report {report}")
+
+
+def test_a_held_target_fails_when_its_sdk_job_did_not_succeed(world):
+    job = next(j for j in world.jobs("sdk-unit-tests.yml") if j["name"] == "go")
+    job["conclusion"] = "failure"
+    run_id = world.ids["sdk-unit-tests.yml"]
+    _fails(
+        world,
+        f"1 targets in sdk/go: its job in sdk-unit-tests.yml run {run_id} is failure",
+    )
+
+
+def test_a_published_sdks_target_is_never_held_at_job_level():
+    assert rc.sdk_job_of(SDK_GO) == "go"
+    assert rc.sdk_job_of("test:sdk/openfeature-python/tests/test_provider.py") == (
+        "openfeature-python"
+    )
+    for target in (
+        SDK_PY,
+        SDK_JS,
+        DEMO_JEST,
+        DEMO_SIM,
+        TARGET_FN,
+        "test:sdk/README.md",
+    ):
+        assert rc.sdk_job_of(target) is None, target
+
+
+def test_the_real_registrys_sdk_and_demo_targets_are_each_judged_by_a_suite():
+    """Every target of this tree's registries in sdk/python, sdk/js or a demo
+    app is matched against a suite's report, and every other SDK's is held by
+    its job: none of them falls to 'no suite reports this test'."""
+    targets = [t for t, _ in rc.read_registry(REPO_ROOT).targets]
+    ours = [
+        t
+        for t in targets
+        if t.startswith(("test:sdk/python/", "test:sdk/js/", "test:demo/"))
+    ]
+    assert {t.split("/")[1] for t in ours} >= {"python", "js", "shoplab", "streampulse"}
+    for target in ours:
+        assert rc.sdk_job_of(target) is None, target
+        problem = rc.target_problem(target, [], "x")
+        assert problem and "not in the suites' JUnit" in problem, problem
+    for target in targets:
+        if target.startswith("test:sdk/") and target not in ours:
+            assert rc.sdk_job_of(target) in rc.SDK_JOBS, target
+
+
+# ---------------------------------------------------------------------------
+# P (PE 14): the published packages against what sdk-release.yml recorded
+# ---------------------------------------------------------------------------
+def test_both_packages_pass_against_their_record(world):
+    code, text = world.main()
+    assert code == 0, text
+    js = next(line for line in text.splitlines() if f"| P | npm {JS_NAME}" in line)
+    py = next(line for line in text.splitlines() if f"| P | PyPI {PY_NAME}" in line)
+    assert "| PASS |" in js and "run 3000 of sdk/js/v0.1.1: 1 published files" in js
+    assert "| PASS |" in py and "run 3001 of sdk/python/v0.1.1: 2 published files" in py
+    assert "counted (published)" in text
+
+
+def test_a_pypi_file_whose_sha256_is_not_the_recorded_one_fails(world):
+    world.published[WHEEL] = b"another wheel"
+    _fails(world, f"{WHEEL}: PyPI's sha256 is", "run 3001 recorded")
+
+
+def test_a_pypi_file_the_run_did_not_record_fails(world):
+    world.web[PYPI_URL] = json.dumps(
+        {
+            "info": {"version": PY_VERSION, "description": GOOD_DESCRIPTION["PyPI"]},
+            "urls": [
+                {
+                    "filename": n,
+                    "digests": {"sha256": hashlib.sha256(FILES[n]).hexdigest()},
+                }
+                for n in (WHEEL, SDIST)
+            ]
+            + [
+                {
+                    "filename": "experimently-0.1.1-py2-none-any.whl",
+                    "digests": {"sha256": "0" * 64},
+                }
+            ],
+        }
+    ).encode()
+    _fails(
+        world,
+        "experimently-0.1.1-py2-none-any.whl: on PyPI; run 3001 did not record it",
+    )
+
+
+def test_an_npm_integrity_that_is_not_the_recorded_tarballs_fails(world):
+    world.integrity = (
+        "sha512-" + base64.b64encode(hashlib.sha512(b"other").digest()).decode()
+    )
+    _fails(
+        world, f"npm's dist.integrity of {JS_VERSION}", "is not the recorded tarball's"
+    )
+
+
+def test_an_npm_tarball_that_is_not_the_recorded_one_fails(world):
+    """The registry is consistent with itself (its integrity is the tarball's),
+    but the tarball is not the one the run tested and recorded."""
+    world.published[TGZ] = b"a tarball nobody tested"
+    _fails(world, f"npm's tarball of {JS_VERSION} has sha256", "run 3000 recorded")
+
+
+@pytest.mark.parametrize(
+    "registry, install",
+    [
+        ("PyPI", "pip install experimently==0.1.0"),
+        ("npm", "npm install @getexperimently/js-sdk@0.1.0"),
+    ],
+)
+def test_a_description_quoting_the_previous_version_fails(world, registry, install):
+    """The manifest says 0.1.1; the description the registry shows says 0.1.0."""
+    current = install.replace("0.1.0", "0.1.1")
+    world.descriptions[registry] = GOOD_DESCRIPTION[registry].replace(current, install)
+    assert install in world.descriptions[registry]
+    _fails(
+        world,
+        f"the {registry} description's install line quotes 0.1.0, not the manifest's 0.1.1",
+    )
+
+
+@pytest.mark.parametrize("registry", ["PyPI", "npm"])
+def test_a_description_with_no_pinned_install_line_fails(world, registry):
+    world.descriptions[registry] = (
+        "# A package\n\n```bash\npip install experimently\n```\n"
+    )
+    _fails(world, f"the {registry} description has no install line with a version")
+
+
+@pytest.mark.parametrize("registry", ["PyPI", "npm"])
+def test_a_description_with_a_relative_link_fails(world, registry):
+    world.descriptions[registry] += (
+        "\nSee [local evaluation](../../docs/sdk/local-evaluation.md).\n"
+    )
+    _fails(
+        world,
+        f"the {registry} description has 1 relative links (../../docs/sdk/local-evaluation.md)",
+    )
+
+
+@pytest.mark.parametrize("registry", ["PyPI", "npm"])
+def test_a_description_that_says_unpublished_fails(world, registry):
+    world.descriptions[registry] = (
+        "**Not yet** published.\n\n" + world.descriptions[registry]
+    )
+    _fails(world, f"the {registry} description says it is not yet published")
+
+
+@pytest.mark.parametrize("sdk, registry", [("js", "npm"), ("python", "PyPI")])
+def test_a_registry_whose_latest_is_another_version_fails(world, sdk, registry):
+    world.latest[sdk] = "0.1.0"
+    name = JS_NAME if sdk == "js" else PY_NAME
+    _fails(world, f"{registry}'s latest {name} is 0.1.0, not the manifest's 0.1.1")
+
+
+def test_no_release_run_at_the_rc_fails(world):
+    world.set_runs(rc.SDK_RELEASE, [world.release_run("python")])
+    _fails(
+        world,
+        f"no sdk-release.yml run of sdk/js/v0.1.1 at {RC[:12]} succeeded",
+    )
+
+
+def test_a_release_run_at_another_commit_is_refused(world):
+    run = world.release_run("js")
+    run["head_sha"], run["stray"] = OLD, True
+    _fails(world, f"run 3000 is at {OLD[:12]}, not the RC")
+
+
+def test_a_release_of_the_previous_version_is_not_this_ones(world):
+    world.release_run("js")["head_branch"] = "sdk/js/v0.1.0"
+    _fails(world, "no sdk-release.yml run of sdk/js/v0.1.1")
+
+
+def test_a_failed_release_run_before_the_good_one_needs_a_disposition(world):
+    world.add_run(
+        rc.SDK_RELEASE,
+        _run(
+            2999,
+            rc.SDK_RELEASE,
+            event="push",
+            ref="sdk/js/v0.1.1",
+            conclusion="failure",
+            created="2026-11-01T10:30:00Z",
+        ),
+    )
+    _fails(
+        world,
+        "run 2999 (sdk/js/v0.1.1, failure) did not succeed and has no disposition",
+    )
+    code, text = world.main("--dispositions", "2999: the trusted publisher was not set")
+    assert code == 0, text
+
+
+def test_two_successful_release_runs_of_one_version_fail(world):
+    world.add_run(
+        rc.SDK_RELEASE,
+        _run(
+            2998,
+            rc.SDK_RELEASE,
+            event="push",
+            ref="sdk/js/v0.1.1",
+            created="2026-11-01T10:30:00Z",
+        ),
+    )
+    _fails(world, "2 sdk-release.yml runs of sdk/js/v0.1.1 succeeded")
+
+
+@pytest.mark.parametrize("conclusion", ["skipped", "failure"])
+def test_a_release_run_whose_publish_did_not_succeed_fails(world, conclusion):
+    job = next(j for j in world.release_jobs("js") if j["name"] == "publish to npm")
+    job["conclusion"] = conclusion
+    _fails(world, f"run 3000: job 'publish to npm' {conclusion}")
+
+
+def test_a_record_that_does_not_hash_to_its_digest_fails(world):
+    """A listing line lost between the build job and the log the verifier
+    read: the digest no longer matches, so the record is refused."""
+    log = world.build_log("python")
+    lines = log.splitlines(keepends=True)
+    world.logs[f"actions/jobs/{world.build_ids['python']}/logs"] = "".join(
+        line for line in lines if not line.rstrip().endswith(SDIST)
+    )
+    _fails(world, "run 3001: the recorded files do not hash to the recorded digest")
+
+
+def test_a_log_with_no_record_fails(world):
+    world.logs[f"actions/jobs/{world.build_ids['js']}/logs"] = (
+        "2026-11-01T10:20:00.1234567Z npm notice Tarball Contents\n"
+    )
+    _fails(world, "run 3000: the build job's log records 0 files, not one tarball")
+
+
+def test_a_build_job_listed_without_an_id_fails(world):
+    """No id, no log, no record: refused, never compared with nothing."""
+    job = next(
+        j for j in world.release_jobs("js") if j["name"] == "test and build for npm"
+    )
+    del job["id"]
+    _fails(world, "run 3000: job 'test and build for npm' has no id")
+
+
+def test_an_unreadable_build_log_fails(world):
+    world.build_ids["python"] = 4999  # the fake answers no log for job 4001
+    _fails(world, "cannot read the log of 'test and build for PyPI'")
+
+
+def test_a_registry_that_does_not_answer_fails(world):
+    world.web[NPM_URL] = b"<html>not json</html>"
+    _fails(world, f"cannot read {NPM_URL}")
+
+
+def test_an_npm_tarball_off_the_registry_is_not_fetched(world):
+    world.web[NPM_URL] = json.dumps(
+        {
+            "dist-tags": {"latest": JS_VERSION},
+            "readme": GOOD_DESCRIPTION["npm"],
+            "versions": {
+                JS_VERSION: {
+                    "dist": {
+                        "integrity": "sha512-x",
+                        "tarball": "https://example.com/x.tgz",
+                    }
+                }
+            },
+        }
+    ).encode()
+    _fails(
+        world, f"npm's tarball of {JS_VERSION} is not on https://registry.npmjs.org/"
+    )
+    assert "https://example.com/x.tgz" not in world.fetched
+
+
+# ---------------------------------------------------------------------------
+# --registry: one package, after its publish in the sitting
+# ---------------------------------------------------------------------------
+def test_registry_mode_checks_one_package_and_says_so(world):
+    code, text = world.main("--registry", "js")
+    assert code == 0, text
+    assert text.splitlines()[0] == f"# Registry check of sdk/js: {TAG} ({RC[:12]})"
+    assert text.splitlines()[-1] == "REGISTRY CHECK (js): PASS"
+    assert "RC EVIDENCE" not in text
+    lines = text.splitlines()
+    table = lines[lines.index("| Item | Subject | Result | Detail |") + 2 :]
+    items = [line.split("|")[1].strip() for line in table[: table.index("")]]
+    assert items == ["P", "D"]
+    assert all("docs-journeys" not in " ".join(call) for call in world.calls)
+    assert set(world.fetched) == {NPM_URL, TARBALL_URL}
+
+
+def test_registry_mode_fails_on_its_package(world):
+    world.published[WHEEL] = b"another wheel"
+    code, text = world.main("--registry", "python")
+    assert code == 1, text
+    assert text.splitlines()[-1] == "REGISTRY CHECK (python): FAIL"
+
+
+def test_registry_mode_is_never_run_in_a_workflow_run(world):
+    code, _ = world.main("--registry", "js", "--this-run", "1", "--junit", ".")
+    assert code == 2
+
+
+def test_registry_mode_names_a_published_package_only(world):
+    with pytest.raises(SystemExit) as stopped:
+        world.main("--registry", "go")
+    assert stopped.value.code == 2
+
+
+def test_registry_mode_refuses_staging(world):
+    world.with_staging()
+    code, _ = world.main("--registry", "js")
+    assert code == 2
+
+
+# ---------------------------------------------------------------------------
+# The parsers P uses
+# ---------------------------------------------------------------------------
+def test_the_record_is_read_from_a_log_as_github_writes_it():
+    sha = hashlib.sha256(b"x").hexdigest()
+    listing = f"{sha}  experimently-1.0.0.tar.gz\n"
+    digest = hashlib.sha256(listing.encode()).hexdigest()
+    log = (
+        "﻿2026-11-01T10:20:00.0000000Z Run set -euo pipefail\n"
+        f"2026-11-01T10:20:01.1234567Z {sha}  experimently-1.0.0.tar.gz\r\n"
+        f"2026-11-01T10:20:01.2234567Z digest {digest}\n"
+        f"not a log line {sha}  experimently-9.tar.gz\n"
+    )
+    files, problems = rc.read_record(rc.PACKAGES["python"], log)
+    assert problems == [] and files == {"experimently-1.0.0.tar.gz": sha}
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("See [the guide](../../docs/sdk/go.md).", ["../../docs/sdk/go.md"]),
+        ("See [Development](#development).", ["#development"]),
+        ("![logo](img/logo.png)", ["img/logo.png"]),
+        ("[guide]: docs/guide.md", ["docs/guide.md"]),
+        ('<a href="../python">SDK</a>', ["../python"]),
+        ("<a href=../python>SDK</a>", ["../python"]),
+        ("<img src='img/logo.png'>", ["img/logo.png"]),
+        ("See [the guide](https://example.com/docs/x.md).", []),
+        ("```md\n[x](../in-a-fence.md)\n```", []),
+        (
+            "~~~~\n[x](../in.md)\n~~~\nstill fenced [y](../in.md)\n~~~~\n[z](../out.md)",
+            ["../out.md"],
+        ),
+    ],
+)
+def test_a_relative_link_is_found_in_each_form(text, expected):
+    assert rc.relative_links(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text", ["**Not yet published.**", "**Not yet** published", "_Not yet_\npublished"]
+)
+def test_unpublished_is_found_in_any_markup(text):
+    assert rc.says_unpublished(text)
+
+
+def test_a_huge_description_is_truncated_before_it_is_read():
+    """Only DESCRIPTION_MAX characters are read, whatever follows; every
+    pattern on it is bounded. A planted pin past the cut is not seen."""
+    head = "](x" * 20_000 + ("href=" + "a" * 3_000 + " ") * 10 + "```\n" * 1_000
+    head += " " * (rc.DESCRIPTION_MAX - len(head))
+    text = head + "pip install experimently==0.1.1\n"
+    problems = rc.description_problems(rc.PACKAGES["python"], PY_NAME, PY_VERSION, text)
+    assert "the PyPI description has no install line with a version" in problems[0]
+
+
+def test_a_whole_class_target_needs_every_case_of_its_class_to_pass():
+    """doc_claims.py accepts ``path::TestClass``: one pass, no failure or skip."""
+    target = "test:sdk/python/tests/test_client.py::TestTrackNeverRaises"
+    owner = "sdk.python.tests.test_client.TestTrackNeverRaises"
+    passed = [
+        rc.Case(owner, "test_a", "passed"),
+        rc.Case(owner + ".TestInner", "test_b", "passed"),
+        rc.Case("sdk.python.tests.test_client.TestTrackNeverRaisesNot", "t", "failed"),
+    ]
+    assert rc.target_problem(target, passed, "x") is None
+    skipped = passed + [rc.Case(owner, "test_c", "skipped")]
+    assert rc.target_problem(target, skipped, "x") == f"{target}: skipped at x"
+    assert rc.target_problem(target, passed[2:], "x") == (
+        f"{target}: not in the suites' JUnit at x"
+    )
