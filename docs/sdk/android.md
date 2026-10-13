@@ -158,22 +158,22 @@ Calls `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…` (both values pe
 |----------|------|-------------|
 | `key` | `String` | The flag key you asked for |
 | `enabled` | `Boolean` | Server decision for this user |
-| `config` | `Any?` | The flag's `config` payload: `Map<String, Any?>` for a JSON object, `List<Any?>` for an array, a scalar, or `null` |
-| `configMap` | `Map<String, Any?>?` | `config` when it is a JSON object, else `null` |
-| `variant` | `String?` | `null` when off; `config["variant"]` when it is a string; otherwise `"on"` |
+| `config` | `Any?` | Always `null`: the evaluate endpoint returns `config: null` for every flag |
+| `configMap` | `Map<String, Any?>?` | Always `null`, like `config` |
+| `variant` | `String?` | `null` when off, otherwise `"on"` |
 
 ```kotlin
 val result = client.evaluateFlag("dark-mode", user)
 if (result.enabled) {
-    val theme = result.configMap?.get("theme") as? String ?: "dark"
+    enableDarkMode()
 }
 ```
 
 Resolution order: the in-memory cache for this user + flag, then the API, then (on failure) the
 offline store's last successful evaluation for this user + flag. Failures are never cached; an
 offline fallback is returned without being re-cached, so the next call retries the server. With
-no offline value the call **throws** — `FlagNotFoundException` on 404 (flag unknown or not
-ACTIVE), `ServerException` on another non-2xx status, `NetworkException` on IO errors — which is
+no offline value the call **throws** — `FlagNotFoundException` on 404 (an unknown flag key; a
+flag that is not ACTIVE is not an error, it answers `enabled: false`), `ServerException` on another non-2xx status, `NetworkException` on IO errors — which is
 what the SDK did before the rewire.
 
 ---
@@ -381,13 +381,13 @@ runTest {
 cd sdk/android && gradle :sdk:test
 ```
 
-- `cd sdk/android && gradle :sdk:test`: JUnit 5 + MockWebServer, 78 tests (no wrapper checked in)
+- `cd sdk/android && gradle :sdk:test`: JUnit 5 + MockWebServer (no wrapper checked in)
 
-`ExperimentationClientTest` (56 tests) covers the exact request for each endpoint (method, path
+`ExperimentationClientTest` covers the exact request for each endpoint (method, path
 encoding, `user_id` query, headers, JSON body), response mapping, sticky cache hits, TTL expiry,
 404/401/network failures, offline fallback, that failures are never cached, keyed `track`
 bodies, key-less fan-out, "nothing cached → no request", batch chunking at 100 and that `track`
-never throws. `HashCompatibilityTest` (22 tests) pins the golden vectors.
+never throws. `HashCompatibilityTest` pins the golden vectors.
 
 The contract smoke, `bash sdk/android/examples/contract_smoke.sh`, compiles the SDK's Kotlin
 sources for a plain JVM (`sdk/android/jvm`), so it needs no Android SDK and no emulator; the

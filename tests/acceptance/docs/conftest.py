@@ -42,6 +42,10 @@ Environment:
   ``GITHUB_RUN_ID``. The headers are the QA templates only when the commit and
   the link are ones they accept (a run in this repository's Actions);
   otherwise a plain line (``docs_runner/report.py``).
+* ``DOCS_JOURNEY_PUBLISHED_REF``, ``DOCS_JOURNEY_PUBLISHED_SHA``: the ref and
+  commit the published site was built from, recorded in ``verdicts.json`` as
+  ``published`` (``scripts/rc_evidence.py`` compares them with the release
+  tag); ``stacks.py`` reads the ref for docs-published.
 * ``DOCS_JOURNEY_STACKS``: the stacks whose journeys this session runs, a
   comma-separated list of names from ``stacks.STACK_CLASSES``. Unset, every
   stack but demo-local, which binds fixed host ports and runs only in the
@@ -468,7 +472,12 @@ def write_reports(
         problem = problem or str(error)
     (run_dir / "verdicts.json").write_text(
         json.dumps(
-            report.verdicts_record(runs, report.RunInfo(date, sha, link)), indent=2
+            report.verdicts_record(
+                runs,
+                report.RunInfo(date, sha, link),
+                report.published_source(os.environ),
+            ),
+            indent=2,
         )
         + "\n",
         encoding="utf-8",

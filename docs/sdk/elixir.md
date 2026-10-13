@@ -127,21 +127,22 @@ Calls `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` and returns
 |-------|------|-------------|
 | `key` | `String.t()` | The flag key you asked for |
 | `enabled` | `boolean()` | Server decision for this user |
-| `config` | `term() \| nil` | The flag's `config` payload as returned by the server |
+| `config` | `term() \| nil` | Always `nil`: the evaluate endpoint returns `config: null` for every flag |
 
 ```elixir
 case Experimently.evaluate_flag(client, "dark-mode", "user-456") do
-  {:ok, %Experimently.FlagEvaluation{enabled: true, config: config}} -> render_dark(config)
+  {:ok, %Experimently.FlagEvaluation{enabled: true}} -> render_dark()
   {:ok, _disabled} -> render_light()
   {:error, _reason} -> render_light()
 end
 ```
 
-Returns `{:error, reason}` on a network/HTTP failure (including `{:api_error, 404, _}` when the
-flag is not ACTIVE). A cached evaluation, when present and unexpired, is returned without calling
+Returns `{:error, reason}` on a network/HTTP failure (including `{:api_error, 404, _}` for an
+unknown flag key). A flag that is not ACTIVE is not an error: it returns `enabled: false`.
+A cached evaluation, when present and unexpired, is returned without calling
 the server; failures are never cached, so the next call retries. Options: `skip_cache: true` to
-bypass the cache; `:attributes` is accepted for symmetry but the evaluate endpoint only takes the
-user id.
+skip the cache; `:attributes` is accepted for symmetry but not sent: the evaluate endpoint takes a
+`context`, which this SDK does not send yet.
 
 ### `feature_enabled?(client, flag_key, user_id)`
 
@@ -283,7 +284,7 @@ The public functions never raise on network or HTTP errors; they return tagged t
 | Reason | When |
 |--------|------|
 | `{:auth_error, 401}` | Invalid API key |
-| `{:api_error, status, body}` | Other 4xx/5xx — 404 experiment/flag not ACTIVE, 422 validation, 429 rate limited |
+| `{:api_error, status, body}` | Other 4xx/5xx — 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 422 validation, 429 rate limited |
 | `{:network_error, reason}` | `:httpc` connection failures and timeouts (`:econnrefused`, `:timeout`, …) |
 | `{:malformed_response, body}` | 2xx body without the expected fields (assignment without `variant_name`) |
 

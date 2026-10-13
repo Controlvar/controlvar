@@ -49,6 +49,11 @@ OPERATIONS = (
     "`POST /api/v1/tracking/assign`",
     "`POST /api/v1/tracking/assign/batch`",
 )
+#: The segment operations that take a ``user_context``, their own row.
+SEGMENT_OPERATIONS = (
+    "`POST /api/v1/segments/{segment_id}/evaluate`",
+    "`POST /api/v1/segments/bulk-evaluate`",
+)
 
 NUMBER = re.compile(r"(\d[\d,]*)\s+(bytes|levels)\b")
 DETAIL = re.compile(r"`(?:users\[\d+\]: )?(Targeting context [^`]*)`")
@@ -121,12 +126,16 @@ def test_the_endpoints_page_states_the_limits_of_the_code():
         assert words in section, words
 
 
-def test_the_stability_row_states_the_limits_of_the_code():
-    rows = [
+def _stability_rows():
+    return [
         line
         for line in STABILITY.read_text("utf-8").splitlines()
         if line.startswith("| ") and f"endpoints.md{ANCHOR}" in line
     ]
+
+
+def test_the_stability_row_states_the_limits_of_the_code():
+    rows = [r for r in _stability_rows() if OPERATIONS[0] in r.split(" | ")[0]]
     assert len(rows) == 1, rows
     row = rows[0]
     operations = row.split(" | ")[0]
@@ -143,12 +152,33 @@ def test_the_stability_row_states_the_limits_of_the_code():
         assert words in row, words
 
 
+def test_the_segment_stability_row_states_the_limits_of_the_code():
+    rows = [r for r in _stability_rows() if SEGMENT_OPERATIONS[0] in r.split(" | ")[0]]
+    assert len(rows) == 1, rows
+    row = rows[0]
+    operations = row.split(" | ")[0]
+    for operation in SEGMENT_OPERATIONS:
+        assert operation in operations, operation
+    numbers, details = _check_numbers([row])
+    assert numbers >= 2 and details == 2, (numbers, details)
+    for words in (
+        "answers 422",
+        "still answers 400",
+        "once",
+        "The OpenAPI document does not change.",
+    ):
+        assert words in row, words
+    # The two rows are all the rows that point at the section.
+    assert len(_stability_rows()) == 2, _stability_rows()
+
+
 # ---------------------------------------------------------------------------
 # The examples
 # ---------------------------------------------------------------------------
 
 #: ``context`` (or ``"context"``) then ``:`` or ``=``; not ``user_context``.
 _CONTEXT_AT = re.compile(r"""(?<![A-Za-z_])["']?context["']?\s*[:=]\s*""")
+_USER_CONTEXT_AT = re.compile(r"""(?<![A-Za-z_])["']?user_context["']?\s*[:=]\s*""")
 _BARE_KEY = re.compile(r"""([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:""")
 
 
@@ -197,14 +227,17 @@ def _parse(literal: str) -> Optional[Any]:
         return None
 
 
-def docs_example_contexts() -> Tuple[List[Tuple[str, dict]], List[str]]:
+def docs_example_contexts(
+    pattern: re.Pattern = _CONTEXT_AT,
+) -> Tuple[List[Tuple[str, dict]], List[str]]:
     """``([(where, context), ...], [where, ...])``: every object literal given
-    as a ``context`` in ``docs/``, and the places one could not be read."""
+    as a ``context`` in ``docs/`` (or, with ``_USER_CONTEXT_AT``, as a
+    segment's ``user_context``), and the places one could not be read."""
     found: List[Tuple[str, dict]] = []
     unread: List[str] = []
     for path in sorted(DOCS.rglob("*.md")):
         text = path.read_text("utf-8")
-        for match in _CONTEXT_AT.finditer(text):
+        for match in pattern.finditer(text):
             at = match.end()
             where = f"{path.relative_to(REPO_ROOT)}:{text.count(chr(10), 0, at) + 1}"
             literal = None
@@ -226,6 +259,19 @@ def docs_example_contexts() -> Tuple[List[Tuple[str, dict]], List[str]]:
 def test_every_example_context_in_the_docs_is_within_the_limits():
     found, unread = docs_example_contexts()
     assert len(found) >= 15, (len(found), unread)
+    assert not unread, unread
+    over = [(where, context_over_limits(c)) for where, c in found]
+    assert not [o for o in over if o[1] is not None], over
+
+
+def docs_example_user_contexts() -> Tuple[List[Tuple[str, dict]], List[str]]:
+    """Every object literal given as a segment's ``user_context`` in ``docs/``."""
+    return docs_example_contexts(_USER_CONTEXT_AT)
+
+
+def test_every_example_user_context_in_the_docs_is_within_the_limits():
+    found, unread = docs_example_user_contexts()
+    assert len(found) >= 2, (len(found), unread)
     assert not unread, unread
     over = [(where, context_over_limits(c)) for where, c in found]
     assert not [o for o in over if o[1] is not None], over

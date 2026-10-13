@@ -44,9 +44,7 @@ client = api.get_client()
 
 ctx = EvaluationContext(targeting_key="user-12345")          # targeting_key == platform user_id (required)
 enabled = client.get_boolean_value("dark-mode", False, ctx)
-variant = client.get_string_value("checkout-experiment", "control", ctx)   # config["variant"]
-limit = client.get_integer_value("cart-max-items", 10, ctx)                # config["value"]
-config = client.get_object_value("feature-config", {}, ctx)                # whole config
+# Only boolean flags carry a value: string, number and object calls return your default.
 
 # Experiments and event tracking are not part of OpenFeature: use the SDK client underneath.
 assignment = provider.client.get_assignment("checkout_flow", "user-12345")
@@ -59,21 +57,21 @@ timeout=10, *, client=None, transport=None)`. Pass `client=` to share one
 
 ## Resolution rules
 
-| OpenFeature call | Value | When absent |
-|---|---|---|
-| `get_boolean_*` | `enabled` | — |
-| `get_string_*` | `config["variant"]` (or `config` itself when it is a string) | default, reason `DEFAULT` |
-| `get_integer_*` / `get_float_*` | `config["value"]` (or `config` itself when numeric; `bool` never counts) | default, reason `DEFAULT` |
-| `get_object_*` | `config` when it is a dict or list | default, reason `DEFAULT` |
+| OpenFeature call | Value |
+|---|---|
+| `get_boolean_*` | `enabled` |
+| `get_string_*`, `get_integer_*`, `get_float_*`, `get_object_*` | the caller's default, reason `DEFAULT` |
+
+Only boolean flags carry a value: the evaluate endpoint returns `config: null` for every flag.
 
 - `targeting_key` → `user_id`. It is required: without it you get the default value with
-  `TARGETING_KEY_MISSING`. **Context attributes are not sent** — the evaluate endpoint has no
-  context parameter.
+  `TARGETING_KEY_MISSING`. **Context attributes are not sent** — the evaluate endpoint takes a
+  `context`, which this provider does not send yet.
 - A disabled flag resolves non-boolean calls to the default with reason `DISABLED`.
 - Reasons: `TARGETING_MATCH` (fresh from the server, on), `DISABLED`, `CACHED` (from the SDK
-  cache), `DEFAULT`, `ERROR` (`FLAG_NOT_FOUND` on 404 — flag unknown or not ACTIVE — otherwise
+  cache), `DEFAULT`, `ERROR` (`FLAG_NOT_FOUND` on 404 — an unknown flag key — otherwise
   `GENERAL`). Errors never raise and are never cached.
-- `variant` on the details is `config["variant"]` when it is a string.
+- `variant` on the details is not set, because `config` is always `null`.
 - `client.track(event_name, ctx, TrackingEventDetails(value=…))` forwards to
   `ExperimentationClient.track` (fans out to the user's cached assignments and flags).
 

@@ -50,7 +50,7 @@ $client = new ExperimentationClient(new SdkConfig(
 // Feature flag (GET /api/v1/feature-flags/evaluate/{key}?user_id=…)
 $flag = $client->evaluateFlag('dark-mode', 'user-123');
 $flag->enabled;   // bool
-$flag->config;    // mixed|null — the flag's config payload
+$flag->config;    // always null: the evaluate endpoint returns config: null
 $client->isFeatureEnabled('dark-mode', 'user-123');   // bool
 
 // Experiment assignment (POST /api/v1/tracking/assign — sticky on the server)
@@ -81,8 +81,8 @@ $client->track('page_view', 'user-123', ['page' => '/']);   // no key: fanned ou
 ### `evaluateFlag(string $flagKey, string $userId): FlagEvaluation`
 
 `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id={userId}`. Returns a `FlagEvaluation`
-with `key`, `enabled` and `config`. On any network/HTTP failure (transport error, 401, 404 when
-the flag is not ACTIVE, 429, ...) the flag is reported as **disabled** (`config: null`); a cached
+with `key`, `enabled` and `config`. On any network/HTTP failure (transport error, 401, 404 for an
+unknown flag key, 429, ...) the flag is reported as **disabled** (`config: null`); a cached
 evaluation, when present, is returned instead. Failures are never cached. Never throws on
 network/HTTP errors.
 

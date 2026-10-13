@@ -78,9 +78,7 @@ const client = OpenFeature.getClient('my-service');
 // 3. Evaluate flags. targetingKey is the platform user_id and is required.
 const ctx = { targetingKey: 'user-12345' };
 const enabled = await client.getBooleanValue('dark-mode', false, ctx);              // → enabled
-const variant = await client.getStringValue('checkout-experiment', 'control', ctx); // → config.variant
-const maxItems = await client.getNumberValue('cart-max-items', 10, ctx);            // → config.value
-const config = await client.getObjectValue('feature-config', {}, ctx);              // → config
+// Only boolean flags carry a value: string, number and object calls return your default.
 
 // 4. Experiments and event tracking are outside OpenFeature: use the JS SDK client underneath.
 const assignment = await provider.client.getAssignment('checkout_flow', { userId: 'user-12345', attributes: { plan: 'pro' } });
@@ -93,22 +91,23 @@ await provider.client.track('user-12345', 'page_view'); // no key → fans out t
 | OpenFeature field | Platform concept | Notes |
 |---|---|---|
 | `targetingKey` | `user_id` | Required. Sent as `?user_id=` on the evaluate call; the server buckets on it. Missing or empty → default value with `errorCode: TARGETING_KEY_MISSING`. |
-| `attributes.*` | — | **Not sent.** The evaluate endpoint takes no context; attributes stay available to your own hooks. Pass them as `attributes` on `provider.client.getAssignment(...)` if an experiment needs them. |
+| `attributes.*` | — | **Not sent.** The evaluate endpoint takes a `context`, but this provider does not send it yet; attributes stay available to your own hooks. Pass them as `attributes` on `provider.client.getAssignment(...)` if an experiment needs them. |
 
 ### Resolution rules
 
-| OpenFeature call | Value | When the config lacks it |
-|---|---|---|
-| `getBooleanValue` / `getBooleanDetails` | `enabled` | — |
-| `getStringValue` / `getStringDetails` | `config.variant` when it is a string (or `config` itself when it is a string) | default, reason `DEFAULT` |
-| `getNumberValue` / `getNumberDetails` | `config.value` when it is a number (or `config` itself when it is a number) | default, reason `DEFAULT` |
-| `getObjectValue` / `getObjectDetails` | `config` when it is a non-null object | default, reason `DEFAULT` |
+| OpenFeature call | Value |
+|---|---|
+| `getBooleanValue` / `getBooleanDetails` | `enabled` |
+| `getStringValue`, `getNumberValue`, `getObjectValue` and their `…Details` | the caller's default, reason `DEFAULT` |
+
+Only boolean flags carry a value: the evaluate endpoint returns `config: null` for every flag, so
+a string, number or object call on a flag that is on returns the caller's default.
 
 - A disabled flag resolves boolean calls to `false` with reason `DISABLED`, and non-boolean calls
   to the caller's default with reason `DISABLED`.
-- `variant` on the resolution details is `config.variant` when it is a string; `flagMetadata` is
+- `variant` on the resolution details is not set, because `config` is always `null`; `flagMetadata` is
   `{ flagKey, enabled }` on every successful resolution.
-- Errors never throw and are never cached: 404 (flag unknown or not ACTIVE) → `FLAG_NOT_FOUND`;
+- Errors never throw and are never cached: 404 (an unknown flag key) → `FLAG_NOT_FOUND`;
   a 2xx with an unexpected body → `PARSE_ERROR`; anything else (401, 5xx, timeout, network) →
   `GENERAL`. All return the default with reason `ERROR` and an `errorMessage`.
 
@@ -119,7 +118,7 @@ await provider.client.track('user-12345', 'page_view'); // no key → fans out t
 | `TARGETING_MATCH` | Fresh answer from the server; the flag is on for this user. |
 | `CACHED` | Served from the JS SDK's per-user cache (within `cacheTtlMs`). |
 | `DISABLED` | The server reports the flag off for this user. |
-| `DEFAULT` | Flag is on but `config` has no value of the requested type; the caller's default was returned. |
+| `DEFAULT` | A string, number or object call on a flag that is on: `config` is always `null`, so the caller's default was returned. |
 | `ERROR` | Evaluation failed (see `errorCode`); the caller's default was returned. |
 
 ### Constructor options
@@ -239,10 +238,7 @@ client = api.get_client()
 # 3. Evaluate flags. targeting_key is the platform user_id and is required.
 ctx = EvaluationContext(targeting_key="user-12345")
 enabled = client.get_boolean_value("dark-mode", False, ctx)                 # -> enabled
-variant = client.get_string_value("checkout-experiment", "control", ctx)   # -> config["variant"]
-max_items = client.get_integer_value("cart-max-items", 10, ctx)             # -> config["value"]
-price = client.get_float_value("price-multiplier", 1.0, ctx)                # -> config["value"]
-config = client.get_object_value("feature-config", {}, ctx)                 # -> config
+# Only boolean flags carry a value: string, number and object calls return your default.
 
 # 4. Experiments and event tracking are outside OpenFeature: use the SDK client underneath.
 assignment = provider.client.get_assignment("checkout_flow", "user-12345", {"plan": "pro"})
@@ -254,20 +250,21 @@ provider.client.track("user-12345", "purchase", event_value=49.99, experiment_ke
 | OpenFeature field | Platform concept | Notes |
 |---|---|---|
 | `targeting_key` | `user_id` | Required. Sent as `?user_id=` on the evaluate call; the server buckets on it. Missing or empty → default value with `TARGETING_KEY_MISSING`. |
-| `attributes.*` | — | **Not sent.** The evaluate endpoint takes no context; attributes stay available to your own hooks. |
+| `attributes.*` | — | **Not sent.** The evaluate endpoint takes a `context`, but this provider does not send it yet; attributes stay available to your own hooks. |
 
 ### Resolution rules
 
-| OpenFeature call | Value | When the config lacks it |
-|---|---|---|
-| `get_boolean_*` | `enabled` | — |
-| `get_string_*` | `config["variant"]` (or `config` itself when it is a string) | default, reason `DEFAULT` |
-| `get_integer_*` / `get_float_*` | `config["value"]` (or `config` itself when numeric; `bool` never counts) | default, reason `DEFAULT` |
-| `get_object_*` | `config` when it is a dict or list | default, reason `DEFAULT` |
+| OpenFeature call | Value |
+|---|---|
+| `get_boolean_*` | `enabled` |
+| `get_string_*`, `get_integer_*`, `get_float_*`, `get_object_*` | the caller's default, reason `DEFAULT` |
+
+Only boolean flags carry a value: the evaluate endpoint returns `config: null` for every flag, so
+a string, number or object call on a flag that is on returns the caller's default.
 
 - A disabled flag resolves non-boolean calls to the default with reason `DISABLED`.
-- `variant` on the resolution details is `config["variant"]` when it is a string.
-- Errors never raise and are never cached: 404 (flag unknown or not ACTIVE) → `FLAG_NOT_FOUND`,
+- `variant` on the resolution details is not set, because `config` is always `null`.
+- Errors never raise and are never cached: 404 (an unknown flag key) → `FLAG_NOT_FOUND`,
   anything else (401, 5xx, timeout, network) → `GENERAL`; both return the default with reason
   `ERROR`.
 - `client.track(event_name, ctx, TrackingEventDetails(value=…, attributes=…))` forwards to
@@ -280,7 +277,7 @@ provider.client.track("user-12345", "purchase", event_value=49.99, experiment_ke
 | `TARGETING_MATCH` | Fresh answer from the server; the flag is on for this user. |
 | `DISABLED` | The server reports the flag off for this user. |
 | `CACHED` | Served from the SDK's per-user cache (within `cache_ttl`). |
-| `DEFAULT` | Flag is on but `config` has no value of the requested type; the caller's default was returned. |
+| `DEFAULT` | A string, number or object call on a flag that is on: `config` is always `null`, so the caller's default was returned. |
 | `ERROR` | Evaluation failed (see `error_code`); the caller's default was returned. |
 
 ### Constructor options
@@ -367,8 +364,8 @@ carries `X-API-Key: <key>`, `Content-Type: application/json`, `Accept: applicati
 | Track one event (`provider.client.track` with a key) | `POST /api/v1/tracking/track` | `{"event_type","event_name"?,"user_id","experiment_key"?,"feature_flag_key"?,"value"?: number,"metadata"?: object,"timestamp"?: ISO-8601}` — at least one key | stored event (ignored) |
 | Track up to 100 events (`track` without a key, `trackBatch`) | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` | `{"success_count","failure_count","errors": list\|null}` |
 
-Errors: 401 bad key; 404 flag/experiment not ACTIVE or unknown (→ `FLAG_NOT_FOUND`, never
-cached); 422 invalid event; 429 rate limited (`Retry-After` header).
+Errors: 401 bad key; 404 an experiment unknown or not ACTIVE, or an unknown flag key (→
+`FLAG_NOT_FOUND`, never cached); 422 invalid event; 429 rate limited (`Retry-After` header).
 
 Successful evaluations are cached per user + flag for the configured TTL (`cacheTtlMs` /
 `cache_ttl`, default 5 minutes) and reported with reason `CACHED`; failures are never cached.
@@ -442,7 +439,8 @@ from openfeature.evaluation_context import EvaluationContext
 from experimentation_openfeature import ExperimentationProvider
 api.set_provider(ExperimentationProvider(api_key='api-key'))
 client = api.get_client()
-treatment = client.get_string_value('my_feature', 'off', EvaluationContext('user-123'))
+# A Split treatment becomes a boolean flag: only boolean flags carry a value here.
+enabled = client.get_boolean_value('my_feature', False, EvaluationContext('user-123'))
 ```
 
 ---
