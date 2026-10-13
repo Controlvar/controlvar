@@ -61,11 +61,11 @@ Attributes are assumed stable per user — caches are keyed by user + key, so ca
 ```tsx
 const { isEnabled, variant, config, loading, error } = useFeatureFlag('shoplab_new_search');
 if (loading) return <Spinner />;
-return isEnabled ? <NewSearch engine={(config as any)?.engine} /> : <LegacySearch />;
+return isEnabled ? <NewSearch /> : <LegacySearch />;
 ```
 
-`variant` is `null` when off, `config.variant` when the server config contains a string
-`variant`, otherwise `'on'`. On error the flag is reported off with `error` set. `reason`
+`variant` is `null` when off and `'on'` otherwise, and `config` is always `null`: the evaluate
+endpoint returns `config: null` for every flag. On error the flag is reported off with `error` set. `reason`
 (`'targeting_rule' | 'rollout' | 'inactive' | 'error'`) says why the server decided; it is
 `undefined` while loading, on error, or when the server does not send one.
 
@@ -189,7 +189,7 @@ npm test
 npm run build
 ```
 
-- `npm test`: 218 unit tests (fetch is mocked)
+- `npm test`: unit tests (fetch is mocked)
 - `npm run build`: tsc, strict
 
 The unit tests run in `.github/workflows/sdk-unit-tests.yml` on every pull request (react is one of

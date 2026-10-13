@@ -160,7 +160,7 @@ func Float64(v float64) *float64
 | Type | Fields |
 |---|---|
 | `User` | `ID string` (required), `Attributes map[string]interface{}` — sent as `context` on assignment |
-| `EvalResult` | `Key string`, `Enabled bool`, `Config map[string]any` — `nil` when the server returned `null` or a non-object |
+| `EvalResult` | `Key string`, `Enabled bool`, `Config map[string]any` — always `nil`: the evaluate endpoint returns `config: null` for every flag |
 | `Assignment` | `ExperimentKey`, `UserID`, `VariantID` (UUID), `VariantName` (`"control"`, `"treatment"`, …), `IsControl bool`, `Configuration map[string]any` |
 | `TrackEvent` | `UserID`, `EventName`, `EventType` (→ `event_type`, defaults to `EventName`), `ExperimentKey`, `FeatureFlagKey`, `Value *float64`, `Properties` (→ `metadata`), `Timestamp time.Time` (→ RFC 3339 when non-zero, else server-stamped) |
 | `APIError` | `StatusCode int`, `Message string` (response body), `RetryAfter string` (raw header on 429) |
@@ -224,7 +224,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | `Track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `Track` without keys, `TrackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
 
-Errors: 401 bad key, 404 experiment/flag unknown or not ACTIVE, 422 invalid event, 429
+Errors: 401 bad key, 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 422 invalid event, 429
 rate limited (`Retry-After`). These paths share the backend's per-IP `SDK_RATE_LIMIT_PER_MINUTE`
 ceiling (default 6000).
 
@@ -263,5 +263,5 @@ go vet ./... && go test -race ./...
 go run ./examples
 ```
 
-- `go vet ./... && go test -race ./...`: 51 tests, HTTP mocked with net/http/httptest
+- `go vet ./... && go test -race ./...`: HTTP mocked with net/http/httptest
 - `go run ./examples`: examples/main.go walkthrough against a running backend

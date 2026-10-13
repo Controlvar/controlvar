@@ -100,25 +100,25 @@ is thread-safe and meant to be shared (one instance per process). Dispose it to 
 ### `Task<FlagEvaluationResult> EvaluateFlagAsync(string flagKey, string userId, Dictionary<string, object>? attributes = null)`
 
 Calls `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…` (both values percent-encoded) and
-returns a `FlagEvaluationResult`. `attributes` is accepted for source compatibility but not sent —
-the evaluate endpoint only takes the user id.
+returns a `FlagEvaluationResult`. `attributes` is accepted for source compatibility but not sent:
+the evaluate endpoint takes a `context`, which this SDK does not send yet.
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `Key` | `string` | The flag key you asked for |
 | `Enabled` | `bool` | Server decision for this user (`false` on any failure) |
-| `Config` | `JsonElement?` | The flag's `config` payload as returned by the server (any JSON), `null` when absent |
+| `Config` | `JsonElement?` | Always `null`: the evaluate endpoint returns `config: null` for every flag |
 
 ```csharp
 var flag = await client.EvaluateFlagAsync("dark-mode", "user-456");
 if (flag.Enabled)
 {
-    var theme = flag.Config?.GetProperty("theme").GetString() ?? "dark";
+    EnableDarkMode();
 }
 ```
 
-Never throws. On a network/HTTP failure (including `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key) a cached
-evaluation is returned when one exists; otherwise a disabled result
+Never throws. A flag that is not ACTIVE is not a failure: it answers `Enabled: false`. On a
+network/HTTP failure (a 404 is an unknown flag key) a cached evaluation is returned when one exists; otherwise a disabled result
 (`FlagEvaluationResult.Disabled(flagKey)`). Failures are never cached, so the next call retries.
 
 ---

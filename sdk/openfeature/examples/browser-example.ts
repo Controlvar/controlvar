@@ -30,12 +30,11 @@ async function renderHomePage(userId: string): Promise<void> {
 
   const ctx: EvaluationContext = { targetingKey: userId };
 
+  // Only boolean flags carry a value: the evaluate endpoint returns `config: null`.
   const showNewHero = await client.getBooleanValue('new-hero-section', false, ctx);
-  const heroCopy = await client.getStringValue('hero-copy', 'default', ctx); // config.variant
 
   console.log(`User ${userId}:`);
   console.log(`  new-hero-section: ${showNewHero}`);
-  console.log(`  hero-copy variant: ${heroCopy}`);
 }
 
 // Example usage.

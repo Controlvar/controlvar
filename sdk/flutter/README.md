@@ -56,7 +56,7 @@ await client.init();   // opens the offline store; makes no network request
 // Feature flag (GET /api/v1/feature-flags/evaluate/{key}?user_id=…)
 final flag = await client.evaluateFlag('dark-mode', 'user-123');
 flag.enabled;   // bool — false on any failure with nothing cached
-flag.config;    // any JSON value or null — the flag's config payload
+flag.config;    // always null: the evaluate endpoint returns config: null
 await client.isEnabled('dark-mode', 'user-123');   // bool shorthand
 
 // Experiment assignment (POST /api/v1/tracking/assign — sticky on the server)
@@ -102,7 +102,7 @@ a `package:http` `Client` — inject `MockClient` in tests) and an `offlineStore
 | `getAssignments(userId)` / `getEvaluatedFlags(userId)` | cached assignments / flag keys | — |
 | `clearCache()` / `clearOfflineCache()` / `close()` | — | — |
 
-A 404 (flag/experiment not ACTIVE or unknown) is a definitive answer: it returns the failure
+A 404 (an experiment unknown or not ACTIVE, or an unknown flag key) is a definitive answer: it returns the failure
 value and also removes any persisted offline entry, so a stale value is never served for it.
 All methods throw `StateError` when called before `init()` — that is the only exception the
 public API raises.
@@ -169,7 +169,7 @@ flutter pub get
 flutter test
 ```
 
-- `flutter test`: 70 tests: client (HTTP faked with package:http MockClient), hash vectors, SharedPreferences store
+- `flutter test`: the client (HTTP faked with package:http MockClient), hash vectors, SharedPreferences store
 
 The test suite and the contract smoke were reviewed line by line for the server-side rewire but
 **not executed** on the development machine (no `dart`/`flutter` installed); run them on a machine
