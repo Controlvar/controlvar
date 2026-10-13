@@ -205,3 +205,37 @@ def test_a_journey_that_strays_from_the_card_is_refused(tmp_path, change, refuse
     with pytest.raises(loader.Refused) as caught:
         _load(planted)
     assert refused in str(caught.value)
+
+
+@pytest.mark.regression
+def test_the_report_names_the_card_as_the_journeys_guide(tmp_path):
+    """The report's header and issue templates take the card's path as the
+    guide's: a run of this journey that passed every step once failed its
+    report ("guide_path: not a valid guide_path value")."""
+    from docs_runner import log, report
+
+    record = log.Record(
+        run="1",
+        sha="abc",
+        stack="compose-empty",
+        guide=CARD,
+        step=1,
+        step_id="sign-in-page",
+        heading="first-run-checklist",
+        action="goto /login",
+        expected="status 200",
+        failure_signature="the sign-in page does not answer",
+        result="PASS",
+        reason="",
+        observed="at /login (status 200)",
+        snapshot="",
+        expected_snapshot="structural only",
+        ms=12,
+    )
+    run = report.GuideRun("first-run", CARD, CARD, "x", records=(record,))
+    sha = "c6e0f081d82f1a858e111c86db62aa5d8b8a71d4"
+    link = "https://github.com/getexperimently/experimently/actions/runs/18000000003"
+    written = report.guide_markdown(
+        run, tmp_path, date="2026-10-13", sha=sha, run_link=link
+    )
+    assert f"({CARD})" in str(written)
