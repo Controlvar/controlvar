@@ -577,7 +577,7 @@ text = "What compliance certifications are supported?"
 by = ["exempt:label"]
 
 [[unit]]
-text = "As of v0.31.0 the project holds no certification."
+text = "On 2026-10-13 the project held no certification."
 tag = "X"
 by = ["exempt:intent"]
 

@@ -362,7 +362,7 @@ by = [
 ]
 
 [[unit]]
-text = "As of v0.31.0 the project holds no SOC 2, ISO 27001 or HIPAA attestation and claims none."
+text = "On 2026-10-13 the project held no SOC 2, ISO 27001 or HIPAA attestation, and it claims none."
 tag = "X"
 by = ["exempt:intent"]
 

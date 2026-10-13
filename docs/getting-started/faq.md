@@ -164,7 +164,7 @@ See [Split URL Testing API](../api/split-url.md) for setup and the CDK construct
 
 ### What compliance certifications are supported?
 
-As of v0.31.0 the project holds no certification. The platform provides audit-trail controls that customers use as evidence in their own **SOC 2** or **ISO/IEC 27001** programs; the `compliance` module adds tamper-evident signing and report packs.
+On 2026-10-13 the project held no certification. The platform provides audit-trail controls that customers use as evidence in their own **SOC 2** or **ISO/IEC 27001** programs; the `compliance` module adds tamper-evident signing and report packs.
 
 Creating, changing and deleting experiments and feature flags (and, in the full profile, warehouse connections, sources and analysis runs) is recorded in the compliance audit trail. With the `compliance` module each event is signed with HMAC-SHA256 under the `AUDIT_HMAC_KEY` setting; without it events are recorded unsigned. Logins, role changes and exports are not recorded in this trail; logins and role changes are recorded in the other audit log, `GET /api/v1/audit-logs`.
 

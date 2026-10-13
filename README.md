@@ -128,8 +128,8 @@ have the steps.
 
 - **Controls that support your compliance program**: append-only audit log, role-based access,
   per-flag safety monitoring with automatic rollback; the `compliance` and `hipaa` modules add
-  tamper-evident audit signing, compliance report packs and PHI encryption. As of v0.31.0 the
-  project holds no SOC 2, ISO 27001 or HIPAA attestation and claims none.
+  tamper-evident audit signing, compliance report packs and PHI encryption. On 2026-10-13 the
+  project held no SOC 2, ISO 27001 or HIPAA attestation, and it claims none.
 - **Passwords and API keys**: stored hashed; an API key is shown once, when it is created
 - **API keys**: any signed-in user can create one for themselves, and a key acts as its creator
   on the tracking and flag-evaluation routes, so a VIEWER's key can send assignments and events
