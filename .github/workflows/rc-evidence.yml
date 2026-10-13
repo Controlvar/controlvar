@@ -1,0 +1,230 @@
+name: RC evidence
+
+# The release candidate's evidence (#1142): the Python suites at the release
+# tag, then scripts/rc_evidence.py, which reads back every run the release
+# checklist asks for at the tag and writes RC EVIDENCE: PASS or FAIL.
+#
+# Dispatched by hand, at the tag, after the runs it reads have finished:
+#   python3 scripts/rc_evidence.py --plan vX.Y.Z    prints them, in order
+#   gh workflow run rc-evidence.yml --ref vX.Y.Z
+# A run at the tag's commit that did not succeed needs a disposition, given as
+# -f dispositions='<run id>: <reason>; ...'.
+#
+# It starts nothing: no job holds actions: write, the token reads (contents,
+# and actions for the runs and artifacts it judges), and the verifier's GitHub
+# calls are GETs and artifact downloads. Every suites job installs packages and
+# holds contents: read only. Dispatched anywhere but a vX.Y.Z tag, every job
+# fails rather than skips, so the run cannot read as green.
+#
+# The suites run as the pull request jobs run them (pr-qa-gate.yml,
+# integration-tests.yml), the tag's whole tree, one job each; the list is
+# SUITES in scripts/rc_evidence.py. Their JUnit reports and the verifier's
+# record (the run table, the verdicts it read, the reports) are kept 90 days.
+# The table is in the log and the record, not the step summary: it names run
+# ids and test names, which the public QA summaries leave out
+# (.github/qa-templates/).
+# backend/tests/unit/scripts/test_rc_evidence_workflow.py pins this shape.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dispositions:
+        description: "'<run id>: <reason>; ...' for each run at the commit that did not succeed"
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc-evidence-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  python-suites:
+    name: python suites (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: unit
+            db: experimentation
+          - suite: smoke
+            db: experimentation
+          - suite: lambda
+            db: experimentation
+          - suite: modules
+            db: experimentation
+          - suite: integration
+            db: experimentation_test
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: ${{ matrix.db }}
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      APP_ENV: test
+      TESTING: 'true'
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${{ matrix.db }}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    steps:
+      - name: Dispatched at a release tag
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s\n' "$REF" | grep -Eqx 'refs/tags/v[0-9]+\.[0-9]+\.[0-9]+'; then
+            printf '%s\n' '::error title=RC evidence::dispatch this at a release tag: gh workflow run rc-evidence.yml --ref vX.Y.Z'
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: python -m pip install -r backend/requirements.txt
+
+      # The modules' own packages, as module-tests installs them.
+      - name: Install the modules' dependencies
+        if: matrix.suite == 'modules'
+        run: |
+          set -euo pipefail
+          python -m pip install -r modules/requirements.txt
+          python -m pip install -r modules/requirements-test.txt
+
+      # As integration-tests.yml: the repository installed editable, the schema
+      # bootstrapped, and a second Redis that requires a password.
+      - name: Install the repository (editable)
+        if: matrix.suite == 'integration'
+        run: python -m pip install -e . --no-deps
+
+      - name: Bootstrap database schema
+        if: matrix.suite == 'integration'
+        env:
+          POSTGRES_SERVER: localhost
+          POSTGRES_SCHEMA: test_experimentation
+          DATABASE_URI: postgresql://postgres:postgres@localhost:5432/experimentation_test
+        run: python -m backend.app.db.bootstrap
+
+      - name: Start a password-protected Redis
+        if: matrix.suite == 'integration'
+        run: |
+          set -euo pipefail
+          password="$(openssl rand -hex 16)"
+          printf '::add-mask::%s\n' "$password"
+          docker run -d --name redis-auth -p 6380:6379 redis:7-alpine \
+            redis-server --requirepass "$password"
+          for _ in $(seq 1 30); do
+            if docker exec redis-auth redis-cli --no-auth-warning -a "$password" ping | grep -q PONG; then
+              {
+                printf 'REDIS_AUTH_TEST_PORT=6380\n'
+                printf 'REDIS_AUTH_TEST_PASSWORD=%s\n' "$password"
+              } >> "$GITHUB_ENV"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs redis-auth
+          exit 1
+
+      - name: Run the suite
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: python scripts/rc_evidence.py --suite "$SUITE" --junit-dir "$RUNNER_TEMP/junit"
+
+      - name: Upload the JUnit reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rc-evidence-junit-${{ matrix.suite }}
+          path: ${{ runner.temp }}/junit
+          retention-days: 90
+          if-no-files-found: warn
+
+  verify:
+    name: RC evidence
+    needs: python-suites
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Dispatched at a release tag
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s\n' "$REF" | grep -Eqx 'refs/tags/v[0-9]+\.[0-9]+\.[0-9]+'; then
+            printf '%s\n' '::error title=RC evidence::dispatch this at a release tag: gh workflow run rc-evidence.yml --ref vX.Y.Z'
+            exit 1
+          fi
+
+      # The whole tree at the tag: the registry check reads the documents and
+      # parses the test files the registries name.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: rc-evidence-junit-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/junit
+
+      # Standard library only: nothing is installed in this job.
+      - name: Read the evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+          DISPOSITIONS: ${{ inputs.dispositions }}
+        run: >-
+          python3 scripts/rc_evidence.py "$TAG"
+          --junit "$RUNNER_TEMP/junit" --this-run "$RUN_ID"
+          --dispositions "$DISPOSITIONS" --out "$RUNNER_TEMP/rc-evidence"
+
+      - name: Upload the record
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rc-evidence-${{ github.ref_name }}
+          path: ${{ runner.temp }}/rc-evidence
+          retention-days: 90
+          if-no-files-found: error
