@@ -83,8 +83,6 @@ def test_an_sso_session_is_a_local_token_that_cognito_does_not_accept(monkeypatc
     db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(
         id=user.id, is_active=True
     )
-    monkeypatch.setattr(core_settings, "DEV_AUTH_BYPASS", False, raising=False)
-
     monkeypatch.setattr(core_settings, "AUTH_PROVIDER", "local")
     assert deps.get_current_user(token=token, db=db).id == user.id
 

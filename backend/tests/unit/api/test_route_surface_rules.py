@@ -120,7 +120,6 @@ def test_signing_out_revokes_nothing(monkeypatch):
     assert response.status_code == 204
     # The same token still signs the user in afterwards, through the
     # dependency every signed-in route uses.
-    monkeypatch.setattr(settings, "DEV_AUTH_BYPASS", False, raising=False)
     row = SimpleNamespace(id=user.id, is_active=True)
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = row

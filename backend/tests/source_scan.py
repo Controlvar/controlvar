@@ -208,9 +208,7 @@ def compliance_writes(tree: ast.AST):
         keywords = {k.arg: k.value for k in call.keywords}
         resource = keywords.get("resource_type")
         if resource is None:
-            position = [i for i, a in enumerate(call.args) if member(a, "AuditAction")][
-                0
-            ]
+            position = [member(a, "AuditAction") for a in call.args].index(action)
             resource = call.args[position + 1]
         name = owner.get(call)
         found.append(

@@ -101,7 +101,7 @@ def test_the_full_teardown_order_respects_imports_and_dependencies(synths, env):
             "experimentation-dynamodb-counters",
         }
     ), order
-    position = {stack: i for i, stack in enumerate(order)}
+    position = dict(zip(order, range(len(order))))
     exports = _exports(synth)
     for name, importers in import_graph(synth).items():
         exporter = synth.short(exports[name])

@@ -32,7 +32,7 @@ REPO = pathlib.Path(__file__).resolve().parents[4]
 
 def _openapi_recipe():
     lines = (REPO / "Makefile").read_text().splitlines()
-    start = next(i for i, line in enumerate(lines) if line.startswith("openapi:"))
+    start = [line.startswith("openapi:") for line in lines].index(True)
     recipe = []
     for line in lines[start + 1 :]:
         if not line.startswith("\t"):
