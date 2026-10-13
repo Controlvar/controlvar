@@ -35,8 +35,11 @@
 # 90-second rounds until the check is critical (its step 3, at most 5 rounds),
 # and waits for the monitor (its step 4, up to 6 min) and for the error rate
 # to fall back (its step 6, up to 16 min); its bound here is 40 min. The
-# journey's polls wait for what the story does: each is bounded and every 5
-# or 10 s.
+# journey's polls wait for what the story does: each is bounded and every
+# 10 s (a poll every 5 s, the length of uvicorn's default keep-alive, had one
+# request reset in run 38448972328). The monitor may roll the flag back while step 3's
+# incident still runs, and then the story's step 4 finds it already at 5%,
+# so what the story prints is not held for its step 4: the API is.
 #
 # The first runs of this journey found the incident too weak for the stack:
 # with setup-local.sh's steady traffic beside it, one round left the error
@@ -272,7 +275,7 @@ steps:
         as: admin
     poll:
       up_to_seconds: 300
-      every_seconds: 5
+      every_seconds: 10
     expect:
       status: 200
       json:
@@ -379,7 +382,7 @@ steps:
         as: admin
     poll:
       up_to_seconds: 300
-      every_seconds: 5
+      every_seconds: 10
     expect:
       status: 200
       json:
@@ -426,8 +429,6 @@ steps:
       output:
         - "Rollout 5% → 25%"
         - "error_rate is above the 5% critical threshold — the flag is now CRITICAL."
-        - "Automatic rollbacks are ON: waiting for the safety scheduler to roll the flag back to 5%"
-        - "Rollout 25% → 5%"
         - "Added rule: app_version semver_gte 3.2.1 → 100% (kept: employee equals true)"
         - "Resumed the rollout schedule (the rollback in step 4 paused it)."
         - "% → 50%"
