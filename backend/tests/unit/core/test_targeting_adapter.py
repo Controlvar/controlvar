@@ -695,3 +695,15 @@ class TestEngineExtensions:
             )
             is False
         )
+
+
+def test_the_dashboard_offers_more_than_20_operators_including_semver_geo_array_and_time():
+    """The demo guide's "20+ targeting operators: semver, geo, array, time windows"."""
+    assert len(DASHBOARD_OPERATORS) > 20, sorted(DASHBOARD_OPERATORS)
+    for operator in (
+        "semver_gte",
+        "geo_within_radius",
+        "array_contains",
+        "time_window",
+    ):
+        assert operator in DASHBOARD_OPERATORS, operator

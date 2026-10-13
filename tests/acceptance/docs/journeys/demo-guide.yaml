@@ -26,12 +26,14 @@
 # the browser. The journey is not recorded (the key).
 #
 # Expectations written on 2026-10-11 from the guide, the seed scripts and the
-# dashboard's source, before the first run.
+# dashboard's source, before the first run; the recommendation and the two
+# compliance steps on 2026-10-12, from the analysis service and the compliance
+# routes.
 guide: demo/DEMO_GUIDE.md
 stack: demo-local
 profile: full
 video: false
-written: 2026-10-11
+written: 2026-10-12
 steps:
   - id: dashboard-address
     doc: local-recommended
@@ -522,13 +524,14 @@ steps:
         metrics.0.variants.1.conversions: 2111
         metrics.0.variants.1.statistical_test_used: fisher_exact
         metrics.0.variants.1.is_significant: true
+        summary.recommendation: SHIP_VARIANT
       computed:
         metrics.0.variants.1.p_value:
           oracle:
             name: fisher_exact_p
             args: {control_users: 25000, control_converted: 1836, treatment_users: 25000, treatment_converted: 2111}
           rel: 1.0e-9
-    fail: the results are not the seed's counts, or the p-value is not Fisher's exact test's for them
+    fail: the results are not the seed's counts, the p-value is not Fisher's exact test's for them, or the recommendation is not to ship the variant
   - id: hero-experiments
     doc: scene-3-statistical-results-5-min
     do:
@@ -632,6 +635,26 @@ steps:
         - main:
           - heading "Audit Log" [level=1]
     fail: /admin/audit does not open the audit log
+  - id: compliance-report
+    doc: scene-5-modules-admin-5-min
+    do:
+      api:
+        method: GET
+        path: /api/v1/compliance/reports/soc2
+        as: admin
+    expect:
+      status: 200
+    fail: the compliance module does not build a SOC 2 report for an Admin
+  - id: compliance-export
+    doc: scene-5-modules-admin-5-min
+    do:
+      api:
+        method: GET
+        path: /api/v1/compliance/export?format=csv
+        as: admin
+    expect:
+      status: 200
+    fail: the compliance module does not download the audit events as CSV for an Admin
   - id: users
     doc: scene-5-modules-admin-5-min
     do:

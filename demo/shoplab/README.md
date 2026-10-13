@@ -131,8 +131,8 @@ source venv/bin/activate && python -m pytest demo/shoplab/simulator/test_traffic
 3. **Buy button** (`shoplab_pdp_buy_button`): four cells. `orange_buy_now` wins on add-to-cart;
    show the multivariate breakdown and the sequential-testing status. On a product page, switch
    visitors to see colour and text change.
-4. **Checkout flow** (`shoplab_checkout_flow`): open Results and show the `purchase` conversion
-   and the revenue metric (`order_value`) as a secondary. There is no CUPED toggle in the dashboard.
+4. **Checkout flow** (`shoplab_checkout_flow`): open Results. Its primary metric is the `purchase`
+   conversion, and its secondary the revenue metric *Order value*. There is no CUPED toggle in the dashboard.
    CUPED adjusts for each user's own purchases before assignment, and the simulator's visitors are
    new, so its `covariate_coverage_pct` is near 0 and it does not narrow the interval here; the
    Quick Start's `checkout_button_color` has history and shows a reduction
