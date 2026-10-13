@@ -9,8 +9,8 @@ vendor's SDK**.
 
 This means you can:
 - Switch feature flag providers without changing a line of application code.
-- Use the same `client.getBooleanValue("my-flag", false)` call whether you are using
-  LaunchDarkly, Split, Flagsmith, or this Experimently.
+- Use the same `client.getBooleanValue("my-flag", false, context)` call whichever provider is
+  registered (this one needs a `targetingKey` in the context).
 - Add OpenFeature hooks (logging, metrics, tracing) once and have them apply to all providers.
 
 ---
@@ -31,14 +31,8 @@ The live runner:
 
 ### Installation
 
-**Not yet published.** `@getexperimently/openfeature-provider` is not on npm yet, so this fails
-today (`@getexperimently/js-sdk` and `@openfeature/server-sdk` are on npm):
-
-```bash
-npm install @openfeature/server-sdk @getexperimently/js-sdk @getexperimently/openfeature-provider
-```
-
-Build both from a clone of this repository instead (the provider's build also builds `sdk/js`):
+**Not yet published.** `@getexperimently/openfeature-provider` is not on npm, so build it from
+source: build both from a clone of this repository (the provider's build also builds `sdk/js`):
 
 ```bash
 git clone https://github.com/getexperimently/experimently.git
@@ -91,7 +85,7 @@ await provider.client.track('user-12345', 'page_view'); // no key → fans out t
 | OpenFeature field | Platform concept | Notes |
 |---|---|---|
 | `targetingKey` | `user_id` | Required. Sent as `?user_id=` on the evaluate call; the server buckets on it. Missing or empty → default value with `errorCode: TARGETING_KEY_MISSING`. |
-| `attributes.*` | — | **Not sent.** The evaluate endpoint takes a `context`, but this provider does not send it yet; attributes stay available to your own hooks. Pass them as `attributes` on `provider.client.getAssignment(...)` if an experiment needs them. |
+| `attributes.*` | — | **Not sent.** The evaluate call carries `user_id` alone, so the server evaluates the flag's targeting rules against an empty context; attributes stay available to your own hooks. Pass them as `attributes` on `provider.client.getAssignment(...)` if an experiment needs them. |
 
 ### Resolution rules
 
@@ -197,19 +191,14 @@ npm run build
 evaluation to the [`experimentation` Python SDK](python.md), which calls
 `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>` and caches the answer per
 user + flag. Flags are decided **by the server**; nothing is bucketed locally and no flag
-definitions are downloaded. Requires Python 3.9+ and `openfeature-sdk >= 0.9.0`.
+definitions are downloaded. Requires Python 3.9+ and `openfeature-sdk >= 0.10.0`.
 
 ### Installation
 
-**Not yet published.** `experimently-openfeature` is not on PyPI yet, so this fails today
-(`experimently` and `openfeature-sdk` are on PyPI):
-
-```bash
-pip install openfeature-sdk experimently experimently-openfeature
-```
-
-Install both from the root of a clone of this repository instead (`openfeature-sdk` itself is on
-PyPI and is installed as a dependency):
+**Not yet published.** This package is not on PyPI: the `experimently-openfeature` name there
+holds a 0.0.0 placeholder, which installs but cannot be imported. Build it from source: install
+both from the root of a clone of this repository (`openfeature-sdk` is installed as a
+dependency):
 
 ```bash
 pip install -e sdk/python -e sdk/openfeature-python
@@ -250,7 +239,7 @@ provider.client.track("user-12345", "purchase", event_value=49.99, experiment_ke
 | OpenFeature field | Platform concept | Notes |
 |---|---|---|
 | `targeting_key` | `user_id` | Required. Sent as `?user_id=` on the evaluate call; the server buckets on it. Missing or empty → default value with `TARGETING_KEY_MISSING`. |
-| `attributes.*` | — | **Not sent.** The evaluate endpoint takes a `context`, but this provider does not send it yet; attributes stay available to your own hooks. |
+| `attributes.*` | — | **Not sent.** The evaluate call carries `user_id` alone, so the server evaluates the flag's targeting rules against an empty context; attributes stay available to your own hooks. |
 
 ### Resolution rules
 
@@ -361,7 +350,7 @@ carries `X-API-Key: <key>`, `Content-Type: application/json`, `Accept: applicati
 |---|---|---|---|
 | Evaluate one flag (every OpenFeature resolution) | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targetingKey>` | — | `{"key","enabled": bool,"config": any\|null}` |
 | Assign user to experiment (`provider.client`) | `POST /api/v1/tracking/assign` | `{"experiment_key","user_id","context"?: object}` | `{"experiment_key","user_id","variant_id","variant_name","is_control": bool,"configuration": object\|null}` |
-| Track one event (`provider.client.track` with a key) | `POST /api/v1/tracking/track` | `{"event_type","event_name"?,"user_id","experiment_key"?,"feature_flag_key"?,"value"?: number,"metadata"?: object,"timestamp"?: ISO-8601}` — at least one key | stored event (ignored) |
+| Track one event (`provider.client.track` with a key) | `POST /api/v1/tracking/track` | `{"event_type","event_name"?,"user_id","experiment_key"?,"feature_flag_key"?,"value"?: number,"metadata"?: object,"timestamp"?: ISO-8601}`; both keys are optional, and an event with neither counts in no experiment's results | stored event (ignored) |
 | Track up to 100 events (`track` without a key, `trackBatch`) | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` | `{"success_count","failure_count","errors": list\|null}` |
 
 Errors: 401 bad key; 404 an experiment unknown or not ACTIVE, or an unknown flag key (→
@@ -402,15 +391,8 @@ hash_user("user-123", "my-flag") ≈ 0.6927449859
 
 ### Switching from LaunchDarkly to this platform
 
-**Before (LaunchDarkly SDK):**
-```typescript
-import * as ld from 'launchdarkly-node-server-sdk';
-const client = ld.init('sdk-key');
-await client.waitForInitialization();
-const value = await client.variation('my-flag', user, false);
-```
+With OpenFeature and this provider, a boolean flag reads:
 
-**After (OpenFeature + Experimently provider):**
 ```typescript
 import { OpenFeature } from '@openfeature/server-sdk';
 import { ExperimentationProvider } from '@getexperimently/openfeature-provider';
@@ -419,20 +401,15 @@ const client = OpenFeature.getClient();
 const value = await client.getBooleanValue('my-flag', false, { targetingKey: userId });
 ```
 
-The application logic does not change — only the provider initialization at startup.
+For a boolean flag only the provider initialization changes. A string, number or object call
+returns its default through this provider, and the context's attributes are not sent (the evaluate
+call carries the targeting key alone), so a flag read as a string, number or object, or targeted on
+attributes, behaves differently.
 
 ### Switching from Split.io
 
-**Before:**
-```python
-from splitio import get_factory
-factory = get_factory('api-key')
-factory.block_until_ready()
-client = factory.client()
-treatment = client.get_treatment('user-123', 'my_feature')
-```
+With OpenFeature and this provider:
 
-**After:**
 ```python
 from openfeature import api
 from openfeature.evaluation_context import EvaluationContext

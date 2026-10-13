@@ -8,14 +8,11 @@ Flag evaluation and experiment assignment are decided **by the server**: every c
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key. Nothing is bucketed locally.
 
-> **Beta: flag targeting on user attributes does not work in this SDK yet.** Flag
-> evaluation sends only the user id (`GET /api/v1/feature-flags/evaluate/{key}?user_id=…`),
-> not the user's attributes, so a flag targeting rule on an attribute (app version, OS,
-> country, plan) never matches here, and the flag's rollout percentage alone decides. Experiment
-> assignment is not affected: `getAssignment` (and `useExperiment`, with the provider's `attributes`) sends the attributes as `context`, so experiment
-> targeting works. Until this is fixed ([#438](https://github.com/getexperimently/experimently/issues/438)), an app that needs attribute targeting on a
-> flag can call the evaluate endpoint itself with a `context` query parameter (a URL-encoded
-> JSON object of the attributes).
+> **Flag evaluation sends only the user id.** `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`
+> carries none of the user's attributes, so the server evaluates a flag's targeting rules against
+> an empty context. Experiment assignment sends them: `getAssignment` (and `useExperiment`, with the provider's `attributes`) sends the attributes as
+> `context`. To evaluate a flag with attributes, call the evaluate endpoint with a `context`
+> query parameter (a URL-encoded JSON object of the attributes).
 
 Source: `sdk/react-native`. Example app: `sdk/react-native/example/App.tsx`.
 
@@ -26,25 +23,10 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/exp
 
 ## Installation
 
-**Not yet published.** `@getexperimently/react-native-sdk` is not on npm yet, so both the npm
-and the Yarn command below fail today. Pack it from a clone of this repository (it ships TypeScript
-source, so there is no build step) and install the tarball instead; installing that tarball into a
-React Native app has not been tested.
-
-With npm:
-
-```bash
-npm install @getexperimently/react-native-sdk @react-native-async-storage/async-storage md5
-```
-
-With Yarn:
-
-```bash
-yarn add @getexperimently/react-native-sdk @react-native-async-storage/async-storage md5
-```
-
-From a clone of this repository instead, `npm pack` writes
-`getexperimently-react-native-sdk-0.1.0.tgz`:
+**Not yet published.** `@getexperimently/react-native-sdk` is not on npm, so build it from
+source: pack it from a clone of this repository (it ships TypeScript source, so there is no build
+step) and install the tarball. No CI job packs the tarball or installs it into a React Native app.
+`npm pack` writes `getexperimently-react-native-sdk-0.1.0.tgz`:
 
 ```bash
 git clone https://github.com/getexperimently/experimently.git
@@ -52,7 +34,9 @@ cd experimently/sdk/react-native
 npm pack
 ```
 
-Then, in your app, install the tarball with the two peer dependencies:
+Then, in your app, install the tarball. `@react-native-async-storage/async-storage` and `md5` are
+dependencies of the package (its peer dependencies are `react` and `react-native`); the command
+names them too, so they are direct dependencies of your app:
 
 ```bash
 npm install /path/to/experimently/sdk/react-native/getexperimently-react-native-sdk-0.1.0.tgz @react-native-async-storage/async-storage md5
@@ -60,14 +44,15 @@ npm install /path/to/experimently/sdk/react-native/getexperimently-react-native-
 
 - **iOS**: `cd ios && pod install` (required by `@react-native-async-storage/async-storage`).
 - **Android**: no additional setup (minSdk 21).
-- **Expo**: `npx expo install @react-native-async-storage/async-storage` (Expo SDK 49+).
-- `md5` is only needed for the exported `hashUser` compatibility utility.
+- `md5` is imported when the package loads (its entry point re-exports `hashUser`), so it must
+  resolve even if you never call `hashUser`.
 
 ---
 
 ## Quick start
 
 ```tsx
+import { ActivityIndicator, Button, View } from 'react-native';
 import {
   ExperimentationProvider,
   ExperimentationClient,
@@ -75,11 +60,12 @@ import {
   useExperiment,
   useExperimentationClient,
 } from '@getexperimently/react-native-sdk';
+// darkStyles, lightStyles, NewCheckout and OldCheckout below are your app's own.
 
 // Create the client once, at app start-up.
 const client = new ExperimentationClient({
   apiKey: 'YOUR_API_KEY',
-  baseUrl: 'https://api.getexperimently.com', // origin only; the SDK appends /api/v1/...
+  baseUrl: 'http://localhost:8000', // your backend's origin; the SDK appends /api/v1/...
 });
 
 export default function App() {
@@ -187,7 +173,7 @@ Escape hatch to the underlying client, e.g. for imperative tracking or `client.c
 ```typescript
 import { ExperimentationClient } from '@getexperimently/react-native-sdk';
 
-const client = new ExperimentationClient({ apiKey: 'YOUR_API_KEY', baseUrl: 'https://api.getexperimently.com' });
+const client = new ExperimentationClient({ apiKey: 'YOUR_API_KEY', baseUrl: 'http://localhost:8000' });
 
 const { key, enabled, config } = await client.evaluateFlag('dark-mode', 'user-123');
 const on = await client.isFeatureEnabled('dark-mode', 'user-123');          // boolean
@@ -299,13 +285,15 @@ hashUser('user-123', 'my-flag'); // ≈ 0.6927449859
 
 ### Jest setup
 
-The SDK ships an in-memory Jest mock for AsyncStorage. Map it in your Jest config (or copy it to
-your own `__mocks__`):
+This repository has an in-memory Jest mock for AsyncStorage,
+`sdk/react-native/__mocks__/@react-native-async-storage/async-storage.ts`. The package does not
+ship it (its `files` list is `src` only), so copy it into your project and map it in your Jest
+config, as the SDK's own Jest config does:
 
 ```json
 {
   "moduleNameMapper": {
-    "@react-native-async-storage/async-storage": "<rootDir>/node_modules/@getexperimently/react-native-sdk/__mocks__/@react-native-async-storage/async-storage"
+    "@react-native-async-storage/async-storage": "<rootDir>/__mocks__/@react-native-async-storage/async-storage.ts"
   }
 }
 ```

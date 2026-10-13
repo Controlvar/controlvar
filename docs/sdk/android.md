@@ -2,21 +2,19 @@
 
 The Android SDK (`com.getexperimently.android`) provides feature flag evaluation,
 experiment assignment and event tracking for Android applications. It is built on Kotlin
-Coroutines and OkHttp, persists the last successful results to `SharedPreferences` for offline
-fallback, and its unit tests run on the plain JVM with OkHttp's `MockWebServer`.
+Coroutines and OkHttp, keeps the last successful results in an offline store for fallback (in
+memory by default; persisted to `SharedPreferences` when you pass an adapter, see [Configuration](#configuration)),
+and its unit tests run on the plain JVM with OkHttp's `MockWebServer`.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key. Nothing is bucketed locally.
 
-> **Beta: flag targeting on user attributes does not work in this SDK yet.** Flag
-> evaluation sends only the user id (`GET /api/v1/feature-flags/evaluate/{key}?user_id=…`),
-> not the user's attributes, so a flag targeting rule on an attribute (app version, OS,
-> country, plan) never matches here, and the flag's rollout percentage alone decides. Experiment
-> assignment is not affected: `getAssignment`, with `user.attributes`, sends the attributes as `context`, so experiment
-> targeting works. Until this is fixed ([#438](https://github.com/getexperimently/experimently/issues/438)), an app that needs attribute targeting on a
-> flag can call the evaluate endpoint itself with a `context` query parameter (a URL-encoded
-> JSON object of the attributes).
+> **Flag evaluation sends only the user id.** `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`
+> carries none of the user's attributes, so the server evaluates a flag's targeting rules against
+> an empty context. Experiment assignment sends them: `getAssignment`, with `user.attributes`, sends the attributes as
+> `context`. To evaluate a flag with attributes, call the evaluate endpoint with a `context`
+> query parameter (a URL-encoded JSON object of the attributes).
 
 Source: `sdk/android` (module `sdk/android/sdk`, Compose example in `sdk/android/examples`).
 
@@ -32,7 +30,8 @@ Source: `sdk/android` (module `sdk/android/sdk`, Compose example in `sdk/android
 
 ## Installation
 
-The module is not published to Maven yet; consume it from source.
+**Not yet published.** The module is not on Maven Central, so build it from source: include
+`sdk/android/sdk` of a clone of this repository in your Gradle build.
 
 ```kotlin
 // settings.gradle.kts
@@ -127,7 +126,8 @@ val client = ExperimentationClient(
 
 ## Lifecycle
 
-Share one `ExperimentationClient` per process (an `Application` field or a DI singleton). Call
+Each `ExperimentationClient` has its own in-memory caches and its own background coroutine scope
+for tracking, so share one per process (an `Application` field or a DI singleton). Call
 `close()` when it is no longer needed (`ViewModel.onCleared`, `Activity.onDestroy`); it drops the
 in-memory caches. Events already handed to `track` keep flushing in the background.
 
@@ -143,8 +143,8 @@ val user = User(
 ```
 
 `attributes` are sent as the assignment `context` (targeting rules). Values may be `String`,
-`Int`, `Long`, `Double`, `Boolean`, nested `Map`/`List` or `null`. Flag evaluation does not
-send them yet (see the beta note at the top of this page).
+`Int`, `Long`, `Double`, `Boolean`, nested `Map`/`List` or `null`. Flag evaluation sends the
+user id only (see the note at the top of this page).
 
 ---
 
@@ -303,7 +303,7 @@ fails and no offline value exists; `track`/`trackBatch` never throw.
 try {
     val result = client.evaluateFlag("my-flag", user)
 } catch (e: ExperimentationException.FlagNotFoundException) {
-    // flag unknown or not ACTIVE → treat as off
+    // unknown flag key → treat as off
 } catch (e: ExperimentationException.NetworkException) {
     // offline and nothing stored → treat as off
 } catch (e: ExperimentationException.ServerException) {
