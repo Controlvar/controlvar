@@ -62,38 +62,22 @@ def _confidence_interval_95(
     m = statistics.mean(values)
     s = statistics.stdev(values)
     se = s / math.sqrt(n)
-    # t critical value for 95 % CI: approximate with 1.96 for large n,
-    # use simple t-table approximation for small n
+    # Exact t critical value for a 95 % CI at df = n - 1
     t_crit = _t_critical(n - 1)
     margin = t_crit * se
     return (m - margin, m + margin)
 
 
 def _t_critical(df: int) -> float:
-    """Approximate t critical value for 95 % CI (two-tailed α=0.05)."""
-    # Exact values for small df, then fall back to 1.96
-    _TABLE = {
-        1: 12.706,
-        2: 4.303,
-        3: 3.182,
-        4: 2.776,
-        5: 2.571,
-        6: 2.447,
-        7: 2.365,
-        8: 2.306,
-        9: 2.262,
-        10: 2.228,
-        15: 2.131,
-        20: 2.086,
-        30: 2.042,
-        60: 2.000,
-    }
+    """
+    Exact t critical value for a 95 % CI (two-tailed, alpha = 0.05).
+
+    Student's t quantile at 0.975 for ``df`` degrees of freedom (#1192).
+    ``df <= 0`` has no t distribution and returns 1.96, as before.
+    """
     if df <= 0:
         return 1.96
-    for key in sorted(_TABLE.keys(), reverse=True):
-        if df >= key:
-            return _TABLE[key]
-    return 12.706  # df=1
+    return float(stats.t.ppf(0.975, df))
 
 
 def _welch_t_test(a: List[float], b: List[float]) -> Optional[float]:

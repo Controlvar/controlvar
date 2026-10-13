@@ -154,10 +154,11 @@ text = "Results include:"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Mean and 95% confidence interval for latency, cost, auto-eval score, and business metric"
+text = "Mean and 95% confidence interval for latency, cost, auto-eval score, and business metric; the interval uses the exact t critical value at n - 1 degrees of freedom"
 by = [
     "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_95_ci_on_business_metric",
     "test:backend/tests/unit/services/test_llm_analytics.py::TestStatisticalHelpers::test_ci_many_values_contains_mean",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestConfidenceIntervalIsExact::test_interval_matches_scipy",
 ]
 
 [[unit]]

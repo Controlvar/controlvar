@@ -27,6 +27,7 @@ from backend.app.services.llm_analytics_service import (
     _confidence_interval_95,
     _mean,
     _std,
+    _t_critical,
     _welch_t_test,
 )
 
@@ -184,6 +185,64 @@ class TestWelchPValueIsExact:
         assert _welch_t_test([1.0, 2.0], []) is None
         # Zero variance in both arms: the standard error is 0
         assert _welch_t_test([2.0, 2.0, 2.0], [5.0, 5.0]) == 1.0
+
+
+# Fixed samples for the exact 95 % interval (#1192), by degrees of freedom
+# (n - 1). The old table took the nearest listed df at or below, so df 12 used
+# df 10's 2.228 and df 99 used df 60's 2.000: intervals too wide.
+_CI_CASES = {
+    "df_1": [4.0, 7.0],
+    "df_10": [5.1, 4.8, 5.6, 5.0, 4.7, 5.3, 5.5, 5.8, 5.1, 6.0, 5.3],
+    "df_12": [
+        0.62,
+        0.71,
+        0.55,
+        0.68,
+        0.74,
+        0.59,
+        0.66,
+        0.70,
+        0.63,
+        0.69,
+        0.58,
+        0.72,
+        0.64,
+    ],
+    "df_39": [0.40 + 0.03 * ((i * 7) % 11) for i in range(40)],
+    "df_99": [200.0 + 15.0 * ((i * 5) % 13) for i in range(100)],
+}
+
+
+@pytest.mark.regression
+class TestConfidenceIntervalIsExact:
+    """#1192: the 95 % interval's t critical value came from a step table that
+    skipped most df, so the interval was too wide. It is now the exact t
+    quantile at df = n - 1."""
+
+    @pytest.mark.parametrize("case", sorted(_CI_CASES))
+    def test_interval_matches_scipy(self, case):
+        import statistics as st
+
+        from scipy import stats
+
+        values = _CI_CASES[case]
+        n = len(values)
+        lo_exp, hi_exp = stats.t.interval(
+            0.95, n - 1, loc=st.mean(values), scale=stats.sem(values)
+        )
+        lower, upper = _confidence_interval_95(values)
+        assert abs(lower - lo_exp) <= 1e-9, (case, lower, lo_exp)
+        assert abs(upper - hi_exp) <= 1e-9, (case, upper, hi_exp)
+
+    def test_t_critical_matches_published_table(self):
+        # Two-tailed 0.05 critical values from a printed t table
+        assert _t_critical(1) == pytest.approx(12.7062, abs=1e-4)
+        assert _t_critical(12) == pytest.approx(2.1788, abs=1e-4)
+        assert _t_critical(99) == pytest.approx(1.9842, abs=1e-4)
+
+    def test_degenerate_df_keeps_the_normal_value(self):
+        assert _t_critical(0) == 1.96
+        assert _t_critical(-1) == 1.96
 
 
 # ---------------------------------------------------------------------------
