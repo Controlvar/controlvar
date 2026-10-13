@@ -10,10 +10,8 @@ the SDK caches the answer per user + key for a TTL. Nothing is bucketed locally.
 
 Source: `sdk/go`. Requires Go 1.21+.
 
-On macOS 26.2, Go 1.21 and 1.22 are not enough. Measured there on Apple silicon
-(arm64), 2026-10-07: the Quick Start below, built with go1.21.13, go1.22.0 or
-go1.22.12, does not start (`dyld: missing LC_UUID load command`); built with
-go1.23.0, it runs. On Linux, Go 1.21 works: every night CI runs this page's
+On macOS, use Go 1.23 or later: a program built with Go 1.21 or 1.22 may not
+start there (`dyld: missing LC_UUID load command`). On Linux, Go 1.21 works: every night CI runs this page's
 Installation and Quick Start with go1.21 against a running stack. Only the
 Quick Start's quoted address and keys change: the stack's API address, the keys
 of an experiment and a flag the run creates, and a user ID of its own take their

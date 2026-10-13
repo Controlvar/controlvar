@@ -6,7 +6,7 @@ WinterCG runtime. Zero runtime dependencies, no Node.js built-ins.
 Flag evaluation and experiment assignment are **decided by the server**; results are cached per
 user + key in memory (and optionally in Cloudflare KV / Deno KV). Nothing is bucketed locally.
 
-Full documentation: [`docs/sdk/edge.md`](../../docs/sdk/edge.md).
+Full documentation: [`docs/sdk/edge.md`](https://github.com/getexperimently/experimently/blob/main/docs/sdk/edge.md).
 
 ## Quick start
 

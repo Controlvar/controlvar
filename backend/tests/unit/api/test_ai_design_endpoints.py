@@ -251,6 +251,20 @@ class TestSampleSizeEndpoint:
         assert days == 7
         assert days * 10000 >= data["total_required"] > (days - 1) * 10000
 
+    def test_without_daily_traffic_there_are_no_days(self, client_with_developer):
+        response = client_with_developer.get(
+            "/api/v1/ai/sample-size", params={"baseline_rate": 0.08, "mde": 0.004}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["days_to_significance"] is None
+        assert data["assumptions"] == {
+            "baseline_rate": 0.08,
+            "mde": 0.004,
+            "confidence": 0.95,
+            "power": 0.8,
+        }
+
     @pytest.mark.regression
     @pytest.mark.parametrize(
         "daily_traffic",
@@ -404,3 +418,21 @@ class TestMCPManifestEndpoint:
         for tool in response.json()["tools"]:
             assert "name" in tool
             assert "description" in tool
+
+    def test_each_tool_has_a_name_a_description_and_parameters(self, client_no_auth):
+        tools = client_no_auth.get("/api/v1/mcp/manifest").json()["tools"]
+        assert [sorted(tool) for tool in tools] == [
+            ["description", "name", "parameters"]
+        ] * len(tools)
+
+    def test_nothing_answers_an_mcp_client(self, client_no_auth):
+        """An MCP client opens with a JSON-RPC ``initialize`` POST to the URL it
+        is given; the manifest's URL answers only GET, and no route speaks MCP."""
+        initialize = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+        assert (
+            client_no_auth.post("/api/v1/mcp/manifest", json=initialize).status_code
+            == 405
+        )
+        paths = client_no_auth.get("/api/v1/openapi.json").json()["paths"]
+        mcp = {path: sorted(ops) for path, ops in paths.items() if "/mcp" in path}
+        assert mcp == {"/api/v1/mcp/manifest": ["get"]}, mcp

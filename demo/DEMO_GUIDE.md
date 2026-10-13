@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide walks you through a 20-minute live demo of the Experimently experimentation platform. The demo environment comes pre-loaded with 100K+ historical events and a live simulator streaming new events in the background so charts update in real time during the presentation.
+This guide walks you through a 20-minute live demo of the Experimently experimentation platform. The demo environment comes pre-loaded with 100K+ historical events, and a live simulator adds new events in the background while you present.
 
 ---
 
@@ -27,8 +27,8 @@ without, and created no image, repository or secret), and it has been retired
 (#73). Deploying to AWS is the self-hosting path:
 [AWS CDK deployment](../docs/self-hosting/cdk.md), then the ordered first-deploy
 checklist in the [deployment guide](../docs/deployment/deployment-guide.md#1-before-the-first-deploy).
-Budget for it: two or more hours the first time, and real monthly cost
-(Aurora, NAT, the load balancer) -- `cdk.md` lists what a teardown leaves behind.
+The stacks create resources that AWS bills for while they exist (Aurora, NAT
+gateways, a load balancer); `cdk.md` lists what a teardown leaves behind.
 
 ---
 
@@ -92,8 +92,8 @@ of devices through the same API, and a scripted "rollout story" walks the platfo
   employee rule) while normal devices are in the 5% canary.
 - Profile tab: `streampulse_wrapped` and `streampulse_profile_badges` are in a **mutual exclusion group** — the panel shows
   one assigned and the other "excluded: mutual exclusion". A few devices show "in global holdout" for every experiment.
-- Kill switch: in the dashboard (http://localhost:3100/feature-flags) disable **streampulse_recs_v2** → within five seconds
-  the Home tab falls back to the classic feed.
+- Kill switch: in the dashboard (http://localhost:3100/feature-flags) disable **streampulse_recs_v2**, then reload StreamPulse
+  or press **Refresh now** in its panel: the Home tab falls back to the classic feed.
 - The rollout story (drawer in the app, driven by `python demo/streampulse/simulator/rollout_story.py --auto`):
   1. player v2 at 5% + internal rule → 2. advance the schedule to 25% → 3. Android 12 devices start crashing (the simulator
   reports the crashes through the API with the StreamPulse server key, the way the app's server would forward them)
@@ -124,7 +124,7 @@ See `demo/streampulse/README.md`.
   - "This uses our 20+ targeting operators. Users with role 'beta' or 'internal', OR an @acme.com email, match this rule."
     The flag's rollout is 100%, so users the rule does not match get it too.
 - Toggle `beta_features` off and back on
-  - "That change is live in milliseconds — no deploy needed."
+  - "The API answers the very next evaluation with the change — no deploy needed."
 
 **Key talking points:**
 - Gradual rollouts with automated progression
@@ -142,12 +142,11 @@ See `demo/streampulse/README.md`.
 - Watch the results panel — numbers are ticking up
   - "These are updating right now. The live simulator is streaming ~3 events/second to both variants."
 - Show the time-series chart — you can see the trend building
-  - "Green is trending at 11% vs blue at 8%, but we don't have statistical significance yet. The platform tells us when we do."
+  - "Green converts at about 9% and blue at about 8%, and the difference is already significant."
 
 **Key talking points:**
 - Live data, not screenshots — the platform is actually running
 - Consistent hash-based assignment (same user always gets same variant)
-- Real-time results vs polling dashboards
 
 ---
 
@@ -159,7 +158,7 @@ See `demo/streampulse/README.md`.
 - Show the results panel:
   - p-value < 0.001 — highly significant
   - +15.0% relative lift in signup conversion (7.34% → 8.44%)
-  - "The platform made the decision: Ship It. No analyst needed to interpret this."
+  - "The results page recommends the decision: Ship Variant ✓."
 - Click the **Sequential** tab (it appears when the experiment has a sequential analysis)
   - "mSPRT lets us peek at results without inflating false positives. No more waiting for a fixed sample size."
 - The Bayesian analysis: if the end of the **Overview** tab has a **Bayesian analysis (primary metric)** panel,
@@ -172,7 +171,7 @@ See `demo/streampulse/README.md`.
 
 **Key talking points:**
 - Multiple statistical methods in one platform: frequentist, sequential and Bayesian
-- Platform-generated decision ("Ship It") — removes analyst bottleneck
+- A recommendation on the results page: Ship Variant, Keep Control, Continue Testing or Inconclusive
 
 ---
 
@@ -211,44 +210,47 @@ See `demo/streampulse/README.md`.
   recorded too, by a named system actor; the page shows it as, for example, "Safety monitor (automatic)"
   - "You can filter these entries by action, resource type and date."
 - Press **Download CSV** (or **Download JSON**): the file holds every entry the current filters match
-- Show compliance report export: `/api/v1/compliance/report` → downloads CSV/JSON
+- Show the `compliance` module's reports: `GET /api/v1/compliance/reports/soc2` (or `iso27001`) builds a report, and
+  `GET /api/v1/compliance/export?format=csv` (or `json`) downloads the audit events, for an Admin
 
 **RBAC:**
 - Navigate to `/admin/users`
 - Show 4 roles: Admin, Developer, Analyst, Viewer
-  - "Analyst can view everything but can't create or modify. Viewer can view experiments, flags and results. Any role can create an API key, and an API key writes tracking data."
+  - "Analyst and Viewer can see experiments and flags but can't create or change them."
+  - Every role, Viewer included, can still create API keys for itself, and an API key can send
+    assignments and events through the tracking API.
 - Four built-in roles are enforced today. Custom roles and resource-level grants exist in the data model but are
   not yet enforced by the permission checks, so do not demo them (tracked in the launch plan, P5).
 
 **API / Integrations:**
 - Open http://localhost:8000/api/v1/docs (Swagger UI)
-  - "Full REST API. Your team can automate everything — CI/CD can create and start experiments, and Slack/email
-    alerts fire when tests complete."
+  - "Full REST API. Your team can automate everything — CI/CD can create and start experiments, and with Slack or
+    email set up, an alert goes out when the scheduler ends a test on its end date."
 - Jira/Salesforce/GitHub integrations are configurable but their outbound delivery has only been exercised with
   mocks; treat them as roadmap in demos until the P5 path tests are green.
 
 **Key talking points:**
-- Controls that support a SOC 2 / ISO 27001 program — an audit log of changes to flags, experiments, users and roles, and with the
+- An audit log of changes to flags, experiments, users and roles, and with the
   `compliance` module HMAC-SHA256 signed compliance events and report exports
 - RBAC with four built-in roles (custom roles: roadmap)
-- Full REST API + SDKs (Python, JavaScript, Java, React, Go)
-- Deployable to your AWS account — you own the data, it never leaves your VPC
+- Full REST API + SDKs: Python and JavaScript on PyPI and npm, Go with `go get`, Java and React built from `sdk/`
+- Deployable to your own AWS account with the AWS CDK
 
 ---
 
 ## FAQ / Objections
 
 **"Can it connect to our data warehouse?"**
-> Not today. Warehouse analysis is being rebuilt (#312).
+> Yes, as a beta in the full profile: Snowflake and BigQuery are available, Amazon Athena is not yet. See `docs/api/warehouse-analytics.md`.
 
 **"Is it SOC 2 compliant?"**
 > The platform is not certified and we do not claim it. What it gives you are controls that support your own program: an audit log of changes to flags, experiments, API keys, users and roles, made by people or by the platform itself, in the core profile, where no API edits or deletes an entry, and with the `compliance` module HMAC-SHA256 signed audit events with exportable report packs. Your auditor decides what they satisfy.
 
 **"What about our tech stack?"**
-> We have SDKs for Python, JavaScript/TypeScript, Java (Spring Boot auto-configuration), and React (with hooks and SSR support). The REST API means you can integrate from anything.
+> The Python and JavaScript/TypeScript SDKs are on PyPI and npm, and the Go SDK installs with `go get`. The Java SDK (with Spring Boot auto-configuration) and the React SDK (with hooks and SSR support) build from the repository's `sdk/` directory. The REST API means you can integrate from anything.
 
 **"How do we deploy? What's the infrastructure cost?"**
-> Into your own AWS account with the AWS CDK — ECS Fargate, Aurora PostgreSQL, ElastiCache Redis — following docs/self-hosting/cdk.md, then dispatching the Deploy workflow for staging or prod. You own all the infrastructure. It is not one command, and the cost is real (Aurora, NAT gateways, a load balancer); cdk.md says what a teardown leaves behind.
+> Into your own AWS account with the AWS CDK — ECS Fargate, Aurora PostgreSQL, ElastiCache Redis — following docs/self-hosting/cdk.md, then dispatching the Deploy workflow for staging or prod. You own all the infrastructure. It is not one command, and the stacks create resources that AWS bills for (Aurora, NAT gateways, a load balancer); cdk.md says what a teardown leaves behind.
 
 **"Can we run A/B tests across multiple products simultaneously?"**
 > Yes. Mutual Exclusion Groups ensure users are never in conflicting experiments. The Global Holdout keeps a percentage of new users out of every experiment, as a baseline to compare with everyone else. Users already assigned keep their assignments, and feature flags ignore it, so shipped features reach the holdout too.
