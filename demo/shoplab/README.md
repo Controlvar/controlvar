@@ -131,8 +131,8 @@ source venv/bin/activate && python -m pytest demo/shoplab/simulator/test_traffic
 3. **Buy button** (`shoplab_pdp_buy_button`): four cells. `orange_buy_now` wins on add-to-cart;
    show the multivariate breakdown and the sequential-testing status. On a product page, switch
    visitors to see colour and text change.
-4. **Checkout flow** (`shoplab_checkout_flow`): open Results and show the `purchase` conversion
-   and the revenue metric (`order_value`) as a secondary. There is no CUPED toggle in the dashboard.
+4. **Checkout flow** (`shoplab_checkout_flow`): open Results. Its primary metric is the `purchase`
+   conversion, and its secondary the revenue metric *Order value*. There is no CUPED toggle in the dashboard.
    CUPED adjusts for each user's own purchases before assignment, and the simulator's visitors are
    new, so its `covariate_coverage_pct` is near 0 and it does not narrow the interval here; the
    Quick Start's `checkout_button_color` has history and shows a reduction
@@ -149,7 +149,7 @@ source venv/bin/activate && python -m pytest demo/shoplab/simulator/test_traffic
 | Symptom | Cause / fix |
 |---|---|
 | Panel shows `error` for every experiment; network tab shows **401** | Wrong or missing `NEXT_PUBLIC_EXPERIMENTLY_API_KEY`. Re-run the seed script (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` (env vars are read at startup). |
-| **404** on `/tracking/assign` or `/feature-flags/evaluate/...` | The ShopLab experiments/flags are not seeded or not ACTIVE. Run the seed script. |
+| **404** on `/tracking/assign` or `/feature-flags/evaluate/...` | The ShopLab experiments are not seeded or not ACTIVE, or the flags are not seeded (a flag that is turned off answers `200` with `enabled: false`). Run the seed script. |
 | Browser console: **CORS** error from `localhost:3200` | Port 3200 is not in the backend's CORS allow-list. The development defaults (`DEFAULT_CORS_ORIGINS` in `backend/app/core/config.py`) include it; if you set `CORS_ORIGINS` or `BACKEND_CORS_ORIGINS` yourself, add `http://localhost:3200` and restart the API. Against a staging or production API, add it to that API's `CORS_ORIGINS`: those allow no other origin by default. |
 | Every visitor is `control` and nothing loads | Backend not running on `NEXT_PUBLIC_EXPERIMENTLY_API_URL`. Start it from the repository root: `ENVIRONMENT=development uvicorn backend.app.main:app --reload`. |
 | "Invalid hook call" in the browser | Two React copies. `next.config.js` aliases `react`/`react-dom` to this app's `node_modules`; make sure you ran `npm install` inside `demo/shoplab`. |

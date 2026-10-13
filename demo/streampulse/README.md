@@ -15,7 +15,7 @@ global holdout and Bayesian A/B analysis. No audio, no images, no external fonts
 
 | Screen | Flag / experiment | What the phone shows | Platform feature showcased |
 |---|---|---|---|
-| **Home** | `streampulse_recs_v2` flag | on → "For you" feed (`recs_impression`); off → "Classic" chronological feed | **Kill switch** — turn the flag off in the dashboard, the feed flips within 5 s |
+| **Home** | `streampulse_recs_v2` flag | on → "For you" feed (`recs_impression`); off → "Classic" chronological feed | **Kill switch** — turn the flag off in the dashboard, then reload the app or press *Refresh now*, and the feed flips |
 | **Player** | `streampulse_player_v2` flag (+ `streampulse_offline_mode`) | on → redesigned player; off → classic; `play {track_id, player}`; Download button when offline mode is on | **Gradual rollout** 5 → 25 → 50 → 100 %, **safety monitoring + auto-rollback**, employee targeting rule; offline mode = SDK caching / kill switch |
 | **Search** | `streampulse_ai_search` flag | on → "AI search ✨" with explanations; off → keyword search; `search {query, engine, results}` | **Targeting rules**: `os = iOS AND os_version ≥ 17.0.0 AND region = US AND tier = premium` |
 | **Notifications** | `streampulse_push_frequency` (A/B) | daily vs 3×/week push setting; "Open notification" → `notification_open`, "Uninstall app" → `app_uninstall` | **Sequential testing (mSPRT)** with an uninstall-rate **guardrail** |
@@ -33,8 +33,8 @@ The right-hand side has two panels:
   Galaxy S10 · Android 12 · US · premium · app 3.1.0; iPhone 14 · iOS 16.7 · GB · free; Internal
   tester · iPhone 15 · employee) plus custom fields. The device id is the SDK user id and every
   attribute is sent as targeting `context`. Applying any change re-mounts the SDK provider, which
-  drops the SDK caches and re-fetches everything (`cacheTtlMs: 5000`, so dashboard flips show up
-  within seconds anyway).
+  drops the SDK caches and re-fetches everything. Otherwise the SDK keeps each answer for 5 s
+  (`cacheTtlMs: 5000`) and asks again the next time a screen needs it.
 - **Powered by Experimently** — per flag: on/off + the server `reason` (`targeting_rule`,
   `rollout`, `inactive`, `error`) spelled out; per experiment: the variant and whether the device
   was actually enrolled (`assigned: false` → "in global holdout streampulse-holdout", "excluded:
@@ -131,8 +131,8 @@ with the `assigned`/`reason` fields).
 Keep `traffic.py` running in a terminal throughout so the numbers move.
 
 1. **Home — kill switch** (`streampulse_recs_v2`). Any preset shows "For you". In the dashboard,
-   toggle the flag off; within 5 s (or press *Refresh now*) the feed becomes "Classic" and the panel
-   reads `off: flag is inactive`. Toggle it back on.
+   toggle the flag off, then press *Refresh now* (or reload the page): the feed becomes "Classic" and
+   the panel reads `off: flag is inactive`. Toggle it back on.
 2. **Search — targeting rules** (`streampulse_ai_search`, rollout 0 %). Search "late night drive"
    as *iPhone 15 · iOS 17.4 · US · premium*: AI results with explanations, panel says `on: matched a
    targeting rule`. Switch to *iPhone 14 · iOS 16.7 · GB · free*: keyword engine, 0 results, `off:
@@ -179,12 +179,12 @@ per-experiment), so it can differ after `--reset`; the holdout bucket does not.
 |---|---|
 | Yellow banner "NEXT_PUBLIC_EXPERIMENTLY_API_KEY is not set"; panel shows `error: API error: 401` everywhere | The key is missing or wrong. Run `python backend/scripts/seed_streampulse.py` (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` — Next reads env vars at startup. |
 | **401** in the network tab although `.env.local` has a key | The key was revoked or belongs to another environment/database. Re-seed. |
-| **404** on `/tracking/assign` or `/feature-flags/evaluate/streampulse_...` | The StreamPulse flags/experiments are not seeded or not ACTIVE (`--reset` removes them). Run the seed script. |
+| **404** on `/tracking/assign` or `/feature-flags/evaluate/streampulse_...` | The StreamPulse experiments are not seeded or not ACTIVE, or the flags are not seeded (`--reset` removes them; a flag that is turned off answers `200` with `enabled: false`). Run the seed script. |
 | Browser console: **CORS** error from `localhost:3300` | Port 3300 is not in the backend's CORS allow-list. The development defaults (`DEFAULT_CORS_ORIGINS` in `backend/app/core/config.py`) include it; if you set `CORS_ORIGINS` or `BACKEND_CORS_ORIGINS` yourself, add `http://localhost:3300` and restart the API. Against a staging or production API, add it to that API's `CORS_ORIGINS`: those allow no other origin by default. |
 | Every flag `off`, every experiment `error`, nothing loads | Backend not running on `NEXT_PUBLIC_EXPERIMENTLY_API_URL`. Start it from the repository root: `ENVIRONMENT=development uvicorn backend.app.main:app --reload`. |
 | AI search never turns on | The rule needs `os = iOS`, `os_version ≥ 17.0.0`, `region = US`, `tier = premium` and the flag's own rollout is 0 %. Check the custom fields; the panel reason tells you whether a rule matched. |
 | Player v2 does not change after the story rolls back / advances | The SDK caches for 5 s — wait or press *Refresh now*. If the schedulers are involved (auto-rollback, time-based stages), they run every `SAFETY_CHECK_INTERVAL_MINUTES` / `ROLLOUT_CHECK_INTERVAL_MINUTES` (default 5 / 15) — set both to `1` in the backend `.env` for the demo (`setup-local.sh` sets both to `1` unless they are already set). |
-| A preset shows "not enrolled … holdout" for every experiment | That id hashes into the 2 % holdout. The shipped preset ids do not; if you changed one, pick another id (or use it to demonstrate the holdout). |
+| A preset shows "in global holdout streampulse-holdout" for every experiment | That id hashes into the 2 % holdout. The shipped preset ids do not; if you changed one, pick another id (or use it to demonstrate the holdout). |
 | "Invalid hook call" in the browser | Two React copies. `next.config.js` aliases `react`/`react-dom` to this app's `node_modules`; run `npm install` inside `demo/streampulse`. |
 | Simulator exits with code 2 / 3 / 4 | 2 = API key rejected or missing, or `--incident` without the server key in `demo/streampulse/.api_key_server` (run the seed), 3 = catalogue not seeded (404), 4 = backend unreachable. |
 | `npm run typecheck` fails inside `sdk/react/src` | The app needs `ExperimentAssignment.assigned` / `.reason` and `FeatureFlagEvaluation.reason` from the React SDK; make sure `sdk/react` is at the version in this repo. |
