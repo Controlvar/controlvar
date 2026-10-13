@@ -12,8 +12,8 @@ changes one already stored:
 * with ``rewrites``, an assignment to an attribute of a row read from the
   database (``row.old_value = ...``).
 
-"Read from the database" is a name assigned, in the same function (or at
-module level), from an expression that names the model and calls ``query``,
+"Read from the database" is a name assigned, in the same function (or in
+the module's own top-level code), from an expression that names the model and calls ``query``,
 ``execute``, ``get``, ``scalars``, ``scalar``, ``first``, ``one``, ``all`` or
 ``select``, or from an expression naming such a name, or bound by a ``for``
 over one. A row only constructed (``Model(...)``) is not one. Each module is
@@ -73,16 +73,37 @@ def _value(node: ast.AST):
     return getattr(node, "value", None)
 
 
+FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
+
+
 def _scopes(tree: ast.AST) -> Iterable[ast.AST]:
     yield tree
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        if isinstance(node, FUNCTIONS):
             yield node
+
+
+def _own_nodes(scope: ast.AST) -> List[ast.AST]:
+    """The nodes of *scope*: a function's include its closures', which can
+    use its names; the module's own exclude every function's, which cannot
+    see a name a function binds."""
+    if not isinstance(scope, ast.Module):
+        return list(ast.walk(scope))
+    nodes, stack = [], [scope]
+    while stack:
+        node = stack.pop()
+        nodes.append(node)
+        stack.extend(
+            child
+            for child in ast.iter_child_nodes(node)
+            if not isinstance(child, FUNCTIONS)
+        )
+    return nodes
 
 
 def _rows_read(scope: ast.AST, models: Set[str]) -> Set[str]:
     rows: Set[str] = set()
-    nodes = list(ast.walk(scope))
+    nodes = _own_nodes(scope)
     for _ in range(3):
         for node in nodes:
             value = _value(node)
@@ -112,7 +133,7 @@ def row_changes(
     for scope in _scopes(tree):
         rows = _rows_read(scope, models)
         watched = models | rows
-        for node in ast.walk(scope):
+        for node in _own_nodes(scope):
             if isinstance(node, ast.Call):
                 func = node.func
                 name = (

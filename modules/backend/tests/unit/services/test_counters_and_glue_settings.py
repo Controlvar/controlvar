@@ -72,8 +72,8 @@ def test_a_counter_is_incremented_by_one_atomic_add():
 
     # One UpdateItem whose expression ADDs to the counter: no read first, and
     # no write of a value computed here, so concurrent writers never contend.
+    assert [c[0] for c in table.method_calls] == ["update_item"]
     (call,) = table.method_calls
-    assert call[0] == "update_item"
     expression = call.kwargs["UpdateExpression"]
     assert expression.split()[:3] == ["ADD", "#attr", ":val"]
     assert call.kwargs["ExpressionAttributeNames"] == {"#attr": "assignments"}

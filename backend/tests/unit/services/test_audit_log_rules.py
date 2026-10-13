@@ -274,6 +274,14 @@ def test_nothing_deletes_an_audit_entry():
             True,
         ),
         ("def f(db):\n    db.execute(text('DELETE FROM audit_logs'))\n", True),
+        (
+            "def f(db):\n"
+            "    entry = db.query(AuditLog).first()\n"
+            "    def later():\n"
+            "        db.delete(entry)\n"
+            "    return later\n",
+            True,
+        ),
         # Not a removal: a new entry, and deleting another model's row.
         (
             "def f(db):\n    entry = AuditLog(user_email='a')\n    db.add(entry)\n",
@@ -286,6 +294,15 @@ def test_nothing_deletes_an_audit_entry():
             "    db.delete(flag)\n",
             False,
         ),
+        # A name one function reads is not the same name in another.
+        (
+            "def f(db):\n"
+            "    entry = db.query(AuditLog).first()\n"
+            "    return entry\n"
+            "def g(db, entry):\n"
+            "    db.delete(entry)\n",
+            False,
+        ),
     ],
     ids=[
         "delete-statement",
@@ -293,8 +310,10 @@ def test_nothing_deletes_an_audit_entry():
         "session-delete",
         "loop-delete",
         "sql",
+        "closure",
         "new-entry",
         "other-row",
+        "other-function",
     ],
 )
 def test_the_scan_sees_each_way_to_remove_an_entry(source, found):
