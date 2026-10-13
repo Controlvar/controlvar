@@ -69,7 +69,7 @@ text = "Thompson Sampling, UCB1, Epsilon-Greedy (create a bandit through the API
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Full profile: store split URL experiments and preview who gets which URL. The edge router does not split traffic yet."
+text = "Full profile: store split URL experiments and preview the URL a user id hashes to. The edge router does not split traffic yet."
 by = ["mechanism:docs-hub"]
 
 [[unit]]
@@ -77,7 +77,7 @@ text = "Keep users out of conflicting experiments, and a share of new users out 
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Experiment results pushed over WebSocket every 30 seconds by default: p-values, lift and significance."
+text = "Live experiment results over WebSocket, sent every 30 seconds by default."
 by = ["mechanism:docs-hub"]
 
 [[unit]]
@@ -117,7 +117,7 @@ text = "A Go client for services: standard library only, goroutine-safe, context
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Native Swift SDK for iOS 14+ and macOS 11+. Async/await API, offline fallback."
+text = "Native Swift SDK for iOS 14+ and macOS 11+, with an async/await API."
 by = ["mechanism:docs-hub"]
 
 [[unit]]
@@ -137,7 +137,7 @@ text = "Describes the API's tools for AI assistants."
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "OpenFeature (a CNCF project) providers for TypeScript and Python"
+text = "OpenFeature (a CNCF project) providers"
 by = ["mechanism:docs-hub"]
 
 [[unit]]
@@ -297,7 +297,7 @@ text = "How power analysis, post-stratification and FDR correction work."
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Pre-experiment planning: MDE, alpha, power, runtime estimation"
+text = "Pre-experiment planning: MDE, power and runtime estimation"
 by = ["mechanism:docs-hub"]
 
 [[unit]]
@@ -317,5 +317,5 @@ text = "What workspaces do and do not do, workspace roles and invitations"
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Create a workspace, invite your team, and connect an SDK"
+text = "Create a workspace, add your team to it, and connect an SDK"
 by = ["mechanism:docs-hub"]

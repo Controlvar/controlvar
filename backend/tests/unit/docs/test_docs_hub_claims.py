@@ -129,7 +129,10 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("Some capabilities work through the API"),
         lede("API only: it works through the API, with no screen yet"),
     ),
-    "Sequential testing with mSPRT": (lede("Sequential Testing"), says("mSPRT")),
+    "Sequential testing with mSPRT": (
+        lede("Sequential Testing"),
+        says("### mSPRT (mixture Sequential Probability Ratio Test)"),
+    ),
     "Variance reduction from each user's own pre-experiment events (API only)": (
         lede("CUPED Variance Reduction"),
         lede(
@@ -144,11 +147,15 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         ),
         says("The collection URL ends with a slash, /api/v1/experiments/"),
     ),
-    "Full profile: store split URL experiments and preview who gets which URL. The edge router does not split traffic yet.": (
+    "Full profile: store split URL experiments and preview the URL a user id hashes to. The edge router does not split traffic yet.": (
         lede("present in the full profile"),
         lede("The edge router does not split traffic in this release"),
         lede(
             "What works today is storing a split URL experiment and its configuration, and the preview endpoint"
+        ),
+        lede("it hashes the user_id you pass with the experiment's id"),
+        says(
+            "Returns the URL variant the preview's own hash gives a user_id, without redirecting"
         ),
     ),
     "Keep users out of conflicting experiments, and a share of new users out of every experiment": (
@@ -157,12 +164,9 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
             "A global holdout keeps a percentage of new users out of every experiment"
         ),
     ),
-    "Experiment results pushed over WebSocket every 30 seconds by default: p-values, lift and significance.": (
-        lede("WebSocket"),
+    "Live experiment results over WebSocket, sent every 30 seconds by default.": (
+        lede("Live experiment results delivered over WebSocket"),
         says("30 seconds (configurable via RESULTS_STREAM_INTERVAL_SECONDS)"),
-        says("p-value"),
-        says("lift"),
-        says("significan"),
     ),
     # LLM / AI Model Evaluation
     "Compare prompt versions, model variants, and agent configs against real business metrics.": (
@@ -196,7 +200,7 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
     "Spring Boot 3 auto-configuration starter; thread-safe client with a TTL cache": (
         lede("adds Spring Boot auto-configuration (Spring Boot 3.1"),
         lede("caches the answer per user + key for a TTL"),
-        says("thread-safe"),
+        says("The client is thread-safe"),
     ),
     "A context provider, hooks and a higher-order component": (
         lede("provides a context provider, hooks, a higher-order"),
@@ -205,10 +209,9 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("for Go services"),
         lede("Standard library only, goroutine-safe, context-aware"),
     ),
-    "Native Swift SDK for iOS 14+ and macOS 11+. Async/await API, offline fallback.": (
+    "Native Swift SDK for iOS 14+ and macOS 11+, with an async/await API.": (
         lede("is a Swift Package (iOS 14+, macOS 11+"),
-        lede("async/await"),
-        says("offline"),
+        lede("event tracking with async/await"),
     ),
     "Native Kotlin SDK for Android (minSdk 21). Coroutines, OkHttp, Compose examples.": (
         lede("built on Kotlin Coroutines and OkHttp"),
@@ -218,24 +221,22 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
     "Dart SDK for Flutter (iOS, Android, web and desktop). Results are decided by the server, with an offline fallback.": (
         lede("for Flutter applications on iOS, Android, Web, macOS, Windows and Linux"),
         lede("decided by the server"),
-        says("offlineFallback"),
+        says("Persist results to the OfflineStore"),
     ),
     "useFlag and useExperiment hooks, Provider, AsyncStorage offline support.": (
         lede("a context provider, three hooks"),
         lede("AsyncStorage-backed offline fallback"),
-        says("useFlag"),
-        says("useExperiment"),
+        says("### useFlag(flagKey): FlagState"),
+        says("### useExperiment(experimentKey): ExperimentState"),
     ),
     "Describes the API's tools for AI assistants.": (
         lede(
             "describes five tools in the vocabulary of the Model Context Protocol (MCP)"
         ),
     ),
-    "OpenFeature (a CNCF project) providers for TypeScript and Python": (
+    "OpenFeature (a CNCF project) providers": (
         lede("OpenFeature Provider"),
         says("is a CNCF (Cloud Native Computing Foundation) standard"),
-        says("TypeScript"),
-        says("Python"),
     ),
     "For Cloudflare Workers, Vercel Edge and Deno Deploy. Zero runtime dependencies; results cached in memory or KV.": (
         lede("runs in Cloudflare Workers, Vercel Edge Functions, Deno Deploy"),
@@ -408,9 +409,9 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
     ),
     "CDK app for ECS Fargate, Aurora and ElastiCache": (
         lede("AWS CDK v2"),
-        says("Fargate"),
-        says("Aurora"),
-        says("ElastiCache"),
+        lede("The Fargate stack runs two services"),
+        says("Aurora PostgreSQL cluster"),
+        says("ElastiCache Redis replication group"),
     ),
     "The published images on one Docker host: deploy/compose/compose.yml, whose header comment lists its commands and settings": (
         lede("production compose file (self-hosting on one Docker host)"),
@@ -451,7 +452,7 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
     "Beta: find experiments that share users, and whether their effects interact": (
         lede("Two experiments that run at the same time usually share users"),
         lede("how to test for an interaction"),
-        lede("(beta)"),
+        lede("(beta) reports the overlap of any two"),
     ),
     # Statistics Reference
     "How power analysis, post-stratification and FDR correction work.": (
@@ -462,10 +463,9 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         ),
         lede("Benjamini-Hochberg FDR Correction", "docs/statistics/fdr-correction.md"),
     ),
-    "Pre-experiment planning: MDE, alpha, power, runtime estimation": (
+    "Pre-experiment planning: MDE, power and runtime estimation": (
         lede("pre-experiment Power Calculator to plan your A/B tests"),
         says("Minimum Detectable Effect (MDE)"),
-        says("alpha"),
         says("Statistical power"),
         says("## Runtime Estimation"),
     ),
@@ -500,9 +500,8 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
             "A workspace holds its members, their workspace roles and its pending invitations"
         ),
     ),
-    "Create a workspace, invite your team, and connect an SDK": (
+    "Create a workspace, add your team to it, and connect an SDK": (
         lede("how to create a workspace, add your team to it, and connect an SDK"),
-        says("invit"),
     ),
 }
 
