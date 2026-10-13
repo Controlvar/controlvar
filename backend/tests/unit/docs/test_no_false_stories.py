@@ -23,9 +23,10 @@ than fixed page by page:
 4. **no-context.** The evaluate endpoint takes a targeting context: GET as the
    ``context`` query parameter, POST in the body. Where an SDK does not send
    the attributes, that is the SDK's gap, not the endpoint's.
-5. **test-counts.** A hand-written number of tests, in a sentence or in a
-   table with a Tests column, goes stale with the next test anyone adds. A
-   page names the suite and where it runs instead.
+5. **test-counts.** A hand-written number of tests (tests, XCTests, RSpec
+   examples, "77 core + 30 starter", or a table with a Tests or Unit tests
+   column) goes stale with the next test anyone adds. A page names the suite
+   and where it runs instead.
 
 Each rule is a pattern, why it is wrong, the path prefixes it is limited to
 (``None``: every in-scope document) and a sample of the removed text it must
@@ -251,10 +252,31 @@ RULES: Tuple[Rule, ...] = (
     ),
     (
         "test-counts",
-        r"(?im)^\|[^\n]{0,200}?\|\s*tests\s*\|",
+        r"(?<![\w.,])\d[\d,]*\+?\s+XCTests?\b",
+        _COUNT,
+        None,
+        "- `swift test`: 71 XCTests; URLSession is intercepted with a URLProtocol mock",
+    ),
+    (
+        "test-counts",
+        r"(?i)(?<![\w.,])\d[\d,]*\+?\s+(?:[a-z][\w-]*\s+){0,2}examples\b",
+        _COUNT + " (an RSpec example is a test)",
+        None,
+        "- `bundle exec rspec`: 109 examples (run here on Ruby 2.6.10); HTTP stubbed with WebMock",
+    ),
+    (
+        "test-counts",
+        r"(?i)\btests?\b[^.\n]{0,60}?\(\d[\d,]*\s+[a-z]+\s*\+\s*\d[\d,]*\s+[a-z]+\)",
+        _COUNT,
+        None,
+        "Tests: `cd sdk/java && mvn test` (77 core + 30 starter).",
+    ),
+    (
+        "test-counts",
+        r"(?im)^\|[^\n]{0,200}?\|\s*(?:unit\s+)?tests\s*\|",
         _COUNT + " (a table with a Tests column is one)",
         None,
-        "| Test class | Tests | Coverage |",
+        "| SDK | Location | Unit tests | Verified live | Docs |",
     ),
 )
 
@@ -376,6 +398,9 @@ def test_every_story_has_a_rule() -> None:
         "the evaluate endpoint takes a `context`, which this SDK does not send yet",
         "13 of the 16 SDKs run against a live backend",
         "Python 3.11 tests",
+        "`main` requires 20 checks to merge; `lint` is one of them.",
+        "`./vendor/bin/phpunit` runs the PHPUnit 10 suite (client, cache, HTTP client and hash tests)",
+        "the default (2 vCPU + 4 GB)",
     ],
 )
 def test_a_true_sentence_is_not_a_hit(true_text: str) -> None:

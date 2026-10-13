@@ -160,7 +160,7 @@ func Float64(v float64) *float64
 | Type | Fields |
 |---|---|
 | `User` | `ID string` (required), `Attributes map[string]interface{}` — sent as `context` on assignment |
-| `EvalResult` | `Key string`, `Enabled bool`, `Config map[string]any` — `nil` when the server returned `null` or a non-object |
+| `EvalResult` | `Key string`, `Enabled bool`, `Config map[string]any` — always `nil`: the evaluate endpoint returns `config: null` for every flag |
 | `Assignment` | `ExperimentKey`, `UserID`, `VariantID` (UUID), `VariantName` (`"control"`, `"treatment"`, …), `IsControl bool`, `Configuration map[string]any` |
 | `TrackEvent` | `UserID`, `EventName`, `EventType` (→ `event_type`, defaults to `EventName`), `ExperimentKey`, `FeatureFlagKey`, `Value *float64`, `Properties` (→ `metadata`), `Timestamp time.Time` (→ RFC 3339 when non-zero, else server-stamped) |
 | `APIError` | `StatusCode int`, `Message string` (response body), `RetryAfter string` (raw header on 429) |

@@ -85,7 +85,7 @@ Types (`types.go`):
 | Type | Fields |
 |---|---|
 | `User` | `ID string`, `Attributes map[string]interface{}` (sent as assignment `context`) |
-| `EvalResult` | `Key string`, `Enabled bool`, `Config map[string]any` (`nil` unless the server returned a JSON object) |
+| `EvalResult` | `Key string`, `Enabled bool`, `Config map[string]any` (always `nil`: the evaluate endpoint returns `config: null` for every flag) |
 | `Assignment` | `ExperimentKey`, `UserID`, `VariantID`, `VariantName string`, `IsControl bool`, `Configuration map[string]any` |
 | `TrackEvent` | `UserID`, `EventName` (required), `EventType` (defaults to `EventName`), `ExperimentKey`, `FeatureFlagKey`, `Value *float64` (`exp.Float64(v)`), `Properties` (sent as `metadata`), `Timestamp time.Time` (ISO-8601 when non-zero) |
 | `APIError` | `StatusCode int`, `Message string`, `RetryAfter string` (429); use `errors.As` |
