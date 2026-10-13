@@ -79,7 +79,7 @@ one, a token, a user or experiment id, an e-mail address, or a hostname.
 | `{count_steps}` | count | steps in a guide |
 | `{count_steps_pass}` | count | steps of a guide that pass |
 | `{count_not_run}` | count | steps of a guide not run |
-| `{guide_path}` | guide path | the page's path in the repository, as `mkdocs.yml` names it |
+| `{guide_path}` | guide path | the page's path in the repository, as `mkdocs.yml` names it, or the path of the dashboard component a journey walks (`.tsx`) |
 | `{step_number}` | step number | the guide step's number |
 | `{heading_guide}` | heading | the guide's title, its first heading |
 | `{heading_step}` | heading | the guide step's own heading, then its id in parentheses (the docs journeys: `Home page (nav-pages)`), because steps can share one heading |
