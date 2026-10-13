@@ -222,6 +222,7 @@ curl -s -X GET "http://localhost:8000/api/v1/experiments/$EXP_ID/results" \
 <!-- expect: "status": "active" -->
 <!-- expect: "variant_name": "control" -->
 <!-- expect: "variant_name": "red" -->
+<!-- expect: "sample_size": 0 -->
 
 Nobody is assigned yet, so each variant's `sample_size` is `0`.
 
@@ -375,8 +376,9 @@ minute to each path from one address, and a path with an id in it, such as
 `/api/v1/experiments/{experiment_id}`, counts separately for each id.
 AI design (`POST /api/v1/ai/design`) allows 10 a minute, and AI results
 interpretation (`POST /api/v1/ai/interpret/{experiment_id}`) 10 a minute for every
-experiment id together. The [API Documentation Guide](api-docs-guide.md#rate-limiting)
-lists every route with its own limit. Over a limit the API answers `429` with a
+experiment id together. For the other routes with a limit of their own, see
+[Rate limiting](api-docs-guide.md#rate-limiting) in the API Documentation Guide. Over a limit
+the API answers `429` with a
 `Retry-After` header (see [Rate Limiting](#3-rate-limiting) below).
 
 ### Request Size Limits
@@ -809,14 +811,9 @@ response.
   `benjamini_hochberg` for good; `?correction_method=none` on its results
   shows the numbers it showed before. A clone is a draft and starts with its
   source's values.
-- Not affected: the breakdown (`?breakdown=`) uses the stored confidence
-  level only as its base alpha, with its own Bonferroni correction over
-  segments; sequential testing (its own `alpha`) does not follow the stored
-  level (CUPED does, and applies the stored correction); the Bayesian results,
-  post-stratification, live results (a fixed, uncorrected 0.05), the AI
-  interpretation, the power calculator (`GET
-  /api/v1/experiments/analysis/sample-size`) and warehouse analysis runs are
-  unchanged.
+- Not affected: the breakdown (`?breakdown=`) applies its own Bonferroni
+  correction over segments, and sequential testing uses its own `alpha`.
+  CUPED follows the stored level and applies the stored correction.
 
 ## Feature Flag Endpoints
 
@@ -1018,7 +1015,7 @@ A 422 names positions and fields, never the ids that were sent.
 - **Endpoint**: `POST /api/v1/tracking/batch`
 - **Description**: Record up to 100 events (same shape as `/track`) in one request. An entry with no
   key is stored as history, not refused; an entry whose key is not found is reported in `errors`.
-- **Response**: 200 OK `{"success_count": int, "failure_count": int, "errors": [...]|null}`; 413 above 100 events
+- **Response**: 200 OK `{"success_count": int, "failure_count": int, "errors": [...]|null}`; 422 above 100 events, and none is stored
 
 ### Track Event by Ids
 - **Endpoint**: `POST /api/v1/tracking/events`
@@ -1754,7 +1751,7 @@ GET  /api/v1/holdout/{id}/results — Holdout vs everyone else for one metric (b
 
 The full profile serves the warehouse analysis routes under
 `/api/v1/warehouse/analysis`; every other path under `/api/v1/warehouse`
-answers 404. Snowflake and BigQuery are available; Amazon Athena is not yet. See
+answers 404. Which warehouses are available is on
 [Warehouse analysis](warehouse-analytics.md).
 
 ---
@@ -2074,8 +2071,7 @@ response.
 
 The API reaches Glue in the region named by `AWS_DEFAULT_REGION`, never
 `AWS_REGION`. With it unset, the job, crawler and partitions routes answer
-500. `GLUE_EVENTS_TABLE` must be the table the crawler creates. See
-[AWS integration: Glue](../integrations/aws.md#glue-the-etl-routes).
+500. See [AWS integration: Glue](../integrations/aws.md#glue-the-etl-routes).
 
 ---
 
@@ -2087,9 +2083,6 @@ POST /api/v1/counters/{experiment_id}/increment    — Increment counter
 POST /api/v1/counters/{experiment_id}/reset        — Reset counters (ADMIN)
 POST /api/v1/counters/bulk                         — Bulk counter update
 ```
-
-Reset is `POST .../reset`, not `DELETE` — this page said `DELETE` for a route
-that has never existed.
 
 On the two routes that take `{experiment_id}`, the path is what is written:
 the body's `experiment_id` must equal it, and a request where they disagree is
@@ -2180,7 +2173,7 @@ variant, and the decision.
 
 See [Split URL API Reference](split-url.md) for full documentation.
 
-Split URL experiments use `experiment_type: split_url` and carry a `split_url_config` in the request body. Variant assignment and URL redirection are meant to happen in the split-URL module's Lambda@Edge router, on a CloudFront distribution. The CDK app creates no CloudFront distribution, and the router has no configuration source in this release, so it does not split traffic even on a distribution you add yourself ([#393](https://github.com/getexperimently/experimently/issues/393)).
+Split URL experiments use `experiment_type: split_url` and carry a `split_url_config` in the request body. How visitors are meant to be redirected, and what does not work in this release, is on the [Split URL API Reference](split-url.md).
 
 **Experiment management** uses the existing experiment CRUD endpoints with `experiment_type=split_url`:
 
@@ -2212,10 +2205,3 @@ it does not predict the edge router.
 
 At least two URL variants, with `traffic_allocation` values (0-100) that sum to 100.
 `cookie_name` and `cookie_ttl_days` (default 30) are optional.
-
-**Lambda@Edge behaviour**: the router reads its configuration only from an `X-Split-URL-Config`
-request header, which nothing sets in this release, so it passes every request through
-([#393](https://github.com/getexperimently/experimently/issues/393)). Given that header, it
-hashes the viewer's IP address and User-Agent, answers `302 Found` to the variant URL and sets a
-`split_url_{experiment_key}` cookie holding that URL for 30 days unless `cookie_ttl_days` says
-otherwise. See [Split URL Testing](split-url.md).

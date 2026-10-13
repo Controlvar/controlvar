@@ -23,7 +23,7 @@ const sections = [
       { label: 'Creating Feature Flags', href: docsUrl('feature-flags/create'), desc: 'Set up your first flag' },
       { label: 'Targeting & Rules', href: docsUrl('Enhanced_Rules_Engine_Reference'), desc: 'The operators a targeting rule can use, with examples' },
       { label: 'Gradual Rollouts', href: docsUrl('feature-flags/rollouts'), desc: 'Staged rollout schedules' },
-      { label: 'Safety Monitoring', href: docsUrl('feature-flags/safety'), desc: 'Auto-rollback on error spikes' },
+      { label: 'Safety Monitoring', href: docsUrl('feature-flags/safety'), desc: 'Roll a flag back when its error rate or latency breaches a threshold' },
     ],
   },
   {

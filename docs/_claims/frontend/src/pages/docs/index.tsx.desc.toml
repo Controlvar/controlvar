@@ -41,8 +41,8 @@ text = "Staged rollout schedules"
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Auto-rollback on error spikes"
-by = ["untested:T"]
+text = "Roll a flag back when its error rate or latency breaches a threshold"
+by = ["mechanism:docs-hub"]
 
 [[unit]]
 text = "Create and start experiments, read their results, and the statistics behind them."

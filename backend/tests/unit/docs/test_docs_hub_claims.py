@@ -110,6 +110,10 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         ),
         says("rollout schedule"),
     ),
+    "Roll a flag back when its error rate or latency breaches a threshold": (
+        lede("error rate and latency against thresholds"),
+        lede("it rolls the flag back"),
+    ),
     # A/B Testing & Experiments
     "Create and start experiments, read their results, and the statistics behind them.": (
         lede(

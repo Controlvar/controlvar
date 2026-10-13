@@ -35,7 +35,13 @@ from backend.app.core.security import create_local_access_token, get_password_ha
 from backend.app.main import app
 from backend.app.models.api_key import APIKey
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
-from backend.app.models.metrics.metric import ErrorLog, MetricType, RawMetric
+from backend.app.models.metrics.metric import (
+    AggregatedMetric,
+    AggregationPeriod,
+    ErrorLog,
+    MetricType,
+    RawMetric,
+)
 from backend.app.models.safety import (
     FeatureFlagSafetyConfig,
     SafetyRollbackRecord,
@@ -47,6 +53,7 @@ from backend.app.models.sdk_evaluation_count import (
 )
 from backend.app.models.user import User, UserRole
 from backend.app.services import sdk_evaluation_service
+from backend.app.services.metrics_service import MetricsService
 from backend.app.services.safety_service import SafetyService
 
 pytestmark = pytest.mark.integration
@@ -500,6 +507,34 @@ class TestRecording:
         flag = flags()
         resp = _post(client, scoped_key["key"], *[_entry(flag.key, 1)] * 1001)
         assert resp.status_code == 422, resp.text
+
+    def test_local_counts_add_evaluations_that_carry_no_user_and_no_rule(
+        self, client, db_session, scoped_key, flags
+    ):
+        """A local count raises the flag's evaluations and nothing else: its
+        rule-match rate falls and its unique users stay those the server saw."""
+        flag = flags()
+        MetricsService.record_flag_evaluation(
+            db_session, flag.id, "user-1", value=True, targeting_rule_id="rule-1"
+        )
+        assert _post(client, scoped_key["key"], _entry(flag.key, 9)).status_code == 201
+        db_session.expire_all()
+        try:
+            MetricsService.aggregate_metrics(
+                db_session, AggregationPeriod.DAY, feature_flag_id=flag.id
+            )
+            summary = MetricsService.get_metrics_summary(
+                db_session, feature_flag_id=flag.id
+            )
+            assert summary.total_evaluations == 10
+            assert summary.rule_match_rate == pytest.approx(10.0)
+            assert summary.unique_users == 1
+        finally:
+            db_session.rollback()
+            db_session.query(AggregatedMetric).filter(
+                AggregatedMetric.feature_flag_id == flag.id
+            ).delete(synchronize_session=False)
+            db_session.commit()
 
 
 # ---------------------------------------------------------------------------

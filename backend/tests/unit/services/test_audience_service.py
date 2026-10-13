@@ -298,6 +298,31 @@ class TestEvaluateMembership:
         assert result.segment_name == mock_seg.name
         assert result.matched_rules == ["country equals US"]
 
+    def test_matched_rules_lists_each_condition_in_any_group_that_holds_on_its_own(
+        self,
+    ):
+        """A member by the second group: the first group's one condition that
+        holds is listed too, and the one that does not is not."""
+        rules = {
+            "logical_operator": "OR",
+            "groups": [
+                {
+                    "logical_operator": "AND",
+                    "conditions": [_eq("country", "US"), _eq("plan", "pro")],
+                },
+                {"logical_operator": "AND", "conditions": [_eq("browser", "chrome")]},
+            ],
+        }
+        mock_seg = _make_mock_segment(rules=rules)
+        db = _make_mock_db(segment=mock_seg)
+
+        result = AudienceService.evaluate_membership(
+            db, str(mock_seg.id), {"country": "US", "plan": "free", "browser": "chrome"}
+        )
+
+        assert result.is_member is True
+        assert result.matched_rules == ["country equals US", "browser equals chrome"]
+
     def test_evaluate_membership_returns_false_when_rules_do_not_match(self):
         """evaluate_membership returns is_member=False when rules don't match."""
         mock_seg = _make_mock_segment(rules=US_RULES)
