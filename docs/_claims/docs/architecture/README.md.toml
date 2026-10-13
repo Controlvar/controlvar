@@ -1,0 +1,52 @@
+# What verifies each unit of docs/architecture/README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/architecture/README.md"
+
+[[unit]]
+text = "Architecture Documentation"
+by = ["exempt:label"]
+
+[[unit]]
+text = "This directory contains documentation about the system architecture and design of Experimently."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Files"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Related Documentation"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Architecture on AWS: what the AWS stacks create"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Technical Guide: assignment, results, schedulers and caching"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Data Models: where the models live, and the constraints the database enforces"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Architecture Overview: the components and where each request goes"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Database Migrations: upgrading a deployment's database"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Database Migrations with Alembic: writing a migration in a checkout"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Logging Standards"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "API Documentation"
+by = ["exempt:navigation"]

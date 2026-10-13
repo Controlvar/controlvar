@@ -1,0 +1,54 @@
+# What verifies each unit of docs/architecture/overview.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/architecture/overview.md"
+
+[[unit]]
+text = "Application Load Balancer: For routing traffic to backend services."
+by = ["test:infrastructure/tests/test_no_world_open_ingress.py::test_nothing_else_is_open_to_the_internet"]
+
+[[unit]]
+text = "This is the only entry point the CDK creates: HTTPS, with HTTP redirected to HTTPS, in front of the API."
+by = ["untested:T"]
+
+[[unit]]
+text = "The dashboard is its own ECS service behind the same load balancer: the HTTPS listener sends /api/, /health, /health/ and /metrics to the API and everything else to the dashboard."
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_api_paths_go_to_the_live_target_group_exactly",
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_https_default_action_is_the_dashboard",
+]
+
+[[unit]]
+text = "cdk deploy starts it on the experimentation-platform/web:bootstrap image; the Deploy workflow rolls each release onto it by digest, after the API."
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_dashboard_container_never_proxies_the_api",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_r1_through_the_step_the_dashboard_rolls_out_when_the_api_is_serving",
+]
+
+[[unit]]
+text = "No stack creates CloudFront or API Gateway."
+by = ["untested:T"]
+
+[[unit]]
+text = "The dashboard is a static Next.js export served by nginx; in Docker Compose that nginx also proxies /api/ to the API, and in AWS it proxies nothing."
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_dashboard_container_never_proxies_the_api"]
+
+[[unit]]
+text = "Architecture on AWS"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The components, and where each request goes, are in the Architecture Overview."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Every stack the CDK app creates, for each profile, is in What Gets Deployed."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "This page says how a request reaches the API and the dashboard on AWS."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Request routing"
+by = ["exempt:label"]
