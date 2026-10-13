@@ -973,12 +973,10 @@ scope = "in"
 class = "reference"
 extractor = "docs-hub-desc"
 literals = 80
-reason = "the in-app docs hub's section and card descriptions; jest renders the page and refuses retired wording (docs-index.test.tsx)"
+reason = "the in-app docs hub's section and card descriptions; each is registered (docs/_claims) and held to the page it links to (test_docs_hub_claims.py); jest renders the page and refuses retired wording (docs-index.test.tsx)"
 
 [documents."frontend/src/components/experiments/FirstRunChecklist.tsx"]
 scope = "in"
 class = "journey"
 journey = "first-run"
-pending = true
-planned = "D73"
-reason = "the first-run card on the experiments page, walked on a stack with no seed data"
+reason = "the first-run card on the experiments page, walked on a stack with no seed data (compose-empty)"

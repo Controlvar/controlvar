@@ -1290,3 +1290,4 @@ untested:T	docs/security/hardening-changes.md	6b6519de194e
 untested:T	docs/security/hardening-changes.md	e8500b1c0e4b
 untested:T	docs/workspaces/quickstart.md	7306b0616b05
 untested:T	docs/workspaces/quickstart.md	d280a134f645
+untested:T	frontend/src/pages/docs/index.tsx#desc	447746140c1d

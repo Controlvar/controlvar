@@ -14,6 +14,10 @@ and ``attr_list``):
 A ``#`` line inside a fenced code block is not a heading (a shell comment is the
 usual one), and an ``id="..."`` on raw HTML in the page is an anchor too.
 
+A dashboard component (a ``.tsx`` guide, such as the first-run card) has no
+headings: its anchors are its ``data-testid`` values, the names its own tests
+find its parts by, and its text is the file's.
+
 Measured on 2026-10-06 against ``mkdocs build`` (mkdocs 1.6.1, Markdown 3.11):
 the anchors computed here for the 121 pages in the nav equal the ids of all
 2,334 headings of the built site.
@@ -33,6 +37,8 @@ HEADING = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
 ATTR_LIST = re.compile(r"[ \t]+\{:?([^}\n]*)\}[ \t]*$")
 ATTR_ID = re.compile(r"(?:^|\s)#([^\s}]+)")
 HTML_ID = re.compile(r"""<[A-Za-z][^>]*?\sid=["']([^"']+)["']""")
+#: A component's anchors: its data-testid values, written as string literals.
+TEST_ID = re.compile(r"""\bdata-testid=["']([A-Za-z0-9_-]{1,80})["']""")
 #: A shell block Doc Examples runs: a fence whose info string is ``{.bash ... exec ...}``.
 EXEC_FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})\s*\{\.bash[^}]*\bexec\b")
 
@@ -148,8 +154,12 @@ def _unique(anchor: str, used: Set[str]) -> str:
 
 
 def parse(path: str, text: str) -> Guide:
-    """The headings, anchors and raw-HTML ids of a page's Markdown *text*."""
+    """The headings, anchors and raw-HTML ids of a page's Markdown *text*, or a
+    component's ``data-testid`` values."""
     guide = Guide(path=path, text=text)
+    if path.endswith(".tsx"):
+        guide.html_ids.extend(TEST_ID.findall(text))
+        return guide
     found: List[Tuple[int, str, str, int]] = []
     fence: Tuple[str, int] = ("", 0)
     for number, line in enumerate(text.splitlines()):

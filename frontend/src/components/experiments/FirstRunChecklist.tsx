@@ -12,7 +12,14 @@ export function sampleApiOrigin(): string {
   return 'http://localhost:8000';
 }
 
-export function assignCurlSample(origin: string, experimentKey = 'my-first-experiment'): string {
+/**
+ * What the sample shows where the experiment's key goes. The card is shown only
+ * while there is no experiment, so it has no real key to show: the reader puts
+ * in the key that the experiment's page shows.
+ */
+export const EXPERIMENT_KEY_PLACEHOLDER = 'YOUR_EXPERIMENT_KEY';
+
+export function assignCurlSample(origin: string, experimentKey = EXPERIMENT_KEY_PLACEHOLDER): string {
   return [
     `curl -X POST "${origin}/api/v1/tracking/assign" \\`,
     `  -H "X-API-Key: $API_KEY" \\`,
@@ -21,18 +28,16 @@ export function assignCurlSample(origin: string, experimentKey = 'my-first-exper
   ].join('\n');
 }
 
-interface FirstRunChecklistProps {
-  /** Key of an existing experiment to use in the sample; defaults to a placeholder. */
-  experimentKey?: string;
-}
-
 /**
  * Three-step onboarding card shown on `/experiments` when the list is empty:
- * create an experiment → mint an API key → send an assignment with the SDK.
+ * create an API key, create an experiment (which opens the experiment's page),
+ * then start it and send an assignment with its key. The API key comes first
+ * because creating the experiment leaves this page, and the card with it. The
+ * `first-run` docs journey walks these steps on a stack with no seed data.
  */
-export function FirstRunChecklist({ experimentKey }: FirstRunChecklistProps) {
+export function FirstRunChecklist() {
   const [copied, setCopied] = useState(false);
-  const curl = assignCurlSample(sampleApiOrigin(), experimentKey);
+  const curl = assignCurlSample(sampleApiOrigin());
   // /admin/api-keys opens only for a superuser (withAdminGuard). Anyone else,
   // and a reader whose account is not known yet, is pointed at the route
   // instead of a page that answers 403 (#920).
@@ -57,18 +62,44 @@ export function FirstRunChecklist({ experimentKey }: FirstRunChecklistProps) {
       className="bg-white rounded-lg border border-slate-200 p-6 sm:p-8"
       data-testid="first-run-checklist"
     >
-      <h2 className="text-lg font-semibold text-slate-900">Get your first result in three steps</h2>
+      <h2 className="text-lg font-semibold text-slate-900">Assign your first user in three steps</h2>
       <p className="text-sm text-slate-500 mt-1 mb-6">
-        Nothing here yet. Here is the shortest path from an empty workspace to a live assignment.
+        No experiments yet. These steps take you from an empty workspace to a live assignment.
       </p>
 
       <ol className="space-y-6">
         <li className={stepClass} data-testid="checklist-step-1">
           <span className={badgeClass}>1</span>
           <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-slate-800">Create an API key</h3>
+            <p className="text-sm text-slate-500 mt-0.5">
+              SDKs and the tracking API authenticate with <code className="font-mono">X-API-Key</code>.
+              A key starts with <code className="font-mono">eptk_</code> and is shown once — copy it
+              when it appears.
+            </p>
+            {superuser ? (
+              <Link
+                href="/admin/api-keys"
+                className="inline-flex items-center mt-2 text-sm font-medium text-blue-600 hover:underline"
+                data-testid="checklist-api-keys"
+              >
+                Open Admin → API Keys
+              </Link>
+            ) : (
+              <p className="text-sm text-slate-500 mt-2">
+                <ApiKeyRouteHint testId="checklist-api-key-route" />
+              </p>
+            )}
+          </div>
+        </li>
+
+        <li className={stepClass} data-testid="checklist-step-2">
+          <span className={badgeClass}>2</span>
+          <div className="min-w-0">
             <h3 className="text-sm font-semibold text-slate-800">Create an experiment</h3>
             <p className="text-sm text-slate-500 mt-0.5">
               Give it a name, a control and a treatment variant, and at least one metric.
+              Creating it opens the experiment&apos;s page, which shows its key.
             </p>
             <Link
               href="/experiments/new"
@@ -80,40 +111,19 @@ export function FirstRunChecklist({ experimentKey }: FirstRunChecklistProps) {
           </div>
         </li>
 
-        <li className={stepClass} data-testid="checklist-step-2">
-          <span className={badgeClass}>2</span>
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-slate-800">Create an API key</h3>
-            <p className="text-sm text-slate-500 mt-0.5">
-              SDKs and the tracking API authenticate with <code className="font-mono">X-API-Key</code>.
-              Keys are shown once — copy it when it appears.
-            </p>
-            {superuser ? (
-              <Link
-                href="/admin/api-keys"
-                className="inline-flex items-center mt-2 text-sm font-medium text-blue-600 hover:underline"
-                data-testid="checklist-api-keys"
-              >
-                Open Admin → API Keys &rarr;
-              </Link>
-            ) : (
-              <p className="text-sm text-slate-500 mt-2">
-                <ApiKeyRouteHint testId="checklist-api-key-route" />
-              </p>
-            )}
-          </div>
-        </li>
-
         <li className={stepClass} data-testid="checklist-step-3">
           <span className={badgeClass}>3</span>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-slate-800">Send an assignment</h3>
-            <p className="text-sm text-slate-500 mt-0.5">
-              Call the tracking API (or any{' '}
+            <h3 className="text-sm font-semibold text-slate-800">Start it, then send an assignment</h3>
+            <p className="text-sm text-slate-500 mt-0.5" data-testid="checklist-start">
+              On the experiment&apos;s page, press Start: only an active experiment assigns users.
+              Then call the tracking API (or any{' '}
               <Link href="/docs" className="text-blue-600 hover:underline">
                 SDK
               </Link>
-              ) with your experiment key. The response carries the variant to render.
+              ) with the experiment&apos;s key in place of{' '}
+              <code className="font-mono">{EXPERIMENT_KEY_PLACEHOLDER}</code> and your API key in{' '}
+              <code className="font-mono">API_KEY</code>. The response carries the variant to render.
             </p>
             <div className="relative mt-2">
               <pre
@@ -130,6 +140,9 @@ export function FirstRunChecklist({ experimentKey }: FirstRunChecklistProps) {
               >
                 {copied ? 'Copied' : 'Copy'}
               </button>
+              <span className="sr-only" role="status" data-testid="checklist-copy-status">
+                {copied ? 'Copied' : ''}
+              </span>
             </div>
           </div>
         </li>
