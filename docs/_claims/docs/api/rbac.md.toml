@@ -1,0 +1,875 @@
+# What verifies each unit of docs/api/rbac.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/rbac.md"
+
+[[unit]]
+text = "RBAC API Reference"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Part of the rbac module"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Custom roles is one of the optional modules -- present in the full profile, absent from the core one."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "A core deployment does not serve these routes."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "See Modules and profiles for what each profile includes and how to run the full one."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Overview"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The RBAC (Role-Based Access Control) module stores three layers of permissions for a user:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Base Role — One of four built-in system roles assigned to every user (admin, developer, analyst, viewer)."
+by = [
+    "test:backend/tests/unit/core/test_permissions.py",
+    "test:modules/backend/tests/unit/api/test_rbac_integration.py",
+]
+
+[[unit]]
+text = "Defined as the static ROLE_PERMISSIONS dict in backend/app/core/permissions.py."
+by = [
+    "test:backend/tests/unit/core/test_permissions.py",
+    "test:modules/backend/tests/unit/api/test_rbac_integration.py",
+]
+
+[[unit]]
+text = "Custom Roles — DB-backed roles with configurable per-resource/action permission sets."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_admin_can_create_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRevokeRole::test_admin_can_assign_role_to_user",
+]
+
+[[unit]]
+text = "An admin can create any number of custom roles and assign them to users."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_admin_can_create_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRevokeRole::test_admin_can_assign_role_to_user",
+]
+
+[[unit]]
+text = "Direct Permission Grants — Per-user, per-resource grants made without assigning a role."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_admin_can_grant_direct_permission",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_grant_with_expiry_date_accepted",
+]
+
+[[unit]]
+text = "Supports optional expiry timestamps for temporary grants."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_admin_can_grant_direct_permission",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_grant_with_expiry_date_accepted",
+]
+
+[[unit]]
+text = "Only the base role decides what a user can do"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Routes check the base role (through check_permission() in backend/app/core/permissions.py) or the superuser flag; none reads custom roles or direct grants."
+by = ["untested:T"]
+
+[[unit]]
+text = "Custom roles and direct grants are stored, and shown by GET /api/v1/rbac/users/{user_id}/permissions, but no permission check reads them: assigning a custom role or granting a permission changes nothing a user can do."
+by = ["untested:T"]
+
+[[unit]]
+text = "Whether to make them take effect or remove them is tracked in #891."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Effective Permissions Resolution"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/rbac/users/{user_id}/permissions merges all three layers to build the set it shows."
+by = [
+    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_custom_role_permissions_merged",
+    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_valid_direct_grant_included",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_grant_appears_in_effective_permissions",
+]
+
+[[unit]]
+text = "No permission check uses this set (see the note above):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Superusers (is_superuser=True) pass every permission check and have full access to every resource and action."
+by = [
+    "test:backend/tests/unit/core/test_permissions.py::TestCheckPermission::test_superuser_permission",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectivePermissions::test_superuser_has_all_permissions",
+]
+
+[[unit]]
+text = "Permission Resolution Precedence"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "These rules describe the set the endpoint shows:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Permissions are additive — a permission granted by any layer is granted overall."
+by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_custom_role_permissions_merged"]
+
+[[unit]]
+text = "There is no deny mechanism; a higher layer cannot revoke a permission given by a lower layer."
+by = ["untested:T"]
+
+[[unit]]
+text = "Expired or deactivated direct grants are excluded from the union."
+by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_expired_direct_grant_not_included"]
+
+[[unit]]
+text = "Authentication"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "All RBAC endpoints require a valid bearer token in the Authorization header:"
+by = ["test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestListRoles::test_list_requires_auth"]
+
+[[unit]]
+text = "The examples on this page run in one terminal, in order, against the full profile (Modules and profiles)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sign in as the stack's administrator, which saves a token in $TOKEN:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If it prints null, the sign-in failed and $TOKEN holds no token."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The examples give roles and grants to the stack's demo analyst, analyst@demo.com."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This saves the analyst's user id in $ANALYST_ID:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints the analyst's email and \"role\": \"ANALYST\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Endpoints"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "List Custom Roles"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Returns all custom roles."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestListRoles::test_developer_can_list_roles",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestListRoles::test_viewer_can_list_roles",
+]
+
+[[unit]]
+text = "Any authenticated user can call this."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestListRoles::test_developer_can_list_roles",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestListRoles::test_viewer_can_list_roles",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestGetRole::test_developer_can_get_existing_role",
+]
+count = 2
+
+[[unit]]
+text = "Query Parameters"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Parameter | Type | Default | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "include_system | boolean | true | When false, leaves out roles marked is_system_role. Nothing in this release creates one, so both forms list the custom roles you created."
+by = ["untested:T"]
+
+[[unit]]
+text = "Response 200"
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestListRoles::test_list_roles_response_item_has_required_fields",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestGetRole::test_get_role_returns_correct_fields",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRevokeRole::test_assign_role_response_has_expected_fields",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRevokeRole::test_admin_can_revoke_role_from_user",
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestAssignRevoke::test_revoke_role_returns_200",
+]
+count = 6
+
+[[unit]]
+text = "Example"
+by = ["exempt:baseline"]
+count = 4
+
+[[unit]]
+text = "On a new deployment it prints []: there are no custom roles until you create one."
+by = ["docex:docs/api/rbac.md#[]"]
+
+[[unit]]
+text = "Create Custom Role"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Creates a new custom role."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_developer_cannot_create_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_analyst_cannot_create_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_viewer_cannot_create_role",
+]
+
+[[unit]]
+text = "ADMIN only."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_developer_cannot_create_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_analyst_cannot_create_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_viewer_cannot_create_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestUpdateRole::test_developer_cannot_update_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestUpdateRole::test_cannot_update_system_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDeleteRole::test_developer_cannot_delete_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDeleteRole::test_cannot_delete_system_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRevokeRole::test_assign_same_role_twice_is_idempotent",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRevokeRole::test_developer_cannot_assign_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRevokeRole::test_analyst_cannot_revoke_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_grant_with_expiry_date_accepted",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_developer_cannot_grant_permission",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_analyst_cannot_grant_permission",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_developer_cannot_revoke_direct_permission",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_revoke_returns_count_of_deleted_grants",
+]
+count = 7
+
+[[unit]]
+text = "Request Body"
+by = ["exempt:baseline"]
+count = 4
+
+[[unit]]
+text = "Name validation rules:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Minimum 2 characters, maximum 64 characters"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_role_name_too_short_returns_422",
+]
+
+[[unit]]
+text = "Must start with a lowercase letter (a-z)"
+by = ["test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::TestCustomRoleCreate::test_name_must_start_with_letter"]
+
+[[unit]]
+text = "Only lowercase letters, digits, hyphens (-), and underscores (_) are allowed"
+by = [
+    "test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::TestCustomRoleCreate::test_name_uppercase_rejected",
+    "test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::TestCustomRoleCreate::test_name_with_underscores_valid",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_role_name_with_spaces_fails_validation",
+]
+
+[[unit]]
+text = "Examples of valid names: data-scientist, read_only_experiments, analyst2"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Available resources: experiment, feature_flag, user, role, permission, report, audit_log, export"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_create_role_with_all_valid_resources",
+]
+
+[[unit]]
+text = "Available actions: create, read, update, delete, list"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_invalid_action_in_permissions_returns_422",
+]
+
+[[unit]]
+text = "Response 201"
+by = [
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestCreateRole::test_create_returns_201",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_create_role_response_has_correct_permissions",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_grant_response_has_expected_fields",
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestGrantRevokePermission::test_grant_permission_returns_201",
+]
+count = 2
+
+[[unit]]
+text = "Error responses:"
+by = ["exempt:baseline"]
+count = 7
+
+[[unit]]
+text = "409 Conflict — A role with this name already exists"
+by = ["test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_duplicate_role_name_returns_conflict"]
+
+[[unit]]
+text = "403 Forbidden — Caller is not an admin"
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_developer_cannot_create_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestUpdateRole::test_analyst_cannot_update_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDeleteRole::test_viewer_cannot_delete_role",
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestAssignRevoke::test_viewer_cannot_assign",
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestGrantRevokePermission::test_viewer_cannot_grant",
+]
+count = 5
+
+[[unit]]
+text = "422 Unprocessable Entity — Invalid name format or empty actions list"
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_role_name_with_uppercase_fails_validation",
+    "test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::TestPermissionGrant::test_empty_actions_rejected",
+]
+
+[[unit]]
+text = "This creates the data-scientist role that the examples below assign:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"name\": \"data-scientist\", \"is_system_role\": false and \"user_count\": 0."
+by = [
+    "docex:docs/api/rbac.md#\"user_count\": 0",
+    "docex:docs/api/rbac.md#\"is_system_role\": false",
+]
+
+[[unit]]
+text = "Get Custom Role"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Get details of a specific role."
+by = ["test:modules/backend/tests/integration/api/test_rbac_api.py::TestGetRole::test_developer_can_get_existing_role"]
+
+[[unit]]
+text = "Path Parameters"
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "Parameter | Type | Description"
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "role_name | string | The role's name."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "404 Not Found — Role does not exist"
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestGetRole::test_get_nonexistent_role_returns_404",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestUpdateRole::test_update_nonexistent_role_returns_404",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDeleteRole::test_delete_nonexistent_role_returns_404",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRevokeRole::test_assign_nonexistent_role_returns_404",
+]
+count = 4
+
+[[unit]]
+text = "Update Custom Role"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Update a custom role's description or permission set."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestUpdateRole::test_developer_cannot_update_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestUpdateRole::test_cannot_update_system_role",
+]
+
+[[unit]]
+text = "System roles cannot be modified."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestUpdateRole::test_developer_cannot_update_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestUpdateRole::test_cannot_update_system_role",
+]
+
+[[unit]]
+text = "Request Body (all fields optional)"
+by = ["test:modules/backend/tests/integration/api/test_rbac_api.py::TestUpdateRole::test_update_role_empty_payload_is_no_op"]
+
+[[unit]]
+text = "Response 200 — Updated role object (same shape as GET)"
+by = [
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestUpdateRole::test_update_returns_200",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "400 Bad Request — Attempted to modify a system role"
+by = ["test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestUpdateRole::test_update_system_role_returns_400"]
+
+[[unit]]
+text = "Delete Custom Role"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Delete a custom role."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDeleteRole::test_developer_cannot_delete_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDeleteRole::test_cannot_delete_system_role",
+]
+
+[[unit]]
+text = "System roles cannot be deleted."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDeleteRole::test_developer_cannot_delete_role",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDeleteRole::test_cannot_delete_system_role",
+]
+
+[[unit]]
+text = "Response 204 — No content"
+by = ["test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestDeleteRole::test_delete_returns_204"]
+
+[[unit]]
+text = "400 Bad Request — Attempted to delete a system role"
+by = ["test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestDeleteRole::test_delete_system_role_returns_400"]
+
+[[unit]]
+text = "Assign Role to User"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Assign a custom role to a user."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRevokeRole::test_assign_same_role_twice_is_idempotent",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRevokeRole::test_developer_cannot_assign_role",
+]
+
+[[unit]]
+text = "This operation is idempotent — assigning a role to a user who already has it is a no-op."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRevokeRole::test_assign_same_role_twice_is_idempotent",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRevokeRole::test_developer_cannot_assign_role",
+]
+
+[[unit]]
+text = "This assigns the data-scientist role created above to the analyst:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"status\": \"assigned\" and \"role\": \"data-scientist\"."
+by = [
+    "docex:docs/api/rbac.md#\"status\": \"assigned\"",
+    "docex:docs/api/rbac.md#\"role\": \"data-scientist\"",
+]
+
+[[unit]]
+text = "The assignment is stored; the analyst can still do only what the analyst base role allows."
+by = ["untested:T"]
+
+[[unit]]
+text = "Revoke Role from User"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Revoke a custom role from a user."
+by = ["test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRevokeRole::test_analyst_cannot_revoke_role"]
+
+[[unit]]
+text = "Get Effective Permissions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Returns the fully resolved permission set for a user, merging base role + custom roles + valid direct grants."
+by = [
+    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_custom_role_permissions_merged",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_grant_appears_in_effective_permissions",
+]
+
+[[unit]]
+text = "This is a display: routes check only the base role, so a custom role or direct grant listed here does not let the user do anything their base role does not."
+by = ["untested:T"]
+
+[[unit]]
+text = "Access control: Users can view their own permissions."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectivePermissions::test_user_can_view_own_permissions",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectivePermissions::test_admin_can_fetch_own_permissions",
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestEffectivePermissions::test_viewer_can_get_own_permissions",
+]
+
+[[unit]]
+text = "Admins can view any user's permissions."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectivePermissions::test_user_can_view_own_permissions",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectivePermissions::test_admin_can_fetch_own_permissions",
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestEffectivePermissions::test_viewer_can_get_own_permissions",
+]
+
+[[unit]]
+text = "The response carries user_id, username, base_role, custom_roles, permissions (each resource with the actions allowed on it) and is_superuser."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "The example below prints part of it for the analyst."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Note: actions within each resource are returned sorted alphabetically."
+by = ["untested:T"]
+
+[[unit]]
+text = "403 Forbidden — Non-admin user trying to view another user's permissions"
+by = ["test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectivePermissions::test_developer_cannot_view_nonexistent_user_permissions"]
+
+[[unit]]
+text = "404 Not Found — User does not exist"
+by = ["test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectivePermissions::test_get_permissions_nonexistent_user_returns_404"]
+
+[[unit]]
+text = "View your own permissions."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/auth/me gives your user id:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For the administrator it prints \"base_role\": \"admin\", no custom roles and \"is_superuser\": true."
+by = [
+    "docex:docs/api/rbac.md#\"base_role\": \"admin\"",
+    "docex:docs/api/rbac.md#\"is_superuser\": true",
+]
+
+[[unit]]
+text = "An admin viewing another user's permissions, here the analyst's:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints the base role, \"analyst\", the stored data-scientist role, and export: [\"read\"] from that role in the set shown."
+by = ["docex:docs/api/rbac.md#\"export\": ["]
+
+[[unit]]
+text = "The analyst base role holds no export permission, and it is still the only thing that decides what the analyst can do."
+by = ["untested:T"]
+
+[[unit]]
+text = "Grant Direct Permission"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Grant a specific resource permission directly to a user, without assigning a role."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The grant is stored and shown by Get Effective Permissions; no permission check reads it yet (#891)."
+by = ["untested:T"]
+
+[[unit]]
+text = "Supports optional expiry for temporary grants."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_grant_with_expiry_date_accepted",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_developer_cannot_grant_permission",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_analyst_cannot_grant_permission",
+]
+
+[[unit]]
+text = "expires_at is optional."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_grant_appears_in_effective_permissions",
+    "test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::TestDelegatePermissionRequest::test_expires_at_optional",
+]
+
+[[unit]]
+text = "If omitted, the grant never expires."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_grant_appears_in_effective_permissions",
+    "test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::TestDelegatePermissionRequest::test_expires_at_optional",
+]
+
+[[unit]]
+text = "Example — Temporary permission with expiry"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "expires_at must be in the future: a grant whose expires_at has already passed is stored, but Get Effective Permissions leaves it out from the start."
+by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_expired_direct_grant_not_included"]
+
+[[unit]]
+text = "This grants the analyst report access for a week from now:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"status\": \"granted\" and \"resource\": \"report\"."
+by = [
+    "docex:docs/api/rbac.md#\"status\": \"granted\"",
+    "docex:docs/api/rbac.md#\"resource\": \"report\"",
+]
+
+[[unit]]
+text = "The grant is stored and shown; it changes nothing the analyst can do."
+by = ["untested:T"]
+
+[[unit]]
+text = "Revoke Direct Permission"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Revoke all direct permission grants for a user+resource combination."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_developer_cannot_revoke_direct_permission",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_revoke_returns_count_of_deleted_grants",
+]
+
+[[unit]]
+text = "user_id | UUID | Target user's ID"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "resource | string | Resource name (e.g. export)"
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "count is the number of grant records deleted."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_revoke_returns_count_of_deleted_grants",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_revoke_nonexistent_grant_returns_zero_count",
+]
+
+[[unit]]
+text = "How-To Examples"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Create a \"Read-Only Experiments\" Custom Role"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This defines and assigns a role for a user who should see experiments and results but never create or modify them."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The role is stored and shown; it does not change what the user can do, which their base role decides (#891)."
+by = ["untested:T"]
+
+[[unit]]
+text = "Today, to keep a user read-only, give them the viewer or analyst base role."
+by = [
+    "test:modules/backend/tests/unit/api/test_rbac_integration.py::TestRBACIntegration::test_viewer_role_permissions",
+    "test:modules/backend/tests/unit/api/test_rbac_integration.py::TestRBACIntegration::test_analyst_role_permissions",
+]
+
+[[unit]]
+text = "Step 1: Create the role:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints read-only-experiments."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Step 2: Assign the role to a user, here the analyst:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints assigned."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Step 3: Check that the assignment is stored, in the user's effective permissions:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints the analyst's stored custom roles, [\"data-scientist\",\"read-only-experiments\"] after the examples above."
+by = ["docex:docs/api/rbac.md#\"read-only-experiments\""]
+
+[[unit]]
+text = "What the analyst can do is unchanged."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Grant a Temporary Export Permission"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This records a week-long export grant for a data analyst without changing their role."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The grant is stored and shown by Get Effective Permissions, but no permission check reads it: it does not let the analyst export anything their base role does not already allow (#891)."
+by = ["untested:T"]
+
+[[unit]]
+text = "To let someone export today, give them a base role that holds the permission."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints granted."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "After expires_at, the direct grant is automatically excluded from the set Get Effective Permissions shows, without requiring manual cleanup."
+by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_expired_direct_grant_not_included"]
+
+[[unit]]
+text = "To revoke early:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints {\"status\":\"revoked\",\"count\":1}: the one export grant is deleted."
+by = ["docex:docs/api/rbac.md#{\"status\":\"revoked\",\"count\":1}"]
+
+[[unit]]
+text = "Show a User's Stored Permissions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This shows the merged set."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What the user can actually do is decided by their base role alone (see Overview)."
+by = ["untested:T"]
+
+[[unit]]
+text = "It prints the whole set, beginning with the analyst's user_id, username and \"base_role\": \"analyst\"."
+by = ["docex:docs/api/rbac.md#\"custom_roles\": ["]
+
+[[unit]]
+text = "Service API"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The RBACService in modules/backend/app/services/rbac_service.py provides these methods."
+by = ["test:modules/backend/tests/unit/services/test_rbac_service.py"]
+
+[[unit]]
+text = "get_effective_permissions builds the set the Get Effective Permissions endpoint returns."
+by = ["test:modules/backend/tests/unit/services/test_rbac_service.py"]
+
+[[unit]]
+text = "check_effective_permission is not called by any route (#891):"
+by = ["untested:T"]
+
+[[unit]]
+text = "check_effective_permission checks custom roles and direct grants in addition to the base role, but no route calls it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Routes call check_permission() from backend/app/core/permissions.py, which reads only the base role."
+by = ["untested:T"]
+
+[[unit]]
+text = "Data Models"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "CustomRole"
+by = ["untested:T"]
+
+[[unit]]
+text = "Column | Type | Description"
+by = ["exempt:baseline"]
+count = 3
+
+[[unit]]
+text = "id | UUID | Primary key"
+by = ["exempt:baseline"]
+count = 3
+
+[[unit]]
+text = "name | string(64) | Unique role name (lowercase, slugified)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "description | text | Optional human-readable description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "is_system_role | boolean | true for built-in roles (protected from edits)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "permissions | JSONB | List of {resource, actions[]} objects"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "created_by_id | UUID FK | User who created the role"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "created_at | datetime | Creation timestamp"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "updated_at | datetime | Last update timestamp"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "UserCustomRole"
+by = ["untested:T"]
+
+[[unit]]
+text = "user_id | UUID FK | Reference to user"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "role_id | UUID FK | Reference to custom role"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "assigned_by_id | UUID FK | Admin who made the assignment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "reason | text | Optional audit reason"
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "assigned_at | datetime | When the assignment was made"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "DirectPermissionGrant"
+by = ["untested:T"]
+
+[[unit]]
+text = "user_id | UUID FK | Target user"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "actions | JSONB | List of action strings (e.g. [\"read\"])"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "granted_by_id | UUID FK | Admin who granted the permission"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "expires_at | datetime | Optional expiry; null means never expires"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "is_active | boolean | Can be deactivated without deleting"
+by = ["exempt:baseline"]

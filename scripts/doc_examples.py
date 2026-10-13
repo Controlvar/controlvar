@@ -207,7 +207,6 @@ PENDING_FROZEN: dict[str, tuple[int, int, int]] = {
     "docs/getting-started/python-virtual-env-setup.md": (0, 1, 0),
     "docs/getting-started/vscode-settings.md": (0, 0, 0),
     "docs/guides/experiment-wizard.md": (0, 1, 0),
-    "docs/hipaa/overview.md": (0, 0, 1),
     "docs/infrastructure/aws-iam-setup.md": (0, 0, 0),
     "docs/infrastructure/cloudwatch-setup.md": (0, 4, 0),
     "docs/infrastructure/dynamodb-readme.md": (0, 0, 0),

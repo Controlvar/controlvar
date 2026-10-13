@@ -1,0 +1,601 @@
+# What verifies each unit of docs/api/auth.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/auth.md"
+
+[[unit]]
+text = "Authentication"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform uses two authentication methods, depending on who is calling:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Method | Used For"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "API Key (X-API-Key header) | SDK clients, server-to-server calls, event tracking"
+by = ["docex:docs/api/auth.md#\"purchase_completed\""]
+
+[[unit]]
+text = "Bearer token (Authorization: Bearer header) | People: the dashboard, and direct API calls made as a user"
+by = [
+    "docex:docs/api/auth.md#\"email\": \"admin@demo.com\"",
+    "docex:docs/api/auth.md#checkout_button_color",
+]
+
+[[unit]]
+text = "The commands on this page run as written against the stack from the Quick Start, in one terminal, top to bottom."
+by = [
+    "docex:docs/api/auth.md#\"role\": \"VIEWER\"",
+    "docex:docs/api/auth.md#{\"detail\":\"Not authenticated\"}",
+]
+
+[[unit]]
+text = "Each one uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Bearer Token Authentication"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A bearer token is issued when a user logs in, and authenticates later requests as that user."
+by = [
+    "docex:docs/api/auth.md#\"token_type\": \"bearer\"",
+    "docex:docs/api/auth.md#\"email\": \"admin@demo.com\"",
+]
+
+[[unit]]
+text = "Where the login is checked depends on AUTH_PROVIDER:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "local (the default, and what the Quick Start runs): the platform checks the email address and password against its own users."
+by = [
+    "test:backend/tests/unit/core/test_config_environment.py::TestAuthSettings::test_defaults",
+    "test:backend/tests/integration/api/test_local_auth_path.py::TestLoginFlow::test_full_flow",
+]
+
+[[unit]]
+text = "Its tokens last 12 hours (LOCAL_AUTH_TOKEN_TTL_MINUTES, default 720)."
+by = [
+    "docex:docs/api/auth.md#\"token_type\": \"bearer\"",
+    "test:backend/tests/unit/core/test_config_environment.py::TestAuthSettings::test_defaults",
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_success_shape",
+]
+
+[[unit]]
+text = "After 10 failed attempts within 15 minutes, the address answers 423 until the 15 minutes are up."
+by = [
+    "test:backend/tests/integration/api/test_local_auth_path.py::TestLockout::test_423_after_max_failed_attempts",
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginAttemptTracker::test_locks_after_threshold_within_window",
+    "test:backend/tests/unit/core/test_config_environment.py::TestAuthSettings::test_defaults",
+]
+
+[[unit]]
+text = "The email address is matched whatever its letter case (A–Z), and every casing of it counts toward the same failed attempts."
+by = ["test:backend/tests/integration/api/test_local_signin_email_case.py::test_a_mixed_case_address_signs_in_whatever_its_letter_case"]
+
+[[unit]]
+text = "cognito: the credentials are passed to an AWS Cognito user pool, which issues an access token and a refresh token."
+by = ["test:backend/tests/integration/auth/test_token.py::TestTokenSuccess::test_login_returns_access_token"]
+
+[[unit]]
+text = "Users are created by an administrator (Adding a user)."
+by = ["test:backend/tests/unit/api/test_cognito_only_routes.py::test_cognito_provider_with_self_signup_off_answers_404"]
+
+[[unit]]
+text = "The dashboard does not yet sign in with Cognito."
+by = [
+    "test:frontend/src/tests/contexts/AuthContext.test.tsx",
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_404_under_cognito_provider",
+]
+
+[[unit]]
+text = "Sign in through the API with POST /api/v1/auth/token."
+by = ["test:backend/tests/integration/auth/test_token.py::TestTokenSuccess::test_login_returns_200"]
+
+[[unit]]
+text = "SSO sign-in needs AUTH_PROVIDER=local."
+by = ["untested:T"]
+
+[[unit]]
+text = "Obtaining a Token"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in with the account's email address and password."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This saves the token in $TOKEN and prints what else the response says:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"token_type\": \"bearer\" and \"expires_in\": 43200, the token's lifetime in seconds (12 hours)."
+by = ["docex:docs/api/auth.md#\"token_type\": \"bearer\""]
+
+[[unit]]
+text = "The response also carries the user's profile as user."
+by = ["test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_success_shape"]
+
+[[unit]]
+text = "A wrong email address or password answers 401 with {\"detail\":\"Invalid email or password\"}."
+by = ["test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_wrong_password_401_generic_message"]
+
+[[unit]]
+text = "POST /api/v1/auth/login takes JSON with email and password."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_missing_fields_422",
+]
+
+[[unit]]
+text = "POST /api/v1/auth/token takes the same two as a form, with the email address in the username field."
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestTokenFormEndpoint::test_form_login_returns_same_shape",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "That's the OAuth2 form the API's interactive documentation at localhost:8000/api/v1/docs uses for its Authorize button."
+by = ["test:backend/tests/unit/models/test_fast_api_setup.py::test_api_docs_available"]
+
+[[unit]]
+text = "Check Who You Are Logged In As"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The profile also carries id, username, full_name, is_superuser, is_active and auth_provider."
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestUserMeSchema::test_contract_fields",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "Using a Bearer Token"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Pass the token in the Authorization header."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This lists the experiments; the demo data has three:"
+by = ["untested:T"]
+
+[[unit]]
+text = "It prints each experiment's key, including checkout_button_color."
+by = ["docex:docs/api/auth.md#checkout_button_color"]
+
+[[unit]]
+text = "The collection URL ends with a slash, /api/v1/experiments/."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Without the slash the API answers 307 Temporary Redirect, which curl doesn't follow, so nothing is printed."
+by = ["test:backend/tests/unit/middleware/test_relative_slash_redirect.py::test_the_real_app_still_redirects_relatively"]
+
+[[unit]]
+text = "Token Expiry, Refresh and Logout"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "With the local provider there is no refresh token: when a token expires, requests answer 401 and the user logs in again."
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestGetCurrentUserLocal::test_expired_token_is_401",
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_local_provider_answers_fixed_404",
+]
+
+[[unit]]
+text = "POST /api/v1/auth/logout answers 204 so a client can discard its token."
+by = ["test:backend/tests/unit/api/test_local_auth.py::TestMeAndLogoutEndpoints::test_logout_204"]
+
+[[unit]]
+text = "The token itself stays valid until it expires, because nothing is revoked on the server."
+by = ["untested:T"]
+
+[[unit]]
+text = "With AUTH_PROVIDER=cognito, the login also returns a refresh token, and POST /api/v1/auth/refresh with {\"refresh_token\": \"...\"} exchanges it for a new access token."
+by = [
+    "test:backend/tests/integration/auth/test_refresh.py::TestRefreshSuccess::test_refresh_returns_new_access_token",
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_local_provider_answers_fixed_404",
+]
+
+[[unit]]
+text = "If the refresh token has expired too, the user logs in again."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "API Key Authentication"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "API keys are long-lived credentials for programs."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once"]
+
+[[unit]]
+text = "Use them when:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "integrating an SDK into your application;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "making server-to-server API calls from a backend service;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "tracking events from a client application."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Creating an API Key"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Creating a key takes a bearer token."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_requires_auth"]
+
+[[unit]]
+text = "This saves the new key in $KEY:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints eptk_, the start of every key."
+by = [
+    "docex:docs/api/auth.md#eptk_",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+]
+
+[[unit]]
+text = "The key is shown only in this response, so store it securely."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once"]
+
+[[unit]]
+text = "If you lose it, create a new key and delete the old one."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "See API Key Management for listing, deleting and rotating keys."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The request also accepts an optional \"scopes\" list."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "The one scope that is enforced is sdk:ruleset, for server-side SDK use: GET /api/v1/sdk/ruleset, POST /api/v1/tracking/evaluations and POST /api/v1/tracking/assign/batch (all beta) refuse a key without it, or whose owner can no longer change feature flags or experiments."
+by = ["untested:T"]
+
+[[unit]]
+text = "Only users who can change feature flags (ADMIN, DEVELOPER, or a superuser) can create a key with it; anyone else gets 403 and no key is created."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role"]
+
+[[unit]]
+text = "Every other endpoint that takes an API key accepts any active key, whatever its scopes; see Scopes."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key"]
+
+[[unit]]
+text = "Using an API Key"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Pass the key in the X-API-Key header on every request."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This tracks a purchase in the demo data's checkout_button_color experiment:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"purchase_completed\", the stored event's type."
+by = ["docex:docs/api/auth.md#\"purchase_completed\""]
+
+[[unit]]
+text = "And this evaluates the demo data's beta_features flag for the same user:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints true."
+by = ["docex:docs/api/auth.md#true"]
+
+[[unit]]
+text = "An API key is accepted only by the endpoints an SDK calls: tracking, flag evaluation and the flag ruleset."
+by = ["untested:T"]
+
+[[unit]]
+text = "Everything else takes a bearer token."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Roles and Permissions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every user has one of four built-in roles."
+by = ["test:backend/tests/unit/core/test_permissions.py"]
+
+[[unit]]
+text = "The role decides which operations are available."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Role | Description | Typical Users"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "ADMIN | Every resource; managing user accounts also needs the separate superuser flag | Platform owners, engineering leads"
+by = [
+    "test:backend/tests/integration/api/test_own_password_change.py::test_admin_role_without_superuser_cannot_reset_another",
+    "test:backend/tests/unit/core/test_permissions.py",
+]
+
+[[unit]]
+text = "DEVELOPER | Create and manage experiments and feature flags | Engineers, product developers"
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+    "test:backend/tests/unit/core/test_flag_and_experiment_update_roles.py",
+    "test:backend/tests/smoke/test_flag_change_routes_guarded.py",
+]
+
+[[unit]]
+text = "ANALYST | Read experiments, flags and results; create reports | Data analysts, product managers"
+by = [
+    "test:backend/tests/unit/core/test_permissions.py",
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+]
+
+[[unit]]
+text = "VIEWER | Reads experiments, flags and results; like every role, can create an API key, and an API key writes tracking data | Stakeholders, executives"
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key",
+    "journey:api-key-first-assignment#track",
+]
+
+[[unit]]
+text = "What Each Role Can Do"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Action | VIEWER | ANALYST | DEVELOPER | ADMIN"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "View experiments, flags and results | Yes | Yes | Yes | Yes"
+by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py"]
+
+[[unit]]
+text = "Create and change experiments | — | — | Yes | Yes"
+by = [
+    "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestDeleteExperimentOwnership::test_analyst_cannot_create_an_experiment",
+    "test:backend/tests/unit/core/test_flag_and_experiment_update_roles.py",
+]
+
+[[unit]]
+text = "Create and change feature flags | — | — | Yes | Yes"
+by = [
+    "test:backend/tests/smoke/test_flag_change_routes_guarded.py",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py",
+]
+
+[[unit]]
+text = "Create their own API keys | Yes | Yes | Yes | Yes"
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged"]
+
+[[unit]]
+text = "View audit logs | Own | All | Own | All"
+by = [
+    "test:backend/tests/unit/api/test_audit_logs.py::TestAuditLogsAPI::test_list_audit_logs_success",
+    "test:backend/tests/unit/api/test_audit_logs.py::TestAuditLogsAPI::test_list_audit_logs_permission_restricted",
+]
+
+[[unit]]
+text = "Manage users | — | — | — | Only with the superuser flag"
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_admin_role_without_superuser_cannot_reset_another"]
+
+[[unit]]
+text = "Access to a feature flag is by role, not by who created it: a DEVELOPER can change any flag, and a VIEWER can change none, not even one they created."
+by = [
+    "test:backend/tests/smoke/test_flag_change_routes_guarded.py",
+    "test:backend/tests/integration/api/test_feature_flag_ownership.py",
+]
+
+[[unit]]
+text = "To see a refusal, create a VIEWER account as the administrator:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints the new account's email and \"role\": \"VIEWER\"."
+by = ["docex:docs/api/auth.md#\"role\": \"VIEWER\""]
+
+[[unit]]
+text = "A password needs at least eight characters and at most 72 bytes (UTF-8; most characters outside English take two or more bytes), with an upper-case letter, a lower-case letter and a digit."
+by = [
+    "test:backend/tests/integration/api/test_own_password_change.py::test_a_weak_new_password_is_422",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_a_72_byte_password_is_accepted",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_create_user_over_72_bytes_is_422_not_500",
+]
+
+[[unit]]
+text = "A longer or weaker one answers 422."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in as the viewer, and try to create a flag:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The API answers 403 Forbidden with {\"detail\":\"You don't have permission to create feature flags\"}."
+by = [
+    "docex:docs/api/auth.md#{\"detail\":\"You don't have permission to create feature flags\"}",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py",
+]
+
+[[unit]]
+text = "Change Your Own Password"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every user changes their own password with POST /api/v1/users/me/password, which asks for the current one."
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_missing_current_password_is_403"]
+
+[[unit]]
+text = "A wrong current password is refused:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It answers 403 with {\"detail\":\"The current password is incorrect.\"}."
+by = [
+    "docex:docs/api/auth.md#{\"detail\":\"The current password is incorrect.\"}",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_wrong_current_password_is_403_not_401",
+]
+
+[[unit]]
+text = "That is 403, not 401: the session is still signed in."
+by = [
+    "docex:docs/api/auth.md#{\"detail\":\"The current password is incorrect.\"}",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_wrong_current_password_is_403_not_401",
+]
+
+[[unit]]
+text = "Wrong current passwords count toward the same limit as failed logins, so after 10 of them within 15 minutes both answer 423."
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_repeated_wrong_current_passwords_lock_the_account"]
+
+[[unit]]
+text = "With the right one, the password changes and the response is an empty 204:"
+by = [
+    "docex:docs/api/auth.md#204",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_correct_current_password_changes_it",
+]
+
+[[unit]]
+text = "It prints 204."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The new password follows the same rules as a new account's."
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_weak_new_password_is_422"]
+
+[[unit]]
+text = "Changing it doesn't sign out other sessions: a token issued before the change keeps working until it expires."
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_token_issued_before_the_change_keeps_working"]
+
+[[unit]]
+text = "To end them straight away, an administrator deactivates the account (\"is_active\": false)."
+by = ["test:backend/tests/integration/api/test_local_auth_path.py::TestLoginFlow::test_deactivated_after_login_gets_400"]
+
+[[unit]]
+text = "Sending your own password to PUT /api/v1/users/{id} or PUT /api/v1/admin/users/{id} is refused with 403, for administrators too."
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_own_password_via_put_is_refused"]
+
+[[unit]]
+text = "Those routes set another account's password: a superuser resets a password there, without knowing the old one."
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_superuser_resets_another_account"]
+
+[[unit]]
+text = "With the modules installed, admins can also create custom roles with fine-grained permissions, and grant temporary permissions to individual users."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py",
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py",
+]
+
+[[unit]]
+text = "These are stored and shown, but no permission check reads them yet; routes check the base role (#891)."
+by = ["untested:T"]
+
+[[unit]]
+text = "See the RBAC API Reference."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Example Authenticated Requests"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Create an Experiment (DEVELOPER or ADMIN)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An experiment needs at least one variant and one metric:"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "docex:docs/api/auth.md#\"name\": \"Checkout Button Green\"",
+]
+
+[[unit]]
+text = "The experiment is created in draft, with a key made from its name, which SDKs use to find it."
+by = [
+    "docex:docs/api/auth.md#\"name\": \"Checkout Button Green\"",
+    "test:backend/tests/unit/services/test_experiment_key_retry.py",
+]
+
+[[unit]]
+text = "Error Responses"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "401 Unauthorized"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Returned when no credentials are sent, or they aren't valid:"
+by = ["docex:docs/api/auth.md#{\"detail\":\"Not authenticated\"}"]
+
+[[unit]]
+text = "It prints {\"detail\":\"Not authenticated\"}."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An expired or malformed bearer token answers {\"detail\":\"Could not validate credentials\"}, a missing API key {\"detail\":\"API key missing\"} and an unknown or deleted one {\"detail\":\"Invalid API Key\"}."
+by = [
+    "test:backend/tests/unit/api/test_deps.py",
+    "test:backend/tests/unit/api/test_local_auth.py::TestGetCurrentUserLocal::test_expired_token_is_401",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py",
+    "test:backend/tests/unit/api/test_dependency_injection.py",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestDelete::test_deleted_key_no_longer_authenticates",
+]
+
+[[unit]]
+text = "403 Forbidden"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Returned when the user is logged in but their role doesn't allow the operation, as in the viewer's attempt above."
+by = ["docex:docs/api/auth.md#{\"detail\":\"You don't have permission to create feature flags\"}"]
+
+[[unit]]
+text = "The detail says what was refused."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Security Notes"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Never commit API keys or access tokens to source control."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rotate API keys regularly: at least every 90 days for production keys."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Use separate API keys for each service or environment."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Access tokens expire; do not store them long-term."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "In production, send all API traffic over HTTPS."
+by = ["exempt:baseline"]

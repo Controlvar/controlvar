@@ -101,11 +101,13 @@ KINDS: Dict[str, Callable[[str], bool]] = {
     "duration": _fullmatch(r"(?:[1-9][0-9]{0,3} h )?[0-9]{1,2} min"),
     "count": _fullmatch(r"[0-9]{1,6}"),
     # A page of the docs nav: README.md and Enhanced_Rules_Engine_Reference.md
-    # are two, so capitals are letters here like any other.
+    # are two, so capitals are letters here like any other. Or a dashboard
+    # component a journey walks (the first-run card, FirstRunChecklist.tsx).
     "guide_path": lambda value: (
         len(value) <= 200
         and re.fullmatch(
-            r"[A-Za-z0-9][A-Za-z0-9_-]*(?:/[A-Za-z0-9][A-Za-z0-9_.-]*)*\.md", value
+            r"[A-Za-z0-9][A-Za-z0-9_-]*(?:/[A-Za-z0-9][A-Za-z0-9_.-]*)*\.(?:md|tsx)",
+            value,
         )
         is not None
     ),

@@ -12,8 +12,9 @@ The RBAC (Role-Based Access Control) module stores three layers of permissions f
 3. **Direct Permission Grants** — Per-user, per-resource grants made without assigning a role. Supports optional expiry timestamps for temporary grants.
 
 !!! warning "Only the base role decides what a user can do"
-    Today every route checks the base role, through `check_permission()` in
-    `backend/app/core/permissions.py`, which does not read custom roles or direct grants.
+    Routes check the base role (through `check_permission()` in
+    `backend/app/core/permissions.py`) or the superuser flag; none reads custom roles or
+    direct grants.
     Custom roles and direct grants are stored, and shown by
     `GET /api/v1/rbac/users/{user_id}/permissions`, but no permission check reads them:
     assigning a custom role or granting a permission changes nothing a user can do.
@@ -379,24 +380,9 @@ Returns the fully resolved permission set for a user, merging base role + custom
 
 **Response 200**
 
-```json
-{
-  "user_id": "user-uuid",
-  "username": "jane.doe",
-  "base_role": "analyst",
-  "custom_roles": ["data-scientist", "export-reader"],
-  "permissions": {
-    "experiment": ["list", "read"],
-    "export": ["list", "read"],
-    "feature_flag": ["list", "read"],
-    "permission": ["read"],
-    "report": ["create", "delete", "list", "read", "update"],
-    "role": ["read"],
-    "user": ["read"]
-  },
-  "is_superuser": false
-}
-```
+The response carries `user_id`, `username`, `base_role`, `custom_roles`, `permissions`
+(each resource with the actions allowed on it) and `is_superuser`. The example below prints
+part of it for the analyst.
 
 Note: actions within each resource are returned sorted alphabetically.
 
@@ -432,7 +418,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 <!-- expect: "export": [ -->
 <!-- expect: "read" -->
 
-It prints `"base_role": "analyst"`, the stored `data-scientist` role, and `export: ["read"]`
+It prints the base role, `"analyst"`, the stored `data-scientist` role, and `export: ["read"]`
 from that role in the set shown. The `analyst` base role holds no export permission, and
 it is still the only thing that decides what the analyst can do.
 

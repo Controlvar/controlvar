@@ -129,8 +129,13 @@ two of the named surfaces (``EXTRACTORS``): ``text``, a file read whole
 the comment block at the top of a file after a ``#!`` line, each line's ``#``
 and the white space around the rest removed (the two ``deploy/compose``
 headers). That is the inventory test's rule for both. The splitter then reads
-the extracted text like a page. A surface with another extractor stays pending
-until its extractor is added here.
+the extracted text like a page. One more surface gives its units directly
+(``UNIT_EXTRACTORS``): ``docs-hub-desc``, the dashboard's docs hub
+(``frontend/src/pages/docs/index.tsx#desc``), where each single- or
+double-quoted ``desc:`` and ``description:`` literal is one unit, its
+backslash escapes resolved and normalised as above. A key whose value is not
+such a literal of at most 500 characters is an error, not a unit dropped. A
+surface with another extractor stays pending until its extractor is added here.
 
 THE GENERATOR (``generate``; a developer tool, its input is private)
 
@@ -546,6 +551,60 @@ def unit_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:HASH_LENGTH]
 
 
+#: The docs hub's extractor (``tests/acceptance/docs/inventory.toml`` names it
+#: and counts its literals; ``test_docs_inventory.py`` reads it the same way).
+HUB = "docs-hub-desc"
+#: A desc: or description: key, whatever its value is.
+_HUB_KEY = re.compile(r"\b(?:desc|description)['\"]?[ \t]{0,8}:")
+#: The same key whose whole value is one single- or double-quoted literal of at
+#: most 500 characters, ending the value. Bounded, and a character of a literal
+#: can match only one of the two alternatives, so it does not backtrack.
+_HUB_LITERAL = re.compile(
+    r"\b(?:desc|description)['\"]?[ \t]{0,8}:\s{0,40}"
+    r"(?:'(?P<single>(?:[^'\\\n]|\\.){0,500})'"
+    r"|\"(?P<double>(?:[^\"\\\n]|\\.){0,500})\")"
+    r"(?=[ \t]{0,8}(?:[,}\])\n]|\Z))"
+)
+_JS_ESCAPE = re.compile(r"\\(.)")
+
+
+def hub_units(text: str) -> List[Unit]:
+    """The docs hub's units: each desc:/description: literal, in file order."""
+    literals: Dict[int, Tuple[str, int]] = {}
+    for match in _HUB_LITERAL.finditer(text):
+        single = match.group("single")
+        raw = single if single is not None else match.group("double")
+        literals[match.start()] = (raw, text.count("\n", 0, match.start()) + 1)
+    for key in _HUB_KEY.finditer(text):
+        if key.start() not in literals:
+            line = text.count("\n", 0, key.start()) + 1
+            raise SplitError(
+                f"line {line}: a {HUB} value that is not one single- or"
+                " double-quoted string of at most 500 characters"
+            )
+    found = []
+    for raw, line in literals.values():
+        unit_text = normalise(_JS_ESCAPE.sub(r"\1", raw))
+        if _WORD.search(unit_text):
+            found.append(Unit(unit_text, line))
+    return found
+
+
+#: Extractors that give the units themselves, not text for the splitter.
+UNIT_EXTRACTORS: Dict[str, Any] = {HUB: hub_units}
+
+
+def has_extractor(extractor: Optional[str]) -> bool:
+    return extractor in EXTRACTORS or extractor in UNIT_EXTRACTORS
+
+
+def document_units(document: str, extractor: Optional[str], text: str) -> List[Unit]:
+    """The units of *document*, whose file's text is *text*, through its extractor."""
+    if extractor in UNIT_EXTRACTORS:
+        return UNIT_EXTRACTORS[extractor](text)
+    return units(extracted(document, extractor, text))
+
+
 # ---------------------------------------------------------------------------
 # The vocabulary
 # ---------------------------------------------------------------------------
@@ -646,6 +705,12 @@ MECHANISMS: Dict[str, Mechanism] = {
                 r"^[^|]{1,300} \| (?:Dashboard|API only|Where you do it) \| [^|]{1,300}$",
             ),
         ),
+    ),
+    # The dashboard's docs hub: each description against the page it links to.
+    "docs-hub": Mechanism(
+        "backend/tests/unit/docs/test_docs_hub_claims.py"
+        "::test_each_description_is_true_of_its_page",
+        quotes=True,
     ),
     "integrations-claims": Mechanism(
         "backend/tests/unit/docs/test_integrations_docs_claims.py"
@@ -814,28 +879,12 @@ CLAIMS_PENDING: Tuple[str, ...] = (
     "demo/streampulse/simulator/README.md",
     "docs/Enhanced_Rules_Engine_Reference.md",
     "docs/README.md",
-    "docs/api/README.md",
-    "docs/api/alerting.md",
-    "docs/api/api-docs-guide.md",
-    "docs/api/audit-logging.md",
-    "docs/api/auth.md",
-    "docs/api/compliance.md",
-    "docs/api/data-export.md",
-    "docs/api/dimensional-analysis.md",
     "docs/api/endpoints.md",
-    "docs/api/integrations.md",
-    "docs/api/rbac.md",
-    "docs/api/stability.md",
-    "docs/api/warehouse-analytics.md",
     "docs/architecture/README.md",
     "docs/architecture/models.md",
     "docs/architecture/overview.md",
     "docs/architecture/technical-guide.md",
-    "docs/auth/README.md",
-    "docs/auth/auth-user-guide.md",
     "docs/auth/cognito-auth-testing.md",
-    "docs/auth/flow.md",
-    "docs/auth/sso.md",
     "docs/cognito_integration.md",
     "docs/deployment/README.md",
     "docs/deployment/deployment-guide.md",
@@ -864,27 +913,17 @@ CLAIMS_PENDING: Tuple[str, ...] = (
     "docs/getting-started/quick-start.md",
     "docs/getting-started/vscode-settings.md",
     "docs/guides/segments.md",
-    "docs/hipaa/overview.md",
     "docs/infrastructure/aws-iam-setup.md",
     "docs/infrastructure/cloudwatch-setup.md",
     "docs/infrastructure/dynamodb-readme.md",
     "docs/infrastructure/network-security-readme.md",
     "docs/infrastructure/vpc-stack-implementation.md",
-    "docs/integrations/aws.md",
-    "docs/integrations/github.md",
-    "docs/integrations/salesforce.md",
     "docs/logging_standards.md",
     "docs/performance/load-testing.md",
-    "docs/rbac/README.md",
     "docs/sdk/local-evaluation.md",
-    "docs/security/README.md",
-    "docs/security/api-keys.md",
-    "docs/security/hardening-changes.md",
-    "docs/security/incident-response.md",
     "docs/self-hosting/cdk.md",
     "docs/self-hosting/migrations.md",
     "docs/self-hosting/monitoring.md",
-    "frontend/src/pages/docs/index.tsx#desc",
     "infrastructure/cdk/README.md",
 )
 
@@ -1631,16 +1670,16 @@ def _registry_problems(
         problems.append(
             f"{rel}: document = {document.path!r}, the path it is the registry of"
         )
-    if document.extractor not in EXTRACTORS:
+    if not has_extractor(document.extractor):
         return problems + [
             f"{rel}: scripts/doc_claims.py has no {document.extractor!r} extractor yet;"
             f" {document.path} stays in CLAIMS_PENDING until it has"
         ], []
     try:
-        text = ctx.document_text(document)
+        text = ctx.text(document.path.partition("#")[0])
         if text is None:
             return problems + [f"{rel}: {document.path} does not exist"], []
-        on_page = units(text)
+        on_page = document_units(document.path, document.extractor, text)
     except SplitError as error:
         return problems + [f"{document.path}: {error}"], []
 
@@ -2554,7 +2593,7 @@ def sync_lines(root: pathlib.Path, document: str) -> Tuple[List[str], int]:
     rel = registry_path(document)
     try:
         data = tomllib.loads((root / rel).read_text(encoding="utf-8"))
-        page = units(read_document(root, document))
+        page = read_units(root, document)
     except (OSError, tomllib.TOMLDecodeError, SplitError) as error:
         return [f"{document}: {error}"], 2
     entries = {
@@ -2819,9 +2858,27 @@ def read_document(root: pathlib.Path, document: str) -> str:
     return extracted(document, extractor, raw)
 
 
+def read_units(root: pathlib.Path, document: str) -> List[Unit]:
+    """The units of *document*, a page or a surface, through the extractor the
+    inventory names for it (Markdown when it names none)."""
+    try:
+        documents, _ = inventory_documents(root)
+    except (OSError, tomllib.TOMLDecodeError):
+        documents = {}
+    found = documents.get(document)
+    extractor = found.extractor if found is not None else MARKDOWN
+    raw = (root / document.partition("#")[0]).read_text(encoding="utf-8")
+    return document_units(document, extractor, raw)
+
+
 def skeleton(document: str, text: str) -> str:
     """A registry for *document* with every unit and no targets, to fill in."""
-    counted = collections.Counter(u.text for u in units(text))
+    return skeleton_of(document, units(text))
+
+
+def skeleton_of(document: str, page: Sequence[Unit]) -> str:
+    """``skeleton`` for units already read."""
+    counted = collections.Counter(u.text for u in page)
     parts = [f"document = {json.dumps(document)}\n"]
     for unit_text, times in counted.items():
         entry = (
@@ -2881,12 +2938,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.all:
             documents, _ = inventory_documents(ROOT)
             targets = sorted(
-                p for p, d in documents.items() if d.extractor in EXTRACTORS
+                p for p, d in documents.items() if has_extractor(d.extractor)
             )
         for document in targets:
             try:
                 sys.stdout.write(
-                    skeleton(document, read_document(ROOT, document)) + "\n"
+                    skeleton_of(document, read_units(ROOT, document)) + "\n"
                 )
             except (OSError, SplitError) as error:
                 print(f"{document}: {error}", file=sys.stderr)

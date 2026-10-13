@@ -1,0 +1,359 @@
+# What verifies each unit of docs/api/alerting.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/alerting.md"
+
+[[unit]]
+text = "Slack & Email Alerting"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform sends a Slack message for each event in the table below."
+by = [
+    "test:backend/tests/unit/schedulers/test_scheduler_notifications.py::TestSafetySchedulerNotifications::test_safety_rollback_calls_notify_safety_rollback",
+    "test:backend/tests/unit/schedulers/test_scheduler_notifications.py::TestRolloutSchedulerNotifications::test_rollout_advance_calls_notify_rollout_advanced",
+    "test:backend/tests/unit/services/test_notification_service_v2.py::TestNotifyRolloutAdvanced::test_calls_slack",
+]
+
+[[unit]]
+text = "Email is sent only by the test route described on this page."
+by = ["untested:T"]
+
+[[unit]]
+text = "Notification failure is always non-fatal — if a Slack message or email cannot be sent, the platform operation that triggered it continues normally and the failure is logged."
+by = [
+    "test:backend/tests/unit/services/test_notification_service_v2.py::TestNotifyExperimentStarted::test_never_raises",
+    "test:backend/tests/unit/services/test_notification_service_v2.py::TestNotifySafetyRollback::test_never_raises",
+    "test:backend/tests/unit/services/test_notification_service_v2.py::TestNotifyRolloutAdvanced::test_never_raises",
+    "test:backend/tests/unit/schedulers/test_scheduler_notifications.py",
+]
+
+[[unit]]
+text = "Supported Channels"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Channel | Provider | Configuration"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Slack | Slack Block Kit via slack_sdk | SLACK_BOT_TOKEN, SLACK_DEFAULT_CHANNEL"
+by = ["test:backend/tests/unit/services/test_slack_notifier.py"]
+
+[[unit]]
+text = "Email | SendGrid (preferred) or SMTP fallback | SENDGRID_API_KEY or SMTP settings"
+by = [
+    "test:backend/tests/unit/services/test_email_notifier.py::TestSendEmailTriesSendgridFirst::test_send_email_tries_sendgrid_first",
+    "test:backend/tests/unit/services/test_email_notifier.py::TestSendEmailFallsBackToSmtp::test_send_email_falls_back_to_smtp",
+]
+
+[[unit]]
+text = "Event Types"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Event | Slack | Email | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Safety rollback | ✅ | ❌ | Feature flag auto-rolled back due to error rate or latency threshold"
+by = [
+    "test:backend/tests/unit/services/test_notification_service_v2.py::TestNotifySafetyRollback::test_calls_slack_alert",
+    "test:backend/tests/unit/schedulers/test_scheduler_notifications.py::TestSafetySchedulerNotifications::test_safety_rollback_calls_notify_safety_rollback",
+]
+
+[[unit]]
+text = "Scheduled experiment change | ✅ | ❌ | The scheduler started, resumed or completed an experiment; the start, pause and complete routes send nothing"
+by = ["untested:T"]
+
+[[unit]]
+text = "Rollout stage advance | ✅ | ❌ | Rollout schedule progressed to next stage"
+by = [
+    "test:backend/tests/unit/services/test_notification_service_v2.py::TestNotifyRolloutAdvanced::test_calls_slack",
+    "test:backend/tests/unit/schedulers/test_scheduler_notifications.py",
+]
+
+[[unit]]
+text = "Configuration"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "These are settings of the API process: put them in its environment (on the Quick Start stack, the api service's environment: in docker-compose.yml), then restart it."
+by = ["untested:T"]
+
+[[unit]]
+text = "Both channels are off until you turn them on."
+by = [
+    "test:backend/tests/unit/services/test_slack_notifier.py::TestDisabledGuards::test_send_when_disabled_returns_false",
+    "test:backend/tests/unit/services/test_email_notifier.py::TestSendWhenDisabled::test_send_when_disabled_returns_false",
+]
+
+[[unit]]
+text = "Setting | What it does"
+by = ["exempt:label"]
+
+[[unit]]
+text = "SLACK_ENABLED | true turns Slack messages on; the default is false."
+by = ["test:backend/tests/unit/services/test_slack_notifier.py::TestDisabledGuards::test_send_when_disabled_returns_false"]
+
+[[unit]]
+text = "SLACK_BOT_TOKEN | The bot token messages are sent with."
+by = ["test:backend/tests/unit/services/test_slack_notifier.py"]
+
+[[unit]]
+text = "SLACK_DEFAULT_CHANNEL | The channel every event's message goes to (default #platform-alerts)."
+by = ["test:backend/tests/unit/services/test_slack_notifier.py::TestSendMessage::test_send_message_uses_default_channel"]
+
+[[unit]]
+text = "EMAIL_ENABLED | true turns email on; the default is false."
+by = ["test:backend/tests/unit/services/test_email_notifier.py::TestSendWhenDisabled::test_send_when_disabled_returns_false"]
+
+[[unit]]
+text = "SENDGRID_API_KEY | Email goes through SendGrid with this key; when it is empty, through SMTP."
+by = [
+    "test:backend/tests/unit/services/test_email_notifier.py::TestSendEmailTriesSendgridFirst::test_send_email_tries_sendgrid_first",
+    "test:backend/tests/unit/services/test_email_notifier.py::TestSendEmailFallsBackToSmtp::test_send_email_falls_back_to_smtp",
+]
+
+[[unit]]
+text = "SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD | The SMTP server (port 587 by default)."
+by = ["untested:T"]
+
+[[unit]]
+text = "EMAIL_FROM_ADDRESS, EMAIL_FROM_NAME | The sender of every email."
+by = ["untested:T"]
+
+[[unit]]
+text = "NOTIFICATION_ADMIN_EMAILS | A JSON array of addresses. No notification is sent to them."
+by = ["untested:T"]
+
+[[unit]]
+text = "NOTIFICATION_ADMIN_EMAILS is a JSON array."
+by = ["untested:T"]
+
+[[unit]]
+text = "A plain comma-separated list stops the API from starting, with error parsing value for field \"NOTIFICATION_ADMIN_EMAILS\"."
+by = ["untested:T"]
+
+[[unit]]
+text = "Notification Preferences API"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each user can store which events they want to be notified about, a Slack channel of their own and another email address."
+by = [
+    "test:backend/tests/unit/api/test_notifications_api.py::test_update_preferences_updates_existing",
+    "docex:docs/api/alerting.md#\"notify_rollout_advanced\": true",
+]
+
+[[unit]]
+text = "The preferences are stored and returned; sending does not read them, so every event's Slack message goes to SLACK_DEFAULT_CHANNEL."
+by = ["untested:T"]
+
+[[unit]]
+text = "Only the test notification below can name another channel."
+by = ["test:backend/tests/unit/api/test_notifications_api.py::test_test_notification_slack_channel"]
+
+[[unit]]
+text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in first:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/notifications/preferences"
+by = ["docex:docs/api/alerting.md#\"notify_experiment_started\": true"]
+
+[[unit]]
+text = "Returns the current user's preferences, creating the defaults the first time:"
+by = ["docex:docs/api/alerting.md#\"notify_experiment_started\": true"]
+
+[[unit]]
+text = "It prints the defaults: notified when an experiment starts, not when a rollout advances, and no channel of your own."
+by = ["docex:docs/api/alerting.md#\"notify_experiment_started\": true"]
+
+[[unit]]
+text = "The full response:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "PUT /api/v1/notifications/preferences"
+by = ["docex:docs/api/alerting.md#\"notify_rollout_advanced\": true"]
+
+[[unit]]
+text = "Changes the fields you send and leaves the others as they are."
+by = ["test:backend/tests/unit/api/test_notifications_api.py::test_update_preferences_partial_update_preserves_others"]
+
+[[unit]]
+text = "This turns on rollout notifications and sends your Slack alerts to #my-team-alerts:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints the two changed values."
+by = ["docex:docs/api/alerting.md#\"notify_rollout_advanced\": true"]
+
+[[unit]]
+text = "The fields are notify_experiment_started, notify_experiment_completed, notify_safety_rollback, notify_rollout_advanced, slack_channel and email_override; any other field is ignored."
+by = ["untested:T"]
+
+[[unit]]
+text = "GET /api/v1/notifications/admin/preferences"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Lists every user's preferences."
+by = [
+    "test:backend/tests/unit/api/test_notifications_api.py::test_list_all_preferences_admin_only",
+    "test:backend/tests/unit/api/test_notifications_api.py::test_list_all_preferences_requires_admin_role",
+    "test:backend/tests/unit/api/test_notifications_api.py::test_list_all_preferences_non_admin_returns_403",
+]
+
+[[unit]]
+text = "Requires the ADMIN role."
+by = [
+    "test:backend/tests/unit/api/test_notifications_api.py::test_list_all_preferences_admin_only",
+    "test:backend/tests/unit/api/test_notifications_api.py::test_list_all_preferences_requires_admin_role",
+    "test:backend/tests/unit/api/test_notifications_api.py::test_list_all_preferences_non_admin_returns_403",
+    "test:backend/tests/unit/api/test_notifications_api.py::test_delivery_log_requires_admin",
+    "test:backend/tests/unit/api/test_notifications_api.py::test_delivery_log_non_admin_returns_403",
+]
+count = 2
+
+[[unit]]
+text = "GET /api/v1/notifications/delivery-log"
+by = ["docex:docs/api/alerting.md#\"total\": 0"]
+
+[[unit]]
+text = "Lists the notification delivery log, most recent first."
+by = ["test:backend/tests/unit/api/test_notifications_api.py::test_delivery_log_returns_list_response"]
+
+[[unit]]
+text = "No notification is written to it, so it is empty."
+by = ["docex:docs/api/alerting.md#\"total\": 0"]
+
+[[unit]]
+text = "Query Parameters"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Parameter | Type | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "page | int | Page number (default: 1)"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/api/test_notifications_api.py::test_delivery_log_pagination",
+]
+
+[[unit]]
+text = "limit | int | Results per page (default: 20, max: 100)"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "event_type | string | Filter by event type"
+by = ["test:backend/tests/unit/api/test_notifications_api.py::test_delivery_log_filter_by_event_type"]
+
+[[unit]]
+text = "status | string | Filter by delivery status: sent, failed, skipped"
+by = ["test:backend/tests/unit/api/test_notifications_api.py::test_delivery_log_filter_by_status"]
+
+[[unit]]
+text = "It prints \"total\": 0."
+by = ["docex:docs/api/alerting.md#\"total\": 0"]
+
+[[unit]]
+text = "POST /api/v1/notifications/test"
+by = ["docex:docs/api/alerting.md#false"]
+
+[[unit]]
+text = "Sends a test notification, to check a channel's settings."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Requires the DEVELOPER or ADMIN role."
+by = [
+    "test:backend/tests/unit/api/test_notifications_api.py::test_test_notification_developer_can_send",
+    "test:backend/tests/unit/api/test_notifications_api.py::test_test_notification_viewer_returns_403",
+    "test:backend/tests/unit/api/test_notifications_api.py::test_test_notification_analyst_returns_403",
+]
+
+[[unit]]
+text = "channel is slack, email or webhook; recipient is optional (a Slack channel or an email address) and message defaults to \"Test notification from Experimently\":"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/api/test_notifications_api.py::test_test_notification_webhook_channel",
+    "test:backend/tests/unit/api/test_notifications_api.py::test_test_notification_default_channel_is_slack",
+]
+
+[[unit]]
+text = "On the Quick Start stack it prints false, because Slack is not configured there."
+by = ["docex:docs/api/alerting.md#false"]
+
+[[unit]]
+text = "Permissions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Action | Minimum Role"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "View own preferences | Any authenticated user"
+by = ["untested:T"]
+
+[[unit]]
+text = "Update own preferences | Any authenticated user"
+by = ["untested:T"]
+
+[[unit]]
+text = "Send test notification | DEVELOPER"
+by = [
+    "test:backend/tests/unit/api/test_notifications_api.py::test_test_notification_developer_can_send",
+    "test:backend/tests/unit/api/test_notifications_api.py::test_test_notification_analyst_returns_403",
+]
+
+[[unit]]
+text = "View all preferences / delivery log | ADMIN"
+by = [
+    "test:backend/tests/unit/api/test_notifications_api.py::test_list_all_preferences_requires_admin_role",
+    "test:backend/tests/unit/api/test_notifications_api.py::test_delivery_log_non_admin_returns_403",
+]
+
+[[unit]]
+text = "Troubleshooting"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Slack messages not arriving"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Confirm that SLACK_ENABLED is true in the API's environment"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Ensure the bot is invited to SLACK_DEFAULT_CHANNEL (/invite @your-bot)"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Emails not arriving"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Confirm that EMAIL_ENABLED is true"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Check the spam folder, and add the EMAIL_FROM_ADDRESS domain to the allowlist"
+by = ["exempt:advice"]

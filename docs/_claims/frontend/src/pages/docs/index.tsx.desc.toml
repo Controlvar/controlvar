@@ -1,0 +1,321 @@
+document = "frontend/src/pages/docs/index.tsx#desc"
+
+[[unit]]
+text = "Run the stack and create your first experiment."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Run the stack and create your first experiment"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Feature flags, experiments, variants, and metrics"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "How the components fit together, and how data flows between them"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Common questions answered"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "What the core profile includes, what each module adds, and how to run the full profile"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Create flags, target them with rules, and roll them out in stages."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Set up your first flag"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "The operators a targeting rule can use, with examples"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Staged rollout schedules"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Auto-rollback on error spikes"
+by = ["untested:T"]
+
+[[unit]]
+text = "Create and start experiments, read their results, and the statistics behind them."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "End-to-end experiment lifecycle"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Which capabilities have a dashboard screen, and which work through the API only for now"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Sequential testing with mSPRT"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Variance reduction from each user's own pre-experiment events (API only)"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Thompson Sampling, UCB1, Epsilon-Greedy (create a bandit through the API)"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Full profile: store split URL experiments and preview the URL a user id hashes to. The edge router does not split traffic yet."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Keep users out of conflicting experiments, and a share of new users out of every experiment"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Live experiment results over WebSocket: a snapshot on connect, then a fresh one after 30 seconds (by default) with no message from the client."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Compare model variants on a task; the winner has the best business metric, or the best LLM-judge score without one."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Supported providers, task types, variant assignment, judge scoring, cost estimation and the analysis"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Compare GPT-4o with Claude 3.5 Sonnet (steps 3–5 need provider API keys)"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Client libraries for web, mobile and server. The JavaScript SDK is on npm and the Python SDK is on PyPI."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Browser and Node.js"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "A synchronous Python client with no dependencies"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Spring Boot 3 auto-configuration starter; thread-safe client with a TTL cache"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "A context provider, hooks and a higher-order component"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "A Go client for services: standard library only, goroutine-safe, context-aware."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Native Swift SDK for iOS 14+ and macOS 11+, with an async/await API."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Native Kotlin SDK for Android (minSdk 21). Coroutines, OkHttp, Compose examples."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Dart SDK for Flutter (iOS, Android, web and desktop). Results are decided by the server, with an offline fallback."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "useFlag and useExperiment hooks, Provider, AsyncStorage offline support."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Describes the API's tools for AI assistants."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "OpenFeature (a CNCF project) providers"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "For Cloudflare Workers, Vercel Edge and Deno Deploy. Zero runtime dependencies; results cached in memory or KV."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Ruby gem with zero runtime dependencies, a thread-safe TTL cache and Net::HTTP."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "For PHP 8.1+, installed with Composer; it needs only ext-curl and ext-json."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Targets netstandard2.1 and net6.0; System.Text.Json and HttpClient, no other dependencies."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "For Elixir and Phoenix: OTP's :httpc and Jason, with a GenServer-backed ETS cache."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "How to call the REST API: authentication, and the endpoints with example requests."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "API keys for SDKs, bearer tokens for people"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "List experiments, get one, and get its results"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "List flags, a user's flags, and archived flags"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Full profile: signed audit events and evidence-report export"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Jira, Salesforce, GitHub webhooks"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Endpoint reference, with example requests and error responses"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "The AWS services Experimently runs on, the webhooks it receives, and the alerts it sends."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "How the platform uses ECS Fargate, Aurora, ElastiCache and DynamoDB"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Inbound webhooks, signed or with a shared secret"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Inbound webhooks from a Flow or Apex callout"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Inbound webhooks, each checked by its HMAC-SHA256 signature"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Slack messages for scheduled experiment changes and rollout stage advances; email only from the test route"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Audit records, compliance reports, roles, API keys and single sign-on."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "An append-only record of changes to experiments and flags; signing and export in the full profile"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Full profile: SOC 2 and ISO 27001 reports and an export of the audit events"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Who changed what through the API; no API edits or deletes an entry"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Admin, Developer, Analyst and Viewer decide what a user can do; custom roles (full profile) are stored but not applied yet"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Create, expire and delete keys; the sdk:ruleset scope for local evaluation"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Full profile: sign in through Okta, Google or GitHub (OIDC). SAML 2.0 sign-in is not available yet; use OIDC."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Full profile: PHI encryption (Fernet), a 6-year retention marker on PHI audit records, BAA records and the data-residency configuration."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Run Experimently yourself: Docker Compose on one machine, Helm on Kubernetes, or a CDK app that deploys to AWS."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "CDK app for ECS Fargate, Aurora and ElastiCache"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "The published images on one Docker host: deploy/compose/compose.yml, and a README that says how to run it and lists its settings"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "The Helm chart in charts/experimently: a one-time secret step, then one install command"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Configuration reference"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Alembic migration guide"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "CloudWatch dashboards, Prometheus metrics"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Walkthroughs and method guides."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "End-to-end experiment walkthrough"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Beta-Binomial posteriors and stopping rules"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Guided setup in the dashboard, and the wizard API"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Beta: find experiments that share users, and whether their effects interact"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "How power analysis, post-stratification and FDR correction work."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Pre-experiment planning: MDE, power and runtime estimation"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "The method, explained; not available through the API yet"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Benjamini-Hochberg false discovery rate correction for multiple metrics"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Group members into teams, projects or product areas with workspace roles. Workspaces do not limit access to experiments or flags; that is by platform role."
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "What workspaces do and do not do, workspace roles and invitations"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
+text = "Create a workspace, add your team to it, and connect an SDK"
+by = ["mechanism:docs-hub"]
