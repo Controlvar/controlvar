@@ -386,7 +386,8 @@ lists every route with its own limit. Over a limit the API answers `429` with a
 The routes that take a targeting `context` hold it to two limits before it is matched against
 any rule: `GET` and `POST /api/v1/feature-flags/evaluate/{flag_key}`,
 `GET /api/v1/feature-flags/user/{user_id}`, `POST /api/v1/tracking/assign`, and each user's
-`context` in `POST /api/v1/tracking/assign/batch`.
+`context` in `POST /api/v1/tracking/assign/batch`. `POST /api/v1/segments/{segment_id}/evaluate`
+and `POST /api/v1/segments/bulk-evaluate` hold their `user_context` to the same limits.
 
 | Limit | At most | `detail` of the 422 |
 |---|---|---|
@@ -1874,6 +1875,11 @@ a feature flag evaluates the same rules: `{"user": {"country": "US"}}` and
 condition, in any group, that the context satisfies on its own, as
 `"<attribute> <operator> <value>"`; it is empty when the user is not a member. A `regex`
 condition that cannot be evaluated makes the user not a member.
+
+Evaluate and bulk-evaluate hold `user_context` to the
+[Targeting Context Limits](#targeting-context-limits): at most 8,192 bytes and 10 levels deep.
+Over either, they answer 422 with the same `detail` as the flag routes, and no segment is
+evaluated. Bulk-evaluate checks its one `user_context` once, whatever the number of segments.
 
 `POST /api/v1/segments/{id}/preview` evaluates the rules in its body against the stored
 contexts of up to `sample_size` assignments (10 to 10,000, default 1,000). Only assignments

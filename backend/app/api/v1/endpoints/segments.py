@@ -30,6 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.core.context_limits import check_context
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.core.segment_preview_limits import preview_ruleset_violations
 from backend.app.models.audit_log import ActionType, EntityType
@@ -209,6 +210,9 @@ def bulk_evaluate_segments(
 ) -> BulkSegmentMembershipResponse:
     """Check user membership across multiple segments at once."""
     _require_permission(current_user, Action.READ)
+    # The limits of backend.app.core.context_limits, once for the one
+    # user_context, before any segment is read or evaluated.
+    check_context(request.user_context)
     return AudienceService.bulk_evaluate_membership(db, request)
 
 
@@ -387,6 +391,9 @@ def evaluate_segment_membership(
 ) -> SegmentMembershipResponse:
     """Evaluate if a user context matches the segment's rules."""
     _require_permission(current_user, Action.READ)
+    # The limits of backend.app.core.context_limits, before the segment is
+    # read or evaluated.
+    check_context(request.user_context)
     try:
         return AudienceService.evaluate_membership(db, segment_id, request.user_context)
     except SegmentRulesNotValid:
