@@ -1,0 +1,135 @@
+# What verifies each unit of docs/getting-started/limitations.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/getting-started/limitations.md"
+
+[[unit]]
+text = "Limitations"
+by = ["exempt:label"]
+
+[[unit]]
+text = "What Experimently does not do, and what happens instead."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Where a public issue tracks a change, the row links it."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Feature flags"
+by = ["exempt:label"]
+
+[[unit]]
+text = "What you might expect | What happens instead"
+by = ["exempt:label"]
+count = 7
+
+[[unit]]
+text = "A flag that serves one of several values | A flag is on or off for each user. Evaluation answers \"config\": null for every flag, a request that sends a flag a variants field is refused with 422, and default_value accepts only false. To serve one of several experiences, run a multivariate experiment: each variant carries a configuration, which POST /api/v1/tracking/assign returns."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_request_with_variants_is_refused",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_serves_false_when_off_and_nothing_else",
+    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_every_flag_evaluates_with_a_null_config",
+]
+
+[[unit]]
+text = "Experiments and results"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A revenue, count or duration metric analysed by its values | Every metric is analysed as a conversion: whether each user sent the metric's event. A metric's type is stored, and its events' values are not analysed."
+by = [
+    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_a_revenue_metric_is_analysed_as_a_conversion",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_results_use_one_proportion_test_for_every_metric",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_every_metric_is_planned_as_a_conversion",
+]
+
+[[unit]]
+text = "A traffic allocation for the experiment as a whole | There is none. Variant weights must add up to exactly 100%, or the request is refused with 422. Users are left out only by targeting rules, a mutual exclusion group or the global holdout."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_experiment_has_no_traffic_allocation_of_its_own",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_variant_weights_under_100_are_refused_with_the_documented_message",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_native_targeting_rules_gate_new_users",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_mutual_exclusion_assigns_each_user_to_exactly_one_experiment",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+]
+
+[[unit]]
+text = "Deployments"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Staging and production inside one deployment | One deployment is one environment: flags, experiments and API keys carry no environment field. Run staging and production as separate deployments, each with its own API keys."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment"]
+
+[[unit]]
+text = "Events streamed to Kinesis, OpenSearch or DynamoDB | The API stores events in PostgreSQL and computes results from there. The full-profile CDK creates a Kinesis stream and an OpenSearch domain, and the API writes to neither."
+by = [
+    "test:backend/tests/integration/services/test_conversion_event_matching.py::TestResultsEngineCountsSdkEvents::test_get_experiment_results_uses_event_name",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_api_writes_no_kinesis_stream_firehose_or_opensearch_domain",
+    "test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_full_checkout_builds_the_module_stacks",
+]
+
+[[unit]]
+text = "Sign-in and access"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Multi-factor sign-in | Not available: a local account signs in with its email and password alone."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_local_sign_in_takes_an_email_and_a_password_alone"]
+
+[[unit]]
+text = "SAML sign-in | Not available. OIDC sign-in is, with the sso module (full profile)."
+by = [
+    "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_saml_acs_token_is_still_not_a_session",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestNonceInTheAuthorizationURL::test_an_oidc_provider_gets_the_nonce",
+]
+
+[[unit]]
+text = "Custom roles and direct permission grants that change access | The rbac module records them and shows them, but no permission check reads them: each user's built-in role decides (#891)."
+by = [
+    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_creates_role_with_name",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+]
+
+[[unit]]
+text = "Data"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A retention policy, or a tool that erases one person's data | Neither exists. Nothing deletes events by age, and no route deletes the events of one of your app's users. Two settings purge the platform's own history: ANALYSIS_HISTORY_RETENTION_DAYS (default 90) and SCHEDULER_HISTORY_RETENTION_DAYS (default 30)."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_no_route_sets_retention_or_erases_a_users_data",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_nothing_calls_the_event_purge",
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_two_settings_purge_the_platforms_own_history",
+]
+
+[[unit]]
+text = "A targeting context of any size | A context larger than 8,192 bytes, or nested more than 10 levels deep, is refused with 422 (Targeting Context Limits)."
+by = [
+    "test:backend/tests/unit/core/test_context_limits.py::test_the_limits_are_8192_bytes_and_10_levels",
+    "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_context_over_the_limits_answers_422_and_nothing_is_recorded",
+]
+
+[[unit]]
+text = "Split URL testing"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Traffic split between URLs at the edge | The split_url module's edge router has no configuration source in this release, so it splits no traffic (#393)."
+by = [
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerPassThrough::test_no_config_header_passes_through",
+    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration",
+]
+
+[[unit]]
+text = "SDKs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every SDK on a package registry | The JavaScript SDK is on npm and the Python SDK is on PyPI. The Go SDK installs by module path, and every other SDK installs from a clone of this repository."
+by = [
+    "journey:sdk-javascript#quick-start-user-on",
+    "journey:sdk-python#quick-start-user-on",
+    "journey:sdk-go#quick-start-user-on",
+]

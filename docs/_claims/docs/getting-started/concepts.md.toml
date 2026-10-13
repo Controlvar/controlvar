@@ -1,0 +1,682 @@
+# What verifies each unit of docs/getting-started/concepts.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/getting-started/concepts.md"
+
+[[unit]]
+text = "Core Concepts"
+by = ["exempt:label"]
+
+[[unit]]
+text = "This guide explains the fundamental concepts you need to understand before working with the platform."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Whether you are a product manager designing experiments, an engineer integrating feature flags, or an analyst reading results, this reference will clarify what each term means and how the pieces fit together."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Feature Flags"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A feature flag (also called a feature toggle or feature switch) is a configuration key that controls whether a piece of functionality is visible or active for a given user."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Instead of deploying code to enable or disable a feature, you change a flag value at runtime — no deployment required."
+by = [
+    "test:backend/tests/smoke/test_no_flag_cache.py::test_no_source_names_a_flag_cache_key",
+    "docex:docs/getting-started/quick-start.md#\"enabled\": true",
+]
+
+[[unit]]
+text = "On/Off Flags"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The simplest type."
+by = [
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+]
+
+[[unit]]
+text = "A boolean value controls whether the feature is shown at all."
+by = [
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+]
+
+[[unit]]
+text = "Common uses: gradual rollouts, kill switches, beta programs, maintenance mode."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Several Experiences"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A flag is on or off for each user: it carries no variants or values."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_request_with_variants_is_refused",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_serves_false_when_off_and_nothing_else",
+    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_every_flag_evaluates_with_a_null_config",
+]
+
+[[unit]]
+text = "To serve one of several experiences, run a multivariate experiment instead."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Each of its variants carries a configuration, which POST /api/v1/tracking/assign returns."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "docex:docs/getting-started/quick-start.md#\"assigned\": true",
+]
+
+[[unit]]
+text = "Why Use Feature Flags"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Deploy code that is hidden behind a flag before it is ready to ship"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Roll out to a small percentage of users first, then expand gradually"
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_rollout_percentage_is_the_share_of_users_turned_on",
+    "journey:feature-flag-rollout#advance-canary",
+    "journey:feature-flag-rollout#at-ten",
+]
+
+[[unit]]
+text = "Instantly disable a problematic feature without a code deploy"
+by = [
+    "test:backend/tests/smoke/test_no_flag_cache.py::test_no_source_names_a_flag_cache_key",
+    "test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestNativeRulesAndReasons::test_inactive_reason",
+]
+
+[[unit]]
+text = "Enable features for internal testers before public launch"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Target features to specific segments (premium users, US users, mobile users)"
+by = [
+    "test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestDashboardRules::test_streampulse_ai_search_rule",
+    "test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestDashboardRules::test_region_in_list",
+]
+
+[[unit]]
+text = "Experiments / A/B Tests"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An experiment (also called an A/B test or controlled experiment) is the process of splitting users into groups, exposing each group to a different version of a feature, and measuring which version performs better on a defined metric."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Hypothesis"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every experiment starts with a hypothesis: a precise, falsifiable statement of what you expect to happen and why."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Good hypothesis: \"Changing the checkout CTA button from blue to green will increase checkout completion rate by 5% because green creates stronger visual contrast against the white background.\""
+by = ["exempt:example"]
+
+[[unit]]
+text = "A good hypothesis specifies the change, the expected direction, the magnitude, and the reason."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Control vs Treatment"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Control: the existing experience, unchanged."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Serves as the baseline."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Treatment (or Variant): the new experience you are testing."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "An experiment can have one control and one or more treatments."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_an_experiment_may_have_one_control_and_several_treatments"]
+
+[[unit]]
+text = "With two variants (control + one treatment) it is called an A/B test."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "With more than two variants it is called an A/B/n test or multivariate test."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Statistical Significance"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Statistical significance tells you how confident you are that the difference between control and treatment is real — not just random noise."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "It is expressed as a p-value."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "p-value < 0.05: 95% confidence the difference is real."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Standard threshold for most experiments."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "p-value < 0.01: 99% confidence."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Use for high-stakes decisions."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "A result is statistically significant when p < your chosen alpha threshold (usually 0.05)."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Important: statistical significance does not tell you the effect is large or meaningful."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Always check effect size alongside p-value."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Variants"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A variant is one of the possible experiences in an experiment."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "A running experiment has at least two variants:"
+by = ["test:backend/tests/integration/api/test_front_door_behaviour.py::test_an_experiment_with_one_variant_cannot_start"]
+
+[[unit]]
+text = "Control variant: the baseline experience (usually what users see today)"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Treatment variant(s): the new experience(s) you are testing"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Each variant is assigned a traffic weight — the fraction of eligible users who will be shown that variant."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_weights_divide_the_100_buckets_between_the_variants_in_order",
+    "test:backend/tests/integration/services/test_assignment_service_coverage.py::TestHashUserToVariant::test_distribution_roughly_matches_traffic_allocation",
+]
+
+[[unit]]
+text = "The weights must add up to exactly 100%; anything else is refused with 422 (\"Traffic allocations must sum to 100% (currently 90%)\")."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_variant_weights_under_100_are_refused_with_the_documented_message",
+    "test:backend/tests/unit/api/test_request_validation.py::TestExperimentValidation::test_variant_traffic_allocation_sum",
+]
+
+[[unit]]
+text = "To keep users out of an experiment, use targeting rules or the global holdout."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Variants vs Feature Flags"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A feature flag controls access to a feature for a user."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "A variant controls which version of a feature a user sees within an experiment."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Experiments are temporary; feature flags are often permanent configuration."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Metrics"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A metric is the measurable outcome you use to evaluate whether a variant is better or worse than the control."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Metric Types"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Type | Description | Example"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Conversion | Binary: did the event happen or not? | Clicked button, completed checkout, signed up"
+by = ["test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py::test_binomial_metric_result_characterisation"]
+
+[[unit]]
+text = "A metric can also be created with the type revenue, count or duration, but the results analyse every metric as a conversion: whether each user sent the metric's event, not the event's value."
+by = [
+    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_a_revenue_metric_is_analysed_as_a_conversion",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_results_use_one_proportion_test_for_every_metric",
+]
+
+[[unit]]
+text = "See Limitations."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Primary vs Secondary Metrics"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Each experiment should have exactly one primary metric — the north star for your ship/no-ship decision."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "All other metrics are secondary and used to check for unexpected side effects."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Example: primary = checkout completion rate; secondary = cart abandonment rate, average order value, customer support contacts."
+by = ["exempt:example"]
+
+[[unit]]
+text = "Guardrail Metrics"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Guardrail metrics are secondary metrics with a minimum acceptable threshold."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "If a treatment improves your primary metric but degrades a guardrail metric beyond its threshold, the experiment should not ship."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Example guardrail: \"Support ticket rate must not increase by more than 5%.\""
+by = ["exempt:example"]
+
+[[unit]]
+text = "User Bucketing"
+by = ["exempt:label"]
+
+[[unit]]
+text = "User bucketing is the process of assigning each user to a variant."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "The platform uses consistent hash-based bucketing."
+by = ["test:tests/sdk-contract/test_hash_contract.py::test_correct_answers_pass_and_report_the_counts"]
+
+[[unit]]
+text = "Consistent Hash Assignment"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The assignment is computed as a deterministic hash of experiment_key + user_id."
+by = ["test:tests/sdk-contract/test_hash_contract.py::test_correct_answers_pass_and_report_the_counts"]
+
+[[unit]]
+text = "This means:"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "The same user always gets the same variant for a given experiment (sticky assignment)"
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky"]
+
+[[unit]]
+text = "The API stores each assignment, and a user who already has one gets it back unchanged, even if the weights have changed since"
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_existing_assignment_is_sticky_when_weights_change"]
+
+[[unit]]
+text = "Sticky assignment survives server restarts, cache clears, and SDK reinitializations"
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_existing_assignment_is_sticky_when_weights_change"]
+
+[[unit]]
+text = "The hash puts each user in one of 100 buckets, numbered 0 to 99, and the traffic weights divide the buckets between the variants in order: with 50% control and 50% treatment, buckets 0–49 get control and buckets 50–99 get treatment."
+by = [
+    "test:backend/tests/unit/core/test_consistent_hash.py::test_bucket_is_derived_from_the_same_float",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_weights_divide_the_100_buckets_between_the_variants_in_order",
+]
+
+[[unit]]
+text = "A multi-armed bandit experiment places new users by the bandit's current weights instead."
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_new_users_follow_bandit_weights"]
+
+[[unit]]
+text = "Why Consistent Bucketing Matters"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Without consistent bucketing, a user could see the control variant on Monday and the treatment variant on Wednesday."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "This would contaminate your results and create a confusing user experience."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Variant Weights vs Rollout Percentage"
+by = ["exempt:label"]
+
+[[unit]]
+text = "These two concepts are related but distinct:"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Variant Weights (Experiments)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An experiment has no separate traffic allocation: every eligible user is assigned, and the variant weights decide how users are split."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_experiment_has_no_traffic_allocation_of_its_own",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky",
+]
+
+[[unit]]
+text = "Users are left out of an experiment only by its targeting rules, a mutual exclusion group or the global holdout."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_native_targeting_rules_gate_new_users",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_mutual_exclusion_assigns_each_user_to_exactly_one_experiment",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+]
+
+[[unit]]
+text = "Rollout Percentage (Feature Flags)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Rollout percentage is the fraction of users for whom a feature flag evaluates to true (enabled)."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_rollout_percentage_is_the_share_of_users_turned_on"]
+
+[[unit]]
+text = "A feature flag at 10% rollout means 10% of users see the feature and 90% do not."
+by = ["exempt:example"]
+
+[[unit]]
+text = "Unlike variant weights, a rollout percentage is usually increased over time as confidence grows."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Targeting Rules"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Targeting rules define which users are eligible for an experiment, and which users a feature flag's rules turn on."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_native_targeting_rules_gate_new_users",
+    "test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestDashboardRules::test_matched_rule_uses_rule_percentage_unmatched_uses_global",
+]
+
+[[unit]]
+text = "In an experiment, a new user who does not match the rules is not assigned: the API answers with the control variant and \"assigned\": false, records no assignment, and the user does not count in the results."
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_native_targeting_rules_gate_new_users"]
+
+[[unit]]
+text = "For a feature flag, a user no rule matches gets the flag's rollout percentage."
+by = ["test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestDashboardRules::test_matched_rule_uses_rule_percentage_unmatched_uses_global"]
+
+[[unit]]
+text = "Attribute-Based Rules"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Rules are evaluated against user attributes that your application passes to the platform at evaluation time."
+by = [
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_native_targeting_rules_gate_new_users",
+]
+
+[[unit]]
+text = "Combining Rules"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Rules can be combined using AND (all must match), OR (at least one must match), and NOT (inverts the result)."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine.py::TestRuleGroupEvaluation::test_and_operator",
+    "test:backend/tests/unit/core/test_rules_engine.py::TestRuleGroupEvaluation::test_or_operator",
+    "test:backend/tests/unit/core/test_rules_engine.py::TestRuleGroupEvaluation::test_not_operator",
+]
+
+[[unit]]
+text = "This would target enterprise users in the US or Canada who have had their account for at least two weeks."
+by = ["exempt:example"]
+
+[[unit]]
+text = "Common Targeting Attributes"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Attribute | Type | Example"
+by = ["exempt:label"]
+
+[[unit]]
+text = "user_id | string | Target a specific beta tester"
+by = ["exempt:example"]
+
+[[unit]]
+text = "country | string | Geographic targeting"
+by = ["exempt:example"]
+
+[[unit]]
+text = "plan | string | Subscription tier"
+by = ["exempt:example"]
+
+[[unit]]
+text = "account_age_days | number | Target new vs returning users"
+by = ["exempt:example"]
+
+[[unit]]
+text = "app_version | semver | Target specific app versions"
+by = ["exempt:example"]
+
+[[unit]]
+text = "device_type | string | Mobile vs desktop"
+by = ["exempt:example"]
+
+[[unit]]
+text = "email | string | Target internal users by domain"
+by = ["exempt:example"]
+
+[[unit]]
+text = "Environments"
+by = ["exempt:label"]
+
+[[unit]]
+text = "One deployment is one environment: flags, experiments and API keys carry no environment field."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment"]
+
+[[unit]]
+text = "To test experiments and flags in staging before they reach production users, run staging and production as separate deployments."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Staging vs Production"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Environment | Purpose"
+by = ["exempt:label"]
+
+[[unit]]
+text = "staging | Test experiment logic, SDK integration, and targeting rules before launch"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "production | Live experiments and flags serving real users"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Each deployment has its own database, so its feature flag states and experiment assignments are its own."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment"]
+
+[[unit]]
+text = "A feature flag that is 100% enabled in staging has no effect in production unless you also enable it there."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment"]
+
+[[unit]]
+text = "Environment Variables"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Your SDK client is initialized with an API key, which is stored in the database of the deployment it was created on, so a key created on staging is unknown to a separate production deployment."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment",
+]
+
+[[unit]]
+text = "Use separate API keys for staging and production to prevent accidental cross-environment leakage."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Glossary"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Term | Definition"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A/B test | Experiment comparing two variants (control and treatment)"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "A/B/n test | Experiment comparing more than two variants"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Alpha (α) | The significance threshold; probability of a false positive you are willing to accept (typically 0.05)"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Bucketing | The process of assigning users to variants"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Confidence interval | Range of values within which the true effect size likely falls"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Control | The baseline variant; typically the existing experience"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Conversion rate | Fraction of users who completed a defined action"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Covariate | In CUPED, the pre-experiment data used to adjust a result: here, whether the user sent the metric's event before being assigned"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_recovers_the_seeded_history"]
+
+[[unit]]
+text = "CUPED | Controlled-experiment Using Pre-Experiment Data; a variance reduction technique"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Effect size | The magnitude of the difference between variants"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Experiment | A controlled test that assigns users to variants and measures outcomes"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Feature flag | A runtime configuration key that controls feature visibility"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Guardrail metric | A secondary metric that must not degrade beyond a threshold"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Holdout | A percentage of new users kept out of all experiments, to compare with everyone else. Users already assigned keep their assignments, and feature flags ignore it"
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_sticky_assignment_bypasses_all_eligibility_checks",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_flag_evaluation_reads_no_holdout",
+]
+
+[[unit]]
+text = "Hypothesis | A falsifiable statement predicting what will happen in an experiment and why"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "MAB | Multi-Armed Bandit; an adaptive experiment that shifts traffic toward better-performing variants"
+by = [
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerIntegration::test_thompson_weights_shift_toward_better_variant",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_new_users_follow_bandit_weights",
+]
+
+[[unit]]
+text = "MDE | Minimum Detectable Effect; the smallest improvement worth measuring"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Metric | A measurable outcome used to evaluate experiment results"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Mutual exclusion group | A set of experiments configured so users are enrolled in at most one at a time"
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_mutual_exclusion_assigns_each_user_to_exactly_one_experiment"]
+
+[[unit]]
+text = "p-value | Probability of observing results as extreme as these if there were no true effect"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Primary metric | The single metric that determines the ship/no-ship decision"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Rollout percentage | Fraction of users for whom a feature flag is enabled"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Segment | A subset of users defined by shared attributes"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Statistical significance | p-value below the chosen alpha threshold"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Targeting rule | An attribute-based condition that determines experiment eligibility"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Traffic weight | The share of an experiment's users a variant gets; the weights add up to 100%"
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_variant_weights_under_100_are_refused_with_the_documented_message"]
+
+[[unit]]
+text = "Treatment | A non-control variant in an experiment"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Variant | One of the possible experiences in an experiment"
+by = ["exempt:theory"]

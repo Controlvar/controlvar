@@ -1,7 +1,7 @@
 # Modules and profiles
 
-Experimently is one codebase, fully open source under Apache-2.0, and it runs
-in one of two **profiles**:
+Experimently is one codebase, open source (Apache-2.0, with the client SDKs
+MIT), and it runs in one of two **profiles**:
 
 - **core** — the product without the optional modules. This is what a
   checkout without a `modules/` directory runs, and what the `core` container
@@ -33,8 +33,7 @@ A core deployment answers `{"profile": "core", "modules": [], "version": "..."}`
 
 ## The core profile
 
-The core profile is the whole product for a team running its own
-experimentation platform. It includes experiments and feature flags end to
+The core profile includes experiments and feature flags end to
 end — targeting rules with 20+ operators, gradual rollouts, safety monitoring
 with automatic rollback, scheduling — and the full statistics: frequentist and
 Bayesian analysis, sequential testing with early stopping, CUPED variance
@@ -59,12 +58,12 @@ the dashboard checks:
 | Compliance reporting | `compliance` | SOC 2 / ISO 27001 reports, signed audit exports |
 | Warehouse analytics | `warehouse` | Warehouse analysis (beta): run an experiment's analysis on tables in your own warehouse, under `/api/v1/warehouse/analysis`. Snowflake and BigQuery are available ([Warehouse analytics](../api/warehouse-analytics.md)) |
 | Third-party integrations | `integrations` | Jira, Salesforce and GitHub |
-| Real-time counters | `counters` | DynamoDB-backed live assignment and conversion counters |
+| Counters | `counters` | Routes to increment and read assignment and conversion counters in DynamoDB; assignment and tracking do not write them |
 | ETL | `etl` | Glue crawlers, Athena partitions and scheduled jobs |
 | Split URL testing | `split_url` | Server-side URL splitting at the edge. The edge router has no configuration source in this release, so it does not split traffic yet; experiments, their URL configuration and the preview work ([#393](https://github.com/getexperimently/experimently/issues/393)) |
 
-Nothing in the core profile moves into a module. The split is along "one team
-running the product" versus "an organisation administering it".
+The split is along "one team running the product" versus "an organisation
+administering it".
 
 ## What the core profile leaves out
 
@@ -109,11 +108,12 @@ checkout and proves it builds, boots and passes its tests. `GET
 `EXPERIMENTLY_PROFILE`, so that variable does not select a backend profile;
 the presence of `modules/` does.
 
-The modules also have dependencies of their own, in `modules/requirements.txt`
-(locked in `modules/requirements.lock`): SAML/OIDC, which
-`backend/requirements.txt` deliberately does not carry. A full profile without
-them starts and serves every route, and then refuses the SAML flow — install
-them alongside the backend pins:
+The modules have dependencies of their own, in `modules/requirements.txt`
+(locked in `modules/requirements.lock`): the SAML and OIDC libraries, and the
+SQL parser the warehouse module checks every query with. `backend/requirements.txt`
+deliberately carries none of them. A full profile without them starts and serves
+every route, and then refuses every warehouse query — install them alongside the
+backend pins:
 
 ```{.bash skip reason="dev: installs the backend's and the modules' Python dependencies into a development checkout"}
 pip install -r backend/requirements.txt -r modules/requirements.txt
@@ -184,7 +184,8 @@ imports a module.
 
 For the dashboard that means `modules/frontend/src/`, which mirrors
 `frontend/src/` (`pages/`, `components/`, `services/`, `contexts/`, `tests/`)
-and holds the six module routes (`/admin/roles`, `/workspaces/**`), the
+and holds the module pages (`/admin/roles`, `/sso/complete`, `/warehouse/**`,
+`/workspaces/**`), the
 custom-roles components and the workspace service. The core tree reaches it
 only through the `@modules/*` alias, defined once in
 `frontend/modules-alias.js` and applied to webpack, jest and TypeScript alike:

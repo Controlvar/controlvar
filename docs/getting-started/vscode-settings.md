@@ -82,8 +82,8 @@ exists to match a repository rule, the rule is named — if the two ever drift,
 | ESLint | `dbaeumer.vscode-eslint` | reads `frontend/eslint.config.mjs` |
 | autoDocstring | `njpwerner.autodocstring` | Google-style docstrings |
 
-**Do not install the Black, isort or Flake8 extensions.** Ruff replaced all
-three (`[tool.ruff]` in `pyproject.toml`); running black alongside it produces
+**Do not install the Black, isort or Flake8 extensions.** Ruff does all three
+jobs here (`[tool.ruff]` in `pyproject.toml`); running black alongside it produces
 formatting the `lint` job then rejects.
 
 **There is no Prettier in this repository** — no config, no dependency. Do not
@@ -94,19 +94,12 @@ noise. ESLint is the frontend gate (`--max-warnings 0`), alongside
 
 ## Notes
 
-`python.linting.*` and `python.formatting.provider` do not appear above. The
-Microsoft Python extension moved linting and formatting out to per-tool
-extensions, so those keys no longer do anything — an older version of this page
-listed them, along with `flake8Args` and `blackArgs`, and none of it had any
-effect.
-
 `PYTHONPATH` is set to the workspace root because the package is `backend.app`.
 Everything runs from the repository root: `uvicorn backend.app.main:app`, not
 `cd backend && uvicorn app.main:app`.
 
-`pytestArgs` points at `backend/tests`. Tests need PostgreSQL on
-`localhost:5432` and `APP_ENV=test TESTING=true`; see
-[Testing](../development/testing-guide.md).
+`pytestArgs` points at `backend/tests`. The integration tests need PostgreSQL;
+see [Testing](../development/testing-guide.md).
 
 Editor settings are a convenience, not the contract. Before pushing, run
 `make lint` — that is what the `lint` job runs.

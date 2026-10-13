@@ -81,6 +81,7 @@ nav:
 - Home: README.md
 - Getting Started:
   - Quick Start: getting-started/quick-start.md
+  - Limitations: getting-started/limitations.md
   - Core Concepts: getting-started/concepts.md
   - Architecture Overview: getting-started/architecture.md
   - FAQ: getting-started/faq.md

@@ -1,0 +1,564 @@
+# What verifies each unit of README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "README.md"
+
+[[unit]]
+text = "Experimently"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Open-source A/B testing and feature flags that you run yourself."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit",
+    "docex:README.md#\"ADMIN\"",
+]
+
+[[unit]]
+text = "The core, the optional modules and the dashboard are Apache-2.0; the client SDKs under sdk/ are MIT."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit"]
+
+[[unit]]
+text = "Experimently is pre-1.0: see the releases."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_version_is_before_1_0"]
+
+[[unit]]
+text = "Try it on your machine"
+by = ["exempt:label"]
+
+[[unit]]
+text = "You need Docker with Compose v2, curl and jq."
+by = ["docex:README.md#\"ADMIN\""]
+
+[[unit]]
+text = "Clone the repository:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Then start the stack from the repository root:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Check that you can sign in:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["docex:README.md#\"ADMIN\""]
+
+[[unit]]
+text = "Open http://localhost:3000 and sign in with admin@demo.com / Demo1234!."
+by = [
+    "journey:quick-start#dashboard-address",
+    "journey:quick-start#sign-in-page",
+    "journey:quick-start#email",
+    "journey:quick-start#password",
+    "journey:quick-start#signed-in",
+]
+
+[[unit]]
+text = "The API is on http://localhost:8000, its docs at http://localhost:8000/api/v1/docs."
+by = [
+    "docex:README.md#\"ADMIN\"",
+    "journey:quick-start#api-docs-address",
+]
+
+[[unit]]
+text = "Four containers come up — Postgres, Redis, the API and the dashboard — and the database is created and seeded on the way."
+by = [
+    "docex:docs/getting-started/docker-guide.md#api",
+    "docex:docs/getting-started/docker-guide.md#admin@demo.com",
+    "journey:api-key-first-assignment#evaluate",
+    "journey:api-key-first-assignment#assign",
+]
+
+[[unit]]
+text = "The first start builds the API and dashboard images from source."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_api_and_dashboard_images_are_built_from_this_checkout"]
+
+[[unit]]
+text = "docker compose down -v removes it all again, volumes included."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "This stack is for your own machine."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_stack_runs_development_settings_and_the_demo_seed",
+    "test:backend/tests/unit/infrastructure/test_dev_stack_loopback.py::test_every_published_port_is_bound_to_loopback",
+]
+
+[[unit]]
+text = "It runs with development settings and publishes its ports on 127.0.0.1 only, and the demo account's password is on this page."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_stack_runs_development_settings_and_the_demo_seed",
+    "test:backend/tests/unit/infrastructure/test_dev_stack_loopback.py::test_every_published_port_is_bound_to_loopback",
+    "docex:README.md#\"ADMIN\"",
+]
+
+[[unit]]
+text = "To run Experimently where others can reach it, see Self-host it."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Quick start has the rest: the service table, the verification commands, and the demo, tools and aws profiles."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "See it in an app"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Two demo applications ship in the repo and drive the platform through the public SDK path, exactly as a customer app would."
+by = [
+    "journey:demo-shoplab#storefront",
+    "journey:demo-shoplab#hero-banner",
+    "journey:demo-streampulse#app",
+    "journey:demo-streampulse#premium-iphone",
+]
+
+[[unit]]
+text = "./demo/setup-local.sh starts everything."
+by = [
+    "journey:demo-guide#dashboard-address",
+    "journey:demo-guide#health-address",
+    "journey:demo-guide#shoplab-address",
+    "journey:demo-guide#streampulse-address",
+]
+
+[[unit]]
+text = "ShopLab (demo/shoplab, http://localhost:3200): an e-commerce storefront running an A/B test, a multi-armed bandit, a multivariate test, a CUPED checkout test and a gradual-rollout flag."
+by = [
+    "journey:demo-guide#shoplab-address",
+    "journey:demo-shoplab#hero-banner",
+    "journey:demo-shoplab#product-sort",
+    "journey:demo-shoplab#buy-button",
+    "journey:demo-shoplab#checkout-flow",
+    "journey:demo-shoplab#new-search-schedule",
+]
+
+[[unit]]
+text = "StreamPulse (demo/streampulse, http://localhost:3300): a simulated mobile app with a device picker, targeting by OS version/region/tier, a kill switch, mutual exclusion and a scripted rollout story in which a crash spike triggers an automatic safety rollback."
+by = ["untested:S"]
+
+[[unit]]
+text = "Walkthrough: demo/DEMO_GUIDE.md."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "What it does"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A/B Testing & Multivariate Experiments: Frequentist, sequential (mSPRT) and Bayesian analysis in the API; which of them the dashboard shows"
+by = [
+    "test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py::test_binomial_metric_result_characterisation",
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_msprt_has_no_alias_notice",
+    "test:backend/tests/integration/api/test_bayesian_results_api.py::TestBayesianResultsEnabled::test_bayesian_results_present_when_enabled",
+]
+
+[[unit]]
+text = "Sequential testing: mSPRT with always-valid confidence intervals, so you can read results at any time."
+by = [
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_aa_false_rejections_under_peeking",
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_anytime_coverage",
+]
+
+[[unit]]
+text = "There are no O'Brien-Fleming or Pocock boundaries."
+by = [
+    "test:backend/tests/integration/api/test_sequential_alpha_api.py::test_no_alpha_spending_table_for_a_stored_experiment",
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_pocock_config_also_gives_no_table",
+]
+
+[[unit]]
+text = "Multiple-comparison correction: Benjamini-Hochberg by default, or Bonferroni, across each experiment's variants; stored with the experiment alongside its confidence level"
+by = ["test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_new_experiment_stores_benjamini_hochberg_at_095"]
+
+[[unit]]
+text = "Sample Size Calculations: Automatic power analysis"
+by = [
+    "test:backend/tests/unit/services/test_sample_size_two_proportions.py::test_sample_size_matches_the_written_out_formula",
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm",
+]
+
+[[unit]]
+text = "Results: events are stored in PostgreSQL and the API computes results from them"
+by = [
+    "test:backend/tests/integration/services/test_conversion_event_matching.py::TestResultsEngineCountsSdkEvents::test_get_experiment_results_uses_event_name",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_api_writes_no_kinesis_stream_firehose_or_opensearch_domain",
+]
+
+[[unit]]
+text = "Advanced Feature Flags: Targeting, gradual rollouts, and automated safety monitoring"
+by = [
+    "test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestDashboardRules::test_matched_rule_uses_rule_percentage_unmatched_uses_global",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage",
+    "journey:feature-flag-rollout#create-schedule",
+]
+
+[[unit]]
+text = "Enhanced Rules Engine: 20+ operators including semantic versioning, geo-distance, time windows"
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_advanced.py::TestAdvancedOperators::test_semantic_version_operator",
+    "test:backend/tests/unit/core/test_rules_engine_advanced.py::TestAdvancedOperators::test_geo_distance_operator",
+    "test:backend/tests/unit/core/test_rules_engine_advanced.py::TestAdvancedOperators::test_time_window_operator",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_rules_engine_has_more_than_20_operators",
+]
+
+[[unit]]
+text = "RBAC: 4-tier role system (Admin, Developer, Analyst, Viewer)"
+by = [
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_admin_has_permission",
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_developer_permissions",
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_analyst_permissions",
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_viewer_permissions",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_there_are_four_built_in_roles",
+]
+
+[[unit]]
+text = "Audit Trail: creating, changing and deleting flags and experiments, and flag toggles, are recorded in every profile; the full profile adds warehouse changes, HMAC-SHA256 signing, SOC 2 / ISO 27001 reports and a JSON or CSV export for your compliance program"
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_create",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_update_records_only_what_changed",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_delete",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_status_verbs",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_create_update_delete",
+    "test:modules/backend/tests/unit/api/test_compliance_signing.py::TestAuditEventSignature::test_audit_event_has_hmac_signature",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestComplianceReports::test_soc2_report_returns_200",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestComplianceReports::test_iso27001_report_returns_200",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_admin_can_export_csv",
+]
+
+[[unit]]
+text = "Automated Safety: monitoring every 5 minutes by default, with automatic rollback capabilities"
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage",
+]
+
+[[unit]]
+text = "Automated Safety Monitoring"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Real-time Metrics: Error rate, latency, custom metrics tracking"
+by = [
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestCheckFeatureFlagSafety::test_error_rate_metric_breaches_critical_threshold",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetLatencyMetrics::test_computes_real_latency_statistics",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestPureHelperFunctions::test_metric_to_trigger_custom_metric",
+]
+
+[[unit]]
+text = "Auto-Rollback: Automatic rollback on threshold violations"
+by = ["test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage"]
+
+[[unit]]
+text = "Configurable Thresholds: Per-feature flag safety configuration"
+by = ["test:backend/tests/integration/api/test_safety_api.py::TestFeatureFlagSafetyConfig::test_superuser_can_set_safety_config"]
+
+[[unit]]
+text = "Complete Audit Trail: All rollbacks logged with reasoning"
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_automatic_rollback_reason_words_the_breach_in_the_scheduler",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestCreateRollbackRecordStatic::test_creates_record_and_resolves_safety_config_id",
+]
+
+[[unit]]
+text = "What it does not do (yet)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A flag is on or off for each user: it carries no variants or values."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_request_with_variants_is_refused",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_serves_false_when_off_and_nothing_else",
+    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_every_flag_evaluates_with_a_null_config",
+]
+
+[[unit]]
+text = "To serve one of several experiences, run a multivariate experiment."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Every metric is analysed as a conversion: whether each user sent the metric's event."
+by = [
+    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_a_revenue_metric_is_analysed_as_a_conversion",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_results_use_one_proportion_test_for_every_metric",
+]
+
+[[unit]]
+text = "Variant weights must add up to exactly 100%; there is no separate experiment-level traffic allocation."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_variant_weights_under_100_are_refused_with_the_documented_message",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_experiment_has_no_traffic_allocation_of_its_own",
+]
+
+[[unit]]
+text = "One deployment is one environment: run staging and production as separate deployments, each with its own API keys."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_flags_experiments_and_keys_carry_no_environment"]
+
+[[unit]]
+text = "Sign-in has no multi-factor step, and SAML sign-in is not available (OIDC is, with the sso module)."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_local_sign_in_takes_an_email_and_a_password_alone",
+    "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_saml_acs_token_is_still_not_a_session",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestNonceInTheAuthorizationURL::test_an_oidc_provider_gets_the_nonce",
+]
+
+[[unit]]
+text = "There is no retention policy, and no tool that erases one person's data."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_no_route_sets_retention_or_erases_a_users_data",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_nothing_calls_the_event_purge",
+]
+
+[[unit]]
+text = "Limitations lists these and the rest, with what happens instead."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Self-host it"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Option | What you run | What CI runs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Docker Compose on one host | deploy/compose/compose.yml, on the published images | starts it and checks the API answers"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_starts_the_file_without_building_or_pulling_the_app",
+]
+
+[[unit]]
+text = "Helm on Kubernetes | charts/experimently | installs it on a kind cluster"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_chart_is_installed_on_a_kind_cluster"]
+
+[[unit]]
+text = "AWS CDK | infrastructure/cdk | synthesises every stack; no CI job deploys it"
+by = [
+    "test:infrastructure/tests/test_app_profiles.py::TestTheAppActuallySynthesises::test_synth_completes",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_only_a_person_starts_a_deploy",
+]
+
+[[unit]]
+text = "AWS CDK Deployment and Kubernetes have the steps."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "🛡️ Security"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Controls that support your compliance program: append-only audit log, role-based access, per-flag safety monitoring with automatic rollback; the compliance and hipaa modules add tamper-evident audit signing, compliance report packs and PHI encryption."
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_create",
+    "test:backend/tests/unit/core/test_permissions.py::TestCheckPermission::test_viewer_permission",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage",
+    "test:modules/backend/tests/unit/api/test_compliance_signing.py::TestAuditEventSignature::test_audit_event_has_hmac_signature",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestComplianceReports::test_soc2_report_returns_200",
+    "test:modules/backend/tests/integration/api/test_hipaa_api.py::TestEncryptDecrypt::test_admin_can_encrypt_phi",
+]
+
+[[unit]]
+text = "As of v0.31.0 the project holds no SOC 2, ISO 27001 or HIPAA attestation and claims none."
+tag = "X"
+by = ["exempt:intent"]
+
+[[unit]]
+text = "Passwords and API keys: stored hashed; an API key is shown once, when it is created"
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+    "test:backend/tests/unit/security/test_owasp_compliance.py::TestCryptographicFailures::test_bcrypt_used_for_password_hashing",
+]
+
+[[unit]]
+text = "API keys: any signed-in user can create one for themselves, and a key acts as its creator on the tracking and flag-evaluation routes, so a VIEWER's key can send assignments and events"
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged",
+    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_a_viewers_own_key_assigns_users_and_tracks_events",
+]
+
+[[unit]]
+text = "Encryption: AES-256 at rest (KMS) and HTTPS in transit at the load balancer when deployed with the provided CDK"
+by = [
+    "test:infrastructure/tests/test_front_door_cdk.py::test_aurora_storage_is_encrypted_with_the_stacks_kms_key",
+    "test:infrastructure/tests/test_front_door_cdk.py::test_http_only_redirects_to_https",
+    "test:infrastructure/tests/test_redis_sizing.py::test_encryption_is_unchanged",
+]
+
+[[unit]]
+text = "Network Security: VPC isolation, security groups, and an HTTPS-only load balancer (HTTP redirects to HTTPS) in front of the API and the dashboard (CDK deployment)."
+by = [
+    "test:infrastructure/tests/test_no_world_open_ingress.py::test_nothing_else_is_open_to_the_internet",
+    "test:infrastructure/tests/test_front_door_cdk.py::test_http_only_redirects_to_https",
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_https_default_action_is_the_dashboard",
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_api_paths_go_to_the_live_target_group_exactly",
+]
+
+[[unit]]
+text = "The CDK does not deploy a WAF or CloudFront"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway"]
+
+[[unit]]
+text = "🧩 Profiles and modules"
+by = ["exempt:label"]
+
+[[unit]]
+text = "One codebase, two profiles."
+by = [
+    "test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointShape::test_profile_matches_the_loader",
+    "test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route",
+]
+
+[[unit]]
+text = "The core profile is backend/ and frontend/: experiments and feature flags end to end, targeting with 20+ operators, gradual rollouts, safety monitoring with automatic rollback, scheduling, the full statistics (frequentist and Bayesian, sequential testing, CUPED, multi-armed bandits, mutual exclusion groups and global holdouts, dimensional breakdowns, experiment overlap and interaction detection (beta), live results), the four built-in roles, audit logging, API keys, alerting and every SDK."
+by = [
+    "test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route",
+    "test:backend/tests/unit/core/test_module_names.py::test_the_registration_provides_exactly_the_known_modules",
+]
+
+[[unit]]
+text = "The full profile adds the optional modules under modules/, which plug into the core through the registration hooks in backend/app/core/:"
+by = [
+    "test:backend/tests/unit/core/test_module_names.py::test_the_registration_provides_exactly_the_known_modules",
+    "test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route",
+]
+
+[[unit]]
+text = "Module | What it adds"
+by = ["exempt:label"]
+
+[[unit]]
+text = "workspaces | Group users into teams, with workspace roles and email invites. Grouping only: access to experiments and flags is by platform role"
+by = [
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_changing_a_members_workspace_role_writes_one_role_assign",
+    "test:modules/backend/tests/integration/api/test_workspace_invite_binding.py::test_the_invited_address_joins_with_the_invited_role",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+]
+
+[[unit]]
+text = "rbac | Roles beyond the built-in four, and permissions granted directly to a user. Both are recorded, but they do not change what anyone can do yet: each user's built-in role decides (#891)"
+by = [
+    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_creates_role_with_name",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+]
+
+[[unit]]
+text = "sso | OIDC identity providers with just-in-time provisioning and role mapping. SAML 2.0 sign-in is not available yet; use OIDC"
+by = [
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_an_sso_role_change_writes_one_role_assign_by_sso_sync",
+    "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_saml_acs_token_is_still_not_a_session",
+]
+
+[[unit]]
+text = "hipaa | PHI encryption, six-year PHI audit retention, BAA records"
+by = [
+    "test:modules/backend/tests/integration/api/test_hipaa_api.py::TestEncryptDecrypt::test_admin_can_encrypt_phi",
+    "test:modules/backend/tests/unit/services/test_hipaa_service.py::TestLogPhiAccess::test_retention_years_set_to_6",
+    "test:modules/backend/tests/integration/api/test_hipaa_api.py::TestCreateBaa::test_admin_can_create_baa",
+]
+
+[[unit]]
+text = "compliance | SOC 2 / ISO 27001 reports, signed audit exports"
+by = [
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestComplianceReports::test_soc2_report_returns_200",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestComplianceReports::test_iso27001_report_returns_200",
+    "test:modules/backend/tests/unit/api/test_compliance_signing.py::TestAuditEventSignature::test_audit_event_has_hmac_signature",
+]
+
+[[unit]]
+text = "warehouse | Warehouse analysis (beta): run an experiment's analysis on tables in your own warehouse, under /api/v1/warehouse/analysis (connections, sources, runs). Snowflake and BigQuery are available; GET /api/v1/warehouse/analysis/connectors lists which connectors are. See docs/api/warehouse-analytics.md"
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_enabled_connectors_exact",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "integrations | Jira, Salesforce and GitHub"
+by = [
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestCreateIntegration::test_admin_can_create_jira_integration",
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestListIntegrations::test_admin_can_list_integrations",
+]
+
+[[unit]]
+text = "counters | Routes to increment and read assignment and conversion counters in DynamoDB; assignment and tracking do not write them"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_assignment_and_tracking_write_no_counter",
+]
+
+[[unit]]
+text = "etl | Glue crawlers, Athena partitions and scheduled jobs"
+by = [
+    "test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_full_checkout_builds_the_module_stacks",
+    "test:modules/backend/tests/unit/api/test_etl_endpoints.py::TestRunETLJobEndpoint::test_admin_can_trigger_etl_job",
+]
+
+[[unit]]
+text = "split_url | Server-side URL splitting at the edge. The edge router has no configuration source in this release, so it does not split traffic yet; experiments, their URL configuration and the preview work (#393)"
+by = [
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerPassThrough::test_no_config_header_passes_through",
+    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration",
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_admin_can_preview_split_url_assignment",
+]
+
+[[unit]]
+text = "GET /api/v1/modules reports the running profile and the installed modules — ask it first, rather than inferring the profile from a status code."
+by = [
+    "test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointShape::test_profile_matches_the_loader",
+    "test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointFull::test_the_full_profile_lists_every_known_module",
+]
+
+[[unit]]
+text = "A core deployment is the repository with modules/ deleted (make core-build proves it builds, boots and passes its tests that way), so a module's routes are not mounted and its URLs 404 like any other unknown path."
+by = ["test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route"]
+
+[[unit]]
+text = "Three URLs are declared by a core router but implemented by a module — /api/v1/compliance/reports/{standard}, /api/v1/compliance/export and /api/v1/experiments/{id}/split-url/preview — and those answer 501, as does creating an experiment with experiment_type=split_url: the route exists in both profiles, so it says \"not installed\" rather than leaving you to wonder about a typo."
+by = [
+    "test:backend/tests/unit/core/test_optional_modules.py::TestComplianceRoutesRefusedWithoutTheModule::test_report_route_returns_501_without_handler",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestComplianceRoutesRefusedWithoutTheModule::test_export_route_returns_501_without_handler",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_preview_route_returns_501_without_handler",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_create_split_url_experiment_returns_501",
+]
+
+[[unit]]
+text = "The two profiles are under the same licence."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit"]
+
+[[unit]]
+text = "Details in docs/getting-started/modules.md."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "📄 License"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Part of the repository | Licence"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Everything except sdk/ — the core, the modules, the dashboard, the docs | Apache-2.0"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit"]
+
+[[unit]]
+text = "sdk/ (all client SDKs and OpenFeature providers) | MIT"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit"]
+
+[[unit]]
+text = "Third-party dependency licences are listed in THIRD_PARTY_LICENSES.md; attribution is in NOTICE."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_licence_report_and_notice_are_present"]
+
+[[unit]]
+text = "Security reports go to SECURITY.md, not to public issues."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Contributions are accepted under the DCO — see CONTRIBUTING.md."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dco_check.py::test_an_unsigned_commit_fails",
+    "test:backend/tests/unit/infrastructure/test_dco_check.py::test_the_workflow_runs_the_script",
+]

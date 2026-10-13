@@ -1,0 +1,415 @@
+# What verifies each unit of docs/getting-started/quick-start.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/getting-started/quick-start.md"
+
+[[unit]]
+text = "Quick Start"
+by = ["exempt:label"]
+
+[[unit]]
+text = "This guide takes you from a fresh clone to a running experiment and a feature flag."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Everything below runs locally with Docker; no AWS account and no external identity provider is needed."
+by = [
+    "docex:docs/getting-started/quick-start.md#\"ADMIN\"",
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_sign_in_is_local_by_default",
+]
+
+[[unit]]
+text = "Prerequisites"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Tool | Check"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Docker with Compose v2 | docker compose version"
+by = ["docex:docs/getting-started/quick-start.md#\"healthy\""]
+
+[[unit]]
+text = "curl and jq | jq --version"
+by = ["docex:docs/getting-started/quick-start.md#\"healthy\""]
+
+[[unit]]
+text = "Only needed if you want to run the backend or dashboard outside Docker: Python 3.11+, Node.js 22+."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_python_3_11_and_node_22"]
+
+[[unit]]
+text = "Step 1: Start the stack"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Clone the repository:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Then start everything from the repository root:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The first start builds two images (experimently-api:core, experimently-web:core), starts Postgres 16 and Redis 7, creates the database schema, creates the first administrator and applies the demo seed (three experiments, two flags)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_api_and_dashboard_images_are_built_from_this_checkout",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_default_stack_is_postgres_redis_the_api_and_the_dashboard",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_stack_runs_development_settings_and_the_demo_seed",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_demo_seed_creates_three_experiments_and_two_flags",
+    "docex:docs/getting-started/docker-guide.md#admin@demo.com",
+]
+
+[[unit]]
+text = "Seeds run once per database."
+by = [
+    "test:backend/tests/integration/database/test_seed_markers.py::TestSeedMarkerScript::test_mark_is_idempotent",
+    "test:backend/tests/integration/database/test_seed_markers.py::TestSeedMarkerScript::test_mark_and_query",
+]
+
+[[unit]]
+text = "Service | URL"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Dashboard | http://localhost:3000"
+by = ["journey:quick-start#dashboard-address"]
+
+[[unit]]
+text = "API and interactive docs | http://localhost:8000 and http://localhost:8000/api/v1/docs"
+by = [
+    "journey:quick-start#api-docs-address",
+    "docex:docs/getting-started/quick-start.md#\"healthy\"",
+]
+
+[[unit]]
+text = "Health | http://localhost:8000/health/ready"
+by = [
+    "journey:quick-start#health-address",
+    "docex:docs/getting-started/quick-start.md#\"healthy\"",
+]
+
+[[unit]]
+text = "Default login: admin@demo.com / Demo1234!."
+by = [
+    "docex:docs/getting-started/quick-start.md#\"ADMIN\"",
+    "journey:quick-start#signed-in",
+]
+
+[[unit]]
+text = "This is the development stack: it publishes its ports on 127.0.0.1 only."
+by = ["test:backend/tests/unit/infrastructure/test_dev_stack_loopback.py::test_every_published_port_is_bound_to_loopback"]
+
+[[unit]]
+text = "Change FIRST_SUPERUSER_PASSWORD, SECRET_KEY and POSTGRES_PASSWORD in a .env file next to docker-compose.yml before anyone else uses it, and run a server from the published images in deploy/compose/compose.yml instead."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_three_settings_are_read_from_a_dot_env_file",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version",
+]
+
+[[unit]]
+text = "The header comment of docker-compose.yml describes the optional demo, tools and aws profiles and the host-port overrides."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_header_describes_the_profiles_and_the_port_overrides"]
+
+[[unit]]
+text = "Verify:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The first prints \"healthy\"."
+by = ["docex:docs/getting-started/quick-start.md#\"healthy\""]
+
+[[unit]]
+text = "The second prints 401, because the API requires a login."
+by = ["docex:docs/getting-started/quick-start.md#\"healthy\""]
+
+[[unit]]
+text = "Step 2: Log in"
+by = ["exempt:label"]
+
+[[unit]]
+text = "In the browser, open http://localhost:3000 and sign in."
+by = [
+    "journey:quick-start#dashboard-address",
+    "journey:quick-start#sign-in-page",
+    "journey:quick-start#email",
+    "journey:quick-start#password",
+    "journey:quick-start#signed-in",
+]
+
+[[unit]]
+text = "From the shell:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["docex:docs/getting-started/quick-start.md#\"ADMIN\""]
+
+[[unit]]
+text = "Tokens last 12 hours (LOCAL_AUTH_TOKEN_TTL_MINUTES)."
+by = ["test:backend/tests/unit/core/test_documented_defaults.py::test_a_local_token_lasts_12_hours"]
+
+[[unit]]
+text = "Ten failed logins lock an account for 15 minutes."
+by = [
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_ten_failed_sign_ins_lock_an_account_for_15_minutes",
+    "test:backend/tests/unit/api/test_local_auth.py::TestLocalAuthService::test_lockout_after_threshold_even_with_correct_password",
+]
+
+[[unit]]
+text = "Step 3: Create an experiment"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Through the dashboard: Experiments → + New Experiment walks you through guided setup (type, details, variants, an optional sample-size estimate, review); create it, then Start."
+by = [
+    "journey:quick-start#experiments",
+    "journey:quick-start#guided-setup",
+    "journey:quick-start#start",
+]
+
+[[unit]]
+text = "Through the API:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The last command prints \"active\"."
+by = [
+    "journey:quick-start#create-from-the-shell",
+    "journey:quick-start#start",
+]
+
+[[unit]]
+text = "Conversions are matched to a metric by event_name, so the events your app sends in Step 5 must use the same name."
+by = [
+    "docex:docs/getting-started/quick-start.md#\"total_conversions\": 1",
+    "test:backend/tests/integration/services/test_conversion_event_matching.py::TestResultsEngineCountsSdkEvents::test_get_experiment_results_uses_event_name",
+]
+
+[[unit]]
+text = "Step 4: Create an API key"
+by = ["exempt:label"]
+
+[[unit]]
+text = "SDKs and your application authenticate with an API key, not a user token."
+by = [
+    "journey:api-key-first-assignment#create-key",
+    "journey:api-key-first-assignment#management-route",
+]
+
+[[unit]]
+text = "The key is shown once."
+by = [
+    "journey:api-key-first-assignment#create-key",
+    "journey:api-key-first-assignment#management-route",
+]
+
+[[unit]]
+text = "Step 5: Assign users and track events"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The response carries variant_name, variant_id, is_control, configuration, and assigned with a reason (assigned, holdout, mutual_exclusion or targeting)."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "docex:docs/getting-started/quick-start.md#\"assigned\": true",
+]
+
+[[unit]]
+text = "Assignments are sticky: the same user_id always gets the same variant."
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky"]
+
+[[unit]]
+text = "It prints \"cta_click\", the event it stored."
+by = ["docex:docs/getting-started/quick-start.md#\"cta_click\""]
+
+[[unit]]
+text = "The SDKs make the same two calls; see the SDK guide."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_thirteen_of_the_sixteen_sdks_run_the_live_contract"]
+
+[[unit]]
+text = "Step 6: Read the results"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Dashboard: Experiments → your experiment → View results."
+by = [
+    "journey:quick-start#back-to-experiments",
+    "journey:quick-start#your-experiment",
+    "journey:quick-start#view-results",
+]
+
+[[unit]]
+text = "API:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Results include per-variant conversion rates, p-values, confidence intervals and a sample-size check."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm",
+]
+
+[[unit]]
+text = "Step 7: Feature flags"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The flag is created switched off (\"is_active\": false, which is also what leaving it out does; a field the API does not read answers 422)."
+by = [
+    "test:backend/tests/integration/api/test_flag_contract.py::test_create_without_is_active_is_inactive",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_create_unknown_field_is_422",
+]
+
+[[unit]]
+text = "The second command turns it on for 10% of users and prints \"active\"."
+by = ["docex:docs/getting-started/quick-start.md#\"enabled\": true"]
+
+[[unit]]
+text = "The third evaluates it for user-2 and prints \"enabled\": true with \"reason\": \"rollout\": user-2 is inside the 10%, user-123 is not, and a user always gets the same answer."
+by = [
+    "docex:docs/getting-started/quick-start.md#\"enabled\": true",
+    "mechanism:quick-start-rollout",
+]
+
+[[unit]]
+text = "Evaluation returns {key, enabled, config, reason}."
+by = ["test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour"]
+
+[[unit]]
+text = "An inactive flag evaluates to enabled: false with reason inactive; only an unknown key is a 404."
+by = [
+    "test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestNativeRulesAndReasons::test_inactive_reason",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
+]
+
+[[unit]]
+text = "Running outside Docker"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The first line starts only the database and cache."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_default_stack_is_postgres_redis_the_api_and_the_dashboard"]
+
+[[unit]]
+text = "The bootstrap creates the schema and the first administrator, and is safe to run again."
+by = [
+    "test:backend/tests/integration/database/test_bootstrap_concurrency.py::test_concurrent_bootstraps_on_a_fresh_schema_do_not_race",
+    "test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate",
+]
+
+[[unit]]
+text = "ENVIRONMENT must be set: the API will not start without it, and the bootstrap will not create an administrator with the default password unless it says development or test."
+by = [
+    "test:backend/tests/unit/core/test_environment_explicit.py::test_the_api_refuses_to_serve_when_the_environment_was_not_set",
+    "test:backend/tests/unit/core/test_environment_explicit.py::test_a_weak_first_superuser_password_is_refused_when_the_environment_defaulted",
+    "test:backend/tests/unit/core/test_environment_explicit.py::test_a_weak_password_is_accepted_when_development_or_test_was_chosen",
+]
+
+[[unit]]
+text = "In a second terminal, start the dashboard on http://localhost:3100."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_dashboard_dev_server_listens_on_3100_and_proxies_nothing"]
+
+[[unit]]
+text = "The development server does not proxy /api: the dashboard calls the API at http://localhost:8000 itself (set NEXT_PUBLIC_API_URL in frontend/.env.local when the API runs elsewhere):"
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_dashboard_dev_server_listens_on_3100_and_proxies_nothing",
+    "test:frontend/src/tests/services/api.test.ts::falls back to localhost:8000 only under next dev",
+]
+
+[[unit]]
+text = "Run these from the repository root; the backend is imported as backend.app.."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Demo applications"
+by = ["exempt:label"]
+
+[[unit]]
+text = "To see the platform drive two sample apps, ShopLab and StreamPulse, follow the demo guide."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Troubleshooting"
+by = ["exempt:label"]
+
+[[unit]]
+text = "api container never becomes healthy"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The entrypoint prints the bootstrap and seed steps."
+by = ["docex:docs/getting-started/quick-start.md#[entrypoint] starting:"]
+
+[[unit]]
+text = "With ENVIRONMENT=staging or production, a SECRET_KEY shorter than 32 characters, or DEV_AUTH_BYPASS=true with ENVIRONMENT=production, stops the API on purpose."
+by = [
+    "test:backend/tests/unit/core/test_config_environment.py::TestModuleImportSelection::test_weak_secret_key_in_production_refuses_to_boot",
+    "test:backend/tests/unit/core/test_config_environment.py::TestHardenedSecrets::test_committed_placeholders_are_refused",
+    "test:backend/tests/unit/core/test_config_environment.py::TestAuthSettings::test_bypass_rejected_in_staging_and_production",
+]
+
+[[unit]]
+text = "This stack runs with ENVIRONMENT=development, which accepts a short SECRET_KEY."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_stack_runs_development_settings_and_the_demo_seed",
+    "test:backend/tests/unit/core/test_environment_explicit.py::test_a_weak_password_is_accepted_when_development_or_test_was_chosen",
+]
+
+[[unit]]
+text = "Port already in use"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Set POSTGRES_HOST_PORT, REDIS_HOST_PORT, API_HOST_PORT or FRONTEND_HOST_PORT in .env."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_each_host_port_has_its_override"]
+
+[[unit]]
+text = "Start from scratch"
+by = ["exempt:label"]
+
+[[unit]]
+text = "This drops the database volume; the seeds run again on the next start."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_database_lives_in_a_named_volume",
+    "test:backend/tests/integration/database/test_seed_markers.py::TestSeedMarkerModel::test_table_is_on_base_metadata",
+]
+
+[[unit]]
+text = "Events are not counted as conversions"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The event's event_name must equal the metric's event_name, the experiment must be active, and the user must have been assigned first."
+by = [
+    "test:backend/tests/integration/services/test_conversion_event_matching.py::TestResultsEngineCountsSdkEvents::test_get_experiment_results_uses_event_name",
+    "test:backend/tests/integration/services/test_event_service_coverage.py::TestTrackConversion::test_track_conversion_without_assignment_leaves_variant_id_none",
+]
+
+[[unit]]
+text = "What's next"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Limitations — what Experimently does not do, and what happens instead"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Docker Compose on one host — run Experimently where others can reach it"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "SDK guide — endpoint contract and per-SDK status"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Docker guide — the local development stack: services, ports and profiles"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "User guide — for experiment designers and analysts"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Testing guide"
+by = ["exempt:navigation"]

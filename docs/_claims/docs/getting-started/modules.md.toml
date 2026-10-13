@@ -1,0 +1,410 @@
+# What verifies each unit of docs/getting-started/modules.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/getting-started/modules.md"
+
+[[unit]]
+text = "Modules and profiles"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Experimently is one codebase, open source (Apache-2.0, with the client SDKs MIT), and it runs in one of two profiles:"
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit",
+    "test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointShape::test_profile_matches_the_loader",
+]
+
+[[unit]]
+text = "core — the product without the optional modules."
+by = ["test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route"]
+
+[[unit]]
+text = "This is what a checkout without a modules/ directory runs, and what the core container images ship."
+by = [
+    "test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointCore::test_the_core_profile_reports_no_modules",
+    "test:backend/tests/unit/infrastructure/test_core_checkout_image.py::test_core_is_the_last_stage_so_it_is_the_default_target",
+]
+
+[[unit]]
+text = "full — the product with the optional modules installed."
+by = ["test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointShape::test_profile_matches_the_loader"]
+
+[[unit]]
+text = "This is what a complete checkout runs, and what the full container images ship."
+by = ["test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointShape::test_profile_matches_the_loader"]
+
+[[unit]]
+text = "There is nothing else to choose: no tier, no key, no state that expires."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_there_is_no_licence_key_or_tier_check"]
+
+[[unit]]
+text = "The modules are part of the same repository, under the same licence, and every one of them is on by default in the full profile."
+by = ["test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointFull::test_the_full_profile_lists_every_known_module"]
+
+[[unit]]
+text = "The only question a deployment answers is whether the modules/ package is present."
+by = ["test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointShape::test_profile_matches_the_loader"]
+
+[[unit]]
+text = "GET /api/v1/modules reports the answer, unauthenticated, with exactly three keys:"
+by = [
+    "test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointShape::test_endpoint_is_unauthenticated",
+    "test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointShape::test_exactly_three_keys",
+]
+
+[[unit]]
+text = "A full deployment prints something like:"
+by = ["exempt:example"]
+
+[[unit]]
+text = "A core deployment answers {\"profile\": \"core\", \"modules\": [], \"version\": \"...\"}."
+by = ["test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointCore::test_the_core_profile_reports_no_modules"]
+
+[[unit]]
+text = "The core profile"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The core profile includes experiments and feature flags end to end — targeting rules with 20+ operators, gradual rollouts, safety monitoring with automatic rollback, scheduling — and the full statistics: frequentist and Bayesian analysis, sequential testing with early stopping, CUPED variance reduction, multi-armed bandits, mutual exclusion groups and global holdouts, dimensional breakdowns, interaction detection, and live results over WebSocket."
+by = [
+    "test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route",
+    "test:backend/tests/integration/api/test_websocket_results.py::TestWebSocketConnect::test_websocket_connect_receives_snapshot",
+]
+
+[[unit]]
+text = "The four built-in roles (Admin, Developer, Analyst, Viewer), audit logging, API keys, alerting and every SDK are core too."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_there_are_four_built_in_roles",
+    "test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route",
+    "test:backend/tests/unit/core/test_module_names.py::test_the_registration_provides_exactly_the_known_modules",
+]
+
+[[unit]]
+text = "The modules"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The modules are the things an organisation needs once more than one team shares an instance, or once a compliance regime or an external system is involved."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Each has a name, which is what GET /api/v1/modules lists and what the dashboard checks:"
+by = ["test:backend/tests/unit/core/test_module_names.py::test_the_dashboard_and_the_backend_name_the_same_modules"]
+
+[[unit]]
+text = "Module | Name | What it adds"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Team workspaces | workspaces | Group users into teams, with workspace roles and email invites. Grouping only: access to experiments and flags is by platform role"
+by = [
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_changing_a_members_workspace_role_writes_one_role_assign",
+    "test:modules/backend/tests/integration/api/test_workspace_invite_binding.py::test_the_invited_address_joins_with_the_invited_role",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+]
+
+[[unit]]
+text = "Custom roles | rbac | Roles beyond the built-in four, and permissions granted directly to a user. Both are recorded, but they do not change what anyone can do yet: each user's built-in role decides (#891)"
+by = [
+    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_creates_role_with_name",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+]
+
+[[unit]]
+text = "SSO / SAML / OIDC | sso | OIDC identity providers with just-in-time provisioning and role mapping. SAML 2.0 sign-in is not available yet; use OIDC"
+by = [
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_an_sso_role_change_writes_one_role_assign_by_sso_sync",
+    "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_saml_acs_token_is_still_not_a_session",
+]
+
+[[unit]]
+text = "HIPAA | hipaa | PHI encryption, six-year PHI audit retention, BAA records"
+by = [
+    "test:modules/backend/tests/integration/api/test_hipaa_api.py::TestEncryptDecrypt::test_admin_can_encrypt_phi",
+    "test:modules/backend/tests/unit/services/test_hipaa_service.py::TestLogPhiAccess::test_retention_years_set_to_6",
+    "test:modules/backend/tests/integration/api/test_hipaa_api.py::TestCreateBaa::test_admin_can_create_baa",
+]
+
+[[unit]]
+text = "Compliance reporting | compliance | SOC 2 / ISO 27001 reports, signed audit exports"
+by = [
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestComplianceReports::test_soc2_report_returns_200",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestComplianceReports::test_iso27001_report_returns_200",
+    "test:modules/backend/tests/unit/api/test_compliance_signing.py::TestAuditEventSignature::test_audit_event_has_hmac_signature",
+]
+
+[[unit]]
+text = "Warehouse analytics | warehouse | Warehouse analysis (beta): run an experiment's analysis on tables in your own warehouse, under /api/v1/warehouse/analysis. Snowflake and BigQuery are available (Warehouse analytics)"
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_enabled_connectors_exact",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Third-party integrations | integrations | Jira, Salesforce and GitHub"
+by = [
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestCreateIntegration::test_admin_can_create_jira_integration",
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestListIntegrations::test_admin_can_list_integrations",
+]
+
+[[unit]]
+text = "Counters | counters | Routes to increment and read assignment and conversion counters in DynamoDB; assignment and tracking do not write them"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_assignment_and_tracking_write_no_counter",
+]
+
+[[unit]]
+text = "ETL | etl | Glue crawlers, Athena partitions and scheduled jobs"
+by = [
+    "test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_full_checkout_builds_the_module_stacks",
+    "test:modules/backend/tests/unit/api/test_etl_endpoints.py::TestRunETLJobEndpoint::test_admin_can_trigger_etl_job",
+]
+
+[[unit]]
+text = "Split URL testing | split_url | Server-side URL splitting at the edge. The edge router has no configuration source in this release, so it does not split traffic yet; experiments, their URL configuration and the preview work (#393)"
+by = [
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerPassThrough::test_no_config_header_passes_through",
+    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration",
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_admin_can_preview_split_url_assignment",
+]
+
+[[unit]]
+text = "The split is along \"one team running the product\" versus \"an organisation administering it\"."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "What the core profile leaves out"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A core deployment does not carry the modules' code at all, so:"
+by = ["test:backend/tests/smoke/test_core_boundary.py::test_no_core_file_imports_a_module"]
+
+[[unit]]
+text = "The modules' API routes are not mounted, so their URLs 404 like any other unknown path."
+by = ["test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route"]
+
+[[unit]]
+text = "That is what \"not installed\" looks like almost everywhere: /api/v1/workspaces/, /api/v1/rbac/roles, /api/v1/hipaa/, /api/v1/sso/, /api/v1/integrations/ and the rest simply are not there."
+by = ["test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route"]
+
+[[unit]]
+text = "Three URLs are the exception, because a core router declares them while a module implements them — /api/v1/compliance/reports/{standard}, /api/v1/compliance/export and /api/v1/experiments/{id}/split-url/preview."
+by = [
+    "test:backend/tests/unit/core/test_optional_modules.py::TestComplianceRoutesRefusedWithoutTheModule::test_report_route_returns_501_without_handler",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestComplianceRoutesRefusedWithoutTheModule::test_export_route_returns_501_without_handler",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_preview_route_returns_501_without_handler",
+]
+
+[[unit]]
+text = "Those answer HTTP 501 Not Implemented: the route exists in both profiles, so it says \"not installed\" rather than leaving you to wonder about a typo."
+by = [
+    "test:backend/tests/unit/core/test_optional_modules.py::TestComplianceRoutesRefusedWithoutTheModule::test_report_route_returns_501_without_handler",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_preview_route_returns_501_without_handler",
+]
+
+[[unit]]
+text = "Creating an experiment with experiment_type=split_url is refused with 501 for the same reason, so a core instance cannot store an experiment nothing routes."
+by = [
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_create_split_url_experiment_returns_501",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_update_to_split_url_returns_501",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_clone_is_held_to_the_same_rule_as_create",
+]
+
+[[unit]]
+text = "Do not infer the profile from a status code."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "GET /api/v1/modules reports the running profile and the installed modules; ask it."
+by = ["test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointShape::test_profile_matches_the_loader"]
+
+[[unit]]
+text = "The dashboard's module pages (/admin/roles, /workspaces/) render a notice saying the module is not installed in this deployment, with a link back here, instead of a 404."
+by = [
+    "test:frontend/src/tests/components/ModuleNotice.test.tsx::states that the module is not installed and links to the modules guide",
+    "test:frontend/src/tests/modules-alias.test.ts::is core whenever EXPERIMENTLY_PROFILE=core, even with the tree present",
+    "test:frontend/src/tests/modules-alias.test.ts::is full when modules/frontend/src exists and EXPERIMENTLY_PROFILE is not \"core\"",
+]
+
+[[unit]]
+text = "The admin sidebar and the \"More\" navigation group list only the pages the instance can serve."
+by = [
+    "test:frontend/src/tests/admin/AdminSidebar.test.tsx::is absent in the core profile",
+    "test:frontend/src/tests/contexts/ModulesContext.test.tsx::renders core *while the request is still outstanding*, never module chrome",
+]
+
+[[unit]]
+text = "The fourteen module tables (workspaces, workspace_members, workspace_invites, workspace_api_keys, sso_configs, custom_roles, user_custom_roles, direct_permission_grants, baa_configs, phi_audit_logs, warehouse_connections, warehouse_sources, warehouse_analysis_runs, integration_configs) are not created."
+by = ["test:backend/tests/smoke/test_core_boundary.py::test_metadata_holds_no_module_table"]
+
+[[unit]]
+text = "Everything else — experiments, flags, assignment, tracking, results — is identical in both profiles."
+by = [
+    "test:backend/tests/smoke/test_core_boundary.py::test_no_core_file_imports_a_module",
+    "test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route",
+]
+
+[[unit]]
+text = "Running the full profile"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The backend runs the full profile whenever the modules package is importable: a complete checkout has it, so uvicorn backend.app.main:app from the repository root is already the full profile."
+by = [
+    "test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointShape::test_profile_matches_the_loader",
+    "test:backend/tests/unit/test_modules_loader.py::TestModulesRegistration::test_the_modules_package_registers_everything",
+    "test:backend/tests/unit/test_modules_loader.py::TestNeverRaises::test_a_modules_package_that_fails_to_import_leaves_the_core_running",
+]
+
+[[unit]]
+text = "The core profile is a tree with no modules/ directory; scripts/core_build.sh produces one from a checkout and proves it builds, boots and passes its tests."
+by = [
+    "test:backend/tests/unit/scripts/test_core_build.py::TestStepSelection::test_the_full_sequence_runs_without_a_filter",
+    "test:backend/tests/smoke/test_core_boundary.py::test_every_manifest_path_exists",
+]
+
+[[unit]]
+text = "GET /api/v1/modules reports which one is running — nothing in the backend reads EXPERIMENTLY_PROFILE, so that variable does not select a backend profile; the presence of modules/ does."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_nothing_in_the_backend_reads_experimently_profile",
+    "test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointShape::test_profile_matches_the_loader",
+]
+
+[[unit]]
+text = "The modules have dependencies of their own, in modules/requirements.txt (locked in modules/requirements.lock): the SAML and OIDC libraries, and the SQL parser the warehouse module checks every query with."
+by = [
+    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_modules_bring_saml_oidc_and_the_sql_parser_and_the_backend_none_of_them",
+    "test:modules/backend/tests/unit/warehouse/test_dependencies.py::test_sqlglot_is_a_pinned_runtime_dependency_of_the_full_image",
+]
+
+[[unit]]
+text = "backend/requirements.txt deliberately carries none of them."
+by = ["test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_modules_bring_saml_oidc_and_the_sql_parser_and_the_backend_none_of_them"]
+
+[[unit]]
+text = "A full profile without them starts and serves every route, and then refuses every warehouse query — install them alongside the backend pins:"
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_reparse_defence.py::test_sqlglot_absent_refuses_all",
+    "test:modules/backend/tests/unit/warehouse/test_dependencies.py::test_sqlglot_is_imported_only_by_the_builder_and_only_guarded",
+]
+
+[[unit]]
+text = "The dashboard follows EXPERIMENTLY_PROFILE."
+by = ["test:frontend/src/tests/modules-alias.test.ts::is core whenever EXPERIMENTLY_PROFILE=core, even with the tree present"]
+
+[[unit]]
+text = "A plain npm run build is the full profile, where @modules/ resolves to ../modules/frontend/src; with EXPERIMENTLY_PROFILE=core it resolves to src/modules-stub instead:"
+by = [
+    "test:frontend/src/tests/modules-alias.test.ts::is core whenever EXPERIMENTLY_PROFILE=core, even with the tree present",
+    "test:frontend/src/tests/modules-alias.test.ts::is full when modules/frontend/src exists and EXPERIMENTLY_PROFILE is not \"core\"",
+]
+
+[[unit]]
+text = "EXPERIMENTLY_PROFILE=core forces the core resolution on a complete checkout, which is how the seam is tested without deleting anything: EXPERIMENTLY_PROFILE=core npm test, EXPERIMENTLY_PROFILE=core npm run build and npx tsc --noEmit -p tsconfig.core.json (from frontend/)."
+by = [
+    "test:frontend/src/tests/modules-alias.test.ts::is core whenever EXPERIMENTLY_PROFILE=core, even with the tree present",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_ci_runs_the_core_dashboard_seam_on_a_complete_checkout",
+]
+
+[[unit]]
+text = "The container images select the profile by build target and build argument."
+by = ["test:backend/tests/unit/infrastructure/test_core_checkout_image.py::test_core_is_the_last_stage_so_it_is_the_default_target"]
+
+[[unit]]
+text = "For the API, the core target is the default."
+by = [
+    "test:backend/tests/unit/infrastructure/test_core_checkout_image.py::test_core_is_the_last_stage_so_it_is_the_default_target",
+    "test:backend/tests/unit/infrastructure/test_core_checkout_image.py::test_every_modules_glob_is_paired_with_a_path_that_always_exists",
+]
+
+[[unit]]
+text = "full additionally copies modules/backend/ and installs modules/requirements.lock, so it needs a complete checkout: built from a core tree it does not fail, it produces an image with an empty /app/modules, which abort_if_modules_broken() refuses to start outside development:"
+by = [
+    "test:backend/tests/unit/infrastructure/test_core_checkout_image.py::test_core_is_the_last_stage_so_it_is_the_default_target",
+    "test:backend/tests/unit/infrastructure/test_core_checkout_image.py::test_every_modules_glob_is_paired_with_a_path_that_always_exists",
+    "test:backend/tests/unit/infrastructure/test_deploy_profile.py::TestTheProfileIsAnExplicitInput::test_the_built_image_is_checked_against_the_requested_profile",
+]
+
+[[unit]]
+text = "For the dashboard, EXPERIMENTLY_PROFILE=core is the default, like the API's core target, so a plain docker build of either produces a matching pair."
+by = [
+    "mechanism:dashboard-image-default",
+    "test:backend/tests/unit/infrastructure/test_core_checkout_image.py::test_core_is_the_last_stage_so_it_is_the_default_target",
+]
+
+[[unit]]
+text = "full copies modules/frontend/, so it too needs a complete checkout: built from a core tree the build stops at its own profile assertion:"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_a_full_dashboard_image_built_without_the_modules_stops"]
+
+[[unit]]
+text = "The full dashboard build fails if modules/frontend/ is missing; the core build never uses it, so it works from a checkout that has no modules/ directory at all — under a classic builder (DOCKER_BUILDKIT=0, Compose v1, Kaniko), which builds every stage rather than only the ones the profile selects, as well as under BuildKit."
+by = ["test:backend/tests/unit/infrastructure/test_core_checkout_image.py::test_no_copy_names_modules_by_an_explicit_path"]
+
+[[unit]]
+text = "Both images refuse to carry a bundle that does not match the profile (a core image carries no chunk naming a module route; a full image carries them)."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_each_dashboard_image_checks_its_bundle_against_the_profile"]
+
+[[unit]]
+text = "docker compose takes the same variable for both images, and without it starts the core profile."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_without_a_profile_the_stack_is_core"]
+
+[[unit]]
+text = "This starts the full one and waits until every service is healthy:"
+by = ["docex:docs/getting-started/modules.md#\"profile\":\"full\""]
+
+[[unit]]
+text = "Where the code lives"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The split is by directory."
+by = ["test:backend/tests/smoke/test_core_boundary.py::test_manifest_paths_are_under_modules"]
+
+[[unit]]
+text = "Everything under modules/ is the optional part; everything else is core."
+by = [
+    "test:backend/tests/smoke/test_core_boundary.py::test_manifest_paths_are_under_modules",
+    "test:backend/tests/smoke/test_core_boundary.py::test_no_core_file_imports_a_module",
+]
+
+[[unit]]
+text = "modules-manifest.txt at the repository root lists every module path, one group per module, and a core build is the repository with those paths deleted — it must build, boot and pass its tests that way, and backend/tests/smoke/test_core_boundary.py fails on any core file that imports a module."
+by = [
+    "test:backend/tests/smoke/test_core_boundary.py::test_every_manifest_path_exists",
+    "test:backend/tests/smoke/test_core_boundary.py::test_manifest_paths_are_under_modules",
+    "test:backend/tests/unit/core/test_module_names.py::test_there_is_one_module_per_manifest_group",
+    "test:backend/tests/smoke/test_core_boundary.py::test_no_core_file_imports_a_module",
+]
+
+[[unit]]
+text = "For the dashboard that means modules/frontend/src/, which mirrors frontend/src/ (pages/, components/, services/, contexts/, tests/) and holds the module pages (/admin/roles, /sso/complete, /warehouse/, /workspaces/), the custom-roles components and the workspace service."
+by = ["test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_module_dashboard_pages"]
+
+[[unit]]
+text = "The core tree reaches it only through the @modules/ alias, defined once in frontend/modules-alias.js and applied to webpack, jest and TypeScript alike:"
+by = [
+    "test:frontend/src/tests/modules-alias.test.ts::is core whenever EXPERIMENTLY_PROFILE=core, even with the tree present",
+    "test:frontend/src/tests/modules-alias.test.ts::is full when modules/frontend/src exists and EXPERIMENTLY_PROFILE is not \"core\"",
+]
+
+[[unit]]
+text = "With modules/frontend/src/ present, @modules/x is modules/frontend/src/x."
+by = ["test:frontend/src/tests/modules-alias.test.ts::is full when modules/frontend/src exists and EXPERIMENTLY_PROFILE is not \"core\""]
+
+[[unit]]
+text = "Without it — a core checkout — @modules/x is frontend/src/modules-stub/x, whose pages render the \"module not installed\" notice."
+by = [
+    "test:frontend/src/tests/modules-alias.test.ts::is core whenever EXPERIMENTLY_PROFILE=core, even with the tree present",
+    "test:frontend/src/tests/modules-alias.test.ts::is full when modules/frontend/src exists and EXPERIMENTLY_PROFILE is not \"core\"",
+    "test:frontend/src/tests/components/ModuleNotice.test.tsx::states that the module is not installed and links to the modules guide",
+]
+
+[[unit]]
+text = "The route files under frontend/src/pages/ are one-line re-exports and are the same in both profiles."
+by = ["test:frontend/src/tests/modules-alias.test.ts::leaves the twelve page files in src/pages as one-line re-exports"]
+
+[[unit]]
+text = "Contributions to modules/ are welcome exactly like contributions anywhere else in the repository; see CONTRIBUTING.md."
+by = ["exempt:navigation"]

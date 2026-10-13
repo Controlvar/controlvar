@@ -632,6 +632,28 @@ MECHANISMS: Dict[str, Mechanism] = {
             ),
         ),
     ),
+    # Which dashboard image a plain `docker build` gives, on the modules page.
+    "dashboard-image-default": Mechanism(
+        "backend/tests/unit/infrastructure/test_dashboard_image_docs.py"
+        "::TestTheDocumentedDashboardBuild::test_the_prose_does_not_claim_the_wrong_default",
+        holds=(
+            (
+                "docs/getting-started/modules.md",
+                r"^For the dashboard, EXPERIMENTLY_PROFILE=core is the default",
+            ),
+        ),
+    ),
+    # The quick start's rollout example: which of its two users the 10% holds.
+    "quick-start-rollout": Mechanism(
+        "backend/tests/unit/docs/test_quick_start_doc.py"
+        "::test_the_rollout_puts_user_2_in_and_user_123_out",
+        holds=(
+            (
+                "docs/getting-started/quick-start.md",
+                r"user-2 is inside the 10%, user-123 is not",
+            ),
+        ),
+    ),
     # Which warehouses the page says are available.
     "warehouse-availability": Mechanism(
         "modules/backend/tests/unit/test_warehouse_docs_availability.py"
@@ -677,8 +699,6 @@ CLAIMS_DEFERRED: Tuple[str, ...] = (
 #: In-scope documents not registered yet. The rollout: it only shrinks, and a
 #: document leaves it in the pull request that registers it.
 CLAIMS_PENDING: Tuple[str, ...] = (
-    "README.md",
-    "SECURITY.md",
     "charts/experimently/templates/NOTES.txt",
     "demo/DEMO_GUIDE.md",
     "demo/shoplab/README.md",
@@ -687,7 +707,6 @@ CLAIMS_PENDING: Tuple[str, ...] = (
     "deploy/compose/compose.yml#header",
     "deploy/compose/generate-env.sh#header",
     "docs/Enhanced_Rules_Engine_Reference.md",
-    "docs/README.md",
     "docs/api/README.md",
     "docs/api/alerting.md",
     "docs/api/api-docs-guide.md",
@@ -735,18 +754,9 @@ CLAIMS_PENDING: Tuple[str, ...] = (
     "docs/feature-flags/create.md",
     "docs/feature-flags/rollouts.md",
     "docs/feature-flags/safety.md",
-    "docs/getting-started/README.md",
-    "docs/getting-started/architecture.md",
-    "docs/getting-started/concepts.md",
     "docs/getting-started/docker-compose-file.md",
     "docs/getting-started/docker-guide.md",
     "docs/getting-started/environment-setup.md",
-    "docs/getting-started/faq.md",
-    "docs/getting-started/modules.md",
-    "docs/getting-started/pre-commit-hooks.md",
-    "docs/getting-started/python-virtual-env-setup.md",
-    "docs/getting-started/quick-start.md",
-    "docs/getting-started/vscode-settings.md",
     "docs/guides/assign-customer-list.md",
     "docs/guides/dashboard-and-api.md",
     "docs/guides/experiment-wizard.md",
