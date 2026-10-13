@@ -110,9 +110,11 @@ DEMO_SETUP = [
     ("actions/setup-node@v7", {"node-version-file": ".nvmrc"}),
 ]
 DEMO_VERDICTS = "docs-journeys-demo-verdicts"
-#: The demo job's timeout. PROVISIONAL until the rollout-story journey's first
-#: measured run (D73 DJ2): its story alone may take up to 40 minutes. A change
-#: is a new measurement, made here and in the workflow's comment together.
+#: The demo job's timeout: above the bounds inside the job, so each of them
+#: stops first (setup-local.sh 900 s, the stack's wait 600 s, the rollout
+#: story's 2,400 s, the other journeys about 2 minutes). Measured 10 min 16 s
+#: with the story (docs-journeys run 38449944644). A change is a new
+#: measurement, made here and in the workflow's comment together.
 DEMO_TIMEOUT_MINUTES = 75
 #: The report job's downloads: each job's verdicts, when that job wrote them.
 REPORT_DOWNLOADS = [
