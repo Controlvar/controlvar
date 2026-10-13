@@ -301,8 +301,11 @@ text = "GET /api/v1/hipaa/status returns:"
 by = ["test:modules/backend/tests/integration/api/test_hipaa_api.py::TestHipaaStatus::test_status_has_required_fields"]
 
 [[unit]]
-text = "overall_hipaa_ready is true when an active BAA exists and PHI_ENCRYPTION_KEY is set."
-by = ["untested:T"]
+text = "overall_hipaa_ready is true when an active BAA exists, PHI_ENCRYPTION_KEY is set and HIPAA_ALLOWED_REGIONS is not empty."
+by = [
+    "test:modules/backend/tests/unit/services/test_hipaa_service.py::TestGetHipaaStatus::test_overall_hipaa_ready_true_when_all_requirements_met",
+    "test:modules/backend/tests/unit/services/test_hipaa_service.py::TestGetHipaaStatus::test_overall_hipaa_ready_false_when_missing_requirements",
+]
 
 [[unit]]
 text = "It reports configuration; it does not inspect stored data or logs."

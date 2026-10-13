@@ -47,11 +47,11 @@ by = [
 ]
 
 [[unit]]
-text = "Emit HSTS (max-age=31536000; includeSubDomains; preload) on every response outside development."
+text = "Emit HSTS (max-age=31536000; includeSubDomains; preload) on every response outside development, except a CORS preflight."
 by = [
-    "test:backend/tests/unit/api/test_security_headers.py::TestSecurityMiddleware::test_hsts_in_production",
-    "test:backend/tests/unit/api/test_security_headers.py::TestSecurityMiddleware::test_hsts_not_in_dev",
     "test:backend/tests/unit/api/test_hsts_header.py::test_outside_development_every_response_carries_the_whole_hsts_value",
+    "test:backend/tests/unit/api/test_hsts_header.py::test_a_cors_preflight_carries_none_of_the_four_headers",
+    "test:backend/tests/unit/api/test_security_headers.py::TestSecurityMiddleware::test_hsts_not_in_dev",
 ]
 
 [[unit]]

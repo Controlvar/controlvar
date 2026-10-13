@@ -510,7 +510,6 @@ exempt:baseline	docs/api/warehouse-analytics.md	c138fe782a66
 exempt:baseline	docs/api/warehouse-analytics.md	c74ea9dc9cd2
 exempt:baseline	docs/api/warehouse-analytics.md	c8e5998f6a39
 exempt:baseline	docs/api/warehouse-analytics.md	d0e6b0c9bbf6
-exempt:baseline	docs/api/warehouse-analytics.md	d892234119a3
 exempt:baseline	docs/api/warehouse-analytics.md	f10779a21315
 exempt:baseline	docs/api/warehouse-analytics.md	fa4434ecf46f
 exempt:baseline	docs/api/warehouse-analytics.md	fef94483168c
@@ -1039,14 +1038,13 @@ untested:T	docs/api/alerting.md	294ac8713c5a
 untested:T	docs/api/alerting.md	39b5c6821e8b
 untested:T	docs/api/alerting.md	42793bd11980
 untested:T	docs/api/alerting.md	5fdf110dbb44
-untested:T	docs/api/alerting.md	6718e126396a
 untested:T	docs/api/alerting.md	6f08f0fb771a
 untested:T	docs/api/alerting.md	a317751a28ad
+untested:T	docs/api/alerting.md	c23228f1236d
 untested:T	docs/api/alerting.md	ca12ff5f5052
 untested:T	docs/api/alerting.md	d951b7d764d3
 untested:T	docs/api/alerting.md	e81a430fa4ec
 untested:T	docs/api/alerting.md	e8c1bbf1f7fa
-untested:T	docs/api/alerting.md	eb00e570325c
 untested:T	docs/api/api-docs-guide.md	727d8aaa8eda
 untested:T	docs/api/api-docs-guide.md	e4600fc0ad12
 untested:T	docs/api/audit-logging.md	3d8cefaae2c3
@@ -1203,7 +1201,6 @@ untested:T	docs/hipaa/overview.md	48e3b150f283
 untested:T	docs/hipaa/overview.md	a45910bd3dc4
 untested:T	docs/hipaa/overview.md	b2ee516dc3d5
 untested:T	docs/hipaa/overview.md	b9484003f72b
-untested:T	docs/hipaa/overview.md	cd4ad42c91e8
 untested:T	docs/integrations/aws.md	05d95059d3eb
 untested:T	docs/integrations/aws.md	0b2f6ce5b607
 untested:T	docs/integrations/aws.md	0d29847b376f
@@ -1237,6 +1234,7 @@ untested:T	docs/integrations/aws.md	b2ba897b3bf1
 untested:T	docs/integrations/aws.md	b9214f37d133
 untested:T	docs/integrations/aws.md	d2179ea5de81
 untested:T	docs/integrations/aws.md	d8e25339e48d
+untested:T	docs/integrations/aws.md	dacb07e33073
 untested:T	docs/integrations/aws.md	dda5fc10a9a7
 untested:T	docs/integrations/aws.md	e1cdb16a69ee
 untested:T	docs/integrations/aws.md	f16d434e1619

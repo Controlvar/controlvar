@@ -93,7 +93,7 @@ All endpoints at `/api/v1/hipaa` require ADMIN role (except `/encrypt` which als
 }
 ```
 
-`overall_hipaa_ready` is true when an active BAA exists and `PHI_ENCRYPTION_KEY` is set. It reports configuration; it does not inspect stored data or logs.
+`overall_hipaa_ready` is true when an active BAA exists, `PHI_ENCRYPTION_KEY` is set and `HIPAA_ALLOWED_REGIONS` is not empty. It reports configuration; it does not inspect stored data or logs.
 
 ## Security Notes
 

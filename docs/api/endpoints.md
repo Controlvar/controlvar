@@ -417,9 +417,9 @@ three levels deep.
   maximum
 
 ### Caching
-- Experiment data is cached for 1 hour when `CACHE_ENABLED` is on (it is off by default)
+- The experiment list, `GET /api/v1/experiments/{experiment_id}`, and its `daily-results` and `segmented-results`, are cached for 1 hour when `CACHE_ENABLED` is on (it is off by default)
 - Feature flags are not cached: the flag list and a flag's detail are read from the database on every request, whatever `CACHE_ENABLED` says
-- Results are cached for 5 minutes while the experiment is running, and for 24 hours otherwise
+- `GET /api/v1/results/{experiment_id}` and `GET /api/v1/experiments/{experiment_id}/results` are cached for 5 minutes while the experiment is running, and for 24 hours otherwise, whenever Redis is reachable
 
 ## Authentication Endpoints
 
@@ -1932,7 +1932,10 @@ segment that is not archived and whose rules are not valid,
 (2 when it cannot read the database). Rewrite each listed segment's rules in the format
 above with `PUT /api/v1/segments/{id}`.
 
-No flag or experiment changes behaviour: no targeting rule can refer to a segment.
+A flag or an experiment whose targeting rules name such a segment (with `in_segment` or
+`not_in_segment`) is not evaluated against it: the flag answers `enabled: false` with
+`reason: "error"`, and a new user is not assigned (`reason: "targeting"`). Creating or
+updating a flag or an experiment that names one answers `422`.
 
 #### Segments made from a list of user IDs (beta)
 

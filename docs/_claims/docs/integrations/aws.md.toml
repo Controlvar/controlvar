@@ -140,12 +140,16 @@ text = "Application Cache"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "With CACHE_ENABLED on (it is off by default), experiment details and results are cached in Redis for an hour and cleared when the experiment changes."
+text = "With CACHE_ENABLED on (it is off by default), the experiment list, GET /api/v1/experiments/{experiment_id}, and its daily-results and segmented-results, are cached in Redis for an hour and cleared when the experiment changes."
 by = [
     "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_the_experiment_detail_is_cached_and_served_from_the_cache",
     "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_results_are_cached_and_served_from_the_cache",
     "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_a_change_drops_the_experiment_and_every_cached_list",
 ]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id} and GET /api/v1/experiments/{experiment_id}/results are cached in Redis whenever it is reachable, CACHE_ENABLED or not: for 5 minutes while the experiment is running, and for 24 hours otherwise."
+by = ["untested:T"]
 
 [[unit]]
 text = "The API does not cache feature flags: it reads them from the database on every request, so a flag change is served on the next one."
