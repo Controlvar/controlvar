@@ -25,8 +25,7 @@ user can see or change. Experiments and feature flags are not created inside a
 workspace, and workspace membership plays no part when they are listed, read
 or changed. That is decided by the user's **platform role** (ADMIN, DEVELOPER,
 ANALYST or VIEWER) across the whole installation — see [Role-based access
-control](../rbac/README.md). Joining or leaving a workspace does not change
-which experiments and flags a user can see or change.
+control](../rbac/README.md).
 
 If you need teams to be unable to see each other's experiments and flags, run a
 separate installation for each team.
@@ -47,9 +46,7 @@ hierarchy, and a workspace role applies only to the workspace routes:
 | **VIEWER**    | Read the workspace and its member list; leave the workspace |
 
 DEVELOPER, ANALYST and VIEWER are recorded for each member but currently grant
-the same thing on the workspace routes. None of the five changes what the member
-can do with experiments, feature flags or platform API keys; the platform role
-does that.
+the same thing on the workspace routes.
 
 ### Changing Roles
 
@@ -70,10 +67,9 @@ members. A create or update request that sends `plan` is refused with `422`.
 ## API Keys
 
 Workspaces do not issue API keys. To connect an SDK, send events or evaluate
-flags, use a **platform API key**. A superuser can create one in the dashboard
-under **Admin → API Keys**. Any signed-in user can create one for themselves
+flags, use a **platform API key**. Any signed-in user can create one for themselves
 with `POST /api/v1/api-keys`; step 3 of the [quickstart](./quickstart.md)
-links to the full guide. A key acts as the user who created it.
+links to the full guide.
 
 ---
 

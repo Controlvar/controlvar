@@ -1,11 +1,5 @@
 # CUPED Variance Reduction
 
-**Changed in 0.21.0.** CUPED now adjusts for each user's own events in the
-`covariate_lookback_days` before they were assigned. Until 0.20.0 it used each user's
-position in the order of assignment, which removed almost no variance, so CUPED numbers for
-experiments set to `cuped` or `cuped_plus` change. Every treatment is now reported, not only
-the first, at the experiment's `confidence_level` and with its `correction_method`.
-
 CUPED (Controlled-experiment Using Pre-Experiment Data) narrows the interval around a
 treatment effect by adjusting for what each user did before the experiment. How much it
 narrows depends on how well that history predicts the outcome. The endpoint is
@@ -66,9 +60,7 @@ For each event:
   event is dated when it is received.
 
 Send events from at least `covariate_lookback_days` before the planned start; anything older
-is never read. The batch route shares the SDK rate limit
-(`SDK_RATE_LIMIT_PER_MINUTE`, 6,000 requests a minute per IP by default) and answers `429`
-with `Retry-After` above it.
+is never read.
 
 Events during the experiment still need the experiment's key, as they always have: an event
 without one counts in no experiment's results.
@@ -76,9 +68,7 @@ without one counts in no experiment's results.
 The SDKs' `track()` without a key sends one event for each experiment and flag cached for the
 user, and those tagged events count as history for a later experiment. **An SDK user with
 nothing cached sends no history**, which is usual before a user's first assignment. Each
-result's `covariate_coverage_pct` shows how many users had history. To give every user
-history, send it from your server: the Python SDK's `track_batch` passes key-less entries
-through as they are, and any HTTP client can call the routes above.
+result's `covariate_coverage_pct` shows how many users had history.
 
 Run the commands on this page in one terminal, in order, against the stack from the
 [Quick Start](../getting-started/quick-start.md). Each uses the shell variables set by the
@@ -97,8 +87,7 @@ It prints `"ADMIN"`. The examples use the demo data's `checkout_button_color` ex
 whose primary metric counts `checkout_completed` events. The demo data already gives about
 one user in ten a `checkout_completed` before their assignment. Sending an event takes an
 API key, which this saves in `$KEY`, with the experiment's id in `$EXP_ID`; then it sends one
-history event with no key. The collection URL ends with a slash, `/api/v1/experiments/`;
-without it the API answers `307`, which `curl` doesn't follow:
+history event with no key:
 
 ```{.bash exec}
 KEY=$(curl -s -X POST localhost:8000/api/v1/api-keys \
@@ -139,9 +128,8 @@ create it (`POST /api/v1/experiments/`) or change it (`PUT /api/v1/experiments/{
 - `cuped_plus` is currently computed as `cuped`: the response's top-level `method` says
   `cuped_plus`, and each row's `method` says `cuped`.
 - `winsorization` clips values above a percentile, which only means something for a mean
-  metric (revenue, say). On a conversion metric it would turn every conversion into 0
-  whenever fewer than 1% of users convert, so a conversion metric is listed with
-  `unavailable_reason: "winsorization_needs_mean_metric"` instead.
+  metric (revenue, say). This view does not apply it: a conversion metric is listed with
+  `unavailable_reason: "winsorization_needs_mean_metric"`.
 
 This sets the demo experiment's method to `cuped` with a 7-day lookback:
 
@@ -188,8 +176,7 @@ curl -s localhost:8000/api/v1/results/$EXP_ID/cuped \
 ```
 <!-- expect: true -->
 
-It prints `true`. On the demo data about 10% of users have history and the variance of the
-effect falls by about 13%. The full response:
+It prints `true`. The full response:
 
 ```json
 {
@@ -289,18 +276,6 @@ Three things can surprise:
 | `covariate_metric_not_found` | `covariate_metric_id` is not one of the experiment's metrics (after a `PUT` replaced them, say) |
 | `metric_has_no_event_name` | The metric whose event is the history has no `event_name` |
 | `result_invalid` | The counts were ones no sample could produce |
-
----
-
-## Interpreting `variance_reduction_pct`
-
-| Value | Interpretation |
-|-------|---------------|
-| < 0 | CUPED did not help this comparison (see above); use the unadjusted numbers if you prefer |
-| < 10% | History is a weak predictor. Little benefit from CUPED. |
-| 10–30% | Moderate benefit. Worth using. |
-| 30–60% | Strong benefit. Experiment is significantly more sensitive. |
-| > 60% | Unusual for user behaviour; check that the history events come from before assignment. |
 
 ---
 

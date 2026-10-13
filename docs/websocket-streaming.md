@@ -1,28 +1,9 @@
-# EP-058: Real-time WebSocket Streaming Results
-
-Live experiment results delivered over WebSocket — no polling required.
+# Live Results over WebSocket
 
 ## Overview
 
 EP-058 adds a WebSocket endpoint that streams experiment result snapshots to
-connected clients. The frontend uses the `useExperimentStream` hook and the
-`LiveResultsPanel` component to display live data in the results dashboard.
-
-## Architecture
-
-```text
-Browser (LiveResultsPanel)
-    |
-    | WebSocket ws://host/api/v1/ws/experiments/{id}/results
-    |
-ConnectionManager  ←──── broadcasts to all subscribers of this experiment
-    |
-ResultsStreamingService
-    |
-    | Queries assignments + events tables
-    |
-PostgreSQL (Aurora)
-```
+connected clients.
 
 ## Backend
 
@@ -32,8 +13,9 @@ PostgreSQL (Aurora)
 ws://localhost:8000/api/v1/ws/experiments/{experiment_id}/results
 ```
 
-On connect the server sends an initial snapshot. Periodic updates are sent every
-30 seconds (configurable via `RESULTS_STREAM_INTERVAL_SECONDS`). The socket needs an
+On connect the server sends an initial snapshot. After 30 seconds with no message from
+the client it sends a fresh one (`RESULTS_STREAM_INTERVAL_SECONDS`, read when the API
+starts); a ping or a refresh starts that wait again. The socket needs an
 access token; see [Authentication](#authentication) below for the three ways to send it.
 
 Run the commands on this page in one terminal, in order, against the stack from the
@@ -50,8 +32,7 @@ curl -s localhost:8000/api/v1/auth/me -H "Authorization: Bearer $TOKEN" | jq .ro
 <!-- expect: "ADMIN" -->
 
 It prints `"ADMIN"`. This saves the id of the demo data's `checkout_button_color`
-experiment in `$EXP_ID`. The collection URL ends with a slash, `/api/v1/experiments/`;
-without it the API answers `307`, which `curl` doesn't follow:
+experiment in `$EXP_ID`:
 
 ```{.bash exec}
 EXP_ID=$(curl -s localhost:8000/api/v1/experiments/ \
@@ -64,12 +45,12 @@ echo "$EXP_ID" | wc -c
 
 It prints `37`, the length of an id and its newline.
 
-Any WebSocket client can connect, such as `websocat` or a browser. `curl` alone can show
+`curl` alone can show
 the first snapshot: it sends the upgrade request with the token as the subprotocol, then
 prints what arrives until `--max-time` stops it three seconds later. That stop is exit
-code 28, which the block accepts. The snapshot arrives inside a binary WebSocket frame, so
-`grep` reads it as bytes (`LC_ALL=C grep -a`) and picks out the event, status and variant
-keys:
+code 28, which the block accepts. The frame header that `curl` prints with the snapshot is
+binary, so `grep` reads the output as bytes (`LC_ALL=C grep -a`) and picks out the event,
+status and variant keys:
 
 ```{.bash exec}
 { curl -s -N --http1.1 --max-time 3 \
@@ -137,7 +118,8 @@ variants, `blue_button` and `green_button`. The whole snapshot has the shape bel
 against the control, computed from each arm's own participants and conversions (the
 arms need not be the same size). It is `null` for the control, and for a variant
 whose test is undefined (a control with no participants, fewer than 5 variant
-participants, or no conversions at all in the two arms together).
+participants, or a pooled rate of 0 or 1: no conversions in the two arms together, or
+every participant converted).
 
 ### HTTP Companion Endpoints
 
@@ -158,97 +140,9 @@ curl -s localhost:8000/api/v1/ws/active-experiments
 
 It prints `0`, then `{"active_experiments":[]}`.
 
-### Key Classes
+## Results Dashboard Integration
 
-**`ConnectionManager`** (`backend/app/services/websocket_manager.py`):
-- Thread-safe `asyncio.Lock`-protected subscriber registry
-- `connect(ws, experiment_id)` — accept and register
-- `disconnect(ws, experiment_id)` — deregister; cleans up empty experiment keys
-- `broadcast(experiment_id, message)` — sends to all; removes dead connections
-
-**`ResultsStreamingService`** (`backend/app/services/results_streaming_service.py`):
-- `get_live_snapshot(experiment_id)` — queries DB, returns snapshot dict
-- Uses a `db_session_factory` callable for fresh sessions per snapshot
-- Gracefully handles missing experiments and DB errors (returns error snapshot)
-- `compute_and_broadcast(manager, experiment_id)` — convenience wrapper
-
-### Configuration
-
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `RESULTS_STREAM_INTERVAL_SECONDS` | `30` | Periodic update interval |
-
-## Frontend
-
-### `useExperimentStream` Hook
-
-```typescript
-import { useExperimentStream } from '@/hooks/useExperimentStream';
-
-function MyComponent({ experimentId }: { experimentId: string }) {
-  const { snapshot, status, error, refresh, disconnect } =
-    useExperimentStream(experimentId);
-
-  // status: 'connecting' | 'connected' | 'disconnected' | 'error'
-  // snapshot: ExperimentSnapshot | null
-}
-```
-
-The hook auto-connects when `experimentId` is set and auto-reconnects up to 5
-times (configurable) on unexpected disconnection.
-
-WebSocket URL: `NEXT_PUBLIC_WS_URL` env var (default: `ws://localhost:8000`).
-
-### `LiveResultsPanel` Component
-
-```tsx
-import { LiveResultsPanel } from '@/components/experiments/LiveResultsPanel';
-
-<LiveResultsPanel experimentId="exp-uuid" />
-```
-
-Features:
-- Connection status badge (green/yellow/grey/red dot)
-- Pulsing "LIVE" indicator when connected
-- Variant results table: Name | Participants | Conversions | Rate | Lift | P-value | Status
-- Refresh button
-- Last updated timestamp
-- Auto-reconnect countdown when disconnected
-- Error banner with reconnect button
-
-### Results Dashboard Integration
-
-The `LiveResultsPanel` is accessible via the **⚡ Live** tab in the
-`ResultsDashboard` component on the `/results/[id]` page.
-
-## Tests
-
-### Running
-
-In a development checkout, with the virtual environment active, this runs the two unit
-test files and the integration test file together:
-
-```{.bash skip reason="dev: runs this repository's test suite in a development checkout"}
-source venv/bin/activate
-export APP_ENV=test TESTING=true
-python -m pytest \
-  backend/tests/unit/services/test_websocket_manager.py \
-  backend/tests/unit/services/test_results_streaming_service.py \
-  backend/tests/integration/api/test_websocket_results.py \
-  -v --tb=short
-```
-
-Pass one of the three paths instead to run that file alone.
-
-### Test Coverage
-
-| Test file | Covers |
-|-----------|--------|
-| `test_websocket_manager.py` | ConnectionManager lifecycle, broadcast, concurrency |
-| `test_results_streaming_service.py` | Snapshot schema, DB error handling, significance logic |
-| `test_websocket_results.py` | WebSocket protocol, HTTP endpoints, edge cases |
-
-All tests mock the DB session; no live PostgreSQL required.
+In the dashboard, the **⚡ Live** tab of an experiment's results page shows this stream.
 
 ## Authentication
 
@@ -265,10 +159,7 @@ Ways to present the token, in order of preference:
    URLs and therefore out of access logs.
 2. **`Authorization: Bearer <token>` header** for non-browser clients.
 3. **`?token=<token>` query parameter**, supported for compatibility only. URLs are
-   written to proxy access logs, so prefer 1 or 2. (The API's own log writes the
-   value as `[redacted]`. The dashboard's nginx, which proxies `/api/` in Docker
-   Compose, leaves the query string out of its access log; its error log, written
-   when it cannot reach the API, still includes it.)
+   written to proxy access logs, so prefer 1 or 2.
 
 `frontend/src/hooks/useExperimentStream.ts` stops reconnecting and reports
 `status: 'unauthorized'` on close code 4401.

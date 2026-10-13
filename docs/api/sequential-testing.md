@@ -1,18 +1,6 @@
 # Sequential Testing & Early Stopping
 
-Sequential testing lets you continuously monitor experiment results and stop as soon as you have enough evidence — without inflating your false positive rate. Unlike fixed-horizon A/B tests that require a predetermined sample size, sequential methods maintain valid error rates even when you peek at results repeatedly.
-
----
-
-## When to Use Sequential Testing
-
-| Situation | Use Sequential Testing |
-|-----------|----------------------|
-| You need results faster than a fixed-horizon test allows | ✅ Yes |
-| Traffic is unpredictable and sample size targets are hard to set | ✅ Yes |
-| You want to stop early if a treatment is clearly harmful | ✅ Yes |
-| You have a strict predetermined sample size and won't peek | ❌ Use standard A/B |
-| You need exact p-values for regulatory reporting | ❌ Use standard A/B |
+Sequential testing lets you continuously monitor experiment results and stop as soon as you have enough evidence — without inflating your false positive rate.
 
 ---
 
@@ -37,7 +25,7 @@ ten million users per arm, still reports a finite number and can stop.
 
 ### Always-Valid Confidence Intervals (Confidence Sequences)
 
-A confidence sequence is a confidence interval that is valid at every sample size simultaneously. The interval shrinks as more data is collected. Use this when you want a continuous view of the effect size range, not just a stop/continue decision.
+A confidence sequence is a confidence interval that is valid at every sample size simultaneously. The interval shrinks as more data is collected.
 
 It is the same mSPRT turned into an interval (the normal-mixture confidence sequence
 of Johari et al. 2017 and Howard et al. 2021), on the difference in conversion rates
@@ -54,9 +42,7 @@ arm, `p̃ = (conversions + 1) / (users + 2)`, and
 same V. Because the interval and the stop decision share V, τ² and α, they cannot
 disagree: 0 is outside the interval exactly when `can_stop` is `true`. At a 10%
 conversion rate, α = 0.05 and the default τ² = 0.001, the half-width is about 0.041
-at 1,000 users per arm, 0.0136 at 10,000 and 0.00055 at 10 million. Early on it is
-wider than a fixed-horizon interval: that is the price of being valid however often
-you look. A difference in rates cannot leave `[-1, 1]`, so the interval is clipped to
+at 1,000 users per arm, 0.0136 at 10,000 and 0.00055 at 10 million. A difference in rates cannot leave `[-1, 1]`, so the interval is clipped to
 that range: with 10 users per arm at a 50% rate the formula gives about ±3.27, and
 the response reports `[-1, 1]`. Clipping changes neither the stop decision nor
 coverage, because 0 and the true difference always lie inside `[-1, 1]`. While an
@@ -66,27 +52,10 @@ user has the same outcome (nobody converts, or everybody does) still gets a fini
 interval: 0 of 500 against 0 of 500 gives about ±0.0093 around 0 and cannot stop,
 while 0 of 500 against 500 of 500 can.
 
-**Unequal splits.** Before engine version 1.4.0
-([#854](https://github.com/getexperimently/experimently/issues/854)) V was the
-plug-in variance `p (1 − p) / n` per arm. With one small, low-rate arm that is too
-small (it is 0 while the arm has no conversions), so the interval was too narrow
-and A/A experiments were told `stop_for_effect` far more often than α: about one in
-five at a 9:1 split and a 1% rate. With the Agresti-Caffo variance, measured over
-4,000 simulated experiments read 20 times each, the interval held the true
-difference at every look on 96.7% of them at 9:1 and 98.2% at 4:1 (1% rate, 100
-users per look in the small arm), and on 95.4% at 9:1 when the true rates were 1%
-and 3%. It is not exact for every design: when the small arm has 1/20 to 1/100 of
-the traffic and 10 to 50 users per look, at rates of 2% to 5%, coverage measured
-0.93 to 0.95, with or without a real effect, so an A/A experiment there can be told
-it may stop about 6% of the time instead of 5%.
-
 ### Alpha Spending (not computed yet)
 
 A group-sequential design with planned interim analyses (O'Brien-Fleming or Pocock
-alpha spending) is not implemented. The boundaries the analysis used to report did
-not hold their stated significance level
-([#232](https://github.com/getexperimently/experimently/issues/232)), and nothing
-counted the looks they were indexed by, so they were removed: `alpha_spending` is
+alpha spending) is not implemented: `alpha_spending` is
 always an empty list. `spending_function` and `planned_looks` are still accepted and
 stored. The mSPRT above stays valid however often you read the results, so no
 planned-looks table is needed to use it.
@@ -126,8 +95,7 @@ curl -s localhost:8000/api/v1/auth/me -H "Authorization: Bearer $TOKEN" | jq .ro
 
 It prints `"ADMIN"`. The examples use the demo data's `checkout_button_color` experiment,
 which is running and has data. This saves its id in `$EXP_ID` and turns sequential testing
-on with five planned looks. The collection URL ends with a slash,
-`/api/v1/experiments/`; without it the API answers `307`, which `curl` doesn't follow:
+on with five planned looks.
 
 ```{.bash exec}
 EXP_ID=$(curl -s localhost:8000/api/v1/experiments/ \
@@ -144,9 +112,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X PUT localhost:8000/api/v1/experiment
 ```
 <!-- expect: 200 -->
 
-It prints `200`. The experiment's own response reports `sequential_testing_enabled` as
-`false` whatever is stored ([#197](https://github.com/getexperimently/experimently/issues/197));
-the results endpoint below is the one to read.
+It prints `200`.
 
 ---
 
@@ -285,9 +251,8 @@ carry the same analysis as `sequential_testing`, computed by the same code as
 created first, at the stored `sequential_testing_config.alpha`. The `alpha` parameter
 exists only on `/sequential`, and the results routes' `confidence_level` and
 `correction_method` do not change this block. It is `null` when sequential testing is
-off. It is also `null` when the analysis could not be computed: the API logs a warning,
-the rest of the response is unaffected, and `/sequential` answers a plain `500` whose
-body does not say why; the cause is in the API log.
+off. It is also `null` when the analysis could not be computed: the API logs a warning
+and the rest of the response is unaffected.
 
 It is cached with the rest of the results: for up to 5 minutes for a running experiment
 and 24 hours otherwise. A change to `sequential_testing_enabled` or
@@ -311,7 +276,7 @@ It prints `"embedded_method": "msprt"` and the boundary `20.0`, the same as the 
 
 ## Permissions
 
-Any logged-in user can read the results. Changing an experiment's sequential testing
+Changing an experiment's sequential testing
 settings is a change to the experiment, decided by role and by the experiment's state, not
 by who created it. ANALYST and VIEWER cannot change any experiment: the `PUT` above answers
 `403` with `"You don't have permission to update experiments"`. ADMIN and DEVELOPER may
@@ -323,9 +288,5 @@ above answers `400` with `"Cannot update experiments in active status"`. The dem
 ---
 
 ## Common Mistakes
-
-**Don't use sequential testing results as standard p-values in reports.** The `always_valid_p_value` is semantically equivalent but should be labeled as such.
-
-**Don't change the configuration mid-experiment.** Fix your parameters before launch.
 
 **Long-running risk is informational only.** An experiment flagged `at_risk` (the same value as `long_running_risk.is_at_risk`) may still be producing valid results. It means the experiment is running well past its expected duration or collecting samples slowly, not that there is no effect.

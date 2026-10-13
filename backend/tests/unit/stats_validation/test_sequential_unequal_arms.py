@@ -25,8 +25,7 @@ A/A 4:1                     0.931 / 0.069       0.982 / 0.018
 ==========================  ==================  ==============
 
 Agresti-Caffo is not exact at every design: with a far smaller arm (99:1)
-and 10 to 50 users per look in it, coverage measured 0.93 to 0.95
-(``docs/api/sequential-testing.md`` states this).
+and 10 to 50 users per look in it, coverage measured 0.93 to 0.95.
 
 The 1:1 coverage and A/A gates stay in ``test_sequential_confidence_sequence.py``.
 """

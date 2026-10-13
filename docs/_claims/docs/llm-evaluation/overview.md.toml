@@ -1,0 +1,179 @@
+# What verifies each unit of docs/llm-evaluation/overview.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/llm-evaluation/overview.md"
+
+[[unit]]
+text = "LLM/AI Model Evaluation — Overview"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Supported Providers and Models"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Provider | Models | Notes"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Anthropic | claude-opus-5, claude-sonnet-5, claude-haiku-4-5, claude-fable-5-1, and the 4.5/4.6 and Claude 3 generations | Recommended judge model. The priced set is COST_PER_1K_TOKENS in backend/app/core/llm_pricing.py; a model missing from it records $0.00 and logs a warning."
+by = ["test:backend/tests/unit/services/test_llm_experiment_service.py::TestCostEstimation::test_unknown_model_returns_zero"]
+
+[[unit]]
+text = "OpenAI | gpt-4o, gpt-4o-mini, gpt-3.5-turbo | Priced in the same table"
+by = ["test:backend/tests/unit/services/test_llm_experiment_service.py::TestCostEstimation::test_openai_gpt4o_cost"]
+
+[[unit]]
+text = "Google | gemini-1.5-pro, gemini-1.5-flash | Priced in the same table"
+by = ["test:backend/tests/unit/services/test_llm_experiment_service.py::TestCostEstimation::test_google_gemini_flash_cost"]
+
+[[unit]]
+text = "Local | A model served by Ollama at http://localhost:11434 on the API's own host | The address is fixed; token counts are word counts, and cost is $0.00"
+by = ["untested:T"]
+
+[[unit]]
+text = "ANTHROPIC_API_KEY enables Anthropic variants in POST /llm-experiments/{id}/complete, the LLM-as-judge (POST /llm-experiments/{id}/judge), and the platform's own AI features (POST /ai/design and POST /ai/interpret/{id})."
+by = ["test:backend/tests/unit/services/test_ai_design_service.py"]
+
+[[unit]]
+text = "OPENAI_API_KEY, which the OpenAI SDK reads, enables OpenAI variants in /complete."
+by = ["untested:T"]
+
+[[unit]]
+text = "With neither set, no provider is called: /complete answers 502 for that variant, the judge records its fallback score of 0.5, and the AI features use their templates."
+by = [
+    "test:backend/tests/integration/api/test_unexpected_errors_fixed_message.py::test_an_llm_completion_failure_answers_the_fixed_message",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestRunLLMAsJudge::test_judge_fallback_on_api_error",
+    "test:backend/tests/unit/services/test_ai_design_service.py",
+]
+
+[[unit]]
+text = "ANTHROPIC_BASE_URL and OPENAI_BASE_URL point the SDKs at a proxy or gateway."
+by = ["untested:T"]
+
+[[unit]]
+text = "The Google provider needs no extra package: a google variant calls the Gemini REST API with the key in GEMINI_API_KEY, and GEMINI_BASE_URL (default https://generativelanguage.googleapis.com) points it at a proxy or gateway."
+by = [
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestGeminiComplete::test_missing_key_is_the_documented_502",
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestGeminiComplete::test_success_returns_the_completion",
+]
+
+[[unit]]
+text = "With no GEMINI_API_KEY, that variant's /complete answers 502 {\"detail\":\"LLM provider error: GEMINI_API_KEY is not set\"}."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Task types and evaluation metrics"
+by = ["exempt:label"]
+
+[[unit]]
+text = "task_type is one of chat_completion, text_generation, classification, summarization, code_generation or embedding."
+by = [
+    "test:backend/tests/unit/services/test_llm_experiment_service.py::TestCreateLLMExperimentRequestValidation::test_all_task_types_accepted",
+    "test:backend/tests/unit/services/test_llm_experiment_service.py::TestCreateLLMExperimentRequestValidation::test_invalid_task_type_raises",
+]
+
+[[unit]]
+text = "evaluation_metric is one of business_metric, human_rating, latency, cost, accuracy, relevance or fluency."
+by = [
+    "test:backend/tests/unit/services/test_llm_experiment_service.py::TestCreateLLMExperimentRequestValidation::test_all_evaluation_metrics_accepted",
+    "test:backend/tests/unit/services/test_llm_experiment_service.py::TestCreateLLMExperimentRequestValidation::test_invalid_evaluation_metric_raises",
+]
+
+[[unit]]
+text = "It does not choose the winner: the winner is always the variant with the highest mean business metric, or, with no business metric, the highest mean auto-eval score."
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_is_variant_with_higher_business_metric",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_based_on_auto_eval_when_no_business_metric",
+]
+
+[[unit]]
+text = "Variant Assignment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Variants are assigned on the server using consistent MD5 hashing."
+by = ["test:backend/tests/unit/services/test_llm_experiment_service.py::TestHashBucket::test_same_inputs_same_output"]
+
+[[unit]]
+text = "The same user_id always receives the same variant, ensuring reproducibility and preventing confounding from re-assignment."
+by = ["test:backend/tests/unit/services/test_llm_experiment_service.py::TestVariantAssignment::test_same_user_always_same_variant"]
+
+[[unit]]
+text = "The hash key is \"{experiment_id}:{user_id}\", mapped to a bucket in [0, 1) and distributed across variants according to their traffic_split values."
+by = [
+    "test:backend/tests/unit/services/test_llm_experiment_service.py::TestHashBucket::test_bucket_in_range",
+    "test:backend/tests/unit/services/test_llm_experiment_service.py::TestHashBucket::test_same_inputs_same_output",
+]
+
+[[unit]]
+text = "LLM-as-Judge Scoring"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform supports automated quality evaluation using a judge LLM."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The default is settings.LLM_DEFAULT_JUDGE_MODEL (claude-sonnet-5), overridable per request and by the LLM_DEFAULT_JUDGE_MODEL environment variable."
+by = ["test:backend/tests/unit/services/test_anthropic_compat.py::test_every_configured_default_is_priced"]
+
+[[unit]]
+text = "The judge is prompted:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Judge scores are stored as auto_eval_score on each evaluation record and included in the results analytics."
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestRunLLMAsJudge::test_judge_updates_auto_eval_score",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_based_on_auto_eval_when_no_business_metric",
+]
+
+[[unit]]
+text = "Cost Estimation"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform automatically estimates the cost of each LLM call using a built-in cost table:"
+by = [
+    "test:backend/tests/unit/services/test_llm_experiment_service.py::TestCostEstimation::test_openai_gpt4o_cost",
+    "test:backend/tests/unit/services/test_llm_experiment_service.py::TestCostEstimation::test_anthropic_claude_sonnet_cost",
+    "test:backend/tests/unit/services/test_llm_experiment_service.py::TestCostEstimation::test_google_gemini_flash_cost",
+]
+
+[[unit]]
+text = "Per-variant cost is in GET /api/v1/llm-experiments/{id}/results (mean_cost_usd); the dashboard has no LLM screen."
+by = ["untested:T"]
+
+[[unit]]
+text = "Statistical Analysis"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Results include:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Mean and 95% confidence interval for latency, cost, auto-eval score, and business metric"
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_95_ci_on_business_metric",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestStatisticalHelpers::test_ci_many_values_contains_mean",
+]
+
+[[unit]]
+text = "A p-value (treatment vs control) from Welch's t statistic: a normal approximation at 30 or more degrees of freedom, and below 30 one of 0.01, 0.02, 0.05, 0.15 or 0.30"
+by = ["untested:T"]
+
+[[unit]]
+text = "Cohen's d effect size for business metric and auto-eval score"
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_effect_size_calculated",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestStatisticalHelpers::test_cohens_d_large_effect",
+]
+
+[[unit]]
+text = "Winner determination based on the highest mean business metric (falls back to auto-eval score)"
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_is_variant_with_higher_business_metric",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_based_on_auto_eval_when_no_business_metric",
+]
