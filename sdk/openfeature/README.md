@@ -5,10 +5,10 @@ you test against.
 
 [OpenFeature](https://openfeature.dev) provider for Experimently
 (`@openfeature/server-sdk`, Node >= 18). Every evaluation is delegated to
-[`@getexperimently/js-sdk`](../js/README.md) and **decided by the server**; successful
+[`@getexperimently/js-sdk`](https://github.com/getexperimently/experimently/blob/main/sdk/js/README.md) and **decided by the server**; successful
 answers are cached per user + flag. Nothing is bucketed locally and no flag definitions are downloaded.
 
-Full documentation: [`docs/sdk/openfeature.md`](../../docs/sdk/openfeature.md).
+Full documentation: [`docs/sdk/openfeature.md`](https://github.com/getexperimently/experimently/blob/main/docs/sdk/openfeature.md).
 
 ## Install
 

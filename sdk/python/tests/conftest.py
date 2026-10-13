@@ -5,6 +5,7 @@ And: no test can reach real AWS credentials or the real ``aws`` binary (below).
 
 import os
 import shutil
+import socket
 import stat
 import sys
 import tempfile
@@ -69,6 +70,9 @@ def _isolate(mp, bin_dir):
 
 
 def pytest_configure(config):
+    # This suite has its own rootdir, so the repository's marker list does not
+    # reach it; a fix's test still carries the repository's regression marker.
+    config.addinivalue_line("markers", "regression: a test that fails on the code before a fix")
     bin_dir = tempfile.mkdtemp(prefix="no-real-aws-")
     fake = os.path.join(bin_dir, "aws")
     with open(fake, "w") as fh:
@@ -93,3 +97,23 @@ def _no_real_aws(monkeypatch):
     """Per test: dummy credentials, no ~/.aws, and a failing ``aws`` first on PATH."""
     _isolate(monkeypatch, _no_real_aws_state["bin_dir"])
     return _no_real_aws_state["bin_dir"]
+
+
+# ---------------------------------------------------------------------------
+# No test can open a network connection: HTTP is faked (FakeTransport, or a
+# mocked ``urlopen``), and a test that forgot to fake it fails here instead of
+# reaching whatever answers on localhost.
+# ---------------------------------------------------------------------------
+class NetworkBlocked(ConnectionRefusedError):
+    """A test tried to open a real connection."""
+
+
+def _refuse_connection(*args, **kwargs):
+    raise NetworkBlocked("the SDK tests fake HTTP; a real connection was attempted")
+
+
+@pytest.fixture(autouse=True)
+def _no_network(monkeypatch):
+    monkeypatch.setattr(socket.socket, "connect", _refuse_connection)
+    monkeypatch.setattr(socket.socket, "connect_ex", _refuse_connection)
+    monkeypatch.setattr(socket, "create_connection", _refuse_connection)

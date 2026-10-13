@@ -306,6 +306,28 @@ describe('answers', () => {
     await expect(client.evaluateFlag('all-on', us)).resolves.toMatchObject({ source: 'local' });
   });
 
+  test('experiments are assigned by the server in local mode', async () => {
+    const server = new FakeServer(ok());
+    const { client } = localClient(server);
+    track(client);
+    await client.ready();
+    const answer = {
+      experiment_key: 'checkout', user_id: 'user-1', variant_id: 'v-2',
+      variant_name: 'treatment', is_control: false, configuration: null,
+    };
+    const answerRulesetAndFlags = server.fetch.getMockImplementation()!;
+    server.fetch.mockImplementation(async (url: string, init: RequestInit) =>
+      url.includes('/tracking/assign')
+        ? (server.calls.push({ url, method: init.method ?? 'GET', headers: {}, body: JSON.parse(init.body as string) }),
+          response({ body: answer }))
+        : answerRulesetAndFlags(url, init)
+    );
+    await expect(client.getAssignment('checkout', us)).resolves.toMatchObject({ variantName: 'treatment' });
+    expect(server.requests('/api/v1/tracking/assign').map(c => [c.method, (c.body as { experiment_key: string }).experiment_key])).toEqual([
+      ['POST', 'checkout'],
+    ]);
+  });
+
   test('server mode is unchanged: no ruleset request, no source field', async () => {
     const server = new FakeServer(ok());
     const client = track(

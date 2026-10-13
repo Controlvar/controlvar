@@ -1,0 +1,187 @@
+# What verifies each unit of docs/mcp-server.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/mcp-server.md"
+
+[[unit]]
+text = "AI Endpoints and the MCP Manifest"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The platform serves two things for AI tooling:"
+by = [
+    "docex:docs/mcp-server.md#create_experiment",
+    "docex:docs/mcp-server.md#checkout-cta checkout",
+]
+
+[[unit]]
+text = "a manifest at GET /api/v1/mcp/manifest, a JSON document that describes five tools in the vocabulary of the Model Context Protocol (MCP);"
+by = ["docex:docs/mcp-server.md#create_experiment"]
+
+[[unit]]
+text = "REST endpoints under /api/v1/ai/ that suggest an experiment design, interpret a result, estimate a sample size and list experiment templates."
+by = [
+    "docex:docs/mcp-server.md#\"primary_metric\": \"activation_rate\"",
+    "docex:docs/mcp-server.md#\"summary\": \"simplified showed a 3.2% improvement (p=0.030). Recommend shipping.\"",
+    "docex:docs/mcp-server.md#\"required_per_variant\": 73855",
+    "docex:docs/mcp-server.md#checkout-cta checkout",
+]
+
+[[unit]]
+text = "The platform does not run an MCP server."
+by = [
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_nothing_answers_an_mcp_client",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "The manifest describes tools, but nothing on the platform answers MCP's own requests, so an MCP client such as Claude Code or Cursor cannot connect to the manifest's URL or call a tool through it."
+by = ["test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_nothing_answers_an_mcp_client"]
+
+[[unit]]
+text = "Call the REST endpoints with any HTTP client instead."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "The examples run against the Quick Start stack, in one terminal, in order: later steps use the $TOKEN an earlier one sets."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The manifest"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The manifest needs no sign-in:"
+by = ["docex:docs/mcp-server.md#create_experiment"]
+
+[[unit]]
+text = "It lists five tools: create_experiment, get_results, toggle_feature_flag, suggest_experiment and interpret_results."
+by = ["docex:docs/mcp-server.md#create_experiment"]
+
+[[unit]]
+text = "Each entry has a name, a description and its parameters:"
+by = [
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_each_tool_has_a_name_a_description_and_parameters",
+    "docex:docs/mcp-server.md#\"experiment_type\"",
+]
+
+[[unit]]
+text = "Signing in"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The endpoints under /api/v1/ai/ need a signed-in user."
+by = ["docex:docs/mcp-server.md#401"]
+
+[[unit]]
+text = "Without a token they answer 401, as this one does:"
+by = ["docex:docs/mcp-server.md#401"]
+
+[[unit]]
+text = "Sign in as the Quick Start's administrator."
+by = ["docex:docs/mcp-server.md#\"ADMIN\""]
+
+[[unit]]
+text = "The second command prints \"ADMIN\"; if it prints null, the sign-in failed and $TOKEN holds no token:"
+by = ["docex:docs/mcp-server.md#\"ADMIN\""]
+
+[[unit]]
+text = "Experiment design: POST /api/v1/ai/design"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Send a description of what you want to test and an experiment type (checkout, onboarding, pricing, email or landing_page):"
+by = ["docex:docs/mcp-server.md#checkout-cta checkout"]
+
+[[unit]]
+text = "On the Quick Start stack the suggestion is the template for the experiment type, and confidence says so (\"template_based\"):"
+by = ["docex:docs/mcp-server.md#\"primary_metric\": \"activation_rate\""]
+
+[[unit]]
+text = "Results interpretation: POST /api/v1/ai/interpret/{experiment_id}"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Send one variant's result."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The endpoint interprets the numbers in the request body: it does not read the experiment's stored results or look the id up, so the checkout-v2 below, which does not exist on the stack, is answered like any other:"
+by = ["docex:docs/mcp-server.md#\"summary\": \"simplified showed a 3.2% improvement (p=0.030). Recommend shipping.\""]
+
+[[unit]]
+text = "On the Quick Start stack the interpretation comes from a template (\"generated_by\": \"template\"), and recommendation is ship when p_value is below 0.05 and the improvement is positive, stop_futility when p_value is below 0.05 and the improvement is negative, and continue_testing otherwise."
+by = [
+    "docex:docs/mcp-server.md#\"summary\": \"simplified showed a 3.2% improvement (p=0.030). Recommend shipping.\"",
+    "docex:docs/mcp-server.md#stop_futility",
+]
+
+[[unit]]
+text = "These two print stop_futility, then continue_testing:"
+by = ["docex:docs/mcp-server.md#stop_futility"]
+
+[[unit]]
+text = "All four body fields are required."
+by = ["docex:docs/mcp-server.md#experiment_id"]
+
+[[unit]]
+text = "An empty body answers 422, naming each missing field:"
+by = ["docex:docs/mcp-server.md#experiment_id"]
+
+[[unit]]
+text = "Sample size: GET /api/v1/ai/sample-size"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Give a baseline rate (baseline_rate) and a minimum detectable effect (mde); a confidence level (confidence) and power (power) are optional, 0.95 and 0.80 by default."
+by = [
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestSampleSizeEndpoint::test_without_daily_traffic_there_are_no_days",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "mde is an absolute change in the rate: 0.004 on a baseline of 0.08 plans for 8% against 8.4%, a 5% relative lift."
+by = ["docex:docs/mcp-server.md#\"required_per_variant\": 73855"]
+
+[[unit]]
+text = "The estimate is for a control and one treatment."
+by = ["docex:docs/mcp-server.md#\"required_per_variant\": 73855"]
+
+[[unit]]
+text = "Add daily_traffic, the users a day who enter the experiment (1 to 10^12), and days_to_significance is the whole days until each variant has required_per_variant users."
+by = [
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestSampleSizeEndpoint::test_daily_traffic_outside_the_range_answers_422",
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestSampleSizeEndpoint::test_daily_traffic_at_the_limit_is_accepted",
+    "docex:docs/mcp-server.md#\"required_per_variant\": 73855",
+]
+
+[[unit]]
+text = "The two variants split the day's users, so at 10,000 a day each gets 5,000, and 73,855 per variant takes 14.8 days: 15."
+by = [
+    "docex:docs/mcp-server.md#\"days_to_significance\": 15",
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestSampleSizeEndpoint::test_days_to_significance_counts_both_variants",
+]
+
+[[unit]]
+text = "Without daily_traffic it is null."
+by = ["test:backend/tests/unit/api/test_ai_design_endpoints.py::TestSampleSizeEndpoint::test_without_daily_traffic_there_are_no_days"]
+
+[[unit]]
+text = "Experiment templates: GET /api/v1/ai/templates"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Five templates, one for each experiment type."
+by = ["docex:docs/mcp-server.md#checkout-cta checkout"]
+
+[[unit]]
+text = "This prints each one's id and type:"
+by = ["docex:docs/mcp-server.md#checkout-cta checkout"]
+
+[[unit]]
+text = "type keeps the templates of one experiment type:"
+by = ["docex:docs/mcp-server.md#pricing-display"]
+
+[[unit]]
+text = "One template, by its id:"
+by = ["docex:docs/mcp-server.md#\"name\": \"Checkout CTA Button Test\""]

@@ -79,3 +79,10 @@ def test_network_failures_raise_transport_error(exc):
     assert isinstance(info.value, ExperimentationError)
     assert info.value.status is None
     assert "http://x/p" in str(info.value)
+
+
+def test_the_suite_cannot_open_a_real_connection():
+    """conftest.py refuses every connection, so HTTP in this suite is faked or
+    the test fails; the real urlopen below never leaves the process."""
+    with pytest.raises(TransportError, match="a real connection was attempted"):
+        UrllibTransport().send("GET", "http://127.0.0.1:9/never", {}, None, 1.0)
