@@ -73,7 +73,7 @@ THE TARGETS (a closed list; anything else is refused)
     gate lists (``DOCS_TESTS``, ``NOT_DOCS_TESTS`` in ``DOCS_GATE``) or whose
     file matches that gate's ``DOCS_READER``. Such a test is reached only
     through ``mechanism:``, which says which units it holds; the exception is
-    ``API_SNAPSHOT_TESTS``, which read the OpenAPI snapshots, not a page. In
+    ``API_SNAPSHOT_TESTS``, which read only the OpenAPI snapshots, not a page. In
     Python the function, or the class and method, is found by parsing the
     file, its name starts with ``test`` (a class with ``Test``), and one marked
     ``benchmark`` is refused (skipped unless RUN_BENCHMARKS=1, so it would hold
@@ -150,8 +150,9 @@ A target that does not resolve in this tree is printed. Uncovered T, S and A
 rows give ``untested:<tag>``; a unit with no row ``exempt:baseline``; both are
 ledgered. A unit new since SHA gets no entry. An R or X row still on the page
 makes the exit status 1 and that page is not written. A row that does not map
-(about 7% of excerpts are not verbatim) is printed for the author to map by
-hand, never dropped; the units on its line get no entry.
+(some excerpts are not verbatim) is printed for the author to map by hand,
+never dropped; the units on its line get no entry. An audit with no row is
+refused: an empty or cut-off file would otherwise read as "nothing found".
 
 ``sync DOC`` prints each unit that is not in the registry beside the
 registered units within a difflib ratio of 0.9 (inputs cut to 2,000
@@ -560,10 +561,16 @@ WORDING_TESTS = "backend/tests/unit/docs/"
 DOCS_GATE = "backend/tests/unit/infrastructure/test_docs_only_gate.py"
 DOCS_READER = re.compile(r"""["']docs["']|["']docs/|mkdocs\.yml""")
 #: Tests the docs-only gate lists only because they read the OpenAPI snapshots
-#: under docs/api/, the product's schema rather than a page's wording: a claim
-#: about a route or a field names one with ``test:``. One that names a page
-#: (``.md``) or mkdocs reads wording, and is refused like any other.
-API_SNAPSHOT_TESTS: Tuple[str, ...] = ("backend/tests/smoke/test_openapi_snapshot.py",)
+#: under docs/api/, the product's schema rather than a page's wording, each with
+#: the docs/ files it may open: a claim about a route or a field names one with
+#: ``test:``. One that names a page (``.md``) or mkdocs, or builds a docs/ path
+#: that is not on its list, reads wording, and is refused like any other.
+API_SNAPSHOT_TESTS: Dict[str, Tuple[str, ...]] = {
+    "backend/tests/smoke/test_openapi_snapshot.py": (
+        "docs/api/openapi-v1.stable.json",
+        "docs/api/openapi-v1.full.json",
+    ),
+}
 _NAMES_A_PAGE = re.compile(r"\.md\b|mkdocs")
 
 
@@ -1099,6 +1106,110 @@ def _python_problem(ctx: Context, path: str, name: Optional[str]) -> Optional[st
     return None
 
 
+def _chain(node: ast.AST) -> List[ast.AST]:
+    """The operands of ``a / b / c``, left to right ([node] when not a division)."""
+    found: List[ast.AST] = []
+    while isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        found.insert(0, node.right)
+        node = node.left
+    return [node] + found
+
+
+def docs_reads_problem(
+    text: Optional[str], tree: Any, allowed: Sequence[str]
+) -> Optional[str]:
+    """What a test reads under docs/ beyond *allowed*, or None.
+
+    Every docs/ path it names is a literal, or a ``/`` chain of literals from
+    ``"docs"`` or from a module-level name bound to one, and is one of *allowed*
+    or a directory above one; a name bound to such a directory is used only to
+    name a file under it. No string names a page (``.md``) or mkdocs."""
+    if text is None or not isinstance(tree, ast.Module):
+        return "does not exist or does not parse"
+    if _NAMES_A_PAGE.search(text):
+        return "names a page (.md) or mkdocs"
+    places = set(allowed)
+    for path in allowed:
+        parts = path.split("/")
+        places.update("/".join(parts[:n]) for n in range(1, len(parts)))
+    bound: Dict[str, str] = {}
+    heads: Set[int] = set()
+    inside: Set[int] = set()
+
+    def path_of(node: ast.AST) -> Any:
+        """The docs/ path a ``/`` chain names, None if none, or the problem."""
+        operands = _chain(node)
+        head = operands[0]
+        if isinstance(head, ast.Name) and head.id in bound:
+            parts, rest = [bound[head.id]], operands[1:]
+            heads.add(id(head))
+        else:
+            start = next(
+                (
+                    n
+                    for n, op in zip(range(len(operands)), operands)
+                    if isinstance(op, ast.Constant) and op.value == "docs"
+                ),
+                None,
+            )
+            if start is None:
+                return None
+            parts, rest = [], operands[start:]
+        for operand in rest:
+            if not (
+                isinstance(operand, ast.Constant) and isinstance(operand.value, str)
+            ):
+                return "builds a docs/ path from something other than literals"
+            inside.add(id(operand))
+            parts.append(operand.value)
+        return "/".join(parts)
+
+    for statement in tree.body:
+        if (
+            isinstance(statement, ast.Assign)
+            and len(statement.targets) == 1
+            and isinstance(statement.targets[0], ast.Name)
+        ):
+            found = path_of(statement.value)
+            if isinstance(found, str) and found.startswith("docs"):
+                bound[statement.targets[0].id] = found
+    docstrings = {
+        id(node.body[0].value)
+        for node in ast.walk(tree)
+        if isinstance(
+            node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        )
+        and node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+    }
+    nested: Set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            if id(node) in nested:
+                continue
+            nested.update(id(n) for n in ast.walk(node.left))
+            found = path_of(node)
+            if found is not None and found not in places:
+                return found if found.startswith("builds") else f"opens {found}"
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id in bound and id(node) not in heads:
+            if isinstance(node.ctx, ast.Load) and bound[node.id] not in allowed:
+                return (
+                    f"uses {node.id} ({bound[node.id]}) other than to name a file in it"
+                )
+        if (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and id(node) not in docstrings
+            and id(node) not in inside
+            and (node.value == "docs" or node.value.startswith("docs/"))
+            and node.value not in allowed
+        ):
+            return f"names {node.value!r} outside a / chain of literals"
+    return None
+
+
 def test_problem(
     ctx: Context, target: str, *, mechanism: bool = False
 ) -> Optional[str]:
@@ -1114,9 +1225,16 @@ def test_problem(
         return "the path must be repository-relative"
     if path.startswith(NOT_TESTS):
         return f"{path} is not a test (application code or a script)"
-    snapshot = path in API_SNAPSHOT_TESTS and not _NAMES_A_PAGE.search(
-        ctx.text(path) or ".md"
-    )
+    snapshot = path in API_SNAPSHOT_TESTS
+    if snapshot and not mechanism:
+        problem = docs_reads_problem(
+            ctx.text(path), ctx.tree(path), API_SNAPSHOT_TESTS[path]
+        )
+        if problem:
+            return (
+                f"{path} {problem}: it reads documentation, so a claim reaches it"
+                " only as mechanism:<name>"
+            )
     if not mechanism and not snapshot and ctx.reads_docs(path):
         return (
             f"{path} reads documentation (the docs-only gate classes it so); a"
@@ -2464,12 +2582,14 @@ def sync_lines(root: pathlib.Path, document: str) -> Tuple[List[str], int]:
 
 def baseline_problems(
     resolver: Resolver, documents: Sequence[str], rows: Sequence[Row]
-) -> List[str]:
-    """Every audit claim row that maps to a unit registered ``exempt:baseline``.
+) -> Tuple[List[str], collections.Counter]:
+    """Every audit claim row that maps to a unit registered ``exempt:baseline``,
+    and how many claim rows were read and mapped.
 
     A row the excerpt cannot place among the units on its line counts against
     all of them. Run at a release candidate, privately (the audit is private)."""
     problems = []
+    counts: collections.Counter = collections.Counter()
     for document in documents:
         rel = registry_path(document)
         try:
@@ -2484,6 +2604,7 @@ def baseline_problems(
         }
         old = resolver.old_text(document)
         if old is None:
+            counts["documents not at the audit commit"] += 1
             continue
         try:
             spans = unit_lines(old)
@@ -2495,16 +2616,19 @@ def baseline_problems(
         for row in rows:
             if row.doc != document or row.kind != "claim":
                 continue
+            counts["claim rows"] += 1
             if outside_prose(old_raw, old_visible, row.line):
+                counts["outside prose"] += 1
                 continue
             mapped, on_line = units_of_row(spans, row)
+            counts["mapped to a unit"] += bool(mapped or on_line)
             for unit in mapped or on_line:
                 if unit.text in baseline:
                     problems.append(
                         f"{row.label()}: maps to {unit.text[:120]!r}, registered"
                         " exempt:baseline: classify it"
                     )
-    return problems
+    return problems, counts
 
 
 def generate_refusal(
@@ -2546,6 +2670,9 @@ def run_generate(
     rows, bad = load_audit(audit)
     if bad:
         print("\n".join(["the audit has lines that are not rows:"] + bad))
+        return 2
+    if not rows:
+        print(f"the audit has no rows ({', '.join(map(str, audit))}): refused")
         return 2
     documents, _ = inventory_documents(root)
     resolver = Resolver(Context(root, documents, MECHANISMS), old_text)
@@ -2616,14 +2743,23 @@ def run_baseline(
     if bad:
         print("\n".join(["the audit has lines that are not rows:"] + bad))
         return 2
+    if not rows:
+        print(f"the audit has no rows ({', '.join(map(str, audit))}): refused")
+        return 2
     documents, _ = inventory_documents(root)
     paths = list(paths) or sorted(
         p for p in documents if (root / registry_path(p)).is_file()
     )
     resolver = Resolver(Context(root, documents, MECHANISMS), old_text)
-    problems = baseline_problems(resolver, paths, rows)
+    problems, counts = baseline_problems(resolver, paths, rows)
     print("\n".join(problems))
-    print(f"documents {len(paths)}; claim rows on a baseline unit: {len(problems)}")
+    print(
+        f"rows read {len(rows)}; documents {len(paths)}"
+        f" ({counts['documents not at the audit commit']} not at the audit commit);"
+        f" claim rows on them {counts['claim rows']}, outside prose"
+        f" {counts['outside prose']}, mapped to a unit {counts['mapped to a unit']};"
+        f" on a baseline unit {len(problems)}"
+    )
     return 1 if problems else 0
 
 

@@ -42,6 +42,8 @@ sys.modules.setdefault("doc_claims", dc)
 _spec.loader.exec_module(dc)
 
 SNAPSHOT_FULL = dc.SNAPSHOT_TARGETS["full"]
+#: A made-up commit: with ``old_text`` given, the generator reads no git.
+FAKE_SHA = "abc1234"
 SNAPSHOT_STABLE = dc.SNAPSHOT_TARGETS["stable"]
 
 
@@ -738,7 +740,7 @@ def check(root: Path):
 def generate(root: Path, rows, documents=("docs/guide.md",), **kw) -> int:
     kw.setdefault("old_text", old_texts())
     return dc.run_generate(
-        root, [write_audit(root, rows)], "312159f8", list(documents), **kw
+        root, [write_audit(root, rows)], FAKE_SHA, list(documents), **kw
     )
 
 
@@ -809,6 +811,36 @@ def test_generate_writes_under_out_and_leaves_the_tree(tmp_path):
     assert not (root / "docs/_claims").exists()
 
 
+@pytest.mark.parametrize("command", ["generate", "baseline"])
+def test_an_audit_with_no_row_is_refused(tmp_path, capsys, command):
+    """An empty or cut-off audit file must not read as nothing found."""
+    root = build(tmp_path)
+    registered(root)
+    capsys.readouterr()
+    empty = root / "empty.jsonl"
+    empty.write_text("\n", encoding="utf-8")
+    run = dc.run_generate if command == "generate" else dc.run_baseline
+    kw = {"replace": True} if command == "generate" else {}
+    status = run(root, [empty], FAKE_SHA, ["docs/guide.md"], old_text=old_texts(), **kw)
+    assert status == 2
+    assert "the audit has no rows" in capsys.readouterr().out
+
+
+def test_baseline_says_how_many_rows_it_read_and_mapped(tmp_path, capsys):
+    root = build(tmp_path)
+    registered(root)
+    capsys.readouterr()
+    audit = write_audit(root, base_rows())
+    status = dc.run_baseline(
+        root, [audit], FAKE_SHA, ["docs/guide.md"], old_text=old_texts()
+    )
+    assert status == 0
+    claims = sum(r["kind"] == "claim" for r in base_rows())
+    out = capsys.readouterr().out
+    assert f"rows read {len(base_rows())};" in out
+    assert f"claim rows on them {claims}, outside prose 1, mapped to a unit" in out
+
+
 @pytest.mark.parametrize(
     "line, problem",
     [
@@ -830,7 +862,7 @@ def test_an_audit_line_that_is_not_a_row_is_refused(tmp_path, capsys, line, prob
     audit = root / "audit.jsonl"
     audit.write_text(line + "\n", encoding="utf-8")
     status = dc.run_generate(
-        root, [audit], "312159f8", ["docs/guide.md"], old_text=old_texts()
+        root, [audit], FAKE_SHA, ["docs/guide.md"], old_text=old_texts()
     )
     assert status == 2
     assert problem in capsys.readouterr().out
@@ -945,14 +977,14 @@ def test_baseline_finds_a_claim_row_left_at_baseline(tmp_path, capsys):
     rows = base_rows()
     audit = write_audit(root, rows)
     old = {"old_text": old_texts()}
-    assert dc.run_baseline(root, [audit], "312159f8", ["docs/guide.md"], **old) == 0
+    assert dc.run_baseline(root, [audit], FAKE_SHA, ["docs/guide.md"], **old) == 0
     text = registry.read_text(encoding="utf-8")
     edited = text.replace(
         'by = ["test:tests/test_things.py::test_alpha"]', 'by = ["exempt:baseline"]', 1
     )
     assert edited != text
     registry.write_text(edited, encoding="utf-8")
-    assert dc.run_baseline(root, [audit], "312159f8", ["docs/guide.md"], **old) == 1
+    assert dc.run_baseline(root, [audit], FAKE_SHA, ["docs/guide.md"], **old) == 1
     assert f"maps to {HEALTH!r}, registered exempt:baseline" in capsys.readouterr().out
 
 
@@ -964,7 +996,58 @@ def test_the_real_snapshot_test_is_a_target():
     ctx = dc.Context(REPO_ROOT, documents, dc.MECHANISMS)
     for target in dc.SNAPSHOT_TARGETS.values():
         assert dc.test_problem(ctx, target) is None, target
-    assert dc.API_SNAPSHOT_TESTS == (dc.SNAPSHOT_TEST,)
+    assert dc.API_SNAPSHOT_TESTS == {
+        dc.SNAPSHOT_TEST: (
+            "docs/api/openapi-v1.stable.json",
+            "docs/api/openapi-v1.full.json",
+        )
+    }
+
+
+#: (id, what the planted snapshot test adds, a substring of the refusal).
+SNAPSHOT_READS = [
+    (
+        "a page split across literals",
+        'ROOT = None\nAPI = ROOT / "docs" / "api"\nPAGE = API / ("endpoints.m" + "d")\n',
+        "builds a docs/ path from something other than literals",
+    ),
+    (
+        "a docs/ literal not on the list",
+        'PAGE = "docs/api/" + "endpoints.m" + "d"\n',
+        "names 'docs/api/' outside",
+    ),
+    (
+        "another file under docs/",
+        'ROOT = None\nNOTES = ROOT / "docs" / "api" / "notes.json"\n',
+        "opens docs/api/notes.json",
+    ),
+    (
+        "the directory listed",
+        'ROOT = None\nAPI = ROOT / "docs" / "api"\nALL = list(API.glob("*"))\n',
+        "uses API (docs/api) other than to name a file in it",
+    ),
+    (
+        "docs joined some other way",
+        'import os\nPAGE = os.path.join("docs", "api", "x.json")\n',
+        "names 'docs' outside",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "added, refusal",
+    [case[1:] for case in SNAPSHOT_READS],
+    ids=[case[0] for case in SNAPSHOT_READS],
+)
+def test_a_snapshot_test_opens_only_the_snapshots(tmp_path, added, refusal):
+    root = build(tmp_path)
+    documents, _ = dc.inventory_documents(root)
+    ctx = dc.Context(root, documents, dc.MECHANISMS)
+    assert dc.test_problem(ctx, SNAPSHOT_FULL) is None, "the positive control"
+    (root / dc.SNAPSHOT_TEST).write_text(SNAPSHOT_PY + added, encoding="utf-8")
+    ctx = dc.Context(root, documents, dc.MECHANISMS)
+    problem = dc.test_problem(ctx, SNAPSHOT_FULL) or ""
+    assert refusal in problem and "reads documentation" in problem, problem
 
 
 def test_a_snapshot_test_that_names_a_page_reads_wording(tmp_path):
