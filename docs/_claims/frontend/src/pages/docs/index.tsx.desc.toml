@@ -77,15 +77,15 @@ text = "Keep users out of conflicting experiments, and a share of new users out 
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Live experiment results over WebSocket, sent every 30 seconds by default."
+text = "Live experiment results over WebSocket: a snapshot on connect, then a fresh one after 30 seconds (by default) with no message from the client."
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Compare prompt versions, model variants, and agent configs against real business metrics."
+text = "Compare model variants on a task; the winner has the best business metric, or the best LLM-judge score without one."
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "What LLM evaluation is, and how it differs from a classic A/B test"
+text = "Supported providers, task types, variant assignment, judge scoring, cost estimation and the analysis"
 by = ["mechanism:docs-hub"]
 
 [[unit]]

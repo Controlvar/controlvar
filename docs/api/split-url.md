@@ -42,7 +42,7 @@ Set `experiment_type` to `split_url` when creating an experiment.
 | `variants` | `array` | Yes | The URL variants: at least 2 |
 | `variants[].name` | `string` | Yes | The variant's name |
 | `variants[].url` | `string` | Yes | The URL this variant is sent to (stored as given; not checked) |
-| `variants[].traffic_allocation` | `number` | Yes | Percentage of traffic, 0-100; the values must sum to 100 |
+| `variants[].traffic_allocation` | `number` | Yes | Percentage of traffic; only the sum is checked, which must be 100 |
 | `cookie_name` | `string` | No | The router's cookie name; `null` means `split_url_{experiment_key}` |
 | `cookie_ttl_days` | `int` | No | How long the router's cookie lasts, in days (default `30`) |
 | `canonical_url` | `string` | No | Stored with the configuration; nothing reads it yet |
@@ -149,107 +149,10 @@ curl -X GET "https://your-platform.example.com/api/v1/experiments/acf727d0-fd25-
 
 ---
 
-## Lambda@Edge Cookie and Redirect Flow
-
-This is what the router does once a request carries its configuration header. Nothing adds
-that header in this release (see the note at the top of this page).
-
-```
-Viewer request
-     |
-     v
-Lambda@Edge (viewer-request)
-     |
-     +-- No X-Split-URL-Config header, invalid JSON or fewer than 2 variants --> pass through
-     |
-     +-- Read cookie: split_url_{experiment_key} (or cookie_name)
-     |        |
-     |        +-- Holds one of the variant URLs --> pass through
-     |        |
-     |        +-- Absent or unknown --> hash IP + User-Agent + experiment_key
-     |                                   --> pick a variant (or the first, in a holdout)
-     |
-     +-- Return 302 with:
-           Location: <variant url>
-           Set-Cookie: split_url_{experiment_key}=<variant url>; Max-Age=<cookie_ttl_days x 86400>; Path=/; SameSite=Lax
-           X-Split-URL-Variant: <variant name>
-           Cache-Control: no-store, no-cache
-```
-
-The header's JSON carries `experiment_key`, `variants` (each with `name`, `url` and
-`traffic_allocation`), and optionally `cookie_name`, `cookie_ttl_days` and `holdout_percentage`.
-
-### Cookie Details
-
-| Property | Value |
-|---|---|
-| **Cookie name** | `cookie_name`, or `split_url_{experiment_key}` |
-| **Cookie value** | The assigned variant's URL |
-| **Max-Age** | `cookie_ttl_days` × 86,400 seconds: 2,592,000 (30 days) by default |
-| **Path** | `/` |
-| **Secure** | Not set by the router |
-| **SameSite** | `Lax` |
-
-### Redirect Details
-
-| Property | Value |
-|---|---|
-| **HTTP status** | `302 Found` |
-| **Location header** | The assigned variant's `url` |
-| **X-Split-URL-Variant** | The assigned variant's `name` |
-| **Cache-Control** | `no-store, no-cache` |
-
-### Cookie Persistence
-
-A browser keeps the cookie for its Max-Age, 30 days by default. While the cookie holds one of
-the variant URLs, the router passes that viewer's requests through without hashing again; a
-cookie naming a URL that is no longer a variant is treated as no cookie.
-
----
-
 ## CloudFront CDK Construct
 
-> Split URL testing is a **module**, not part of the core profile. The
-> construct and the Lambda@Edge handler live under `modules/`, so a core
-> checkout does not have them. See [Modules & Profiles](../getting-started/modules.md).
-
 `modules/infrastructure/constructs/split_url_distribution.py` provisions a
-CloudFront distribution wired to a Lambda@Edge viewer-request function. No stack
-in this repository uses it:
-
-1. **No caching** (TTL 0) — every request must reach the router, or a user
-   would be served another user's variant from the edge cache.
-2. **HTTPS-only** viewer protocol policy, so the assignment cookie is not sent
-   in clear text.
-3. **`ALL_VIEWER` origin request policy** (`OriginRequestPolicy.ALL_VIEWER`), so a
-   request the router lets through reaches the origin with every viewer header, cookie
-   and query string. (`ALLOW_ALL` is a different setting, the allowed methods: GET, HEAD,
-   OPTIONS, PUT, PATCH, POST and DELETE.)
-
-The CDK app is **Python** (`infrastructure/cdk/app.py`; `cdk.json` runs
-`python3 app.py`). There is no TypeScript in this repository's infrastructure.
-
-```python
-from modules.infrastructure.constructs.split_url_distribution import (
-    SplitUrlDistribution,
-)
-
-split_url = SplitUrlDistribution(
-    self,
-    "CheckoutSplitUrl",
-    router_function=router_fn,        # lambda_.IFunction, in us-east-1
-    origin_domain=alb.load_balancer_dns_name,
-)
-# split_url.distribution  -> the CloudFront Distribution
-# split_url.domain_name   -> e.g. d1234.cloudfront.net
-```
-
-**How the router gets its configuration.** Only from the `X-Split-URL-Config`
-request header, and neither the construct nor anything else sets it. The handler
-(`modules/lambda/split_url_router/handler.py`) passes the request through unchanged
-when the header is missing, invalid, or names fewer than two variants. Assignment
-hashes a client fingerprint (IP + User-Agent), so it makes no call back to the
-platform.
+CloudFront distribution wired to a Lambda@Edge viewer-request function.
 
 ---
 

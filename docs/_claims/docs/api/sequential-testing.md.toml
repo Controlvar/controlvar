@@ -1,0 +1,492 @@
+# What verifies each unit of docs/api/sequential-testing.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/api/sequential-testing.md"
+
+[[unit]]
+text = "Sequential Testing & Early Stopping"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sequential testing lets you continuously monitor experiment results and stop as soon as you have enough evidence — without inflating your false positive rate."
+by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_aa_false_rejections_under_peeking"]
+
+[[unit]]
+text = "Methods"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "mSPRT (mixture Sequential Probability Ratio Test)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The method the analysis uses."
+by = ["docex:docs/api/sequential-testing.md#\"method\": \"msprt\""]
+
+[[unit]]
+text = "Computes a likelihood ratio (lambda_ratio) that accumulates evidence for an effect:"
+by = ["docex:docs/api/sequential-testing.md#\"method\": \"msprt\""]
+
+[[unit]]
+text = "lambda_ratio >= 1/alpha → strong evidence for an effect, in either direction (stop_for_effect); the direction decides whether to ship (see Reading a stop decision)"
+by = ["untested:T"]
+
+[[unit]]
+text = "Otherwise → continue collecting data (continue)"
+by = ["test:backend/tests/unit/services/test_sequential_testing_service.py::TestIntegration::test_full_analysis_continue"]
+
+[[unit]]
+text = "The mSPRT has no futility boundary, so the analysis never tells you to stop for futility."
+by = [
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_long_running_inconclusive_is_at_risk_and_continue",
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_recommended_action_set_is_the_dashboard_type",
+]
+
+[[unit]]
+text = "An experiment that is running well past its expected duration is flagged with the advisory at_risk, which is not evidence that there is no effect."
+by = [
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_long_running_inconclusive_is_at_risk_and_continue",
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_long_running_with_a_clear_effect_still_stops_for_effect",
+]
+
+[[unit]]
+text = "The always_valid_p_value can be interpreted like a standard p-value at any point without inflating Type I error."
+by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_aa_false_rejections_under_peeking"]
+
+[[unit]]
+text = "lambda_ratio is computed in log space and capped at the largest finite double (about 1.8 × 10³⁰⁸), so an overwhelming difference, such as 10% against 11% with ten million users per arm, still reports a finite number and can stop."
+by = [
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_overwhelming_difference_stays_finite_and_stops",
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_overwhelming_difference_answers_a_finite_lambda",
+]
+
+[[unit]]
+text = "Always-Valid Confidence Intervals (Confidence Sequences)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A confidence sequence is a confidence interval that is valid at every sample size simultaneously."
+by = [
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_anytime_coverage",
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_narrows_below_a_tenth_of_a_point_at_ten_million",
+]
+
+[[unit]]
+text = "The interval shrinks as more data is collected."
+by = [
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_anytime_coverage",
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_narrows_below_a_tenth_of_a_point_at_ten_million",
+]
+
+[[unit]]
+text = "It is the same mSPRT turned into an interval (the normal-mixture confidence sequence of Johari et al."
+by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_half_width_closed_form"]
+
+[[unit]]
+text = "2017 and Howard et al."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "2021), on the difference in conversion rates (treatment minus control), with the same alpha and tau_squared:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "where the estimate is the observed difference in rates and V is the Agresti-Caffo variance of that difference: one conversion and one non-conversion are added to each arm, p̃ = (conversions + 1) / (users + 2), and V = p̃_c (1 − p̃_c) / (n_c + 2) + p̃_t (1 − p̃_t) / (n_t + 2)."
+by = [
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_half_width_closed_form",
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_all_or_nothing_arms_get_a_finite_interval",
+]
+
+[[unit]]
+text = "The mSPRT uses the same V."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Because the interval and the stop decision share V, τ² and α, they cannot disagree: 0 is outside the interval exactly when can_stop is true."
+by = [
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_matches_can_stop",
+    "test:backend/tests/unit/stats_validation/test_sequential_unequal_arms.py::test_can_stop_is_zero_outside_the_interval_on_every_look",
+]
+
+[[unit]]
+text = "At a 10% conversion rate, α = 0.05 and the default τ² = 0.001, the half-width is about 0.041 at 1,000 users per arm, 0.0136 at 10,000 and 0.00055 at 10 million."
+by = [
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_half_width_closed_form",
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_half_width_closed_form_across_sizes",
+]
+
+[[unit]]
+text = "A difference in rates cannot leave [-1, 1], so the interval is clipped to that range: with 10 users per arm at a 50% rate the formula gives about ±3.27, and the response reports [-1, 1]."
+by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_small_sample_interval_is_clipped_to_the_proportion_range"]
+
+[[unit]]
+text = "Clipping changes neither the stop decision nor coverage, because 0 and the true difference always lie inside [-1, 1]."
+by = [
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_clip_is_one_sided_when_only_one_end_leaves_the_range",
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_matches_can_stop",
+]
+
+[[unit]]
+text = "While an arm has no users, nothing bounds the effect: the interval is [-1, 1], the whole range of a difference in rates, and can_stop is false."
+by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_no_finite_interval_without_data"]
+
+[[unit]]
+text = "An arm in which every user has the same outcome (nobody converts, or everybody does) still gets a finite interval: 0 of 500 against 0 of 500 gives about ±0.0093 around 0 and cannot stop, while 0 of 500 against 500 of 500 can."
+by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_all_or_nothing_arms_get_a_finite_interval"]
+
+[[unit]]
+text = "Alpha Spending (not computed yet)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A group-sequential design with planned interim analyses (O'Brien-Fleming or Pocock alpha spending) is not implemented: alpha_spending is always an empty list."
+by = [
+    "docex:docs/api/sequential-testing.md#\"alpha_spending\": []",
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_alpha_spending_is_empty_with_a_notice",
+]
+
+[[unit]]
+text = "spending_function and planned_looks are still accepted and stored."
+by = ["docex:docs/api/sequential-testing.md#200"]
+
+[[unit]]
+text = "The mSPRT above stays valid however often you read the results, so no planned-looks table is needed to use it."
+by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_aa_false_rejections_under_peeking"]
+
+[[unit]]
+text = "Turning it on"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sequential testing is set on the experiment, when you create it (POST /api/v1/experiments/) or change it (PUT /api/v1/experiments/{id}):"
+by = ["docex:docs/api/sequential-testing.md#200"]
+
+[[unit]]
+text = "Field | Type | Default | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "sequential_testing_enabled | bool | false | Turns the analysis on"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/api/test_sequential_results_api.py::TestSequentialTestingInResults::test_results_include_sequential_testing_null_when_disabled",
+]
+
+[[unit]]
+text = "sequential_testing_config.method | msprt | always_valid | msprt | always_valid is an alias of msprt: the analysis is mSPRT with a confidence sequence, reports \"method\": \"msprt\", and says so in analysis_notice"
+by = [
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_always_valid_is_echoed_as_msprt_with_a_notice",
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_msprt_has_no_alias_notice",
+]
+
+[[unit]]
+text = "sequential_testing_config.alpha | float | 0.05 | The significance level, above 0 and at most 0.2. The stopping boundary is 1/alpha. A value outside the range is refused with 422"
+by = ["docex:docs/api/sequential-testing.md#\"method\": \"msprt\""]
+
+[[unit]]
+text = "sequential_testing_config.tau_squared | float | 0.001 | The mSPRT mixing parameter, above 0 and at most 1"
+by = ["untested:T"]
+
+[[unit]]
+text = "sequential_testing_config.spending_function | obrien_fleming | pocock | obrien_fleming | Accepted and stored; no alpha-spending table is computed yet"
+by = ["test:backend/tests/unit/api/test_sequential_contract.py::test_pocock_config_also_gives_no_table"]
+
+[[unit]]
+text = "sequential_testing_config.planned_looks | int | 10 | Accepted and stored (1–100); no alpha-spending table is computed yet"
+by = ["untested:T"]
+
+[[unit]]
+text = "The sequential analysis uses its own alpha."
+by = ["untested:T"]
+
+[[unit]]
+text = "It does not follow the experiment's stored confidence_level or correction_method, which judge the fixed-horizon results (How results are judged)."
+by = ["untested:T"]
+
+[[unit]]
+text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Log in first:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The examples use the demo data's checkout_button_color experiment, which is running and has data."
+by = ["docex:docs/api/sequential-testing.md#200"]
+
+[[unit]]
+text = "This saves its id in $EXP_ID and turns sequential testing on with five planned looks."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints 200."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "API Reference"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}/sequential"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Returns the full sequential analysis for an experiment, on its primary metric: the control against the treatment created first, so an experiment with three or more variants compares only that one, and the same one on every call."
+by = ["test:backend/tests/integration/api/test_sequential_treatment_arm.py::test_sequential_analysis_compares_the_control_against_the_treatment_created_first"]
+
+[[unit]]
+text = "It takes one optional query parameter, alpha: the significance level for this request, above 0 and at most 0.2, which overrides the stored sequential_testing_config.alpha (default 0.05); a value outside the range answers 422."
+by = ["docex:docs/api/sequential-testing.md#\"method\": \"msprt\""]
+
+[[unit]]
+text = "Any logged-in user can read it."
+by = ["untested:T"]
+
+[[unit]]
+text = "It answers 404 with \"Sequential testing is not enabled for this experiment\" when it is off, and \"Experiment not found\" when there is no such experiment."
+by = ["test:backend/tests/unit/api/test_sequential_results_api.py::TestGetSequentialResults::test_sequential_endpoint_returns_404_for_missing_experiment"]
+
+[[unit]]
+text = "It prints \"method\": \"msprt\", the boundary 20.0 (that is 1/α at the default α of 0.05), the strength of the evidence so far, the recommended action, the advisory at_risk, an empty alpha_spending and \"analysis_status\": \"beta\"."
+by = ["docex:docs/api/sequential-testing.md#\"method\": \"msprt\""]
+
+[[unit]]
+text = "The second request asks for α = 0.01, so its boundary is 100.0."
+by = [
+    "docex:docs/api/sequential-testing.md#\"boundary_at_alpha_001\": 100",
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_alpha_query_001_gives_boundary_100",
+]
+
+[[unit]]
+text = "A full response, abridged:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "analysis_status is \"beta\" while part of the analysis is not computed yet (here the alpha-spending table), and analysis_notice then says what; when the status is \"ga\" the notice is null."
+by = ["docex:docs/api/sequential-testing.md#\"method\": \"msprt\""]
+
+[[unit]]
+text = "If the experiment's method is stored as always_valid, the notice adds that it is an alias of msprt."
+by = ["test:backend/tests/unit/api/test_sequential_contract.py::test_always_valid_is_echoed_as_msprt_with_a_notice"]
+
+[[unit]]
+text = "Evidence Strength Values"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Value | Meaning"
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "strong_for_effect | Clear effect detected, better or worse: the sign of the confidence_sequence decides whether to ship (see Reading a stop decision)"
+by = [
+    "test:backend/tests/unit/services/test_sequential_testing_service.py::TestMSPRT::test_strong_evidence_for_effect",
+    "test:frontend/src/tests/components/EarlyStoppingBanner.test.tsx::a higher-is-better metric with a worse variant (10% -> 7%) shows harm, not ship",
+]
+
+[[unit]]
+text = "moderate_for_effect | Trending toward an effect, in either direction — consider continuing for confirmation"
+by = ["untested:T"]
+
+[[unit]]
+text = "inconclusive | Not enough data yet — continue"
+by = ["test:backend/tests/unit/services/test_sequential_testing_service.py::TestMSPRT::test_identical_rates_evidence_inconclusive"]
+
+[[unit]]
+text = "moderate_for_null | Trending toward no effect"
+by = ["untested:T"]
+
+[[unit]]
+text = "strong_for_null | Evidence leans strongly toward no effect. Not a stopping rule"
+by = ["untested:T"]
+
+[[unit]]
+text = "Recommended Actions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "stop_for_effect | The mSPRT crossed its boundary (1/alpha): stop, there is an effect, which may be an improvement or a harm"
+by = [
+    "test:backend/tests/unit/services/test_sequential_testing_service.py::TestIntegration::test_full_analysis_stop_for_effect",
+    "test:backend/tests/unit/services/test_sequential_testing_service.py::TestMSPRT::test_boundary_is_reciprocal_of_alpha",
+]
+
+[[unit]]
+text = "continue | Keep running — not enough evidence yet"
+by = ["test:backend/tests/unit/api/test_sequential_results_api.py::TestGetSequentialResults::test_sequential_continue_recommendation"]
+
+[[unit]]
+text = "stop_for_futility | Kept in the value set, but not returned by the current analysis: the mSPRT has no futility boundary. A long-running experiment is flagged with at_risk instead"
+by = [
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_recommended_action_set_is_the_dashboard_type",
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_long_running_inconclusive_is_at_risk_and_continue",
+]
+
+[[unit]]
+text = "Reading a stop decision"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The mSPRT is a two-sided test: stop_for_effect and strong_for_effect mean the effect is not zero, whichever way it points."
+by = ["untested:T"]
+
+[[unit]]
+text = "A treatment that is worse than the control crosses the boundary exactly as a better one does."
+by = ["untested:T"]
+
+[[unit]]
+text = "The response has no separate \"worse\" value, so read the direction from the confidence_sequence, which is the difference in rates, treatment minus control:"
+by = ["test:backend/tests/unit/api/test_sequential_contract.py::test_recommended_action_set_is_the_dashboard_type"]
+
+[[unit]]
+text = "confidence_sequence | Metric where higher is better | Metric where lower is better (lower_is_better)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "lower and upper both above 0 | Better: shipping is justified | Worse: do not ship"
+by = [
+    "test:frontend/src/tests/components/EarlyStoppingBanner.test.tsx::a higher-is-better metric with a better variant (10% -> 13%) shows ready to stop",
+    "test:frontend/src/tests/components/EarlyStoppingBanner.test.tsx::a lower-is-better metric with a positive difference shows harm",
+]
+
+[[unit]]
+text = "lower and upper both below 0 | Worse: do not ship | Better: shipping is justified"
+by = [
+    "test:frontend/src/tests/components/EarlyStoppingBanner.test.tsx::a higher-is-better metric with a worse variant (10% -> 7%) shows harm, not ship",
+    "test:frontend/src/tests/components/EarlyStoppingBanner.test.tsx::a lower-is-better metric (bounce, latency) with a negative difference shows success",
+]
+
+[[unit]]
+text = "the interval includes 0 | The direction is not clear; this should not happen with stop_for_effect | Same"
+by = ["test:frontend/src/tests/components/EarlyStoppingBanner.test.tsx::a confidence sequence that straddles zero shows a neutral message"]
+
+[[unit]]
+text = "For example, 10% against 13% and 10% against 7% at 10,000 users per arm both answer stop_for_effect with strong_for_effect."
+by = ["untested:T"]
+
+[[unit]]
+text = "The first has a confidence_sequence of 0.0157 to 0.0443, the second -0.0427 to -0.0173 (at the default α and τ²; they are not mirror images, because the variance is larger at 13%)."
+by = ["untested:T"]
+
+[[unit]]
+text = "With a higher-is-better metric the first is a win and the second is a harm."
+by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx::shows a worse variant as harm when higher is better"]
+
+[[unit]]
+text = "The dashboard's banner follows this table for a conversion metric: it reads \"Ready to stop\" in green only for a change in the better direction, \"Stop — the variant is significantly worse\" in red for the other, and a neutral message when the interval includes 0."
+by = [
+    "test:frontend/src/tests/components/EarlyStoppingBanner.test.tsx::a higher-is-better metric with a better variant (10% -> 13%) shows ready to stop",
+    "test:frontend/src/tests/components/EarlyStoppingBanner.test.tsx::a higher-is-better metric with a worse variant (10% -> 7%) shows harm, not ship",
+    "test:frontend/src/tests/components/EarlyStoppingBanner.test.tsx::a confidence sequence that straddles zero shows a neutral message",
+]
+
+[[unit]]
+text = "Only for conversion metrics."
+by = ["exempt:label"]
+
+[[unit]]
+text = "The analysis counts the users who sent the metric's event (the same count the results use for a conversion), whatever the metric's metric_type, so the confidence_sequence is always a difference in the share of users who sent the event."
+by = ["untested:T"]
+
+[[unit]]
+text = "For a conversion metric that share is the metric."
+by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx::keeps judging a conversion metric, whatever other metrics the experiment has"]
+
+[[unit]]
+text = "For a duration, count, revenue or custom metric it is not: with a lower-is-better metric such as a page load time, fewer treatment users sending the event can mean the page broke, not that it got faster."
+by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx::does not judge direction for a %s metric that is lower-is-better, with a negative interval"]
+
+[[unit]]
+text = "The table above therefore does not apply to those metrics, and the dashboard's banner does not judge their direction: it shows \"Significant change detected — direction unknown\" and leaves the call to you."
+by = [
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::does not judge direction for a %s metric that is lower-is-better, with a negative interval",
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::does not judge a non-conversion metric that is higher-is-better either",
+]
+
+[[unit]]
+text = "In the results response"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id} and GET /api/v1/experiments/{experiment_id}/results carry the same analysis as sequential_testing, computed by the same code as /sequential without alpha: the primary metric, the control against the treatment created first, at the stored sequential_testing_config.alpha."
+by = ["docex:docs/api/sequential-testing.md#\"embedded_method\": \"msprt\""]
+
+[[unit]]
+text = "The alpha parameter exists only on /sequential, and the results routes' confidence_level and correction_method do not change this block."
+by = ["untested:T"]
+
+[[unit]]
+text = "It is null when sequential testing is off."
+by = ["test:backend/tests/unit/api/test_sequential_results_api.py::TestSequentialTestingInResults::test_results_include_sequential_testing_null_when_disabled"]
+
+[[unit]]
+text = "It is also null when the analysis could not be computed: the API logs a warning and the rest of the response is unaffected."
+by = ["test:backend/tests/unit/api/test_sequential_results_api.py::TestSequentialTestingInResults::test_a_failed_sequential_analysis_is_null_and_logged"]
+
+[[unit]]
+text = "It is cached with the rest of the results: for up to 5 minutes for a running experiment and 24 hours otherwise."
+by = ["untested:T"]
+
+[[unit]]
+text = "A change to sequential_testing_enabled or sequential_testing_config, which is accepted on a running experiment, therefore shows here only when the cached answer expires or POST /api/v1/results/{experiment_id}/invalidate-cache clears it, not immediately; /sequential is not cached."
+by = ["untested:T"]
+
+[[unit]]
+text = "The request below passes use_cache=false for that reason:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"embedded_method\": \"msprt\" and the boundary 20.0, the same as the first /sequential request above."
+by = ["docex:docs/api/sequential-testing.md#\"embedded_method\": \"msprt\""]
+
+[[unit]]
+text = "Permissions"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Changing an experiment's sequential testing settings is a change to the experiment, decided by role and by the experiment's state, not by who created it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "ANALYST and VIEWER cannot change any experiment: the PUT above answers 403 with \"You don't have permission to update experiments\"."
+by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py"]
+
+[[unit]]
+text = "ADMIN and DEVELOPER may change experiments, but only a superuser may change one that is no longer a draft, and the demo experiment is running: for a DEVELOPER (or an ADMIN who is not a superuser) the PUT above answers 400 with \"Cannot update experiments in active status\"."
+by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py"]
+
+[[unit]]
+text = "The demo's admin@demo.com is a superuser, which is why it gets 200."
+by = ["docex:docs/api/sequential-testing.md#200"]
+
+[[unit]]
+text = "Common Mistakes"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Long-running risk is informational only."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An experiment flagged at_risk (the same value as long_running_risk.is_at_risk) may still be producing valid results."
+by = [
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_long_running_inconclusive_is_at_risk_and_continue",
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_on_schedule_is_not_at_risk",
+]
+
+[[unit]]
+text = "It means the experiment is running well past its expected duration or collecting samples slowly, not that there is no effect."
+by = [
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_long_running_inconclusive_is_at_risk_and_continue",
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_on_schedule_is_not_at_risk",
+]

@@ -1,0 +1,235 @@
+# What verifies each unit of docs/guides/assign-customer-list.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/guides/assign-customer-list.md"
+
+[[unit]]
+text = "Assign a customer list to an experiment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Use this when you know who will see an experiment before they arrive (an email campaign, a CRM export, a list from your warehouse) and need each person's variant now."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "POST /api/v1/tracking/assign/batch (beta) assigns up to 1,000 users in one request."
+by = ["docex:docs/guides/assign-customer-list.md#2500"]
+
+[[unit]]
+text = "Each user gets what POST /api/v1/tracking/assign would give them, with the bandit weights read at the start of the request: the global holdout, the experiment's mutual exclusion group and its targeting rules apply to each new user, and a user who is already assigned keeps their variant."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestParity::test_each_user_gets_what_a_single_call_gives",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestDatabaseWork::test_the_bandit_weights_are_read_once_per_request",
+]
+
+[[unit]]
+text = "The full contract and every error are in the API reference."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The examples run against the Quick Start stack and its demo data."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What you need"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sign in as the demo administrator:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An ACTIVE experiment."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This creates one for an email campaign, with two subject lines and a targeting rule that admits customers in the US only, and starts it:"
+by = ["docex:docs/guides/assign-customer-list.md#active"]
+
+[[unit]]
+text = "It prints active."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An API key with the sdk:ruleset scope, created by an ADMIN or a DEVELOPER."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_key_without_the_scope_is_403",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_scoped_key_whose_owner_lost_the_role_is_403",
+]
+
+[[unit]]
+text = "The same scope lets the key download every feature flag's targeting rules, so keep it on a server and never ship it to a browser or a mobile app."
+by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py"]
+
+[[unit]]
+text = "This creates one and saves it in $KEY:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints eptk_."
+by = ["docex:docs/guides/assign-customer-list.md#eptk_"]
+
+[[unit]]
+text = "Send the list"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each user has a user_id and, optionally, a context: the attributes the experiment's targeting rules read, as on POST /api/v1/tracking/assign."
+by = ["docex:docs/guides/assign-customer-list.md#\"assigned\":2"]
+
+[[unit]]
+text = "This sends three customers, two in the US and one in Germany, and saves the response in $RESULT:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints {\"assigned\":2,\"holdout\":0,\"mutual_exclusion\":0,\"targeting\":1}."
+by = ["docex:docs/guides/assign-customer-list.md#\"assigned\":2"]
+
+[[unit]]
+text = "The response also has assignments, one entry per user in the order sent, and variants, each variant's name and configuration by id."
+by = ["docex:docs/guides/assign-customer-list.md#\"cust-003\",\"control\",false"]
+
+[[unit]]
+text = "Read who was not enrolled"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints cust-003 and targeting."
+by = ["docex:docs/guides/assign-customer-list.md#cust-003"]
+
+[[unit]]
+text = "A user who was not enrolled gets the control variant, the experience to show them, and nothing is recorded for them:"
+by = ["docex:docs/guides/assign-customer-list.md#\"cust-003\",\"control\",false"]
+
+[[unit]]
+text = "reason | What it means | What to do"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "holdout | The user is in the global holdout, which sees no experiment | Nothing: show the control"
+by = ["test:backend/tests/unit/services/test_assignment_service_eligibility.py::TestHoldout::test_user_in_holdout_is_not_assigned"]
+
+[[unit]]
+text = "mutual_exclusion | The user is enrolled in, or hashed to, another experiment of the same mutual exclusion group | Nothing: show the control"
+by = [
+    "test:backend/tests/unit/services/test_assignment_service_eligibility.py::TestMutualExclusion::test_group_selecting_another_experiment_blocks_assignment",
+    "test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestPublicAssignRoute::test_m4_tracking_assign_refuses_with_no_row_and_no_event",
+]
+
+[[unit]]
+text = "targeting | The user's context does not match the experiment's targeting rules | Send the attributes your rules use in each user's context"
+by = ["docex:docs/guides/assign-customer-list.md#cust-003"]
+
+[[unit]]
+text = "Join variants to your list"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints one line per customer: the id, the variant's name and whether they were enrolled."
+by = ["docex:docs/guides/assign-customer-list.md#\"cust-003\",\"control\",false"]
+
+[[unit]]
+text = "cust-003 is \"cust-003\",\"control\",false; the other two are enrolled in control or urgent."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Retries"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Send the same request again."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Users already assigned keep their variant and no second assignment is recorded:"
+by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestResend::test_a_resend_returns_the_same_and_adds_no_rows"]
+
+[[unit]]
+text = "It prints true: the same answers as the first time."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A 409 (the experiment was paused or completed during the request) or a 500 may come after some users were assigned; sending the same request again is safe for the same reason."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestMidBatch::test_experiment_paused_part_way_is_409_and_a_resend_completes",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestMidBatch::test_any_other_failure_part_way_is_500_and_a_resend_completes",
+]
+
+[[unit]]
+text = "Any other 4xx assigns nobody."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_422_assigns_nobody_and_repeats_no_id",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_unknown_or_inactive_experiment_is_404",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_no_key_is_401",
+]
+
+[[unit]]
+text = "When they arrive"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "When a customer reaches your site or app, call POST /api/v1/tracking/assign (an SDK's get_assignment / getAssignment) as usual."
+by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestResend::test_a_later_single_call_returns_the_same_variant_and_records_the_view"]
+
+[[unit]]
+text = "The user gets the same variant, and that call records that they saw the experiment; the batch route records only the assignment:"
+by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestResend::test_a_later_single_call_returns_the_same_variant_and_records_the_view"]
+
+[[unit]]
+text = "It prints true."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "More than 1,000 users"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Send the list in chunks of 1,000, one request at a time."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The route allows 60 requests a minute from one address; over that it answers 429 with a Retry-After header, in seconds, and the loop below waits that long and sends the same chunk again."
+by = [
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_limit_is_sixty_a_minute",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_61st_request_in_a_minute_is_429",
+]
+
+[[unit]]
+text = "It stops at any other error; run it again from the start, which is safe because assignments are sticky."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This writes 2,500 customer ids to a file in a scratch directory, sends them in three chunks, and appends each answer to assignments.csv:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints 2500, one line per customer."
+by = ["docex:docs/guides/assign-customer-list.md#2500"]
+
+[[unit]]
+text = "One chunk at a time."
+by = ["test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_61st_request_in_a_minute_is_429"]
+
+[[unit]]
+text = "Chunks sent in parallel share the 60-a-minute limit and the API's database connections with every other request."
+by = ["test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_61st_request_in_a_minute_is_429"]
+
+[[unit]]
+text = "What counts in results"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every enrolled user counts in the experiment's results from the moment they are assigned, whether or not they open the email."
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_s6_sizes_and_conversions_are_the_results_routes"]
+
+[[unit]]
+text = "If only some of them will ever see the experience, analyse it as an intent-to-treat experiment, or assign only the users you will contact."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For a bandit experiment, each enrolled user also counts as a pull of their variant."
+by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
