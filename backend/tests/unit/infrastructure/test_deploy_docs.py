@@ -303,17 +303,19 @@ def test_no_timed_only_wording_is_left():
 )
 def test_the_docs_say_what_has_run_against_aws(path):
     """Inverted from test_the_docs_say_the_deploy_path_is_unproven (EM B3b C8)
-    by #798. The forward deploy has run to success on staging; the Rollback
-    workflow has run there but not yet completed end to end. Each page says
-    both, and neither still calls the whole path unrun. The note is a
-    blockquote, so its `>` markers are dropped before the text is joined."""
+    by #798, and again once the Rollback workflow had completed end to end on
+    staging (2026-10-04 and 2026-10-11). Each page says, with the run, that
+    Deploy has run to success on a staging account and that the Rollback
+    workflow has run there end to end; neither still says it has not, or
+    calls the whole path unrun. The note is a blockquote, so its `>` markers
+    are dropped before the text is joined."""
     text = " ".join(re.sub(r"(?m)^>[ \t]?", "", path.read_text()).split())
     assert "Not yet run against a real AWS account" not in text, path.name
-    assert "forward deploy" in text and "has run to success on staging" in text
-    assert (
-        "The Rollback workflow has run on staging but has not yet completed "
-        "end to end there" in text
-    ), path.name
+    assert "has not yet completed end to end" not in text, path.name
+    assert "has been tested only against a simulated `aws`" not in text, path.name
+    assert "Deploy has run to success on a staging account" in text, path.name
+    assert re.search(r"Rollback workflow (?:ran|has run) there end to end", text)
+    assert "actions/runs/38423251771" in text, path.name
 
 
 @pytest.mark.regression
@@ -331,11 +333,13 @@ def test_the_public_docs_do_not_name_internal_streams():
 @pytest.mark.regression
 @pytest.mark.parametrize("path", [GUIDE, RUNBOOK], ids=lambda p: p.name)
 def test_the_fix_forward_cost_is_written_down(path):
-    """EM B3b C5: within the hour, Rollback first; then its own hour."""
+    """EM B3b C5: within the hour, Rollback first; then its own hour, which
+    a staging rollback showed on 2026-10-11 (no longer "expected behaviour")."""
     text = " ".join(path.read_text().split())
     assert re.search(r"Rollback first", text), path.name
     assert "the next forward deploy is refused until it is no longer active" in text
-    assert "expected behaviour" in text and "first staging deploy" in text
+    assert "deployment stayed active for about an hour after its traffic shift" in text
+    assert "not yet observed" not in text, path.name
 
 
 @pytest.mark.regression
@@ -617,7 +621,9 @@ def test_the_runbook_undoes_a_migration_before_the_api_rollback():
         "with Steps 1 to 4 of [Restore from PITR](disaster-recovery.md#restore-from-pitr-preferred)"
     )
     assert stop < decided < link, (stop, decided, link)
-    assert "That path is **decided, not yet rehearsed**" in flat
+    # Rehearsed on staging (2026-10-11): the page says so, dated.
+    assert "It was rehearsed on a staging account on 2026-10-11" in flat
+    assert "not yet rehearsed" not in flat
     assert "aws rds restore-db-cluster-to-point-in-time" not in section
     assert "Decide which BEFORE an incident" not in section
     assert "issue 78" not in section
@@ -682,25 +688,26 @@ def _dr_section(heading: str, level: str = "##") -> str:
 
 @pytest.mark.regression
 def test_the_restore_path_is_the_script_and_says_what_it_cannot_do():
-    """T143: the restore is scripts/restore_repoint.sh, labelled "decided, not
-    yet rehearsed" until a staging rehearsal passes; it needs an `available`
-    cluster, so DR Scenario 4's own trigger (`failed`) has no decided path;
-    prod's reader step has run only against the fake; no repoint time is given
-    as measured. Every phase the page runs is one the script has, each in a
-    block of its own, so no pasted block runs `restore` and `cutover`
-    together."""
+    """T143: the restore is scripts/restore_repoint.sh. It was rehearsed on
+    staging on 2026-10-11, and the page says so, dated, with the measured
+    restore and cutover times; it needs an `available` cluster, so DR
+    Scenario 4's own trigger (`failed`) has no decided path; prod's reader step
+    has run only against the fake. Every phase the page runs is one the script
+    has, each in a block of its own, so no pasted block runs `restore` and
+    `cutover` together."""
     scenario = _dr_section("Scenario 4: Full Aurora Database Cluster Failure")
     flat = " ".join(scenario.split())
-    assert "**Decided, not yet rehearsed.**" in flat
+    assert "**Rehearsed on a staging account on 2026-10-11**" in flat
+    assert "not yet rehearsed" not in flat
     assert "**A cluster in status `failed` has no decided path.**" in flat
-    assert "Prod's `readers` step has run only against that fake" in flat
-    assert "an estimated 15 to 40 minutes, not measured" in flat
-    assert "plus the cutover's downtime, which is not measured yet" in flat
+    assert "Prod's `readers` step has run only against the fake AWS" in flat
+    assert "an estimated 15 to 40 minutes" not in flat
+    assert "not measured" not in flat
+    assert "12 min 45 s" in flat and "11 min 41 s" in flat
     assert "Decide before an incident" not in flat
     assert "#### If the script stops part-way" in scenario
-    # The downtime's monitors are expected, not measured (EM ruling R3).
-    assert "the load balancer is expected to answer 503 to every request" in flat
-    assert "measured; the staging rehearsal records them. A green" in flat
+    # What the rehearsal did not show stays unclaimed (EM ruling R3).
+    assert "that has not been rehearsed on AWS as of v" in flat
     # The rehearsal's own step numbers are not published, so the page names none.
     assert "step R5" not in flat
     assert "the load balancer answers 503" not in flat
@@ -798,7 +805,6 @@ CLI_FLAG_CHECKED = {
     "disaster-recovery.md": {
         "rds describe-db-clusters",
         "rds describe-db-cluster-snapshots",
-        "rds restore-db-cluster-from-snapshot",
         "cloudformation describe-stacks",
     },
     "rollback-runbook.md": {"rds describe-db-cluster-snapshots"},

@@ -1,0 +1,744 @@
+# What verifies each unit of docs/cognito_integration.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/cognito_integration.md"
+
+[[unit]]
+text = "AWS Cognito Integration"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This document explains how Experimently integrates with AWS Cognito for authentication and role-based access control."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Overview"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform uses AWS Cognito for user authentication and leverages Cognito groups to automatically assign user roles within the application."
+by = [
+    "test:backend/tests/integration/api/test_users_me_role.py::test_users_me_role_is_the_group_mapped_role_under_cognito",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py",
+]
+
+[[unit]]
+text = "This integration provides the following features:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The first time a Cognito user signs in, the platform creates their account and records their Cognito user ID (sub) on it."
+by = [
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_new_cognito_identity_gets_an_account_linked_to_its_sub",
+    "test:backend/tests/integration/api/test_cognito_onboarding_users_me.py::test_the_documented_onboarding_creates_the_account",
+]
+
+[[unit]]
+text = "Later sign-ins find the account by that ID (see How a sign-in finds its account)"
+by = [
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_second_sign_in_with_the_same_sub_reaches_the_same_account_after_a_rename",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_two_first_sign_ins_of_one_identity_reach_the_same_account",
+]
+
+[[unit]]
+text = "User roles are set from the Cognito groups in the user's access token"
+by = [
+    "test:backend/tests/integration/api/test_users_me_role.py::test_users_me_role_is_the_group_mapped_role_under_cognito",
+    "test:backend/tests/unit/services/test_auth_service.py::test_get_user_with_groups",
+]
+
+[[unit]]
+text = "A change of Cognito groups is reflected in the user's role at their next access token (see When a role change takes effect)"
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_leaving_the_admin_group_changes_the_role_at_the_next_token"]
+
+[[unit]]
+text = "Superusers (with full admin privileges) are automatically identified based on membership in designated admin groups"
+by = [
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_pool_user_in_the_admin_group_gets_an_administrator_account",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_new_identity_in_an_admin_group_gets_an_administrator_account",
+]
+
+[[unit]]
+text = "Signing in under Cognito"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The dashboard does not yet sign in with Cognito."
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_404_under_cognito_provider",
+    "test:frontend/src/tests/contexts/AuthContext.test.tsx",
+]
+count = 2
+
+[[unit]]
+text = "Sign in through the API with POST /api/v1/auth/token."
+by = [
+    "test:backend/tests/integration/auth/test_token.py::TestTokenSuccess",
+    "test:backend/tests/integration/auth/test_cognito_onboarding.py::test_a_user_added_as_documented_signs_in",
+]
+
+[[unit]]
+text = "SSO sign-in needs AUTH_PROVIDER=local."
+by = ["untested:T"]
+
+[[unit]]
+text = "Under AUTH_PROVIDER=cognito the dashboard's sign-in form answers that its endpoint is not available, and an SSO sign-in does not sign the user in."
+by = ["untested:T"]
+
+[[unit]]
+text = "Dashboard sign-in under Cognito is tracked in #708."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Required settings"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Under AUTH_PROVIDER=cognito, both COGNITO_USER_POOL_ID and COGNITO_CLIENT_ID are required."
+by = [
+    "test:backend/tests/unit/services/test_cognito_token_claims.py::TestValidateAccessTokenClaims::test_unset_settings_are_refused_as_not_configured",
+    "test:backend/tests/integration/api/test_cognito_token_audience.py::test_sign_in_without_a_configured_app_client_is_refused",
+]
+
+[[unit]]
+text = "A sign-in, and a call to /api/v1/auth/me, is accepted only for an access token issued to this deployment's user pool (the one COGNITO_USER_POOL_ID names) and app client (COGNITO_CLIENT_ID)."
+by = [
+    "test:backend/tests/integration/api/test_cognito_token_audience.py::test_sign_in_with_a_token_not_from_the_configured_pool_is_refused",
+    "test:backend/tests/integration/api/test_cognito_token_audience.py::test_auth_me_with_a_token_not_from_the_configured_pool_is_refused",
+    "test:backend/tests/integration/api/test_cognito_token_audience.py::test_a_token_from_the_configured_pool_and_app_client_signs_in",
+]
+
+[[unit]]
+text = "An ID token, or an access token issued to a different app client, is refused with a 401."
+by = [
+    "test:backend/tests/unit/services/test_cognito_token_claims.py::TestValidateAccessTokenClaims::test_an_id_token_is_refused",
+    "test:backend/tests/unit/services/test_cognito_token_claims.py::TestValidateAccessTokenClaims::test_a_different_app_client_is_refused",
+    "test:backend/tests/integration/api/test_cognito_token_audience.py::test_sign_in_with_a_token_for_a_different_app_client_is_refused",
+]
+
+[[unit]]
+text = "With either setting unset, every sign-in is refused."
+by = [
+    "test:backend/tests/unit/services/test_cognito_token_claims.py::TestValidateAccessTokenClaims::test_unset_settings_are_refused_as_not_configured",
+    "test:backend/tests/integration/api/test_cognito_token_audience.py::test_auth_me_without_a_configured_app_client_is_refused",
+]
+
+[[unit]]
+text = "Keep the pool ID in the form Cognito gives it, <region>_<id> (for example us-west-2_abcDEF123): the token issuer the platform expects is built from it, and a pool ID in any other form refuses every sign-in."
+by = [
+    "test:backend/tests/unit/services/test_cognito_token_claims.py::TestValidateAccessTokenClaims::test_a_malformed_pool_id_is_refused",
+    "test:backend/tests/unit/services/test_cognito_token_claims.py::TestExpectedIssuer::test_a_malformed_pool_id_has_no_issuer",
+]
+
+[[unit]]
+text = "Each refused sign-in is logged at WARNING on the backend.app.auth.cognito_sign_in logger with a reason field: not_configured when a setting is unset, wrong_issuer when the token was not issued to the configured user pool and app client."
+by = ["test:backend/tests/integration/api/test_cognito_token_audience.py"]
+
+[[unit]]
+text = "The other reasons are listed under Reading a refused sign-in."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "No IAM permission is needed for sign-in: the platform reads the user's groups from their access token, not from the Cognito API."
+by = ["untested:T"]
+
+[[unit]]
+text = "User pool requirements"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The user pool that COGNITO_USER_POOL_ID names must require an email address:"
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_with_no_email_is_refused"]
+
+[[unit]]
+text = "make email a required standard attribute of the pool;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "if users sign in through a federated identity provider (SAML, OIDC, Google and so on), map the provider's email claim to the pool's email attribute."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The platform creates a user's account the first time they sign in, and takes the account's email address from the pool's email attribute."
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_new_cognito_identity_gets_an_account_linked_to_its_sub"]
+
+[[unit]]
+text = "A first sign-in from a user with no email address is refused, and no account is created."
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_with_no_email_is_refused"]
+
+[[unit]]
+text = "Cognito does not let you change a pool's required attributes after the pool is created, so set this when you create it."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "The reference pool in infrastructure/cdk/stacks/authentication_stack.py already requires email."
+by = ["untested:T"]
+
+[[unit]]
+text = "How a sign-in finds its account"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every request signed with a Cognito access token is matched to one account, in this order:"
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py"]
+
+[[unit]]
+text = "The account linked to the Cognito user."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An account is linked when its external_id is cognito: followed by the user's Cognito user ID (sub)."
+by = [
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_account_an_administrator_linked_signs_in_whatever_its_password",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_the_sub_is_looked_up_before_the_username",
+    "test:backend/tests/integration/api/test_cognito_link_docs.py::test_the_documented_statement_links_an_account_a_sign_in_then_reaches",
+]
+
+[[unit]]
+text = "That account is used whatever its username, email address or password."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A first sign-in links the account it creates; an administrator links an existing account (see Linking an existing account)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Otherwise, a new account, created from the user's Cognito username, email address, given name and family name, with the role their groups give (see Role Assignment Logic)."
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_new_cognito_identity_gets_an_account_linked_to_its_sub"]
+
+[[unit]]
+text = "It has no password on the platform, and its external_id is set to cognito:<sub>."
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_new_cognito_identity_gets_an_account_linked_to_its_sub"]
+
+[[unit]]
+text = "The new account is not created, and the sign-in is refused, when:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "another account already has the user's Cognito username: an account with a password on the platform, an account linked to another identity, or an account with neither (for example one an earlier version of the platform created at a first Cognito sign-in)."
+by = [
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_cognito_sign_in_named_like_an_account_with_a_password_is_refused",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_account_linked_to_another_identity_is_refused",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_account_created_by_single_sign_on_is_refused",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_account_from_an_earlier_cognito_sign_in_is_refused_until_linked",
+]
+
+[[unit]]
+text = "It is used only once an administrator links it;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "the user has no email address in the pool;"
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_with_no_email_is_refused"]
+
+[[unit]]
+text = "another account already has the user's email address, in any letter case."
+by = [
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_whose_email_another_account_holds_is_refused",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_whose_email_differs_only_in_case_is_refused_without_the_index",
+]
+
+[[unit]]
+text = "An account is never linked by email address."
+by = [
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_whose_email_another_account_holds_is_refused",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_whose_email_differs_only_in_case_is_refused_without_the_index",
+]
+
+[[unit]]
+text = "A refused sign-in answers every request with 401 and {\"detail\":\"Could not validate credentials\"}, the same answer as an expired or invalid token."
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_cognito_sign_in_named_like_an_account_with_a_password_is_refused"]
+
+[[unit]]
+text = "The reason is in the API's log (see Reading a refused sign-in)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An account's username, email address and name are never changed from Cognito after the account is created."
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_second_sign_in_with_the_same_sub_reaches_the_same_account_after_a_rename"]
+
+[[unit]]
+text = "To check which account a sign-in reaches, call GET /api/v1/users/me with the access token: it answers with the account, or 401 when the sign-in is refused."
+by = [
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py",
+    "test:backend/tests/integration/api/test_cognito_onboarding_users_me.py::test_the_documented_onboarding_creates_the_account",
+]
+
+[[unit]]
+text = "GET /api/v1/auth/me returns the user pool's record of the user and does not look at accounts, so it answers 200 for a sign-in that is refused everywhere else."
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_auth_me_answers_for_a_sign_in_that_users_me_refuses"]
+
+[[unit]]
+text = "Self sign-up"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Variable Name | Description | Required | Default"
+by = ["exempt:label"]
+
+[[unit]]
+text = "COGNITO_SELF_SIGNUP_ENABLED | Under AUTH_PROVIDER=cognito, lets anyone who can reach the API register with POST /api/v1/auth/signup and /confirm. Off: both answer 404 and an administrator creates users (Adding a user). Ignored under local, where both always answer 404. The user pool must also allow self sign-up; the reference pool does not. A self-registered user is in no Cognito group, so their first sign-in creates an account with the Viewer role. | No | false"
+by = [
+    "test:backend/tests/integration/auth/test_self_signup_gate.py::test_signup_refused_by_default_makes_no_cognito_call",
+    "test:backend/tests/integration/auth/test_self_signup_gate.py::test_signup_and_confirm_reach_cognito_when_turned_on",
+]
+
+[[unit]]
+text = "COGNITO_SELF_SIGNUP_ENABLED takes true or false, in any letter case (1/0, yes/no, on/off, t/f and y/n are read the same way)."
+by = [
+    "test:backend/tests/unit/core/test_cognito_self_signup_setting.py::test_values_read_as_true",
+    "test:backend/tests/unit/core/test_cognito_self_signup_setting.py::test_values_read_as_false",
+]
+
+[[unit]]
+text = "An empty value, or any other value, stops the API from starting with an error naming the setting."
+by = ["test:backend/tests/unit/core/test_cognito_self_signup_setting.py::test_other_values_refuse_to_start"]
+
+[[unit]]
+text = "The name must be in upper case: a lower-case cognito_self_signup_enabled is ignored and the setting stays false."
+by = ["test:backend/tests/unit/core/test_cognito_self_signup_setting.py::test_a_lower_case_name_is_ignored"]
+
+[[unit]]
+text = "Upgrading from a release where sign-up was always on."
+by = ["exempt:label"]
+
+[[unit]]
+text = "A user who signed up but never confirmed before this release can no longer confirm through the API while the setting is off."
+by = ["test:backend/tests/integration/auth/test_self_signup_gate.py::test_confirm_refused_by_default_makes_no_cognito_call"]
+
+[[unit]]
+text = "Confirm them in the user pool with aws cognito-idp admin-confirm-sign-up --user-pool-id \"$COGNITO_USER_POOL_ID\" --username \"<their Cognito username>\", or delete them and add them again as in Adding a user."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Adding a user"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "(Cognito onboarding by an administrator.) Users cannot register themselves unless COGNITO_SELF_SIGNUP_ENABLED=true (see Self sign-up)."
+by = ["test:backend/tests/integration/auth/test_self_signup_gate.py::test_signup_refused_by_default_makes_no_cognito_call"]
+
+[[unit]]
+text = "An administrator creates each one in the user pool, with a permanent password, and their first sign-in creates their account on the platform."
+by = [
+    "test:backend/tests/integration/auth/test_cognito_onboarding.py::test_a_user_added_as_documented_signs_in",
+    "test:backend/tests/integration/api/test_cognito_onboarding_users_me.py::test_the_documented_onboarding_creates_the_account",
+]
+
+[[unit]]
+text = "Once per pool, create the role groups."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The names are the keys of COGNITO_GROUP_ROLE_MAPPING (Admins, Developers, Analysts, Viewers; see Configuration)."
+by = ["test:backend/tests/integration/api/test_users_me_role.py::test_users_me_role_is_the_group_mapped_role_under_cognito"]
+
+[[unit]]
+text = "The reference pool creates none."
+by = ["untested:T"]
+
+[[unit]]
+text = "Create the user."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Choose a username that is not an email address: the reference pool lets people sign in with their email address too, so a username in email form is refused."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "email_verified=true lets them reset their own password."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "--message-action SUPPRESS stops Cognito emailing a temporary password, which cannot be used to sign in through the API (see step 6)."
+by = ["test:backend/tests/integration/auth/test_cognito_onboarding.py::test_a_user_left_with_a_temporary_password_gets_the_documented_401"]
+
+[[unit]]
+text = "The reference pool also requires given_name and family_name."
+by = ["untested:T"]
+
+[[unit]]
+text = "Give them a permanent password."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "--permanent is required."
+by = ["test:backend/tests/integration/auth/test_cognito_onboarding.py::test_a_user_left_with_a_temporary_password_gets_the_documented_401"]
+
+[[unit]]
+text = "The password must meet the pool's policy: in the reference pool, at least 8 characters with upper case, lower case, a digit and a symbol."
+by = ["untested:T"]
+
+[[unit]]
+text = "Type it at the Password: prompt, which does not show it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Then either tell the user the password through a channel you trust, or do not share it and let them choose their own: POST /api/v1/auth/forgot-password with {\"username\":\"jdoe\"} emails them a code, and POST /api/v1/auth/reset-password with username, confirmation_code and new_password sets the password."
+by = [
+    "test:backend/tests/integration/auth/test_password_reset.py::TestForgotPassword::test_forgot_password_returns_200",
+    "test:backend/tests/integration/auth/test_password_reset.py::TestConfirmForgotPassword::test_confirm_reset_returns_200",
+]
+
+[[unit]]
+text = "Add them to their role's group."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "First sign-in."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The user calls POST /api/v1/auth/token (form fields username and password), then GET /api/v1/users/me with the access token."
+by = [
+    "test:backend/tests/integration/auth/test_cognito_onboarding.py::test_a_user_added_as_documented_signs_in",
+    "test:backend/tests/integration/api/test_cognito_onboarding_users_me.py::test_the_documented_onboarding_creates_the_account",
+]
+
+[[unit]]
+text = "That first authenticated call creates their account (see How a sign-in finds its account)."
+by = ["test:backend/tests/integration/api/test_cognito_onboarding_users_me.py::test_the_documented_onboarding_creates_the_account"]
+
+[[unit]]
+text = "If the user cannot sign in with the password you set, they still have a temporary password: step 3 was skipped or run without --permanent, or Cognito sent an invitation email."
+by = ["test:backend/tests/integration/auth/test_cognito_onboarding.py::test_a_user_left_with_a_temporary_password_gets_the_documented_401"]
+
+[[unit]]
+text = "A temporary password cannot sign in through the API: POST /api/v1/auth/token answers 401 with This user must set a new password before signing in; an administrator sets one with admin-set-user-password --permanent."
+by = [
+    "test:backend/tests/integration/auth/test_cognito_onboarding.py::test_a_user_left_with_a_temporary_password_gets_the_documented_401",
+    "test:backend/tests/integration/auth/test_token_challenge.py",
+]
+
+[[unit]]
+text = "Run step 3 again with --permanent."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Do not create the account on the platform first."
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_cognito_sign_in_named_like_an_account_with_a_password_is_refused"]
+
+[[unit]]
+text = "An account created through the API or the dashboard has a password and is not linked to the Cognito user, so the user's sign-in would be refused until an administrator links the two."
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_cognito_sign_in_named_like_an_account_with_a_password_is_refused"]
+
+[[unit]]
+text = "Linking an existing account"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An existing account is used for a Cognito sign-in once its external_id is set to cognito: followed by the user's Cognito user ID."
+by = [
+    "test:backend/tests/integration/api/test_cognito_link_docs.py::test_the_documented_statement_links_an_account_a_sign_in_then_reaches",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_account_an_administrator_linked_signs_in_whatever_its_password",
+]
+
+[[unit]]
+text = "Do this for an account created on the platform before Cognito was turned on, for one created by single sign-on, for one an earlier version of the platform created at a first Cognito sign-in, and after a Cognito user is deleted and created again (the new user has a new ID)."
+by = [
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_cognito_sign_in_named_like_an_account_with_a_password_is_refused",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_account_created_by_single_sign_on_is_refused",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_account_from_an_earlier_cognito_sign_in_is_refused_until_linked",
+]
+
+[[unit]]
+text = "Print the user's Cognito user ID:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Then, in the platform's database, set it on the account."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "<schema> is the platform's schema: experimentation unless you changed it (POSTGRES_SCHEMA; the Helm chart sets it from postgresql.schema)."
+by = ["untested:T"]
+
+[[unit]]
+text = "It returns exactly one row."
+by = [
+    "test:backend/tests/integration/api/test_cognito_link_docs.py::test_the_documented_statement_links_an_account_a_sign_in_then_reaches",
+    "test:backend/tests/integration/api/test_cognito_link_docs.py::test_the_documented_statement_returns_no_row_for_an_unknown_address",
+    "test:backend/tests/integration/api/test_cognito_link_docs.py::test_linking_a_second_account_to_the_same_user_names_external_id",
+]
+
+[[unit]]
+text = "No row means no account has that email address."
+by = [
+    "test:backend/tests/integration/api/test_cognito_link_docs.py::test_the_documented_statement_links_an_account_a_sign_in_then_reaches",
+    "test:backend/tests/integration/api/test_cognito_link_docs.py::test_the_documented_statement_returns_no_row_for_an_unknown_address",
+    "test:backend/tests/integration/api/test_cognito_link_docs.py::test_linking_a_second_account_to_the_same_user_names_external_id",
+]
+
+[[unit]]
+text = "An error naming external_id means another account is already linked to that Cognito user."
+by = [
+    "test:backend/tests/integration/api/test_cognito_link_docs.py::test_the_documented_statement_links_an_account_a_sign_in_then_reaches",
+    "test:backend/tests/integration/api/test_cognito_link_docs.py::test_the_documented_statement_returns_no_row_for_an_unknown_address",
+    "test:backend/tests/integration/api/test_cognito_link_docs.py::test_linking_a_second_account_to_the_same_user_names_external_id",
+]
+
+[[unit]]
+text = "The account keeps its username, email address and password."
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_account_an_administrator_linked_signs_in_whatever_its_password"]
+
+[[unit]]
+text = "With SYNC_ROLES_ON_LOGIN on (the default), its role then follows the user's Cognito groups from their next sign-in, so add the user to the group for the role the account should keep before they sign in."
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_linked_account_takes_its_role_from_the_groups_when_sync_is_on"]
+
+[[unit]]
+text = "If you replace the user pool"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A new user pool gives every user a new Cognito user ID, so no account is linked to the users of the new pool, and their sign-ins are refused."
+by = [
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_account_linked_to_another_identity_is_refused",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_whose_email_another_account_holds_is_refused",
+]
+
+[[unit]]
+text = "Re-link each account, one at a time: print the user's ID from the new pool with admin-get-user and set it on the account as in Linking an existing account."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Reading a refused sign-in"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each refused sign-in writes one WARNING record to the backend.app.auth.cognito_sign_in logger."
+by = ["test:backend/tests/integration/api/test_cognito_token_audience.py"]
+
+[[unit]]
+text = "Its reason field is one of these:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Reason | The sign-in was refused because"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "not_configured | COGNITO_USER_POOL_ID or COGNITO_CLIENT_ID is unset"
+by = [
+    "test:backend/tests/integration/api/test_cognito_token_audience.py::test_sign_in_without_a_configured_app_client_is_refused",
+    "test:backend/tests/unit/services/test_cognito_token_claims.py::TestValidateAccessTokenClaims::test_unset_settings_are_refused_as_not_configured",
+]
+
+[[unit]]
+text = "wrong_issuer | the token was not an access token issued to the configured user pool and app client"
+by = [
+    "test:backend/tests/integration/api/test_cognito_token_audience.py::test_sign_in_with_a_token_not_from_the_configured_pool_is_refused",
+    "test:backend/tests/integration/api/test_cognito_token_audience.py::test_sign_in_with_a_token_for_a_different_app_client_is_refused",
+]
+
+[[unit]]
+text = "no_sub | the user's record has no Cognito user ID"
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_without_a_cognito_user_id_is_refused"]
+
+[[unit]]
+text = "local_password | an account with a password on the platform has the user's username"
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_cognito_sign_in_named_like_an_account_with_a_password_is_refused"]
+
+[[unit]]
+text = "linked_elsewhere | an account linked to another identity has the user's username"
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_account_linked_to_another_identity_is_refused"]
+
+[[unit]]
+text = "legacy_unlinked | an account with no password and no link has the user's username"
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_account_from_an_earlier_cognito_sign_in_is_refused_until_linked"]
+
+[[unit]]
+text = "no_email | the user has no email address in the pool"
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_with_no_email_is_refused"]
+
+[[unit]]
+text = "email_taken | another account has the user's email address, in any letter case"
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_whose_email_another_account_holds_is_refused"]
+
+[[unit]]
+text = "field_too_long | the user's username, email address, given or family name, or Cognito user ID is longer than the platform stores; the record's field names which"
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_with_a_value_longer_than_its_column_is_refused"]
+
+[[unit]]
+text = "commit_failed | the new account could not be saved"
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_create_that_cannot_be_saved_is_refused"]
+
+[[unit]]
+text = "The record also carries cognito_username, sub and, where an account was involved, row_id, that account's id."
+by = ["untested:T"]
+
+[[unit]]
+text = "For local_password, linked_elsewhere and legacy_unlinked, row_id is the account to link (see Linking an existing account)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For field_too_long it carries field, the column (username, email, first_name, last_name or external_id), and never the value: when the over-long value is the username or the Cognito user ID, that one is left out of the record."
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_with_a_value_longer_than_its_column_is_refused"]
+
+[[unit]]
+text = "Configuration"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The following settings in backend/app/core/config.py control the Cognito integration:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "COGNITO_GROUP_ROLE_MAPPING: Maps Cognito group names to application roles"
+by = [
+    "test:backend/tests/unit/core/test_cognito.py::test_map_cognito_groups_to_role_multiple_groups",
+    "test:backend/tests/unit/core/test_cognito_integration.py",
+]
+
+[[unit]]
+text = "COGNITO_ADMIN_GROUPS: Lists Cognito groups whose members are automatically given superuser status"
+by = [
+    "test:backend/tests/unit/core/test_cognito.py::test_should_be_superuser_multiple_groups",
+    "test:backend/tests/unit/core/test_cognito_integration.py::TestCognitoIntegration::test_should_be_superuser_true",
+]
+
+[[unit]]
+text = "SYNC_ROLES_ON_LOGIN: When True (the default), every authenticated request -- not only sign-in -- sets the user's role and superuser status from their Cognito groups."
+by = [
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_leaving_the_admin_group_changes_the_role_at_the_next_token",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_linked_account_takes_its_role_from_the_groups_when_sync_is_on",
+]
+
+[[unit]]
+text = "A role changed in the dashboard would be overwritten on the user's next request, so PATCH /api/v1/admin/users/{user_id} refuses a role change with 409 while this is on; change the user's group in Cognito instead."
+by = [
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchUnderCognitoRoleSync::test_a_role_change_is_409",
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchUnderCognitoRoleSync::test_a_role_change_is_saved_with_sync_off",
+]
+
+[[unit]]
+text = "Active status is not synced and can be changed there."
+by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestPatchUnderCognitoRoleSync::test_deactivation_is_saved_under_sync"]
+
+[[unit]]
+text = "User Roles"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The application defines the following user roles, in order of decreasing privilege:"
+by = ["test:backend/tests/unit/core/test_permissions.py::TestHasPermission"]
+
+[[unit]]
+text = "ADMIN: Can create and manage experiments and feature flags, and read all data."
+by = ["test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_admin_has_permission"]
+
+[[unit]]
+text = "Managing users, safety settings, per-flag safety config and rollback, and opening the dashboard's Users, API Keys, Safety settings and Roles pages, also needs a superuser account (see Role-based access control)."
+by = [
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestAdminUserList::test_a_non_superuser_is_refused",
+    "test:backend/tests/integration/api/test_safety_api.py",
+    "test:frontend/src/tests/admin/withAdminGuard.test.tsx",
+]
+
+[[unit]]
+text = "DEVELOPER: Can create and manage experiments and feature flags"
+by = ["test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_developer_permissions"]
+
+[[unit]]
+text = "ANALYST: Can view all data but cannot create or modify experiments/flags"
+by = ["test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_analyst_permissions"]
+
+[[unit]]
+text = "VIEWER: Reads experiments, feature flags and results, and changes none of them."
+by = ["test:backend/tests/unit/core/test_permissions.py"]
+
+[[unit]]
+text = "Like every role, a VIEWER can create an API key, and an API key writes tracking data: assignments and events."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key",
+    "journey:api-key-first-assignment#track",
+]
+
+[[unit]]
+text = "Role Assignment Logic"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "When a user authenticates via Cognito, the following logic determines their role:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The user's Cognito groups are read from the cognito:groups claim of their access token."
+by = [
+    "test:backend/tests/unit/services/test_auth_service.py::test_get_user_with_groups",
+    "test:backend/tests/unit/services/test_auth_service.py::test_get_user_with_groups_without_the_claim_is_no_groups",
+    "test:backend/tests/unit/services/test_auth_service.py::test_get_user_with_groups_keeps_only_group_names",
+]
+
+[[unit]]
+text = "Cognito leaves the claim out for a user in no group, so a token without it means no groups"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If the user belongs to any group listed in COGNITO_ADMIN_GROUPS, they are:"
+by = [
+    "test:backend/tests/unit/api/test_deps.py",
+    "test:backend/tests/unit/core/test_cognito_integration.py::TestCognitoIntegration::test_superuser_always_gets_admin_role",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_pool_user_in_the_admin_group_gets_an_administrator_account",
+]
+
+[[unit]]
+text = "Assigned superuser status (is_superuser = True)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Given the ADMIN role regardless of other group mappings"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Otherwise, their role is determined by the highest-privilege role mapped from their Cognito groups"
+by = [
+    "test:backend/tests/unit/core/test_cognito_integration.py::TestCognitoIntegration::test_map_multiple_cognito_groups_to_highest_role",
+    "test:backend/tests/unit/core/test_cognito.py::test_map_cognito_groups_to_role_multiple_groups",
+]
+
+[[unit]]
+text = "If the user doesn't belong to any mapped group, they default to the VIEWER role"
+by = [
+    "test:backend/tests/integration/api/test_users_me_role.py::test_users_me_role_is_the_group_mapped_role_under_cognito",
+    "test:backend/tests/unit/core/test_cognito_integration.py::TestCognitoIntegration::test_map_unknown_cognito_group_defaults_to_viewer",
+]
+
+[[unit]]
+text = "When a role change takes effect"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The groups come from the access token, so adding a user to a group or removing them from one changes their role on the platform at their next access token, not at their next request."
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_leaving_the_admin_group_changes_the_role_at_the_next_token"]
+
+[[unit]]
+text = "The reference app client in infrastructure/cdk/stacks/authentication_stack.py sets no token lifetime, so its access tokens last CDK's default of 60 minutes."
+by = ["untested:T"]
+
+[[unit]]
+text = "To make a change take effect at once, sign the user out of every session, which revokes their tokens:"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "With SYNC_ROLES_ON_LOGIN on (the default), each request with the new token sets the account's role and superuser flag from its groups."
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_leaving_the_admin_group_changes_the_role_at_the_next_token"]
+
+[[unit]]
+text = "With it off, the role is set only when the account is created."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Example"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A user who belongs to both the \"Developers\" and \"Analysts\" Cognito groups will be assigned the DEVELOPER role in the application."
+by = ["test:backend/tests/unit/core/test_cognito_integration.py::TestCognitoIntegration::test_map_multiple_cognito_groups_to_highest_role"]
+
+[[unit]]
+text = "A user who belongs to the \"SuperUsers\" group (which is in COGNITO_ADMIN_GROUPS) will automatically be assigned the ADMIN role and given superuser status, even if \"SuperUsers\" is mapped to a different role in COGNITO_GROUP_ROLE_MAPPING."
+by = [
+    "test:backend/tests/unit/api/test_deps.py",
+    "test:backend/tests/unit/core/test_cognito_integration.py::TestCognitoIntegration::test_superuser_always_gets_admin_role",
+]

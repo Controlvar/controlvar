@@ -84,8 +84,6 @@ def test_the_rollback_runbook_covers_segment_targeting():
         "disable segment-targeted flags",
         "pause segment-targeted experiments",
         "and pause the experiments that use them",
-        "`GET /api/v1/sdk/ruleset`",
-        "keep doing so from the ruleset they cached",
     ):
         assert fact in section, fact
     assert "(#rolling-back-past-segment-targeting)" in text

@@ -24,19 +24,9 @@ GitHub environments and the secret paths all use it.
 ## Before the first deploy
 
 Every workflow refuses -- a red run, not a skipped one -- an environment that is
-not configured. Per GitHub environment (**Settings → Environments →
-`<env>`**), in this order:
-
-1. **Protection first**: a required reviewer, and deployment branches limited
-   to `main`. Do this before adding anything else: dispatching a workflow for
-   an environment that does not exist creates it, unprotected.
-2. **Secrets**: `AWS_ACCOUNT_ID` (that environment's account, 12 digits:
-   `gh secret set AWS_ACCOUNT_ID --env <env>`) and `AWS_ROLE_ARN`, that
-   environment's OIDC role ([IAM Permissions](iam-permissions.md)). The
-   account ID is a secret, not a variable, because the workflow logs are
-   public; a variable of that name is not read.
-3. **Variable**: `PUBLIC_BASE_URL` (the origin the stacks were deployed with,
-   e.g. `https://app.example.com` -- the smoke test calls it).
+not configured. The GitHub environment's protection, its `AWS_ACCOUNT_ID` and
+`AWS_ROLE_ARN` secrets and its `PUBLIC_BASE_URL` variable are
+[section 1.5 of the deployment guide](deployment-guide.md#15-github-repository-administrator).
 
 `SLACK_BOT_TOKEN` (repository secret, optional) posts to `#deployments`.
 Without it, Deploy and Rollback skip their Slack steps and say so in one line
@@ -62,25 +52,25 @@ checklist in [the deployment guide](deployment-guide.md#1-before-the-first-deplo
    -- the API and the dashboard, each with its new revision and what was
    serving before -- and hands you one rollback line that covers both.
 
-> **What has run against a real AWS account.** The CodeDeploy forward deploy
-> has run to success on staging. An alarm-driven rollback has been seen there
-> too: a 5xx alarm raised during a deploy's traffic shift stopped the
-> deployment, and CodeDeploy moved the API back to the previous revision by
-> itself ([#148](https://github.com/getexperimently/experimently/issues/148)).
-> The Rollback workflow has run on staging but has not yet completed end to
-> end there; its whole path has been tested only against a simulated `aws`,
-> so read a Rollback run and its summary closely.
+> **What has run against a real AWS account.** Deploy has run to success on a
+> staging account, most recently v0.31.0 on 2026-10-13
+> ([run](https://github.com/getexperimently/experimently/actions/runs/38423251771)).
+> On 2026-10-04 and on 2026-10-11 the Rollback workflow ran there end to end,
+> putting the API and the dashboard back on the previous release
+> ([run](https://github.com/getexperimently/experimently/actions/runs/37217043185),
+> [run](https://github.com/getexperimently/experimently/actions/runs/38098724258)).
+> On 2026-10-11 a 5xx alarm forced into ALARM in the hour after a deploy's
+> traffic shift stopped the deployment there, and CodeDeploy moved the API back
+> to the previous revision by itself
+> ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_1), [#148](https://github.com/getexperimently/experimently/issues/148)).
 
 **How the traffic moves.** The deploy creates a CodeDeploy blue/green
 deployment. When CodeDeploy reports it `Ready`, the deploy checks that every
 target in the new task set's target group is healthy, as many as the task set
 wants, and then approves the shift. The deployment group's canary sends 10%
-of traffic to the new revision, waits 15 minutes, then sends the rest. The
-canary is 15 minutes because launch traffic is low: at 10% of a small number
-of requests, five minutes is often too short for a 5xx alarm to fire, which
-needs errors in 2 of 3 minutes plus CloudWatch's metric delay. It will be
-revisited once production has real traffic. The
-run succeeds when the new revision is the API's PRIMARY task set **and** the
+of traffic to the new revision, waits 15 minutes, then sends the rest. A
+canary of 15 minutes gives a 5xx alarm, which needs errors in 2 of 3 minutes,
+time to fire while 10% of traffic is on the new revision. The run succeeds when the new revision is the API's PRIMARY task set **and** the
 HTTPS listener's `/api/*` rule forwards to that task set's target group. The
 summary then prints the live group and the `-c api_live_target_group=<blue|green>`
 value the next `cdk deploy` of the Fargate stack needs.
@@ -110,8 +100,7 @@ too, so the dashboard alone goes back with
 > and at least 5% of that target group's requests, for 2 minutes of 3). A
 > release that answers wrongly with a 2xx is not caught, nor are the load
 > balancer's own 502 and 504, and an alarm does not roll back the dashboard.
-> Staging traffic may be too low to reach the threshold at all. After that
-> hour, the response to a bad release is **Rollback**.
+> After that hour, the response to a bad release is **Rollback**.
 
 **One deploy per environment per hour.** After the shift, CodeDeploy keeps
 the previous task set for an hour, and the deployment stays active that whole
@@ -126,11 +115,8 @@ is active; see
 [An alarm rolled the API back](rollback-runbook.md#an-alarm-rolled-the-api-back).
 
 **One at a time per environment.** Deploy and Database Migration share a
-concurrency group per environment and are never cancelled mid-run. GitHub keeps
-at most one run *waiting* in a group: a newer dispatch that queues behind a
-running deploy **replaces** an older one that was still waiting, which is then
-cancelled without running. Rollback has its own group, so it never waits behind
-a deploy.
+concurrency group per environment and are never cancelled mid-run. Rollback has
+its own group, so it never waits behind a deploy.
 
 Full procedure: [deployment-guide.md](deployment-guide.md)
 
@@ -188,10 +174,8 @@ and a reason. The API is always rolled back.
 > waiting for `ContinueDeployment` and then stops, which auto-rollback turns
 > back into the revision you were rolling away from.
 >
-> That is three calls with an AppSpec in between, which is not something to
-> assemble by hand during an incident. **Use Method 1.** If the workflow itself
-> is unavailable, [rollback-runbook.md](rollback-runbook.md) Method 2 has the
-> full sequence.
+> **Use Method 1.** If the workflow itself is unavailable,
+> [rollback-runbook.md](rollback-runbook.md) Method 2 has the full sequence.
 
 How to find the previous task definition, **with its image** — the revision
 list alone is not enough, because CloudFormation also registers into this
@@ -248,9 +232,12 @@ curl -s https://app.example.com/health
 It prints:
 
 ```text
-{"status": "...", "profile": "full", "version": "X.Y.Z", "environment": "...",
+{"status": "...", "timestamp": "...", "profile": "full",
  "checks": {"database": {"status": "..."}, ...}}
 ```
+
+Outside production it also reports `version`, `environment` and each check's
+detail ([Monitoring](../self-hosting/monitoring.md#health-check)).
 
 The smoke test the deploy runs: a real route, unauthenticated:
 
@@ -322,16 +309,12 @@ There is no `:latest` and no bare `:<tag>`: each release is pushed once per
 profile as `:<tag>-<profile>` (reused, not rebuilt, when the same release is
 deployed again into the same account), and every task definition the workflows
 register names the image **by digest**, so a later push to a tag cannot change
-what a running environment starts. Staging and prod are meant to be separate
-AWS accounts, each with its own ECR, so prod builds the release itself from the
-tag: it runs the same release (tag, commit and profile; the deploy refuses an
-image whose labels name another commit or profile), not the same digest
-staging ran.
+what a running environment starts. A deploy into an account whose ECR does
+not hold the release builds it there from the tag, and refuses an image whose
+labels name another commit or profile.
 
 The dashboard image is built with an empty `NEXT_PUBLIC_API_URL`, so it calls
-the API on its own origin and one image serves any environment. The
-`api.<domain>` fallback would need a per-environment image, which Deploy does
-not build.
+the API on its own origin and one image serves any environment.
 
 ---
 
@@ -373,19 +356,19 @@ which also says how the staging rehearsal proves the tasks really reach it
 
 ---
 
-## Infrastructure Stack Deployment Order
+## Infrastructure Stacks
 
-CDK stacks must be deployed in this order. Each stack depends on outputs from the previous.
+An environment's stacks, by stack **id** — what `cdk deploy` takes, and what
+`cdk list` prints. `cdk deploy --all` deploys them in the order their
+dependencies need.
 
-These are stack **ids** — what `cdk deploy` takes, and what `cdk list` prints.
-
-1. `experimentation-auth-<env>` — Cognito user pool, client and groups
+1. `experimentation-auth-<env>` — Cognito user pool and app client
 2. `experimentation-vpc-<env>` — VPC, subnets, NAT gateways
 3. `experimentation-dynamodb-<env>` — the three DynamoDB tables (events, feature flags, overrides)
 4. `experimentation-database-<env>` — Aurora PostgreSQL cluster
 5. `experimentation-redis-<env>` — ElastiCache Redis replication group
 6. `experimentation-compute-<env>` — ECS cluster, task security group, database-access Lambda
-7. `experimentation-monitoring-<env>` — CloudWatch dashboards, alarms, log groups
+7. `experimentation-monitoring-<env>` — CloudWatch dashboards, alarms and the SNS topic they email
 8. `experimentation-fargate-<env>` — Fargate services, ALB, CodeDeploy blue/green
 9. `experimentation-migrations-<env>` — ECS task definition for Alembic (plural)
 
@@ -445,16 +428,3 @@ CLUSTER=$(aws cloudformation describe-stacks --stack-name "experimentation-datab
 aws rds describe-db-clusters --db-cluster-identifier "$CLUSTER" \
   --query 'DBClusters[0].{Status:Status,Endpoint:Endpoint,LatestRestorableTime:LatestRestorableTime}'
 ```
-
----
-
-## Recovery Time Objectives
-
-| Scenario | RTO | RPO | See |
-|----------|-----|-----|-----|
-| Single ECS task crash | ~60 seconds | 0 | DR Plan — Scenario 1 |
-| All ECS tasks down | ~5 minutes | 0 | DR Plan — Scenario 2 |
-| Application rollback | < 5 minutes | 0 | Rollback Runbook |
-| Aurora primary failure | ~2 minutes | 0 | DR Plan — Scenario 3 |
-| Aurora cluster restore from snapshot | ~30 minutes | 5 minutes | DR Plan — Scenario 4 |
-| Full region failover | ~60 minutes | 5 minutes | DR Plan — Scenario 6 |

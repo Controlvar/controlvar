@@ -48,9 +48,8 @@ Three identities, described with their exact permissions in
 
 ### 1.2 Certificate and domain
 
-An ACM certificate **in `us-west-2`** (the load balancer's region -- not
-`us-east-1`, which is CloudFront's) covering `app.<domain>`, status `ISSUED`,
-before any `cdk deploy`. `PUBLIC_BASE_URL=https://app.<domain>`.
+An ACM certificate in the region the stacks deploy to (`us-west-2`), covering
+`app.<domain>`, with status `ISSUED`, before any `cdk deploy`. `PUBLIC_BASE_URL=https://app.<domain>`.
 
 ```bash
 aws acm describe-certificate --certificate-arn "$CERTIFICATE_ARN" \
@@ -83,9 +82,8 @@ aws ecr create-repository \
   --image-scanning-configuration scanOnPush=true
 ```
 
-Then one image in each tagged `bootstrap`: CloudFormation cannot create an ECS
-service without a task definition, and a task definition cannot name no image.
-`bootstrap` is a tag the Deploy workflow never writes, so the revision
+Then push one image to each, tagged `bootstrap`, which the stacks' task
+definitions name until the first deploy. `bootstrap` is a tag the Deploy workflow never writes, so the revision
 CloudFormation registers cannot drift to a later build. Build from the
 repository root with the profile you will deploy:
 
@@ -142,11 +140,9 @@ input and run `cdk deploy` again ([Secrets Management](secrets-management.md#giv
 
 For each environment, **protection first**, then configuration:
 
-1. Settings → Environments → `<env>`: a **required reviewer** and
-   **deployment branches: `main` only**. Check it before going on:
+1. Under **Settings → Environments**, give `<env>` a **required reviewer** and
+   limit its **deployment branches** to `main`. Check it before going on:
    `gh api repos/<owner>/<repo>/environments/<env> --jq '.protection_rules, .deployment_branch_policy'`.
-   A workflow dispatched for an environment that does not exist creates it,
-   unprotected -- which is why this comes before anything that names it.
 2. Secrets `AWS_ACCOUNT_ID` and `AWS_ROLE_ARN`; variable `PUBLIC_BASE_URL`.
    Setting them arms the workflows for that environment:
    `gh secret set AWS_ACCOUNT_ID --env <env>` (12 digits; it prompts for the
@@ -310,60 +306,66 @@ usual cause (section 7).
 
 ## 2. The first deploys, and the rollback rehearsal
 
-In **staging**, before prod is ever deployed (DECISIONS D6):
+In **staging**, before prod is ever deployed:
 
 1. **Deploy tag A** (section 3). The first deploy's migration builds the
    schema from nothing (`backend.app.db.bootstrap`); until it has, the API
    answers real requests with 500 (section 1.6).
 2. **Smoke through the public origin**: `curl -s https://app.<domain>/api/v1/experiments/`
-   answers `401 {"detail":"Not authenticated"}`. `/health` is not enough: it
-   is what the load balancer already probed.
+   answers `401 {"detail":"Not authenticated"}`.
 3. **Deploy tag B.**
 4. **Roll back to A** with the line tag B's run summary printed
    ([Rollback Runbook](rollback-runbook.md)).
-5. Record, for the plan's open questions: whether CodeDeploy rewrites the API
-   listener rules; when the PRIMARY task set flips relative to the canary; the
-   deployment's status during the hour-long termination wait.
-6. **Force an alarm during a canary.** Deploy tag B again once tag A's hour has
+5. **Force an alarm during a canary.** Deploy tag B again once tag A's hour has
    passed, and while its canary runs set the green or blue alarm (whichever
-   watches the new task set's target group) to ALARM by hand. Record what
-   `aws deploy get-deployment` says after the stop: `status`, `errorInformation`
-   and `rollbackInfo`, whether a separate `codeDeployRollback` deployment
-   appears and for how long it stays active, and what the run and its summary
-   said. Do the same once in the hour after a shift. The state set by hand
-   lasts until the alarm's next evaluation, about a minute:
+   watches the new task set's target group) to ALARM by hand. Do the same once
+   in the hour after a shift. The state set by hand lasts until the alarm's
+   next evaluation, about a minute:
 
     ```{.bash skip reason="aws: forces a real alarm into ALARM in the staging account"}
     aws cloudwatch set-alarm-state --alarm-name experimentation-api-5xx-green-staging --state-value ALARM --state-reason "rehearsal: forced during the canary"
     ```
 
-7. Tear down, and compare what is left with
+6. Tear down, and compare what is left with
    [what `cdk destroy` leaves behind](../self-hosting/cdk.md#what-cdk-destroy-leaves-behind-and-bills).
 
 Tag B cannot be deployed within the hour after tag A's traffic shift: tag A's
 CodeDeploy deployment is still active while the old task set is kept, and the
 deploy refuses until it is not (section 3).
 
-Prod: the same checklist, with a reviewer who did not dispatch the run.
 Alarms watch the API's canary and the hour after it
 ([#148](https://github.com/getexperimently/experimently/issues/148)): while
 either of the deployment group's two 5xx alarms is in ALARM, CodeDeploy stops
-the deployment and rolls the API back by itself (section 3). That is expected
-behaviour, not yet observed: the forced alarm in step 6 is where it is first
-seen. A rollback in the hour after the shift comes after the run has gone
+the deployment and rolls the API back by itself (section 3). A rollback in the hour after the shift comes after the run has gone
 green, and it is not announced in #deployments: the run summary gives the
 time the alarms stop watching and the command that shows whether it happened.
 After that hour, the response to a bad release is the Rollback workflow.
+
+**What has run on staging:**
+
+- On 2026-10-02, tag A deployed
+  ([run](https://github.com/getexperimently/experimently/actions/runs/37070072132)), and tag B, dispatched inside the
+  hour after A's shift, was refused before it changed anything
+  ([run](https://github.com/getexperimently/experimently/actions/runs/37074588665)).
+- On 2026-10-04, v0.18.0 deployed and the Rollback workflow put the API and the
+  dashboard back on the previous release
+  ([run](https://github.com/getexperimently/experimently/actions/runs/37213010211),
+  [run](https://github.com/getexperimently/experimently/actions/runs/37217043185)).
+- On 2026-10-11, the Rollback workflow did it again
+  ([run](https://github.com/getexperimently/experimently/actions/runs/38098724258)), and a 5xx alarm forced into
+  ALARM in the hour after a deploy's shift stopped that deployment, and
+  CodeDeploy moved the API back by itself while the dashboard stayed on the new
+  release ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_1)).
 
 ---
 
 ## 3. Every deploy
 
-> **What has run against a real AWS account.** The CodeDeploy forward deploy
-> described here has run to success on staging. The Rollback workflow has run
-> on staging but has not yet completed end to end there; its whole path has
-> been tested only against a simulated `aws`. Deploy to staging before prod, and read the
-> run and its summary closely.
+> **What has run against a real AWS account.** Deploy has run to success on a
+> staging account, most recently v0.31.0 on 2026-10-13
+> ([run](https://github.com/getexperimently/experimently/actions/runs/38423251771)), and the Rollback workflow
+> has run there end to end ([section 2](#2-the-first-deploys-and-the-rollback-rehearsal)).
+> Deploy to staging before prod, and read the run and its summary closely.
 
 1. **A release tag.** release-please cuts them; the Release Gate runs on every
    push to `main`, so the tag's commit has a result. For a tag cut before that:
@@ -438,17 +440,17 @@ CodeDeploy swaps the two on every deployment. Both are polled for the whole
 deployment: before the approval, in the canary, and in the hour after the
 shift while CodeDeploy keeps the previous task set. While either is in ALARM,
 CodeDeploy stops the deployment and rolls the API back to the previous
-revision by itself. That has been seen on staging: an alarm raised during a
-deploy's traffic shift stopped the deployment, and CodeDeploy moved the API
-back with no workflow involved. Whether the hour after the shift and the time
-before the approval are watched has not yet been observed. An alarm fires on a minute with at least 5 target 5xx
+revision by itself. On 2026-10-03 an alarm stopped a deployment on staging and
+CodeDeploy reverted the API with no workflow involved
+([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5971647359)),
+and on 2026-10-11 an alarm forced in the hour after the shift did the same
+([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_1)). An alarm in the time before the approval has not been rehearsed
+on AWS as of v0.31.1. An alarm fires on a minute with at least 5 target 5xx
 **and** at least 5% of that target group's requests, for 2 minutes of 3; a
-minute with no requests counts as fine. These are starting values, to be
-measured against real traffic. What they do not catch:
+minute with no requests counts as fine. What they do not catch:
 
 - a release that answers wrongly with a 2xx, or with fewer errors than that;
-- the load balancer's own 502 and 504 (a task that crashed or timed out): they
-  have no target-group dimension, so the alarms cannot watch them;
+- the load balancer's own 502 and 504 (a task that crashed or timed out);
 - the dashboard: an alarm rolls back the API only, and a rollback in the hour
   after the shift leaves the dashboard on the new release;
 - anything after that hour, when the response is the **Rollback** workflow.
@@ -459,9 +461,7 @@ dependency) stops every new deploy too, the fix included: see
 [Fix forward while an alarm is firing](rollback-runbook.md#fix-forward-while-an-alarm-is-firing).
 And every 5xx the API answers counts, its deliberate ones included: `501` on a
 module's route under the core profile, and `503` from `/health/ready` for a
-caller other than the load balancer. Staging traffic may be too low to reach
-the threshold at all, so a quiet staging deploy proves nothing about the
-alarms. A rollback in the hour after the shift is not announced in the
+caller other than the load balancer. A rollback in the hour after the shift is not announced in the
 `#deployments` channel; the run summary gives the time the alarms stop watching and the
 command that shows whether one happened.
 
@@ -480,18 +480,17 @@ afterwards. If an alarm already rolled the release back, do not run Rollback
 for it: the API is already going back, and Rollback refuses while CodeDeploy's
 own rollback is active
 ([An alarm rolled the API back](rollback-runbook.md#an-alarm-rolled-the-api-back)). Rollback's own CodeDeploy deployment is then the active one, and
-the next forward deploy is refused until it is no longer active. That is
-expected to be about another hour, because the 60-minute termination wait is a
-setting of the deployment group (the synthesised template's
+the next forward deploy is refused until it is no longer active: about another
+hour, because the 60-minute termination wait is a setting of the deployment
+group (the synthesised template's
 `TerminateBlueInstancesOnDeploymentSuccess.TerminationWaitTimeInMinutes: 60`)
 and `create-deployment` has no parameter that overrides it. Rollback's
 all-at-once `--deployment-config-name` changes how traffic moves, not how long
-the old task set is kept. This is expected behaviour, not yet observed: the
-first staging deploy is where it is seen.
+the old task set is kept. On staging on 2026-10-11, the Rollback run's
+deployment stayed active for about an hour after its traffic shift
+([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_1)).
 
-One deploy or manual migration per environment at a time. A newer dispatch
-waiting behind a running deploy replaces an older one that was still waiting
-(GitHub keeps one pending run per concurrency group).
+One deploy or manual migration per environment at a time.
 
 ### Backward-compatible migrations
 
@@ -509,9 +508,8 @@ not, the order matters: undo the migration while the release that contains it
 is still serving, and only then roll the API back
 ([Rollback Runbook, Database Rollback Procedure](rollback-runbook.md#database-rollback-procedure),
 [Step 2](rollback-runbook.md#step-2-run-migration-downgrade-via-github-actions)). Once the API has been rolled back, the workflow can no longer
-undo it. The emergency route is then a point-in-time restore to a new cluster,
-which the API tasks cannot pick up today
-(the same procedure, Step 3).
+undo it. The emergency route is then a point-in-time restore (the same
+procedure, Step 3).
 
 ---
 
@@ -519,10 +517,7 @@ which the API tasks cannot pick up today
 
 ### Mandatory Checks
 
-- [ ] The Release Gate passed on the tag's commit (the workflow refuses otherwise)
-- [ ] Security scan passing — no new CRITICAL or HIGH CVEs
-- [ ] No active P0 or P1 incidents (check `#incidents` and PagerDuty; the workflow does not)
-- [ ] Team notified in `#deployments`: "Deploying vX.Y.Z to <env> at HH:MM UTC"
+- [ ] The tag's commit passed the Release Gate; the Deploy workflow refuses it otherwise
 - [ ] For prod: the same tag deployed to staging and smoke-tested
 
 ### Database Migration Checks (if migration is included)
@@ -606,9 +601,6 @@ aws ecs describe-tasks --cluster "experimentation-$ENV" \
   --query 'tasks[0].{Status:lastStatus,StopCode:stopCode,StopReason:stoppedReason}'
 ```
 
-Common causes: a secret not found (check `/<env>/experimentation/`), an image
-not found (check ECR), IAM permission denied (check the task role).
-
 ### "Migration task failed"
 
 The run prints the task's last 100 log lines. The full log is CloudWatch log
@@ -671,9 +663,7 @@ Watch it with `aws deploy get-deployment --deployment-id <id>` and
 The new revision is the PRIMARY task set, but the HTTPS listener's `/api/*`
 rule forwards to the *other* target group, with no split. The API route is not
 where the new tasks are. When the old task set is terminated, an hour after
-the shift, every API request gets a 503. This is the unobserved question of
-whether a CodeDeploy traffic shift rewrites listener *rules* or only the
-default action. The first staging deploy is where it is first seen.
+the shift, every API request gets a 503.
 
 Until then the old task set keeps answering through the rule, so users see
 the *previous* release, not the new one.
@@ -686,10 +676,9 @@ back first. Do not dispatch Rollback; read
 The deploy re-reads the deployment for about a minute before it reports this,
 for that reason. Otherwise:
 
-1. Roll back within the hour, with the rollback line in the run summary.
-   Rollback is expected to leave the previous revision on the group the rule
-   names. That is not observed yet, so confirm it afterwards with
-   `python3 scripts/check_live_target_group.py --env <env>`.
+1. Roll back within the hour, with the rollback line in the run summary. Then
+   confirm with `python3 scripts/check_live_target_group.py --env <env>` that
+   the rule names the group the previous revision runs in.
 2. Before any further deploy, record the observation. Then see the fallbacks
    named in `fargate_service_stack.py` (ECS-native blue/green, or separate
    hosts).

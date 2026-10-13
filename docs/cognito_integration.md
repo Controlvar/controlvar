@@ -21,8 +21,7 @@ The dashboard does not yet sign in with Cognito. Sign in through the API with
 
 Under `AUTH_PROVIDER=cognito` the dashboard's sign-in form answers that its endpoint is not
 available, and an SSO sign-in does not sign the user in. Dashboard sign-in
-under Cognito is tracked in [#708](https://github.com/getexperimently/experimently/issues/708),
-SSO under Cognito in [#707](https://github.com/getexperimently/experimently/issues/707).
+under Cognito is tracked in [#708](https://github.com/getexperimently/experimently/issues/708).
 
 ## Required settings
 
@@ -138,10 +137,11 @@ their account on the platform.
 
 3. **Give them a permanent password.** `--permanent` is required. The password must meet the
    pool's policy: in the reference pool, at least 8 characters with upper case, lower case, a
-   digit and a symbol.
+   digit and a symbol. Type it at the `Password:` prompt, which does not show it.
 
     ```{.bash skip reason="aws: needs the Cognito user pool"}
-    aws cognito-idp admin-set-user-password --user-pool-id "$COGNITO_USER_POOL_ID" --username jdoe --password 'Choose-A-Password-1' --permanent
+    read -rs -p 'Password: ' PASSWORD
+    aws cognito-idp admin-set-user-password --user-pool-id "$COGNITO_USER_POOL_ID" --username jdoe --password "$PASSWORD" --permanent
     ```
 
     Then either tell the user the password through a channel you trust, or do not share it
@@ -166,8 +166,7 @@ their account on the platform.
    email. A temporary password cannot sign in through the API: `POST /api/v1/auth/token`
    answers `401` with `This user must set a new password before signing in; an
    administrator sets one with admin-set-user-password --permanent.` Run step 3 again with
-   `--permanent`. Handling the new-password step at sign-in is tracked in
-   [#699](https://github.com/getexperimently/experimently/issues/699).
+   `--permanent`.
 
 Do not create the account on the platform first. An account created through the API or the
 dashboard has a password and is not linked to the Cognito user, so the user's sign-in would be
@@ -270,7 +269,9 @@ The application defines the following user roles, in order of decreasing privile
 1. **ADMIN**: Can create and manage experiments and feature flags, and read all data. Managing users, safety settings, per-flag safety config and rollback, and opening the dashboard's Users, API Keys, Safety settings and Roles pages, also needs a superuser account (see [Role-based access control](rbac/README.md)).
 2. **DEVELOPER**: Can create and manage experiments and feature flags
 3. **ANALYST**: Can view all data but cannot create or modify experiments/flags
-4. **VIEWER**: Read-only access to approved resources
+4. **VIEWER**: Reads experiments, feature flags and results, and changes none of them. Like every
+   role, a VIEWER can create an API key, and an API key writes tracking data: assignments and
+   events.
 
 ## Role Assignment Logic
 
@@ -300,34 +301,8 @@ With `SYNC_ROLES_ON_LOGIN` on (the default), each request with the new token set
 account's role and superuser flag from its groups. With it off, the role is set only when the
 account is created.
 
-## Role Precedence
-
-If a user belongs to multiple Cognito groups that map to different roles, the highest-privilege role wins:
-
-- `ADMIN` takes precedence over `DEVELOPER`
-- `DEVELOPER` takes precedence over `ANALYST`
-- `ANALYST` takes precedence over `VIEWER`
-
 ## Example
 
 A user who belongs to both the "Developers" and "Analysts" Cognito groups will be assigned the `DEVELOPER` role in the application.
 
 A user who belongs to the "SuperUsers" group (which is in `COGNITO_ADMIN_GROUPS`) will automatically be assigned the `ADMIN` role and given superuser status, even if "SuperUsers" is mapped to a different role in `COGNITO_GROUP_ROLE_MAPPING`.
-
-## Implementation Details
-
-The Cognito integration is implemented in the following files:
-
-- `backend/app/core/cognito.py`: Contains utility functions for mapping Cognito groups to roles
-- `backend/app/services/cognito_accounts.py`: Finds or creates the account for a Cognito sign-in, and assigns its role
-- `backend/app/api/deps.py`: Implements the `get_current_user` dependency, which answers a refused sign-in with `401`
-- `backend/app/services/auth_service.py`: Provides the interface to Cognito API
-
-## Testing
-
-To test the Cognito integration:
-
-1. Configure your AWS Cognito User Pool with the appropriate groups
-2. Set the required environment variables for Cognito connection
-3. Create users and assign them to different groups in Cognito
-4. Verify with `GET /api/v1/users/me` that each user reaches their account with the expected role

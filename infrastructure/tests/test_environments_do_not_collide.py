@@ -1053,7 +1053,8 @@ def cluster_export_importers(synth: Synth) -> set[str]:
 
 def _doc_section(title: str) -> str:
     text = CDK_DOC.read_text()
-    match = re.search(rf"^### {re.escape(title)}\n(.*?)(?=^##)", text, re.M | re.S)
+    # The section ends at the next heading, or at the end of the page.
+    match = re.search(rf"^### {re.escape(title)}\n(.*?)(?=^##|\Z)", text, re.M | re.S)
     assert match, f"{CDK_DOC} has no section '### {title}'"
     return match.group(1)
 

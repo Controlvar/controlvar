@@ -1,22 +1,21 @@
 # Secrets Management — Experimently
 
-**Version:** 1.0
-**Date:** March 2026
 **Audience:** DevOps, Security Engineers
-**Classification:** Internal — Handle as Confidential
 
 ---
 
 ## Overview
 
-All production secrets are stored in AWS Secrets Manager. The application never reads secrets from files or baked environment variables. Secrets are injected at container runtime by ECS using the `secrets` key in the task definition.
+On AWS, the API and migration tasks take their secrets from AWS Secrets Manager. Each task
+definition names its secrets in its `secrets` key, and ECS reads their values into the
+container's environment when a task starts.
 
-**Core principles:**
-- No secrets in source code, `.env` files, or container images
-- All secrets under the `/prod/experimentation/` prefix in Secrets Manager
-- ECS task role has `secretsmanager:GetSecretValue` permission scoped to that prefix
-- Secret values are never logged, printed to stdout, or included in error messages
-- Rotation is scheduled and documented below
+- The secrets a human creates are under `/<env>/experimentation/` (below). The database's
+  user and password are in the secret the database stack generates.
+- Each task's execution role may read exactly the secrets its task definition names, by their
+  complete ARNs ([below](#iam-permissions-for-secret-access)).
+- No stack schedules the rotation of a secret:
+  [Emergency Secret Rotation](#emergency-secret-rotation) rotates one by hand.
 
 ---
 
@@ -67,7 +66,7 @@ encoded as `+` would come back as `+`.)
 
 ### JWT Signing Secret
 
-The JWT secret must be at least 32 characters. Using 48 characters provides adequate security margin.
+The JWT secret must be at least 32 characters.
 
 ```bash
 JWT_SECRET=$(openssl rand -base64 48)
@@ -115,22 +114,6 @@ catch it, and the first staging deploy uses one of them:
 
 This change sets neither: the deployed task keeps the default,
 `REDIS_REQUIRED=false`.
-
-### Cognito Configuration
-
-Replace the placeholder values with your actual Cognito user pool ID and app client ID:
-
-```bash
-aws secretsmanager create-secret \
-  --name /prod/experimentation/cognito-config \
-  --description "AWS Cognito user pool configuration for the experimentation platform" \
-  --secret-string '{
-    "user_pool_id": "us-west-2_XXXXXXXXX",
-    "client_id": "XXXXXXXXXXXXXXXXXXXXXXXXXX",
-    "region": "us-west-2"
-  }' \
-  --tags '[{"Key":"Environment","Value":"production"},{"Key":"Service","Value":"experimently"}]'
-```
 
 ### First Superuser Password
 
@@ -187,8 +170,7 @@ account and region (a partial ARN, one that stops at the name, is refused
 before any Secrets Manager call), requires the API and migration task
 definitions to reference `jwt-secret` and `first-superuser-password`, plus
 `audit-hmac-key` for the `full` profile, and then runs `describe-secret` on
-each complete ARN. Its log names each secret by name only, never by ARN.
-`cognito-config` may also be listed; nothing in the deployment reads it. The
+each complete ARN. Its log names each secret by name only, never by ARN. The
 database credentials are not under this prefix: they are the database stack's
 `experimentation-database-<env>-aurora-credentials`. Nor is Redis: see
 [Redis: nothing to create](#redis-nothing-to-create).
@@ -240,95 +222,29 @@ run `cdk deploy` again, or the next task start fails with
 
 The ECS task definition references secrets by their complete ARN. At container start, ECS fetches the current secret value from Secrets Manager and sets it as an environment variable. The container process reads the environment variable normally — it never calls Secrets Manager directly.
 
-A shortened version of the API task definition in
-`infrastructure/cdk/stacks/fargate_service_stack.py` (the migration task in
-`migration_task_stack.py` imports the same secrets the same way). The ARNs are
-the synth inputs [above](#give-the-cdk-each-secrets-complete-arn), which
-`app.py` checks and passes in as `secret_arns`:
+The API task definition in `infrastructure/cdk/stacks/fargate_service_stack.py`, and the
+migration task in `migration_task_stack.py`, import each secret by its complete ARN, from the
+synth inputs [above](#give-the-cdk-each-secrets-complete-arn), and map it to a variable:
 
-```python
-# Each secret by its COMPLETE ARN. A secret imported by name renders a partial
-# ARN into valueFrom, and Secrets Manager does not resolve it, so no task
-# would start.
-jwt_secret = secretsmanager.Secret.from_secret_complete_arn(
-    stack, "JwtSecret", secret_arns["JWT_SECRET_ARN"]
-)
-superuser_secret = secretsmanager.Secret.from_secret_complete_arn(
-    stack, "SuperuserPasswordSecret", secret_arns["FIRST_SUPERUSER_PASSWORD_SECRET_ARN"]
-)
+| Variable | From |
+|----------|------|
+| `SECRET_KEY` | `/<env>/experimentation/jwt-secret` |
+| `FIRST_SUPERUSER_PASSWORD` | `/<env>/experimentation/first-superuser-password` |
+| `AUDIT_HMAC_KEY` | `/<env>/experimentation/audit-hmac-key` (`profile: full` only) |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD` | the `username` and `password` fields of the database stack's secret |
 
-# The execution role may read exactly these secrets, by the same ARNs.
-task_definition.add_container(
-    "ExperimentationBackend",
-    image=ecs.ContainerImage.from_ecr_repository(repo, tag=image_tag),
-    environment={
-        "APP_ENV": "production",
-        "LOG_LEVEL": "INFO",
-        "PYTHONUNBUFFERED": "1",
-        "POSTGRES_DB": "experimentation",
-        "POSTGRES_SCHEMA": "experimentation",
-        # Not secrets: the Redis stack's primary endpoint, spoken to over TLS.
-        "REDIS_HOST": redis_stack.primary_host,
-        "REDIS_PORT": redis_stack.primary_port,
-        "REDIS_SSL": "true",
-    },
-    secrets={
-        # The secret the database stack generated Aurora's credentials into.
-        "POSTGRES_USER": ecs.Secret.from_secrets_manager(
-            db_credentials, field="username"
-        ),
-        "POSTGRES_PASSWORD": ecs.Secret.from_secrets_manager(
-            db_credentials, field="password"
-        ),
-        "SECRET_KEY": ecs.Secret.from_secrets_manager(jwt_secret),
-        "FIRST_SUPERUSER_PASSWORD": ecs.Secret.from_secrets_manager(superuser_secret),
-        # profile: full adds AUDIT_HMAC_KEY from AUDIT_HMAC_KEY_SECRET_ARN.
-    },
-)
-```
-
-The application reads these as standard environment variables:
-
-```python
-# backend/app/core/config.py
-import os
-
-POSTGRES_PASSWORD = os.environ["POSTGRES_PASSWORD"]  # from the Aurora-generated secret
-SECRET_KEY = os.environ["SECRET_KEY"]            # from /prod/experimentation/jwt-secret
-REDIS_HOST = os.environ["REDIS_HOST"]            # the Redis stack's primary endpoint
-```
+`REDIS_HOST`, `REDIS_PORT` and `REDIS_SSL` are plain environment, not secrets.
+The application reads them as settings (`backend/app/core/config.py`) from that environment.
 
 ---
 
-## Secret Rotation Schedule
+## Secret Rotation
 
-| Secret | Rotation Frequency | Method | Requires Restart |
-|--------|-------------------|--------|-----------------|
-| `experimentation-database-prod-aurora-credentials` | 180 days | Secrets Manager Lambda rotation (single-user) | Yes: ECS injects it when a task starts |
-| `/prod/experimentation/jwt-secret` | 90 days | Manual rotation (see below) | Yes ([restart the API](#restart-the-api-on-its-current-release)) |
-| `/prod/experimentation/cognito-config` | On Cognito pool change | Manual update | Yes |
-| GitHub Actions deployment secrets | 365 days | Manual (GitHub Settings) | N/A |
-
-### Configure Automatic DB Password Rotation
-
-Enable automatic rotation (runs every 180 days via Lambda):
-
-```bash
-aws secretsmanager rotate-secret \
-  --secret-id experimentation-database-prod-aurora-credentials \
-  --rotation-lambda-arn arn:aws:lambda:us-west-2:ACCOUNT:function:SecretsManagerRDSPostgreSQLRotationSingleUser \
-  --rotation-rules AutomaticallyAfterDays=180
-```
-
-Verify rotation is enabled:
-
-```bash
-aws secretsmanager describe-secret \
-  --secret-id experimentation-database-prod-aurora-credentials \
-  --query '{RotationEnabled:RotationEnabled,RotationLambdaARN:RotationLambdaARN,LastRotatedDate:LastRotatedDate}'
-```
-
-The rotation Lambda changes the master password on the cluster and in the secret together. Running tasks keep the value ECS read for them when they started, so restart the API after a rotation: [Restart the API on its current release](#restart-the-api-on-its-current-release). Not `aws ecs update-service --force-new-deployment`: the API's service is controlled by CodeDeploy, which that call is not for (below).
+No stack schedules the rotation of a secret. ECS reads a secret into a task when the task
+starts, so a rotation reaches the API only after a restart:
+[Restart the API on its current release](#restart-the-api-on-its-current-release). Not
+`aws ecs update-service --force-new-deployment`: the API's service is controlled by CodeDeploy,
+which that call is not for (below).
 
 ---
 
@@ -431,7 +347,7 @@ curl -X POST \
   -H "Authorization: Bearer $OWNER_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name": "Replacement key", "scopes": ["sdk:ruleset"]}' \
-  https://api.experimentation.example.com/api/v1/api-keys
+  https://app.example.com/api/v1/api-keys
 ```
 
 Leave `scopes` out when step 1 printed none. A server SDK that evaluates flags locally uses a key
@@ -569,80 +485,14 @@ still reach tasks that started before the change:
 
 ## IAM Permissions for Secret Access
 
-The ECS task execution role must be able to read the secrets at container startup. The CDK stacks grant
-`secretsmanager:GetSecretValue` on exactly the complete ARNs the task definition names (the synth
-inputs above) and nothing wider. A hand-made role outside the CDK needs at least this:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "AllowSecretsAccess",
-      "Effect": "Allow",
-      "Action": [
-        "secretsmanager:GetSecretValue",
-        "secretsmanager:DescribeSecret"
-      ],
-      "Resource": "arn:aws:secretsmanager:us-west-2:ACCOUNT_ID:secret:/prod/experimentation/*"
-    },
-    {
-      "Sid": "AllowKMSDecrypt",
-      "Effect": "Allow",
-      "Action": [
-        "kms:Decrypt",
-        "kms:GenerateDataKey"
-      ],
-      "Resource": "arn:aws:kms:us-west-2:ACCOUNT_ID:key/EXPERIMENTATION-KMS-KEY-ID"
-    }
-  ]
-}
-```
-
-Verify the task execution role has this policy:
-
-```bash
-aws iam list-attached-role-policies \
-  --role-name ExperimentationECSTaskExecutionRole \
-  --query 'AttachedPolicies[*].PolicyName'
-```
-
----
-
-## Secrets Audit
-
-Quarterly, verify:
-
-1. No secrets in application code:
-
-Search for potential hardcoded secrets in Python files:
-
-```bash
-grep -r "password\s*=\s*['\"]" backend/ --include="*.py" | grep -v "test\|mock\|fixture\|example"
-grep -r "secret\s*=\s*['\"]" backend/ --include="*.py" | grep -v "test\|mock\|fixture\|example"
-```
-
-2. All secrets in Secrets Manager have been accessed recently (unused secrets may indicate a configuration error):
-
-```bash
-aws secretsmanager list-secrets \
-  --filters Key=name,Values=/prod/experimentation/ \
-  --query 'SecretList[*].{Name:Name,LastAccessed:LastAccessedDate,LastChanged:LastChangedDate}'
-```
-
-3. Rotation schedule is being met — no secret exceeds its rotation window:
-
-```bash
-aws secretsmanager describe-secret \
-  --secret-id /prod/experimentation/jwt-secret \
-  --query '{LastRotated:LastRotatedDate,RotationEnabled:RotationEnabled}'
-```
+The CDK stacks grant `secretsmanager:GetSecretValue` to each task's execution role on exactly the
+complete ARNs its task definition names (the synth inputs above), and nothing wider.
 
 ---
 
 ## Staging Secrets
 
-Staging uses separate secrets under `/staging/experimentation/` with the same structure. Staging secrets use weaker but non-production values and are safe to rotate independently.
+Staging uses separate secrets under `/staging/experimentation/` with the same structure.
 
 Create staging secrets (same structure, different values). The database credentials are generated by experimentation-database-staging:
 

@@ -1,14 +1,8 @@
 # Disaster Recovery Plan — Experimently
 
-**Version:** 1.1
-**Date:** September 2026
-**Owner:** SRE / DevOps Team
-**Review Cycle:** Quarterly
-
 This page describes what the AWS CDK app in `infrastructure/cdk` actually creates, and how to
-recover each part of it. The RTO and RPO figures are **targets** for you to hold your
-deployment to, not measurements. Where the CDK does not create something a recovery would
-need (a second region, replicated secrets), the page says so.
+recover each part of it. Where the CDK does not create something a recovery would need (a
+second region, replicated secrets), the page says so.
 
 The commands use `ENV` for the environment (`prod`, `staging`, `dev`). Most names follow
 from it: the ECS cluster is `experimentation-$ENV`, the API service is
@@ -27,7 +21,6 @@ CLUSTER=$(aws cloudformation describe-stacks --stack-name "experimentation-datab
 
 | Objective | Target | Mechanism |
 |-----------|--------|-----------|
-| **RTO** (Recovery Time Objective) | 1 hour | Aurora failover (prod) or restore, then restart the API through CodeDeploy |
 | **RPO** (Recovery Point Objective) | 5 minutes | Aurora point-in-time recovery (PITR), within the backup retention period |
 
 Aurora backs up continuously. You can restore to any second between the start of the backup
@@ -79,7 +72,6 @@ ALARM at once. Between deployments one of blue and green is empty, so the idle c
 alarm is always in ALARM, by design; that is not an incident. In an environment that runs one
 API task (`demo`), replacing that task leaves no healthy target for a few minutes, and the
 composite sends a true "no healthy task" email for it.
-**RTO:** about a minute (target-group health checks plus task start-up; not measured).
 
 ### Response
 
@@ -113,7 +105,6 @@ fire for this: they count 5xx responses *from the tasks* (`HTTPCode_Target_5XX_C
 task running, the load balancer answers 503 itself, and those minutes count as not breaching.
 The composite needs the alarm topic's email subscription to be confirmed, and CloudWatch to be
 reachable; an uptime check from outside AWS on `/health` covers both.
-**RTO:** about 5 minutes (target).
 
 ### Immediate Response
 
@@ -129,15 +120,15 @@ aws ecs describe-services \
 Step 2: Check stopped task reasons:
 
 ```bash
-STOPPED_TASKS=$(aws ecs list-tasks \
+STOPPED=$(aws ecs list-tasks \
   --cluster "experimentation-$ENV" \
   --desired-status STOPPED \
   --query 'taskArns[:3]' \
-  --output json)
+  --output text)
 
 aws ecs describe-tasks \
   --cluster "experimentation-$ENV" \
-  --tasks $STOPPED_TASKS \
+  --tasks $STOPPED \
   --query 'tasks[*].{StopReason:stoppedReason,ContainerReason:containers[0].reason,ExitCode:containers[0].exitCode}'
 ```
 
@@ -162,7 +153,7 @@ in the Rollback Runbook.
 ### Verification
 
 ```bash
-curl -fsS https://api.experimentation.example.com/health | jq '{status, database: .checks.database.status}'
+curl -fsS https://app.example.com/health | jq '{status, database: .checks.database.status}'
 ```
 
 It prints `"status": "healthy"` and `"database": "healthy"`. `/health` answers 503 while the
@@ -171,7 +162,6 @@ database is unreachable.
 ### Escalation
 
 If tasks keep failing after the restart, the cause is likely one of these:
-- Secret rotation broke the secret format → check the Secrets Manager values
 - The new container image is crashing → roll back to the previous task definition (see [Rollback Runbook](rollback-runbook.md))
 - Aurora or Redis is unreachable → go to Scenario 3 or 5
 
@@ -188,8 +178,8 @@ CPU (`DBClusterIdentifier` from the SSM parameter
 `/experimentation/$ENV/database/aurora-cluster-identifier`, `Role=WRITER`) and treats missing
 data as breaching, so a writer that stops publishing metrics also puts it in ALARM, after 15
 minutes.
-**RTO:** prod about 2 minutes (target), for Aurora's failover to the reader. Other environments have
-one instance and no reader, so Aurora has to replace the instance, which takes longer.
+In prod Aurora fails over to the reader. Other environments have one instance and no reader,
+so Aurora has to replace the instance.
 
 ### Automatic Failover (prod: Aurora handles this)
 
@@ -209,7 +199,7 @@ Check cluster status:
 ```bash
 aws rds describe-db-clusters \
   --db-cluster-identifier "$CLUSTER" \
-  --query 'DBClusters[0].{Status:Status,Endpoint:Endpoint,ReaderEndpoint:ReaderEndpoint,Members:DBClusterMembers[*].{Role:IsClusterWriter,ID:DBInstanceIdentifier,Status:DBInstanceStatus}}'
+  --query 'DBClusters[0].{Status:Status,Endpoint:Endpoint,ReaderEndpoint:ReaderEndpoint,Members:DBClusterMembers[*].{Role:IsClusterWriter,ID:DBInstanceIdentifier}}'
 ```
 
 Watch until status is "available" and a new writer is identified:
@@ -233,8 +223,9 @@ If the failover has not completed within 5 minutes, or no instance is available:
 ## Scenario 4: Full Aurora Database Cluster Failure
 
 **Detection:** `aws rds describe-db-clusters` returns status `failed`, and every database call in the application logs fails.
-**RTO:** about 30 minutes for the restore (a target), plus the cutover's downtime, which is not
-measured yet.
+**RTO:** in the staging rehearsal on 2026-10-11, on a database holding little data, the restore
+took 11 min 41 s and the cutover took the API down for 12 min 45 s ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_2)). A larger
+database restores more slowly.
 **RPO:** 5 minutes (PITR), and only within the backup retention period (35 days in prod and
 staging, 1 elsewhere; see Backup Strategy). Beyond that, the
 newest manual snapshot (`pre-deploy-...` or `pre-migration-...`) is the recovery point.
@@ -266,11 +257,10 @@ aws rds describe-db-cluster-snapshots \
 
 ### Restore from PITR (preferred)
 
-**Decided, not yet rehearsed.** This is the decided way to point the application at a restored
-cluster, but it has run only against a fake AWS in the test suite
-(`backend/tests/unit/infrastructure/test_restore_repoint.py`), never on AWS. Until it has been
-rehearsed on staging, every time given for it on this page is an estimate. Prod's `readers` step
-has run only against that fake, on a two-instance cluster; no rehearsal reaches it.
+**Rehearsed on a staging account on 2026-10-11** ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_2)): `read`, `restore`, `cutover`,
+and the cutover undone with `rollback`. Prod's `readers` step has run only against the fake
+AWS in the test suite (`backend/tests/unit/infrastructure/test_restore_repoint.py`), on a
+two-instance cluster: staging runs one instance.
 
 Both backend task definitions take the database host from the database stack's writer endpoint,
 which is the cluster identifier plus a suffix, and `deploy.yml`, the stack and its alarms all find
@@ -330,8 +320,8 @@ It must equal the migration heads of the release the API runs. If it does not, t
 `/health` and fail requests: put the API on the release that matches first
 ([Rollback Runbook](rollback-runbook.md)).
 
-Step 4: Cut over. **The API is down from the start of this step to its end: an estimated 15 to 40
-minutes, not measured.**
+Step 4: Point the stack's names at the restored cluster. **The API is down from the start of this step to its end: 12 min 45 s in the
+staging rehearsal on 2026-10-11, on a database holding little data ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_2)).**
 
 ```bash
 scripts/restore_repoint.sh cutover "$EVID"
@@ -345,10 +335,10 @@ what it was, and starts the API only after two probes in a row, from the API tas
 reached the marked database through that endpoint. The API gets back the task count and scaling
 Step 1 recorded.
 
-During the cutover the load balancer is expected to answer 503 to every request, and the composite
-alarm `experimentation-api-no-healthy-task-$ENV` is expected to email `ALARM_EMAIL` after about
-three minutes, then clear. Both are read from the stacks and the load balancer's documentation, not
-measured; the staging rehearsal records them. A green `/health` afterwards does not show which cluster answered, because it runs
+During the cutover of the staging rehearsal on 2026-10-11, `/health` answered 503 for 11 min
+40 s ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_2)). The composite alarm `experimentation-api-no-healthy-task-$ENV` is expected
+to email `ALARM_EMAIL` after about three minutes, then clear; that has not been rehearsed on AWS
+as of v0.31.1. A green `/health` afterwards does not show which cluster answered, because it runs
 `SELECT 1`; the probes do. Writes made to the original between the restore time and the cutover
 stay on it, under its new name.
 
@@ -372,9 +362,9 @@ groups, so deleting the database stack fails until it is gone.
 Before the cutover the restored cluster is not watched by `AuroraHighCPU-$ENV` either. The alarm
 reads the cluster identifier from the database stack's parameter
 `/experimentation/$ENV/database/aurora-cluster-identifier`, which names the stack's own cluster.
-The cutover gives the restored cluster that identifier, so from then on the alarm is expected to
-watch it with no redeploy; the staging rehearsal checks that. The original, once renamed, is
-watched by no alarm.
+The cutover gives the restored cluster that identifier, so from then on the alarm watches it with
+no redeploy, as it did in the staging rehearsal on 2026-10-11 ([#295](https://github.com/getexperimently/experimently/issues/295#ISSUE295_COMMENT_2)). The original, once
+renamed, is watched by no alarm.
 
 #### Undo a cutover
 
@@ -411,7 +401,7 @@ A cluster in status `failed` is not covered: `read` refuses it (see the top of t
 ### Verification
 
 ```bash
-curl -fsS https://api.experimentation.example.com/health | jq '{status, database: .checks.database.status}'
+curl -fsS https://app.example.com/health | jq '{status, database: .checks.database.status}'
 ```
 
 It prints `"status": "healthy"` and `"database": "healthy"`. That shows the API reaches a
@@ -433,7 +423,6 @@ Redis alarms are one per node, `RedisHighCPU-001-$ENV` (and `-002-`, `-003-` in 
 `EngineCPUUtilization` for `experimentation-redis-$ENV-redis-001` and its siblings. They treat
 missing data as breaching, so a node that stops publishing metrics puts its alarm in ALARM after
 15 minutes. No alarm watches whether a node accepts connections.
-**RTO:** about 5 minutes (target).
 
 ### Application Behavior During Redis Failure
 
@@ -451,15 +440,6 @@ The API is designed to keep serving without Redis. What is pinned by tests:
   (`test_the_client_tries_to_connect_once` and
   `test_the_client_gives_up_on_an_unreachable_redis_after_a_second` in
   `backend/tests/unit/core/test_redis_connection.py`).
-
-How much a Redis outage adds to a readiness probe, measured on a laptop against one API process
-(not on Fargate): about 10 ms when Redis refuses connections, and about 1 s, the connect
-timeout, when it is unreachable (a connect that never completes). Both are inside the 5 s
-timeout of the ECS, ALB and Helm probes. A readiness probe also waits for a free worker
-thread, so under a heavy load of slow requests it can take longer than that. With the default retries the same probe took 3-4 s
-and 15-18 s, and every other request on the process waited with it (#810). Not measured: DNS
-resolution of `REDIS_HOST`, which neither timeout covers, and the TLS handshake used when
-`REDIS_SSL=true`.
 
 Which tasks are counting per process, and since when (CloudWatch Logs Insights on
 `/ecs/experimentation-backend-$ENV`):
@@ -496,7 +476,7 @@ Restart through CodeDeploy, as in Scenario 2, Step 4, so that every task reconne
 ### Verification
 
 ```bash
-curl -fsS https://api.experimentation.example.com/health | jq '.checks.redis.status'
+curl -fsS https://app.example.com/health | jq '.checks.redis.status'
 ```
 
 It prints `"healthy"`.
@@ -523,81 +503,6 @@ A second region needs all of the following, and the CDK creates none of them:
   **empty** database, and the data comes back only by restoring a snapshot you have copied
   to that region (`aws rds copy-db-cluster-snapshot`).
 
-### Failover Procedure (once those exist)
-
-`GLOBAL_CLUSTER_ID` and `SECONDARY_CLUSTER_ARN` are the Aurora Global Database you created,
-if you created one.
-
-Step 1: Confirm it is a regional outage, not an application issue:
-
-```bash
-aws health describe-events \
-  --filter eventTypeCategories=issue \
-  --region us-east-1
-```
-
-Step 2: Promote Aurora secondary cluster to primary (only if you configured an Aurora Global Database):
-
-```bash
-aws rds failover-global-cluster \
-  --global-cluster-identifier "$GLOBAL_CLUSTER_ID" \
-  --target-db-cluster-identifier "$SECONDARY_CLUSTER_ARN"
-```
-
-Step 3: Deploy CDK stacks in us-east-1:
-
-```bash
-cd infrastructure/cdk
-export ENVIRONMENT=prod CDK_DEFAULT_REGION=us-east-1 AWS_REGION=us-east-1
-export CERTIFICATE_ARN="$US_EAST_1_CERTIFICATE_ARN" PUBLIC_BASE_URL="https://app.$DOMAIN"
-export ALARM_EMAIL=ops@your-domain.com
-cdk deploy --all
-```
-
-Step 4: Update DNS to point to us-east-1 ALB:
-
-```bash
-aws route53 change-resource-record-sets \
-  --hosted-zone-id <hosted-zone-id> \
-  --change-batch '{
-    "Changes": [{
-      "Action": "UPSERT",
-      "ResourceRecordSet": {
-        "Name": "api.experimentation.example.com",
-        "Type": "CNAME",
-        "TTL": 60,
-        "ResourceRecords": [{"Value": "<us-east-1-alb-dns>"}]
-      }
-    }]
-  }'
-```
-
-Step 5: Verify services are running in us-east-1:
-
-```bash
-curl -f https://api.experimentation.example.com/health
-```
-
-Step 3 synthesises the app like any other deploy, so it needs the same settings
-as the primary region, read from the environment (not `--context`):
-`ENVIRONMENT=prod`, the us-east-1 region, an ACM certificate **issued in
-us-east-1** (a certificate is regional), `PUBLIC_BASE_URL`, and `ALARM_EMAIL`.
-Without `ALARM_EMAIL` synth stops with a `ValueError` naming it. The new
-region's alarm topic gets a new subscription, which stays unconfirmed until
-someone confirms it from the inbox
-([AWS CDK Deployment](../self-hosting/cdk.md#required-environment-variables)).
-Until then, no alarm in the failover region reaches anyone.
-
-### Communication
-
-- Immediately post in `#incidents`: "Regional failover in progress to us-east-1."
-- Update status page to "Major Outage — Failover in Progress"
-- Notify customers if SLA breach is expected
-
-### Escalation
-
-Regional failover requires Engineering Lead and VP Engineering approval due to data implications. Do not proceed without explicit approval from the Incident Commander.
-
 ---
 
 ## Scenario 7: Security Breach
@@ -610,13 +515,13 @@ Key immediate actions:
 
 Disable suspected compromised account:
 
-```bash
+```sql
 UPDATE experimentation.users SET is_active = false WHERE email = '<suspected>';
 ```
 
 Revoke API keys:
 
-```bash
+```sql
 UPDATE experimentation.api_keys SET is_active = false WHERE user_id = '<user-uuid>';
 ```
 
@@ -644,8 +549,8 @@ period (35 days in prod and staging, 1 elsewhere). After that, the newest manual
 
 ### Response
 
-The restore is the one in [Restore from PITR](#restore-from-pitr-preferred) (Scenario 4), decided
-and not yet rehearsed, with the API stopped from the start so that nothing more is written to the
+The restore is the one in [Restore from PITR](#restore-from-pitr-preferred) (Scenario 4),
+rehearsed on a staging account on 2026-10-11, with the API stopped from the start so that nothing more is written to the
 damaged data. The outage therefore lasts from Step 2 until the cutover ends, restore included.
 
 Step 1: Record the environment while the API still runs. `read` records the API's task count and
@@ -677,10 +582,10 @@ aws ecs update-service \
 Step 3: Confirm the extent of data loss. Connect to Aurora and check key tables:
 
 ```sql
-SELECT table_name, COUNT(*)
-FROM information_schema.tables t
-JOIN experimentation.experiments e ON true
-GROUP BY table_name;
+SELECT 'experiments' AS table_name, COUNT(*) FROM experimentation.experiments
+UNION ALL SELECT 'feature_flags', COUNT(*) FROM experimentation.feature_flags
+UNION ALL SELECT 'assignments', COUNT(*) FROM experimentation.assignments
+UNION ALL SELECT 'events', COUNT(*) FROM experimentation.events;
 ```
 
 Step 4: Restore to just before the data loss, and check the restored data: Steps 2 and 3 of
@@ -689,63 +594,3 @@ Step 4: Restore to just before the data loss, and check the restored data: Steps
 Step 5: Point the application at the restored cluster: Step 4 of
 [Restore from PITR](#restore-from-pitr-preferred) (`cutover`), then its Steps 5 and 6. The cutover
 starts the API with the task count and scaling Step 1 recorded; nothing is typed.
-
-Escalation: Data loss incidents require immediate escalation to Engineering Lead and DPO if customer PII (experiment assignment records containing `user_id`) is involved.
-
----
-
-## DR Testing Schedule
-
-| Test | Frequency | Scope | Who |
-|------|-----------|-------|-----|
-| Restore Aurora snapshot to staging, verify data integrity | Monthly | DB restore | SRE |
-| Full failover drill in staging (simulate all ECS tasks down) | Quarterly | Application layer | DevOps + Engineering |
-| Full DR simulation (regional failover simulation) | Annually, once regional failover is built | All layers | Full engineering team |
-| Rollback procedure walkthrough (tabletop) | Each deploy | Application | On-call engineer |
-
-### Monthly DB Restore Test Procedure
-
-Step 1: Find latest automated snapshot:
-
-```bash
-aws rds describe-db-cluster-snapshots \
-  --db-cluster-identifier "$CLUSTER" \
-  --snapshot-type automated \
-  --query 'sort_by(DBClusterSnapshots, &SnapshotCreateTime)[-1].DBClusterSnapshotIdentifier'
-```
-
-Step 2: Restore to a test cluster in TEST_SUBNET_GROUP, then add an instance (Scenario 4):
-
-```bash
-aws rds restore-db-cluster-from-snapshot \
-  --db-cluster-identifier experimentation-staging-dr-test \
-  --snapshot-identifier <snapshot-id> \
-  --engine aurora-postgresql \
-  --db-subnet-group-name "$TEST_SUBNET_GROUP"
-```
-
-Step 3: Connect to restored cluster and verify. Expected: all tables present, row counts match production within expected delta.
-
-Step 4: Clean up:
-
-```bash
-aws rds delete-db-cluster \
-  --db-cluster-identifier experimentation-staging-dr-test \
-  --skip-final-snapshot
-```
-
-Record the results of each test where your team keeps its DR log.
-
----
-
-## Emergency Contacts
-
-| Role | Contact | Notes |
-|------|---------|-------|
-| On-call engineer | PagerDuty rotation | First responder |
-| Engineering Lead | PagerDuty escalation | Required for DB/region failover |
-| Incident Commander | PagerDuty L2 escalation | P0/P1 auto-pages |
-| AWS Support | https://console.aws.amazon.com/support | Premium Support (use for Aurora and regional failures) |
-| DPO | dpo@yourcompany.com | Required if customer data is affected |
-
-The rows above are examples: put your own team's contacts here.
