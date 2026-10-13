@@ -12,9 +12,10 @@ only. What a run cannot see is pinned here, without a stack:
   migration task the way the Deploy workflow does: a registered revision's
   ARN, never the bare family, with ``MIGRATION_COMMAND``;
 * no shell block on either migration page autogenerates a revision without
-  naming the head it extends, or names the singular ``head``: a full checkout
-  has two heads (the contributor page once told a reader to autogenerate an
-  "Initial migration" on an empty database, with neither).
+  naming the head it extends, names the singular ``head``, or runs
+  ``alembic merge``: a full checkout has two heads, kept apart on purpose (the
+  contributor page once told a reader to autogenerate an "Initial migration" on
+  an empty database, with neither, and the operator page once showed a merge).
 """
 
 from __future__ import annotations
@@ -121,5 +122,4 @@ def test_no_block_autogenerates_without_a_head_or_names_the_singular_head(rel):
             assert not re.search(r"\b(upgrade|downgrade|stamp) head\b", command), (
                 f"{rel}: {command}"
             )
-        if info.startswith("exec"):
-            assert " merge " not in f" {body} ", f"{rel}: an exec block merges heads"
+        assert " merge " not in f" {body} ", f"{rel}: a block merges heads"
