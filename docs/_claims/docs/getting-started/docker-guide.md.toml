@@ -1,0 +1,338 @@
+# What verifies each unit of docs/getting-started/docker-guide.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/getting-started/docker-guide.md"
+
+[[unit]]
+text = "Docker Local Development"
+by = ["exempt:label"]
+
+[[unit]]
+text = "This guide runs the local development stack, for your own machine."
+by = ["test:backend/tests/unit/infrastructure/test_dev_stack_loopback.py::test_every_published_port_is_bound_to_loopback"]
+
+[[unit]]
+text = "It is not for a server."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dev_stack_loopback.py::test_every_published_port_is_bound_to_loopback",
+    "test:backend/tests/unit/core/test_config_environment.py::TestHardenedSecrets::test_placeholders_are_fine_outside_hardened_environments",
+]
+
+[[unit]]
+text = "The stack publishes its ports on 127.0.0.1 only, ENVIRONMENT=development accepts a short SECRET_KEY, and the first start creates the demo administrator admin@demo.com with the demo password shown in this guide."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dev_stack_loopback.py::test_every_published_port_is_bound_to_loopback",
+    "test:backend/tests/unit/core/test_config_environment.py::TestHardenedSecrets::test_placeholders_are_fine_outside_hardened_environments",
+    "docex:docs/getting-started/docker-guide.md#admin@demo.com",
+]
+
+[[unit]]
+text = "To run Experimently on a server, use the published images in deploy/compose/compose.yml: the README beside it says how to run it and lists its settings, and Releases, images and verification covers the versions and how to verify the images."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version"]
+
+[[unit]]
+text = "Overview"
+by = ["exempt:label"]
+
+[[unit]]
+text = "This guide runs Experimently locally with Docker Compose and shows how to reach each service."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "By default the compose file at the repository root starts PostgreSQL, Redis, the API and the dashboard."
+by = [
+    "docex:docs/getting-started/docker-guide.md#api",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_profiles_add_what_the_guide_says",
+]
+
+[[unit]]
+text = "Three optional profiles add more: tools (pgAdmin), aws (LocalStack, for developing the optional AWS integrations) and demo (the ShopLab and StreamPulse demo applications)."
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_profiles_add_what_the_guide_says"]
+
+[[unit]]
+text = "The Docker Compose stack lists every service with its host port and profile."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Prerequisites"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Docker with Compose v2 (docker compose, not the retired docker-compose)"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "curl and jq"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The AWS CLI, only for the LocalStack section below"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Project Structure"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The commands below run from the root of a clone of the repository, which contains:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Docker Compose File Overview"
+by = ["exempt:label"]
+
+[[unit]]
+text = "docker-compose.yml defines these services:"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_file_has_exactly_these_services"]
+
+[[unit]]
+text = "postgres: the database (PostgreSQL 16)"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "redis: caching and rate-limit counters (Redis 7)"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "api: the backend, built from backend/Dockerfile"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "frontend: the dashboard, built from frontend/Dockerfile"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "pgadmin (profile tools): a database browser"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "localstack (profile aws): local emulation of AWS services"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "shoplab, streampulse and their simulators (profile demo)"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_profiles_add_what_the_guide_says"]
+
+[[unit]]
+text = "Getting Started"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Step 1: Start Services"
+by = ["exempt:label"]
+
+[[unit]]
+text = "From the repository root, start the default services:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The first start builds the API and dashboard images, which takes a few minutes."
+by = ["docex:docs/getting-started/docker-guide.md#api"]
+
+[[unit]]
+text = "--wait returns once every service is healthy."
+by = ["docex:docs/getting-started/docker-guide.md#api"]
+
+[[unit]]
+text = "Step 2: Verify Services"
+by = ["exempt:label"]
+
+[[unit]]
+text = "List the services that are running:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints api, frontend, postgres and redis, one per line."
+by = ["docex:docs/getting-started/docker-guide.md#api"]
+
+[[unit]]
+text = "Step 3: Connect to PostgreSQL"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Open a psql session inside the postgres container:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The user and password are both postgres, and the database is experimentation."
+by = ["docex:docs/getting-started/docker-guide.md#admin@demo.com"]
+
+[[unit]]
+text = "The tables live in the experimentation schema."
+by = ["docex:docs/getting-started/docker-guide.md#admin@demo.com"]
+
+[[unit]]
+text = "To run a single query instead, pass it with -c; this one lists the administrators the first start created:"
+by = ["docex:docs/getting-started/docker-guide.md#admin@demo.com"]
+
+[[unit]]
+text = "It prints admin@demo.com."
+by = ["docex:docs/getting-started/docker-guide.md#admin@demo.com"]
+
+[[unit]]
+text = "PostgreSQL is also published on localhost:5432 for tools on your machine, on 127.0.0.1 only."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dev_stack_loopback.py::test_every_published_port_is_bound_to_loopback",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile",
+]
+
+[[unit]]
+text = "With the tools profile, pgAdmin runs at http://localhost:5050:"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "Step 4: Interact with Redis"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Check that Redis answers:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints PONG."
+by = ["docex:docs/getting-started/docker-guide.md#PONG"]
+
+[[unit]]
+text = "Step 5: Working with LocalStack"
+by = ["exempt:label"]
+
+[[unit]]
+text = "LocalStack runs only with the aws profile."
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "Start it:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It listens on http://localhost:4566."
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "AWS CLI Configuration for LocalStack"
+by = ["exempt:label"]
+
+[[unit]]
+text = "LocalStack accepts any credentials."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Set dummy ones for this shell only, so that nothing is written to your ~/.aws and no real profile is used:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Every command below passes --endpoint-url=http://localhost:4566, which sends it to LocalStack on your machine, not to an AWS account."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Creating and Listing DynamoDB Tables"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Create a table:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "List tables:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Working with S3"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Create a bucket:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "List buckets:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Step 6: Rebuild After a Change"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The api and frontend containers run images built from your working tree; they do not reload when you edit the code."
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_api_and_the_dashboard_run_built_images_with_no_source_mounted"]
+
+[[unit]]
+text = "Rebuild and restart them after a change:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The API is at http://localhost:8000 and the dashboard at http://localhost:3000."
+by = [
+    "journey:docker-guide#api-address",
+    "journey:docker-guide#dashboard-address",
+]
+
+[[unit]]
+text = "Step 7: Sign in to the dashboard"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Open http://localhost:3000 and choose Sign in."
+by = [
+    "journey:docker-guide#sign-in-page",
+    "journey:docker-guide#email",
+    "journey:docker-guide#password",
+    "journey:docker-guide#signed-in",
+]
+
+[[unit]]
+text = "Enter admin@demo.com as the Email and Demo1234!"
+by = [
+    "journey:docker-guide#sign-in-page",
+    "journey:docker-guide#email",
+    "journey:docker-guide#password",
+    "journey:docker-guide#signed-in",
+]
+
+[[unit]]
+text = "as the Password, then choose Sign in; you land on Experiments."
+by = ["journey:docker-guide#signed-in"]
+
+[[unit]]
+text = "The first start creates that administrator from FIRST_SUPERUSER and FIRST_SUPERUSER_PASSWORD in docker-compose.yml, whose defaults these are."
+by = [
+    "journey:docker-guide#signed-in",
+    "docex:docs/getting-started/docker-guide.md#admin@demo.com",
+]
+
+[[unit]]
+text = "The default demo seed adds dev@demo.com, analyst@demo.com and viewer@demo.com with the same password, three experiments and two flags."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_seed_accounts.py::test_the_demo_seed_adds_one_account_per_role_with_one_password",
+    "test:backend/tests/unit/scripts/test_demo_seed_accounts.py::test_the_demo_seed_adds_three_experiments_and_two_flags",
+    "test:backend/tests/unit/scripts/test_demo_seed_accounts.py::test_main_runs_exactly_those_three_experiment_seeds",
+]
+
+[[unit]]
+text = "These accounts are for a stack on your own machine."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Development Workflow"
+by = ["exempt:label"]
+
+[[unit]]
+text = "For hot reloading, run the API or the dashboard outside Docker and keep only PostgreSQL and Redis in it: see \"Running outside Docker\" in the Quick Start and \"Running the stack\" in CONTRIBUTING.md."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Stopping"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Stop everything and drop the volumes, which deletes the database:"
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_database_is_the_postgres_data_volume"]
+
+[[unit]]
+text = "The next docker compose up -d --wait creates the database and applies the seeds again."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_database_is_the_postgres_data_volume",
+    "test:backend/tests/unit/db/test_bootstrap_schema_env.py::test_the_fresh_database_branch_stamps_the_schema_it_chose",
+    "test:backend/tests/integration/database/test_seed_markers.py::TestSeedMarkerModel::test_create_all_created_it_in_the_test_schema",
+    "test:backend/tests/unit/scripts/test_demo_seeds_development_only.py::test_entrypoint_allows_the_seeds_it_should",
+]

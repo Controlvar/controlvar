@@ -1,0 +1,206 @@
+# What verifies each unit of deploy/compose/README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "deploy/compose/README.md"
+
+[[unit]]
+text = "Self-hosting with Docker Compose"
+by = ["exempt:label"]
+
+[[unit]]
+text = "compose.yml in this directory runs Experimently on one Docker host from the published images."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "It builds nothing, starts no demo applications and creates no demo users."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_nothing_is_built",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestText::test_no_demo_material",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_production_with_no_seed_and_no_bypass",
+]
+
+[[unit]]
+text = "For a development stack built from a checkout, use the repository's docker-compose.yml and the Docker guide instead."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Run it"
+by = ["exempt:label"]
+
+[[unit]]
+text = "From this directory:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "generate-env.sh writes .env beside compose.yml with a generated SECRET_KEY, POSTGRES_PASSWORD, FIRST_SUPERUSER_PASSWORD and AUDIT_HMAC_KEY, readable by your user only."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_it_writes_every_required_setting_privately",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "Give it the URL people will open and the first administrator's email:"
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_given_inputs_it_writes_them"]
+
+[[unit]]
+text = "Without them it writes http://localhost:8080 and admin@example.com."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_without_inputs_it_writes_the_local_url_and_the_example_admin"]
+
+[[unit]]
+text = "EXPERIMENTLY_PROFILE=full makes it write the full profile, and ENV_FILE writes the file somewhere else."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_given_inputs_it_writes_them",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_it_writes_every_required_setting_privately",
+]
+
+[[unit]]
+text = "It refuses to overwrite an existing .env, whose secrets the running install already uses."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_a_second_run_refuses_and_leaves_the_file_alone",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "To start again from nothing, run docker compose down -v, which deletes the database, and delete .env first."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_named_volumes_are_declared"]
+
+[[unit]]
+text = "docker compose up -d --wait starts PostgreSQL, Redis, the API and the dashboard, and returns once they are healthy."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_exactly_the_four_services",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "The first start creates the database schema and the first administrator: sign in at PUBLIC_BASE_URL as FIRST_SUPERUSER with the FIRST_SUPERUSER_PASSWORD from .env."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_production_with_no_seed_and_no_bypass",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "That password is read only while the database has no users: changing it later does nothing."
+by = ["test:backend/tests/integration/database/test_bootstrap_concurrency.py::test_the_bootstrap_says_whether_it_created_the_first_administrator"]
+
+[[unit]]
+text = "Only the dashboard publishes a port, on 127.0.0.1:8080 by default, and it passes /api to the API."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_only_the_dashboard_publishes_a_port_on_loopback_by_default",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "Put your TLS reverse proxy in front of it and pass the Host header unchanged: the API answers only for the host name of PUBLIC_BASE_URL."
+by = [
+    "test:backend/tests/unit/middleware/test_trusted_host.py::test_host_is_checked",
+    "test:backend/tests/unit/core/test_config_allowed_hosts.py::TestDerivation::test_it_derives_from_public_base_url",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_the_host_allow_list_is_derived_not_set",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "Settings"
+by = ["exempt:label"]
+
+[[unit]]
+text = ".env holds them, and .env.example lists every setting compose.yml reads."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestText::test_every_variable_is_documented_in_the_example"]
+
+[[unit]]
+text = "Compose refuses to start while a required one is unset or empty, and names it."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_a_required_setting_has_no_default",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "Setting | Meaning"
+by = ["exempt:label"]
+
+[[unit]]
+text = "PUBLIC_BASE_URL | required: the URL people open"
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_a_required_setting_has_no_default"]
+
+[[unit]]
+text = "SECRET_KEY | required"
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_a_required_setting_has_no_default"]
+
+[[unit]]
+text = "FIRST_SUPERUSER | required: the first administrator's email"
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_a_required_setting_has_no_default"]
+
+[[unit]]
+text = "FIRST_SUPERUSER_PASSWORD | required"
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_a_required_setting_has_no_default"]
+
+[[unit]]
+text = "POSTGRES_PASSWORD | required"
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_a_required_setting_has_no_default"]
+
+[[unit]]
+text = "EXPERIMENTLY_PROFILE | core (the default) or full"
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version"]
+
+[[unit]]
+text = "AUDIT_HMAC_KEY | needed by the full profile"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_an_optional_secret_defaults_to_empty",
+    "test:modules/backend/tests/unit/test_modules_settings.py::TestHardenedAuditKey::test_class_default_is_refused",
+]
+
+[[unit]]
+text = "HTTP_BIND, HTTP_PORT | where the dashboard listens: 127.0.0.1 and 8080 by default"
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_only_the_dashboard_publishes_a_port_on_loopback_by_default"]
+
+[[unit]]
+text = "POSTGRES_SERVER | an external PostgreSQL instead of the bundled one; then start only docker compose up -d api web"
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_api_does_not_wait_on_the_bundled_database"]
+
+[[unit]]
+text = "Run an external PostgreSQL server with its TimeZone set to UTC."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The image lines name the images of this file's own release, ghcr.io/getexperimently/experimently:<profile>-X.Y.Z and ghcr.io/getexperimently/experimently-web:<profile>-X.Y.Z."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version"]
+
+[[unit]]
+text = "Releases, images and verification shows how to check what you pulled."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "What CI runs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The compose-production workflow runs this file on every pull request that changes it, with that change's images under the published names."
+by = [
+    "workflow:compose-production.yml",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_starts_the_file_without_building_or_pulling_the_app",
+]
+
+[[unit]]
+text = "It runs generate-env.sh twice, and the second run must refuse and leave .env as it was."
+by = [
+    "workflow:compose-production.yml",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_runs_the_generator_twice_and_the_config_check",
+]
+
+[[unit]]
+text = "It starts the stack with docker compose up -d --wait and signs in as the first administrator through the dashboard's port."
+by = [
+    "workflow:compose-production.yml",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_starts_the_file_without_building_or_pulling_the_app",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_rehearses_in_the_compose_topology",
+]
+
+[[unit]]
+text = "It checks that a request for another host name answers 400, that the demo login answers 401, and that PostgreSQL, Redis and the API publish no port."
+by = [
+    "workflow:compose-production.yml",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_rehearses_in_the_compose_topology",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_refuses_the_demo_login_and_checks_only_the_dashboard_publishes",
+]

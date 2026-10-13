@@ -404,6 +404,30 @@ def test_the_ingress_host_is_the_public_base_url_hostname(url):
     )
 
 
+def test_helm_test_checks_the_public_host_and_refuses_another(docs):
+    """`helm test`, which the install notes and the README name: the API
+    answers 200 for publicBaseUrl's host and 400 for any other."""
+    smoke = one(docs, "Pod", f"{FULLNAME}-smoke")
+    assert smoke["metadata"]["annotations"]["helm.sh/hook"] == "test"
+    test = container(smoke, "smoke")
+    assert env_of(test)["PUBLIC_HOST"]["value"] == urlparse(PUBLIC_BASE_URL).hostname
+    script = test["args"][0]
+    assert '-H "Host: $PUBLIC_HOST" "$BASE/api/v1/modules"' in script
+    assert '[ "$code" = 200 ]' in script
+    assert '-H "Host: not-$PUBLIC_HOST" "$BASE/api/v1/modules"' in script
+    assert '[ "$code" = 400 ]' in script
+
+
+def test_the_bundled_postgres_and_redis_are_one_replica_each_and_never_backed_up(docs):
+    """The core CI values keep the chart's defaults, which bundle both, each a
+    single replica; no values render a job of any kind, so nothing backs the
+    database up."""
+    defaults = render("core")
+    assert one(defaults, "StatefulSet", f"{FULLNAME}-postgres")["spec"]["replicas"] == 1
+    assert one(defaults, "Deployment", f"{FULLNAME}-redis")["spec"]["replicas"] == 1
+    assert [d["kind"] for d in docs if d["kind"] in ("CronJob", "Job")] == []
+
+
 def test_extra_allowed_hosts_keep_the_public_host():
     config = one(render("full"), "ConfigMap", f"{FULLNAME}-config")["data"]
     assert config["ALLOWED_HOSTS"].split(",") == [

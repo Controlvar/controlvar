@@ -27,10 +27,12 @@ universe = [
     "backend/app/models/models_overview.md",
     "backend/lambda/README.md",
     "backend/lambda/event_processor/README.md",
+    "charts/experimently/README.md",
     "demo/DEMO_GUIDE.md",
     "demo/shoplab/README.md",
     "demo/streampulse/README.md",
     "demo/streampulse/simulator/README.md",
+    "deploy/compose/README.md",
     "docs/Enhanced_Rules_Engine_Reference.md",
     "docs/README.md",
     "docs/api/README.md",
@@ -219,8 +221,8 @@ expects = 6
 path = "docs/getting-started/docker-compose-file.md"
 environment = "bare"
 exec = 5
-skip = 2
-expects = 6
+skip = 1
+expects = 5
 
 [[document]]
 path = "docs/getting-started/environment-setup.md"
@@ -427,6 +429,13 @@ expects = 0
 [[exempt]]
 path = "docs/self-hosting/kubernetes.md"
 reason = "run on a kind cluster by the chart-kind workflow (scripts/chart_kind.sh), which extracts its marked blocks"
+
+# Read on GitHub, beside compose.yml: its blocks start the production stack,
+# which the compose-production workflow boots with generate-env.sh and
+# docker compose up --wait.
+[[exempt]]
+path = "deploy/compose/README.md"
+reason = "starts the production stack on a Docker host: the compose-production workflow runs generate-env.sh and docker compose up --wait on this directory's files"
 
 [pending]
 "backend/lambda/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }

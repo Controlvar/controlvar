@@ -1,0 +1,277 @@
+# What verifies each unit of docs/self-hosting/releases.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/self-hosting/releases.md"
+
+[[unit]]
+text = "Releases, images and verification"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Experimently releases are cut by CI from a tag: release.yml builds, signs and publishes each one."
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_a_release_starts_from_a_tag",
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_signed_and_carries_its_sbom_as_an_attestation",
+]
+
+[[unit]]
+text = "The version a running deployment reports in GET /api/v1/modules is the string in the repository's VERSION file, and each image's org.opencontainers.image.version label and the Helm chart's version and appVersion are the same string."
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_the_api_reports_the_version_file",
+    "test:backend/tests/unit/infrastructure/test_release_image_labels.py::test_both_dockerfiles_define_the_version_arg_the_workflow_passes",
+    "test:backend/tests/unit/chart/test_chart_render.py::test_chart_version_and_app_version_equal_VERSION",
+]
+
+[[unit]]
+text = "deploy/compose/compose.yml names the images of its own release."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version"]
+
+[[unit]]
+text = "What a release publishes"
+by = ["exempt:label"]
+
+[[unit]]
+text = "For version X.Y.Z, in the repository's GitHub Container Registry namespace:"
+by = ["test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_both_profiles_tagged_with_the_version_and_amd64_only"]
+
+[[unit]]
+text = "Image | Platforms"
+by = ["exempt:label"]
+
+[[unit]]
+text = "…/experimently:core-X.Y.Z | linux/amd64"
+by = ["test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_both_profiles_tagged_with_the_version_and_amd64_only"]
+
+[[unit]]
+text = "…/experimently:full-X.Y.Z | linux/amd64"
+by = ["test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_both_profiles_tagged_with_the_version_and_amd64_only"]
+
+[[unit]]
+text = "…/experimently-web:core-X.Y.Z | linux/amd64"
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_both_profiles_tagged_with_the_version_and_amd64_only",
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_the_web_image_is_the_api_image_name_with_web",
+]
+
+[[unit]]
+text = "…/experimently-web:full-X.Y.Z | linux/amd64"
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_both_profiles_tagged_with_the_version_and_amd64_only",
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_the_web_image_is_the_api_image_name_with_web",
+]
+
+[[unit]]
+text = "A final release also moves :core and :full to point at it, and only once everything else in the release, including the chart below, has succeeded."
+by = ["test:backend/tests/unit/infrastructure/test_release_chart_job.py::test_floating_tags_wait_for_the_chart"]
+
+[[unit]]
+text = "A pre-release, a tag with a - in it such as v1.2.0-rc.1, publishes its versioned tags only: :core and :full stay on the newest final release."
+by = ["test:backend/tests/unit/infrastructure/test_release_publishes.py::test_a_pre_release_never_moves_the_floating_tags"]
+
+[[unit]]
+text = "Every image is built for linux/amd64 only; #181 tracks an arm64 build."
+by = ["test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_both_profiles_tagged_with_the_version_and_amd64_only"]
+
+[[unit]]
+text = "Each image is scanned for stored credentials with trivy's secret scanner before it is pushed, and a finding stops that image and the release."
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_credential_scan.py::test_each_image_is_scanned_before_it_is_pushed",
+    "test:backend/tests/unit/infrastructure/test_release_credential_scan.py::test_a_planted_defect_turns_the_gate_red",
+]
+
+[[unit]]
+text = "The claim is that the scan found nothing, not that the image is proven to hold no credential."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "There are two scans:"
+by = ["test:backend/tests/unit/infrastructure/test_release_credential_scan.py::test_each_image_is_scanned_before_it_is_pushed"]
+
+[[unit]]
+text = "The whole image, with trivy's default rules."
+by = ["test:backend/tests/unit/infrastructure/test_release_credential_scan.py::test_each_image_is_scanned_before_it_is_pushed"]
+
+[[unit]]
+text = "Those rules skip /usr/share and /usr/lib, vendor/ and locale/ directories, .md files, file names containing example or _test, and node_modules/ (trivy skips that one even with every rule turned off)."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "This project's own files, with every rule turned off."
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_credential_scan.py::test_dropping_any_disabled_rule_turns_the_gate_red",
+    "test:backend/tests/unit/infrastructure/test_release_credential_scan.py::test_each_image_is_scanned_before_it_is_pushed",
+]
+
+[[unit]]
+text = "These are /app in the API images, and /usr/share/nginx/html and /etc/nginx in the dashboard images."
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_credential_scan.py::test_dropping_any_disabled_rule_turns_the_gate_red",
+    "test:backend/tests/unit/infrastructure/test_release_credential_scan.py::test_a_widened_trivy_configuration_turns_the_gate_red",
+]
+
+[[unit]]
+text = "They are copied out of the image without running it."
+by = ["test:backend/tests/unit/infrastructure/test_release_credential_scan.py::test_each_image_is_scanned_before_it_is_pushed"]
+
+[[unit]]
+text = "So the remaining gap is third-party files on the paths the default rules skip."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "After the push, the release checks that the pushed image's layers are the layers it scanned, before signing it."
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_credential_scan.py::test_identical_layers_pass",
+    "test:backend/tests/unit/infrastructure/test_release_credential_scan.py::test_different_layers_fail",
+    "test:backend/tests/unit/infrastructure/test_release_credential_scan.py::test_moving_the_scan_after_the_push_turns_the_gate_red",
+]
+
+[[unit]]
+text = "The GitHub release also carries the Helm chart as experimently-X.Y.Z.tgz, packaged from the tagged tree after helm lint --strict."
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_chart_job.py::test_chart_job_lints_packages_checks_then_attaches_in_that_order",
+    "test:backend/tests/unit/infrastructure/test_release_chart_job.py::test_chart_job_checks_out_the_tag",
+]
+
+[[unit]]
+text = "Before it is attached, scripts/check_chart_package.py reads the Chart.yaml inside the archive and requires its version and appVersion to be exactly X.Y.Z, so the chart installs the images of the same release."
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_chart_job.py::test_checker_rejects",
+    "test:backend/tests/unit/infrastructure/test_release_chart_job.py::test_checker_accepts_the_release",
+]
+
+[[unit]]
+text = "The chart is a release asset only; it is not pushed to a chart registry."
+by = ["test:backend/tests/unit/infrastructure/test_release_chart_job.py::test_chart_job_is_a_release_asset_only"]
+
+[[unit]]
+text = "Verifying what you pulled"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every image is signed with cosign keyless — the signature is bound to the workflow's OIDC identity and recorded in Rekor, so there is no key to leak — and carries an SPDX SBOM as a Sigstore attestation."
+by = [
+    "docex:docs/self-hosting/releases.md#https://github.com/getexperimently/experimently/.github/workflows/release.yml@refs/",
+    "docex:docs/self-hosting/releases.md#https://spdx.dev/Document",
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_signed_and_carries_its_sbom_as_an_attestation",
+]
+
+[[unit]]
+text = "The same SBOMs are attached to the GitHub release."
+by = ["test:backend/tests/unit/infrastructure/test_release_publishes.py::test_the_github_release_carries_the_same_sbom_files"]
+
+[[unit]]
+text = "The SBOMs describe linux/amd64"
+by = ["test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_both_profiles_tagged_with_the_version_and_amd64_only"]
+
+[[unit]]
+text = "That is the only platform published, so each SBOM describes the whole image."
+by = ["test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_both_profiles_tagged_with_the_version_and_amd64_only"]
+
+[[unit]]
+text = "You need cosign, Docker with Buildx (docker buildx version prints one) and jq."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Nothing is pulled: every command below reads the registry, and none needs an account."
+by = ["docex:docs/self-hosting/releases.md#https://github.com/getexperimently/experimently/.github/workflows/release.yml@refs/"]
+
+[[unit]]
+text = "Set IMAGE to the image you run."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = ":core is the newest final release; a versioned tag such as :core-0.26.3 is one release, and full in place of core is the full profile:"
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_a_pre_release_never_moves_the_floating_tags",
+    "test:backend/tests/unit/infrastructure/test_release_chart_job.py::test_floating_tags_wait_for_the_chart",
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_both_profiles_tagged_with_the_version_and_amd64_only",
+]
+
+[[unit]]
+text = "IDENTITY names one workflow, this repository's release.yml."
+by = ["mechanism:release-identity-refuses"]
+
+[[unit]]
+text = "It accepts release.yml run from main, which is how release-please cuts a release and how gh workflow run release.yml -f tag=vX.Y.Z runs one again, and run from a v tag, which is how a tag pushed by hand starts it."
+by = ["mechanism:release-identity-accepts"]
+
+[[unit]]
+text = "A signature made by any other workflow, repository or branch fails."
+by = ["mechanism:release-identity-refuses"]
+
+[[unit]]
+text = "NO_LOGIN is an empty directory."
+by = ["exempt:example"]
+
+[[unit]]
+text = "The two cosign commands run with DOCKER_CONFIG pointing at it, so they read no registry login and show that none is needed."
+by = [
+    "docex:docs/self-hosting/releases.md#https://github.com/getexperimently/experimently/.github/workflows/release.yml@refs/",
+    "docex:docs/self-hosting/releases.md#https://spdx.dev/Document",
+]
+
+[[unit]]
+text = "Check the signature:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints the identity in the signing certificate, such as https://github.com/getexperimently/experimently/.github/workflows/release.yml@refs/heads/main."
+by = ["docex:docs/self-hosting/releases.md#https://github.com/getexperimently/experimently/.github/workflows/release.yml@refs/"]
+
+[[unit]]
+text = "cosign writes the checks it made to stderr."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "When no signature matches, it fails with no matching signatures."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Check the SBOM attestation the same way."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints the attestation's predicate type, https://spdx.dev/Document:"
+by = ["docex:docs/self-hosting/releases.md#https://spdx.dev/Document"]
+
+[[unit]]
+text = "Without the jq, it prints the whole attestation, SBOM included."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "The image also states its own version and profile in its labels, which docker buildx imagetools inspect reads from the registry without pulling the image:"
+by = [
+    "docex:docs/self-hosting/releases.md#\"version\": \"",
+    "test:backend/tests/unit/infrastructure/test_release_image_labels.py::test_both_dockerfiles_define_the_version_arg_the_workflow_passes",
+    "test:backend/tests/unit/infrastructure/test_release_image_labels.py::test_wrong_profile_is_refused",
+]
+
+[[unit]]
+text = "It prints the release's version, such as \"version\": \"0.26.3\", and \"profile\": \"core\"."
+by = ["docex:docs/self-hosting/releases.md#\"version\": \""]
+
+[[unit]]
+text = "A running deployment reports the same two things, which is the quickest check that it is running what you think:"
+by = ["docex:docs/self-hosting/releases.md#\"profile\":\"core\""]
+
+[[unit]]
+text = "It prints {\"profile\":\"core\",\"modules\":[],\"version\":…} on the core profile; the full profile lists its modules."
+by = [
+    "test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointCore::test_the_core_profile_reports_no_modules",
+    "test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointFull::test_the_full_profile_lists_every_known_module",
+]
+
+[[unit]]
+text = "SDK releases"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Each SDK is released by its own tag, such as sdk/js/v1.2.3 or sdk/python/v1.2.3, and versions independently of the platform."
+by = ["test:backend/tests/smoke/test_sdk_release_wiring.py::test_a_mismatched_tag_is_refused"]
+
+[[unit]]
+text = "sdk-release.yml publishes to PyPI and npm by trusted publishing (OIDC — no long-lived token in any secret), behind the sdk-release environment."
+by = [
+    "test:backend/tests/smoke/test_sdk_release_wiring.py::test_the_release_environment_and_the_token_sit_on_the_publish_jobs_only",
+    "test:backend/tests/smoke/test_sdk_release_wiring.py::test_no_job_that_installs_or_tests_can_request_an_oidc_token",
+]

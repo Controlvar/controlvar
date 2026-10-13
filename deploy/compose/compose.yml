@@ -1,37 +1,7 @@
-# =============================================================================
-# Experimently -- production compose file (self-hosting on one Docker host).
+# Experimently: the production compose file, for one Docker host. It runs the
+# published images and builds nothing.
 #
-# This file runs the PUBLISHED images. It never builds, it ships no demo
-# services and no seeded demo users, and it starts nothing that listens on the
-# host except the dashboard. For a development stack built from a checkout,
-# use the repository's docker-compose.yml instead.
-#
-#   ./generate-env.sh              # writes .env with generated secrets, once
-#   docker compose up -d --wait    # postgres + redis + api + web
-#   docker compose logs -f api     # first start creates the schema and admin
-#
-# Settings come from the `.env` file next to this file. The five marked
-# REQUIRED have no default: compose refuses to start (and `docker compose
-# config` exits non-zero) naming the first one that is unset or empty.
-#
-#   SECRET_KEY                 REQUIRED  signs sessions and tokens
-#   FIRST_SUPERUSER            REQUIRED  email of the first administrator
-#   FIRST_SUPERUSER_PASSWORD   REQUIRED  used only while the users table is empty
-#   POSTGRES_PASSWORD          REQUIRED  the database password
-#   PUBLIC_BASE_URL            REQUIRED  the URL people open, e.g.
-#                                        https://experimently.example.com; the
-#                                        API answers only for this host name
-#   AUDIT_HMAC_KEY             full profile only: signs audit events
-#   EXPERIMENTLY_PROFILE       core (default) or full
-#   HTTP_BIND / HTTP_PORT      where the dashboard listens (127.0.0.1:8080);
-#                              put your TLS reverse proxy in front of it
-#   POSTGRES_SERVER            an external database host instead of the bundled
-#                              one; then start only `docker compose up -d api web`.
-#                              Its TimeZone must be UTC
-#
-# The image versions below are literal and move with each release (the
-# `x-release-please-version` markers); there are no floating tags.
-# =============================================================================
+# README.md beside this file says how to run it and lists its settings.
 
 # Not `experimently`: that is the project name the development compose file
 # gets from a checkout directory of that name, and sharing it would make this

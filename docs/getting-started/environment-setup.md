@@ -4,12 +4,12 @@ This guide explains how to set up the environment configuration for Experimently
 
 ## Overview
 
-The platform uses Pydantic Settings to manage environment-specific configuration. The setup includes:
+The API reads its settings with Pydantic Settings, in `backend/app/core/config.py`:
 
-1. A base settings class with common configurations
-2. Environment-specific settings classes (development, test, production)
-3. Environment file templates for different environments
-4. Logic to determine the current environment and load appropriate settings
+1. One `Settings` class, with the settings and their defaults
+2. A class for each environment, `DevSettings`, `TestSettings` and `ProdSettings`, derived from it, that changes some of those defaults
+3. An environment file for each environment, and one template, `.env.example`
+4. The `ENVIRONMENT` variable, which chooses the class and the file
 
 ## Setup Steps
 
@@ -20,7 +20,7 @@ application in (the repository root):
 
 | `ENVIRONMENT` | File |
 |---|---|
-| `development` (the default) | `.env.dev` |
+| `development` | `.env.dev` |
 | `test` | `.env.test` |
 | `staging`, `production` | `.env.prod` |
 
@@ -58,12 +58,11 @@ Set `REDIS_PASSWORD` as well if your Redis requires one; the local stack's does 
 ```dotenv
 PROJECT_NAME="Experimently"
 ENVIRONMENT=development
-DEBUG=true
 LOG_LEVEL=DEBUG
 ```
 
-These are development values. In production, set `DEBUG=false` and `LOG_LEVEL` to `INFO`,
-`WARNING` or `ERROR`.
+These are development values. In production, set `LOG_LEVEL` to `INFO`, `WARNING` or
+`ERROR`.
 
 #### Security Settings
 
@@ -118,7 +117,8 @@ completes experiments whose scheduled `start_date` or `end_date` has passed. The
 
 The application determines which environment to use based on the `ENVIRONMENT` variable:
 
-- If not set, defaults to `development`
+- If it is not set, the API refuses to start and logs `ENVIRONMENT is not set: set it to
+  development, test, staging or production before starting the API.`
 - Valid values: `development`, `test`, `staging`, `production` (the older spellings `dev`
   and `prod` still work, with a deprecation warning)
 
@@ -142,7 +142,6 @@ For production deployment:
    - `POSTGRES_PASSWORD` (use a strong password)
    - `REDIS_PASSWORD` (if applicable)
    - `FIRST_SUPERUSER_PASSWORD` (for the admin user)
-   - `DEBUG=false`
    - `LOG_LEVEL=WARNING` or `ERROR`
 
 ## Accessing Settings in Code
@@ -161,15 +160,16 @@ app_name = settings.PROJECT_NAME
 
 To add new configuration options:
 
-1. Add the new setting to the `BaseAppSettings` class in `config.py`
+1. Add the new setting to the `Settings` class in `backend/app/core/config.py`
 2. Provide a default value
-3. Override in environment-specific classes if needed
-4. Update environment file templates with the new variable
+3. Override it in `DevSettings`, `TestSettings` or `ProdSettings` if one environment needs
+   another default
+4. Add it to `.env.example`
 
 Example:
 ```python
-# In config.py
-class BaseAppSettings(BaseSettings):
+# In backend/app/core/config.py
+class Settings(BaseSettings):
     # ... existing settings
     
     # New setting
@@ -181,4 +181,4 @@ class BaseAppSettings(BaseSettings):
 - If settings aren't loading correctly, check that your environment file exists and has the correct format
 - Verify environment variables are set correctly
 - Check file permissions on the .env files
-- Enable DEBUG mode to see more detailed logs
+- Set `LOG_LEVEL=DEBUG` to see more detailed logs

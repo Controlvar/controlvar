@@ -1,31 +1,10 @@
-Experimently {{ .Chart.AppVersion }} ({{ .Values.profile }} profile) is installing as release {{ .Release.Name }}.
+Experimently {{ .Chart.AppVersion }} ({{ .Values.profile }} profile) is installing as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
 
-1. Wait for the API. Its `migrate` init container creates or upgrades the schema first:
+Check that the API answers on your public host:
 
-     kubectl rollout status deployment/{{ include "experimently.fullname" . }}-api -n {{ .Release.Namespace }}
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
 
-   If a pod stays in Init, read the bootstrap's log:
+Then sign in at {{ .Values.publicBaseUrl }} as {{ .Values.firstSuperuser }}, with the FIRST_SUPERUSER_PASSWORD of your Secret.
 
-     kubectl logs -n {{ .Release.Namespace }} deploy/{{ include "experimently.fullname" . }}-api -c migrate
-
-2. Check that the API answers on your public host, not only its health probe
-   (probes are exempt from the Host check, so they stay green when the host is wrong):
-
-     helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
-{{- if .Values.ingress.enabled }}
-     curl -s -o /dev/null -w '%{http_code}\n' {{ .Values.publicBaseUrl }}/api/v1/experiments/    # expect 401
-{{- else }}
-
-   The Ingress is disabled. Route {{ .Values.publicBaseUrl }} yourself: /api, /ws and /health to
-   service/{{ include "experimently.fullname" . }}-api:8000, everything else to service/{{ include "experimently.fullname" . }}-web:8080,
-   passing the original Host header.
-{{- end }}
-
-3. Sign in at {{ .Values.publicBaseUrl }} as {{ .Values.firstSuperuser }} with the password from your Secret.
-   That password is used only when the first administrator is created; changing it later does nothing.
-{{- if or .Values.postgresql.bundled (and .Values.redis.enabled .Values.redis.bundled) }}
-
-The bundled {{ if .Values.postgresql.bundled }}Postgres{{ end }}{{ if and .Values.postgresql.bundled .Values.redis.enabled .Values.redis.bundled }} and {{ end }}{{ if and .Values.redis.enabled .Values.redis.bundled }}Redis{{ end }} are for evaluation and small installs:
-no backups, no high availability, and no major-version upgrades by this chart.
-Back up the database before every upgrade.
-{{- end }}
+The chart's README says what to do when a pod stays in Init or the Ingress is disabled:
+https://github.com/getexperimently/experimently/blob/v{{ .Chart.AppVersion }}/charts/experimently/README.md
