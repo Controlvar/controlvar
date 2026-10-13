@@ -471,6 +471,7 @@ by = ["exempt:label"]
 [[unit]]
 text = "reads error metrics from error_logs and latency metrics from raw_metrics, over the last 15 minutes;"
 by = [
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_the_check_reads_the_last_15_minutes_of_errors_and_latency",
     "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetErrorMetrics::test_computes_rate_and_error_type_breakdown",
     "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetLatencyMetrics::test_computes_real_latency_statistics",
 ]

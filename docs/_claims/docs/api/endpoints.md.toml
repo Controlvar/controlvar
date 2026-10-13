@@ -5,7 +5,7 @@ document = "docs/api/endpoints.md"
 
 [[unit]]
 text = "API Endpoints Documentation"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "This document describes the API's main endpoints, with examples."
@@ -20,11 +20,11 @@ by = [
 
 [[unit]]
 text = "Authentication and Authorization"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Overview"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The API uses two types of authentication:"
@@ -32,11 +32,14 @@ by = ["docex:docs/api/endpoints.md#\"admin@demo.com\""]
 
 [[unit]]
 text = "OAuth2 Bearer tokens for user authentication"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_bearer_token_is_not_an_api_key",
+]
 
 [[unit]]
 text = "API keys for client applications"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key"]
 
 [[unit]]
 text = "The examples on this page run in one terminal, in order, against the Quick Start stack."
@@ -44,20 +47,20 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each uses the shell variables set by the ones before it ($TOKEN, $KEY, $EXP_ID)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "OAuth2 Authentication"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "1."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 2
 
 [[unit]]
 text = "Obtain an access token."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "POST /api/v1/auth/token takes a form."
@@ -69,16 +72,16 @@ by = ["test:backend/tests/unit/core/test_config_environment.py::TestAuthSettings
 
 [[unit]]
 text = "This signs in as the Quick Start stack's administrator and saves the token in $TOKEN:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "2."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 2
 
 [[unit]]
 text = "Use the access token:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"admin@demo.com\"."
@@ -90,15 +93,18 @@ by = ["docex:docs/api/endpoints.md#\"admin@demo.com\""]
 
 [[unit]]
 text = "API Key Authentication"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "API keys are used by client applications for the tracking and feature flag evaluation endpoints."
-by = ["docex:docs/api/endpoints.md#\"new_dashboard_ui\": true"]
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key",
+    "test:backend/tests/smoke/test_openfeature_routes.py::test_the_valid_key_reaches_a_route_that_is_still_mounted",
+]
 
 [[unit]]
 text = "Obtain an API key."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Any signed-in user can create one, whatever their role (see API Keys), and an API key writes tracking data."
@@ -116,15 +122,18 @@ by = [
 
 [[unit]]
 text = "This creates one and saves it in $KEY:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints eptk_, the start of every key."
-by = ["docex:docs/api/endpoints.md#eptk_"]
+by = [
+    "docex:docs/api/endpoints.md#eptk_",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+]
 
 [[unit]]
 text = "Use the API key:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints each flag's answer for user 123; on the Quick Start stack both of its flags are on for that user: \"new_dashboard_ui\": true and \"beta_features\": true."
@@ -132,11 +141,11 @@ by = ["docex:docs/api/endpoints.md#\"new_dashboard_ui\": true"]
 
 [[unit]]
 text = "Authorization Levels"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Regular Users:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Can access their own data"
@@ -164,7 +173,7 @@ by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::tes
 
 [[unit]]
 text = "Superusers:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Can access all user data"
@@ -184,11 +193,11 @@ by = ["test:backend/tests/integration/api/test_user_email_case_conflict.py::Test
 
 [[unit]]
 text = "Usage Examples"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "1. User Registration and Authentication"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Cognito only"
@@ -232,31 +241,34 @@ count = 2
 
 [[unit]]
 text = "Step 1: Register a new user:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Only with COGNITO_SELF_SIGNUP_ENABLED=true and a user pool that allows self sign-up; otherwise see Adding a user."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/auth/test_self_signup_gate.py::test_signup_refused_by_default_makes_no_cognito_call",
+    "test:backend/tests/integration/auth/test_self_signup_gate.py::test_signup_and_confirm_reach_cognito_when_turned_on",
+]
 
 [[unit]]
 text = "Step 2: Confirm registration:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Step 3: Login to get access token:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "With the default local provider, sign in as in OAuth2 Authentication above."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "2. Managing Experiments"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Step 1: List experiments:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "On the Quick Start stack it prints its three demo experiments, among them Checkout Button Color."
@@ -264,7 +276,7 @@ by = ["docex:docs/api/endpoints.md#Checkout Button Color"]
 
 [[unit]]
 text = "Step 2: Create a new experiment."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It needs at least one variant and one metric, and experiment_type is a_b, mv, split_url or bandit."
@@ -288,7 +300,7 @@ by = ["docex:docs/api/endpoints.md#active"]
 
 [[unit]]
 text = "Step 3: Get experiment results."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The path takes the experiment's id, a UUID:"
@@ -300,11 +312,11 @@ by = ["docex:docs/api/endpoints.md#\"sample_size\": 0"]
 
 [[unit]]
 text = "3. Feature Flag Management"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Step 1: List feature flags:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "On the Quick Start stack it prints its two demo flags, new_dashboard_ui and beta_features."
@@ -312,11 +324,11 @@ by = ["docex:docs/api/endpoints.md#beta_features"]
 
 [[unit]]
 text = "Step 2: Create a feature flag:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Step 3: Get feature flags for a user (client-side):"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The answer now includes the new flag, \"new_checkout_flow\": true."
@@ -328,7 +340,7 @@ by = ["test:backend/tests/integration/api/test_feature_flag_evaluate_context.py"
 
 [[unit]]
 text = "4. Tracking Events"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Step 1: Assign a user to an experiment (sticky; every call for an enrolled user records that the user saw the experiment):"
@@ -336,7 +348,7 @@ by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRes
 
 [[unit]]
 text = "The experiment created above targets country US or CA and browser chrome or firefox, so the context says both."
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "User 123 is enrolled in control."
@@ -356,7 +368,7 @@ by = ["docex:docs/api/endpoints.md#\"event_name\": \"purchase\""]
 
 [[unit]]
 text = "Step 3: Get user assignments:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints the one assignment made above: Button Color Test, control."
@@ -364,7 +376,7 @@ by = ["test:backend/tests/integration/api/test_tracking_api.py::TestUserAssignme
 
 [[unit]]
 text = "5. Admin Operations"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Step 1: List all users (superuser only):"
@@ -383,7 +395,7 @@ by = ["test:backend/tests/integration/api/test_users_api.py::TestCreateUserHashe
 
 [[unit]]
 text = "It prints the new account."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/endpoints.md#\"username\": \"jane.smith\""]
 
 [[unit]]
 text = "Its role is VIEWER; change it with PATCH /api/v1/admin/users/{user_id} (below)."
@@ -394,11 +406,11 @@ by = [
 
 [[unit]]
 text = "Rate Limiting and API Constraints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Rate Limits"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Limits are counted per client address and per path: most routes allow 300 requests a minute to each path from one address, and a path with an id in it, such as /api/v1/experiments/{experiment_id}, counts separately for each id."
@@ -424,7 +436,7 @@ by = ["docex:docs/api/endpoints.md#429 Too Many Requests"]
 
 [[unit]]
 text = "Request Size Limits"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Maximum request body size: 5 MiB (5,242,880 bytes); a larger body is answered 413, with or without a Content-Length header"
@@ -510,7 +522,7 @@ by = ["test:backend/tests/unit/core/test_context_limits.py::test_every_context_i
 
 [[unit]]
 text = "Pagination"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "List endpoints that page take skip and limit parameters"
@@ -526,7 +538,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Caching"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "GET /api/v1/experiments/{experiment_id} and its daily-results and segmented-results are cached for 3,600 seconds (an hour) when CACHE_ENABLED is on (it is off by default)."
@@ -549,11 +561,11 @@ by = ["test:backend/tests/unit/api/test_results_stored_settings.py::test_results
 
 [[unit]]
 text = "Authentication Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Sign Up"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: POST /api/v1/auth/signup"
@@ -561,7 +573,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Description: Register a new user"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Request Body:"
@@ -575,7 +587,7 @@ count = 2
 
 [[unit]]
 text = "Confirm Sign Up"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: POST /api/v1/auth/confirm"
@@ -583,7 +595,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Description: Confirm user registration with verification code"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Response: 200 OK"
@@ -592,7 +604,7 @@ count = 12
 
 [[unit]]
 text = "Login"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: POST /api/v1/auth/token"
@@ -600,19 +612,22 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Description: OAuth2 compatible token login"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Request Body: Form data"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/api/test_local_auth.py::TestTokenFormEndpoint::test_form_login_returns_same_shape",
+]
 
 [[unit]]
 text = "username: string (with AUTH_PROVIDER=local, the user's email address)"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_local_auth.py::TestTokenFormEndpoint::test_form_login_returns_same_shape"]
 
 [[unit]]
 text = "password: string"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
 text = "With AUTH_PROVIDER=local: The email address is matched whatever its letter case (A–Z), and every casing of it counts toward the same failed attempts."
@@ -620,7 +635,7 @@ by = ["test:backend/tests/integration/api/test_local_signin_email_case.py"]
 
 [[unit]]
 text = "Get User Info"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: GET /api/v1/auth/me"
@@ -628,20 +643,23 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Description: Get current user information"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Headers: Authorization: Bearer {token}"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
 count = 16
 
 [[unit]]
 text = "User Management Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "List Users"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: GET /api/v1/users/"
@@ -653,7 +671,7 @@ by = ["test:backend/tests/unit/api/test_users.py::test_list_users_normal_user"]
 
 [[unit]]
 text = "Query Parameters:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 6
 
 [[unit]]
@@ -678,7 +696,7 @@ count = 2
 
 [[unit]]
 text = "Create User"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: POST /api/v1/users/"
@@ -694,7 +712,10 @@ by = ["test:backend/tests/integration/api/test_own_password_change.py::test_crea
 
 [[unit]]
 text = "Anything else is a 422."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_own_password_change.py::test_a_weak_password_in_a_superuser_reset_is_422",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_create_user_over_72_bytes_is_422_not_500",
+]
 
 [[unit]]
 text = "Errors: 409 \"Email already registered\" when another account holds the email address in any letter case (Pat.Lee@example.com and pat.lee@example.com are the same address here)."
@@ -709,7 +730,7 @@ by = ["test:backend/tests/integration/api/test_user_username_conflict.py::TestUp
 
 [[unit]]
 text = "Get User"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: GET /api/v1/users/{user_id}"
@@ -717,21 +738,21 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Description: Get user by ID"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Path Parameters:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 6
 
 [[unit]]
 text = "user_id: string (UUID)"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 count = 2
 
 [[unit]]
 text = "Update User"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: PUT /api/v1/users/{user_id}"
@@ -739,7 +760,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Description: Update a user."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A superuser may update any user and every field."
@@ -766,11 +787,11 @@ by = ["test:backend/tests/integration/api/test_own_password_change.py::test_supe
 
 [[unit]]
 text = "It follows the same rules as a new account's (see Create User); a weaker one, or \"\", is a 422."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_a_weak_password_in_a_superuser_reset_is_422"]
 
 [[unit]]
 text = "Leave it out, or send null, to keep the password as it is."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_null_password_via_put_changes_nothing"]
 
 [[unit]]
 text = "Your own password is changed with POST /api/v1/users/me/password (below), which asks for the current one; sending your own password here is a 403 for every caller, superusers included."
@@ -778,7 +799,10 @@ by = ["test:backend/tests/integration/api/test_own_password_change.py::test_own_
 
 [[unit]]
 text = "PUT /api/v1/admin/users/{user_id} treats password the same way."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_own_password_change.py::test_own_password_via_put_is_refused",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_a_weak_password_in_a_superuser_reset_is_422",
+]
 
 [[unit]]
 text = "Your own access: a superuser cannot remove their own superuser access or deactivate their own account here; another superuser does it."
@@ -787,12 +811,12 @@ count = 2
 
 [[unit]]
 text = "The request is refused when it would change your own is_superuser or is_active from true to false, and nothing in it is written, other fields included."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_own_access_put.py::TestOwnAccessRefused::test_removing_your_own_access_is_refused_and_nothing_is_written"]
 count = 2
 
 [[unit]]
 text = "Resending the stored values (true) is accepted, so a client that reads the account and sends it back with an edit is not refused."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_own_access_put.py::TestStillAllowed::test_resending_your_stored_values_with_an_edit_is_saved"]
 count = 2
 
 [[unit]]
@@ -805,12 +829,12 @@ count = 2
 
 [[unit]]
 text = "If another administrator has just deactivated or deleted your account, the answer is 400 \"Inactive user\"; if they have just removed your superuser access, 403 \"Not enough permissions\"."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_superuser_race.py::TestCallerChangedJustBefore::test_the_caller_is_refused_and_the_target_is_unchanged"]
 count = 5
 
 [[unit]]
 text = "Nothing is written either way."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_superuser_race.py::TestCallerChangedJustBefore::test_the_caller_is_refused_and_the_target_is_unchanged"]
 count = 5
 
 [[unit]]
@@ -828,7 +852,7 @@ count = 2
 
 [[unit]]
 text = "If the entry cannot be written, nothing is saved."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_put_under_a_failed_audit_write_keeps_neither"]
 count = 3
 
 [[unit]]
@@ -846,7 +870,7 @@ by = ["test:backend/tests/integration/api/test_own_access_put.py::TestTexts::tes
 
 [[unit]]
 text = "400 \"You can't deactivate your own account.\" when it would turn off their own is_active; when both would change, the answer is the first."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_own_access_put.py::TestOwnAccessRefused::test_removing_your_own_access_is_refused_and_nothing_is_written"]
 
 [[unit]]
 text = "403 \"Only an administrator can change an account's email address or username.\" when a user who is not a superuser sends a different email address or username."
@@ -854,7 +878,10 @@ by = ["test:backend/tests/integration/api/test_user_email_and_username_updates.p
 
 [[unit]]
 text = "Administrators change them with PUT /api/v1/admin/users/{user_id}."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_user_email_and_username_updates.py::test_a_superuser_can_change_a_users_email_and_username",
+    "test:backend/tests/integration/api/test_user_email_and_username_updates.py::test_a_user_cannot_change_their_own_email",
+]
 
 [[unit]]
 text = "403 \"To change your own password, use POST /api/v1/users/me/password, which asks for your current password.\" when the request sets the caller's own password."
@@ -866,7 +893,10 @@ by = ["test:backend/tests/integration/api/test_user_email_case_conflict.py::Test
 
 [[unit]]
 text = "Changing only the letter case of the account's own address is accepted, and resending the stored address unchanged is never refused."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_user_email_case_conflict.py::TestUpdate::test_re_casing_the_accounts_own_address_succeeds",
+    "test:backend/tests/integration/api/test_user_email_case_conflict.py::TestUpdate::test_resending_the_stored_address_is_not_refused_when_a_pair_exists",
+]
 count = 2
 
 [[unit]]
@@ -875,7 +905,7 @@ by = ["test:backend/tests/integration/api/test_user_username_conflict.py::TestUp
 
 [[unit]]
 text = "Delete User"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: DELETE /api/v1/users/{user_id}"
@@ -905,7 +935,7 @@ by = ["test:backend/tests/integration/api/test_own_access_put.py::TestDeleteAnsw
 
 [[unit]]
 text = "403 \"Not enough permissions\" when anyone else deletes another account."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_own_access_put.py::TestDeleteAnswersAsDocumented::test_anyone_else_deletes_only_their_own_account"]
 
 [[unit]]
 text = "404 \"User not found\"."
@@ -914,7 +944,7 @@ count = 4
 
 [[unit]]
 text = "Change Your Password"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: POST /api/v1/users/me/password"
@@ -922,7 +952,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Description: Change your own password."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Available when AUTH_PROVIDER is local; otherwise the route answers 404 before the body is validated against the schema."
@@ -950,19 +980,19 @@ by = [
 
 [[unit]]
 text = "A wrong current password is a 403, not a 401: the session is still signed in."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_own_password_change.py::test_wrong_current_password_is_403_not_401"]
 
 [[unit]]
 text = "The runnable example is in Authentication."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Experiment Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "List Experiments"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: GET /api/v1/experiments/"
@@ -970,11 +1000,11 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Description: List experiments with filtering and pagination"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "status_filter: string (optional)"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
 text = "limit: int (default: 100, max: 500)"
@@ -982,7 +1012,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "search: string (optional)"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
 text = "sort_by: string (default: \"created_at\")"
@@ -994,7 +1024,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Get Experiment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: GET /api/v1/experiments/{experiment_id}"
@@ -1002,16 +1032,16 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Description: Get experiment details"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "experiment_id: string (UUID)"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 count = 2
 
 [[unit]]
 text = "Get Experiment Results"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: GET /api/v1/experiments/{experiment_id}/results"
@@ -1019,7 +1049,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Description: Get experiment results and analysis."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The same payload as GET /api/v1/results/{experiment_id} with no options: the experiment's stored correction_method and confidence_level (see How results are judged)."
@@ -1027,7 +1057,7 @@ by = ["test:backend/tests/unit/services/test_results_correction_pins.py::test_th
 
 [[unit]]
 text = "Response: 200 OK."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 count = 2
 
 [[unit]]
@@ -1036,11 +1066,11 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "An excerpt:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "How results are judged"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Each experiment stores a correction_method (none, bonferroni or benjamini_hochberg) and a confidence_level (0.80 to 0.99)."
@@ -1067,7 +1097,7 @@ by = ["test:backend/tests/unit/services/test_results_correction_pins.py::test_th
 
 [[unit]]
 text = "?correction_method=none shows the uncorrected numbers."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_results_stored_settings.py::test_a_request_naming_none_on_a_stored_bh_experiment_is_labelled_none"]
 
 [[unit]]
 text = "With one treatment the correction changes no decision: adjusted_p_value equals p_value, and is_significant, the winner and the summary are the same as with none."
@@ -1083,7 +1113,10 @@ by = ["test:backend/tests/integration/api/test_experiment_correction_settings_ap
 
 [[unit]]
 text = "After that nobody can change them, a superuser included, and re-sending the stored value is refused as well (Cannot update correction_method for experiments in active status)."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_superuser_cannot_change_the_settings_once_out_of_draft",
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_developer_cannot_change_them_on_an_active_experiment_either",
+]
 
 [[unit]]
 text = "An experiment that was already running when these fields were added keeps benjamini_hochberg for good; ?correction_method=none on its results shows the numbers it showed before."
@@ -1110,11 +1143,11 @@ by = [
 
 [[unit]]
 text = "Feature Flag Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "List Feature Flags"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: GET /api/v1/feature-flags/"
@@ -1122,7 +1155,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Description: List feature flags with filtering and pagination."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Every role can list every flag."
@@ -1146,7 +1179,7 @@ by = ["test:backend/tests/integration/api/test_flag_list_search.py::test_search_
 
 [[unit]]
 text = "Get User Feature Flags"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: GET /api/v1/feature-flags/user/{user_id}"
@@ -1154,16 +1187,16 @@ by = ["docex:docs/api/endpoints.md#\"new_dashboard_ui\": true"]
 
 [[unit]]
 text = "Description: Get all feature flags evaluated for a user"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Headers: X-API-Key: {api_key}"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openfeature_routes.py::test_the_valid_key_reaches_a_route_that_is_still_mounted"]
 count = 5
 
 [[unit]]
 text = "user_id: string"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 count = 2
 
 [[unit]]
@@ -1172,15 +1205,18 @@ by = ["test:backend/tests/integration/api/test_targeting_context_limits.py::test
 
 [[unit]]
 text = "Archived Flags"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "An archived flag stays archived until it is unarchived:"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_every_status_verb_from_every_status",
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_bulk_enable_refuses_only_the_archived_flag",
+]
 
 [[unit]]
 text = "Request | On an archived flag"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "PUT /api/v1/feature-flags/{id} with \"is_active\": true | 400, flag unchanged"
@@ -1220,7 +1256,7 @@ by = ["test:backend/tests/integration/api/test_archived_flag_verbs.py::test_ever
 
 [[unit]]
 text = "Unarchive Feature Flag (beta)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: POST /api/v1/feature-flags/{flag_id}/unarchive"
@@ -1236,7 +1272,7 @@ by = ["test:backend/tests/integration/api/test_archived_flag_verbs.py::test_ever
 
 [[unit]]
 text = "A flag that is not archived is returned unchanged."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_archived_flag_verbs.py::test_unarchive_returns_a_flag_that_is_not_archived_unchanged"]
 
 [[unit]]
 text = "Written to the audit log as feature_flag_update (ARCHIVED to INACTIVE)."
@@ -1256,7 +1292,7 @@ by = ["test:backend/tests/integration/api/test_archived_flag_verbs.py::test_unar
 
 [[unit]]
 text = "Tracking Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "All tracking endpoints use API-key authentication (X-API-Key)."
@@ -1278,7 +1314,7 @@ by = [
 
 [[unit]]
 text = "Assign User to Experiment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: POST /api/v1/tracking/assign"
@@ -1302,7 +1338,11 @@ by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligib
 
 [[unit]]
 text = "An ineligible user still gets 200 OK with the control variant, assigned: false and reason set to holdout, mutual_exclusion or targeting; nothing is recorded for them."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_mutual_exclusion_assigns_each_user_to_exactly_one_experiment",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_dashboard_shaped_targeting_rules_gate_new_users",
+]
 
 [[unit]]
 text = "A user who already has an assignment keeps it."
@@ -1328,7 +1368,7 @@ by = [
 
 [[unit]]
 text = "Assign a List of Users to an Experiment (beta)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: POST /api/v1/tracking/assign/batch"
@@ -1356,7 +1396,7 @@ by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestHol
 
 [[unit]]
 text = "See Assign a customer list to an experiment."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Headers: X-API-Key: {api_key}, a key with the sdk:ruleset scope whose owner is an ADMIN, a DEVELOPER or a superuser."
@@ -1368,7 +1408,7 @@ by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py"]
 
 [[unit]]
 text = "Body: {\"experiment_key\": string, \"users\": [{\"user_id\": string, \"context\": object?}]}"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
 text = "users: 1 to 1,000 entries; each user_id 1 to 255 characters and different from every other in the request."
@@ -1388,15 +1428,15 @@ by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestPar
 
 [[unit]]
 text = "assigned: false means the user was not enrolled and nothing was recorded for them; variant_id is then the control, the experience to show them, and reason says why: holdout (the user is in the global holdout), mutual_exclusion (the user is enrolled in, or hashed to, another experiment of the same mutual exclusion group) or targeting (the user's context does not match the experiment's targeting rules)."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestParity::test_each_user_gets_what_a_single_call_gives"]
 
 [[unit]]
 text = "counts always has all four keys."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestParity::test_each_user_gets_what_a_single_call_gives"]
 
 [[unit]]
 text = "Errors: see the table below."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A 409 or a 500 may follow partial assignment: the users before the failure are assigned."
@@ -1404,11 +1444,14 @@ by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestMid
 
 [[unit]]
 text = "Send the same request again; that is safe, because assignments are sticky."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestResend::test_a_resend_returns_the_same_and_adds_no_rows",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestMidBatch::test_experiment_paused_part_way_is_409_and_a_resend_completes",
+]
 
 [[unit]]
 text = "Any other 4xx assigns nobody."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_422_assigns_nobody_and_repeats_no_id"]
 
 [[unit]]
 text = "Rate limit: 60 requests a minute per client address, counted separately from the other tracking routes (60 × 1,000 = 60,000 users a minute)."
@@ -1416,11 +1459,11 @@ by = ["test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_61st_
 
 [[unit]]
 text = "Over it the API answers 429 with Retry-After: 60; wait that long before sending again."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_61st_request_in_a_minute_is_429"]
 
 [[unit]]
 text = "Status | When | detail"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "401 | no key | API key missing"
@@ -1480,7 +1523,7 @@ by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRef
 
 [[unit]]
 text = "Track Event"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: POST /api/v1/tracking/track"
@@ -1488,7 +1531,7 @@ by = ["docex:docs/api/endpoints.md#\"event_name\": \"purchase\""]
 
 [[unit]]
 text = "Description: Record one event."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "experiment_key and feature_flag_key are both optional."
@@ -1496,7 +1539,10 @@ by = ["test:backend/tests/integration/api/test_tracking_untagged_events.py::Test
 
 [[unit]]
 text = "An event with no key is stored as history and counts in no experiment's results; tag outcome events."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::TestUntaggedTrack::test_an_event_with_no_key_is_stored_as_history",
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::test_untagged_events_change_no_results_path",
+]
 
 [[unit]]
 text = "A key that is given but not found answers 404."
@@ -1520,7 +1566,7 @@ by = ["test:backend/tests/integration/api/test_tracking_untagged_events.py::Test
 
 [[unit]]
 text = "Batch Track Events"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: POST /api/v1/tracking/batch"
@@ -1528,7 +1574,10 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Description: Record up to 100 events (same shape as /track) in one request."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestBatch::test_reports_success_and_failure_per_event",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestBatch::test_more_than_100_events_is_422_and_stores_nothing",
+]
 
 [[unit]]
 text = "An entry with no key is stored as history, not refused; an entry whose key is not found is reported in errors."
@@ -1543,7 +1592,7 @@ by = [
 
 [[unit]]
 text = "Track Event by Ids"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: POST /api/v1/tracking/events"
@@ -1551,11 +1600,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Description: Same as /track but keyed by internal ids (experiment_id, variant_id, feature_flag_id); event_name is required."
-by = ["exempt:baseline"]
-
-[[unit]]
-text = "Used by server-side integrations and seeding tools."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
 text = "Response: 200 OK (the stored event); 404 an id names no stored row, and nothing is stored: the detail names each such field, for example No experiment has that experiment_id.; 422 invalid body, or an id that is not a UUID"
@@ -1563,7 +1608,7 @@ by = ["test:backend/tests/integration/api/test_tracking_events_unknown_ids.py"]
 
 [[unit]]
 text = "Get User Assignments"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: GET /api/v1/tracking/assignments/{user_id}"
@@ -1571,7 +1616,7 @@ by = ["test:backend/tests/integration/api/test_tracking_api.py::TestUserAssignme
 
 [[unit]]
 text = "Description: Get user's experiment assignments"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestUserAssignments::test_lists_assignments_for_user"]
 
 [[unit]]
 text = "active_only: boolean (default: true)"
@@ -1579,11 +1624,11 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Admin Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "List Users (Admin)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: GET /api/v1/admin/users"
@@ -1591,7 +1636,10 @@ by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestAdminUser
 
 [[unit]]
 text = "Description: List all users, newest first (superuser only)"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestAdminUserList::test_a_non_superuser_is_refused",
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestAdminUserList::test_newest_first_so_pagination_is_deterministic",
+]
 
 [[unit]]
 text = "search: string (optional, at most 100 characters)."
@@ -1615,7 +1663,7 @@ by = ["test:backend/tests/integration/api/test_admin_user_search.py::test_search
 
 [[unit]]
 text = "A term matching nothing answers 200 with \"items\": [] and \"total\": 0."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_admin_user_search.py::test_a_search_matching_nothing_answers_an_empty_list"]
 
 [[unit]]
 text = "Each column is matched on its own, so Jane Smith does not match a first name Jane and last name Smith; search for either part."
@@ -1627,7 +1675,7 @@ by = ["test:backend/tests/integration/api/test_admin_user_search.py::test_a_sear
 
 [[unit]]
 text = "Update User (Admin)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: PUT /api/v1/admin/users/{user_id}"
@@ -1635,7 +1683,10 @@ by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_super
 
 [[unit]]
 text = "Description: Update any user, including is_superuser (superuser only)"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_admin_user_routes_need_a_superuser.py::test_a_non_superuser_cannot_update_or_delete_through_the_admin_routes",
+    "test:backend/tests/integration/api/test_admin_user_routes_need_a_superuser.py::test_a_superuser_updates_and_deletes_through_the_admin_routes",
+]
 
 [[unit]]
 text = "Request Body: as Update User; password is treated the same way"
@@ -1647,23 +1698,23 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Ask another administrator to do it.\" when the request would turn off your own is_superuser."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_own_access_put.py::TestOwnAccessRefused::test_removing_your_own_access_is_refused_and_nothing_is_written"]
 
 [[unit]]
 text = "400 \"You can't deactivate your own account.\" when it would turn off your own is_active; when both would change, the answer is the first."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_own_access_put.py::TestOwnAccessRefused::test_removing_your_own_access_is_refused_and_nothing_is_written"]
 
 [[unit]]
 text = "409 \"Email already registered\" when the request sets an email address that another account holds in any letter case."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_user_email_case_conflict.py::TestUpdate::test_a_case_variant_of_another_accounts_address_answers_409"]
 
 [[unit]]
 text = "409 \"Username already registered\" when the request sets a username another account has."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_user_username_conflict.py::TestUpdateUsername::test_another_accounts_username_answers_409"]
 
 [[unit]]
 text = "Change a User's Role or Active Status (Admin)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: PATCH /api/v1/admin/users/{user_id}"
@@ -1671,15 +1722,21 @@ by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestPatchCont
 
 [[unit]]
 text = "Stability: beta (x-stability: beta); the shape may still change."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestPatchContract::test_the_operation_is_beta_and_its_body_has_no_null_branch"]
 
 [[unit]]
 text = "Description: Change another account's role, its active status, or both (superuser only)."
-by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestPatchSaves::test_the_edit_user_modal_body_is_saved"]
+by = [
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchRefusals::test_a_non_superuser_is_refused_and_nothing_changes",
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchSaves::test_the_edit_user_modal_body_is_saved",
+]
 
 [[unit]]
 text = "This is what the dashboard's Edit user dialog calls."
-by = ["exempt:baseline"]
+by = [
+    "test:frontend/src/tests/admin/services/admin.test.ts::sends PATCH (upper case) with only the fields given",
+    "test:frontend/src/tests/admin/EditUserModal.test.tsx::changing only the role sends exactly {role}",
+]
 
 [[unit]]
 text = "Request Body: only the keys to change, at least one of them:"
@@ -1699,11 +1756,11 @@ by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestPatchRefu
 
 [[unit]]
 text = "Use PUT above for those."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Response: 200 OK, the user."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestPatchSaves::test_the_edit_user_modal_body_is_saved"]
 
 [[unit]]
 text = "Sending the values the account already has changes nothing and still answers 200."
@@ -1718,7 +1775,7 @@ by = [
 
 [[unit]]
 text = "Check which keys a user created before deactivating them."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "During a concurrent change: deactivating an account that is a superuser first waits for any change in progress to an active superuser's account, then checks that you are still an active superuser."
@@ -1726,7 +1783,7 @@ by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestPatchSupe
 
 [[unit]]
 text = "Errors:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "400 \"You can't change your own role."
@@ -1754,11 +1811,11 @@ by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestPatchUnde
 
 [[unit]]
 text = "Change this user's group in Cognito instead.\" when AUTH_PROVIDER=cognito and SYNC_ROLES_ON_LOGIN is on (the default) and the request changes role."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestPatchUnderCognitoRoleSync::test_a_role_change_is_409"]
 
 [[unit]]
 text = "Changing is_active is still accepted there."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestPatchUnderCognitoRoleSync::test_deactivation_is_saved_under_sync"]
 
 [[unit]]
 text = "422 for a body that is empty, has an unknown key, a null, or a role outside the four above."
@@ -1770,7 +1827,7 @@ by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestPatchAudi
 
 [[unit]]
 text = "Delete User (Admin)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endpoint: DELETE /api/v1/admin/users/{user_id}"
@@ -1778,7 +1835,10 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Description: Delete user (superuser only)"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_admin_user_routes_need_a_superuser.py::test_a_non_superuser_cannot_update_or_delete_through_the_admin_routes",
+    "test:backend/tests/integration/api/test_own_access_put.py::TestDeleteAnswersAsDocumented::test_a_superuser_cannot_delete_their_own_account",
+]
 
 [[unit]]
 text = "Errors: 400 \"Cannot delete your own user account\" when the account is your own."
@@ -1786,11 +1846,11 @@ by = ["test:backend/tests/integration/api/test_own_access_put.py::TestDeleteAnsw
 
 [[unit]]
 text = "Error Responses"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "All endpoints may return the following error responses:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "400 Bad Request"
@@ -1818,7 +1878,7 @@ by = ["test:backend/tests/smoke/test_openfeature_routes.py::test_a_removed_listi
 
 [[unit]]
 text = "500 Internal Server Error"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The SDK routes that store data answer a failure to store it with JSON: a fixed sentence followed by the request ID, never the error itself."
@@ -1826,7 +1886,7 @@ by = ["test:backend/tests/integration/api/test_tracking_failure_messages.py"]
 
 [[unit]]
 text = "Route | detail"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "POST /api/v1/tracking/assign | Could not assign the user to the experiment (request ID: <id>)."
@@ -1858,7 +1918,7 @@ by = ["test:backend/tests/unit/core/test_logger.py"]
 
 [[unit]]
 text = "_ : -, it is left out and the sentence simply ends: Could not store the event."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_tracking_failure_messages.py::test_a_request_id_of_the_wrong_shape_is_left_out_of_the_sentence"]
 
 [[unit]]
 text = "The two batch routes answer 200 and list each item they could not store in errors."
@@ -1870,11 +1930,14 @@ by = ["test:backend/tests/integration/api/test_tracking_failure_messages.py"]
 
 [[unit]]
 text = "(/tracking/batch) or Could not store this error report (request ID: <id>)."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_tracking_failure_messages.py::test_a_batch_item_whose_metadata_the_database_refuses_answers_the_fixed_sentence",
+    "test:backend/tests/integration/api/test_tracking_failure_messages.py::test_a_failed_lookup_in_an_error_report_batch_fails_only_that_item",
+]
 
 [[unit]]
 text = "(/tracking/errors/batch)."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_tracking_failure_messages.py::test_a_failed_lookup_in_an_error_report_batch_fails_only_that_item"]
 
 [[unit]]
 text = "Any other unhandled error answers with a plain-text body, not JSON:"
@@ -1890,15 +1953,15 @@ by = ["test:backend/tests/unit/middleware/test_unhandled_error_cors.py"]
 
 [[unit]]
 text = "Error Handling Examples"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "1. Authentication Errors"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Invalid credentials:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Response (401 Unauthorized):"
@@ -1914,19 +1977,19 @@ by = ["test:backend/tests/integration/api/test_local_auth_path.py"]
 
 [[unit]]
 text = "An expired or invalid token:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "2. Validation Errors"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Invalid experiment creation:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Both fields are invalid on purpose: name is empty and experiment_type is not a type."
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "The request also leaves out variants and metrics, which are required, so the response lists four errors, one per field."
@@ -1938,11 +2001,11 @@ by = ["docex:docs/api/endpoints.md#{\"loc\":[\"body\",\"name\"],\"msg\":\"String
 
 [[unit]]
 text = "3. Rate Limiting"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Too many requests."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "One experiment's URL, /api/v1/experiments/{experiment_id}, allows 300 requests a minute from one address, so the 301st inside a minute is refused."
@@ -1966,11 +2029,11 @@ by = ["docex:docs/api/endpoints.md#429 Too Many Requests"]
 
 [[unit]]
 text = "Targeting Rules and Experiment Types"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Targeting Rules"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "targeting_rules uses the shape the dashboard's rule builder writes: groups of conditions, each condition an attribute, an operator and a value."
@@ -1982,7 +2045,10 @@ by = ["test:backend/tests/unit/core/test_experiment_targeting_validation.py::tes
 
 [[unit]]
 text = "Left out, it is AND."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/core/test_logical_operator_defaults_to_and.py::test_a_group_without_an_operator_needs_every_condition",
+    "test:backend/tests/unit/core/test_logical_operator_defaults_to_and.py::test_groups_without_a_top_level_operator_must_all_match",
+]
 
 [[unit]]
 text = "The operators are equals, not_equals, contains, not_contains, starts_with, ends_with, greater_than, less_than, greater_than_or_equal, less_than_or_equal, in, not_in, regex, is_null, is_not_null, semver_eq, semver_gt, semver_lt, semver_gte, semver_lte, geo_within_radius, time_window, array_contains, array_intersects, in_segment and not_in_segment (below)."
@@ -2022,11 +2088,11 @@ by = ["test:backend/tests/unit/core/test_experiment_targeting_validation.py::tes
 
 [[unit]]
 text = "in_segment, not_in_segment."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "{\"attribute\": \"segment\", \"operator\": \"in_segment\", \"value\": \"<segment id>\"}."
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "One segment per condition; to match any of several, put one condition per segment in an OR group."
@@ -2062,7 +2128,7 @@ by = ["test:backend/tests/unit/services/test_sdk_ruleset.py::test_every_other_op
 
 [[unit]]
 text = "A segment condition requires nothing from the context."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/core/test_segment_condition.py::test_required_attributes_skip_only_segment_conditions"]
 
 [[unit]]
 text = "A user who lacks an attribute is not refused outright: on experiments, as on flags, they fail only the conditions on that attribute (is_null passes), so another OR branch can still enrol them, and they match a NOT group on that attribute (a user with no country matches NOT (country equals US), but not country not_equals US)."
@@ -2074,7 +2140,7 @@ by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligib
 
 [[unit]]
 text = "See Segments."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "POST /api/v1/experiments/ and PUT /api/v1/experiments/{experiment_id} answer 422 for experiment rules that would not be applied as written: a list of rules, a flat object such as {\"country\": [\"US\"]}, an unknown key, groups together with rules, logical_operator without groups, a group with no conditions, an unknown operator or logical operator, a value the operator cannot use, and a list operator with more than 1,000 values."
@@ -2098,7 +2164,7 @@ by = ["test:backend/tests/integration/api/test_flag_targeting_validated.py::test
 
 [[unit]]
 text = "A flag's rules are also refused for a top-level name, and for native rules without rules (a default_rule on its own, which the flag evaluator does not read)."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused"]
 
 [[unit]]
 text = "A problem with the rules as a whole reads targeting rules: <reason>, for example targeting rules: unknown key."
@@ -2114,7 +2180,7 @@ by = ["test:backend/tests/integration/api/test_flag_targeting_validated.py::test
 
 [[unit]]
 text = "See Add targeting rules."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "An experiment's targeting can be changed only while it is draft or paused, whatever the caller's role, superusers included:"
@@ -2134,7 +2200,7 @@ by = ["test:backend/tests/integration/api/test_experiment_targeting_by_state.py:
 
 [[unit]]
 text = "The detail names the state, for example Targeting can be changed only while the experiment is draft or paused; it is active."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_experiment_targeting_by_state.py::test_targeting_change_by_state_and_role"]
 
 [[unit]]
 text = "Pause the experiment, change the targeting, then start it again."
@@ -2150,7 +2216,7 @@ by = ["test:backend/tests/integration/api/test_experiment_targeting_by_state.py:
 
 [[unit]]
 text = "Updating an experiment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Every field of PUT /api/v1/experiments/{experiment_id} is optional: a field left out keeps its value."
@@ -2186,11 +2252,11 @@ by = ["test:backend/tests/integration/api/test_experiment_update_refusals.py::te
 
 [[unit]]
 text = "Schedule an experiment with PUT /api/v1/experiments/{experiment_id}/schedule."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "An experiment's status"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "An experiment's status changes only through its lifecycle endpoints, whatever the caller's role, superusers included:"
@@ -2202,7 +2268,12 @@ by = ["test:backend/tests/integration/api/test_experiments_lifecycle_api.py"]
 
 [[unit]]
 text = "It checks for at least two variants, a control variant and at least one metric, and sets start_date to now when it has none."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/services/test_experiment_lifecycle.py::TestExperimentLifecycleStartValidation::test_start_experiment_without_variants_returns_error",
+    "test:backend/tests/integration/services/test_experiment_lifecycle.py::TestExperimentLifecycleStartValidation::test_start_experiment_without_control_variant_returns_error",
+    "test:backend/tests/integration/services/test_experiment_lifecycle.py::TestExperimentLifecycleStartValidation::test_start_experiment_without_metrics_returns_error",
+    "test:backend/tests/integration/api/test_complete_after_early_start.py::test_a_start_pause_resume_and_complete_with_no_schedule_are_unchanged",
+]
 
 [[unit]]
 text = "A draft started before its scheduled start_date starts now, and its start_date is set to now; a scheduled end_date is kept."
@@ -2222,7 +2293,7 @@ by = ["test:backend/tests/integration/api/test_complete_after_early_start.py::te
 
 [[unit]]
 text = "An experiment that an earlier version started before its scheduled start can still have a start_date after now; complete sets it to one microsecond before the new end_date."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_complete_after_early_start.py::test_a_start_exactly_at_the_completion_time_is_moved_one_microsecond_back"]
 
 [[unit]]
 text = "POST /api/v1/experiments/{experiment_id}/archive: any status but archived to archived."
@@ -2234,11 +2305,14 @@ by = ["test:backend/tests/integration/api/test_experiment_status_lifecycle_only.
 
 [[unit]]
 text = "A status equal to the current one is accepted and changes nothing, so an experiment fetched with GET can be sent back as it is."
-by = ["test:backend/tests/integration/api/test_experiment_status_lifecycle_only.py::test_put_a_different_status_is_refused_for_every_role"]
+by = [
+    "test:backend/tests/integration/api/test_experiment_status_lifecycle_only.py::test_put_the_current_status_is_a_no_op",
+    "test:backend/tests/integration/api/test_experiment_status_lifecycle_only.py::test_get_then_put_round_trip_still_works",
+]
 
 [[unit]]
 text = "Any other value is refused with 422, nothing is changed, and the error is on [\"body\", \"status\"] with the message status changes through POST /api/v1/experiments/{id}/start, /pause, /complete or /archive; it cannot be set by an update."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_experiment_status_lifecycle_only.py::test_put_a_different_status_is_refused_for_every_role"]
 
 [[unit]]
 text = "POST /api/v1/experiments/ always creates a draft."
@@ -2250,7 +2324,7 @@ by = ["test:backend/tests/integration/api/test_experiment_status_lifecycle_only.
 
 [[unit]]
 text = "Experiment Types"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "experiment_type is one of these, in lower case; anything else is a 422:"
@@ -2258,7 +2332,7 @@ by = ["docex:docs/api/endpoints.md#{\"loc\":[\"body\",\"name\"],\"msg\":\"String
 
 [[unit]]
 text = "Value | What it is"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "a_b | An A/B test (the default)"
@@ -2282,7 +2356,10 @@ by = ["test:backend/tests/unit/api/test_request_validation.py"]
 
 [[unit]]
 text = "The allocations must add up to 100, and one variant must be the control (\"is_control\": true):"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_request_validation.py::TestExperimentValidation::test_variant_traffic_allocation_sum",
+    "test:backend/tests/unit/api/test_request_validation.py::TestExperimentValidation::test_control_variant_required",
+]
 
 [[unit]]
 text = "A feature flag is not an experiment type: flags have their own endpoints, under Feature Flag Endpoints."
@@ -2290,7 +2367,7 @@ by = ["docex:docs/api/endpoints.md#{\"loc\":[\"body\",\"name\"],\"msg\":\"String
 
 [[unit]]
 text = "SDK Usage"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The SDKs call the tracking and evaluation endpoints above for you."
@@ -2305,27 +2382,27 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Python SDK"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "JavaScript SDK, and React SDK for its hooks"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Every other SDK is listed in the SDK Integration Guide"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Advanced Analytics Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Sequential Testing"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See Sequential Testing Guide for full documentation."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Returns mSPRT analysis, always-valid confidence intervals, an early stopping recommendation and the advisory at_risk flag."
@@ -2345,27 +2422,23 @@ by = ["test:backend/tests/unit/api/test_sequential_results_api.py::TestSequentia
 
 [[unit]]
 text = "Sample Size"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See Statistical Power Analysis for the method."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Returns the users each variant needs to detect a relative lift of mde over the baseline on the primary metric (a two-sided two-proportion test), the smallest variant's users so far, the power they give at that MDE, and every input used with where it came from."
 by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm"]
 
 [[unit]]
-text = "Nothing is saved."
-by = ["exempt:baseline"]
-
-[[unit]]
 text = "Query params (all optional; send only what you want to change):"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Parameter | Default | Range"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "baseline_conversion_rate | the control variant's observed rate so far | above 0, below 1"
@@ -2405,11 +2478,11 @@ by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_
 
 [[unit]]
 text = "CUPED Variance Reduction"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See CUPED Guide for full documentation."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Returns, for each conversion metric and each treatment, the effect against the control adjusted for each user's own events before assignment, with the variance reduction and the share of users with history."
@@ -2432,11 +2505,11 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Dimensional Analysis / Segment Breakdown"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See Dimensional Analysis Guide for full documentation."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Returns counts per segment of segment_by, variant and metric, with no significance test; an experiment in draft answers 400."
@@ -2455,19 +2528,19 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Multi-Armed Bandit"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See Multi-Armed Bandit Guide for full documentation."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Interaction Detection"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See Interaction Detection Guide for full documentation."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Access: ANALYST, DEVELOPER or ADMIN (VIEWER returns 403)."
@@ -2475,24 +2548,24 @@ by = ["test:backend/tests/unit/api/test_interaction_endpoints.py"]
 
 [[unit]]
 text = "Platform Management Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Mutual Exclusion Groups"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See Mutual Exclusion Groups Guide for full documentation."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 count = 2
 
 [[unit]]
 text = "Global Holdout"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Warehouse analysis (beta)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The full profile serves the warehouse analysis routes under /api/v1/warehouse/analysis; every other path under /api/v1/warehouse answers 404."
@@ -2504,11 +2577,11 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Experiment Wizard"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See Experiment Wizard Guide for full documentation."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "All six wizard operations are deprecated: the dashboard does not use them, and they may be removed in a later release."
@@ -2516,15 +2589,15 @@ by = ["test:backend/tests/unit/api/test_wizard_drafts_per_user.py::test_every_wi
 
 [[unit]]
 text = "Rollout Schedules"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Audit Logs & Bulk Toggle"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See Audit Logging Guide for full documentation."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "ADMIN and ANALYST read every audit entry; DEVELOPER and VIEWER read only their own entries on the list, user, stream and history routes."
@@ -2532,19 +2605,19 @@ by = ["test:backend/tests/integration/api/test_audit_log_reads.py::test_develope
 
 [[unit]]
 text = "See Permissions."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Safety Monitoring"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See Safety Monitoring."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Audience Segments"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "{id} is the segment's UUID; any other text answers 422."
@@ -2556,7 +2629,10 @@ by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_kind
 
 [[unit]]
 text = "It is set on create and never changed."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_kind_cannot_be_changed",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_kind_defaults_to_rules",
+]
 
 [[unit]]
 text = "Segment rules use the targeting rule format that flag and experiment targeting use, and are checked when saved:"
@@ -2572,7 +2648,10 @@ by = ["test:backend/tests/unit/core/test_segment_rule_validation.py::test_cap_bo
 
 [[unit]]
 text = "It holds at most 20 groups, 50 conditions, 10 regex conditions and 1,000 list values in total."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/core/test_segment_rule_validation.py::test_the_caps_are_the_preview_limits",
+    "test:backend/tests/unit/core/test_segment_rule_validation.py::test_cap_boundaries",
+]
 
 [[unit]]
 text = "POST and PUT /api/v1/segments answer 422 for anything else, with loc [\"body\", \"rules\"] and a fixed message naming the place and the reason, for example groups[0].conditions[0].operator: unknown operator or rules: unknown key."
@@ -2580,7 +2659,7 @@ by = ["test:backend/tests/integration/api/test_segment_rules_validated.py::test_
 
 [[unit]]
 text = "The message never repeats the submitted rules."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_segment_rules_validated.py::test_refused_on_create"]
 
 [[unit]]
 text = "Saved rules are returned exactly as sent."
@@ -2619,7 +2698,7 @@ by = ["test:backend/tests/integration/api/test_segment_rules_validated.py::test_
 
 [[unit]]
 text = "Only assignments that carry a context are counted, and sample_size in the answer is how many there were."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_segment_rules_validated.py::test_preview_counts_only_assignments_with_a_context"]
 
 [[unit]]
 text = "Assignment does not store a context today, so the answer is usually {\"estimated_percentage\": 0.0, \"sample_size\": 0, \"matched\": 0}: there was nothing to estimate from, which is not the same as 0%."
@@ -2637,11 +2716,14 @@ by = [
 
 [[unit]]
 text = "A segment in use cannot be archived or made inactive."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_segment_in_use.py::test_a_disabled_flag_and_a_paused_experiment_block",
+    "test:backend/tests/integration/api/test_segment_in_use.py::test_each_live_experiment_status_blocks",
+]
 
 [[unit]]
 text = "Flags and experiments target a segment with in_segment / not_in_segment (Targeting Rules)."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_segment_targeting_api.py::test_rules_naming_an_active_segment_are_accepted"]
 
 [[unit]]
 text = "DELETE /api/v1/segments/{id}, and a PUT that sets status to inactive or archived, answer 409 and change nothing while a flag that is not archived (a disabled one included), or an experiment that is draft, active or paused, has a rule naming the segment:"
@@ -2653,7 +2735,7 @@ by = ["test:backend/tests/integration/api/test_segment_in_use.py::test_unreadabl
 
 [[unit]]
 text = "Upgrading: segment rules"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Releases before this check stored segment rules in a format of their own, {\"operator\": \"and\", \"conditions\": [{\"attribute\", \"operator\": \"eq\", \"value\"}]}, which nothing checked: a condition the engine did not understand was skipped, and a segment left with no condition matched every user."
@@ -2661,7 +2743,7 @@ by = ["test:backend/tests/integration/api/test_segment_rules_validated.py::test_
 
 [[unit]]
 text = "That format is now refused when saved."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_segment_rules_validated.py::test_refused_on_create"]
 
 [[unit]]
 text = "Segments already stored are left as they are."
@@ -2673,7 +2755,7 @@ by = ["test:backend/tests/integration/api/test_segment_rules_validated.py::test_
 
 [[unit]]
 text = "The same holds for a stored segment with no groups, an empty group or an unknown operator."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_segment_rules_validated.py::test_evaluate_answers_409_for_stored_rules_that_are_not_valid"]
 
 [[unit]]
 text = "A PUT that leaves rules out (to rename one, say) still succeeds."
@@ -2689,7 +2771,7 @@ by = ["test:backend/tests/unit/scripts/test_check_targeting_rules.py::test_a_seg
 
 [[unit]]
 text = "Rewrite each listed segment's rules in the format above with PUT /api/v1/segments/{id}."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "A flag or an experiment whose targeting rules name such a segment (with in_segment or not_in_segment) is not evaluated against it: the flag answers enabled: false with reason: \"error\", and a new user is not assigned (reason: \"targeting\")."
@@ -2704,7 +2786,7 @@ by = [
 
 [[unit]]
 text = "Segments made from a list of user IDs (beta)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Create the segment with kind id_list and no rules:"
@@ -2727,11 +2809,11 @@ by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_kind
 
 [[unit]]
 text = "Add and remove IDs with the member routes, which are beta (x-stability: beta):"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
 text = "Limits."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "1 to 10,000 IDs per request, each a string of 1 to 255 characters, matched exactly (not trimmed, not case-folded)."
@@ -2739,11 +2821,11 @@ by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_requ
 
 [[unit]]
 text = "A segment holds at most 1,000,000 IDs."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_the_segment_cap_writes_nothing"]
 
 [[unit]]
 text = "Send a longer list in chunks of 10,000."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Sending the same IDs again is safe."
@@ -2751,15 +2833,15 @@ by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_add_
 
 [[unit]]
 text = "An ID already in the segment is counted in already_members and left alone; removing one that is not there is counted in not_members."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_add_and_remove_are_idempotent"]
 
 [[unit]]
 text = "An ID repeated within one request counts once, so added + already_members (or removed + not_members) is the number of distinct IDs sent."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_add_and_remove_are_idempotent"]
 
 [[unit]]
 text = "Refusals."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "422 with loc [\"body\", \"add\"] (or \"remove\") and a fixed message that never repeats an ID: add: at least 1 ID is required, add: at most 10,000 IDs per request, add[17]: an ID is 1 to 255 characters."
@@ -2767,11 +2849,11 @@ by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_requ
 
 [[unit]]
 text = "Any other field in the body answers 422 ({\"ids\": [...]} is refused, not ignored)."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_unknown_fields_are_refused"]
 
 [[unit]]
 text = "A request that would take the segment past 1,000,000 answers 422 this segment would have 1,000,250 members; a segment holds at most 1,000,000 and adds nothing."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_the_segment_cap_writes_nothing"]
 
 [[unit]]
 text = "A rules segment answers 409 members can be added only to an id_list segment (removed only from on remove), an archived one 409 this segment is archived; its members cannot be changed, an unknown one 404."
@@ -2795,11 +2877,11 @@ by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_eval
 
 [[unit]]
 text = "A context with no user_id, or a user_id that is not a string, is not a member."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_evaluate_an_id_list"]
 
 [[unit]]
 text = "Bulk-evaluate answers the same way."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_evaluate_an_id_list"]
 
 [[unit]]
 text = "Preview takes rules, so it answers 422 for a body with none."
@@ -2807,19 +2889,19 @@ by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_prev
 
 [[unit]]
 text = "Notifications & Alerting"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See Alerting Guide for full documentation."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "AI Endpoints and the MCP Manifest"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See AI Endpoints and the MCP Manifest for full documentation."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "The manifest describes these operations as tools in the vocabulary of the Model Context Protocol, but the platform runs no MCP server: an MCP client cannot connect to it or call a tool through it."
@@ -2827,15 +2909,15 @@ by = ["test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestE
 
 [[unit]]
 text = "Call the endpoints over HTTP."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Scheduler Health"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "ETL / Glue Jobs"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "POST /api/v1/etl/query has been removed and answers 404."
@@ -2851,7 +2933,7 @@ by = ["test:modules/backend/tests/unit/api/test_etl_configured_names.py::test_an
 
 [[unit]]
 text = "Route | Parameter | Accepted value | Otherwise"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "GET .../jobs/{run_id}/status | job_name | GLUE_ETL_JOB_NAME or GLUE_METRICS_JOB_NAME | \"Unknown ETL job\""
@@ -2883,15 +2965,15 @@ by = ["test:modules/backend/tests/unit/services/test_etl_errors_fixed_message.py
 
 [[unit]]
 text = "Re-running a date is safe: hours already registered are accepted."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_etl_errors_fixed_message.py::test_every_partition_already_registered_is_still_201"]
 
 [[unit]]
 text = "Otherwise:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Status | detail | When"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "404 | \"Unknown Glue table\" | database or table is not the configured pair. Glue is not called"
@@ -2923,15 +3005,15 @@ by = ["test:modules/backend/tests/unit/services/test_etl_service_calls.py"]
 
 [[unit]]
 text = "With it unset, the job, crawler and partitions routes answer"
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_etl_service_calls.py::test_with_no_region_the_routes_answer_a_handled_500"]
 
 [[unit]]
 text = "See AWS integration: Glue."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Real-time DynamoDB Counters"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "On the two routes that take {experiment_id}, the path is what is written: the body's experiment_id must equal it, and a request where they disagree is answered 400 rather than written somewhere else (#95)."
@@ -2943,23 +3025,23 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Additional Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The following endpoints extend the core API."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "See the dedicated reference pages linked below for full request/response schemas, authentication requirements, and code examples."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Compliance Audit Logging"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See Compliance API Reference for full documentation."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "ADMIN or ANALYST for the listing and the reports; ADMIN for the export."
@@ -2979,15 +3061,15 @@ by = ["test:modules/backend/tests/unit/api/test_compliance_signing.py"]
 
 [[unit]]
 text = "See Compliance API Reference for what is recorded."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Third-Party Integrations"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See Integrations API Reference for full documentation."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Read (the list and the get) needs the ADMIN or DEVELOPER role; create, update and delete need ADMIN."
@@ -3003,11 +3085,11 @@ by = ["test:modules/backend/tests/integration/api/test_integrations_api.py"]
 
 [[unit]]
 text = "Integration CRUD:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Webhook receivers:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Supported IntegrationType values: jira, salesforce, github (lower case, in the body and in the path)."
@@ -3015,11 +3097,11 @@ by = ["test:modules/backend/tests/integration/api/test_integrations_api.py"]
 
 [[unit]]
 text = "Bayesian Experimentation"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See Bayesian API Reference for full documentation."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Bayesian analysis is enabled per experiment with two fields on the standard experiment create/update request body."
@@ -3027,11 +3109,11 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "The experiment response carries both, plus bayesian_decision:"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
 text = "Field | Type | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "bayesian_enabled | boolean | Computes Bayesian results for this experiment. Turning it on without a config stores the defaults"
@@ -3051,11 +3133,11 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Server-Side Split URL Testing"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See Split URL API Reference for full documentation."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Split URL experiments use experiment_type: split_url and carry a split_url_config in the request body."
@@ -3067,11 +3149,11 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Experiment management uses the existing experiment CRUD endpoints with experiment_type=split_url:"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
 text = "Split URL-specific endpoint:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Query parameters for preview: user_id (required)."
@@ -3083,7 +3165,7 @@ by = ["test:modules/backend/tests/integration/api/test_split_url_api.py"]
 
 [[unit]]
 text = "SplitUrlConfig schema (split_url_config field):"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "At least two URL variants, with traffic_allocation values (0-100) that sum to 100."
@@ -3091,4 +3173,7 @@ by = ["test:backend/tests/unit/schemas/test_split_url_schemas.py"]
 
 [[unit]]
 text = "cookie_name and cookie_ttl_days (default 30) are optional."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigOptionalFields::test_cookie_ttl_days_default_30",
+    "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigOptionalFields::test_cookie_name_defaults_to_none",
+]

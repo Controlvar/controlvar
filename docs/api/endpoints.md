@@ -1020,7 +1020,7 @@ A 422 names positions and fields, never the ids that were sent.
 ### Track Event by Ids
 - **Endpoint**: `POST /api/v1/tracking/events`
 - **Description**: Same as `/track` but keyed by internal ids (`experiment_id`, `variant_id`, `feature_flag_id`);
-  `event_name` is required. Used by server-side integrations and seeding tools.
+  `event_name` is required.
 - **Headers**: X-API-Key: {api_key}
 - **Response**: 200 OK (the stored event); 404 an id names no stored row, and nothing is stored: the detail names
   each such field, for example `No experiment has that experiment_id.`; 422 invalid body, or an id that is not a UUID
@@ -1630,7 +1630,7 @@ GET /api/v1/results/{experiment_id}/sample-size
 ```
 Returns the users each variant needs to detect a relative lift of `mde` over the baseline on the
 primary metric (a two-sided two-proportion test), the smallest variant's users so far, the power
-they give at that MDE, and every input used with where it came from. Nothing is saved.
+they give at that MDE, and every input used with where it came from.
 
 **Query params** (all optional; send only what you want to change):
 

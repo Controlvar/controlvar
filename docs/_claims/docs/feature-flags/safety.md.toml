@@ -53,6 +53,7 @@ by = [
 [[unit]]
 text = "Reads the current value of each configured metric over the last 15 minutes: error metrics come from error_logs (relative to the flag's evaluations in raw_metrics), latency metrics from raw_metrics."
 by = [
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_the_check_reads_the_last_15_minutes_of_errors_and_latency",
     "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetErrorMetrics::test_computes_rate_and_error_type_breakdown",
     "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetLatencyMetrics::test_computes_real_latency_statistics",
 ]
@@ -262,6 +263,7 @@ by = [
 text = "It returns a default built from the global settings, with the nil UUID as id."
 by = [
     "test:backend/tests/integration/services/test_safety_service_coverage.py::TestAsyncFeatureFlagSafetyConfig::test_get_missing_config_returns_defaults_from_settings",
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_a_rollback_gives_a_flag_without_a_configuration_one_with_no_thresholds",
     "docex:docs/feature-flags/safety.md#\"id\": \"00000000-0000-0000-0000-000000000000\"",
     "journey:feature-flag-safety#default-config",
 ]

@@ -881,6 +881,7 @@ class TestAsyncFeatureFlagSafetyConfig:
         response = await service.get_feature_flag_safety_config(flag.id)
 
         assert response.id == DEFAULT_CONFIG_ID
+        assert str(response.id) == "00000000-0000-0000-0000-000000000000"
         assert response.feature_flag_id == flag.id
         assert response.enabled is True
         assert response.rollback_percentage == 0

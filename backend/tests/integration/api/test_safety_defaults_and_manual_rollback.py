@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -41,6 +41,7 @@ from backend.app.services.safety_service import DEFAULT_CONFIG_ID
 pytestmark = [pytest.mark.integration]
 
 PREFIX = "safety-defaults-"
+NIL_UUID = "00000000-0000-0000-0000-000000000000"
 SAFETY = "/api/v1/safety"
 SCHEMA = "test_experimentation"
 
@@ -166,7 +167,7 @@ def test_a_rollback_gives_a_flag_without_a_configuration_one_with_no_thresholds(
 ):
     flag = _flag(db_session, latency_ms=50.0)
     before = admin_client.get(f"{SAFETY}/feature-flags/{flag.id}/config").json()
-    assert before["id"] == str(DEFAULT_CONFIG_ID)
+    assert before["id"] == NIL_UUID == str(DEFAULT_CONFIG_ID)
     assert set(before["metrics"]) == set(DEFAULT_METRICS)
 
     resp = admin_client.post(
@@ -186,15 +187,19 @@ def test_a_rollback_gives_a_flag_without_a_configuration_one_with_no_thresholds(
 def test_a_manual_rollback_sends_no_alert_and_no_webhook_event(
     admin_client, db_session
 ):
+    """Every way out is watched: the rollback notification, the webhook
+    (``_send``, ``send_webhook`` and the HTTP call under them) and Slack's one
+    sender, so a direct call to any of them fails the test."""
     flag = _flag(db_session)
+    service = "backend.app.services.notification_service"
     with (
+        patch(f"{service}.NotificationService.notify_safety_rollback") as notify,
+        patch(f"{service}.NotificationService._send") as send,
+        patch(f"{service}.NotificationService.send_webhook") as webhook,
+        patch(f"{service}.httpx.post") as http_post,
         patch(
-            "backend.app.services.notification_service.NotificationService"
-            ".notify_safety_rollback"
-        ) as notify,
-        patch(
-            "backend.app.services.notification_service.NotificationService.send_webhook"
-        ) as webhook,
+            "backend.app.services.slack_notifier.SlackNotifier._send_message"
+        ) as slack,
     ):
         resp = admin_client.post(
             f"{SAFETY}/feature-flags/{flag.id}/rollback",
@@ -202,8 +207,8 @@ def test_a_manual_rollback_sends_no_alert_and_no_webhook_event(
         )
     assert resp.status_code == 200, resp.text
     assert resp.json()["success"] is True
-    notify.assert_not_called()
-    webhook.assert_not_called()
+    for channel in (notify, send, webhook, http_post, slack):
+        channel.assert_not_called()
 
 
 def test_any_signed_in_user_can_read_the_global_settings_and_only_a_superuser_change_them(
@@ -346,3 +351,58 @@ def test_a_flag_turned_back_on_while_its_threshold_is_still_breached_is_rolled_b
     db_session.expire_all()
     stored = db_session.query(FeatureFlag).filter(FeatureFlag.id == flag.id).one()
     assert stored.status == FeatureFlagStatus.INACTIVE
+
+
+def test_the_check_reads_the_last_15_minutes_of_errors_and_latency(
+    admin_client, db_session
+):
+    """A row 14 minutes old counts and one 16 minutes old does not, for the
+    error metrics and the latency metrics alike."""
+    flag = _flag(db_session)
+    resp = admin_client.post(
+        f"{SAFETY}/feature-flags/{flag.id}/config",
+        json={
+            "metrics": {
+                "error_count": {"critical_threshold": 100},
+                "total_evaluations": {"critical_threshold": 100},
+                "max_latency": {"critical_threshold": 100000},
+            }
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    now = datetime.utcnow()
+    for minutes, latency in ((14, 50.0), (16, 5000.0)):
+        at = now - timedelta(minutes=minutes)
+        db_session.add(
+            ErrorLog(
+                feature_flag_id=flag.id,
+                error_type="crash",
+                message=f"{minutes} minutes ago",
+                timestamp=at,
+            )
+        )
+        db_session.add(
+            RawMetric(
+                feature_flag_id=flag.id,
+                metric_type=MetricType.FLAG_EVALUATION.value,
+                timestamp=at,
+            )
+        )
+        db_session.add(
+            RawMetric(
+                feature_flag_id=flag.id,
+                metric_type=MetricType.LATENCY.value,
+                value=latency,
+                timestamp=at,
+            )
+        )
+    db_session.commit()
+
+    values = {
+        m["name"]: m["current_value"] for m in _check(admin_client, flag)["metrics"]
+    }
+    assert values == {
+        "error_count": 1.0,
+        "total_evaluations": 1.0,
+        "max_latency": 50.0,
+    }
