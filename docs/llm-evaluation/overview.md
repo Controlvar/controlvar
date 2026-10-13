@@ -88,7 +88,7 @@ dashboard has no LLM screen.
 
 Results include:
 - **Mean and 95% confidence interval** for latency, cost, auto-eval score, and business metric
-- **A p-value** (treatment vs control) from Welch's t statistic: a normal approximation at
-  30 or more degrees of freedom, and below 30 one of 0.01, 0.02, 0.05, 0.15 or 0.30
+- **A p-value** (treatment vs control) from Welch's t-test: the exact two-tailed value from
+  the t distribution at the Welch-Satterthwaite degrees of freedom, at every sample size
 - **Cohen's d effect size** for business metric and auto-eval score
 - **Winner determination** based on the highest mean business metric (falls back to auto-eval score)

@@ -16,6 +16,7 @@ import statistics
 from typing import Dict, List, Optional
 from uuid import UUID
 
+from scipy import stats
 from sqlalchemy.orm import Session
 
 from backend.app.core.anthropic_compat import first_text
@@ -99,7 +100,11 @@ def _welch_t_test(a: List[float], b: List[float]) -> Optional[float]:
     """
     Welch's t-test p-value (two-tailed) for two independent samples.
 
-    Returns None if either sample has fewer than 2 observations.
+    The p-value is exact: the two-tailed tail area of Student's t distribution
+    at the Welch-Satterthwaite degrees of freedom, at every sample size (#1192).
+
+    Returns None if either sample has fewer than 2 observations, and 1.0 when
+    both samples have zero variance (the standard error is 0).
     """
     if len(a) < 2 or len(b) < 2:
         return None
@@ -117,47 +122,7 @@ def _welch_t_test(a: List[float], b: List[float]) -> Optional[float]:
     num = (var_a / n_a + var_b / n_b) ** 2
     denom = ((var_a / n_a) ** 2 / (n_a - 1)) + ((var_b / n_b) ** 2 / (n_b - 1))
     df = num / denom if denom > 0 else 1.0
-    # Approximate p-value from t-statistic and df using incomplete beta
-    return _approx_p_value(t_stat, df)
-
-
-def _approx_p_value(t: float, df: float) -> float:
-    """
-    Approximate two-tailed p-value from t-statistic.
-
-    Uses a simple normal approximation for large df, and a conservative
-    look-up table for small df.  Good enough for experiment dashboard display.
-    """
-    # For large df use normal approximation
-    if df >= 30:
-        try:
-            from statistics import NormalDist  # Python 3.8+
-
-            p_one_tail = 1 - NormalDist().cdf(t)
-            return min(2 * p_one_tail, 1.0)
-        except Exception:
-            pass
-        # Fallback: rough table
-        if t >= 3.29:
-            return 0.001
-        if t >= 2.576:
-            return 0.01
-        if t >= 1.96:
-            return 0.05
-        if t >= 1.645:
-            return 0.10
-        return 0.20
-
-    # For small df use conservative table
-    if t >= 4.0:
-        return 0.01
-    if t >= 3.0:
-        return 0.02
-    if t >= 2.0:
-        return 0.05
-    if t >= 1.5:
-        return 0.15
-    return 0.30
+    return min(float(2.0 * stats.t.sf(t_stat, df)), 1.0)
 
 
 def _cohens_d(a: List[float], b: List[float]) -> Optional[float]:

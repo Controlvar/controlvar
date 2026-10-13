@@ -161,8 +161,8 @@ by = [
 ]
 
 [[unit]]
-text = "A p-value (treatment vs control) from Welch's t statistic: a normal approximation at 30 or more degrees of freedom, and below 30 one of 0.01, 0.02, 0.05, 0.15 or 0.30"
-by = ["untested:T"]
+text = "A p-value (treatment vs control) from Welch's t-test: the exact two-tailed value from the t distribution at the Welch-Satterthwaite degrees of freedom, at every sample size"
+by = ["test:backend/tests/unit/services/test_llm_analytics.py::TestWelchPValueIsExact::test_p_value_matches_scipy_welch"]
 
 [[unit]]
 text = "Cohen's d effect size for business metric and auto-eval score"
