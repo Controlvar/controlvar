@@ -123,14 +123,14 @@ by = ["untested:T"]
 
 [[unit]]
 text = "The bootstrap is also what the API container runs on start-up when RUN_MIGRATIONS=true, the image's default, and it is what makes a profile switch work; see \"Switching profile\" below."
+by = ["untested:T"]
+
+[[unit]]
+text = "The AWS (CDK) deployment sets RUN_MIGRATIONS=false on its API tasks: there, the Deploy workflow's migration task is the only thing that runs the bootstrap (see On AWS, the API does not migrate)."
 by = [
     "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations",
     "test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_the_deploy_bootstraps_too",
 ]
-
-[[unit]]
-text = "The AWS (CDK) deployment sets RUN_MIGRATIONS=false on its API tasks: there, the Deploy workflow's migration task is the only thing that runs the bootstrap (see On AWS, the API does not migrate)."
-by = ["exempt:baseline"]
 
 [[unit]]
 text = "Viewing Migration History"
@@ -433,7 +433,7 @@ count = 2
 
 [[unit]]
 text = "The Deploy workflow's migration task runs it before traffic shifts, and the previous release keeps serving meanwhile."
-by = ["test:backend/tests/unit/infrastructure/test_task_definition_scripts.py::test_a_migration_still_running_at_the_deadline_is_not_rerun"]
+by = ["untested:T"]
 
 [[unit]]
 text = "The AWS deployment gives you no psql, so use the migration's log line instead of the queries above, and read the staging deploy's line (rewritten, unreadable, seconds) before you deploy production."
@@ -782,10 +782,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "In production (ECS Fargate), migrations run as a one-off ECS task of the family experimentation-migrate-<env>, before the new application version takes any traffic."
-by = [
-    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_snapshot_is_taken_before_the_migration_from_the_stack_output",
-    "test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_the_deploy_bootstraps_too",
-]
+by = ["untested:T"]
 
 [[unit]]
 text = "You do not normally run it yourself: the Deploy workflow runs it, and the Database Migration workflow (.github/workflows/db-migrate.yml, Actions › Database Migration) runs an upgrade or a downgrade to a target you name, after taking a snapshot."

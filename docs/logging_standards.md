@@ -77,12 +77,16 @@ reporting an error can quote it.
 
 No credentials, API keys, tokens, password hashes, or PHI.
 
-**Nothing masks a log line.** `backend/app/utils/masking.py` blanks
+**No request or response body is masked.** `backend/app/utils/masking.py` blanks
 `password`, `token`, `api_key`, `secret`, `credential`, `authorization`,
 `access_token`, `refresh_token`, `private_key` and friends, and partially
 masks emails, phone numbers, credit card numbers and IP addresses. Only
 `LoggingMiddleware` (`backend/app/middleware/logging_middleware.py`) calls it,
 and the application does not mount that middleware.
+
+Query values are redacted in uvicorn's access and error logs: a filter on the
+`uvicorn.access` and `uvicorn.error` loggers blanks the values
+`backend/app/core/query_redaction.py` recognises, and keeps the parameter names.
 
 A keyword you pass to `logger.info(...)` lands in CloudWatch verbatim. So log
 the identifier, not the object. A `User` or a tracking payload carries an email

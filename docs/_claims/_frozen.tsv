@@ -137,7 +137,6 @@ exempt:baseline	docs/self-hosting/migrations.md	1a8ef47a4773
 exempt:baseline	docs/self-hosting/migrations.md	1b92da167437
 exempt:baseline	docs/self-hosting/migrations.md	2093c9849a1d
 exempt:baseline	docs/self-hosting/migrations.md	209a4d5c04bf
-exempt:baseline	docs/self-hosting/migrations.md	215265161c1a
 exempt:baseline	docs/self-hosting/migrations.md	218513c23b88
 exempt:baseline	docs/self-hosting/migrations.md	22211289ac73
 exempt:baseline	docs/self-hosting/migrations.md	22d467666346
@@ -345,12 +344,13 @@ untested:T	docs/architecture/models.md	5aded6eb8e52
 untested:T	docs/architecture/models.md	61b4fbb47947
 untested:T	docs/architecture/models.md	a358b773340b
 untested:T	docs/architecture/overview.md	7830fa53799f
+untested:T	docs/architecture/overview.md	af4cc059896d
 untested:T	docs/logging_standards.md	084a04b30ca7
 untested:T	docs/logging_standards.md	09e99902dbc4
 untested:T	docs/logging_standards.md	142ac8f267ba
+untested:T	docs/logging_standards.md	1c59cc69efff
 untested:T	docs/logging_standards.md	25fcc4a178a0
 untested:T	docs/logging_standards.md	2b60820a94c4
-untested:T	docs/logging_standards.md	48ed02f13e27
 untested:T	docs/logging_standards.md	502c28c922ee
 untested:T	docs/logging_standards.md	54872398e9fc
 untested:T	docs/logging_standards.md	561a097a4b6f
@@ -391,6 +391,7 @@ untested:T	docs/self-hosting/migrations.md	09a63de1cf26
 untested:T	docs/self-hosting/migrations.md	0ad4ca5f6e4e
 untested:T	docs/self-hosting/migrations.md	14d981f3554b
 untested:T	docs/self-hosting/migrations.md	15489e4b03f8
+untested:T	docs/self-hosting/migrations.md	15ad4bb05092
 untested:T	docs/self-hosting/migrations.md	2badcc09ffcc
 untested:T	docs/self-hosting/migrations.md	2c9f618c6583
 untested:T	docs/self-hosting/migrations.md	2e1be5279dd1
@@ -414,6 +415,7 @@ untested:T	docs/self-hosting/migrations.md	7464f15b6a01
 untested:T	docs/self-hosting/migrations.md	806784b4f0dc
 untested:T	docs/self-hosting/migrations.md	874ae629aaec
 untested:T	docs/self-hosting/migrations.md	8d285fc309cd
+untested:T	docs/self-hosting/migrations.md	93789552c23b
 untested:T	docs/self-hosting/migrations.md	968db8c95343
 untested:T	docs/self-hosting/migrations.md	997b6a3e3922
 untested:T	docs/self-hosting/migrations.md	9ab69ccb9e13
@@ -436,6 +438,7 @@ untested:T	docs/self-hosting/migrations.md	c7b873deb175
 untested:T	docs/self-hosting/migrations.md	d1b8016cacc8
 untested:T	docs/self-hosting/migrations.md	d4f9dc99c2e9
 untested:T	docs/self-hosting/migrations.md	dab7e999c476
+untested:T	docs/self-hosting/migrations.md	dc37b40cefb8
 untested:T	docs/self-hosting/migrations.md	dd07e5585872
 untested:T	docs/self-hosting/migrations.md	e2dd9304bf2e
 untested:T	docs/self-hosting/migrations.md	e8f8118b00d4

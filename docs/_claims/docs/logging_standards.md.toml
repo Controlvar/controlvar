@@ -204,7 +204,7 @@ text = "A reassignment, which an operator requests, logs one INFO line naming th
 by = ["test:backend/tests/unit/services/test_assignment_evaluation_logs_no_user_id.py::test_reassignment"]
 
 [[unit]]
-text = "Nothing masks a log line."
+text = "No request or response body is masked."
 by = ["untested:T"]
 
 [[unit]]
@@ -246,3 +246,12 @@ by = ["untested:T"]
 [[unit]]
 text = "No middleware binds the dashboard user's id to a log line; the audit log records who changed what."
 by = ["untested:T"]
+
+[[unit]]
+text = "Query values are redacted in uvicorn's access and error logs: a filter on the uvicorn.access and uvicorn.error loggers blanks the values backend/app/core/query_redaction.py recognises, and keeps the parameter names."
+by = [
+    "test:backend/tests/unit/core/test_query_redaction.py::test_configure_logging_installs_one_filter_however_often_it_runs",
+    "test:backend/tests/unit/core/test_query_redaction.py::test_the_filter_rewrites_uvicorns_access_line",
+    "test:backend/tests/unit/core/test_query_redaction.py::test_a_listed_name_has_its_value_replaced_on_any_route",
+    "test:backend/tests/unit/core/test_query_redaction.py::test_every_value_on_the_oidc_callback_is_replaced_and_every_name_kept",
+]

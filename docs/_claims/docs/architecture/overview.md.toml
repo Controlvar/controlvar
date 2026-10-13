@@ -9,7 +9,7 @@ by = ["test:infrastructure/tests/test_no_world_open_ingress.py::test_nothing_els
 
 [[unit]]
 text = "This is the only entry point the CDK creates: HTTPS, with HTTP redirected to HTTPS, in front of the API."
-by = ["test:infrastructure/tests/test_no_world_open_ingress.py::test_nothing_else_is_open_to_the_internet"]
+by = ["untested:T"]
 
 [[unit]]
 text = "The dashboard is its own ECS service behind the same load balancer: the HTTPS listener sends /api/, /health, /health/ and /metrics to the API and everything else to the dashboard."
