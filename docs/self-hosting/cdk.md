@@ -538,7 +538,7 @@ cdk destroy experimentation-vpc-<env>
 ```
 
 The glue, analytics and counters stacks exist only in a full checkout; skip
-their lines in a core one. `infrastructure/tests/test_environments_do_not_collide.py`
+their lines in a core one. `infrastructure/tests/test_teardown_instructions.py`
 checks this order against the synthesised imports and stack dependencies.
 
 The buckets outside `prod` are emptied before they are deleted:
@@ -616,7 +616,7 @@ cdk deploy --all
   the names. Skip the dashboard line if that log group does not exist.
 - Destroying fargate stops the API and the dashboard until the last step
   finishes; the database, Redis and the data stores are not touched.
-- `infrastructure/tests/test_environments_do_not_collide.py` derives the list
+- `infrastructure/tests/test_teardown_instructions.py` derives the list
   of stacks to destroy from the synthesised import graph and checks it against
   the commands above.
 

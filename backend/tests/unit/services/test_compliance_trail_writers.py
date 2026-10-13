@@ -1,11 +1,12 @@
-"""What writes the compliance audit trail, and what each event holds (#1142).
+"""What writes the compliance audit trail in core, and what each event holds (#1142).
 
 The trail (``ComplianceAuditEvent``, table ``audit_events_v2``) is written
 through ``AuditLogService.log``, and every write names its ``AuditAction``
-member in the source. The source checks below read every call that names one,
-in ``backend/app`` and (when present) ``modules/backend/app``, so a new writer,
-a new action, a new outcome or a changed snapshot fails here until this file
-says so.
+member in the source. The source checks below read every call that names one
+in ``backend/app``, so a new writer, a new action, a new outcome or a changed
+snapshot fails here until this file says so. The warehouse module's writers,
+the only other ones, are held by the modules' own test of them
+(``test_warehouse_compliance_writers.py``).
 """
 
 from __future__ import annotations
@@ -27,90 +28,33 @@ from backend.app.main import app
 from backend.app.models.compliance_audit_event import AuditAction, AuditOutcome
 from backend.app.models.user import UserRole
 from backend.app.services.audit_log_service import AuditLogService
+from backend.tests.source_scan import compliance_writes, member, row_changes
 
 REPO = pathlib.Path(__file__).resolve().parents[4]
-TREES = [REPO / "backend" / "app", REPO / "modules" / "backend" / "app"]
+CORE = REPO / "backend" / "app"
 MODEL = "backend/app/models/compliance_audit_event.py"
 FLAGS = "backend/app/api/v1/endpoints/feature_flags.py"
 EXPERIMENTS = "backend/app/api/v1/endpoints/experiments.py"
-WAREHOUSE = "modules/backend/app/api/v1/endpoints/warehouse_analysis.py"
-MODULES_PRESENT = (REPO / "modules" / "backend" / "app").is_dir()
 
 
 def _files():
-    for tree in TREES:
-        if tree.is_dir():
-            for path in sorted(tree.rglob("*.py")):
-                yield path.relative_to(REPO).as_posix(), ast.parse(path.read_text())
-
-
-def _member(node, enum_name):
-    if (
-        isinstance(node, ast.Attribute)
-        and isinstance(node.value, ast.Name)
-        and node.value.id == enum_name
-    ):
-        return node.attr
-    return None
-
-
-def _functions(tree):
-    """Each node mapped to the name of the function that holds it."""
-    owner = {}
-    for fn in ast.walk(tree):
-        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for node in ast.walk(fn):
-                owner.setdefault(node, fn.name)
-    return owner
+    for path in sorted(CORE.rglob("*.py")):
+        yield path.relative_to(REPO).as_posix(), ast.parse(path.read_text())
 
 
 def _writes():
     """(file, function, action, resource_type, outcome, call, function node)."""
-    found = []
-    for path, tree in _files():
-        if path == MODEL:
-            continue
-        owner = _functions(tree)
-        fns = {
-            n.name: n
-            for n in ast.walk(tree)
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-        }
-        for call in ast.walk(tree):
-            if not isinstance(call, ast.Call):
-                continue
-            values = list(call.args) + [k.value for k in call.keywords]
-            actions = [_member(v, "AuditAction") for v in values]
-            actions = [a for a in actions if a]
-            if not actions:
-                continue
-            (action,) = actions
-            keywords = {k.arg: k.value for k in call.keywords}
-            resource = keywords.get("resource_type")
-            if resource is None:
-                position = [
-                    i for i, a in enumerate(call.args) if _member(a, "AuditAction")
-                ][0]
-                resource = call.args[position + 1]
-            outcome = _member(keywords.get("outcome"), "AuditOutcome")
-            name = owner.get(call)
-            found.append(
-                (
-                    path,
-                    name,
-                    action,
-                    resource.value if isinstance(resource, ast.Constant) else None,
-                    outcome,
-                    call,
-                    fns.get(name),
-                )
-            )
-    return found
+    return [
+        (path, *write)
+        for path, tree in _files()
+        if path != MODEL
+        for write in compliance_writes(tree)
+    ]
 
 
 def test_only_these_actions_write_an_event():
     written = {(path, action, resource) for path, _, action, resource, *_ in _writes()}
-    expected = {
+    assert written == {
         (FLAGS, "CREATE", "feature_flag"),
         (FLAGS, "UPDATE", "feature_flag"),
         (FLAGS, "DELETE", "feature_flag"),
@@ -118,22 +62,11 @@ def test_only_these_actions_write_an_event():
         (EXPERIMENTS, "UPDATE", "experiment"),
         (EXPERIMENTS, "DELETE", "experiment"),
     }
-    if MODULES_PRESENT:
-        expected |= {
-            (WAREHOUSE, "CREATE", "warehouse_connection"),
-            (WAREHOUSE, "UPDATE", "warehouse_connection"),
-            (WAREHOUSE, "DELETE", "warehouse_connection"),
-            (WAREHOUSE, "KEY_CREATE", "warehouse_connection"),
-            (WAREHOUSE, "CREATE", "warehouse_source"),
-            (WAREHOUSE, "UPDATE", "warehouse_source"),
-            (WAREHOUSE, "DELETE", "warehouse_source"),
-            (WAREHOUSE, "CREATE", "warehouse_analysis_run"),
-        }
-    assert written == expected
 
-    # So nothing writes READ, LOGIN, LOGOUT, LOGIN_FAILED, ROLE_GRANT,
-    # ROLE_REVOKE, KEY_REVOKE, EXPORT or REPORT_GENERATED, which still exist
-    # to filter on.
+    # Core writes nothing else: not READ, LOGIN, LOGOUT, LOGIN_FAILED,
+    # ROLE_GRANT, ROLE_REVOKE, KEY_REVOKE, EXPORT or REPORT_GENERATED, which
+    # still exist to filter on, and not KEY_CREATE, which only the warehouse
+    # module writes.
     never = set(AuditAction.__members__) - {a for _, a, _ in written}
     assert never == {
         "READ",
@@ -143,6 +76,7 @@ def test_only_these_actions_write_an_event():
         "ROLE_GRANT",
         "ROLE_REVOKE",
         "KEY_REVOKE",
+        "KEY_CREATE",
         "EXPORT",
         "REPORT_GENERATED",
     }
@@ -151,18 +85,16 @@ def test_only_these_actions_write_an_event():
 def test_every_event_is_written_with_outcome_success():
     assert {o.value for o in AuditOutcome} == {"SUCCESS", "FAILURE", "DENIED"}
     for path, function, action, _, outcome, call, _ in _writes():
-        if path == WAREHOUSE:
-            continue  # through _audit, checked below
         assert outcome == "SUCCESS", f"{path}:{call.lineno} {function} {action}"
     named = set()
     for path, tree in _files():
         if path == MODEL:
             continue
         for node in ast.walk(tree):
-            member = _member(node, "AuditOutcome")
-            if member:
-                named.add(member)
-    # FAILURE and DENIED are never written; the warehouse helper passes SUCCESS.
+            found = member(node, "AuditOutcome")
+            if found:
+                named.add(found)
+    # FAILURE and DENIED are never written.
     assert named == {"SUCCESS"}
 
 
@@ -179,38 +111,7 @@ def test_flag_status_changes_and_experiment_lifecycle_write_no_event():
         "delete_experiment",
     }
     # Sign-ins, role and API key changes write none either: no other file.
-    assert {path for path, _ in by_function} <= {FLAGS, EXPERIMENTS, WAREHOUSE}
-
-
-@pytest.mark.modules
-def test_which_warehouse_routes_write_and_when_a_key_is_created():
-    by_action = {}
-    for path, function, action, resource, *_ in _writes():
-        if path == WAREHOUSE:
-            by_action.setdefault((resource, action), set()).add(function)
-    assert by_action == {
-        ("warehouse_connection", "CREATE"): {"create_connection"},
-        ("warehouse_connection", "UPDATE"): {"update_connection"},
-        ("warehouse_connection", "DELETE"): {"delete_connection"},
-        # /regenerate-key, and a pending key promoted by a passing test.
-        ("warehouse_connection", "KEY_CREATE"): {
-            "regenerate_key",
-            "_promote_pending_key",
-        },
-        ("warehouse_source", "CREATE"): {"create_source"},
-        ("warehouse_source", "UPDATE"): {"update_source", "validate_source"},
-        ("warehouse_source", "DELETE"): {"delete_source"},
-        ("warehouse_analysis_run", "CREATE"): {"start_run"},
-    }
-    tree = ast.parse((REPO / WAREHOUSE).read_text())
-    promoters = {
-        fn.name
-        for fn in ast.walk(tree)
-        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
-        for node in ast.walk(fn)
-        if isinstance(node, ast.Name) and node.id == "_promote_pending_key"
-    }
-    assert promoters == {"test_connection"}
+    assert {path for path, _ in by_function} == {FLAGS, EXPERIMENTS}
 
 
 def _keys(value, function):
@@ -229,9 +130,7 @@ def _keys(value, function):
 
 def test_each_event_carries_a_snapshot_of_a_few_fields():
     snapshots = {}
-    for path, _, action, resource, _, call, function in _writes():
-        if path == WAREHOUSE:
-            continue
+    for _, _, action, resource, _, call, function in _writes():
         keywords = {k.arg: k.value for k in call.keywords}
         snapshots[(resource, action)] = {
             side: _keys(keywords[side], function)
@@ -256,21 +155,64 @@ def test_each_event_carries_a_snapshot_of_a_few_fields():
 
 
 def test_nothing_changes_or_deletes_an_event_once_written():
-    for path, tree in _files():
-        source = (REPO / path).read_text()
-        if "ComplianceAuditEvent" not in source and "audit_events_v2" not in source:
-            continue
-        if "/migrations/" in path:
-            continue
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                assert node.func.attr not in {"delete", "update", "merge"}, (
-                    f"{path}:{node.lineno} changes stored events"
-                )
-            if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store):
-                assert node.attr not in {"archived_at", "old_value", "new_value"}, (
-                    f"{path}:{node.lineno} rewrites a stored event"
-                )
+    changes = [
+        (path, line, what)
+        for path, tree in _files()
+        if "/migrations/" not in path
+        for line, what in row_changes(
+            tree, {"ComplianceAuditEvent"}, {"audit_events_v2"}, rewrites=True
+        )
+    ]
+    assert changes == []
+
+
+@pytest.mark.parametrize(
+    "source, found",
+    [
+        ("def f(db):\n    db.execute(delete(ComplianceAuditEvent))\n", True),
+        (
+            "def f(db):\n    db.execute(update(ComplianceAuditEvent).values(outcome='X'))\n",
+            True,
+        ),
+        (
+            "def f(db, i):\n"
+            "    event = db.query(ComplianceAuditEvent).get(i)\n"
+            "    db.delete(event)\n",
+            True,
+        ),
+        (
+            "def f(db, i):\n"
+            "    event = db.get(ComplianceAuditEvent, i)\n"
+            "    event.old_value = {}\n",
+            True,
+        ),
+        (
+            "def f(db):\n    db.execute(text('UPDATE audit_events_v2 SET outcome = 1'))\n",
+            True,
+        ),
+        # Not a change: signing a new event before it is stored.
+        (
+            "def f(db):\n"
+            "    event = ComplianceAuditEvent(action='CREATE')\n"
+            "    event.hmac_signature = 'x'\n"
+            "    db.add(event)\n",
+            False,
+        ),
+    ],
+    ids=[
+        "delete-statement",
+        "update-statement",
+        "session-delete",
+        "rewrite",
+        "sql",
+        "new-event",
+    ],
+)
+def test_the_scan_sees_each_way_to_change_a_stored_event(source, found):
+    changes = row_changes(
+        ast.parse(source), {"ComplianceAuditEvent"}, {"audit_events_v2"}, rewrites=True
+    )
+    assert bool(changes) is found
 
 
 # ---------------------------------------------------------------------------

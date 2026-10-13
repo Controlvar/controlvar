@@ -119,5 +119,11 @@ def test_ready_needs_an_active_baa_a_key_and_an_allowed_region(
     with patch("modules.backend.app.services.hipaa_service.settings", configured):
         status = HIPAAService().get_hipaa_status(db)
     assert status["overall_hipaa_ready"] is ready
-    # Configuration only: the one table it reads is the BAAs'.
+    # Configuration only: the one table it reads is the BAAs', and only the
+    # active ones count.
     assert [c.args for c in db.query.call_args_list] == [(BAAConfig,)]
+    (condition,) = db.query.return_value.filter.call_args.args
+    assert str(condition) == str(BAAConfig.is_active.is_(True))
+    assert str(condition.compile(compile_kwargs={"literal_binds": True})).endswith(
+        "is_active IS true"
+    )

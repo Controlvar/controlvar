@@ -27,6 +27,7 @@ from backend.app.models.experiment import ExperimentStatus
 from backend.app.models.feature_flag import FeatureFlagStatus
 from backend.app.models.user import UserRole
 from backend.app.services.audit_service import AuditService
+from backend.tests.source_scan import row_changes
 
 REPO = pathlib.Path(__file__).resolve().parents[4]
 TREES = [REPO / "backend" / "app", REPO / "modules" / "backend" / "app"]
@@ -233,22 +234,16 @@ def test_a_failed_write_logs_one_error_line_and_counts_it(caplog):
 
 
 def test_nothing_deletes_an_audit_entry():
-    for path, tree in _sources():
-        if "/migrations/" in path:
-            continue
-        mentions_audit_log = "AuditLog" in ast.unparse(tree)
-        for node in ast.walk(tree):
-            if not (
-                isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-            ):
-                continue
-            if node.func.attr == "delete":
-                target = ast.unparse(node.func.value)
-                assert "AuditLog" not in target, f"{path}:{node.lineno}"
-                if mentions_audit_log and node.args:
-                    assert "audit" not in ast.unparse(node.args[0]).lower(), (
-                        f"{path}:{node.lineno}"
-                    )
+    deletes = [
+        (path, line, what)
+        for path, tree in _sources()
+        if "/migrations/" not in path
+        for line, what in row_changes(tree, {"AuditLog"}, {"audit_logs"})
+    ]
+    assert deletes == []
+    # Deleting a user empties user_id on their entries; it removes none.
+    (foreign_key,) = AuditLog.__table__.c.user_id.foreign_keys
+    assert foreign_key.ondelete == "SET NULL"
     routes = {
         (method, ctx.path)
         for route in app.routes
@@ -256,3 +251,51 @@ def test_nothing_deletes_an_audit_entry():
         for method in (getattr(ctx, "methods", None) or ())
     }
     assert not [r for r in routes if r[0] == "DELETE" and "/audit-logs" in r[1]]
+
+
+@pytest.mark.parametrize(
+    "source, found",
+    [
+        ("def f(db):\n    db.execute(delete(AuditLog))\n", True),
+        (
+            "def f(db):\n    db.query(AuditLog).filter(AuditLog.id == 1).delete()\n",
+            True,
+        ),
+        (
+            "def f(db, i):\n"
+            "    entry = db.query(AuditLog).filter(AuditLog.id == i).first()\n"
+            "    db.delete(entry)\n",
+            True,
+        ),
+        (
+            "def f(db):\n"
+            "    for entry in db.query(AuditLog).all():\n"
+            "        db.delete(entry)\n",
+            True,
+        ),
+        ("def f(db):\n    db.execute(text('DELETE FROM audit_logs'))\n", True),
+        # Not a removal: a new entry, and deleting another model's row.
+        (
+            "def f(db):\n    entry = AuditLog(user_email='a')\n    db.add(entry)\n",
+            False,
+        ),
+        (
+            "def f(db, i):\n"
+            "    flag = db.query(FeatureFlag).get(i)\n"
+            "    db.query(AuditLog).count()\n"
+            "    db.delete(flag)\n",
+            False,
+        ),
+    ],
+    ids=[
+        "delete-statement",
+        "query-delete",
+        "session-delete",
+        "loop-delete",
+        "sql",
+        "new-entry",
+        "other-row",
+    ],
+)
+def test_the_scan_sees_each_way_to_remove_an_entry(source, found):
+    assert bool(row_changes(ast.parse(source), {"AuditLog"}, {"audit_logs"})) is found

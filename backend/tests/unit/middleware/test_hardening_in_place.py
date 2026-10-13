@@ -122,14 +122,29 @@ def test_cors_sends_no_cookies_cross_origin_and_limits_are_per_ip_and_path():
     )
 
 
-def test_a_short_or_placeholder_secret_key_stops_production(monkeypatch):
+def test_a_short_or_placeholder_secret_key_stops_staging_and_production(monkeypatch):
     import pytest
     from pydantic import ValidationError
 
-    # The test runner's own TESTING flag is refused in production first.
+    strong = "k" * 64
+    weak_keys = ("a" * 31, "secret", "changeme", "default-secret-key-for-testing")
     monkeypatch.delenv("TESTING", raising=False)
     monkeypatch.delenv("APP_ENV", raising=False)
-    for weak in ("a" * 31, "secret", "changeme", "default-secret-key-for-testing"):
+    for environment in ("staging", "production", "prod"):
+        for weak in weak_keys:
+            with pytest.raises(ValidationError) as refused:
+                Settings(_env_file=None, ENVIRONMENT=environment, SECRET_KEY=weak)
+            assert "SECRET_KEY" in str(refused.value), (environment, weak)
+
+    # TESTING relaxes nothing: with it set, staging and production refuse to
+    # start at all, whatever the key.
+    monkeypatch.setenv("TESTING", "true")
+    for environment in ("staging", "production"):
         with pytest.raises(ValidationError) as refused:
-            Settings(_env_file=None, ENVIRONMENT="production", SECRET_KEY=weak)
-        assert "SECRET_KEY" in str(refused.value), weak
+            Settings(_env_file=None, ENVIRONMENT=environment, SECRET_KEY=strong)
+        assert "TESTING" in str(refused.value), environment
+
+    # Development and test take any key.
+    monkeypatch.delenv("TESTING", raising=False)
+    for environment in ("development", "test"):
+        assert Settings(_env_file=None, ENVIRONMENT=environment, SECRET_KEY="secret")

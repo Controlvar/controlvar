@@ -64,7 +64,10 @@ by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_each_alarm_is_e
 
 [[unit]]
 text = "To deploy a new version, run Actions → Deploy with a release tag (deployment guide, section 3)."
-by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_preflight_holds_no_secret_and_checks_the_release"]
+by = [
+    "test:backend/tests/unit/core/test_aws_settings_and_clients.py::test_a_version_is_deployed_by_the_deploy_workflow_with_a_release_tag",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_preflight_holds_no_secret_and_checks_the_release",
+]
 
 [[unit]]
 text = "The API's revision moves through CodeDeploy, not through cdk deploy: the service has a CODE_DEPLOY deployment controller, and ECS refuses a task-definition change through UpdateService on such a service."
@@ -170,7 +173,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The counters module (full profile) keeps real-time assignment, event and conversion counters in Amazon DynamoDB, and increments them with atomic ADD update expressions so that concurrent writers never contend on a row."
-by = ["test:modules/backend/tests/unit/services/test_dynamodb_counter_service.py::TestIncrementCounter::test_increment_uses_add_expression_atomically"]
+by = ["test:modules/backend/tests/unit/services/test_counters_and_glue_settings.py::test_a_counter_is_incremented_by_one_atomic_add"]
 
 [[unit]]
 text = "Atomic Increment"

@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import func
 
 from backend.app.api import deps
 from backend.app.main import app
@@ -25,6 +26,7 @@ from backend.app.models.experiment import (
     ExperimentStatus,
 )
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
+from backend.app.models.metrics.metric import RawMetric
 from backend.app.models.user import UserRole
 from backend.app.schemas.export import (
     ExportFormat,
@@ -195,17 +197,46 @@ def _flag(created=None, updated=None):
 
 def test_the_feature_flag_columns():
     flag = _flag()
-    db = MagicMock()
-    db.query.return_value.all.return_value = [flag]
-    service = ExportService(db)
-    with patch.object(service, "_count_by", return_value={flag.id: 12}) as count_by:
-        (row,) = service._build_feature_flag_rows(
-            ExportRequest(format=ExportFormat.CSV)
-        )
+    counted = []
 
-    # total_evaluations counts the metric records stored for the flag.
-    (column, ids), _ = count_by.call_args
-    assert str(column) == "RawMetric.feature_flag_id" and ids == [flag.id]
+    class Counts:
+        """``query(column, count)`` for the rows of each flag, as SQL would group them."""
+
+        def __init__(self, *columns):
+            counted.append(columns)
+            self.steps = []
+
+        def filter(self, *conditions):
+            self.steps.append(("filter", conditions))
+            return self
+
+        def group_by(self, *columns):
+            self.steps.append(("group_by", columns))
+            return self
+
+        def all(self):
+            counted.append(tuple(self.steps))
+            return [(flag.id, 12)]
+
+    flags = MagicMock()
+    flags.all.return_value = [flag]
+    db = MagicMock()
+    db.query.side_effect = lambda *columns: (
+        flags if columns[0] is FeatureFlag else Counts(*columns)
+    )
+    (row,) = ExportService(db)._build_feature_flag_rows(
+        ExportRequest(format=ExportFormat.CSV)
+    )
+
+    # total_evaluations is the number of raw_metrics rows stored for the flag:
+    # count(*) grouped by the flag, whatever the rows' metric type.
+    (column, count), steps = counted
+    assert str(column) == str(RawMetric.feature_flag_id)
+    assert str(count) == str(func.count()) == "count(*)"
+    assert [kind for kind, _ in steps] == ["filter", "group_by"]
+    (condition,) = steps[0][1]
+    assert str(condition) == str(RawMetric.feature_flag_id.in_([flag.id]))
+    assert [str(c) for c in steps[1][1]] == [str(RawMetric.feature_flag_id)]
     assert row.total_evaluations == 12
     assert row.enabled_evaluations == 0
     assert row.enabled_rate == 0.0

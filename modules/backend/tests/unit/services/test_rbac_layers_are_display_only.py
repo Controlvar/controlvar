@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import re
 import uuid
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -256,3 +257,16 @@ def test_granting_and_revoking_a_direct_permission_write_no_audit_entry():
     assert "_record_custom_role" in {
         n.id for n in ast.walk(functions["assign_role"]) if isinstance(n, ast.Name)
     }
+
+
+def test_the_roles_page_needs_a_superuser():
+    page = REPO / "modules" / "frontend" / "src" / "pages" / "admin" / "roles.tsx"
+    source = page.read_text()
+    assert "export default withAdminGuard(" in source
+    # The guard's default audience is superusers; only an explicit
+    # `superuser: false` opens a page to anyone else.
+    assert "superuser: false" not in source
+    guard = (
+        REPO / "frontend" / "src" / "components" / "admin" / "withAdminGuard.tsx"
+    ).read_text()
+    assert re.search(r"superuser\s*=\s*true", guard)

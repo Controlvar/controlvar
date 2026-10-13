@@ -60,7 +60,7 @@ def _config(is_active=True):
 
 
 @pytest.fixture
-def db():
+def admin_session():
     session = MagicMock()
     user = _admin()
     app.dependency_overrides[deps.get_current_active_user] = lambda: user
@@ -70,17 +70,19 @@ def db():
     app.dependency_overrides.clear()
 
 
-def test_a_new_configuration_is_inactive_and_only_an_active_one_answers(db):
+def test_a_new_configuration_is_inactive_and_only_an_active_one_answers(admin_session):
     assert IntegrationConfigCreate(integration_type="jira").is_active is False
     assert IntegrationConfig.__table__.c.is_active.default.arg is False
 
-    endpoint._active_config(db, IntegrationType.JIRA)
-    conditions = [str(c) for c in db.query.return_value.filter.call_args.args]
+    endpoint._active_config(admin_session, IntegrationType.JIRA)
+    conditions = [
+        str(c) for c in admin_session.query.return_value.filter.call_args.args
+    ]
     assert any("is_active IS true" in c for c in conditions), conditions
 
     # With no active configuration the lookup finds nothing, and the
     # delivery is refused even with the right secret.
-    db.query.return_value.filter.return_value.first.return_value = None
+    admin_session.query.return_value.filter.return_value.first.return_value = None
     response = TestClient(app).post(
         "/api/v1/integrations/webhooks/jira",
         json={"webhookEvent": "jira:issue_created"},
@@ -89,24 +91,26 @@ def test_a_new_configuration_is_inactive_and_only_an_active_one_answers(db):
     assert response.status_code == 401
 
 
-def test_delete_removes_the_row_and_a_put_to_inactive_keeps_the_stored_config(db):
+def test_delete_removes_the_row_and_a_put_to_inactive_keeps_the_stored_config(
+    admin_session,
+):
     config = _config()
-    db.query.return_value.filter.return_value.first.return_value = config
+    admin_session.query.return_value.filter.return_value.first.return_value = config
     client = TestClient(app)
 
     stopped = client.put("/api/v1/integrations/jira", json={"is_active": False})
     assert stopped.status_code == 200, stopped.text
     assert config.is_active is False
     assert config.encrypted_config == STORED_CONFIG
-    db.delete.assert_not_called()
+    admin_session.delete.assert_not_called()
 
     deleted = client.delete("/api/v1/integrations/jira")
     assert deleted.status_code == 204
-    db.delete.assert_called_once_with(config)
+    admin_session.delete.assert_called_once_with(config)
 
 
-def test_a_shared_secret_delivery_is_accepted_again_when_replayed(db):
-    db.query.return_value.filter.return_value.first.return_value = _config()
+def test_a_shared_secret_delivery_is_accepted_again_when_replayed(admin_session):
+    admin_session.query.return_value.filter.return_value.first.return_value = _config()
     client = TestClient(app)
     with patch.object(JiraService, "parse_webhook_event") as parse:
         for _ in range(2):
@@ -137,8 +141,8 @@ def test_the_github_client_sends_a_bearer_token():
     assert service._headers()["Authorization"] == "Bearer ghp_token"
 
 
-def test_an_unexpected_failure_is_a_500(db):
-    db.query.side_effect = RuntimeError("database went away")
+def test_an_unexpected_failure_is_a_500(admin_session):
+    admin_session.query.side_effect = RuntimeError("database went away")
     response = TestClient(app, raise_server_exceptions=False).get(
         "/api/v1/integrations"
     )
@@ -154,7 +158,7 @@ def test_an_unexpected_failure_is_a_500(db):
     ],
     ids=["no-event-header", "event-header", "delivery-and-any-content-type"],
 )
-def test_a_signed_github_delivery_needs_only_its_signature(db, headers):
+def test_a_signed_github_delivery_needs_only_its_signature(admin_session, headers):
     config = _config()
     config.integration_type = IntegrationType.GITHUB
     config.encrypted_config = {
@@ -163,7 +167,7 @@ def test_a_signed_github_delivery_needs_only_its_signature(db, headers):
         "repo_name": "r",
         "webhook_secret": SECRET,
     }
-    db.query.return_value.filter.return_value.first.return_value = config
+    admin_session.query.return_value.filter.return_value.first.return_value = config
     body = b'{"action": "opened", "number": 42}'
     signature = webhook_auth.expected_signature(SECRET, body)
     with patch.object(GitHubService, "parse_webhook_event") as parse:

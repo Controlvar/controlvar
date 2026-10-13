@@ -118,13 +118,15 @@ def test_signing_out_revokes_nothing(monkeypatch):
         "/api/v1/auth/logout", headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 204
-    # The same token still authenticates afterwards.
-    assert decode_local_token(token)["sub"] == str(user.id)
+    # The same token still signs the user in afterwards, through the
+    # dependency every signed-in route uses.
+    monkeypatch.setattr(settings, "DEV_AUTH_BYPASS", False, raising=False)
+    row = SimpleNamespace(id=user.id, is_active=True)
     db = MagicMock()
-    db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(
-        id=user.id, is_active=True
-    )
-    assert deps._authenticate_local_token(token, db).id == user.id
+    db.query.return_value.filter.return_value.first.return_value = row
+    signed_in = deps.get_current_active_user(deps.get_current_user(token=token, db=db))
+    assert signed_in is row
+    assert decode_local_token(token)["sub"] == str(user.id)
 
 
 @pytest.mark.parametrize(
@@ -185,14 +187,11 @@ def test_the_ruleset_scope_and_its_owner_rule(scopes, owner, refusal):
         "frontend/src/pages/admin/users.tsx",
         "frontend/src/pages/admin/api-keys.tsx",
         "frontend/src/pages/admin/safety.tsx",
-        "modules/frontend/src/pages/admin/roles.tsx",
     ],
 )
-def test_the_users_api_keys_safety_and_roles_pages_need_a_superuser(page):
-    path = REPO / page
-    if page.startswith("modules/") and not path.is_file():
-        return  # core checkout: no rbac module
-    source = path.read_text()
+def test_the_users_api_keys_and_safety_pages_need_a_superuser(page):
+    # The Roles page is the rbac module's: test_rbac_layers_are_display_only.py.
+    source = (REPO / page).read_text()
     assert "export default withAdminGuard(" in source
     # The guard's default audience is superusers; only an explicit
     # `superuser: false` opens a page to anyone else.

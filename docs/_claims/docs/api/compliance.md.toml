@@ -32,6 +32,8 @@ text = "The compliance audit trail is an append-only table of changes to experim
 by = [
     "test:backend/tests/unit/services/test_compliance_trail_writers.py::test_only_these_actions_write_an_event",
     "test:backend/tests/unit/services/test_compliance_trail_writers.py::test_nothing_changes_or_deletes_an_event_once_written",
+    "test:modules/backend/tests/unit/services/test_warehouse_compliance_writers.py::test_across_the_profile_only_the_warehouse_writes_key_create",
+    "test:modules/backend/tests/unit/services/test_warehouse_compliance_writers.py::test_no_module_code_changes_or_deletes_a_stored_event",
 ]
 
 [[unit]]
@@ -55,7 +57,10 @@ by = ["test:backend/tests/unit/services/test_compliance_trail_writers.py::test_e
 
 [[unit]]
 text = "These are the only actions that write one in this release:"
-by = ["test:backend/tests/unit/services/test_compliance_trail_writers.py::test_only_these_actions_write_an_event"]
+by = [
+    "test:backend/tests/unit/services/test_compliance_trail_writers.py::test_only_these_actions_write_an_event",
+    "test:modules/backend/tests/unit/services/test_warehouse_compliance_writers.py::test_across_the_profile_only_the_warehouse_writes_key_create",
+]
 
 [[unit]]
 text = "Action | resource_type | Written when | Profile"
@@ -91,7 +96,7 @@ by = ["test:modules/backend/tests/integration/warehouse/test_connections_api.py:
 
 [[unit]]
 text = "KEY_CREATE | warehouse_connection | a new key is generated (/regenerate-key), or a pending key becomes current after a passing connection test | full"
-by = ["test:backend/tests/unit/services/test_compliance_trail_writers.py::test_which_warehouse_routes_write_and_when_a_key_is_created"]
+by = ["test:modules/backend/tests/unit/services/test_warehouse_compliance_writers.py::test_which_warehouse_routes_write_and_when_a_key_is_created"]
 
 [[unit]]
 text = "CREATE, UPDATE, DELETE | warehouse_source | creating, changing, validating or deleting a warehouse source | full"
@@ -122,7 +127,10 @@ by = [
 
 [[unit]]
 text = "AuditAction defines READ, LOGIN, LOGOUT, LOGIN_FAILED, ROLE_GRANT, ROLE_REVOKE, KEY_REVOKE, EXPORT and REPORT_GENERATED, and you can filter on them, but nothing in this release writes them."
-by = ["test:backend/tests/unit/services/test_compliance_trail_writers.py::test_only_these_actions_write_an_event"]
+by = [
+    "test:backend/tests/unit/services/test_compliance_trail_writers.py::test_only_these_actions_write_an_event",
+    "test:modules/backend/tests/unit/services/test_warehouse_compliance_writers.py::test_across_the_profile_only_the_warehouse_writes_key_create",
+]
 
 [[unit]]
 text = "For flags, experiments and warehouse analysis runs, a failure to write the event does not fail the request that made the change: the change is kept and the failure is logged as a warning."
@@ -442,12 +450,16 @@ by = ["test:backend/tests/integration/api/test_change_audit_saved.py::test_audit
 text = "KEY_CREATE | Yes, warehouse connections only (full profile)"
 by = [
     "test:backend/tests/unit/services/test_compliance_trail_writers.py::test_only_these_actions_write_an_event",
-    "test:backend/tests/unit/services/test_compliance_trail_writers.py::test_which_warehouse_routes_write_and_when_a_key_is_created",
+    "test:modules/backend/tests/unit/services/test_warehouse_compliance_writers.py::test_which_warehouse_routes_write_and_when_a_key_is_created",
+    "test:modules/backend/tests/unit/services/test_warehouse_compliance_writers.py::test_across_the_profile_only_the_warehouse_writes_key_create",
 ]
 
 [[unit]]
 text = "READ, LOGIN, LOGOUT, LOGIN_FAILED, ROLE_GRANT, ROLE_REVOKE, KEY_REVOKE, EXPORT, REPORT_GENERATED | No"
-by = ["test:backend/tests/unit/services/test_compliance_trail_writers.py::test_only_these_actions_write_an_event"]
+by = [
+    "test:backend/tests/unit/services/test_compliance_trail_writers.py::test_only_these_actions_write_an_event",
+    "test:modules/backend/tests/unit/services/test_warehouse_compliance_writers.py::test_across_the_profile_only_the_warehouse_writes_key_create",
+]
 
 [[unit]]
 text = "outcome is one of SUCCESS, FAILURE and DENIED; every event written in this release is SUCCESS."

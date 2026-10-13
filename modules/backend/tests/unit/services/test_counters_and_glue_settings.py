@@ -53,3 +53,28 @@ def test_nothing_writes_counters_automatically():
     # The helpers that would increment from tracking records: imported by
     # nothing but their own docstring example.
     assert importers <= {"modules/backend/app/services/dynamodb_counter_integration.py"}
+
+
+def test_a_counter_is_incremented_by_one_atomic_add():
+    from unittest.mock import MagicMock
+
+    from modules.backend.app.services.dynamodb_counter_service import (
+        CounterType,
+        DynamoDBCounterService,
+    )
+
+    resource = MagicMock()
+    table = resource.Table.return_value
+    table.update_item.return_value = {"Attributes": {"assignments": 3}}
+    service = DynamoDBCounterService(table_name="counters", dynamodb_resource=resource)
+
+    assert service.increment_counter("exp-1", "v1", CounterType.ASSIGNMENT, 2) == 3
+
+    # One UpdateItem whose expression ADDs to the counter: no read first, and
+    # no write of a value computed here, so concurrent writers never contend.
+    (call,) = table.method_calls
+    assert call[0] == "update_item"
+    expression = call.kwargs["UpdateExpression"]
+    assert expression.split()[:3] == ["ADD", "#attr", ":val"]
+    assert call.kwargs["ExpressionAttributeNames"] == {"#attr": "assignments"}
+    assert int(call.kwargs["ExpressionAttributeValues"][":val"]) == 2

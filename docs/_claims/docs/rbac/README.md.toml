@@ -94,7 +94,8 @@ by = [
 [[unit]]
 text = "The dashboard's Users, API Keys, Safety settings and Roles pages also require a superuser."
 by = [
-    "test:backend/tests/unit/api/test_route_surface_rules.py::test_the_users_api_keys_safety_and_roles_pages_need_a_superuser",
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_the_users_api_keys_and_safety_pages_need_a_superuser",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_roles_page_needs_a_superuser",
     "test:frontend/src/tests/admin/withAdminGuard.test.tsx::refuses a non-superuser by default, whatever their role",
 ]
 

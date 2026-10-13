@@ -37,21 +37,17 @@ def test_one_engine_on_postgres_server_with_a_fixed_pool():
     # No setting names a reader endpoint or changes the pool.
     fields = set(Settings.model_fields)
     assert not [f for f in fields if "READER" in f or "REPLICA" in f or "POOL" in f]
-    # The API process builds one engine; the other two belong to the
-    # bootstrap and an operator script.
+    # The API process builds one engine; the only other core builder is the
+    # bootstrap, which runs before the API starts.
     builders = set()
-    for path, text in _sources():
-        for node in ast.walk(ast.parse(text)):
+    for path in sorted((REPO / "backend" / "app").rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
             if (
                 isinstance(node, ast.Call)
                 and getattr(node.func, "id", None) == "create_engine"
             ):
-                builders.add(path)
-    assert builders <= {
-        "backend/app/db/session.py",
-        "backend/app/db/bootstrap.py",
-        "modules/backend/app/scripts/rotate_warehouse_credentials.py",
-    }
+                builders.add(path.relative_to(REPO).as_posix())
+    assert builders == {"backend/app/db/session.py", "backend/app/db/bootstrap.py"}
 
 
 def test_redis_defaults_and_cognito_settings_only_for_cognito_sign_in(monkeypatch):
@@ -200,3 +196,17 @@ def test_each_request_reaches_the_access_log_with_its_path_and_status():
         '"POST /api/v1/integrations/webhooks/salesforce HTTP/1.1" 401' in line
         for line in lines
     ), lines
+
+
+def test_a_version_is_deployed_by_the_deploy_workflow_with_a_release_tag():
+    workflow = yaml.safe_load(
+        (REPO / ".github" / "workflows" / "deploy.yml").read_text()
+    )
+    # What the Actions tab lists, and what a person picks: "Deploy".
+    assert workflow["name"] == "Deploy"
+    triggers = workflow.get("on", workflow.get(True))
+    assert set(triggers) == {"workflow_dispatch"}
+    version = triggers["workflow_dispatch"]["inputs"]["version"]
+    assert version["required"] is True
+    preflight = yaml.dump(workflow["jobs"]["preflight"])
+    assert "v[0-9]+" in preflight and "refs/tags/${VERSION}" in preflight
