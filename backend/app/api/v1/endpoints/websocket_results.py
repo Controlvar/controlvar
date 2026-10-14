@@ -163,6 +163,8 @@ async def stream_results(
 
     await manager.connect(websocket, experiment_id, subprotocol=subprotocol)
     streaming_service = ResultsStreamingService(SessionLocal)
+    # The one outstanding read of the next client message, if any.
+    receive_task: Optional["asyncio.Future[str]"] = None
 
     try:
         # Send initial snapshot immediately on connection
@@ -172,7 +174,9 @@ async def stream_results(
         # Main loop: wait for a client message, but only until the next
         # snapshot is due. The deadline moves only when a periodic snapshot
         # is sent, so a client message (a ping, say) never postpones one
-        # (#1193).
+        # (#1193). A read that is still waiting when a snapshot is due is
+        # kept, not cancelled, and waited on again: cancelling a read can
+        # drop a message that arrives in the same moment.
         interval = float(settings.RESULTS_STREAM_INTERVAL_SECONDS)
         loop = asyncio.get_running_loop()
         next_snapshot_at = loop.time() + interval
@@ -183,31 +187,31 @@ async def stream_results(
                 await websocket.send_text(json.dumps(snapshot))
                 next_snapshot_at = loop.time() + interval
                 continue
-            try:
-                data = await asyncio.wait_for(
-                    websocket.receive_text(), timeout=remaining
-                )
-                try:
-                    msg = json.loads(data)
-                except json.JSONDecodeError:
-                    msg = {}
-
-                action = msg.get("action")
-                if action == "ping":
-                    await websocket.send_text(json.dumps({"event": "pong"}))
-                elif action == "refresh":
-                    snapshot = await streaming_service.get_live_snapshot(experiment_id)
-                    await websocket.send_text(json.dumps(snapshot))
-                else:
-                    logger.debug(
-                        "Unknown WebSocket action '%s' for experiment %s",
-                        action,
-                        experiment_id,
-                    )
-
-            except asyncio.TimeoutError:
+            if receive_task is None:
+                receive_task = asyncio.ensure_future(websocket.receive_text())
+            done, _ = await asyncio.wait({receive_task}, timeout=remaining)
+            if not done:
                 # The next snapshot is due: the top of the loop sends it.
                 continue
+            finished, receive_task = receive_task, None
+            data = finished.result()  # raises WebSocketDisconnect on close
+            try:
+                msg = json.loads(data)
+            except json.JSONDecodeError:
+                msg = {}
+
+            action = msg.get("action")
+            if action == "ping":
+                await websocket.send_text(json.dumps({"event": "pong"}))
+            elif action == "refresh":
+                snapshot = await streaming_service.get_live_snapshot(experiment_id)
+                await websocket.send_text(json.dumps(snapshot))
+            else:
+                logger.debug(
+                    "Unknown WebSocket action '%s' for experiment %s",
+                    action,
+                    experiment_id,
+                )
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected for experiment %s", experiment_id)
@@ -218,6 +222,12 @@ async def stream_results(
             exc,
         )
     finally:
+        if receive_task is not None:
+            if not receive_task.done():
+                receive_task.cancel()
+            elif not receive_task.cancelled():
+                # Read the outcome, so asyncio does not log it as unretrieved.
+                receive_task.exception()
         await manager.disconnect(websocket, experiment_id)
 
 

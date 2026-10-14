@@ -11,6 +11,7 @@ context manager). All DB calls are mocked so no live PostgreSQL is required.
 """
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -301,18 +302,40 @@ class TestWebSocketRefresh:
 #: A short interval for the schedule test, set through Settings.
 SHORT_INTERVAL_SECONDS = 0.2
 
+#: How long the schedule test waits for any one message, and how many messages
+#: it reads while waiting for one pong, before it fails. A lost message then
+#: fails the test instead of hanging the run.
+RECEIVE_TIMEOUT_SECONDS = 5.0
+MAX_MESSAGES_PER_PING = 20
 
-def _ping_and_collect(ws, pings: int, pause: float) -> list:
+
+def _receive_json_within(ws, reader: ThreadPoolExecutor) -> dict:
+    """``ws.receive_json()``, failing after RECEIVE_TIMEOUT_SECONDS.
+
+    The TestClient's receive takes no timeout, so it runs on ``reader``'s
+    thread. Leaving the ``websocket_connect`` block closes the session, which
+    ends a receive still waiting there.
+    """
+    try:
+        return reader.submit(ws.receive_json).result(timeout=RECEIVE_TIMEOUT_SECONDS)
+    except TimeoutError:
+        pytest.fail(f"no message from the server in {RECEIVE_TIMEOUT_SECONDS} s")
+
+
+def _ping_and_collect(ws, reader: ThreadPoolExecutor, pings: int, pause: float) -> list:
     """Ping ``pings`` times, ``pause`` seconds apart, and return every message
     received up to the last pong, in order."""
     received = []
     for _ in range(pings):
         ws.send_json({"action": "ping"})
-        while True:
-            message = ws.receive_json()
+        for _ in range(MAX_MESSAGES_PER_PING):
+            message = _receive_json_within(ws, reader)
             received.append(message)
             if message.get("event") == "pong":
                 break
+        else:
+            events = [message.get("event") for message in received]
+            pytest.fail(f"no pong in {MAX_MESSAGES_PER_PING} messages: {events}")
         time.sleep(pause)
     return received
 
@@ -336,13 +359,15 @@ class TestPeriodicSnapshots:
         monkeypatch.setattr(
             settings, "RESULTS_STREAM_INTERVAL_SECONDS", SHORT_INTERVAL_SECONDS
         )
-        with patch(PATCH_SNAPSHOT, return_value=_make_snapshot()):
-            client = TestClient(app)
-            with client.websocket_connect(f"{WS_BASE}/schedule-exp/results") as ws:
-                assert ws.receive_json()["event"] == "results_update"
-                received = _ping_and_collect(
-                    ws, pings=16, pause=SHORT_INTERVAL_SECONDS / 4
-                )
+        with ThreadPoolExecutor(max_workers=1) as reader:
+            with patch(PATCH_SNAPSHOT, return_value=_make_snapshot()):
+                client = TestClient(app)
+                with client.websocket_connect(f"{WS_BASE}/schedule-exp/results") as ws:
+                    first = _receive_json_within(ws, reader)
+                    assert first["event"] == "results_update"
+                    received = _ping_and_collect(
+                        ws, reader, pings=16, pause=SHORT_INTERVAL_SECONDS / 4
+                    )
 
         events = [message["event"] for message in received]
         assert events.count("pong") == 16
