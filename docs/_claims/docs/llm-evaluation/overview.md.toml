@@ -81,10 +81,18 @@ by = [
 ]
 
 [[unit]]
-text = "It does not choose the winner: the winner is always the variant with the highest mean business metric, or, with no business metric, the highest mean auto-eval score."
+text = "It does not choose the winner: the results compare every variant on one metric, named in winner_metric, and the winner is the variant with the highest mean on it."
 by = [
-    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_is_variant_with_higher_business_metric",
-    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_based_on_auto_eval_when_no_business_metric",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_a_variant_without_a_business_metric_puts_every_variant_on_the_judge_score",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_the_business_metric_is_used_when_every_variant_has_one",
+]
+
+[[unit]]
+text = "The metric is business_metric when every variant has at least one business-metric value; otherwise it is auto_eval, compared across the variants that have an auto-eval score."
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_a_variant_without_a_business_metric_puts_every_variant_on_the_judge_score",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_the_business_metric_is_used_when_every_variant_has_one",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_the_judge_score_compares_only_the_variants_that_have_one",
 ]
 
 [[unit]]
@@ -173,8 +181,11 @@ by = [
 ]
 
 [[unit]]
-text = "Winner determination based on the highest mean business metric (falls back to auto-eval score)"
+text = "Winner determination on one metric for every variant, named in winner_metric (business_metric or auto_eval, as above, or null when no variant has a value for it); each variant's p-value and effect size are on the same metric"
 by = [
-    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_is_variant_with_higher_business_metric",
-    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_based_on_auto_eval_when_no_business_metric",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_a_variant_without_a_business_metric_puts_every_variant_on_the_judge_score",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_every_p_value_and_effect_size_is_on_the_winner_metric",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_the_business_metric_is_used_when_every_variant_has_one",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_no_value_for_the_chosen_metric_gives_no_metric_and_no_winner",
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestGetResults::test_the_results_compare_every_variant_on_the_judge_score_and_say_so",
 ]
