@@ -592,7 +592,6 @@ class AssignmentService:
         experiment_id: Union[str, UUID],
         user_context: Dict[str, Any],
         track_exposure: bool = True,
-        validate_attributes: bool = True,
     ) -> Dict[str, Any]:
         """
         Assign a user to an experiment variant using targeting rules.
@@ -602,7 +601,6 @@ class AssignmentService:
             experiment_id: ID of the experiment
             user_context: User context for targeting evaluation
             track_exposure: Whether to track an exposure event
-            validate_attributes: Whether to validate user attributes
 
         Returns:
             Dictionary containing the assignment data and targeting info
@@ -669,7 +667,6 @@ class AssignmentService:
         targeting_result = self._evaluate_experiment_targeting(
             experiment,
             user_context,
-            validate_attributes,
             user_id=user_id,
         )
 
@@ -742,7 +739,6 @@ class AssignmentService:
         self,
         experiment: Experiment,
         user_context: Dict[str, Any],
-        validate_attributes: bool = True,
         user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
@@ -758,7 +754,6 @@ class AssignmentService:
             experiment: The experiment model
             user_context: User context for evaluation (expanded by
                 ``check_eligibility``)
-            validate_attributes: Whether to validate attributes
             user_id: The user being assigned
 
         Returns:
@@ -806,14 +801,13 @@ class AssignmentService:
                     raise SegmentMembershipUnavailable(undecided)
                 members = memberships.members
 
-            # Evaluate rules with validation
+            # Evaluate rules
             (
                 matched_rule,
                 metrics,
             ) = self.rules_evaluation_service.evaluate_rules_with_validation(
                 targeting_rules=targeting_rules,
                 user_context=with_memberships(user_context, members),
-                validate_attributes=validate_attributes,
                 track_metrics=True,
                 owner=owner,
             )

@@ -16,6 +16,7 @@ text = "Flag targeting and experiment targeting answer every operator on this pa
 by = [
     "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_both_evaluators_answer_each_operator_alike",
     "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_both_evaluators_answer_the_native_spellings_alike",
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_array_length_means_one_thing",
     "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_between_includes_both_bounds_for_numbers",
     "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_before_and_after_are_strict",
 ]
@@ -231,12 +232,30 @@ by = [
 ]
 
 [[unit]]
-text = "The native shape also accepts array_length, json_path and percentage_bucket."
-by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_the_native_shape_accepts_the_operators_the_reference_leaves_out"]
+text = "none | array_length | the attribute is a list, text or object whose length compares with the value as additional_value says: eq (the default), gt, gte, lt, lte, or between a {\"min\", \"max\"} value, both included. A number or null has no length and does not match."
+by = [
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_array_length_compares_the_length_as_additional_value_says",
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_array_length_means_one_thing",
+]
+
+[[unit]]
+text = "The native shape also accepts json_path and percentage_bucket."
+by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_the_native_shape_accepts_json_path_and_percentage_bucket"]
 
 [[unit]]
 text = "Flag targeting and experiment targeting do not answer them alike, so they are not documented here."
-by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_flags_and_experiments_answer_the_left_out_operators_differently"]
+by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_flags_and_experiments_answer_json_path_and_percentage_bucket_differently"]
+
+[[unit]]
+text = "A native condition may also carry attribute_type."
+by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_attribute_type_is_read_by_neither_evaluator"]
+
+[[unit]]
+text = "Neither flag targeting nor experiment targeting reads it: the condition is answered from the attribute's value alone."
+by = [
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_attribute_type_is_read_by_neither_evaluator",
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_attribute_type_conditions_enrol_like_flags",
+]
 
 [[unit]]
 text = "Operator details"

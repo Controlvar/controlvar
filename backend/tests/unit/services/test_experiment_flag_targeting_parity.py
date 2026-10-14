@@ -1,5 +1,5 @@
 """
-Experiment targeting answers a rule the way flag targeting does (#1144, #1145).
+Experiment targeting answers a rule the way flag targeting does (#1144, #1145, #1159).
 
 An experiment is targeted by ``RulesEvaluationService``, through
 ``AssignmentService._evaluate_experiment_targeting``; a flag by the rules
@@ -20,20 +20,23 @@ stored rules, user and context, and asserts the same answer, over:
 * a battery for each operator the adapter supports
   (``targeting_adapter.DASHBOARD_OPERATORS``), plus the native
   ``semantic_version``, ``geo_distance`` and ``time_window`` spellings;
+* a battery for the native ``array_length``, each comparison alone and inside
+  a ``NOT``, and one for conditions that carry ``attribute_type`` (#1159);
 * the cases of #1144 and #1145, with their expected answers, including a
   ``time_window`` the engine cannot read: the whole ruleset is abandoned, as
   for a pattern that cannot be evaluated (the flag is off with reason
   ``error``, the user is not eligible, a segment is unavailable).
 
-The parity holds for conditions without ``attribute_type``, which is every
-condition the dashboard stores, and no case here sets one. A native condition
-that sets ``attribute_type`` is a separate, known difference: the experiment
-path checks the context value against it before any operator runs
-(``RulesEvaluationService.validate_user_context``), and a value that fails the
-check refuses the whole ruleset, where a flag still evaluates it. A
-``geo_distance`` with ``"attribute_type": "geo_coordinate"`` refuses a
-``{"lat", "lon"}`` location, and a ``semantic_version`` with
-``"attribute_type": "semantic_version"`` refuses ``"v3.0.0"``.
+Until #1159 an experiment read two more things its own way. ``array_length``
+was an exact length of a list, whatever ``additional_value`` said, so
+``gt 2`` never enrolled a three-item list and a ``NOT`` around it enrolled
+everyone. And a condition's ``attribute_type`` was checked against the
+context's value before any operator ran: a value that failed the check refused
+the whole ruleset, where a flag still evaluated it (a ``geo_distance`` with
+``"attribute_type": "geo_coordinate"`` refused a ``{"lat", "lon"}`` location,
+and a ``semantic_version`` with ``"attribute_type": "semantic_version"``
+refused ``"v2.0.0"``). Now ``array_length`` is the rules engine's on both, and
+neither evaluator reads ``attribute_type``.
 
 The rules both evaluators are given have every rule-level
 ``rollout_percentage`` at 100. A partial rollout is not an operator: an
@@ -199,6 +202,7 @@ def native(
     value: Any,
     additional_value: Any = None,
     group_operator: str = "and",
+    attribute_type: Optional[str] = None,
 ) -> Dict[str, Any]:
     """One condition in the native ``TargetingRules`` shape."""
     condition: Dict[str, Any] = {
@@ -208,6 +212,8 @@ def native(
     }
     if additional_value is not None:
         condition["additional_value"] = additional_value
+    if attribute_type is not None:
+        condition["attribute_type"] = attribute_type
     return {
         "version": "1.0",
         "rules": [
@@ -239,29 +245,55 @@ def disagreements(cases) -> List[str]:
 # ---------------------------------------------------------------------------
 
 
+#: The vectors' flags whose rules the adapter does not evaluate, so their cases
+#: are not compared: the legacy list shape, a value with no rule (rollout only,
+#: empty, or no rules), and rules the adapter cannot convert. Every other case
+#: is compared.
+NOT_COMPARED = {
+    "drapeau-été",
+    "empty-list",
+    "empty-object",
+    "legacy-context",
+    "legacy-user-ids",
+    "no-rules",
+    "rollout-0",
+    "rollout-1",
+    "rollout-100",
+    "rollout-25",
+    "rollout-50",
+    "rollout-99",
+    "unconvertible-attribute",
+    "unconvertible-number",
+    "unconvertible-operator",
+}
+
+
 def vector_cases():
     vectors = json.loads(generator.VECTORS_PATH.read_text(encoding="utf-8"))
     stored = {flag["key"]: flag for flag in vectors["stored_flags"]}
-    cases, with_time_window = [], 0
+    cases, with_time_window, not_compared = [], 0, set()
     for case in vectors["cases"]:
         raw = stored[case["flag"]]["targeting_rules"]
         rules = evaluable(raw)
         if rules is None:
+            not_compared.add(case["flag"])
             continue
         if OperatorType.TIME_WINDOW in operators_in(rules):
             with_time_window += 1
         cases.append(
             (case["id"], at_full_rollout(raw), case["user_id"], case["context"])
         )
-    return cases, with_time_window
+    return cases, with_time_window, not_compared
 
 
 def test_the_vectors_get_the_same_answer_from_both_evaluators():
-    cases, with_time_window = vector_cases()
-    # Not vacuous: most of the 2181 cases have rules to evaluate, the
-    # time_window flag's among them (it was left out until #1145).
-    assert len(cases) > 1500, len(cases)
-    assert with_time_window > 0, with_time_window
+    cases, with_time_window, not_compared = vector_cases()
+    # Exact, so a case cannot stop being compared unseen: 1988 of the 2191
+    # cases have rules to evaluate, the time_window flag's two among them (it
+    # was left out until #1145), and the 203 others are NOT_COMPARED's.
+    assert not_compared == NOT_COMPARED
+    assert len(cases) == 1988, len(cases)
+    assert with_time_window == 2, with_time_window
     found = disagreements(cases)
     assert not found, f"{len(found)} of {len(cases)} cases disagree:\n" + "\n".join(
         found[:25]
@@ -425,6 +457,144 @@ def test_both_evaluators_answer_the_native_spellings_alike(spelling):
     assert not found, "\n".join(found)
     answers = {flag_answer(raw, user_id, context) for _, raw, user_id, context in cases}
     assert answers == {None, "native"}, answers
+
+
+# ---------------------------------------------------------------------------
+# 2b. array_length and attribute_type (#1159)
+# ---------------------------------------------------------------------------
+
+#: Values with each length around the rules' 2 (lists, text and objects), and
+#: values with no length. Every value is also tried absent and for two users.
+LENGTHS = [
+    [],
+    ["a"],
+    ["a", "b"],
+    ["a", "b", "c"],
+    "",
+    "ab",
+    "abc",
+    {},
+    {"a": 1},
+    {"a": 1, "b": 2},
+    {"a": 1, "b": 2, "c": 3},
+    None,
+    2,
+    2.5,
+    True,
+]
+
+#: Each comparison ``array_length`` takes, alone and inside a ``NOT``.
+ARRAY_LENGTH_BATTERY: Dict[str, Any] = {
+    **{
+        f"{comparison or 'none'}/{wrapper}": native(
+            "tags", "array_length", 2, comparison, group_operator=wrapper
+        )
+        for comparison in (None, "eq", "gt", "gte", "lt", "lte")
+        for wrapper in ("and", "not")
+    },
+    **{
+        f"between/{wrapper}": native(
+            "tags",
+            "array_length",
+            {"min": 1, "max": 2},
+            "between",
+            group_operator=wrapper,
+        )
+        for wrapper in ("and", "not")
+    },
+}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("spelling", sorted(ARRAY_LENGTH_BATTERY))
+def test_array_length_means_one_thing(spelling):
+    """The rules engine's ``array_length`` on both evaluators: the length of a
+    list, text or object, compared as ``additional_value`` says. An experiment
+    used to read only an exact length of a list, so ``gt``, ``between`` and
+    text never enrolled anyone, and a ``NOT`` around them enrolled everyone."""
+    raw = ARRAY_LENGTH_BATTERY[spelling]
+    assert evaluable(raw) is not None
+    cases = battery_cases(spelling, raw, "tags", LENGTHS)
+    found = disagreements(cases)
+    assert not found, "\n".join(found)
+    answers = {flag_answer(raw, user_id, context) for _, raw, user_id, context in cases}
+    assert answers == {None, "native"}, answers
+
+
+#: Conditions that carry ``attribute_type``: the two of #1159, each alone and
+#: inside a ``NOT``, and a type that does not match the attribute's values.
+ATTRIBUTE_TYPE_BATTERY: Dict[str, Any] = {
+    **{
+        f"geo_coordinate/{wrapper}": (
+            native(
+                "location",
+                "geo_distance",
+                [48.8566, 2.3522],
+                50,
+                group_operator=wrapper,
+                attribute_type="geo_coordinate",
+            ),
+            "location",
+            LOCATIONS,
+        )
+        for wrapper in ("and", "not")
+    },
+    **{
+        f"semantic_version/{wrapper}": (
+            native(
+                "app_version",
+                "semantic_version",
+                "2.0.0",
+                "gte",
+                group_operator=wrapper,
+                attribute_type="semantic_version",
+            ),
+            "app_version",
+            SEMVER_ACTUALS,
+        )
+        for wrapper in ("and", "not")
+    },
+    "number on text": (
+        native("plan", "eq", "premium", attribute_type="number"),
+        "plan",
+        ["premium", "basic", 1, None],
+    ),
+}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("spelling", sorted(ATTRIBUTE_TYPE_BATTERY))
+def test_attribute_type_conditions_enrol_like_flags(spelling):
+    """``attribute_type`` decides nothing: an experiment used to check the
+    context's value against it first and refuse the whole ruleset when the
+    value failed the check, where a flag answered the condition."""
+    raw, attribute, values = ATTRIBUTE_TYPE_BATTERY[spelling]
+    assert evaluable(raw) is not None
+    cases = battery_cases(spelling, raw, attribute, values)
+    found = disagreements(cases)
+    assert not found, "\n".join(found)
+    answers = {flag_answer(raw, user_id, context) for _, raw, user_id, context in cases}
+    assert answers == {None, "native"}, answers
+
+
+#: The table of #1159: each of these users is enrolled, on both evaluators.
+ATTRIBUTE_TYPE_ISSUE_CASES = [
+    ("geo_coordinate/and", {"location": {"lat": 48.86, "lon": 2.35}}),
+    ("semantic_version/and", {"app_version": "v2.0.0"}),
+    ("number on text", {"plan": "premium"}),
+]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "spelling, context",
+    ATTRIBUTE_TYPE_ISSUE_CASES,
+    ids=[case[0] for case in ATTRIBUTE_TYPE_ISSUE_CASES],
+)
+def test_the_attribute_type_issue_cases(spelling, context):
+    raw = ATTRIBUTE_TYPE_BATTERY[spelling][0]
+    assert experiment_answer(raw, USER, context) == "native"
+    assert flag_answer(raw, USER, context) == "native"
 
 
 # ---------------------------------------------------------------------------

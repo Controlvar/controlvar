@@ -489,9 +489,13 @@ class TestAssignUserWithTargeting:
                 _uid("targeting-inactive"), exp.id, user_context={}
             )
 
-    def test_validation_error_prevents_assignment(
+    @pytest.mark.regression
+    def test_attribute_type_does_not_prevent_assignment(
         self, service, db_session, make_experiment, make_variant
     ):
+        """A condition's ``attribute_type`` refuses nothing (#1159): ``v1.2.0``
+        is enrolled, as a flag matches it, and a value that is not a version
+        is simply not matched."""
         version_rules = {
             "version": "1.0",
             "rules": [
@@ -504,6 +508,7 @@ class TestAssignUserWithTargeting:
                                 "attribute": "app_version",
                                 "operator": "semantic_version",
                                 "value": "1.2.0",
+                                "additional_value": "gte",
                                 "attribute_type": "semantic_version",
                             }
                         ],
@@ -517,22 +522,30 @@ class TestAssignUserWithTargeting:
             db_session,
             make_experiment,
             make_variant,
-            "Targeting Validation Error",
+            "Targeting Attribute Type",
             version_rules,
         )
-        user_id = _uid("targeting-invalid-version")
 
         result = service.assign_user_with_targeting(
-            user_id,
+            _uid("targeting-invalid-version"),
             exp.id,
             user_context={"app_version": "not-a-version"},
             track_exposure=False,
-            validate_attributes=True,
         )
-
         assert result["assignment"] is None
         assert result["targeting_matched"] is False
-        assert result["user_context_validated"] is False
+        assert result["user_context_validated"] is True
+
+        user_id = _uid("targeting-v-prefixed-version")
+        result = service.assign_user_with_targeting(
+            user_id,
+            exp.id,
+            user_context={"app_version": "v1.2.0"},
+            track_exposure=False,
+        )
+        assert result["targeting_matched"] is True
+        assert result["targeting_rule_id"] == "version_gate"
+        assert result["user_id"] == user_id
 
     def test_exposure_event_includes_targeting_info(
         self, service, db_session, make_experiment, make_variant, monkeypatch
@@ -631,9 +644,7 @@ class TestEvaluateExperimentTargeting:
         exp = make_experiment(name="Evaluate JSON String Rules")
         exp.targeting_rules = json.dumps(PREMIUM_RULES)
 
-        result = service._evaluate_experiment_targeting(
-            exp, {"plan": "premium"}, validate_attributes=False
-        )
+        result = service._evaluate_experiment_targeting(exp, {"plan": "premium"})
 
         assert result["eligible"] is True
         assert result["rule_id"] == "premium_users"
@@ -642,9 +653,7 @@ class TestEvaluateExperimentTargeting:
         exp = make_experiment(name="Evaluate Dict Rules")
         exp.targeting_rules = PREMIUM_RULES
 
-        result = service._evaluate_experiment_targeting(
-            exp, {"plan": "premium"}, validate_attributes=False
-        )
+        result = service._evaluate_experiment_targeting(exp, {"plan": "premium"})
 
         assert result["eligible"] is True
         assert result["rule_id"] == "premium_users"
@@ -653,9 +662,7 @@ class TestEvaluateExperimentTargeting:
         exp = make_experiment(name="Evaluate No Match")
         exp.targeting_rules = PREMIUM_RULES
 
-        result = service._evaluate_experiment_targeting(
-            exp, {"plan": "free"}, validate_attributes=False
-        )
+        result = service._evaluate_experiment_targeting(exp, {"plan": "free"})
 
         assert result["eligible"] is False
         assert result["rule_id"] is None
@@ -691,9 +698,7 @@ class TestEvaluateExperimentTargeting:
         # through the JSONB column as a dict.
         exp.targeting_rules = rules_obj
 
-        result = service._evaluate_experiment_targeting(
-            exp, {"plan": "premium"}, validate_attributes=False
-        )
+        result = service._evaluate_experiment_targeting(exp, {"plan": "premium"})
 
         assert result["eligible"] is True
         assert result["rule_id"] == "premium_users"
@@ -724,9 +729,7 @@ class TestTargetingPerformanceStats:
         exp.targeting_rules = PREMIUM_RULES
 
         for plan in ("premium", "free", "premium"):
-            service._evaluate_experiment_targeting(
-                exp, {"plan": plan}, validate_attributes=False
-            )
+            service._evaluate_experiment_targeting(exp, {"plan": plan})
 
         stats = service.get_targeting_performance_stats()
 
@@ -738,9 +741,7 @@ class TestTargetingPerformanceStats:
         exp = make_experiment(name="Perf Stats Clear")
         exp.targeting_rules = PREMIUM_RULES
 
-        service._evaluate_experiment_targeting(
-            exp, {"plan": "premium"}, validate_attributes=False
-        )
+        service._evaluate_experiment_targeting(exp, {"plan": "premium"})
         assert service.get_targeting_performance_stats() != {}
 
         service.clear_targeting_metrics()

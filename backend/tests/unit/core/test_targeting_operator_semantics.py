@@ -25,6 +25,7 @@ from backend.app.core.targeting_adapter import (
     validate_flag_targeting,
 )
 from backend.app.schemas.targeting_rule import (
+    AttributeType,
     Condition,
     LogicalOperator,
     OperatorType,
@@ -51,9 +52,7 @@ def _rules(*conditions: Condition, operator=LogicalOperator.AND) -> TargetingRul
 def _answers(rules: TargetingRules, context: Dict[str, Any]) -> Tuple[bool, bool]:
     """(the flag's rule matched, the experiment's rule matched)."""
     flag = match_targeting_rule(rules, context) is not None
-    matched, _ = RulesEvaluationService().evaluate_rules_with_validation(
-        rules, context, validate_attributes=False
-    )
+    matched, _ = RulesEvaluationService().evaluate_rules_with_validation(rules, context)
     return flag, matched is not None
 
 
@@ -227,7 +226,7 @@ def test_an_out_of_range_comparison_makes_the_user_ineligible_for_an_experiment(
 ):
     rules = _rules(condition, operator=group)
     matched, metrics = RulesEvaluationService().evaluate_rules_with_validation(
-        rules, context, validate_attributes=False
+        rules, context
     )
     assert matched is None
     assert metrics is not None and metrics.rule_id == "error"
@@ -236,7 +235,6 @@ def test_an_out_of_range_comparison_makes_the_user_ineligible_for_an_experiment(
     outcome = AssignmentService(MagicMock())._evaluate_experiment_targeting(
         SimpleNamespace(targeting_rules=rules.model_dump(mode="json")),
         context,
-        validate_attributes=False,
     )
     assert outcome["eligible"] is False
 
@@ -273,9 +271,7 @@ def test_a_window_in_default_rule_is_never_read():
     )
     context = {"country": "FR", "now": "2024-01-10T12:00:00"}
     assert match_targeting_rule(rules, context).id == "default"
-    matched, _ = RulesEvaluationService().evaluate_rules_with_validation(
-        rules, context, validate_attributes=False
-    )
+    matched, _ = RulesEvaluationService().evaluate_rules_with_validation(rules, context)
     assert matched.id == "default"
 
 
@@ -295,7 +291,7 @@ def test_a_window_with_one_half_of_a_pair_cannot_be_read(window):
     with pytest.raises(TimeWindowUnreadable):
         match_targeting_rule(rules, {"now": "2024-01-10T12:00:00"})
     matched, _ = RulesEvaluationService().evaluate_rules_with_validation(
-        rules, {"now": "2024-01-10T12:00:00"}, validate_attributes=False
+        rules, {"now": "2024-01-10T12:00:00"}
     )
     assert matched is None
 
@@ -320,11 +316,55 @@ def test_a_window_without_a_timezone_compares_the_moments_own_clock_time(
 
 
 # ---------------------------------------------------------------------------
+# array_length (#1159)
+# ---------------------------------------------------------------------------
+
+BETWEEN_1_AND_2 = {"min": 1, "max": 2}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "value, comparison, attribute, holds",
+    [
+        (2, None, ["x", "y"], True),
+        (2, None, ["x"], False),
+        (2, "eq", "ab", True),
+        (1, "eq", {"k": 1}, True),
+        (2, "gt", [1, 2, 3], True),
+        (2, "gt", [1, 2], False),
+        (2, "gte", [1, 2], True),
+        (2, "gte", [1], False),
+        (2, "lt", [1], True),
+        (2, "lt", [1, 2], False),
+        (2, "lte", [1, 2], True),
+        (2, "lte", [1, 2, 3], False),
+        (BETWEEN_1_AND_2, "between", [1], True),
+        (BETWEEN_1_AND_2, "between", [1, 2], True),
+        (BETWEEN_1_AND_2, "between", [], False),
+        (BETWEEN_1_AND_2, "between", [1, 2, 3], False),
+        (BETWEEN_1_AND_2, "between", "abc", False),
+        (0, None, 5, False),
+        (0, None, None, False),
+        (1, None, True, False),
+    ],
+)
+def test_array_length_compares_the_length_as_additional_value_says(
+    value, comparison, attribute, holds
+):
+    """The same answer from both evaluators: an experiment used to read only an
+    exact length of a list, whatever ``additional_value`` said."""
+    rules = _rules(_condition(OperatorType.ARRAY_LENGTH, value, comparison))
+    raw = rules.model_dump(mode="json", exclude_none=True)
+    assert validate_flag_targeting(raw) is not None
+    assert validate_experiment_targeting(raw) is not None
+    assert _answers(rules, {"a": attribute}) == (holds, holds)
+
+
+# ---------------------------------------------------------------------------
 # The operators the reference leaves out
 # ---------------------------------------------------------------------------
 
 LEFT_OUT = {
-    "array_length": (_condition(OperatorType.ARRAY_LENGTH, 3), {"a": [1, 2, 3]}),
     "json_path": (_condition(OperatorType.JSON_PATH, "$.b", 1), {"a": {"b": 1}}),
     "percentage_bucket": (
         Condition(
@@ -336,26 +376,48 @@ LEFT_OUT = {
 
 
 @pytest.mark.parametrize("name", sorted(LEFT_OUT))
-def test_the_native_shape_accepts_the_operators_the_reference_leaves_out(name):
+def test_the_native_shape_accepts_json_path_and_percentage_bucket(name):
     condition, _ = LEFT_OUT[name]
     raw = _rules(condition).model_dump(mode="json", exclude_none=True)
     assert validate_flag_targeting(raw) is not None
     assert validate_experiment_targeting(raw) is not None
 
 
-def test_flags_and_experiments_answer_the_left_out_operators_differently():
+def test_flags_and_experiments_answer_json_path_and_percentage_bucket_differently():
     differ = {
         name
         for name, (condition, context) in LEFT_OUT.items()
         if len(set(_answers(_rules(condition), context))) == 2
     }
     assert differ == {"json_path", "percentage_bucket"}
-    # array_length differs once the comparison or the attribute's type moves
-    # off an exact length of a list.
-    longer = _rules(_condition(OperatorType.ARRAY_LENGTH, 2, "gt"))
-    assert _answers(longer, {"a": [1, 2, 3]}) == (True, False)
-    text = _rules(_condition(OperatorType.ARRAY_LENGTH, 3))
-    assert _answers(text, {"a": "abc"}) == (True, False)
+
+
+# ---------------------------------------------------------------------------
+# attribute_type (#1159)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("attribute_type", list(AttributeType), ids=lambda t: t.value)
+def test_attribute_type_is_read_by_neither_evaluator(attribute_type):
+    """Saved, and then ignored: the condition is answered from the value. An
+    experiment used to refuse the whole ruleset when the value did not have
+    the condition's type (here, text under every type but ``string`` and
+    ``json``)."""
+    typed = Condition(
+        attribute="a",
+        operator=OperatorType.EQUALS,
+        value="x",
+        attribute_type=attribute_type,
+    )
+    raw = _rules(typed).model_dump(mode="json", exclude_none=True)
+    assert raw["rules"][0]["rule"]["conditions"][0]["attribute_type"] == (
+        attribute_type.value
+    )
+    assert validate_flag_targeting(raw) is not None
+    assert validate_experiment_targeting(raw) is not None
+    for context, holds in (({"a": "x"}, True), ({"a": "y"}, False), ({}, False)):
+        assert _answers(_rules(typed), context) == (holds, holds), context
 
 
 # ---------------------------------------------------------------------------

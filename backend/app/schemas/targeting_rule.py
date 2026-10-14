@@ -65,7 +65,7 @@ class OperatorType(str, Enum):
 
 
 class AttributeType(str, Enum):
-    """Types of user attributes for validation."""
+    """Types a condition may declare for its attribute; no evaluator reads them (#1159)."""
 
     STRING = "string"
     NUMBER = "number"
@@ -88,7 +88,11 @@ class Condition(BaseModel):
         description="Additional value for operators that need two values (e.g., between)",
     )
     attribute_type: Optional[AttributeType] = Field(
-        None, description="Type of the attribute for validation"
+        None,
+        description=(
+            "Type of the attribute. Saved as given; neither flag nor experiment "
+            "targeting reads it (#1159)"
+        ),
     )
     validation_schema: Optional[Dict[str, Any]] = Field(
         None, description="JSON schema for validating the attribute value"

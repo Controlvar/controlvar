@@ -153,10 +153,14 @@ def test_a_value_the_check_cannot_read_is_listed(monkeypatch):
     assert found.line() == "feature_flag\tid\tk\ttargeting_rules\tcould not be checked"
 
 
-def test_the_feature_flags_and_segments_tables_are_read(monkeypatch):
+def test_the_feature_flags_experiments_and_segments_tables_are_read(monkeypatch):
     seen = []
     rows = {
         "feature_flags": [("row", "key", {"country": ["US"]})],
+        "experiments": [
+            ("exp", "exp-key", "ACTIVE", {"country": ["US"]}),
+            ("fine", "fine-key", "DRAFT", _dash(US)),
+        ],
         "segments": [
             ("seg", "Legacy", {"operator": "and", "conditions": []}),
             ("ok", "Fine", _dash(US)),
@@ -173,20 +177,130 @@ def test_the_feature_flags_and_segments_tables_are_read(monkeypatch):
     class Connection:
         def execute(self, statement):
             seen.append(str(statement))
-            table = "segments" if '"segments"' in str(statement) else "feature_flags"
+            table = next(name for name in rows if f'"{name}"' in str(statement))
             return Result(table)
 
     found = check.scan(Connection(), "exp")
     assert [f.line() for f in found] == [
         "feature_flag\trow\tkey\ttargeting_rules\tunknown key",
+        "experiment\texp\texp-key\tACTIVE\ttargeting_rules\tunknown key",
         "segment\tseg\tLegacy\trules\trules not valid: unknown key",
     ]
     assert seen == [
         'SELECT id, "key", "targeting_rules" FROM "exp"."feature_flags" '
         'WHERE "targeting_rules" IS NOT NULL ORDER BY id',
+        'SELECT id, "key", "status", "targeting_rules" FROM "exp"."experiments" '
+        'WHERE "targeting_rules" IS NOT NULL ORDER BY id',
         'SELECT id, "name", "rules" FROM "exp"."segments" '
         "WHERE \"status\" <> 'ARCHIVED' ORDER BY id",
     ]
+
+
+def test_an_experiment_line_carries_its_status():
+    found = check.experiment_finding_for("id", None, "PAUSED", 42)
+    assert (
+        found.line() == "experiment\tid\t\tPAUSED\ttargeting_rules\tmust be an object"
+    )
+    assert check.experiment_finding_for("id", "k", "DRAFT", _dash(US)) is None
+    assert check.experiment_finding_for("id", "k", "DRAFT", None) is None
+
+
+def _native(group, default=None):
+    out = {"rules": [{"id": "r", "rule": group}]}
+    if default is not None:
+        out["default_rule"] = {"id": "d", "rule": default}
+    return out
+
+
+LONGER = {
+    "attribute": "tags",
+    "operator": "array_length",
+    "value": 2,
+    "additional_value": "gt",
+}
+TYPED = {
+    "attribute": "plan",
+    "operator": "eq",
+    "value": "pro",
+    "attribute_type": "string",
+}
+EQ = {"attribute": "plan", "operator": "eq", "value": "pro"}
+
+
+@pytest.mark.parametrize(
+    "rules, path, what",
+    [
+        (
+            _native({"operator": "and", "conditions": [EQ, LONGER]}),
+            "rules[0].rule.conditions[1].operator",
+            "array_length",
+        ),
+        (
+            _native({"operator": "not", "conditions": [LONGER]}),
+            "rules[0].rule.conditions[0].operator",
+            "array_length",
+        ),
+        (
+            _native(
+                {
+                    "operator": "and",
+                    "conditions": [EQ],
+                    "groups": [{"operator": "not", "conditions": [EQ, TYPED]}],
+                }
+            ),
+            "rules[0].rule.groups[0].conditions[1].attribute_type",
+            "attribute_type",
+        ),
+        (
+            _native(
+                {"operator": "and", "conditions": [EQ]}, default={"conditions": [TYPED]}
+            ),
+            "default_rule.rule.conditions[0].attribute_type",
+            "attribute_type",
+        ),
+        (
+            _native(
+                {
+                    "operator": "and",
+                    "conditions": [{**LONGER, "attribute_type": "array"}],
+                }
+            ),
+            "rules[0].rule.conditions[0].operator",
+            "array_length, attribute_type",
+        ),
+    ],
+    ids=["top", "not", "nested-not", "default-typed", "both"],
+)
+def test_an_enrolment_change_names_the_first_condition(rules, path, what):
+    found = check.enrolment_change_for("id", "k", "ACTIVE", rules)
+    assert found.line() == (
+        f"experiment\tid\tk\tACTIVE\t{path}\tenrolment of new users may change: {what}"
+    )
+
+
+@pytest.mark.parametrize(
+    "rules",
+    [
+        None,
+        {},
+        _native({"operator": "and", "conditions": [EQ]}),
+        _native(
+            {"operator": "and", "conditions": [EQ]}, default={"conditions": [LONGER]}
+        ),
+        _dash({"attribute": "tags", "operator": "array_length", "value": 2}),
+        [{"type": "context", "conditions": [LONGER]}],
+    ],
+    ids=["null", "empty", "plain", "length-in-default", "dashboard", "legacy-list"],
+)
+def test_rules_assignment_reads_alike_are_not_enrolment_changes(rules):
+    assert check.enrolment_change_for("id", "k", "ACTIVE", rules) is None
+
+
+def test_rules_assignment_cannot_read_are_listed():
+    found = check.enrolment_change_for("id", "k", "DRAFT", "{not json")
+    assert found.line() == (
+        "experiment\tid\tk\tDRAFT\ttargeting_rules\tcould not be checked"
+    )
 
 
 @pytest.mark.parametrize(

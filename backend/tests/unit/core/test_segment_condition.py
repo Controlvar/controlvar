@@ -68,10 +68,10 @@ def _flag_matches(rules: TargetingRules, ctx) -> bool:
 
 
 def _experiment_matches(rules: TargetingRules, ctx) -> bool:
-    """The experiment evaluator, with attribute validation as assignment runs it."""
+    """The experiment evaluator, as assignment runs it."""
     service = RulesEvaluationService()
     rule, _metrics = service.evaluate_rules_with_validation(
-        rules, ctx, validate_attributes=True, track_metrics=False
+        rules, ctx, track_metrics=False
     )
     return rule is not None
 
@@ -198,13 +198,18 @@ def test_segment_attribute_with_equals():
     assert _experiment_matches(rules, {"country": "US"}) is False
 
 
-def test_required_attributes_skip_only_segment_conditions():
-    service = RulesEvaluationService()
+@pytest.mark.parametrize("evaluate", EVALUATORS)
+def test_required_attributes_skip_only_segment_conditions(evaluate):
+    """A segment condition requires nothing from the context; the condition
+    beside it still requires its own attribute."""
     rules = _rules(
         _cond(OperatorType.IN_SEGMENT),
         _cond(OperatorType.EQUALS, value="US", attribute="country"),
     )
-    assert set(service._extract_required_attributes(rules)) == {"country"}
+    member = {SEGMENT_MEMBERSHIP_KEY: frozenset({SEG})}
+    assert evaluate(rules, {"country": "US", **member}) is True
+    assert evaluate(rules, member) is False
+    assert evaluate(_rules(_cond(OperatorType.IN_SEGMENT)), member) is True
 
 
 # ---------------------------------------------------------------------------

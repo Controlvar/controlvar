@@ -2,7 +2,7 @@
 Advanced unit tests for the enhanced rules engine with custom attribute targeting.
 
 This module tests the new features including:
-- Custom attribute validation
+- That a condition's attribute_type decides nothing (#1159)
 - Advanced operators (semantic version, geo distance, etc.)
 - Performance monitoring
 - Integration with assignment service
@@ -17,6 +17,7 @@ import pytest
 
 from backend.app.core.rule_validation import RuleValidator, ValidationSeverity
 from backend.app.core.rules_engine import TimeWindowUnreadable
+from backend.app.core.targeting_adapter import match_targeting_rule
 from backend.app.schemas.targeting_rule import (
     AttributeType,
     Condition,
@@ -27,7 +28,6 @@ from backend.app.schemas.targeting_rule import (
     TargetingRules,
 )
 from backend.app.services.rules_evaluation_service import (
-    AttributeValidationResult,
     RuleEvaluationMetrics,
     RulesEvaluationService,
 )
@@ -210,171 +210,103 @@ class TestAdvancedOperators:
             is True
         )
 
+    @pytest.mark.regression
     def test_array_length_operator(self):
-        """Test array length operator."""
-        # Test array length comparison
-        assert self.service._evaluate_array_length([1, 2, 3], 3) is True
-        assert self.service._evaluate_array_length([1, 2, 3], 2) is False
-        assert self.service._evaluate_array_length([], 0) is True
+        """array_length is the rules engine's, as on flags (#1159).
 
-        # Test with non-array
-        assert self.service._evaluate_array_length("not an array", 5) is False
+        This test used to pin the service's own reading: an exact length of a
+        list, whatever ``additional_value`` said, and never a text's length.
+        """
+
+        def length(actual, expected, comparison=None):
+            return self.service._apply_operator_enhanced(
+                OperatorType.ARRAY_LENGTH, actual, expected, comparison
+            )
+
+        # No comparison is eq.
+        assert length([1, 2, 3], 3) is True
+        assert length([1, 2, 3], 2) is False
+        assert length([], 0) is True
+        # The comparison is honoured.
+        assert length([1, 2, 3], 2, "gt") is True
+        assert length([1, 2, 3], 3, "gt") is False
+        assert length([1, 2, 3], 3, "lte") is True
+        assert length([1, 2, 3], {"min": 2, "max": 4}, "between") is True
+        # Anything with a length counts: text and objects too.
+        assert length("abc", 3) is True
+        assert length({"a": 1}, 1) is True
+        # A number or null has no length.
+        assert length(5, 1) is False
+        assert length(None, 0) is False
 
 
-class TestAttributeValidation:
-    """Tests for custom attribute validation."""
+#: One condition per attribute type whose ``attribute_type`` disagrees with the
+#: context's value: the check that used to run first refused the whole ruleset
+#: for each of these.
+MISMATCHED_TYPES = {
+    AttributeType.STRING: ("age", OperatorType.GREATER_THAN, 18, 30),
+    AttributeType.NUMBER: ("plan", OperatorType.EQUALS, "premium", "premium"),
+    AttributeType.BOOLEAN: ("plan", OperatorType.EQUALS, "premium", "premium"),
+    AttributeType.ARRAY: ("plan", OperatorType.EQUALS, "premium", "premium"),
+    AttributeType.DATE: ("plan", OperatorType.EQUALS, "premium", "premium"),
+    AttributeType.JSON: ("plan", OperatorType.EQUALS, "premium", "premium"),
+    AttributeType.GEO_COORDINATE: ("plan", OperatorType.EQUALS, "premium", "premium"),
+    AttributeType.SEMANTIC_VERSION: (
+        "plan",
+        OperatorType.EQUALS,
+        "premium",
+        "premium",
+    ),
+}
 
-    def setup_method(self):
-        """Setup test data."""
-        self.service = RulesEvaluationService()
 
-    def test_string_attribute_validation(self):
-        """Test string attribute validation."""
-        result = self.service._validate_attribute_value(
-            "name", "John Doe", AttributeType.STRING
+class TestAttributeTypeIsNotRead:
+    """``attribute_type`` decides nothing on either evaluator (#1159).
+
+    Replaces the tests of the experiment's own attribute check, which refused
+    the whole ruleset when the context's value did not have the condition's
+    ``attribute_type``, where a flag answered the condition.
+    """
+
+    def test_every_attribute_type_is_covered(self):
+        assert set(MISMATCHED_TYPES) == set(AttributeType)
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize(
+        "attribute_type", sorted(MISMATCHED_TYPES, key=lambda t: t.value)
+    )
+    def test_a_mismatched_attribute_type_does_not_refuse_the_ruleset(
+        self, attribute_type
+    ):
+        attribute, operator, value, actual = MISMATCHED_TYPES[attribute_type]
+
+        def rules(**extra):
+            condition = Condition(
+                attribute=attribute, operator=operator, value=value, **extra
+            )
+            return TargetingRules(
+                rules=[
+                    TargetingRule(
+                        id="typed",
+                        rule=RuleGroup(conditions=[condition]),
+                        rollout_percentage=100,
+                    )
+                ]
+            )
+
+        context = {attribute: actual}
+        typed = rules(attribute_type=attribute_type)
+        matched, metrics = RulesEvaluationService().evaluate_rules_with_validation(
+            typed, context
         )
-        assert result.is_valid is True
-
-        # Test non-string value
-        result = self.service._validate_attribute_value(
-            "name", 123, AttributeType.STRING
+        assert matched is not None and matched.id == "typed"
+        assert metrics.error is None
+        # The same answer as without the type, and as a flag.
+        untyped, _ = RulesEvaluationService().evaluate_rules_with_validation(
+            rules(), context
         )
-        assert result.is_valid is False
-        assert "must be a string" in result.error_message
-
-    def test_number_attribute_validation(self):
-        """Test number attribute validation."""
-        # Test valid numbers
-        result = self.service._validate_attribute_value("age", 25, AttributeType.NUMBER)
-        assert result.is_valid is True
-
-        result = self.service._validate_attribute_value(
-            "score", 98.5, AttributeType.NUMBER
-        )
-        assert result.is_valid is True
-
-        # Test string that can be converted to number
-        result = self.service._validate_attribute_value(
-            "count", "42", AttributeType.NUMBER
-        )
-        assert result.is_valid is True
-
-        # Test invalid number
-        result = self.service._validate_attribute_value(
-            "age", "not a number", AttributeType.NUMBER
-        )
-        assert result.is_valid is False
-
-    def test_boolean_attribute_validation(self):
-        """Test boolean attribute validation."""
-        result = self.service._validate_attribute_value(
-            "active", True, AttributeType.BOOLEAN
-        )
-        assert result.is_valid is True
-
-        result = self.service._validate_attribute_value(
-            "active", False, AttributeType.BOOLEAN
-        )
-        assert result.is_valid is True
-
-        # Test non-boolean
-        result = self.service._validate_attribute_value(
-            "active", "true", AttributeType.BOOLEAN
-        )
-        assert result.is_valid is False
-
-    def test_array_attribute_validation(self):
-        """Test array attribute validation."""
-        result = self.service._validate_attribute_value(
-            "tags", ["a", "b", "c"], AttributeType.ARRAY
-        )
-        assert result.is_valid is True
-
-        result = self.service._validate_attribute_value(
-            "empty", [], AttributeType.ARRAY
-        )
-        assert result.is_valid is True
-
-        # Test non-array
-        result = self.service._validate_attribute_value(
-            "tags", "not an array", AttributeType.ARRAY
-        )
-        assert result.is_valid is False
-
-    def test_date_attribute_validation(self):
-        """Test date attribute validation."""
-        # Test ISO string
-        result = self.service._validate_attribute_value(
-            "created_at", "2023-01-01T00:00:00Z", AttributeType.DATE
-        )
-        assert result.is_valid is True
-
-        # Test datetime object
-        result = self.service._validate_attribute_value(
-            "updated_at", datetime.now(), AttributeType.DATE
-        )
-        assert result.is_valid is True
-
-        # Test timestamp
-        result = self.service._validate_attribute_value(
-            "timestamp", 1672531200, AttributeType.DATE
-        )
-        assert result.is_valid is True
-
-        # Test invalid date string
-        result = self.service._validate_attribute_value(
-            "invalid_date", "not a date", AttributeType.DATE
-        )
-        assert result.is_valid is False
-
-    def test_geo_coordinate_validation(self):
-        """Test geographic coordinate validation."""
-        # Test valid coordinates
-        result = self.service._validate_attribute_value(
-            "location", [40.7128, -74.0060], AttributeType.GEO_COORDINATE
-        )
-        assert result.is_valid is True
-
-        # Test invalid format
-        result = self.service._validate_attribute_value(
-            "location", [40.7128], AttributeType.GEO_COORDINATE
-        )
-        assert result.is_valid is False
-
-        # Test out of range coordinates
-        result = self.service._validate_attribute_value(
-            "location", [91, -74], AttributeType.GEO_COORDINATE
-        )
-        assert result.is_valid is False
-
-        result = self.service._validate_attribute_value(
-            "location", [40, -181], AttributeType.GEO_COORDINATE
-        )
-        assert result.is_valid is False
-
-    def test_semantic_version_validation(self):
-        """Test semantic version validation."""
-        # Test valid versions
-        result = self.service._validate_attribute_value(
-            "version", "1.2.3", AttributeType.SEMANTIC_VERSION
-        )
-        assert result.is_valid is True
-
-        result = self.service._validate_attribute_value(
-            "version", "1.0.0-beta.1", AttributeType.SEMANTIC_VERSION
-        )
-        assert result.is_valid is True
-
-        # Test invalid versions
-        result = self.service._validate_attribute_value(
-            "version", "1.2", AttributeType.SEMANTIC_VERSION
-        )
-        assert result.is_valid is False
-
-        result = self.service._validate_attribute_value(
-            "version", "not a version", AttributeType.SEMANTIC_VERSION
-        )
-        assert result.is_valid is False
+        assert untyped is not None
+        assert match_targeting_rule(typed, context).id == "typed"
 
 
 class TestRulesEvaluationService:
@@ -423,14 +355,14 @@ class TestRulesEvaluationService:
         assert metrics is not None
         assert metrics.matched is True
 
-    def test_validation_with_invalid_attributes(self):
-        """Test validation with invalid user context."""
-        # Create invalid user context
-        invalid_context = {
-            "user_id": "test-user-123",
-            "app_version": "invalid version",  # Invalid semantic version
-        }
+    @pytest.mark.regression
+    def test_attribute_type_is_not_a_validation(self):
+        """A value that is not a version does not match; it is not an error.
 
+        The condition's ``attribute_type`` is not checked first (#1159): the
+        operator answers, as on flags, so ``v1.2.3`` (which the old check
+        refused) matches, and a value that is not a version simply does not.
+        """
         condition = Condition(
             attribute="app_version",
             operator=OperatorType.SEMANTIC_VERSION,
@@ -447,15 +379,20 @@ class TestRulesEvaluationService:
 
         targeting_rules = TargetingRules(version="1.0", rules=[targeting_rule])
 
-        # Test evaluation should handle validation gracefully
         matched_rule, metrics = self.service.evaluate_rules_with_validation(
-            targeting_rules, invalid_context, validate_attributes=True
+            targeting_rules,
+            {"user_id": "test-user-123", "app_version": "invalid version"},
         )
-
-        # Should not match due to validation error
         assert matched_rule is None
         assert metrics is not None
-        assert metrics.error is not None
+        assert metrics.rule_id == "no_match"
+        assert metrics.error is None
+
+        matched_rule, metrics = self.service.evaluate_rules_with_validation(
+            targeting_rules, {"user_id": "test-user-123", "app_version": "v1.2.3"}
+        )
+        assert matched_rule is not None and matched_rule.id == "version_test"
+        assert metrics.error is None
 
     def test_performance_metrics_collection(self):
         """Test that performance metrics are collected."""
