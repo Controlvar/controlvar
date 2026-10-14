@@ -1309,12 +1309,22 @@ text = "To undo the migration a release added, open that migration file (backend
 by = ["test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_module_migrations_ship_in_the_full_image_only"]
 
 [[unit]]
-text = "d29a479daafe to undo 37dcb2969766."
+text = "37dcb2969766 to undo 4c2c09a2b3e8."
 by = ["test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch"]
 
 [[unit]]
-text = "That downgrade drops the table segment_members, the members of every id-list segment (nothing rebuilds them), and the column segments.kind, so it refuses while segment_members has any row: it prints the row count and changes nothing."
-by = ["test:backend/tests/integration/database/test_segment_members_migration.py"]
+text = "That downgrade changes no table: safety_rollback_records.safety_config_id stays nullable and its foreign key stays ON DELETE SET NULL, which the release you roll back to runs against unchanged."
+by = [
+    "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_the_downgrade_changes_nothing_and_a_rollback_still_succeeds",
+    "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_a_database_at_the_previous_release_upgraded_with_heads",
+]
+
+[[unit]]
+text = "Going one further, to d29a479daafe, also undoes 37dcb2969766, which drops the table segment_members, the members of every id-list segment (nothing rebuilds them), and the column segments.kind, so it refuses while segment_members has any row: it prints the row count and changes nothing."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_segment_members_migration.py",
+]
 
 [[unit]]
 text = "The workflow cannot pass the override (-x allow_member_loss=true), so with id lists stored either remove their members first or run the downgrade by hand with the override, with the Engineering Lead's approval at the moment it runs."
@@ -1324,7 +1334,7 @@ by = [
 ]
 
 [[unit]]
-text = "Going one further, to 806901fb7735, also undoes d29a479daafe, which drops the table holdout_population with every recorded holdout membership (nothing rebuilds it) and three global_holdouts columns: when that table has rows, a downgrade across d29a479daafe needs the Engineering Lead's approval at the moment it runs."
+text = "Going further, to 806901fb7735, also undoes d29a479daafe, which drops the table holdout_population with every recorded holdout membership (nothing rebuilds it) and three global_holdouts columns: when that table has rows, a downgrade across d29a479daafe needs the Engineering Lead's approval at the moment it runs."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_holdout_population_migration.py::test_downgrade_drops_the_table_index_and_columns_and_keeps_the_deactivation",

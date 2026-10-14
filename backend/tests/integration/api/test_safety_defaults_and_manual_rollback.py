@@ -4,9 +4,9 @@
   configuration of its own. A flag that has one is checked against its own
   thresholds only, so a flag can be taken off a default threshold by giving it
   a configuration without that metric.
-* A rollback of a flag that has no configuration stores one with no
-  thresholds (``execute_rollback`` needs a config row for the rollback
-  record), so from then on the flag is not checked against the defaults.
+* A rollback of a flag that has no configuration leaves it with none, so it
+  is still checked against the defaults (#1206; until then the rollback
+  stored a configuration with no thresholds).
 * A manual rollback (``POST .../rollback``) sends no Slack alert and no
   webhook event: only the safety monitor's automatic rollback notifies.
 * Any signed-in user can read the global settings; changing them takes a
@@ -162,9 +162,13 @@ def test_a_flag_with_its_own_configuration_is_checked_against_its_own_thresholds
     assert own["is_healthy"] is True
 
 
-def test_a_rollback_gives_a_flag_without_a_configuration_one_with_no_thresholds(
+@pytest.mark.regression
+def test_a_rollback_leaves_a_flag_without_a_configuration_on_the_defaults(
     admin_client, db_session, global_defaults
 ):
+    """#1206: renamed and inverted from
+    ``test_a_rollback_gives_a_flag_without_a_configuration_one_with_no_thresholds``,
+    which pinned the rollback that stored an empty configuration."""
     flag = _flag(db_session, latency_ms=50.0)
     before = admin_client.get(f"{SAFETY}/feature-flags/{flag.id}/config").json()
     assert before["id"] == NIL_UUID == str(DEFAULT_CONFIG_ID)
@@ -177,11 +181,11 @@ def test_a_rollback_gives_a_flag_without_a_configuration_one_with_no_thresholds(
     assert resp.json()["success"] is True
 
     after = admin_client.get(f"{SAFETY}/feature-flags/{flag.id}/config").json()
-    assert after["id"] != str(DEFAULT_CONFIG_ID)
-    assert after["metrics"] == {}
+    assert after["id"] == NIL_UUID
+    assert set(after["metrics"]) == set(DEFAULT_METRICS)
     check = _check(admin_client, flag)
-    assert check["metrics"] == []
-    assert check["is_healthy"] is True
+    assert {m["name"] for m in check["metrics"]} == set(DEFAULT_METRICS)
+    assert check["is_healthy"] is False
 
 
 def test_a_manual_rollback_sends_no_alert_and_no_webhook_event(

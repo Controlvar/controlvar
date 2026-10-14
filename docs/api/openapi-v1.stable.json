@@ -7178,6 +7178,12 @@
             "title": "Status",
             "type": "string"
           },
+          "total_auto_eval_unscored": {
+            "description": "Evaluations in the experiment with no judge score: not judged yet, or the call failed or gave no usable score.",
+            "minimum": 0,
+            "title": "Total Auto Eval Unscored",
+            "type": "integer"
+          },
           "total_evaluations": {
             "title": "Total Evaluations",
             "type": "integer"
@@ -7188,6 +7194,22 @@
             },
             "title": "Variant Stats",
             "type": "array"
+          },
+          "winner_metric": {
+            "anyOf": [
+              {
+                "enum": [
+                  "business_metric",
+                  "auto_eval"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The one metric every variant is compared on: business_metric when every variant has at least one business-metric value, otherwise auto_eval (the judge score), compared across the variants that have one. The winner and every variant's p_value and effect_size are on this metric. A variant with no evaluations has no business-metric value. Null when no variant has a value for the chosen metric.",
+            "title": "Winner Metric"
           },
           "winner_variant_id": {
             "anyOf": [
@@ -7220,7 +7242,8 @@
           "variant_stats",
           "winner_variant_id",
           "winner_variant_name",
-          "total_evaluations"
+          "total_evaluations",
+          "total_auto_eval_unscored"
         ],
         "title": "LLMExperimentResults",
         "type": "object"
@@ -13019,6 +13042,12 @@
             ],
             "title": "Mean Latency Ms"
           },
+          "n_auto_eval_unscored": {
+            "description": "Evaluations with no judge score: not judged yet, or the call failed or gave no usable score; left out of the auto-eval statistics.",
+            "minimum": 0,
+            "title": "N Auto Eval Unscored",
+            "type": "integer"
+          },
           "n_evaluations": {
             "title": "N Evaluations",
             "type": "integer"
@@ -13048,6 +13077,7 @@
           "variant_name",
           "is_control",
           "n_evaluations",
+          "n_auto_eval_unscored",
           "mean_latency_ms",
           "latency_ci_lower",
           "latency_ci_upper",
@@ -21430,7 +21460,7 @@
     },
     "/api/v1/llm-experiments/{experiment_id}/judge": {
       "post": {
-        "description": "Use a judge LLM (default: Claude 3.5 Sonnet) to score all responses in\nthis experiment on the specified criteria (e.g. 'helpfulness', 'accuracy').\n\nReturns a list of LLMJudgeResult objects with scores 0–1.",
+        "description": "Use a judge LLM (default: LLM_DEFAULT_JUDGE_MODEL) to score all responses in\nthis experiment on the specified criteria (e.g. 'helpfulness', 'accuracy').\n\nReturns one result per evaluation: its score from 0 to 1, stored as the\nevaluation's auto_eval_score. When the judge call fails or the reply has no\nusable score, no score is stored: the result's score is null, error is\n\"call_failed\" or \"no_score\", and an earlier score is replaced by null.",
         "operationId": "run_judge_api_v1_llm_experiments__experiment_id__judge_post",
         "parameters": [
           {

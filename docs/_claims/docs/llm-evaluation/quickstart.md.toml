@@ -147,8 +147,12 @@ text = "The judge is called through the Anthropic SDK, so judge_model names a Cl
 by = ["untested:T"]
 
 [[unit]]
-text = "A judge call that fails scores the response 0.5."
-by = ["test:backend/tests/unit/services/test_llm_analytics.py::TestRunLLMAsJudge::test_judge_fallback_on_api_error"]
+text = "A judge call that fails, or a reply without a usable score, leaves that response unscored: score is null in the judge's response, and the results count it in the variant's n_auto_eval_unscored."
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheJudgeStoresNoInventedScore::test_a_judge_call_that_fails_leaves_the_evaluation_unscored",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestParseJudgeResponse::test_a_reply_without_a_usable_score_is_unscored",
+    "test:backend/tests/integration/api/test_llm_judge_unscored.py::test_unscored_evaluations_are_left_out_of_the_statistics_and_counted",
+]
 
 [[unit]]
 text = "6. Read Results and Declare a Winner"

@@ -270,7 +270,7 @@ by = ["test:backend/tests/integration/api/test_safety_api.py::TestFeatureFlagSaf
 text = "Complete Audit Trail: All rollbacks logged with reasoning"
 by = [
     "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_automatic_rollback_reason_words_the_breach_in_the_scheduler",
-    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestCreateRollbackRecordStatic::test_creates_record_and_resolves_safety_config_id",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestExecuteRollback::test_every_rollback_is_recorded_and_audited_with_its_reason",
 ]
 
 [[unit]]

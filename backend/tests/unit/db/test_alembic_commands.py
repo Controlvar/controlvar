@@ -27,7 +27,8 @@ ALEMBIC_INI = REPO_ROOT / "backend" / "app" / "db" / "alembic.ini"
 CORE_VERSIONS = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "versions"
 ENV_PY = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "env.py"
 
-CORE_HEAD = "37dcb2969766"
+#: The core chain's head (#1206).
+CORE_HEAD = "4c2c09a2b3e8"
 MODULES_HEAD = "modules_0002_warehouse_analysis"
 #: The revision 1ab99332f0ba's re-run recipe downgrades to, and what lies past it.
 EVENTS_UTC = "1ab99332f0ba"

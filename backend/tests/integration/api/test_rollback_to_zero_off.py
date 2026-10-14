@@ -754,9 +754,10 @@ def test_a_rollback_commits_exactly_once_on_a_flag_with_no_config(
     assert result.success is True, result.message
     assert len(commits) == 1
     db_session.expire_all()
+    # And it gave the flag no safety config: it stays on the defaults (#1206).
     assert (
         db_session.query(FeatureFlagSafetyConfig)
         .filter(FeatureFlagSafetyConfig.feature_flag_id == flag.id)
         .count()
-        == 1
+        == 0
     )

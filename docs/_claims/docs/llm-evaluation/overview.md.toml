@@ -40,10 +40,10 @@ text = "OPENAI_API_KEY, which the OpenAI SDK reads, enables OpenAI variants in /
 by = ["untested:T"]
 
 [[unit]]
-text = "With neither set, no provider is called: /complete answers 502 for that variant, the judge records its fallback score of 0.5, and the AI features use their templates."
+text = "With neither set, no provider is called: /complete answers 502 for that variant, the judge stores no score for any response, and the AI features use their templates."
 by = [
     "test:backend/tests/integration/api/test_unexpected_errors_fixed_message.py::test_an_llm_completion_failure_answers_the_fixed_message",
-    "test:backend/tests/unit/services/test_llm_analytics.py::TestRunLLMAsJudge::test_judge_fallback_on_api_error",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheJudgeStoresNoInventedScore::test_with_no_key_the_judge_calls_nothing_and_stores_no_score",
     "test:backend/tests/unit/services/test_ai_design_service.py",
 ]
 
@@ -81,10 +81,29 @@ by = [
 ]
 
 [[unit]]
-text = "It does not choose the winner: the winner is always the variant with the highest mean business metric, or, with no business metric, the highest mean auto-eval score."
+text = "It does not choose the winner: the results compare every variant on one metric, named in winner_metric, and the winner is the variant with the highest mean on it."
 by = [
-    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_is_variant_with_higher_business_metric",
-    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_based_on_auto_eval_when_no_business_metric",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_a_variant_without_a_business_metric_puts_every_variant_on_the_judge_score",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_the_business_metric_is_used_when_every_variant_has_one",
+]
+
+[[unit]]
+text = "The metric is business_metric when every variant has at least one business-metric value; otherwise it is auto_eval, compared across the variants that have an auto-eval score."
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_a_variant_without_a_business_metric_puts_every_variant_on_the_judge_score",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_the_business_metric_is_used_when_every_variant_has_one",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_the_judge_score_compares_only_the_variants_that_have_one",
+]
+
+[[unit]]
+text = "A variant with no evaluations at all has no business-metric value, so it keeps the experiment off business_metric."
+by = ["test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_the_judge_score_compares_only_the_variants_that_have_one"]
+
+[[unit]]
+text = "winner_metric is null when no variant has a value for the chosen metric."
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_no_value_for_the_chosen_metric_gives_no_metric_and_no_winner",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_an_experiment_with_no_evaluations_names_no_metric",
 ]
 
 [[unit]]
@@ -130,6 +149,29 @@ by = [
 ]
 
 [[unit]]
+text = "A judge call that fails, or a reply without a JSON score from 0 to 1, stores no score: the evaluation's auto_eval_score becomes null, replacing any earlier score, and its entry in the judge's response has \"score\": null and an error, \"call_failed\" or \"no_score\"."
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheJudgeStoresNoInventedScore::test_a_judge_call_that_fails_leaves_the_evaluation_unscored",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheJudgeStoresNoInventedScore::test_a_rejudge_replaces_an_earlier_score_or_clears_it",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestParseJudgeResponse::test_a_reply_without_a_usable_score_is_unscored",
+    "test:backend/tests/integration/api/test_llm_judge_unscored.py::test_the_judge_entry_is_null_with_its_reason_and_the_stored_score_is_null",
+]
+
+[[unit]]
+text = "The results leave such an evaluation out of the auto-eval mean, interval, p-value and effect size, and count it in its variant's n_auto_eval_unscored (total_auto_eval_unscored for the experiment); the count includes evaluations the judge has not been run on."
+by = [
+    "test:backend/tests/integration/api/test_llm_judge_unscored.py::test_unscored_evaluations_are_left_out_of_the_statistics_and_counted",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestUnscoredCount::test_unscored_evaluations_are_counted_and_left_out",
+]
+
+[[unit]]
+text = "Scores stored by an earlier version are kept: there, a failed call was stored as 0.5, which cannot be told from a real 0.5; to re-score such an experiment, run the judge on it again."
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheJudgeStoresNoInventedScore::test_a_score_stored_before_the_upgrade_is_kept_until_the_judge_runs_again",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheJudgeStoresNoInventedScore::test_a_rejudge_replaces_an_earlier_score_or_clears_it",
+]
+
+[[unit]]
 text = "Cost Estimation"
 by = ["exempt:baseline"]
 
@@ -162,19 +204,31 @@ by = [
 ]
 
 [[unit]]
-text = "A p-value (treatment vs control) from Welch's t-test: the exact two-tailed value from the t distribution at the Welch-Satterthwaite degrees of freedom, at every sample size"
-by = ["test:backend/tests/unit/services/test_llm_analytics.py::TestWelchPValueIsExact::test_p_value_matches_scipy_welch"]
-
-[[unit]]
-text = "Cohen's d effect size for business metric and auto-eval score"
+text = "A p-value (treatment vs control) from Welch's t-test: the exact two-tailed value from the t distribution at the Welch-Satterthwaite degrees of freedom, at every sample size; null when either variant has fewer than two values, or neither variant's values vary"
 by = [
-    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_effect_size_calculated",
-    "test:backend/tests/unit/services/test_llm_analytics.py::TestStatisticalHelpers::test_cohens_d_large_effect",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestWelchPValueIsExact::test_p_value_matches_scipy_welch",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestWelchPValueIsExact::test_too_few_values_or_no_spread_give_no_p_value",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestZeroSpread::test_p_value_and_effect_size",
+    "test:backend/tests/integration/api/test_llm_judge_unscored.py::test_zero_spread_gives_a_null_p_value_and_effect_size",
 ]
 
 [[unit]]
-text = "Winner determination based on the highest mean business metric (falls back to auto-eval score)"
+text = "Cohen's d effect size (each treatment vs control) on the metric winner_metric names, like the p-value, and null in the same cases"
 by = [
-    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_is_variant_with_higher_business_metric",
-    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_based_on_auto_eval_when_no_business_metric",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_every_p_value_and_effect_size_is_on_the_winner_metric",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_the_business_metric_is_used_when_every_variant_has_one",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_effect_size_calculated",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestStatisticalHelpers::test_cohens_d_large_effect",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestZeroSpread::test_p_value_and_effect_size",
+    "test:backend/tests/integration/api/test_llm_judge_unscored.py::test_zero_spread_gives_a_null_p_value_and_effect_size",
+]
+
+[[unit]]
+text = "Winner determination on one metric for every variant, named in winner_metric (business_metric or auto_eval, as above, or null when no variant has a value for the chosen metric); each variant's p-value and effect size are on that metric"
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_a_variant_without_a_business_metric_puts_every_variant_on_the_judge_score",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_every_p_value_and_effect_size_is_on_the_winner_metric",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_the_business_metric_is_used_when_every_variant_has_one",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_no_value_for_the_chosen_metric_gives_no_metric_and_no_winner",
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestGetResults::test_the_results_compare_every_variant_on_the_judge_score_and_say_so",
 ]
