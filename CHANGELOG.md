@@ -10,6 +10,22 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.33.0](https://github.com/getexperimently/experimently/compare/v0.32.0...v0.33.0) (2026-10-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** a split URL variant's `traffic_allocation` outside 0 to 100 is refused with 422 on create and update, where only the sum was checked; a `PUT` that sends back a stored configuration with such a value answers 422 until the value is corrected, and the split URL preview of one answers 409.
+
+### Bug Fixes
+
+* **api:** a split URL variant's traffic_allocation must be 0 to 100, and the CUPED covariate description says what the code does ([#1230](https://github.com/getexperimently/experimently/issues/1230)) ([f7ef181](https://github.com/getexperimently/experimently/commit/f7ef18136e2773bfd4d35e587624c297720e9567))
+* core-build fails when a step is stopped, the snapshot test reads the UTC day, and doc_claims judges a row by its own excerpt ([#1228](https://github.com/getexperimently/experimently/issues/1228)) ([3abe528](https://github.com/getexperimently/experimently/commit/3abe528c2632d967e3d2363e2aac574f854fb59e))
+* **docs:** the evaluate route, the OpenFeature providers and the Android SDK describe what the API answers ([#1235](https://github.com/getexperimently/experimently/issues/1235)) ([935ebad](https://github.com/getexperimently/experimently/commit/935ebad3a0518adfcb064268fef67ed28bc8ce2c))
+* **logging:** the HTTP client's request lines no longer put warehouse hosts in the API log ([#1234](https://github.com/getexperimently/experimently/issues/1234)) ([fb435d7](https://github.com/getexperimently/experimently/commit/fb435d72cbfeab754c141ece07820094c3057967))
+* **targeting:** a json_path value that cannot be parsed does not match, and is not logged as an error ([#1229](https://github.com/getexperimently/experimently/issues/1229)) ([a8d8519](https://github.com/getexperimently/experimently/commit/a8d851907037c12fee85e51875bb299710f753ad))
+* **targeting:** experiments answer array_length and attribute_type conditions as flags do ([#1232](https://github.com/getexperimently/experimently/issues/1232)) ([05a2a6d](https://github.com/getexperimently/experimently/commit/05a2a6d3196181a5164096a3e5b17157765b5635))
+
 ## [0.32.0](https://github.com/getexperimently/experimently/compare/v0.31.1...v0.32.0) (2026-10-14)
 
 
