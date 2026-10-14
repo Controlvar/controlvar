@@ -139,6 +139,25 @@ def _inject_context(
 # Public configuration helpers
 # ---------------------------------------------------------------------------
 
+#: The HTTP client's own loggers.  httpx writes one INFO line per request --
+#: ``HTTP Request: POST https://<account>.snowflakecomputing.com/... "HTTP/1.1
+#: 200 OK"`` -- with the full URL, so at the default ``LOG_LEVEL=INFO`` every
+#: call to a warehouse put its host (the customer's account or project) in the
+#: API log.  httpcore traces connections at DEBUG, host included.
+HTTP_CLIENT_LOGGERS: tuple[str, ...] = ("httpx", "httpcore")
+
+
+def quiet_http_client_loggers() -> None:
+    """Hold the HTTP client's loggers at WARNING, whatever the root level is.
+
+    A level on the named logger wins over the root's, so this applies to every
+    handler the process installs.  WARNING and above (a failed request) still
+    get through.  Called by both functions that configure logging
+    (:func:`configure_logging` and ``backend.app.core.logging.setup_logging``).
+    """
+    for name in HTTP_CLIENT_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
+
 
 def configure_logging(
     log_level: str = "INFO",
@@ -222,6 +241,7 @@ def configure_logging(
         root.removeHandler(existing)
     root.addHandler(handler)
     root.setLevel(numeric_level)
+    quiet_http_client_loggers()
 
     # uvicorn installs its own handlers (plain text, propagate=False). Route
     # them through the root handler so access/error lines share the format.

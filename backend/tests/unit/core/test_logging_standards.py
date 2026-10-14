@@ -11,7 +11,8 @@ that produces:
   buffer: the fields every line carries, and a keyword argument written as it
   was given;
 * the application's middleware: what it binds to a request's log lines, and
-  that the request-body masking helper is on no request's path.
+  that the request-body masking helper is on no request's path;
+* the HTTP client's own request lines, which are not written at any level.
 """
 
 from __future__ import annotations
@@ -164,6 +165,9 @@ def test_production_logs_at_info_so_debug_lines_are_not_written(started):
 # ---------------------------------------------------------------------------
 
 
+_HTTP_CLIENT_LOGGERS = ("httpx", "httpcore")
+
+
 class _Rendered:
     def __init__(self, buffer: io.StringIO) -> None:
         self.buffer = buffer
@@ -187,6 +191,12 @@ def _configured(json_logs: bool = True, log_level: str = "INFO", **kwargs):
 
     root = logging.root
     handlers, root_level = list(root.handlers), root.level
+    client_levels = {n: logging.getLogger(n).level for n in _HTTP_CLIENT_LOGGERS}
+    # What is in force when the API starts: nothing holds the HTTP client back.
+    # Importing the application has already quieted these loggers (both
+    # configuring functions do), which would hide a call that was removed.
+    for name in _HTTP_CLIENT_LOGGERS:
+        logging.getLogger(name).setLevel(logging.NOTSET)
     saved = structlog.get_config()
     buffer = io.StringIO()
     configure_logging(log_level=log_level, json_logs=json_logs, stream=buffer, **kwargs)
@@ -198,6 +208,8 @@ def _configured(json_logs: bool = True, log_level: str = "INFO", **kwargs):
         for handler in handlers:
             root.addHandler(handler)
         root.setLevel(root_level)
+        for name, level in client_levels.items():
+            logging.getLogger(name).setLevel(level)
         structlog.configure(**saved)
 
 
@@ -374,3 +386,137 @@ def test_the_assignment_event_and_error_tables_keep_the_users_id():
     assert sorted(tables) == ["assignments", "error_logs", "events"]
     for name, table in tables.items():
         assert "user_id" in table.columns, name
+
+
+# ---------------------------------------------------------------------------
+# The HTTP client's request lines
+# ---------------------------------------------------------------------------
+
+#: What a warehouse call looks like to the HTTP client: the host names the
+#: customer's Snowflake account, and httpx writes it, with the query string, on
+#: one INFO line per request.
+_WAREHOUSE_URL = (
+    "https://acme-xy12345.snowflakecomputing.com/api/v2/statements?requestId=r-1"
+)
+
+
+def _post_through_httpx(url: str = _WAREHOUSE_URL) -> None:
+    """One request through an httpx client, as the warehouse adapters make it."""
+    import httpx
+
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={}))
+    with httpx.Client(transport=transport) as client:
+        client.post(url)
+
+
+def _http_client_records(lines: list[dict]) -> list[dict]:
+    return [
+        line
+        for line in lines
+        if line["logger"] in _HTTP_CLIENT_LOGGERS
+        or line["logger"].startswith(tuple(f"{n}." for n in _HTTP_CLIENT_LOGGERS))
+    ]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("log_level", ["INFO", "DEBUG"])
+def test_the_http_clients_request_lines_are_not_written_at_any_log_level(log_level):
+    """``HTTP Request: POST https://<host>/...`` is the line httpx writes at INFO
+    for every request, and httpcore's connection trace (``connect_tcp.started
+    host='<host>'``) is DEBUG.  Neither is in the log, however low ``LOG_LEVEL``
+    is, and neither is the host."""
+    with _configured(log_level=log_level) as out:
+        _post_through_httpx()
+        # What httpcore traces on a real connection (its own logger names).
+        logging.getLogger("httpcore.connection").debug(
+            "connect_tcp.started host='acme-xy12345.snowflakecomputing.com' port=443"
+        )
+        logging.getLogger("httpcore.http11").info("send_request_headers.started")
+        logging.getLogger("probe.kept").info("kept line")
+    lines = out.lines()
+    assert "kept line" in [line["event"] for line in lines], "INFO is not written"
+    assert _http_client_records(lines) == []
+    assert "snowflakecomputing" not in out.buffer.getvalue()
+    assert "HTTP Request" not in out.buffer.getvalue()
+
+
+def test_a_warning_from_the_http_client_is_still_written():
+    """The level is WARNING, not off: a failure the client reports gets through.
+    Passes before the fix too; it guards against quieting more than the lines."""
+    with _configured(log_level="INFO") as out:
+        logging.getLogger("httpx").warning("httpx probe warning")
+        logging.getLogger("httpcore.connection").error("httpcore probe error")
+    assert [line["event"] for line in _http_client_records(out.lines())] == [
+        "httpx probe warning",
+        "httpcore probe error",
+    ]
+
+
+@pytest.mark.regression
+def test_the_older_setup_function_holds_the_http_client_at_warning_too(tmp_path):
+    """``backend.app.core.logging.setup_logging`` is the second place the
+    application configures logging, and it runs when that module is imported."""
+    from backend.app.core.logging import setup_logging
+
+    log_file = tmp_path / "api.log"
+    client_levels = {n: logging.getLogger(n).level for n in _HTTP_CLIENT_LOGGERS}
+    try:
+        # What is in force when the module is imported: nothing quiets httpx.
+        for name in _HTTP_CLIENT_LOGGERS:
+            logging.getLogger(name).setLevel(logging.NOTSET)
+        setup_logging(
+            level=logging.INFO, format="%(name)s %(message)s", log_file=str(log_file)
+        )
+        _post_through_httpx()
+        logging.getLogger("probe.kept").info("kept line")
+    finally:
+        for handler in logging.getLogger().handlers:
+            handler.close()
+        for name, level in client_levels.items():
+            logging.getLogger(name).setLevel(level)
+    written = log_file.read_text(encoding="utf-8")
+    assert "probe.kept kept line" in written, written
+    assert "snowflakecomputing" not in written, written
+    assert "HTTP Request" not in written, written
+
+
+#: Imports the application with LOG_LEVEL=INFO, makes one request through an
+#: httpx client (MockTransport) and writes what the root handler rendered to the
+#: file named by argv[1].  argv[2] is the URL.
+_HTTP_PROBE = textwrap.dedent(
+    """
+    import io, logging, sys
+    import httpx
+    import backend.app.main  # noqa: F401  (configures logging on import)
+
+    (handler,) = logging.getLogger().handlers
+    buffer = io.StringIO()
+    handler.setStream(buffer)
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={}))
+    with httpx.Client(transport=transport) as client:
+        client.post(sys.argv[2])
+    logging.getLogger("probe.kept").info("kept line")
+    with open(sys.argv[1], "w", encoding="utf-8") as out:
+        out.write(buffer.getvalue())
+    """
+)
+
+
+@pytest.mark.regression
+def test_the_api_started_at_info_does_not_log_the_hosts_it_calls(tmp_path):
+    """The whole start-up path: ``backend.app.main`` in a fresh interpreter, with
+    ``LOG_LEVEL=INFO`` set, calls a host through httpx."""
+    out = tmp_path / "rendered.txt"
+    result = subprocess.run(
+        [sys.executable, "-c", _HTTP_PROBE, str(out), _WAREHOUSE_URL],
+        cwd=REPO_ROOT,
+        env={**_environment("development"), "LOG_LEVEL": "INFO"},
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert result.returncode == 0, result.stderr[-3000:]
+    rendered = out.read_text(encoding="utf-8")
+    assert "kept line" in rendered, rendered
+    assert "snowflakecomputing" not in rendered, rendered
+    assert "HTTP Request" not in rendered, rendered

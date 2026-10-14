@@ -88,6 +88,11 @@ Query values are redacted in uvicorn's access and error logs: a filter on the
 `uvicorn.access` and `uvicorn.error` loggers blanks the values
 `backend/app/core/query_redaction.py` recognises, and keeps the parameter names.
 
+The `httpx` and `httpcore` loggers are held at `WARNING` whatever `LOG_LEVEL` is,
+so the line the HTTP client writes for each outgoing request, which includes
+the host it called, is not in the log. A warning or an error from either is
+still written.
+
 A keyword you pass to `logger.info(...)` lands in CloudWatch verbatim. So log
 the identifier, not the object. A `User` or a tracking payload carries an email
 address or an attribute you did not mean to persist.
