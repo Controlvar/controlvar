@@ -36,16 +36,23 @@ pytestmark = [pytest.mark.integration, pytest.mark.regression]
 
 @pytest.fixture
 def session_factory(db_session):
+    """Sessions for the requests; all rolled back and closed before teardown,
+    so a failed assertion cannot leave one holding locks the cleanup waits on."""
     factory = sessionmaker(
         bind=db_session.get_bind(), autocommit=False, autoflush=False
     )
+    made = []
 
     def make():
         session = factory()
         session.execute(text("SET search_path TO test_experimentation"))
+        made.append(session)
         return session
 
-    return make
+    yield make
+    for session in made:
+        session.rollback()
+        session.close()
 
 
 def _users_in_b_slot(db_session, count):
@@ -92,8 +99,7 @@ def test_two_requests_in_flight_across_an_activation_can_both_enrol(
     assert later["reason"] == "mutual_exclusion"
     # ... while in flight, both succeed.
     assert racing["assigned"] is True
-    first.commit()
-    first.close()
+    real_commit()
     db_session.expire_all()
     assert in_flight in _users_in(db_session, EXP_A)
     assert in_flight in _users_in(db_session, EXP_B)
