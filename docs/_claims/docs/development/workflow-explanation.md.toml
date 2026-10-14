@@ -55,11 +55,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "core-build: make core-build, which runs scripts/core_build.sh."
-by = ["untested:T"]
-
-[[unit]]
-text = "It copies the tree, deletes modules/ from the copy, then rebuilds and tests it, and never touches your checkout."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_contributor_rules.py::test_make_core_build_runs_the_core_build_script"]
 
 [[unit]]
 text = "The backend and dashboard suites: see the Testing Guide."

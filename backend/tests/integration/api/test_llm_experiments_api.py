@@ -798,6 +798,74 @@ class TestGetResults:
         app.dependency_overrides.clear()
         assert response.status_code == 200
 
+    @pytest.mark.regression
+    def test_the_results_compare_every_variant_on_the_judge_score_and_say_so(
+        self, admin_client: TestClient, db_session: Session
+    ):
+        """#1214, through the route and the database.
+
+        The control and A have business-metric values and judge scores; B has
+        judge scores only. Every variant is compared on the judge score: B
+        wins on its judge mean, although A's business mean is far higher, and
+        A's p-value is on the judge score although A and the control both
+        have business values.
+        """
+        from scipy import stats
+
+        from backend.app.models.llm_experiment import LLMEvaluation
+
+        payload = _base_payload("One Metric")
+        payload["variants"][0]["traffic_split"] = 0.34
+        payload["variants"][1]["traffic_split"] = 0.33
+        payload["variants"][1]["name"] = "A"
+        payload["variants"].append(
+            {**payload["variants"][1], "name": "B", "traffic_split": 0.33}
+        )
+        create_resp = admin_client.post("/api/v1/llm-experiments/", json=payload)
+        assert create_resp.status_code == 201, create_resp.text
+        exp_id = uuid.UUID(create_resp.json()["id"])
+        ids = {v["name"]: uuid.UUID(v["id"]) for v in create_resp.json()["variants"]}
+
+        values = {
+            "control": {"bm": [10.0, 11.0, 12.0], "ae": [0.40, 0.45, 0.50, 0.42]},
+            "A": {"bm": [20.0, 21.0, 22.0], "ae": [0.41, 0.47, 0.49, 0.44]},
+            "B": {"bm": [], "ae": [0.80, 0.85, 0.90, 0.82]},
+        }
+        for name, by_metric in values.items():
+            for column, metric in (
+                ("business_metric_value", "bm"),
+                ("auto_eval_score", "ae"),
+            ):
+                for value in by_metric[metric]:
+                    db_session.add(
+                        LLMEvaluation(
+                            llm_experiment_id=exp_id,
+                            variant_id=ids[name],
+                            user_id=f"u-{uuid.uuid4().hex[:8]}",
+                            input_variables={},
+                            rendered_prompt="Q",
+                            model_response="A",
+                            latency_ms=10,
+                            input_tokens=1,
+                            output_tokens=1,
+                            estimated_cost_usd=0.0,
+                            **{column: value},
+                        )
+                    )
+        db_session.commit()
+
+        response = admin_client.get(f"/api/v1/llm-experiments/{exp_id}/results")
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["winner_metric"] == "auto_eval"
+        assert data["winner_variant_name"] == "B"
+        by_name = {vs["variant_name"]: vs for vs in data["variant_stats"]}
+        for name in ("A", "B"):
+            expected = stats.ttest_ind(
+                values["control"]["ae"], values[name]["ae"], equal_var=False
+            ).pvalue
+            assert by_name[name]["p_value"] == pytest.approx(float(expected))
+
 
 # ---------------------------------------------------------------------------
 # Judge tests

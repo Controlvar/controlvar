@@ -81,7 +81,7 @@ text = "Live experiment results over WebSocket: a snapshot on connect, then a fr
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Compare model variants on a task; the winner has the best business metric, or the best LLM-judge score without one."
+text = "Compare model variants on a task; the winner has the best business metric when every variant has one, and otherwise the best LLM-judge score."
 by = ["mechanism:docs-hub"]
 
 [[unit]]

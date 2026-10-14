@@ -40,11 +40,15 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "With make db instead (PostgreSQL and Redis only), start the API from the checkout, in a separate terminal:"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_contributor_rules.py::test_make_db_starts_postgresql_and_redis_only"]
 
 [[unit]]
 text = "Seed what the locustfiles call: the experiment sdk_contract_ab, the flag sdk_contract_flag, an API key, and the developer account the management tasks sign in as (dev@demo.com, not a superuser)."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_the_seed_makes_the_keys_and_the_account_the_locustfiles_use",
+    "docex:docs/performance/load-testing.md#sdk_contract_ab",
+    "mechanism:load-test-seed-keys",
+]
 
 [[unit]]
 text = "The seed writes to the database the POSTGRES_ settings name, whose defaults are that PostgreSQL, and writes the key to tests/sdk-contract/live/.api_key:"
@@ -63,7 +67,10 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "An API in the development environment, which is what the Quick Start stack and the command above run, answers 429 to an address that passes a route's rate limit: 6000 requests a minute for each SDK route (/api/v1/tracking/, /api/v1/feature-flags/evaluate/)."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_a_development_api_answers_429_past_6000_requests_a_minute_on_an_sdk_route",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitMiddleware::test_returns_429_when_limit_exceeded",
+]
 
 [[unit]]
 text = "So against a development API, keep a run small and short, as Option B does."
@@ -71,7 +78,10 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "For a real load, run the API in the test environment, where rate limiting is off, as Option C's --start-server and the weekly workflow do."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_start_server_starts_the_api_from_the_checkout_in_the_test_environment",
+    "test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_the_workflow_runs_its_api_in_the_test_environment",
+]
 
 [[unit]]
 text = "Option A: Locust Web UI (interactive)"
@@ -111,11 +121,14 @@ by = ["docex:docs/performance/load-testing.md#Total failures : 0 (0.00%)"]
 
 [[unit]]
 text = "With --start-server it first starts the API from the checkout in the test environment, where rate limiting is off, on --server-port, runs against it, and stops it afterwards."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_start_server_runs_against_the_api_it_started_and_stops_it",
+    "test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_start_server_starts_the_api_from_the_checkout_in_the_test_environment",
+]
 
 [[unit]]
 text = "That API reads the same POSTGRES_ settings, with other defaults: in the test environment its database is experimentation_test and its schema test_experimentation."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_start_server_starts_the_api_from_the_checkout_in_the_test_environment"]
 
 [[unit]]
 text = "Name the ones the seed wrote to:"
@@ -167,7 +180,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "They pass without a running database or API server."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_the_framework_unit_tests_pass_with_no_database_or_api"]
 
 [[unit]]
 text = "The load tests are Locust files in backend/tests/performance/locustfiles/."
@@ -191,7 +204,7 @@ by = ["test:backend/tests/performance/test_run_load_tests.py::test_every_profile
 
 [[unit]]
 text = "Without it the runner runs the baseline, api_load_test.py."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_without_a_profile_the_runner_runs_the_baseline"]
 
 [[unit]]
 text = "What is measured, and where"
@@ -199,39 +212,56 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "This page publishes no response time or throughput."
-by = ["untested:T"]
+by = ["mechanism:load-testing-no-figures"]
 
 [[unit]]
 text = "The CI run that measures them is the Performance Tests workflow (.github/workflows/performance-tests.yml), which runs the baseline every Monday and any of the six on a manual dispatch: it prints each endpoint's p50, p95, p99 and requests per second beside its target, and uploads Locust's CSV files as the run's artifacts."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_the_workflow_runs_the_baseline_every_monday_and_any_profile_on_dispatch",
+    "test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_the_workflow_uploads_the_csv_files_it_tells_locust_to_write",
+    "test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_report_mode_prints_each_percentile_and_rps_beside_its_target",
+]
 
 [[unit]]
 text = "Run with --sla enforce (the runner's default), a test passes when all of the following hold simultaneously:"
-by = ["untested:T"]
+by = [
+    "mechanism:load-test-default-enforce",
+    "mechanism:load-test-measured-run-passes",
+]
 
 [[unit]]
 text = "no request failed (Locust exits 1 on any failed request, and the runner names the endpoints)"
-by = ["untested:T"]
+by = ["mechanism:load-test-failed-request"]
 
 [[unit]]
 text = "every target the locustfile declares in its TARGETS tuple was recorded"
-by = ["untested:T"]
+by = ["mechanism:load-test-declared-target"]
 
 [[unit]]
 text = "The weekly Performance Tests workflow does not gate on latency or throughput."
-by = ["untested:T"]
+by = [
+    "mechanism:load-test-weekly-report",
+    "mechanism:load-test-enforce-or-report",
+]
 
 [[unit]]
 text = "It passes --sla report: it fails when a request fails, when nothing was recorded, or when a declared target was not recorded, and it prints each endpoint's p50, p95, p99 and requests per second beside its target without checking them."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_report_mode_prints_each_percentile_and_rps_beside_its_target",
+    "mechanism:load-test-failed-request",
+    "mechanism:load-test-declared-target",
+    "mechanism:load-test-no-stats",
+    "mechanism:load-test-weekly-report",
+    "mechanism:load-test-enforce-or-report",
+]
 
 [[unit]]
 text = "CI runs this section and Running Unit Tests for the Load Test Framework as written, against the Quick Start stack."
-by = ["untested:T"]
+by = ["mechanism:migration-pages-environments"]
 
 [[unit]]
 text = "Its requirements include Locust, at the version backend/requirements.txt pins:"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_locust_is_pinned_and_the_pinned_version_is_installed"]
 
 [[unit]]
 text = "The tests need PostgreSQL and Redis on localhost, and an API on port 8000 that uses them."
@@ -249,7 +279,10 @@ by = [
 
 [[unit]]
 text = "Locust counts a 429 as a failed request, so the run fails."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_a_429_is_a_failed_request",
+    "mechanism:load-test-failed-request",
+]
 
 [[unit]]
 text = "Locust writes its CSV files under the /tmp/locust_baseline prefix, /tmp/locust_baseline_stats.csv among them."
@@ -261,7 +294,10 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "run_load_tests.py runs Locust headless and judges the result."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_the_runner_runs_locust_headless",
+    "mechanism:load-test-enforce-or-report",
+]
 
 [[unit]]
 text = "Then run it as the weekly workflow does, with --sla report, which prints latency and throughput beside the targets instead of gating on them:"
@@ -269,23 +305,29 @@ by = ["docex:docs/performance/load-testing.md#Every declared target recorded and
 
 [[unit]]
 text = "It exits 1 when a request failed (ERROR: Locust exited with code 1, then one FAIL: line per endpoint with failures), and when the run measured nothing or not what it should: Locust recorded no requests (FAIL: no stats), no recorded endpoint matches a target in performance_targets.py (FAIL: no matched endpoint), or a target the locustfile declares in TARGETS was not recorded, or it declares none (FAIL: unmatched target)."
-by = ["untested:T"]
+by = [
+    "mechanism:load-test-failed-request",
+    "mechanism:load-test-declared-target",
+    "mechanism:load-test-no-target-list",
+    "mechanism:load-test-no-stats",
+    "mechanism:load-test-no-matched-endpoint",
+]
 
 [[unit]]
 text = "A recorded endpoint matches a target when its method and its Locust name= are the target's method and endpoint exactly."
-by = ["untested:T"]
+by = ["mechanism:load-test-exact-match"]
 
 [[unit]]
 text = "Without --sla report it also exits 1 when an endpoint misses a target."
-by = ["untested:T"]
+by = ["mechanism:load-test-enforce-or-report"]
 
 [[unit]]
 text = "Against an API that is already running, pass --host (for example --host http://localhost:8000) instead of --start-server and --server-port."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_with_host_it_runs_against_that_api_and_starts_none"]
 
 [[unit]]
 text = "Add a PerformanceTarget entry to PERFORMANCE_TARGETS in performance_targets.py, for a route the API serves (a unit test checks every target against the OpenAPI document)"
-by = ["untested:T"]
+by = ["mechanism:load-test-target-routes"]
 
 [[unit]]
 text = "Add its key to a TargetGroup in TARGET_GROUPS: the spec tests fail on a target in no group"
@@ -293,11 +335,11 @@ by = ["test:backend/tests/performance/test_specs.py::test_target_groups_cover_al
 
 [[unit]]
 text = "Without the with block Locust sends the request and never records it"
-by = ["untested:T"]
+by = ["mechanism:load-test-no-stats"]
 
 [[unit]]
 text = "Add the target's key to the locustfile's TARGETS tuple, so a run that does not record it fails"
-by = ["untested:T"]
+by = ["mechanism:load-test-declared-target"]
 
 [[unit]]
 text = "Run the spec and validator unit tests (below)"

@@ -494,6 +494,149 @@ class TestGetExperimentResults:
         assert results.total_evaluations == 16
 
 
+def _three_variant_experiment(
+    control: dict, a: dict, b: dict
+) -> tuple[LLMExperiment, List[LLMEvaluation]]:
+    """
+    An experiment with a control and two treatments, ``A`` and ``B``.
+
+    Each argument maps ``"bm"`` and ``"ae"`` to that variant's business-metric
+    values and judge scores, each on its own evaluation.
+    """
+    exp, _ = _make_experiment_with_data()
+    ctrl, a_variant = exp.variants
+    a_variant.name = "A"
+    b_variant = LLMVariant()
+    b_variant.id = uuid.uuid4()
+    b_variant.llm_experiment_id = exp.id
+    b_variant.name = "B"
+    b_variant.is_control = False
+    exp.variants = [ctrl, a_variant, b_variant]
+    evals = []
+    for variant, values in ((ctrl, control), (a_variant, a), (b_variant, b)):
+        for v in values.get("bm", []):
+            evals.append(_make_eval(exp.id, variant.id, bm=v))
+        for v in values.get("ae", []):
+            evals.append(_make_eval(exp.id, variant.id, auto_eval=v))
+    return exp, evals
+
+
+def _results(exp, evals) -> LLMExperimentResults:
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = exp
+    db.query.return_value.filter.return_value.all.return_value = evals
+    return LLMEvaluationAnalyticsService().get_experiment_results(db, exp.id)
+
+
+def _welch(a: List[float], b: List[float]) -> float:
+    """scipy's two-tailed Welch p-value, the control first."""
+    from scipy import stats
+
+    return float(stats.ttest_ind(a, b, equal_var=False).pvalue)
+
+
+def _pooled_d(a: List[float], b: List[float]) -> float:
+    """Cohen's d of ``b`` against ``a`` on the pooled standard deviation."""
+    import statistics as st
+
+    pooled = ((len(a) - 1) * st.variance(a) + (len(b) - 1) * st.variance(b)) / (
+        len(a) + len(b) - 2
+    )
+    return (st.mean(b) - st.mean(a)) / pooled**0.5
+
+
+# The business metric is on its own scale (here, revenue), far above the
+# judge's 0-1: compared with each other, A's business mean beats B's judge
+# mean, while on the judge score alone B is best. On the business metric A
+# differs from the control; on the judge score A barely does, so the two
+# metrics give A different p-values.
+_CONTROL = {"bm": [10.0, 11.0, 12.0, 10.5, 11.5], "ae": [0.40, 0.45, 0.50, 0.42]}
+_A = {"bm": [20.0, 21.0, 22.0, 20.5, 21.5], "ae": [0.41, 0.47, 0.49, 0.44]}
+_B = {"ae": [0.80, 0.85, 0.90, 0.82]}
+
+
+@pytest.mark.regression
+class TestTheWinnerIsChosenOnOneMetric:
+    """
+    #1214: every variant is compared on one metric, which the results name.
+
+    The business metric when every variant has a value for it; otherwise the
+    judge score, across the variants that have one. Each variant's p-value
+    and effect size are on that metric too, so a result never mixes the two.
+    """
+
+    def test_a_variant_without_a_business_metric_puts_every_variant_on_the_judge_score(
+        self,
+    ):
+        results = _results(*_three_variant_experiment(_CONTROL, _A, _B))
+        assert results.winner_metric == "auto_eval"
+        # On the judge means B (0.84) beats A (0.45) and the control (0.44).
+        # Comparing A's business mean (21) with B's judge mean would pick A.
+        assert results.winner_variant_name == "B"
+
+    def test_every_p_value_and_effect_size_is_on_the_winner_metric(self):
+        results = _results(*_three_variant_experiment(_CONTROL, _A, _B))
+        stats_by_name = {vs.variant_name: vs for vs in results.variant_stats}
+        for name, values in (("A", _A), ("B", _B)):
+            vs = stats_by_name[name]
+            # A has business values, as the control does, yet its p-value is
+            # on the judge score like every other variant's.
+            assert vs.p_value == pytest.approx(_welch(_CONTROL["ae"], values["ae"]))
+            assert vs.effect_size == pytest.approx(
+                _pooled_d(_CONTROL["ae"], values["ae"])
+            )
+        assert _welch(_CONTROL["bm"], _A["bm"]) != pytest.approx(
+            stats_by_name["A"].p_value
+        )
+        assert stats_by_name["control"].p_value is None
+
+    def test_the_business_metric_is_used_when_every_variant_has_one(self):
+        b = {"bm": [15.0, 16.0, 17.0, 15.5, 16.5], "ae": [0.80, 0.85, 0.90, 0.82]}
+        results = _results(*_three_variant_experiment(_CONTROL, _A, b))
+        assert results.winner_metric == "business_metric"
+        # On the business metric A (21) beats B (16), whose judge mean is higher.
+        assert results.winner_variant_name == "A"
+        stats_by_name = {vs.variant_name: vs for vs in results.variant_stats}
+        for name, values in (("A", _A), ("B", b)):
+            vs = stats_by_name[name]
+            assert vs.p_value == pytest.approx(_welch(_CONTROL["bm"], values["bm"]))
+            assert vs.effect_size == pytest.approx(
+                _pooled_d(_CONTROL["bm"], values["bm"])
+            )
+
+    def test_the_judge_score_compares_only_the_variants_that_have_one(self):
+        # B has no evaluation at all: the judge score is used, and B has no
+        # mean, p-value or effect size on it.
+        results = _results(*_three_variant_experiment(_CONTROL, _A, {}))
+        assert results.winner_metric == "auto_eval"
+        assert results.winner_variant_name == "A"
+        stats_by_name = {vs.variant_name: vs for vs in results.variant_stats}
+        assert stats_by_name["A"].p_value == pytest.approx(
+            _welch(_CONTROL["ae"], _A["ae"])
+        )
+        assert stats_by_name["B"].p_value is None
+        assert stats_by_name["B"].effect_size is None
+
+    def test_no_value_for_the_chosen_metric_gives_no_metric_and_no_winner(self):
+        # Business values on two variants, none on B, and no judge score
+        # anywhere: the judge score is the metric, and nobody has one.
+        results = _results(
+            *_three_variant_experiment({"bm": _CONTROL["bm"]}, {"bm": _A["bm"]}, {})
+        )
+        assert results.winner_metric is None
+        assert results.winner_variant_id is None
+        assert results.winner_variant_name is None
+        for vs in results.variant_stats:
+            assert vs.p_value is None
+            assert vs.effect_size is None
+
+    def test_an_experiment_with_no_evaluations_names_no_metric(self):
+        exp, _ = _make_experiment_with_data()
+        results = _results(exp, [])
+        assert results.winner_metric is None
+        assert results.winner_variant_id is None
+
+
 # ---------------------------------------------------------------------------
 # Human rating submission
 # ---------------------------------------------------------------------------
