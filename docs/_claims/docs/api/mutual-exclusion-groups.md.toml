@@ -101,11 +101,11 @@ by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::
 
 [[unit]]
 text = "The check is made per request."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/services/test_mutual_exclusion_per_request.py::test_two_requests_in_flight_across_an_activation_can_both_enrol"]
 
 [[unit]]
 text = "If the group's set of active experiments changes while two requests for the same new user are in flight, both can succeed."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/services/test_mutual_exclusion_per_request.py::test_two_requests_in_flight_across_an_activation_can_both_enrol"]
 
 [[unit]]
 text = "Mutual Exclusion Group API"
@@ -482,8 +482,8 @@ by = [
 ]
 
 [[unit]]
-text = "Feature flags and split-URL experiments ignore the holdout: once a winner ships behind a flag, users in the holdout get it too, so shipped features are not part of this comparison."
-by = ["untested:T"]
+text = "Feature flags ignore the holdout: once a winner ships behind a flag, users in the holdout get it too, so shipped features are not part of this comparison."
+by = ["test:backend/tests/integration/api/test_holdout_does_not_hold_back_flags.py::test_held_out_users_still_get_a_shipped_flag"]
 
 [[unit]]
 text = "always_valid_ci_lower and always_valid_ci_upper stay valid however often you check."

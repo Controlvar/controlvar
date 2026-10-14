@@ -38,7 +38,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Each variant has a Beta posterior, Beta(1 + successes, 1 + failures)."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_bandit_weights_routes.py::test_thompson_weights_are_the_beta_1_plus_successes_posteriors"]
 
 [[unit]]
 text = "A weight update draws 10,000 samples from every posterior, and each variant's weight is the share of draws in which it is highest."
@@ -53,11 +53,11 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Each variant's score is mean + sqrt(2 ln(total_pulls) / variant_pulls), and its weight is its score divided by the sum of the scores, so every variant keeps some traffic."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_bandit_weights_routes.py::test_ucb1_weights_are_the_normalised_scores"]
 
 [[unit]]
 text = "While any variant has no pulls, the variants with none share all the weight equally."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_bandit_weights_routes.py::test_ucb1_variants_with_no_pulls_share_all_the_weight"]
 
 [[unit]]
 text = "Epsilon-Greedy"
@@ -68,6 +68,7 @@ text = "The variant with the highest conversion rate gets the weight 0.9 + 0.1 /
 by = [
     "test:backend/tests/unit/services/test_bandit_service.py::TestEpsilonGreedy::test_best_variant_gets_largest_weight",
     "test:backend/tests/unit/services/test_bandit_service.py::TestEpsilonGreedy::test_non_best_variants_get_epsilon_over_n",
+    "test:backend/tests/integration/api/test_bandit_weights_routes.py::test_epsilon_is_point_one_and_not_a_setting",
 ]
 
 [[unit]]
@@ -169,8 +170,8 @@ text = "successes | Converting users in this variant: users assigned to it with 
 by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
 
 [[unit]]
-text = "regret_reduction_pct | Estimated regret reduction compared with a uniform split; null until there is data"
-by = ["untested:T"]
+text = "regret_reduction_pct | Estimated regret reduction compared with a uniform split; null until there is data, and while the weights do no better than a uniform split"
+by = ["test:backend/tests/integration/api/test_bandit_weights_routes.py::test_regret_reduction_is_null_until_there_is_data_and_a_gain"]
 
 [[unit]]
 text = "recommendation | EXPLORING, CONVERGING, or DEPLOYING_<variant name> once one variant dominates"
@@ -251,7 +252,7 @@ by = [
 
 [[unit]]
 text = "Use with caution: the scheduler replaces an override on its next cycle while the experiment is active."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_bandit_weights_routes.py::test_the_scheduler_replaces_an_override_while_the_experiment_is_active"]
 
 [[unit]]
 text = "It prints the new weights:"

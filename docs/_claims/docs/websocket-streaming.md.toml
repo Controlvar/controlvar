@@ -155,7 +155,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "In the dashboard, the ⚡ Live tab of an experiment's results page shows this stream."
-by = ["untested:T"]
+by = ["test:frontend/src/tests/pages/results-reading.test.tsx::opens the results stream of this experiment"]
 
 [[unit]]
 text = "Authentication"

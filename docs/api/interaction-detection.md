@@ -310,6 +310,11 @@ interaction.
 - `has_interaction` is `true` when any row is significant, `false` only when every row
   was tested and none is, and `null` otherwise.
 
+**"No interaction" with few users is weak evidence.** The test has little power when the
+groups are small. The 50% lift example above (10% → 15% and 20% → 30%) is found with 2,000
+users in each group (X² = 8.46, p = 0.0036). With 200 users in each group, the same rates
+give X² = 0.85 and p = 0.36: not significant, although the interaction is there.
+
 ### Rows that are not tested
 
 Every treatment of both experiments has a row; a row that cannot be tested is listed with

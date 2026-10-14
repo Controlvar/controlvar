@@ -196,8 +196,12 @@ by = [
 ]
 
 [[unit]]
-text = "A schedule is refused with 422 when its target percentages decrease, when its stage orders aren't 1, 2, 3 and so on without gaps, or when a stage order is above 1000."
-by = ["untested:T"]
+text = "A schedule is refused with 422 when its target percentages decrease, when two stages have the same stage order or the orders leave a gap, or when a stage order is above 1000."
+by = ["test:backend/tests/integration/api/test_flag_guide_behaviour.py::test_which_schedules_are_refused_with_422"]
+
+[[unit]]
+text = "The orders need not start at 1: 5, 6, 7 is accepted."
+by = ["test:backend/tests/integration/api/test_flag_guide_behaviour.py::test_which_schedules_are_refused_with_422"]
 
 [[unit]]
 text = "Step 4: Activate the schedule"
@@ -385,7 +389,11 @@ by = [
 
 [[unit]]
 text = "min_stage_duration (in hours) applies only to the stages the scheduler starts."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/core/test_rollout_min_stage_duration.py::test_the_scheduler_waits_for_min_stage_duration",
+    "test:backend/tests/unit/core/test_rollout_min_stage_duration.py::test_the_scheduler_starts_the_next_stage_once_min_stage_duration_has_passed",
+    "test:backend/tests/unit/core/test_rollout_min_stage_duration.py::test_a_manual_advance_does_not_wait_for_min_stage_duration",
+]
 
 [[unit]]
 text = "Manual stages are recommended for the final rollout to 100%: they serve as a human approval gate before full deployment."
@@ -510,6 +518,7 @@ text = "Stage orders must be sequential (1, 2, 3, with no gaps), and no higher t
 by = [
     "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestCreateScheduleValidation::test_create_schedule_non_sequential_stage_orders_returns_422",
     "test:backend/tests/integration/api/test_rollout_stage_order_bounds_api.py::test_create_with_a_stage_order_above_the_bound_answers_422",
+    "test:backend/tests/integration/api/test_flag_guide_behaviour.py::test_which_schedules_are_refused_with_422",
 ]
 
 [[unit]]

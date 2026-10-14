@@ -172,7 +172,10 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Every experiment needs a control; mark one variant as it:"
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/api/test_request_validation.py::TestExperimentValidation::test_control_variant_required",
+    "test:backend/tests/integration/api/test_experiments_api.py::TestCreateExperiment::test_create_experiment_no_control_variant_returns_error",
+]
 
 [[unit]]
 text = "Variant | Is Control | Traffic %"
@@ -312,7 +315,11 @@ by = ["test:frontend/src/tests/pages/experiment-new-configuration.test.tsx"]
 
 [[unit]]
 text = "Turned on, the results also carry a Bayesian analysis of the primary metric (the probability that each variant is the best) with default priors; the frequentist results and the recommendation do not change."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/integration/api/test_bayesian_route_claims.py::test_turning_it_on_changes_neither_the_frequentist_results_nor_the_recommendation",
+    "test:frontend/src/tests/components/experiment-form-state.test.ts::sends bayesian_enabled: true only when it is turned on",
+    "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestTurningBayesianOn::test_create_enabled_without_config_stores_defaults",
+]
 
 [[unit]]
 text = "To set the priors, see Bayesian analysis."
@@ -497,6 +504,10 @@ text = "Use the Sample Size tab to confirm the smallest variant has reached the 
 by = ["exempt:advice"]
 
 [[unit]]
+text = "Do not stop the experiment the first time a p-value drops below 0.05: decide at the planned sample size."
+by = ["exempt:advice"]
+
+[[unit]]
 text = "Reading Results"
 by = ["exempt:baseline"]
 
@@ -627,15 +638,18 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "For an experiment with Bayesian analysis on, the end of the Overview tab shows a Bayesian analysis of the primary metric: its decision (Continue, Stop: a winner is clear, Stop: the variants are equivalent or Stop: a meaningful difference is unlikely) and, for each variant, the chance it is the best, the expected loss, the posterior mean and the credible interval."
-by = ["untested:T"]
+by = [
+    "test:frontend/src/tests/pages/results-reading.test.tsx::is the last section, with the decision and a row per variant",
+    "test:frontend/src/tests/pages/results-reading.test.tsx::names the decision %s \"%s\"",
+]
 
 [[unit]]
 text = "It is a second analysis and does not change the recommendation."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_bayesian_route_claims.py::test_turning_it_on_changes_neither_the_frequentist_results_nor_the_recommendation"]
 
 [[unit]]
 text = "When Bayesian analysis is on but the results carry none, a line says it could not be computed."
-by = ["untested:T"]
+by = ["test:frontend/src/tests/pages/results-reading.test.tsx::says it could not be computed when it is on and the results carry none"]
 
 [[unit]]
 text = "The method is described in Bayesian analysis."
@@ -718,7 +732,7 @@ by = [
 
 [[unit]]
 text = "Green = statistically significant improvement Red = statistically significant degradation Gray = not statistically significant"
-by = ["untested:T"]
+by = ["test:frontend/src/tests/pages/results-reading.test.tsx::is green for a significant improvement, red for a significant degradation, gray otherwise"]
 
 [[unit]]
 text = "Trend Chart"
@@ -917,7 +931,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "If you increase to 50%, the original 5% are still included (plus 45% more)"
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_flag_guide_behaviour.py::test_raising_the_rollout_adds_users_and_takes_none_away"]
 
 [[unit]]
 text = "Adding targeting rules:"

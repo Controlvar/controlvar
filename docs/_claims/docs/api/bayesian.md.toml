@@ -72,7 +72,7 @@ by = ["docex:docs/api/bayesian.md#\"is_enabled\": false"]
 
 [[unit]]
 text = "Returns the Bayesian block on its own, always freshly computed."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_bayesian_route_claims.py::test_the_bayesian_route_is_computed_on_every_request"]
 
 [[unit]]
 text = "Any logged-in user can read it."
@@ -170,7 +170,10 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "prior_family | string | beta | Stored only: beta, normal or gamma are accepted, and every config is analysed as Beta-Binomial"
-by = ["untested:T"]
+by = [
+    "test:backend/tests/integration/api/test_bayesian_route_claims.py::test_every_prior_family_is_stored_and_analysed_as_beta_binomial",
+    "test:backend/tests/integration/api/test_bayesian_route_claims.py::test_any_other_prior_family_is_refused",
+]
 
 [[unit]]
 text = "alpha | float | 1.0 | Prior alpha (> 0)"
@@ -278,7 +281,10 @@ by = ["test:backend/tests/integration/api/test_experiment_bayesian_config_api.py
 
 [[unit]]
 text = "STOP_FUTILE is defined but no rule returns it."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_bayesian_decision_values.py::test_stop_futile_is_a_value_of_the_decision",
+    "test:backend/tests/unit/services/test_bayesian_decision_values.py::test_no_rule_returns_stop_futile",
+]
 
 [[unit]]
 text = "The example response above answers CONTINUE: the treatment's expected loss, 0.0002, is below the default loss_threshold, but its probability to be best, 0.9731, is under 0.975."

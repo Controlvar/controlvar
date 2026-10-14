@@ -35,7 +35,11 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The Lambda@Edge router reads its configuration only from an X-Split-URL-Config request header, and nothing sets that header: no stack creates the CloudFront distribution or adds the header, and the platform does not send an experiment's split_url_config to the edge."
-by = ["untested:T"]
+by = [
+    "test:modules/backend/tests/unit/test_split_url_edge_wiring.py::test_the_router_redirects_only_on_the_header",
+    "test:modules/backend/tests/unit/test_split_url_edge_wiring.py::test_no_stack_creates_the_distribution",
+    "test:modules/backend/tests/unit/test_split_url_edge_wiring.py::test_nothing_but_the_router_names_the_header",
+]
 
 [[unit]]
 text = "Without it the router passes every request through unchanged, so deploying the construct does not split traffic."
@@ -298,7 +302,7 @@ by = [
 
 [[unit]]
 text = "401 Unauthorized | Missing or invalid Bearer token"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/api/test_split_url_routes_need_a_token.py::test_a_split_url_route_without_a_valid_token_is_401"]
 
 [[unit]]
 text = "403 Forbidden | Preview: the user is not ADMIN, DEVELOPER or a superuser"

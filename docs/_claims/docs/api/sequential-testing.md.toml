@@ -29,7 +29,10 @@ by = ["docex:docs/api/sequential-testing.md#\"method\": \"msprt\""]
 
 [[unit]]
 text = "lambda_ratio >= 1/alpha → strong evidence for an effect, in either direction (stop_for_effect); the direction decides whether to ship (see Reading a stop decision)"
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/api/test_sequential_decisions.py::test_a_worse_treatment_stops_for_effect_as_a_better_one_does",
+    "test:backend/tests/unit/api/test_sequential_decisions.py::test_the_boundary_is_one_over_alpha_in_either_direction",
+]
 
 [[unit]]
 text = "Otherwise → continue collecting data (continue)"
@@ -51,7 +54,12 @@ by = [
 
 [[unit]]
 text = "The always_valid_p_value can be interpreted like a standard p-value at any point without inflating Type I error."
-by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_aa_false_rejections_under_peeking"]
+by = [
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_aa_false_rejections_under_peeking",
+    "test:backend/tests/unit/stats_validation/test_sequential_p_value.py::test_the_always_valid_p_value_is_one_over_the_mixture_ratio",
+    "test:backend/tests/unit/stats_validation/test_sequential_p_value.py::test_the_p_value_is_below_alpha_exactly_when_the_analysis_can_stop",
+    "test:backend/tests/unit/stats_validation/test_sequential_p_value.py::test_aa_paths_read_through_the_p_value_reject_at_most_alpha",
+]
 
 [[unit]]
 text = "lambda_ratio is computed in log space and capped at the largest finite double (about 1.8 × 10³⁰⁸), so an overwhelming difference, such as 10% against 11% with ten million users per arm, still reports a finite number and can stop."
@@ -185,7 +193,12 @@ by = ["docex:docs/api/sequential-testing.md#\"method\": \"msprt\""]
 
 [[unit]]
 text = "sequential_testing_config.tau_squared | float | 0.001 | The mSPRT mixing parameter, above 0 and at most 1"
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/api/test_sequential_decisions.py::test_tau_squared_outside_above_zero_and_at_most_one_is_refused",
+    "test:backend/tests/unit/api/test_sequential_decisions.py::test_tau_squared_up_to_one_is_accepted",
+    "test:backend/tests/unit/api/test_sequential_decisions.py::test_with_no_tau_squared_stored_the_analysis_uses_0001",
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_the_configuration_is_stored_with_its_defaults_and_ranges",
+]
 
 [[unit]]
 text = "sequential_testing_config.spending_function | obrien_fleming | pocock | obrien_fleming | Accepted and stored; no alpha-spending table is computed yet"
@@ -193,15 +206,19 @@ by = ["test:backend/tests/unit/api/test_sequential_contract.py::test_pocock_conf
 
 [[unit]]
 text = "sequential_testing_config.planned_looks | int | 10 | Accepted and stored (1–100); no alpha-spending table is computed yet"
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/api/test_sequential_decisions.py::test_planned_looks_outside_one_to_a_hundred_is_refused",
+    "test:backend/tests/unit/api/test_sequential_decisions.py::test_planned_looks_are_accepted_and_change_nothing",
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_the_configuration_is_stored_with_its_defaults_and_ranges",
+]
 
 [[unit]]
 text = "The sequential analysis uses its own alpha."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/api/test_sequential_decisions.py::test_the_stored_confidence_level_and_correction_do_not_set_the_boundary"]
 
 [[unit]]
 text = "It does not follow the experiment's stored confidence_level or correction_method, which judge the fixed-horizon results (How results are judged)."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/api/test_sequential_decisions.py::test_the_stored_confidence_level_and_correction_do_not_set_the_boundary"]
 
 [[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
@@ -249,7 +266,7 @@ by = ["docex:docs/api/sequential-testing.md#\"method\": \"msprt\""]
 
 [[unit]]
 text = "Any logged-in user can read it."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_sequential_results_routes.py::test_any_signed_in_user_reads_the_sequential_analysis"]
 
 [[unit]]
 text = "It answers 404 with \"Sequential testing is not enabled for this experiment\" when it is off, and \"Experiment not found\" when there is no such experiment."
@@ -296,7 +313,7 @@ by = [
 
 [[unit]]
 text = "moderate_for_effect | Trending toward an effect, in either direction — consider continuing for confirmation"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/api/test_sequential_decisions.py::test_moderate_for_effect_is_either_direction_and_continues"]
 
 [[unit]]
 text = "inconclusive | Not enough data yet — continue"
@@ -304,11 +321,11 @@ by = ["test:backend/tests/unit/services/test_sequential_testing_service.py::Test
 
 [[unit]]
 text = "moderate_for_null | Trending toward no effect"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/api/test_sequential_decisions.py::test_moderate_for_null_is_equal_rates_short_of_strong"]
 
 [[unit]]
 text = "strong_for_null | Evidence leans strongly toward no effect. Not a stopping rule"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/api/test_sequential_decisions.py::test_strong_for_null_is_not_a_stopping_rule"]
 
 [[unit]]
 text = "Recommended Actions"
@@ -338,11 +355,14 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The mSPRT is a two-sided test: stop_for_effect and strong_for_effect mean the effect is not zero, whichever way it points."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/api/test_sequential_decisions.py::test_a_worse_treatment_stops_for_effect_as_a_better_one_does"]
 
 [[unit]]
 text = "A treatment that is worse than the control crosses the boundary exactly as a better one does."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/api/test_sequential_decisions.py::test_a_worse_treatment_stops_for_effect_as_a_better_one_does",
+    "test:backend/tests/unit/api/test_sequential_decisions.py::test_the_boundary_is_one_over_alpha_in_either_direction",
+]
 
 [[unit]]
 text = "The response has no separate \"worse\" value, so read the direction from the confidence_sequence, which is the difference in rates, treatment minus control:"
@@ -372,11 +392,11 @@ by = ["test:frontend/src/tests/components/EarlyStoppingBanner.test.tsx::a confid
 
 [[unit]]
 text = "For example, 10% against 13% and 10% against 7% at 10,000 users per arm both answer stop_for_effect with strong_for_effect."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/api/test_sequential_decisions.py::test_a_worse_treatment_stops_for_effect_as_a_better_one_does"]
 
 [[unit]]
 text = "The first has a confidence_sequence of 0.0157 to 0.0443, the second -0.0427 to -0.0173 (at the default α and τ²; they are not mirror images, because the variance is larger at 13%)."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/api/test_sequential_decisions.py::test_ten_against_thirteen_and_seven_percent_give_the_pages_intervals"]
 
 [[unit]]
 text = "With a higher-is-better metric the first is a win and the second is a harm."
@@ -396,7 +416,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The analysis counts the users who sent the metric's event (the same count the results use for a conversion), whatever the metric's metric_type, so the confidence_sequence is always a difference in the share of users who sent the event."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_sequential_results_routes.py::test_it_counts_users_who_sent_the_event_whatever_the_metric_type"]
 
 [[unit]]
 text = "For a conversion metric that share is the metric."
@@ -423,7 +443,7 @@ by = ["docex:docs/api/sequential-testing.md#\"embedded_method\": \"msprt\""]
 
 [[unit]]
 text = "The alpha parameter exists only on /sequential, and the results routes' confidence_level and correction_method do not change this block."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_sequential_results_routes.py::test_the_results_routes_settings_do_not_change_the_embedded_block"]
 
 [[unit]]
 text = "It is null when sequential testing is off."
@@ -435,11 +455,17 @@ by = ["test:backend/tests/unit/api/test_sequential_results_api.py::TestSequentia
 
 [[unit]]
 text = "It is cached with the rest of the results: for up to 5 minutes for a running experiment and 24 hours otherwise."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_a_settings_change_reaches_the_cached_results_only_once_cleared",
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_results_of_an_experiment_that_is_not_running_are_kept_24_hours",
+]
 
 [[unit]]
-text = "A change to sequential_testing_enabled or sequential_testing_config, which is accepted on a running experiment, therefore shows here only when the cached answer expires or POST /api/v1/results/{experiment_id}/invalidate-cache clears it, not immediately; /sequential is not cached."
-by = ["untested:T"]
+text = "A change to sequential_testing_enabled or sequential_testing_config, which only a superuser can make once the experiment is running (see Permissions), therefore shows here only when the cached answer expires or POST /api/v1/results/{experiment_id}/invalidate-cache clears it, not immediately; /sequential is not cached."
+by = [
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_a_settings_change_reaches_the_cached_results_only_once_cleared",
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_once_running_only_a_superuser_changes_the_sequential_settings",
+]
 
 [[unit]]
 text = "The request below passes use_cache=false for that reason:"
@@ -489,4 +515,19 @@ text = "It means the experiment is running well past its expected duration or co
 by = [
     "test:backend/tests/unit/api/test_sequential_contract.py::test_long_running_inconclusive_is_at_risk_and_continue",
     "test:backend/tests/unit/api/test_sequential_contract.py::test_on_schedule_is_not_at_risk",
+]
+
+[[unit]]
+text = "Do not change the configuration mid-experiment."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Choose alpha and tau_squared before the experiment starts."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Once it is running, the PUT that would change sequential_testing_enabled or sequential_testing_config answers 400 with \"Cannot update experiments in active status\" for an ADMIN or DEVELOPER who is not a superuser."
+by = [
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_once_running_only_a_superuser_changes_the_sequential_settings",
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller",
 ]

@@ -47,11 +47,18 @@ by = [
 
 [[unit]]
 text = "An API key can't do them (the API answers 401)."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/integration/api/test_flag_guide_behaviour.py::test_an_api_key_does_not_create_change_or_turn_on_a_flag",
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key",
+]
 
 [[unit]]
-text = "An administrator creates accounts under Admin → Users."
-by = ["untested:T"]
+text = "A superuser creates accounts under Admin → Users."
+by = [
+    "test:frontend/src/tests/pages/admin-accounts-and-keys.test.tsx::names Users and API Keys in its sidebar",
+    "test:frontend/src/tests/pages/admin-accounts-and-keys.test.tsx::a superuser creates an account under Admin → Users",
+    "test:frontend/src/tests/pages/admin-accounts-and-keys.test.tsx::turns away an %s who is not a superuser (%#)",
+]
 
 [[unit]]
 text = "The examples below use the demo administrator, admin@demo.com."
@@ -62,8 +69,12 @@ text = "An API key, to evaluate the flag the way your application will."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The API section creates one; in the dashboard, it's Admin → API Keys."
-by = ["untested:T"]
+text = "The API section creates one; in the dashboard, a superuser can also create one under Admin → API Keys."
+by = [
+    "test:frontend/src/tests/pages/admin-accounts-and-keys.test.tsx::names Users and API Keys in its sidebar",
+    "test:frontend/src/tests/pages/admin-accounts-and-keys.test.tsx::a superuser creates an API key under Admin → API Keys",
+    "test:frontend/src/tests/pages/admin-accounts-and-keys.test.tsx::turns away an %s who is not a superuser (%#)",
+]
 
 [[unit]]
 text = "Creating a Flag in the Dashboard"
@@ -114,7 +125,11 @@ by = [
 
 [[unit]]
 text = "Key (required) | The identifier your code passes to the SDK. It's filled in from the name (new_checkout_flow), and you can edit it. Use lowercase letters, digits, - and _. The dashboard can't change it after the flag is created. | new-checkout-flow"
-by = ["untested:T"]
+by = [
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::is filled in from the name, and an edited key is the one sent",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::cannot be changed in the dashboard once the flag exists",
+    "test:backend/tests/integration/api/test_feature_flags_api.py::TestFeatureFlagsValidation::test_create_feature_flag_invalid_key_uppercase_returns_422",
+]
 
 [[unit]]
 text = "Description | What the flag controls, and when it should be removed. | Redesigned single-page checkout experience"
@@ -238,7 +253,7 @@ by = [
 
 [[unit]]
 text = "Raising it adds users, and takes none away."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_flag_guide_behaviour.py::test_raising_the_rollout_adds_users_and_takes_none_away"]
 
 [[unit]]
 text = "Step 5: Create the flag, then turn it on"
@@ -495,7 +510,7 @@ by = [
 
 [[unit]]
 text = "Only the first problem found is reported."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_flag_guide_behaviour.py::test_only_the_first_problem_in_the_rules_is_reported"]
 
 [[unit]]
 text = "This request misspells equals:"
@@ -788,7 +803,7 @@ by = ["test:backend/tests/integration/api/test_bulk_toggle_api.py"]
 
 [[unit]]
 text = "The dashboard has no archive or unarchive action yet."
-by = ["untested:T"]
+by = ["test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::neither page offers archive or unarchive for an %s flag"]
 
 [[unit]]
 text = "Create an API key"

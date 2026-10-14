@@ -125,7 +125,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "user_id is exactly the id the user will be assigned with (it is case-sensitive);"
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_cuped_history_sent_by_tracking.py::test_history_is_matched_by_exact_id_and_dated_in_utc"]
 
 [[unit]]
 text = "event_type is the metric's event_name, for example checkout_completed;"
@@ -133,11 +133,11 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "timestamp is when the event happened, in ISO 8601 (no offset means UTC)."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_cuped_history_sent_by_tracking.py::test_history_is_matched_by_exact_id_and_dated_in_utc"]
 
 [[unit]]
 text = "Without it the event is dated when it is received."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_cuped_history_sent_by_tracking.py::test_history_is_matched_by_exact_id_and_dated_in_utc"]
 
 [[unit]]
 text = "Send events from at least covariate_lookback_days before the planned start; anything older is never read."
@@ -421,7 +421,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "variance_reduction_pct can be negative."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_cuped_pooled_slope.py::test_variance_reduction_can_be_negative"]
 
 [[unit]]
 text = "θ is one slope pooled over every arm."
@@ -437,7 +437,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Adding an arm changes the other arms' adjusted effects."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_cuped_pooled_slope.py::test_adding_an_arm_moves_the_other_arms_adjusted_effects_only"]
 
 [[unit]]
 text = "Because θ is pooled over every arm, a new treatment's users move θ, and with it every comparison's adjusted numbers."

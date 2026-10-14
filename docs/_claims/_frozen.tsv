@@ -1,10 +1,6 @@
 # The ledger of scripts/doc_claims.py (#1142): one line per registry entry whose
 # target is untested:<T|S|X|A> or exempt:baseline, as kind<TAB>document<TAB>the
 # first 12 hex digits of sha256(the unit's text). Sorted; it only shrinks.
-# The untested:T lines of the experiments and statistics pages (D73 G5b) are TR1's:
-# that pull request gives each one a test: target.
-# The untested:T lines of the feature flag, rollout, targeting operator and segment
-# pages (D73 G5a) are TR1's: that pull request gives each one a test: target.
 exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	0e2a8558fe91
 exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	2ceb5a66d539
 exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	49c6ccbf4aca
@@ -1997,81 +1993,5 @@ exempt:baseline	docs/workspaces/overview.md	c245b7b28e9d
 exempt:baseline	docs/workspaces/overview.md	c5fbe66a1f0a
 exempt:baseline	docs/workspaces/overview.md	edbaccdf13b1
 exempt:baseline	docs/workspaces/overview.md	ef126424e390
-untested:T	docs/api/bayesian.md	0b4ee9d76216
-untested:T	docs/api/bayesian.md	201f152ac34f
-untested:T	docs/api/bayesian.md	d4d7a2c8b34e
-untested:T	docs/api/cuped.md	a065f92f66b7
-untested:T	docs/api/cuped.md	c30472891c14
-untested:T	docs/api/cuped.md	dcb8f20a9432
-untested:T	docs/api/cuped.md	e40ae9a2f7e1
-untested:T	docs/api/cuped.md	eda34b4c1472
-untested:T	docs/api/interaction-detection.md	029bfa12e2ad
-untested:T	docs/api/interaction-detection.md	4b29b7cdbaff
-untested:T	docs/api/interaction-detection.md	ee846be8a911
-untested:T	docs/api/multi-armed-bandit.md	56fa2f0c4c95
-untested:T	docs/api/multi-armed-bandit.md	87d200d92223
-untested:T	docs/api/multi-armed-bandit.md	887aebbc1db2
-untested:T	docs/api/multi-armed-bandit.md	9001b13e012f
-untested:T	docs/api/multi-armed-bandit.md	9b23e002d808
-untested:T	docs/api/mutual-exclusion-groups.md	1525c2a434b2
-untested:T	docs/api/mutual-exclusion-groups.md	8737589486b4
-untested:T	docs/api/mutual-exclusion-groups.md	b460c33bf075
-untested:T	docs/api/sequential-testing.md	03952cb20118
-untested:T	docs/api/sequential-testing.md	258c48d5b8c8
-untested:T	docs/api/sequential-testing.md	50407dc5b1bc
-untested:T	docs/api/sequential-testing.md	54f59c458e62
-untested:T	docs/api/sequential-testing.md	5b93541c1026
-untested:T	docs/api/sequential-testing.md	65e24141fad2
-untested:T	docs/api/sequential-testing.md	69fe8bd456ca
-untested:T	docs/api/sequential-testing.md	72a9e9f58c54
-untested:T	docs/api/sequential-testing.md	7c6ba1db6465
-untested:T	docs/api/sequential-testing.md	9cd55156668e
-untested:T	docs/api/sequential-testing.md	a5b5c3e3f5bc
-untested:T	docs/api/sequential-testing.md	be3149254d8b
-untested:T	docs/api/sequential-testing.md	c243aeb83ac8
-untested:T	docs/api/sequential-testing.md	cd20d6b060bb
-untested:T	docs/api/sequential-testing.md	e1d25d44dc67
-untested:T	docs/api/sequential-testing.md	e8d21136a179
-untested:T	docs/api/sequential-testing.md	fe28669cec17
-untested:T	docs/api/split-url.md	64252d3e7d0e
-untested:T	docs/api/split-url.md	edd41800962b
-untested:T	docs/feature-flags/create.md	177af18d1e48
-untested:T	docs/feature-flags/create.md	3559ee50ac9c
-untested:T	docs/feature-flags/create.md	3c85d89e3a53
-untested:T	docs/feature-flags/create.md	6402fb92b42a
-untested:T	docs/feature-flags/create.md	999a216c2f8b
-untested:T	docs/feature-flags/create.md	b46d48fd2b19
-untested:T	docs/feature-flags/create.md	cff0d4fae451
-untested:T	docs/feature-flags/rollouts.md	661a00919b40
-untested:T	docs/feature-flags/rollouts.md	c7f286207e01
-untested:T	docs/guides/experiment-wizard.md	2421617fdc23
-untested:T	docs/guides/experiment-wizard.md	6a744edcbe42
-untested:T	docs/guides/experiment-wizard.md	9df7f61b307e
-untested:T	docs/guides/experiment-wizard.md	a124688d0119
-untested:T	docs/guides/segments.md	43ff15f5ea80
-untested:T	docs/guides/segments.md	5102d2074ad7
-untested:T	docs/guides/segments.md	745ffa2ac982
-untested:T	docs/guides/user-guide.md	0c2301bbdb98
-untested:T	docs/guides/user-guide.md	189e895065dc
-untested:T	docs/guides/user-guide.md	1cc79802a38a
-untested:T	docs/guides/user-guide.md	328194544896
-untested:T	docs/guides/user-guide.md	3f2558dda3b9
-untested:T	docs/guides/user-guide.md	84f30cde8908
-untested:T	docs/guides/user-guide.md	df16d0beeea2
-untested:T	docs/llm-evaluation/overview.md	297c2f9155c7
-untested:T	docs/llm-evaluation/overview.md	3d51e699f9ec
-untested:T	docs/llm-evaluation/overview.md	6048ac282e09
-untested:T	docs/llm-evaluation/overview.md	6c9f1e5d29c0
-untested:T	docs/llm-evaluation/quickstart.md	859f8612a3e1
-untested:T	docs/llm-evaluation/quickstart.md	e2946305fdda
-untested:T	docs/llm-evaluation/quickstart.md	fb3e7678eba0
-untested:T	docs/statistics/power-analysis.md	1b994da3c716
-untested:T	docs/statistics/power-analysis.md	37be4a66c462
-untested:T	docs/websocket-streaming.md	93ac326677f6
-untested:T	docs/workspaces/overview.md	1e1e4ae440ee
-untested:T	docs/workspaces/overview.md	7d56b8268742
-untested:T	docs/workspaces/overview.md	7e7518e6a355
-untested:T	docs/workspaces/overview.md	b2d2b9453a2c
-untested:T	docs/workspaces/overview.md	c7f5436c4cc0
 untested:T	docs/workspaces/quickstart.md	7306b0616b05
 untested:T	docs/workspaces/quickstart.md	d280a134f645

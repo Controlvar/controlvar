@@ -233,7 +233,7 @@ by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_
 
 [[unit]]
 text = "The results page is cached for up to five minutes and the tab is not, so for that long the tab's rate can be newer than the one on the Overview."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_sample_size_tab_route.py::test_the_tab_is_not_cached_and_the_results_are"]
 
 [[unit]]
 text = "MDE: 5% relative unless you change it."
@@ -296,7 +296,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "with 20,000 users in the smallest variant: 43% of the planned sample, and a power of 45% to detect the 5% lift"
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_sample_size_tab_route.py::test_twenty_thousand_users_are_43_percent_of_the_plan_at_45_percent_power"]
 
 [[unit]]
 text = "with three variants and Bonferroni: each comparison at 2.5%, n = 56,961 per variant"
@@ -365,7 +365,7 @@ count = 4
 [[unit]]
 text = "Response:"
 by = ["exempt:baseline"]
-count = 5
+count = 4
 
 [[unit]]
 text = "Given a fixed sample size per variant, compute the minimum detectable effect."
@@ -394,6 +394,10 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 [[unit]]
 text = "Example: GET /api/v1/power/curve?baseline=0.05&alpha=0.05&power=0.80&mde=0.10"
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "Response, abridged to 3 of its 15 points:"
+by = ["test:backend/tests/unit/api/test_power_curve_points.py::test_the_curve_has_fifteen_points_and_the_three_the_page_shows"]
 
 [[unit]]
 text = "POST /api/v1/power/plan"

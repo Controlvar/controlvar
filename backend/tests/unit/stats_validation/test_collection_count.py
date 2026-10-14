@@ -34,6 +34,7 @@ EXPECTED = {
     "test_golden_srm.py": 4,
     "test_multiple_comparison_reference.py": 21,
     "test_sequential_confidence_sequence.py": 20,
+    "test_sequential_p_value.py": 18,
     "test_sequential_unequal_arms.py": 12,
 }
 

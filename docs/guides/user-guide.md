@@ -187,7 +187,8 @@ any other change of status.
 **Complete**: Stop the experiment. Use when you have sufficient data and are ready to make a decision. Existing data is preserved.
 
 Use the **Sample Size** tab to confirm the smallest variant has reached the planned sample
-before deciding.
+before deciding. Do not stop the experiment the first time a p-value drops below 0.05: decide at
+the planned sample size.
 
 ---
 

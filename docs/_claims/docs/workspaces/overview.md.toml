@@ -74,7 +74,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Workspaces do not decide which experiments, feature flags or API keys a user can see or change."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_the_platform_role_not_the_workspace_decides"]
 
 [[unit]]
 text = "Experiments and feature flags are not created inside a workspace, and workspace membership plays no part when they are listed, read or changed."
@@ -82,7 +82,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "That is decided by the user's platform role (ADMIN, DEVELOPER, ANALYST or VIEWER) across the whole installation — see Role-based access control."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_the_platform_role_not_the_workspace_decides"]
 
 [[unit]]
 text = "If you need teams to be unable to see each other's experiments and flags, run a separate installation for each team."
@@ -128,7 +128,7 @@ by = [
 
 [[unit]]
 text = "ANALYST | Read the workspace and its member list; leave the workspace"
-by = ["untested:T"]
+by = ["test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_developer_analyst_and_viewer_get_the_same_answers"]
 
 [[unit]]
 text = "VIEWER | Read the workspace and its member list; leave the workspace"
@@ -136,7 +136,7 @@ by = ["test:modules/backend/tests/unit/services/test_workspace_service.py::TestC
 
 [[unit]]
 text = "DEVELOPER, ANALYST and VIEWER are recorded for each member but currently grant the same thing on the workspace routes."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_developer_analyst_and_viewer_get_the_same_answers"]
 
 [[unit]]
 text = "Changing Roles"
@@ -279,4 +279,4 @@ by = [
 
 [[unit]]
 text = "An invitation cannot grant the OWNER role."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_an_invitation_cannot_grant_owner"]

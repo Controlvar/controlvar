@@ -256,8 +256,9 @@ and the rest of the response is unaffected.
 
 It is cached with the rest of the results: for up to 5 minutes for a running experiment
 and 24 hours otherwise. A change to `sequential_testing_enabled` or
-`sequential_testing_config`, which is accepted on a running experiment, therefore shows
-here only when the cached answer expires or
+`sequential_testing_config`, which only a superuser can make once the experiment is
+running (see [Permissions](#permissions)), therefore shows here only when the cached
+answer expires or
 `POST /api/v1/results/{experiment_id}/invalidate-cache` clears it, not immediately;
 `/sequential` is not cached. The request below passes `use_cache=false` for that reason:
 
@@ -290,3 +291,9 @@ above answers `400` with `"Cannot update experiments in active status"`. The dem
 ## Common Mistakes
 
 **Long-running risk is informational only.** An experiment flagged `at_risk` (the same value as `long_running_risk.is_at_risk`) may still be producing valid results. It means the experiment is running well past its expected duration or collecting samples slowly, not that there is no effect.
+
+**Do not change the configuration mid-experiment.** Choose `alpha` and `tau_squared`
+before the experiment starts. Once it is running, the `PUT` that would change
+`sequential_testing_enabled` or `sequential_testing_config` answers `400` with
+`"Cannot update experiments in active status"` for an ADMIN or DEVELOPER who is not a
+superuser.
