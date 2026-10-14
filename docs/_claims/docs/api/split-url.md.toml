@@ -142,8 +142,11 @@ text = "variants[].url | string | Yes | The URL this variant is sent to (stored 
 by = ["test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlVariant::test_variant_missing_url_raises"]
 
 [[unit]]
-text = "variants[].traffic_allocation | number | Yes | Percentage of traffic; only the sum is checked, which must be 100"
+text = "variants[].traffic_allocation | number | Yes | Percentage of traffic: each from 0 to 100, and they must add up to 100"
 by = [
+    "test:backend/tests/unit/schemas/test_split_url_allocation_range.py::test_an_allocation_outside_0_to_100_is_refused_though_the_sum_is_right",
+    "test:backend/tests/unit/schemas/test_split_url_allocation_range.py::test_an_allocation_from_0_to_100_is_accepted",
+    "test:backend/tests/unit/schemas/test_split_url_allocation_range.py::test_the_limits_are_inclusive_and_exact",
     "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigTrafficSum::test_sum_less_than_100_raises",
     "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigTrafficSum::test_sum_greater_than_100_raises",
     "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigTrafficSum::test_exact_100_valid",
@@ -271,8 +274,11 @@ text = "at least 2 URL variants;"
 by = ["test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlValidation::test_single_variant_rejected"]
 
 [[unit]]
-text = "traffic_allocation values that sum to 100 (within 0.01), none of them NaN or infinite."
+text = "traffic_allocation values that are each from 0 to 100 and add up to 100 (within 0.01), none of them NaN or infinite."
 by = [
+    "test:backend/tests/unit/schemas/test_split_url_allocation_range.py::test_an_allocation_outside_0_to_100_is_refused_though_the_sum_is_right",
+    "test:backend/tests/unit/schemas/test_split_url_allocation_range.py::test_the_sum_must_still_be_100_within_the_tolerance",
+    "test:backend/tests/integration/api/test_split_url_allocation_range_api.py::test_create_with_an_allocation_outside_0_to_100_answers_422",
     "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigTrafficSum::test_floating_point_tolerance",
     "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigTrafficSum::test_sum_less_than_100_raises",
     "test:backend/tests/unit/schemas/test_experiment_numeric_bounds.py",
@@ -314,6 +320,10 @@ by = [
 [[unit]]
 text = "404 Not Found | Preview: no experiment has this id"
 by = ["test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_preview_nonexistent_experiment_returns_404"]
+
+[[unit]]
+text = "409 Conflict | Preview: the stored split_url_config is not valid, such as an allocation outside 0 to 100 saved before it was checked; update it with PUT /api/v1/experiments/{id}"
+by = ["test:backend/tests/integration/api/test_split_url_allocation_range_api.py::test_the_preview_of_a_stored_out_of_range_config_answers_409"]
 
 [[unit]]
 text = "422 Unprocessable Entity | Create: the body fails validation, such as allocations that do not sum to 100"

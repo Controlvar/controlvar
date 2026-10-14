@@ -42,7 +42,7 @@ Set `experiment_type` to `split_url` when creating an experiment.
 | `variants` | `array` | Yes | The URL variants: at least 2 |
 | `variants[].name` | `string` | Yes | The variant's name |
 | `variants[].url` | `string` | Yes | The URL this variant is sent to (stored as given; not checked) |
-| `variants[].traffic_allocation` | `number` | Yes | Percentage of traffic; only the sum is checked, which must be 100 |
+| `variants[].traffic_allocation` | `number` | Yes | Percentage of traffic: each from 0 to 100, and they must add up to 100 |
 | `cookie_name` | `string` | No | The router's cookie name; `null` means `split_url_{experiment_key}` |
 | `cookie_ttl_days` | `int` | No | How long the router's cookie lasts, in days (default `30`) |
 | `canonical_url` | `string` | No | Stored with the configuration; nothing reads it yet |
@@ -161,7 +161,7 @@ CloudFront distribution wired to a Lambda@Edge viewer-request function.
 On create, `split_url_config` is checked for:
 
 - at least 2 URL variants;
-- `traffic_allocation` values that sum to 100 (within 0.01), none of them NaN or infinite.
+- `traffic_allocation` values that are each from 0 to 100 and add up to 100 (within 0.01), none of them NaN or infinite.
 
 Nothing else about it is checked: the URLs are stored as given, the number of URL variants
 need not match the experiment's variants, and an experiment of another type can carry a
@@ -178,6 +178,7 @@ answers `400`).
 | `401 Unauthorized` | Missing or invalid Bearer token |
 | `403 Forbidden` | Preview: the user is not ADMIN, DEVELOPER or a superuser |
 | `404 Not Found` | Preview: no experiment has this id |
+| `409 Conflict` | Preview: the stored `split_url_config` is not valid, such as an allocation outside 0 to 100 saved before it was checked; update it with `PUT /api/v1/experiments/{id}` |
 | `422 Unprocessable Entity` | Create: the body fails validation, such as allocations that do not sum to 100 |
 | `501 Not Implemented` | Preview, or creating a `split_url` experiment, in a core deployment |
 

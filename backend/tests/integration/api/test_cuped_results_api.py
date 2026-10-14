@@ -592,6 +592,35 @@ def test_x3_a_covariate_metric_of_the_experiment_is_read(
     assert rows["Purchase"]["theta"] == 0.0
 
 
+def test_cuped_without_a_covariate_metric_reads_each_metrics_own_event(
+    admin_client, built
+):
+    """#1194: ``covariate_metric_id`` is optional, and absent it each metric's
+    own event before the user's assignment is the history (the schema's
+    description says so).
+
+    Both metrics here have no covariate configured. Only ``purchase`` has
+    history (30% of users), so the Purchase row reads it and the Signup row
+    reads the signup history, which nobody has.
+    """
+    exp = built(
+        TWO,
+        metrics=[
+            ("Purchase", "purchase", MetricType.CONVERSION),
+            ("Signup", "signup", MetricType.CONVERSION),
+        ],
+    )
+    assert "covariate_metric_id" not in exp.variance_reduction_config
+
+    rows = {r["metric_name"]: r for r in _get(admin_client, exp)["metrics"]}
+
+    assert rows["Purchase"]["covariate_event_name"] == "purchase"
+    assert rows["Purchase"]["covariate_coverage_pct"] == 30.0
+    assert rows["Purchase"]["unavailable_reason"] is None
+    assert rows["Signup"]["covariate_event_name"] == "signup"
+    assert rows["Signup"]["covariate_coverage_pct"] == 0.0
+
+
 @pytest.mark.regression
 def test_pe10_a_metric_with_no_event_name_never_reads_every_conversion(
     admin_client, built
