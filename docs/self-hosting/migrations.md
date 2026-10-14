@@ -666,7 +666,7 @@ What this means for you:
 
 - **`cdk deploy` alone no longer creates the schema.** After the first
   `cdk deploy` of an environment, the API runs against an empty database until
-  the first Deploy (or a Database Migration run) creates it. In that window
+  the first Deploy creates it. In that window
   `/health` answers 200 -- it checks that the database answers, not that the
   schema is there -- so the load balancer's health checks pass, while real
   requests answer 500 and the API logs errors. That is expected until the first

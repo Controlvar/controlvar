@@ -58,7 +58,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Under Helm, run the same command in an API pod with kubectl exec."
-by = ["untested:S"]
+by = ["test:backend/tests/unit/infrastructure/test_upgrade_on_start.py::test_an_api_pod_runs_the_commands_the_compose_api_container_runs"]
 
 [[unit]]
 text = "On AWS, see Running Migrations in Production."
@@ -212,11 +212,11 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Name the revision rather than a relative step such as upgrade +1."
-by = ["untested:S"]
+by = ["test:backend/tests/integration/database/test_profile_migrations.py::test_a_relative_step_is_refused_with_two_heads_and_a_named_revision_applies"]
 
 [[unit]]
 text = "A relative step counts along one line of revisions, and with two heads alembic refuses it: Relative revision +1 didn't produce 1 migrations (measured from a full checkout against a database at the core head, with the modules branch still to apply)."
-by = ["untested:S"]
+by = ["test:backend/tests/integration/database/test_profile_migrations.py::test_a_relative_step_is_refused_with_two_heads_and_a_named_revision_applies"]
 
 [[unit]]
 text = "Rolling Back"
@@ -437,7 +437,10 @@ count = 2
 
 [[unit]]
 text = "The migrate init container runs it while the old pods keep serving."
-by = ["untested:S"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_upgrade_on_start.py::test_the_migrate_init_container_upgrades_while_the_old_pods_keep_serving",
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_api_serves_a_database_a_newer_release_migrated",
+]
 
 [[unit]]
 text = "helm upgrade --wait --timeout 10m can report a failure while the init container is still running."
@@ -1085,8 +1088,13 @@ text = "cdk deploy alone no longer creates the schema."
 by = ["test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations"]
 
 [[unit]]
-text = "After the first cdk deploy of an environment, the API runs against an empty database until the first Deploy (or a Database Migration run) creates it."
-by = ["untested:A"]
+text = "After the first cdk deploy of an environment, the API runs against an empty database until the first Deploy creates it."
+by = [
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations",
+    "test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_the_migration_task_bootstraps_rather_than_replaying_the_chain",
+    "test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_the_deploy_bootstraps_too",
+    "test:backend/tests/unit/infrastructure/test_deploy_migrates_before_traffic.py::test_the_migration_task_runs_before_the_deployment_that_shifts_traffic",
+]
 
 [[unit]]
 text = "In that window /health answers 200 -- it checks that the database answers, not that the schema is there -- so the load balancer's health checks pass, while real requests answer 500 and the API logs errors."
@@ -1098,11 +1106,20 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The first Deploy may be refused by the API's 5xx alarms."
-by = ["untested:A"]
+by = [
+    "mechanism:deploy-refuses-on-an-api-alarm",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_each_alarm_is_exactly_the_specified_one",
+]
 
 [[unit]]
 text = "Anything that reaches the schema-less API in that window, a scanner included, can put experimentation-api-5xx-blue-<env> or -green-<env> into ALARM, and the Deploy refuses to start while one is."
-by = ["untested:A"]
+by = [
+    "test:backend/tests/integration/database/test_schemaless_api.py::test_health_answers_200_while_requests_answer_500_and_are_logged",
+    "mechanism:deploy-refuses-on-an-api-alarm",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_each_alarm_is_exactly_the_specified_one",
+    "mechanism:deploy-alarm-check-runs-first",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_every_refusal_comes_before_the_first_aws_mutation",
+]
 
 [[unit]]
 text = "The way through is Deploy's existing break-glass (rollback runbook, \"Fix forward while an alarm is firing\"), and whether to use it is a person's decision at that moment."
@@ -1168,7 +1185,10 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "An environment whose Fargate stack was deployed before this change still has API revisions that run the bootstrap on start."
-by = ["untested:A"]
+by = [
+    "test:backend/tests/unit/scripts/test_entrypoint_seed_force_and_workers.py::test_by_default_the_bootstrap_runs_on_every_start_before_the_api_serves",
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations",
+]
 
 [[unit]]
 text = "Those revisions keep doing so, and a rollback to one of them after a newer migration refuses to start."
@@ -1219,7 +1239,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The API container runs the upgrade on start, exits, and restarts until the database is fixed: docker compose logs api --tail 100."
-by = ["untested:S"]
+by = ["test:backend/tests/unit/infrastructure/test_upgrade_on_start.py::test_compose_restarts_the_api_container_that_a_failed_upgrade_stopped"]
 
 [[unit]]
 text = "To serve meanwhile, start the previous release's image; nothing was migrated, so it starts normally."
@@ -1227,7 +1247,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The migrate init container fails and the rolling update stalls; the old pods keep serving."
-by = ["untested:S"]
+by = ["test:backend/tests/unit/infrastructure/test_upgrade_on_start.py::test_a_failed_migrate_stalls_the_rolling_update_and_the_old_pods_keep_serving"]
 
 [[unit]]
 text = "kubectl logs <pod> -c migrate."

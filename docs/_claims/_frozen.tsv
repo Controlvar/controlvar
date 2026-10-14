@@ -1,8 +1,6 @@
 # The ledger of scripts/doc_claims.py (#1142): one line per registry entry whose
 # target is untested:<T|S|X|A> or exempt:baseline, as kind<TAB>document<TAB>the
 # first 12 hex digits of sha256(the unit's text). Sorted; it only shrinks.
-# The untested:S lines of the migrations and load-testing pages (D73 G5d) wait
-# for a stack (S+), and their untested:A lines for AWS evidence (G6).
 # The untested:T lines of the experiments and statistics pages (D73 G5b) are TR1's:
 # that pull request gives each one a test: target.
 # The untested:T lines of the feature flag, rollout, targeting operator and segment
@@ -1999,17 +1997,6 @@ exempt:baseline	docs/workspaces/overview.md	c245b7b28e9d
 exempt:baseline	docs/workspaces/overview.md	c5fbe66a1f0a
 exempt:baseline	docs/workspaces/overview.md	edbaccdf13b1
 exempt:baseline	docs/workspaces/overview.md	ef126424e390
-untested:A	docs/self-hosting/migrations.md	103d9d6888c4
-untested:A	docs/self-hosting/migrations.md	240e6c380d76
-untested:A	docs/self-hosting/migrations.md	d5b74d852de0
-untested:A	docs/self-hosting/migrations.md	ef95de008f71
-untested:S	docs/performance/load-testing.md	771f47b623fa
-untested:S	docs/self-hosting/migrations.md	1c59d2c0c1d5
-untested:S	docs/self-hosting/migrations.md	6ed565315f44
-untested:S	docs/self-hosting/migrations.md	b1be92b5ddf2
-untested:S	docs/self-hosting/migrations.md	be0f10ba7d29
-untested:S	docs/self-hosting/migrations.md	c3f57934ba03
-untested:S	docs/self-hosting/migrations.md	c61f11774260
 untested:T	docs/api/bayesian.md	0b4ee9d76216
 untested:T	docs/api/bayesian.md	201f152ac34f
 untested:T	docs/api/bayesian.md	d4d7a2c8b34e

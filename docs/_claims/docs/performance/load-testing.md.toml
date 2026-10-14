@@ -100,8 +100,16 @@ text = "Endurance test:"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Then open http://localhost:8089 in your browser, configure the number of users and spawn rate, and click Start swarming."
-by = ["untested:S"]
+text = "Then open http://localhost:8089 in your browser."
+by = ["test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_the_web_ui_is_on_8089_and_its_form_follows_the_locustfile"]
+
+[[unit]]
+text = "For the baseline and endurance tests, fill in Number of users and Ramp up, then click Start."
+by = ["test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_the_web_ui_is_on_8089_and_its_form_follows_the_locustfile"]
+
+[[unit]]
+text = "The spike test's shape sets its own users and ramp-up, so Locust disables those two fields for it: click Start."
+by = ["test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_the_web_ui_is_on_8089_and_its_form_follows_the_locustfile"]
 
 [[unit]]
 text = "Against a development API, the rate limits above apply."
