@@ -115,7 +115,7 @@ func (h *HTTPClient) do(req *http.Request, result interface{}) error {
 }
 
 // APIError is returned when the server responds with a non-2xx HTTP status code:
-// 401 bad API key, 404 experiment/flag unknown or not ACTIVE, 422 invalid event,
+// 401 bad API key, 404 an unknown flag key, or an experiment that is unknown or not ACTIVE, 422 invalid event,
 // 429 rate limited (see RetryAfter).
 type APIError struct {
 	StatusCode int

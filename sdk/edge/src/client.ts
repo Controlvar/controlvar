@@ -135,7 +135,7 @@ export class EdgeExperimentationClient {
   /**
    * Evaluate a flag via `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`.
    * Order: in-memory cache → shared store → network. Never throws: on
-   * failure (404 flag not ACTIVE, network error, timeout) resolves to
+   * failure (404 unknown flag key, network error, timeout) resolves to
    * `{key, enabled: false, config: null}`, which is not cached.
    */
   async evaluateFlag(flagKey: string, userId: string): Promise<FlagEvaluation> {

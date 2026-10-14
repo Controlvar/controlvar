@@ -31,7 +31,7 @@ public class FlagEvaluation {
      *
      * @param key     the evaluated flag key
      * @param enabled the server's decision for this user
-     * @param config  the flag's config payload (any JSON value), or {@code null}
+     * @param config  {@code null} today: the evaluate route returns {@code config: null} for every flag
      */
     public FlagEvaluation(String key, boolean enabled, Object config) {
         this.key = key;
@@ -48,9 +48,10 @@ public class FlagEvaluation {
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
 
     /**
-     * Returns the flag's config payload as returned by the server: a
-     * {@code Map} for JSON objects, a {@code List} for arrays, a {@code String},
-     * {@code Number} or {@code Boolean} for scalars, or {@code null}.
+     * Returns {@code null} today: the evaluate route returns {@code config: null}
+     * for every flag. A JSON value the server might send decodes to a
+     * {@code Map} (object), a {@code List} (array) or a {@code String},
+     * {@code Number} or {@code Boolean} (scalar).
      */
     public Object getConfig() { return config; }
     public void setConfig(Object config) { this.config = config; }

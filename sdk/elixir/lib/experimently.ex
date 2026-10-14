@@ -23,7 +23,7 @@ defmodule Experimently do
       case Experimently.evaluate_flag(client, "dark-mode", "user-123") do
         {:ok, %Experimently.FlagEvaluation{enabled: true, config: config}} -> render_dark_mode(config)
         {:ok, _disabled} -> render_default()
-        {:error, reason} -> render_default()   # network/HTTP failure, flag not ACTIVE
+        {:error, reason} -> render_default()   # network/HTTP failure, unknown flag key
       end
 
       Experimently.feature_enabled?(client, "dark-mode", "user-123")   # => true | false

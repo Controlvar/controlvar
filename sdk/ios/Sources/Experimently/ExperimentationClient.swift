@@ -114,7 +114,7 @@ public class ExperimentationClient: ExperimentationClientProtocol {
     /// `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id={user.id}`.
     ///
     /// - Returns: The server's decision (`enabled`) plus the flag's `config`.
-    /// - Throws: `ExperimentationError.flagNotFound` when the flag is unknown or not ACTIVE;
+    /// - Throws: `ExperimentationError.flagNotFound` when the flag key is unknown;
     ///   `.networkError` / `.serverError` / `.decodingError` when the request failed and no
     ///   cached value exists.
     public func evaluateFlag(_ flagKey: String, user: User) async throws -> EvalResult {

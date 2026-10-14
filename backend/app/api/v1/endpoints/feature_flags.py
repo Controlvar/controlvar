@@ -1076,11 +1076,15 @@ async def evaluate_feature_flag(
     Returns:
         ``{"key", "enabled", "config", "reason"}`` where ``reason`` is one of
         ``targeting_rule`` (a rule matched and its rollout % decided),
-        ``rollout`` (the global rollout % decided), ``inactive`` or ``error``.
+        ``rollout`` (the global rollout % decided), ``inactive`` (the flag exists
+        but is not ACTIVE: ``enabled`` is false) or ``error``. ``config`` is
+        always null.
 
     Raises:
         HTTPException 401: If the API key is invalid
-        HTTPException 404: If the feature flag doesn't exist or is not active
+        HTTPException 404: If no feature flag has this key. A flag that exists
+            but is not ACTIVE is not a 404: it answers 200 with ``enabled: false``
+            and ``reason: "inactive"``.
         HTTPException 422: If ``context`` is not valid JSON object
     """
     # The limits of backend.app.core.context_limits, outside the evaluation:
@@ -1120,7 +1124,9 @@ async def evaluate_feature_flag_post(
 
     Raises:
         HTTPException 401: If the API key is invalid
-        HTTPException 404: If the feature flag doesn't exist or is not active
+        HTTPException 404: If no feature flag has this key. A flag that exists
+            but is not ACTIVE is not a 404: it answers 200 with ``enabled: false``
+            and ``reason: "inactive"``.
         HTTPException 422: If the body is invalid
     """
     # The limits of backend.app.core.context_limits, outside the evaluation.

@@ -5,7 +5,7 @@ defmodule Experimently.FlagEvaluation do
 
   - `key` — the flag key you asked for
   - `enabled` — the server's decision for this user
-  - `config` — the flag's config payload as returned by the server (`nil` when none)
+  - `config` — `nil` today: the evaluate route returns `config: null` for every flag
   """
 
   @derive Jason.Encoder

@@ -18,9 +18,8 @@ public class FlagEvaluationResult
     public bool Enabled { get; set; }
 
     /// <summary>
-    /// The flag's <c>config</c> payload as returned by the server — any JSON value — or
-    /// <c>null</c>. For an object payload use e.g.
-    /// <c>result.Config?.GetProperty("variant").GetString()</c>.
+    /// <c>null</c> today: the evaluate route returns <c>config: null</c> for every flag. It
+    /// holds the JSON value if the server ever sends one.
     /// </summary>
     [JsonPropertyName("config")]
     public JsonElement? Config { get; set; }

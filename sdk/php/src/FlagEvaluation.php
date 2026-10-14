@@ -13,7 +13,7 @@ final class FlagEvaluation
     /**
      * @param string $key     The flag key you asked for
      * @param bool   $enabled The server's decision for this user
-     * @param mixed  $config  The flag's config payload as returned by the server (null when none)
+     * @param mixed  $config  null today: the evaluate route returns config: null for every flag
      */
     public function __construct(
         public readonly string $key,
@@ -23,7 +23,7 @@ final class FlagEvaluation
     }
 
     /**
-     * The value reported when an evaluation fails (network/HTTP error, flag not ACTIVE).
+     * The value reported when an evaluation fails (network/HTTP error, unknown flag key).
      */
     public static function disabled(string $key): self
     {

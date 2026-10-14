@@ -73,7 +73,7 @@ static async Task<int> RunAsync()
     //    throws, so a failed request is detected by the flag not having been cached.
     var flag = await client.EvaluateFlagAsync(flagKey, userId);
     if (!client.GetEvaluatedFlags(userId).Contains(flagKey))
-        return Fail($"flag evaluation failed for {flagKey} (not ACTIVE, bad key, or API unreachable)");
+        return Fail($"flag evaluation failed for {flagKey} (unknown flag key, bad key, or API unreachable)");
 
     // 3. Track `purchase` with a value and the experiment key → POST /api/v1/tracking/track.
     bool trackOk = await client.TrackAsync(

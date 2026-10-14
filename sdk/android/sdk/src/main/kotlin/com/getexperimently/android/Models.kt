@@ -46,9 +46,10 @@ data class User(
  *
  * @property key     the evaluated flag key
  * @property enabled the server's decision for this user
- * @property config  the flag's `config` payload: a `Map<String, Any?>` for a JSON object,
- *                   a `List<Any?>` for an array, a `String`/`Number`/`Boolean` for a
- *                   scalar, or `null`
+ * @property config  `null` today: the evaluate route returns `config: null` for every
+ *                   flag. A JSON value the server might send decodes to a
+ *                   `Map<String, Any?>` (object), a `List<Any?>` (array) or a
+ *                   `String`/`Number`/`Boolean` (scalar)
  */
 data class EvalResult(
     val key: String,
@@ -61,8 +62,9 @@ data class EvalResult(
         get() = config as? Map<String, Any?>
 
     /**
-     * Convenience variant name: `null` when the flag is off, `config["variant"]` when
-     * the config carries a string `variant`, otherwise `"on"`.
+     * Convenience variant name: `null` when the flag is off, otherwise `"on"`. The API
+     * returns `config: null`, so no variant name comes back; the code would return a string
+     * `config["variant"]` instead if the server ever sent one.
      */
     val variant: String?
         get() = if (!enabled) null else (configMap?.get("variant") as? String) ?: "on"
@@ -193,7 +195,7 @@ sealed class ExperimentationException(message: String, cause: Throwable? = null)
     class NetworkException(message: String, cause: Throwable? = null) :
         ExperimentationException(message, cause)
 
-    /** The flag is unknown or not ACTIVE (HTTP 404) and no offline value exists. */
+    /** The flag key is unknown (HTTP 404) and no offline value exists. */
     class FlagNotFoundException(flagKey: String) :
         ExperimentationException("Flag not found: $flagKey")
 

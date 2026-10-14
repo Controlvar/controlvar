@@ -52,9 +52,10 @@ class ExperimentationClient
     /**
      * Evaluate a feature flag for the given user. The server decides.
      *
-     * On a network/HTTP failure (including 404 when the flag is not ACTIVE) the
+     * On a network/HTTP failure (including 404 for an unknown flag key) the
      * flag is reported as disabled; a cached evaluation, when present, is
-     * returned instead. Never throws.
+     * returned instead. A flag that is not ACTIVE is a normal answer with
+     * enabled false. Never throws.
      *
      * @param string $flagKey Feature flag key (e.g. 'dark-mode')
      * @param string $userId  Stable user identifier

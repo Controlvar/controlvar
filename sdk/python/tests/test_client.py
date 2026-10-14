@@ -316,7 +316,7 @@ class TestGetFeatureFlag:
         assert len(transport.requests) == 2
 
     def test_404_raises_and_is_not_cached(self, client, transport):
-        transport.respond(404, json={"detail": "Feature flag with key 'x' not found or not active"})
+        transport.respond(404, json={"detail": "Feature flag with key 'x' not found"})
         flag_route(transport, key="x")
         with pytest.raises(ExperimentationError) as info:
             client.get_feature_flag("x", "user-1")
