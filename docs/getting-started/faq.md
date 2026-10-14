@@ -14,9 +14,9 @@ The platform includes a REST API backend (FastAPI), a React management dashboard
 
 ### Is it open source and self-hostable?
 
-Yes. The platform is designed to be deployed in your own AWS account using the provided CDK infrastructure definitions. You own your data and control your deployment. There is no vendor lock-in and no data leaves your infrastructure.
+Yes. The code is Apache-2.0, with the client SDKs MIT, and you run it yourself: Docker Compose on one host, the Helm chart on Kubernetes, or the AWS CDK app in your AWS account. Your experiment data is stored in your own PostgreSQL database. Features you configure send data where you point them: LLM evaluation to the model provider you choose, alerting to Slack or a mail server, and warehouse analysis to your warehouse.
 
-Running `cdk deploy --all` from the `infrastructure/cdk/` directory provisions the AWS environment: the API and the dashboard as ECS Fargate services behind one Application Load Balancer, the Aurora PostgreSQL database, the Redis cache and Lambda functions. The dashboard starts on the `web:bootstrap` image you push first. After that, each run of the Deploy workflow rolls the release onto the dashboard too: it builds the release's dashboard image (or reuses the one already in ECR for that version), registers a new dashboard task definition with it, rolls the dashboard service onto it once the API is serving the same release, and smoke-tests the dashboard through the public URL ([Deployment Guide](../deployment/deployment-guide.md)). The CDK does not create a CloudFront distribution. A checkout that also has `modules/` gets the real-time DynamoDB counters table and the Kinesis/OpenSearch/Glue data lake alongside them — see [AWS CDK Deployment](../self-hosting/cdk.md) for which stacks each profile deploys.
+On AWS, the CDK app in `infrastructure/cdk/` defines the environment: the API and the dashboard as ECS Fargate services behind one Application Load Balancer, the Aurora PostgreSQL database and the Redis cache. The dashboard starts on the `web:bootstrap` image you push first. After that, each run of the Deploy workflow rolls the release onto the dashboard too: it builds the release's dashboard image (or reuses the one already in ECR for that version), registers a new dashboard task definition with it, rolls the dashboard service onto it once the API is serving the same release, and smoke-tests the dashboard through the public URL ([Deployment Guide](../deployment/deployment-guide.md)). The CDK does not create a CloudFront distribution. A checkout that also has `modules/` gets the real-time DynamoDB counters table and the Kinesis/OpenSearch/Glue data lake alongside them — see [AWS CDK Deployment](../self-hosting/cdk.md) for which stacks each profile deploys.
 
 ---
 
@@ -28,16 +28,16 @@ A full production deployment uses the following AWS services:
 |---------|---------|
 | ECS Fargate | Hosts the FastAPI application |
 | Aurora PostgreSQL | Primary relational database |
-| ElastiCache Redis | Session storage and caching |
-| DynamoDB | Real-time impression and conversion counters |
+| ElastiCache Redis | Rate-limit counters and the API's caches |
+| DynamoDB | Full profile: the `counters` module's counters, which only its own routes write |
 | Lambda | No request or event processing: placeholder functions that do nothing, and a daily Glue ETL trigger in the full profile. Assignment and flag evaluation are API calls ([AWS Integration](../integrations/aws.md#lambda-functions)) |
 | CloudFront | Not created by the CDK. Only the split-URL module's Lambda@Edge construct would use it, and its router has no configuration source yet ([#393](https://github.com/getexperimently/experimently/issues/393)) |
 | Kinesis | Full profile only: a stream feeding Firehose and the S3 data lake. The API does not write to it today |
 | OpenSearch | Full profile only: a domain is created; nothing writes to it today |
-| Cognito | User authentication and JWT token issuance |
+| Cognito | A user pool the CDK creates; sign-in uses local accounts by default ([Cognito Integration](../cognito_integration.md)) |
 | S3 | Full profile only: the analytics data lake, Athena results and Glue scripts. The dashboard is an ECS service, not files in S3 |
 | CloudWatch | Logging, metrics, and dashboards |
-| Secrets Manager | Encrypted storage for API keys and credentials |
+| Secrets Manager | The JWT signing secret, the first administrator's password, and the database user and its password; in the full profile, also the audit signing key |
 | CodeDeploy | Blue/green deployments for the API service |
 
 For local development, Docker Compose provides PostgreSQL and Redis, and LocalStack can emulate most AWS services.
@@ -76,10 +76,9 @@ dashboard shows.
 ### What SDKs are available?
 
 The JavaScript SDK is on npm (`npm install @getexperimently/js-sdk`, 0.1.0, beta) and the
-Python SDK is on PyPI (`pip install experimently`, 0.1.0, beta). **The others are not published
-yet:** none of them is on its registry, so installing them by name fails today. Each SDK's page
-([Java](../sdk/java.md), [React](../sdk/react.md)) says how to install it from this repository
-instead.
+Python SDK is on PyPI (`pip install experimently`, 0.1.0, beta). The Go SDK installs by module
+path, and the other SDKs from a clone of this repository: each SDK's page
+([Go](../sdk/go.md), [Java](../sdk/java.md), [React](../sdk/react.md)) says how.
 
 | SDK | Package |
 |-----|---------|
@@ -88,7 +87,7 @@ instead.
 | Java / JVM | `com.getexperimently:experimently-sdk` (Maven/Gradle) |
 | React | `@getexperimently/react-sdk` (npm) |
 
-All SDKs support experiment variant assignment, feature flag evaluation, and event tracking. The Java SDK includes Spring Boot auto-configuration. The React SDK includes hooks, an HOC, and SSR support for Next.js.
+13 of the 16 SDKs run experiment variant assignment, feature flag evaluation and event tracking against a live API in CI, in the SDK Live Contract job of `pr-qa-gate.yml`. The Java SDK includes Spring Boot auto-configuration. The React SDK includes hooks, an HOC, and SSR support for Next.js.
 
 ---
 
@@ -96,14 +95,14 @@ All SDKs support experiment variant assignment, feature flag evaluation, and eve
 
 ### How do I get started?
 
-Follow the [Quick Start Guide](quick-start.md) to go from zero to a running experiment in under 30 minutes. The guide walks you through:
+Follow the [Quick Start Guide](quick-start.md). It walks you through:
 
-1. Cloning the repository and configuring environment variables
-2. Starting PostgreSQL and Redis with Docker Compose
-3. Running database migrations
-4. Starting the FastAPI backend and Next.js frontend
-5. Creating your first experiment via the UI or API
-6. Tracking events and viewing results
+1. Starting the local stack with Docker Compose: Postgres, Redis, the API and the dashboard
+2. Signing in
+3. Creating and starting an experiment, in the dashboard or through the API
+4. Creating an API key
+5. Assigning a user and tracking an event
+6. Reading the results, then creating and evaluating a feature flag
 
 For a full AWS deployment, see [CDK Deployment](../self-hosting/cdk.md).
 
@@ -144,7 +143,6 @@ When that history predicts the outcome, lower variance means you reach statistic
 - A **credible interval**: the range where the true effect likely falls, with a specified probability
 - **Probability of superiority**: P(treatment > control), a natural way to communicate results
 - A **Bayes factor**: how much more likely the data is under the alternative hypothesis than the null
-- A **stopping rule** that is mathematically valid for early stopping without inflating false-positive rates
 
 Bayesian methods are more flexible for continuous monitoring and provide richer output than a binary p-value. Frequentist methods are more familiar, have established reporting conventions, and are often required for regulatory or compliance reporting.
 
@@ -154,11 +152,9 @@ See [Bayesian Experimentation API](../api/bayesian.md) to enable Bayesian analys
 
 ### How does Split URL testing work?
 
-Split URL testing redirects different user segments to different URLs — for example, `/checkout` vs `/checkout-v2` — at the CDN layer using Lambda@Edge.
+Split URL testing would send different users to different URLs — for example, `/checkout` vs `/checkout-v2` — with a Lambda@Edge router at the CDN. It does not split traffic yet: the router has no configuration source in this release ([#393](https://github.com/getexperimently/experimently/issues/393)).
 
 The split-URL module ships a CloudFront construct with a Lambda@Edge router, which no stack uses: you add it to a stack yourself. The router reads a cookie to check whether the visitor has already been assigned. If not, it hashes the client fingerprint (IP address and User-Agent) to pick a variant, returns a 302 redirect to the variant URL, and sets a cookie that lasts `cookie_ttl_days` (30 days by default). A request that carries a cookie naming a known variant URL passes through without being bucketed again.
-
-This approach provides zero-latency variant delivery (the redirect happens at the CDN edge, before the request reaches your origin) and works for full page-level experiments where the content differences are too large for a single-page A/B test.
 
 See [Split URL Testing API](../api/split-url.md) for setup and the CDK construct reference.
 
@@ -168,9 +164,9 @@ See [Split URL Testing API](../api/split-url.md) for setup and the CDK construct
 
 ### What compliance certifications are supported?
 
-The platform holds no certifications. It provides audit-trail controls that customers use as evidence in their own **SOC 2** or **ISO/IEC 27001** programs; the `compliance` module adds tamper-evident signing and report packs.
+On 2026-10-13 the project held no certification. The platform provides audit-trail controls that customers use as evidence in their own **SOC 2** or **ISO/IEC 27001** programs; the `compliance` module adds tamper-evident signing and report packs.
 
-Creating, changing and deleting experiments and feature flags (and, in the full profile, warehouse connections, sources and analysis runs) is recorded in the compliance audit trail. With the `compliance` module each event is signed with HMAC-SHA256 under the `AUDIT_HMAC_KEY` setting; without it events are recorded unsigned. Logins, role changes and exports are not recorded yet.
+Creating, changing and deleting experiments and feature flags (and, in the full profile, warehouse connections, sources and analysis runs) is recorded in the compliance audit trail. With the `compliance` module each event is signed with HMAC-SHA256 under the `AUDIT_HMAC_KEY` setting; without it events are recorded unsigned. Logins, role changes and exports are not recorded in this trail; logins and role changes are recorded in the other audit log, `GET /api/v1/audit-logs`.
 
 Pre-built compliance reports are available at:
 - `GET /api/v1/compliance/reports/soc2` — SOC 2 report, by default over the last 365 days
@@ -204,7 +200,7 @@ The platform uses a layered role-based access control system with four built-in 
 
 | Role | What They Can Do |
 |------|-----------------|
-| **VIEWER** | Read-only access to approved experiments and results |
+| **VIEWER** | Reads every experiment, flag and result and changes none; can create an API key, which writes tracking data |
 | **ANALYST** | View all experiments, results, audit logs, and reports |
 | **DEVELOPER** | Create and manage experiments and feature flags; read integration settings, but not change them |
 | **ADMIN** | Full access: user management, compliance exports, global settings, integrations |
@@ -217,7 +213,7 @@ See [RBAC API Reference](../api/rbac.md) for the full role and permission manage
 
 ### How do API keys work?
 
-API keys are used for SDK authentication and server-to-server calls. Unlike JWT tokens (which are user-session credentials), API keys are long-lived. Any active key authenticates every API-key route (flag evaluation, tracking) as the user who created it; its `scopes` do not narrow that. The one exception is the server-side SDK routes (`GET /api/v1/sdk/ruleset`, `POST /api/v1/tracking/evaluations`, `POST /api/v1/tracking/assign/batch`), which require the `sdk:ruleset` scope.
+API keys are used for SDK authentication and server-to-server calls. Unlike JWT tokens, which sign a user in, API keys do not expire unless they are created with an expiry (`expires_at`). Any active key authenticates every API-key route (flag evaluation, tracking) as the user who created it; its `scopes` do not narrow that. The one exception is the server-side SDK routes (`GET /api/v1/sdk/ruleset`, `POST /api/v1/tracking/evaluations`, `POST /api/v1/tracking/assign/batch`), which require the `sdk:ruleset` scope.
 
 Create an API key via `POST /api/v1/api-keys` with a name. The full key value is shown only once at creation time — store it securely. To use it, pass the key in the `X-API-Key: <key>` header on all SDK requests.
 

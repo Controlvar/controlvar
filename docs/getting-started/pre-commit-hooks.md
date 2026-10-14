@@ -16,16 +16,16 @@ pre-commit run --all-files
 
 ## What actually runs
 
-Two groups. The config is short on purpose, and the file itself is the
-authority — read it rather than this page if the two ever disagree.
+Three groups. The file itself is the authority — read it rather than this page
+if the two ever disagree.
 
 ### File hygiene (`pre-commit/pre-commit-hooks`)
 
 | hook | note |
 |---|---|
-| `check-yaml` | |
+| `check-yaml` | excludes the Helm chart's templates, which render to YAML but are not YAML |
 | `check-json` | excludes `tsconfig*.json` — those are JSONC, and a strict JSON parser is wrong about them |
-| `check-added-large-files` | `--maxkb=1024`. The two OpenAPI snapshots under `docs/api/` are the only files past the default 500 KB, and they are generated text that a snapshot test diffs operation by operation — they are supposed to be large |
+| `check-added-large-files` | `--maxkb=1024`, for the two OpenAPI snapshots under `docs/api/` |
 | `check-merge-conflict` | |
 | `debug-statements` | |
 | `detect-private-key` | |
@@ -36,11 +36,7 @@ authority — read it rather than this page if the two ever disagree.
 
 `ruff --fix` and `ruff-format`, both scoped to
 `^(backend|modules|scripts|tests/acceptance)/` — the same four trees as
-`make lint` and the `lint` CI job. Scoped to `^backend/` the hook used to let a
-`modules/` or `scripts/` change through and the gate then failed on it.
-
-Ruff replaced black, isort and flake8. One tool, one config block
-(`[tool.ruff]` in `pyproject.toml`). `.flake8` does not exist.
+`make lint` and the `lint` CI job.
 
 **Keep the versions in step.** The hook's `rev:` and the `ruff==` pin in
 `backend/requirements.txt` must match, or a commit that passes locally fails
@@ -56,11 +52,15 @@ ruff --version
 - `grep '^ruff==' backend/requirements.txt`: CI and the venv
 - `ruff --version`: what you have
 
+### The publication check (`repo: local`)
+
+Two hooks run the repository's publication check: on the staged files at each
+commit, and on the whole tree and the outgoing commit messages at each push.
+
 ## This is a subset of the gate, not the gate
 
-Pre-commit runs **no frontend checks** — no eslint, no `tsc`, no Prettier
-(there is no Prettier in this repository). It runs no mypy, no Bandit, no
-Semgrep. Those live in `make lint` and in CI.
+Pre-commit runs **no frontend checks** — no eslint, no `tsc`. Those live in
+`make lint` and in CI.
 
 So a clean `git commit` is not a green pull request. Before pushing:
 
@@ -69,9 +69,6 @@ make lint
 ```
 
 - `make lint`: ruff, import-linter, reuse, the lock checks, eslint, tsc, hadolint, actionlint — exactly what the `lint` job runs
-
-`main` requires 20 checks to merge; `lint` is one of them. See
-[Development Guidelines](../development/guidelines.md) for the full list.
 
 ## Tips
 

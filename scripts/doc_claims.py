@@ -761,6 +761,28 @@ MECHANISMS: Dict[str, Mechanism] = {
             ),
         ),
     ),
+    # Which dashboard image a plain `docker build` gives, on the modules page.
+    "dashboard-image-default": Mechanism(
+        "backend/tests/unit/infrastructure/test_dashboard_image_docs.py"
+        "::test_the_modules_page_names_the_dockerfile_default",
+        holds=(
+            (
+                "docs/getting-started/modules.md",
+                r"^For the dashboard, EXPERIMENTLY_PROFILE=core is the default",
+            ),
+        ),
+    ),
+    # The quick start's rollout example: which of its two users the 10% holds.
+    "quick-start-rollout": Mechanism(
+        "backend/tests/unit/docs/test_quick_start_doc.py"
+        "::test_the_rollout_puts_user_2_in_and_user_123_out",
+        holds=(
+            (
+                "docs/getting-started/quick-start.md",
+                r"user-2 is inside the 10%, user-123 is not",
+            ),
+        ),
+    ),
     # The signature identity the release page verifies with (its IDENTITY=
     # line): the release paths it accepts, and every other signer it refuses.
     "release-identity-accepts": Mechanism(
@@ -893,11 +915,8 @@ CLAIMS_DEFERRED: Tuple[str, ...] = (
 #: In-scope documents not registered yet. The rollout: it only shrinks, and a
 #: document leaves it in the pull request that registers it.
 CLAIMS_PENDING: Tuple[str, ...] = (
-    "README.md",
-    "SECURITY.md",
     "demo/streampulse/simulator/README.md",
     "docs/Enhanced_Rules_Engine_Reference.md",
-    "docs/README.md",
     "docs/api/endpoints.md",
     "docs/architecture/technical-guide.md",
     "docs/cognito_integration.md",
@@ -911,15 +930,6 @@ CLAIMS_PENDING: Tuple[str, ...] = (
     "docs/feature-flags/create.md",
     "docs/feature-flags/rollouts.md",
     "docs/feature-flags/safety.md",
-    "docs/getting-started/README.md",
-    "docs/getting-started/architecture.md",
-    "docs/getting-started/concepts.md",
-    "docs/getting-started/faq.md",
-    "docs/getting-started/modules.md",
-    "docs/getting-started/pre-commit-hooks.md",
-    "docs/getting-started/python-virtual-env-setup.md",
-    "docs/getting-started/quick-start.md",
-    "docs/getting-started/vscode-settings.md",
     "docs/guides/segments.md",
     "docs/infrastructure/aws-iam-setup.md",
     "docs/infrastructure/cloudwatch-setup.md",
