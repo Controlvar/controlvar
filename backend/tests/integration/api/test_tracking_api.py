@@ -429,6 +429,31 @@ class TestBatch:
         )
         assert sorted(e.event_type for e in stored) == ["add_to_cart", "page_view"]
 
+    def test_more_than_100_events_is_422_and_stores_nothing(
+        self, admin_client, active_experiment, db_session
+    ):
+        user_id = _user()
+        event = {
+            "event_type": "page_view",
+            "user_id": user_id,
+            "experiment_key": active_experiment.key,
+        }
+        resp = admin_client.post(
+            "/api/v1/tracking/batch", json={"events": [event] * 101}
+        )
+        assert resp.status_code == 422, resp.text
+        (error,) = resp.json()["detail"]
+        assert error["loc"] == ["body", "events"]
+        assert error["type"] == "too_long"
+        assert (
+            db_session.query(Event)
+            .filter(
+                Event.experiment_id == active_experiment.id, Event.user_id == user_id
+            )
+            .count()
+            == 0
+        )
+
 
 class TestEventsByIds:
     def test_tracks_event_by_ids_and_parses_json_properties(

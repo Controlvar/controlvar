@@ -1,0 +1,914 @@
+# What verifies each unit of docs/feature-flags/safety.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/feature-flags/safety.md"
+
+[[unit]]
+text = "Safety Monitoring"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Safety monitoring checks each active feature flag's error rate and latency against thresholds you set."
+by = [
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_a_flag_with_its_own_configuration_is_checked_against_its_own_thresholds_only",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+]
+
+[[unit]]
+text = "When a flag breaches one and automatic rollbacks are turned on, it rolls the flag back."
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_no_rollback_when_automatic_rollbacks_disabled",
+]
+
+[[unit]]
+text = "Its endpoints are under /api/v1/safety."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "What Safety Monitoring Does"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The safety monitor runs every 5 minutes by default (SAFETY_CHECK_INTERVAL_MINUTES)."
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_interval_defaults_come_from_settings",
+]
+
+[[unit]]
+text = "For every ACTIVE flag, whatever its rollout_percentage (a flag at 0% still serves the users its targeting rules match), it:"
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p3_a_rule_only_flag_can_be_rolled_back",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+]
+
+[[unit]]
+text = "Loads the flag's safety configuration (or the platform default when the flag has none) and skips the flag if monitoring is not enabled."
+by = [
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestAsyncFeatureFlagSafetyConfig::test_get_missing_config_returns_defaults_from_settings",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestCheckFeatureFlagSafety::test_disabled_config_is_healthy_with_no_metrics",
+]
+
+[[unit]]
+text = "Reads the current value of each configured metric over the last 15 minutes: error metrics come from error_logs (relative to the flag's evaluations in raw_metrics), latency metrics from raw_metrics."
+by = [
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_the_check_reads_the_last_15_minutes_of_errors_and_latency",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetErrorMetrics::test_computes_rate_and_error_type_breakdown",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetLatencyMetrics::test_computes_real_latency_statistics",
+]
+
+[[unit]]
+text = "Compares each value with the metric's critical_threshold using its comparison_type."
+by = [
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestCheckFeatureFlagSafety::test_error_rate_metric_breaches_critical_threshold",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestCheckFeatureFlagSafety::test_warning_only_breach_is_reported_but_still_healthy",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestPureHelperFunctions::test_breaches_less_than",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestPureHelperFunctions::test_breaches_equal_to",
+]
+
+[[unit]]
+text = "A breach marks the flag unhealthy; a warning_threshold breach is only reported."
+by = [
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestCheckFeatureFlagSafety::test_error_rate_metric_breaches_critical_threshold",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestCheckFeatureFlagSafety::test_warning_only_breach_is_reported_but_still_healthy",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestPureHelperFunctions::test_breaches_less_than",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestPureHelperFunctions::test_breaches_equal_to",
+]
+
+[[unit]]
+text = "If the flag is unhealthy and the global setting enable_automatic_rollbacks is on, rolls the flag back to the configuration's rollback_percentage."
+by = [
+    "journey:feature-flag-safety#automatic-rollback",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_no_rollback_when_automatic_rollbacks_disabled",
+]
+
+[[unit]]
+text = "A target of 0 (the default) turns the flag off (status: inactive) and sets its percentage to 0; any other target lowers only the global percentage (see What a rollback changes)."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_defaults_to_zero_when_config_has_no_percentage",
+]
+
+[[unit]]
+text = "It also pauses the flag's active rollout schedules, records a SafetyRollbackRecord, and sends the Slack alert and webhook event."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p10_a_tick_and_a_stage_advance_after_a_rollback_leave_users_off",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_automatic_rollback_alert_carries_the_measured_error_rate",
+]
+
+[[unit]]
+text = "You can run the same check on demand with GET /api/v1/safety/feature-flags/{flag_id}/check."
+by = [
+    "docex:docs/feature-flags/safety.md#\"is_healthy\": true",
+    "journey:feature-flag-safety#healthy",
+    "journey:feature-flag-safety#unhealthy",
+]
+
+[[unit]]
+text = "Which errors count"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A flag's error metrics, and so automatic rollback, count two kinds of error: flag evaluations that fail on the server, and error reports sent to POST /api/v1/tracking/errors or /errors/batch with a server-side key, an API key with the sdk:ruleset scope whose owner can change feature flags (ADMIN, DEVELOPER or a superuser)."
+by = [
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_server_side_key_rolls_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_an_evaluation_that_fails_on_the_server_still_rolls_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_rows_of_every_stored_shape_are_counted_as_documented",
+]
+
+[[unit]]
+text = "Error reports sent with any other key, such as the key in a browser or mobile app, are stored and counted separately in the check (details.uncounted_error_count), but do not count toward the error rate or a rollback."
+by = [
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_key_without_the_scope_does_not_roll_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_check_endpoint_shows_the_reports_it_does_not_count",
+]
+
+[[unit]]
+text = "The same goes for an sdk:ruleset key whose owner has since lost the role."
+by = ["test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count"]
+
+[[unit]]
+text = "To have app errors count, send them to your server and forward them from there with a server-side key; see Reporting client-side errors."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "GET /api/v1/metrics/summary counts errors by the same rule: its error_rate leaves out the reports that do not count, and its uncounted_error_count is the number of them in its period."
+by = [
+    "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_counts_errors_by_the_safety_checks_rule",
+]
+
+[[unit]]
+text = "That error_rate still differs from the check's in three ways: it covers start_date to end_date (by default the 30 days before now), not the last 15 minutes; it divides by the aggregated flag evaluations (of its period, by default day), not the raw ones; and it is a percentage (0–100), not a fraction."
+by = [
+    "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_counts_errors_by_the_safety_checks_rule",
+    "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_still_differs_from_the_check_in_period_and_denominator",
+]
+
+[[unit]]
+text = "Metrics You Can Monitor"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Metric name | Source | Meaning"
+by = ["exempt:label"]
+
+[[unit]]
+text = "error_rate | error_logs ÷ flag evaluations | Fraction of evaluations that logged an error that counts (0.0–1.0; see Which errors count)"
+by = [
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetErrorMetrics::test_computes_rate_and_error_type_breakdown",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_rows_of_every_stored_shape_are_counted_as_documented",
+]
+
+[[unit]]
+text = "error_count | error_logs | Number of errors that count, in the window"
+by = [
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetErrorMetrics::test_computes_rate_and_error_type_breakdown",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_rows_of_every_stored_shape_are_counted_as_documented",
+]
+
+[[unit]]
+text = "total_evaluations | raw_metrics | Number of flag evaluations in the window"
+by = ["test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetErrorMetrics::test_non_evaluation_raw_metrics_are_not_counted"]
+
+[[unit]]
+text = "latency, avg_latency | raw_metrics (metric_type = latency) | Average latency in ms"
+by = [
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetMetricValue::test_latency_metric_name_maps_to_avg_latency",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetLatencyMetrics::test_computes_real_latency_statistics",
+]
+
+[[unit]]
+text = "p95_latency | raw_metrics | 95th percentile latency in ms"
+by = ["test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetLatencyMetrics::test_computes_real_latency_statistics"]
+
+[[unit]]
+text = "max_latency, min_latency | raw_metrics | Extremes in ms"
+by = ["test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetLatencyMetrics::test_computes_real_latency_statistics"]
+
+[[unit]]
+text = "Each metric takes a MetricThreshold:"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Field | Type | Description"
+by = ["exempt:label"]
+
+[[unit]]
+text = "critical_threshold | float | Breaching it makes the flag unhealthy (rollback candidate)"
+by = ["test:backend/tests/integration/services/test_safety_service_coverage.py::TestCheckFeatureFlagSafety::test_error_rate_metric_breaches_critical_threshold"]
+
+[[unit]]
+text = "warning_threshold | float | Reported in the check details; never triggers a rollback"
+by = ["test:backend/tests/integration/services/test_safety_service_coverage.py::TestCheckFeatureFlagSafety::test_warning_only_breach_is_reported_but_still_healthy"]
+
+[[unit]]
+text = "comparison_type | \"greater_than\" (default), \"less_than\", \"equal_to\" | How the current value is compared with the thresholds"
+by = [
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestPureHelperFunctions::test_breaches_greater_than_default",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestPureHelperFunctions::test_breaches_less_than",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestPureHelperFunctions::test_breaches_equal_to",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Metric names outside this list are accepted but have no data source; they are reported as healthy."
+by = ["test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetMetricValue::test_unrecognized_metric_name_returns_none"]
+
+[[unit]]
+text = "Configuring Per-Flag Safety"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Run the commands on the rest of this page in one terminal, in order, against the stack from the Quick Start."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Each uses the shell variables set by the ones before it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Log in and create a flag"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Changing safety settings takes a superuser, such as the demo administrator:"
+by = [
+    "test:backend/tests/integration/api/test_safety_api.py::TestSafetySettings::test_non_superuser_cannot_update_settings",
+    "test:backend/tests/integration/api/test_safety_api.py::TestFeatureFlagSafetyConfig::test_non_superuser_cannot_set_config",
+]
+
+[[unit]]
+text = "It prints \"is_superuser\": true."
+by = [
+    "docex:docs/feature-flags/safety.md#\"is_superuser\": true",
+    "journey:feature-flag-safety#superuser",
+]
+
+[[unit]]
+text = "The examples watch a flag that is on for half of all users."
+by = ["exempt:example"]
+
+[[unit]]
+text = "This creates it and saves its id in $FLAG_ID (see Creating Feature Flags):"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints \"status\": \"active\" and \"rollout_percentage\": 50."
+by = ["docex:docs/feature-flags/safety.md#\"rollout_percentage\": 50"]
+
+[[unit]]
+text = "A flag without a configuration"
+by = ["exempt:label"]
+
+[[unit]]
+text = "GET /api/v1/safety/feature-flags/{flag_id}/config never answers 404 for a flag without a configuration."
+by = [
+    "docex:docs/feature-flags/safety.md#\"id\": \"00000000-0000-0000-0000-000000000000\"",
+    "journey:feature-flag-safety#default-config",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestAsyncFeatureFlagSafetyConfig::test_get_missing_config_returns_defaults_from_settings",
+]
+
+[[unit]]
+text = "It returns a default built from the global settings, with the nil UUID as id."
+by = [
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestAsyncFeatureFlagSafetyConfig::test_get_missing_config_returns_defaults_from_settings",
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_a_rollback_gives_a_flag_without_a_configuration_one_with_no_thresholds",
+    "docex:docs/feature-flags/safety.md#\"id\": \"00000000-0000-0000-0000-000000000000\"",
+    "journey:feature-flag-safety#default-config",
+]
+
+[[unit]]
+text = "Nothing is written until you POST:"
+by = ["test:backend/tests/integration/services/test_safety_service_coverage.py::TestAsyncFeatureFlagSafetyConfig::test_get_missing_config_returns_defaults_from_settings"]
+
+[[unit]]
+text = "Create or Update a Flag's Configuration"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Requires a superuser."
+by = [
+    "docex:docs/feature-flags/safety.md#\"error_rate\":{\"warning_threshold\":0.02,\"critical_threshold\":0.05,\"comparison_type\":\"greater_than\"}",
+    "test:backend/tests/integration/api/test_safety_config_nulls.py::test_a_field_left_out_keeps_its_stored_value",
+    "test:backend/tests/integration/api/test_safety_api.py::TestSafetyRollback::test_non_superuser_cannot_rollback",
+    "test:backend/tests/integration/api/test_safety_rollback_bounds.py::test_rollback_route_refuses_out_of_range_percentage",
+    "test:backend/tests/integration/api/test_safety_rollback_bounds.py::test_rollback_route_accepts_the_edges",
+]
+count = 2
+
+[[unit]]
+text = "The call creates the configuration, or replaces the fields you send:"
+by = [
+    "docex:docs/feature-flags/safety.md#\"error_rate\":{\"warning_threshold\":0.02,\"critical_threshold\":0.05,\"comparison_type\":\"greater_than\"}",
+    "test:backend/tests/integration/api/test_safety_config_nulls.py::test_a_field_left_out_keeps_its_stored_value",
+]
+
+[[unit]]
+text = "It prints the stored thresholds:"
+by = [
+    "docex:docs/feature-flags/safety.md#\"error_rate\":{\"warning_threshold\":0.02,\"critical_threshold\":0.05,\"comparison_type\":\"greater_than\"}",
+    "journey:feature-flag-safety#configure",
+]
+
+[[unit]]
+text = "Request Fields"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Field | Type | Required | Description"
+by = ["exempt:label"]
+
+[[unit]]
+text = "enabled | boolean | No | Whether the monitor checks this flag (default true)"
+by = ["test:backend/tests/integration/services/test_safety_service_coverage.py::TestFeatureFlagSafetyConfigStatic::test_get_or_create_creates_new_config_with_defaults"]
+
+[[unit]]
+text = "metrics | object | No | Map of metric name → threshold (see above). An empty map means nothing is checked"
+by = [
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestCheckFeatureFlagSafety::test_enabled_config_with_no_metrics_is_healthy",
+    "test:backend/tests/integration/api/test_safety_config_nulls.py::test_a_create_that_leaves_metrics_out_stores_no_thresholds",
+]
+
+[[unit]]
+text = "rollback_percentage | int | No | Target of the automatic rollback, 0–100 (default 0); any other value answers 422. A value stored before that bound is clamped to 0–100 when the monitor uses it. 0 turns the flag off for every user, including users matched by a targeting rule. A value from 1 to 100 lowers the global rollout, for example 5 to keep a small slice of users on the flag; users matched by a targeting rule keep their rule's percentage (see What a rollback changes). Manual rollbacks take the percentage as a query parameter"
+by = [
+    "test:backend/tests/integration/api/test_safety_rollback_bounds.py::test_config_route_refuses_out_of_range_when_creating",
+    "test:backend/tests/integration/api/test_safety_rollback_bounds.py::test_config_route_refuses_out_of_range_when_updating",
+    "test:backend/tests/integration/api/test_safety_rollback_bounds.py::test_config_schemas_accept_the_edges",
+    "test:backend/tests/integration/api/test_safety_rollback_bounds.py::test_stored_negative_rollback_percentage_rolls_the_flag_back_to_zero",
+    "test:backend/tests/integration/api/test_safety_rollback_bounds.py::test_stored_rollback_percentage_above_100_reads_back_and_does_not_fail_the_monitor",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_target_percentage_clamps_and_defaults",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout",
+    "docex:docs/feature-flags/safety.md#\"success\": true",
+]
+
+[[unit]]
+text = "A field you leave out keeps its stored value; on the first POST it takes its default."
+by = [
+    "test:backend/tests/integration/api/test_safety_config_nulls.py::test_a_field_left_out_keeps_its_stored_value",
+    "test:backend/tests/integration/api/test_safety_config_nulls.py::test_a_create_that_leaves_metrics_out_stores_no_thresholds",
+]
+
+[[unit]]
+text = "No field accepts null: a null answers 422 with \"type\": \"null_not_allowed\" and nothing is written."
+by = [
+    "test:backend/tests/integration/api/test_safety_config_nulls.py::test_null_is_refused_when_creating_and_nothing_is_written",
+    "test:backend/tests/integration/api/test_safety_config_nulls.py::test_null_is_refused_when_updating_and_the_stored_config_is_kept",
+]
+
+[[unit]]
+text = "A configuration saved with \"metrics\": null by an earlier version reads back with \"metrics\": {}, so nothing is checked for that flag until you POST its thresholds again."
+by = [
+    "test:backend/tests/integration/api/test_safety_config_nulls.py::test_a_stored_null_metrics_reads_back_for_a_viewer",
+    "test:backend/tests/integration/api/test_safety_config_nulls.py::test_the_safety_monitor_checks_a_flag_whose_stored_metrics_are_null",
+]
+
+[[unit]]
+text = "The response (the same shape as GET .../config) also carries the configuration's id, feature_flag_id, enabled, rollback_percentage, created_at and updated_at."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_safety_api.py::TestFeatureFlagSafetyConfig::test_config_rollback_percentage_field_persisted",
+]
+
+[[unit]]
+text = "Example: Checkout Flag with Tight Thresholds"
+by = ["exempt:example"]
+
+[[unit]]
+text = "Example: Non-Critical UI Flag, Alerts Only"
+by = ["exempt:example"]
+
+[[unit]]
+text = "Set only warning_thresholds (no critical_threshold): the check reports warnings but the flag never becomes unhealthy, so it is never rolled back."
+by = [
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestCheckFeatureFlagSafety::test_warning_only_breach_is_reported_but_still_healthy",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_no_rollback_when_healthy",
+]
+
+[[unit]]
+text = "Global Safety Settings"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Global settings hold the automatic-rollback switch and the default metric thresholds applied to flags that have no configuration of their own."
+by = ["test:backend/tests/integration/services/test_safety_service_coverage.py::TestAsyncFeatureFlagSafetyConfig::test_get_missing_config_returns_defaults_from_settings"]
+
+[[unit]]
+text = "View Global Settings"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Any logged-in user can read them:"
+by = ["test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_any_signed_in_user_can_read_the_global_settings_and_only_a_superuser_change_them"]
+
+[[unit]]
+text = "It prints \"enable_automatic_rollbacks\": true: the Quick Start's demo data turns automatic rollbacks on."
+by = [
+    "docex:docs/feature-flags/safety.md#\"enable_automatic_rollbacks\": true",
+    "journey:feature-flag-safety#global-settings",
+]
+
+[[unit]]
+text = "The response also carries default_metrics, id, created_at and updated_at."
+by = [
+    "test:backend/tests/integration/api/test_safety_api.py::TestSafetySettings::test_get_settings_returns_id_field",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "On a database where no settings have been stored, the first read creates them with enable_automatic_rollbacks: false and no defaults."
+by = ["test:backend/tests/integration/services/test_safety_service_coverage.py::TestAsyncSafetySettings::test_get_creates_default_row_when_missing"]
+
+[[unit]]
+text = "Automatic rollbacks are then off until a superuser turns them on."
+by = [
+    "test:backend/tests/unit/services/test_automatic_rollbacks_default_off.py::test_the_first_read_creates_the_settings_switched_off",
+    "test:backend/tests/integration/api/test_safety_api.py::TestSafetySettings::test_non_superuser_cannot_update_settings",
+]
+
+[[unit]]
+text = "Update Global Settings"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Requires a superuser:"
+by = ["test:backend/tests/integration/api/test_safety_api.py::TestSafetySettings::test_non_superuser_cannot_update_settings"]
+
+[[unit]]
+text = "It prints the stored defaults:"
+by = ["docex:docs/feature-flags/safety.md#{\"error_rate\":{\"warning_threshold\":0.05,\"critical_threshold\":0.1,\"comparison_type\":\"greater_than\"}}"]
+
+[[unit]]
+text = "A flag with a configuration of its own is checked against its own thresholds only; the defaults apply to a flag that has none."
+by = ["test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_a_flag_with_its_own_configuration_is_checked_against_its_own_thresholds_only"]
+
+[[unit]]
+text = "Running a Check"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The new flag has no traffic, so every value is 0.0 and the flag is healthy:"
+by = [
+    "docex:docs/feature-flags/safety.md#\"is_healthy\": true",
+    "journey:feature-flag-safety#healthy",
+]
+
+[[unit]]
+text = "Each metric's details holds its warning_threshold, critical_threshold, comparison_type, warning (whether the warning threshold is breached) and measured (false for a metric name with no data source)."
+by = ["test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_each_metric_of_a_check_carries_its_thresholds_and_whether_it_was_measured"]
+
+[[unit]]
+text = "The response also carries feature_flag_id, last_checked and details, with the window's error_count, total_evaluations and uncounted_error_count: the error reports that were stored but do not count (see Which errors count)."
+by = [
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_check_endpoint_shows_the_reports_it_does_not_count",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "When a metric breaches its critical threshold, that metric and the whole response read \"is_healthy\": false."
+by = ["journey:feature-flag-safety#unhealthy"]
+
+[[unit]]
+text = "The dashboard shows the same check."
+by = ["test:frontend/src/tests/pages/feature-flag-detail.test.tsx::renders header, on/off state, targeting rules, rollout schedule and safety check"]
+
+[[unit]]
+text = "The flag's page has a Safety check section that reads Healthy or Unhealthy (or Error rate unknown when errors were reported but no evaluations fall in the last 15 minutes), with each metric's value beside its threshold, and a line saying how many error reports in the window were sent with keys that do not count."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-detail.test.tsx::shows Unhealthy when the safety check fails a threshold and re-checks on demand",
+    "test:frontend/src/tests/pages/feature-flag-detail.test.tsx::says the error rate cannot be computed, in text, when errors arrive with no evaluations",
+    "test:frontend/src/tests/pages/feature-flag-detail.test.tsx::says how many error reports were stored but not counted, only when there are some",
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_the_check_reads_the_last_15_minutes_of_errors_and_latency",
+]
+
+[[unit]]
+text = "Admin → Safety (for superusers) lists the first 100 flags under Flag Safety Status as healthy, warning or critical, with its error rate and how many reports were not counted."
+by = [
+    "test:frontend/src/tests/admin/SafetyDashboard.test.tsx::lists every flag and runs a safety check for each",
+    "test:frontend/src/tests/admin/SafetyStatusCard.test.tsx::renders error_rate fraction as a percentage",
+    "test:frontend/src/tests/admin/SafetyStatusCard.test.tsx::notes the error reports that were stored but not counted, only when there are some",
+    "test:frontend/src/tests/admin/withAdminGuard.test.tsx::refuses a non-superuser by default, whatever their role",
+]
+
+[[unit]]
+text = "Auto-Rollback"
+by = ["exempt:label"]
+
+[[unit]]
+text = "When the monitor finds a flag unhealthy and enable_automatic_rollbacks is on, it:"
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_no_rollback_when_automatic_rollbacks_disabled",
+]
+
+[[unit]]
+text = "Locks the flag row and rolls the flag back to its configured rollback_percentage (default 0, which turns the flag off), pausing the flag's active rollout schedules in the same transaction"
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p10_a_tick_and_a_stage_advance_after_a_rollback_leave_users_off",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_rollback_commits_exactly_once_on_a_flag_with_no_config",
+]
+
+[[unit]]
+text = "Records a SafetyRollbackRecord with trigger type automatic, the previous and target percentages, and the reason (trigger_reason, the same text as the audit entry's reason below: the record has no columns of its own for the metric value or the threshold)"
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage",
+]
+
+[[unit]]
+text = "Writes a safety_rollback entry to the flag's audit history (GET /api/v1/audit-logs/entity/feature_flag/{flag_id}), with system:safety-monitor as its user_email and no user_id."
+by = ["journey:feature-flag-safety#rollback-audit"]
+
+[[unit]]
+text = "Its reason is the rollback's: the first breaching metric with its value and threshold, in the metric's unit and each to four significant figures (an error rate as a percentage, so 1 error in 14 evaluations reads 7.143%; a latency in milliseconds), worded by the threshold's comparison_type: above and > for greater_than, below and < for less_than, equal to and = for equal_to."
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_format_metric_value_four_significant_figures_no_exponent",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_error_rate_reason_is_a_percentage_not_a_fraction",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_automatic_rollback_reason_rounds_the_measured_value",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_automatic_rollback_reason_words_the_breach_in_the_scheduler",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_less_than_threshold_from_the_safety_config_reaches_the_reason",
+]
+
+[[unit]]
+text = "Such as Automatic rollback due to error_rate above threshold (10% > 5%), or, for a less_than threshold of 100 on total_evaluations and a flag evaluated 40 times, Automatic rollback due to total_evaluations below threshold (40 < 100)."
+by = ["journey:feature-flag-safety#rollback-audit"]
+
+[[unit]]
+text = "Its new_value holds trigger_type (automatic), previous_percentage, new_percentage, deactivated and paused_schedules (see Audit Logging)"
+by = ["journey:feature-flag-safety#rollback-audit"]
+
+[[unit]]
+text = "Sends a Slack alert to SLACK_DEFAULT_CHANNEL and a safety_rollback event to NOTIFICATION_WEBHOOK_URL, each when configured."
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_automatic_rollback_alert_carries_the_measured_error_rate",
+    "test:backend/tests/unit/services/test_notification_service.py",
+]
+
+[[unit]]
+text = "Both name the first breaching metric with its measured value and threshold in the metric's unit: an error rate as a percentage (1 error in 14 evaluations against 0.05 reads error rate 7.143% above threshold 5%), a latency in milliseconds (avg latency 523.5 ms above threshold 500 ms)."
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_automatic_rollback_alert_carries_the_measured_error_rate",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_automatic_rollback_alert_shows_a_latency_in_ms",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_automatic_rollback_alert_words_the_breach_by_the_comparison",
+]
+
+[[unit]]
+text = "The line says above, below or equal to by the threshold's comparison_type, as the reason does."
+by = ["test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_automatic_rollback_alert_words_the_breach_by_the_comparison"]
+
+[[unit]]
+text = "The webhook's metadata carries the raw numbers as metric, value and threshold, and error_rate holds the value only when the metric is error_rate (otherwise null)."
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_automatic_rollback_alert_shows_a_latency_in_ms",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_automatic_rollback_alert_carries_the_measured_error_rate",
+]
+
+[[unit]]
+text = "An automatic rollback sends no email"
+by = ["test:backend/tests/unit/services/test_safety_rollback_alert_channels.py::test_an_automatic_rollback_alert_goes_to_the_webhook_and_slack_and_sends_no_email"]
+
+[[unit]]
+text = "Investigate the root cause before re-enabling."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "What a rollback changes"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A rollback, automatic or manual, does one of two things, depending on its target:"
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout",
+]
+
+[[unit]]
+text = "A rollback to 0% turns the flag off."
+by = [
+    "journey:feature-flag-safety#rolled-back",
+    "journey:feature-flag-safety#off-for-everyone",
+    "journey:feature-flag-safety#off-after-rollback",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
+]
+
+[[unit]]
+text = "Its status becomes inactive and its global rollout_percentage becomes 0."
+by = [
+    "journey:feature-flag-safety#rolled-back",
+    "journey:feature-flag-safety#off-for-everyone",
+    "journey:feature-flag-safety#off-after-rollback",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
+]
+
+[[unit]]
+text = "Every user, including users matched by a targeting rule, gets enabled: false with reason: \"inactive\", exactly as when the flag is turned off by hand (see Creating Feature Flags)."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p2_a_default_rule_user_is_off_after_a_rollback_to_0",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p5_get_post_and_user_routes_agree_after_a_rollback",
+]
+
+[[unit]]
+text = "The targeting rules are left as written."
+by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p11_the_documented_restore_steps_restore_every_user"]
+
+[[unit]]
+text = "A rollback to 1–100% lowers only the global rollout_percentage."
+by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout"]
+
+[[unit]]
+text = "A user who matches no targeting rule is bucketed by the new percentage."
+by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout"]
+
+[[unit]]
+text = "A user who matches a rule is bucketed by that rule's own rollout_percentage (100 unless the rule sets one), so the rollback does not change whether that user gets the flag."
+by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout"]
+
+[[unit]]
+text = "Either way, the flag's active rollout schedules are paused, so a later stage cannot raise the percentage again; they stay paused until you resume them."
+by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p10_a_tick_and_a_stage_advance_after_a_rollback_leave_users_off"]
+
+[[unit]]
+text = "So the flag's default value is served to every user after a rollback to 0%, and after a partial rollback to the users it removes, while users matched by a targeting rule keep their rule's percentage."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout",
+]
+
+[[unit]]
+text = "A partial rollback does not help when the harm is only among users matched by a targeting rule, and a flag that serves only rule-matched users (global 0%) is never rolled back to a partial target; use a target of 0 for such a flag."
+by = [
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestShouldRollback::test_zero_rollout_with_a_partial_target_returns_false",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p3_a_rule_only_flag_can_be_rolled_back",
+]
+
+[[unit]]
+text = "What Triggers a Rollback"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Condition | Trigger"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Any metric's current value breaches its critical_threshold | Automatic rollback (first breaching metric is named in the reason)"
+by = [
+    "journey:feature-flag-safety#automatic-rollback",
+    "journey:feature-flag-safety#rollback-audit",
+    "journey:feature-flag-safety#control-stays-on",
+]
+
+[[unit]]
+text = "Only warning_thresholds are breached | Reported in the check; no rollback"
+by = [
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestCheckFeatureFlagSafety::test_warning_only_breach_is_reported_but_still_healthy",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_no_rollback_when_healthy",
+]
+
+[[unit]]
+text = "enable_automatic_rollbacks is off | Check reports unhealthy; no rollback"
+by = ["test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_no_rollback_when_automatic_rollbacks_disabled"]
+
+[[unit]]
+text = "Rollback History"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every rollback (automatic or manual) is stored in the safety_rollback_records table (feature_flag_id, safety_config_id, trigger_type, trigger_reason, previous_percentage, target_percentage, success, executed_by_user_id, created_at)."
+by = [
+    "test:backend/tests/unit/services/test_safety_rollback_alert_channels.py::test_a_rollback_record_has_exactly_these_columns",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+]
+
+[[unit]]
+text = "The rollback response includes the record's id as rollback_record_id."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "No endpoint lists the records, and the dashboard lists only the manual rollbacks made in the current browser session, so query the table for automatic ones."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:frontend/src/tests/admin/SafetyDashboard.test.tsx::says automatic rollbacks are not listed under the session table",
+]
+
+[[unit]]
+text = "Manual Rollback"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Roll a flag down to a percentage from 0 to 100 (default 0; any other value answers 422), with a reason."
+by = [
+    "test:backend/tests/integration/api/test_safety_api.py::TestSafetyRollback::test_non_superuser_cannot_rollback",
+    "test:backend/tests/integration/api/test_safety_rollback_bounds.py::test_rollback_route_refuses_out_of_range_percentage",
+    "test:backend/tests/integration/api/test_safety_rollback_bounds.py::test_rollback_route_accepts_the_edges",
+]
+
+[[unit]]
+text = "The reason is a query parameter, so its spaces are written %20:"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "The response also carries feature_flag_id, trigger_type (manual), rollback_record_id, timestamp and details: the reason, deactivated, and paused_schedules (the ids of the rollout schedules the rollback paused)."
+by = [
+    "test:backend/tests/integration/api/test_safety_api.py::TestSafetyRollback::test_rollback_response_contains_percentage_fields",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "A rollback that would change nothing returns success: false, writes nothing, and says why: the flag is archived, the flag is already off, or, for a target above 0, its global percentage is already at or below the target."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_rollback_that_changes_nothing_says_why",
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_a_safety_rollback_of_an_archived_flag_changes_nothing",
+]
+
+[[unit]]
+text = "A manual rollback changes the same thing as an automatic one (see What a rollback changes)."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+]
+
+[[unit]]
+text = "This one was to 0%, so the flag is now off:"
+by = [
+    "docex:docs/feature-flags/safety.md#\"status\": \"inactive\"",
+    "journey:feature-flag-safety#rolled-back",
+]
+
+[[unit]]
+text = "It prints \"status\": \"inactive\" and \"rollout_percentage\": 0."
+by = ["docex:docs/feature-flags/safety.md#\"status\": \"inactive\""]
+
+[[unit]]
+text = "Re-Enabling After Rollback"
+by = ["exempt:label"]
+
+[[unit]]
+text = "After investigating and resolving the root cause, bring the flag back in this order."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The percentage the flag had before the rollback is the rollback response's previous_percentage (50 above)."
+by = [
+    "test:backend/tests/integration/api/test_safety_api.py::TestSafetyRollback::test_rollback_response_contains_percentage_fields",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p11_the_documented_restore_steps_restore_every_user",
+]
+
+[[unit]]
+text = "For an automatic rollback, read it from the flag's latest safety_rollback audit entry (GET /api/v1/audit-logs/entity/feature_flag/{flag_id}, for superusers, ADMIN and ANALYST): that entry's new_value is a JSON string holding previous_percentage."
+by = [
+    "journey:feature-flag-safety#rollback-audit",
+    "test:backend/tests/integration/api/test_audit_log_reads.py",
+]
+
+[[unit]]
+text = "The flag's latest row in the safety_rollback_records table holds it too."
+by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once"]
+
+[[unit]]
+text = "After a rollback to 0%, turn the flag on first."
+by = ["journey:feature-flag-safety#turn-on"]
+
+[[unit]]
+text = "It comes back at 0%, so at first only users matched by a targeting rule are served:"
+by = ["journey:feature-flag-safety#turn-on"]
+
+[[unit]]
+text = "It prints \"status\": \"active\" and \"rollout_percentage\": 0."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p11_the_documented_restore_steps_restore_every_user",
+    "journey:feature-flag-safety#turn-on",
+]
+
+[[unit]]
+text = "Then raise the rollout, back to previous_percentage or, more cautiously, below it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "After a partial rollback (1–100%) the flag is still on, so this is where you start:"
+by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout"]
+
+[[unit]]
+text = "It prints \"status\": \"active\" and \"rollout_percentage\": 5."
+by = [
+    "docex:docs/feature-flags/safety.md#\"rollout_percentage\": 5",
+    "journey:feature-flag-safety#raise",
+    "journey:feature-flag-safety#five-percent",
+]
+
+[[unit]]
+text = "Finally, resume the rollout schedule."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The rollback paused the flag's active schedule, and it stays paused until you resume it explicitly with POST /api/v1/rollout-schedules/{schedule_id}/activate (see Rollout Schedules)."
+by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p11_the_documented_restore_steps_restore_every_user"]
+
+[[unit]]
+text = "The ids are in the rollback response's details.paused_schedules."
+by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p11_the_documented_restore_steps_restore_every_user"]
+
+[[unit]]
+text = "Check the flag's thresholds."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A rollback leaves the flag with a safety configuration of its own: a flag that had none gets one with no thresholds, so from then on it is not checked against the global defaults."
+by = ["test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_a_rollback_gives_a_flag_without_a_configuration_one_with_no_thresholds"]
+
+[[unit]]
+text = "If it should stay monitored, POST its thresholds (see Create or Update a Flag's Configuration)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Watch the safety check for at least one full 15-minute window before expanding further."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "With automatic rollbacks on, the monitor rolls the flag back again on its next pass while one of its critical thresholds is still breached."
+by = ["test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_a_flag_turned_back_on_while_its_threshold_is_still_breached_is_rolled_back_again"]
+
+[[unit]]
+text = "Best Practices"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Set thresholds relative to baseline"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Measure your baseline error rate and latency before enabling safety monitoring."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "If your API normally returns 2% errors, a 1% threshold causes false positives."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A reasonable critical threshold is 2× your baseline: baseline error rate 2% → critical_threshold: 0.04; baseline p95 latency 200 ms → critical_threshold: 400."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Use a warning threshold as an early signal"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Pair a lower warning_threshold with the critical one; warnings show up in the check details and in the dashboard without touching traffic."
+by = ["test:backend/tests/integration/services/test_safety_service_coverage.py::TestCheckFeatureFlagSafety::test_warning_only_breach_is_reported_but_still_healthy"]
+
+[[unit]]
+text = "Use tight thresholds for critical paths"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "For features that touch payments, authentication or core user flows: error_rate critical 0.02, p95_latency critical 300."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Combine with gradual rollouts"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Safety monitoring is most effective with gradual rollouts."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A problem affecting 5% of users is much easier to contain than one affecting 100%."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "See Rollout Schedules."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Flags with large targeting rules"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "For a flag with large targeting rules, either set no threshold on latency, avg_latency, p95_latency or max_latency, or leave automatic rollback off."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A flag without a safety configuration of its own uses the global default thresholds, so to take a latency threshold off one flag, give that flag its own configuration without one."
+by = ["test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_a_flag_with_its_own_configuration_is_checked_against_its_own_thresholds_only"]
+
+[[unit]]
+text = "Test the rollback path"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Before a major launch, trigger a manual rollback in staging to confirm that the flag turns off as expected."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A manual rollback sends no Slack alert or webhook event; only an automatic rollback does."
+by = [
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_a_manual_rollback_sends_no_alert_and_no_webhook_event",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_automatic_rollback_alert_carries_the_measured_error_rate",
+]
