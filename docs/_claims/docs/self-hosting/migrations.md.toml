@@ -665,7 +665,7 @@ text = "4c2c09a2b3e8's downgrade moves alembic_version back and leaves the colum
 by = ["test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_the_downgrade_changes_nothing_and_a_rollback_still_succeeds"]
 
 [[unit]]
-text = "A downgrade runs while this release still serves (see On AWS, the API does not migrate), and this release records a null safety_config_id for each rollback of a flag on the defaults, which NOT NULL would refuse."
+text = "The rollback runbook undoes a migration while the release that contains it still serves, before the API is rolled back (Database Rollback Procedure), and this release records a null safety_config_id for each rollback of a flag on the defaults, which NOT NULL would refuse."
 by = ["test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_the_downgrade_changes_nothing_and_a_rollback_still_succeeds"]
 
 [[unit]]

@@ -418,10 +418,11 @@ it.
 
 **The downgrade changes nothing.** `4c2c09a2b3e8`'s downgrade moves
 `alembic_version` back and leaves the column nullable and the key ON DELETE SET
-NULL. A downgrade runs while this release still serves (see
-[On AWS, the API does not migrate](#on-aws-the-api-does-not-migrate)), and this
-release records a null `safety_config_id` for each rollback of a flag on the
-defaults, which NOT NULL would refuse.
+NULL. The rollback runbook undoes a migration while the release that contains it
+still serves, before the API is rolled back
+([Database Rollback Procedure](../deployment/rollback-runbook.md#database-rollback-procedure)),
+and this release records a null `safety_config_id` for each rollback of a flag
+on the defaults, which NOT NULL would refuse.
 
 Roll back to a specific revision:
 

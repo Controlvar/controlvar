@@ -40,12 +40,13 @@ pytestmark = pytest.mark.skipif(
 )
 
 #: The examples the help text and the runbook give, and the revisions each
-#: unapplies from both heads, newest first.  ``a89544fb1075`` was the down
-#: revision of the newest core migration when it became the example; every core
-#: revision added since joins its list (``37dcb2969766``, #440), and the
-#: documents that name it must say what those revisions' downgrades drop
-#: (``test_documented_downgrade_targets.py``).  Since ``4c2c09a2b3e8`` (#1206)
-#: the example is ``37dcb2969766``, whose list is that one revision.
+#: unapplies from both heads, newest first.  The core example is the down
+#: revision of the newest core migration: ``37dcb2969766``, which undoes
+#: ``4c2c09a2b3e8`` (#1206), since that revision landed; ``d29a479daafe``
+#: (#440) and ``a89544fb1075`` before it.  A core revision added later moves the
+#: example to its own down revision or joins this list, and the documents that
+#: name the example must say what the downgrades it runs drop
+#: (``test_documented_downgrade_targets.py``).
 NAMED_DOWNGRADES = {
     "37dcb2969766": ["4c2c09a2b3e8"],
     "modules_0001_rbac": ["modules_0002_warehouse_analysis"],
