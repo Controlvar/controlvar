@@ -55,6 +55,13 @@ by = [
 ]
 
 [[unit]]
+text = "Once the schedule's end_date has passed, the scheduler passes the schedule over: no stage starts or completes by itself, and the schedule stays active."
+by = [
+    "test:backend/tests/integration/services/test_rollout_end_date.py::test_a_schedule_past_its_end_date_is_passed_over",
+    "test:backend/tests/integration/services/test_rollout_end_date.py::test_a_schedule_before_its_end_date_advances",
+]
+
+[[unit]]
 text = "Creating a Rollout Schedule via API"
 by = ["exempt:baseline"]
 
@@ -202,12 +209,14 @@ by = ["exempt:baseline"]
 count = 2
 
 [[unit]]
-text = "From now on the scheduler starts a time-based stage once its start_date has passed and every stage before it is complete."
+text = "From now until the schedule's end_date, the scheduler starts a time-based stage once its start_date has passed and every stage before it is complete."
 by = [
     "test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_is_stage_eligible_for_activation",
     "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_starts_once_the_stage_before_it_is_complete",
     "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_with_a_future_start_date_waits_after_the_one_before",
     "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_after_a_manual_stage_in_progress_never_starts",
+    "test:backend/tests/integration/services/test_rollout_end_date.py::test_a_schedule_past_its_end_date_is_passed_over",
+    "test:backend/tests/integration/services/test_rollout_end_date.py::test_a_schedule_before_its_end_date_advances",
 ]
 
 [[unit]]
@@ -254,13 +263,14 @@ text = "Trigger Type | Description"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "time_based | The stage starts by itself once its start_date has passed and every stage before it is complete; with no start_date, on the scheduler's first pass after that. The scheduler completes it no sooner than 24 hours after it starts, or the hours its trigger_configuration gives as duration."
+text = "time_based | Before the schedule's end_date, the stage starts by itself once its start_date has passed and every stage before it is complete; with no start_date, on the scheduler's first pass after that. The scheduler completes it no sooner than 24 hours after it starts, or the hours its trigger_configuration gives as duration."
 by = [
     "test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_is_stage_eligible_for_activation",
     "test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_is_stage_eligible_for_completion",
     "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_starts_once_the_stage_before_it_is_complete",
     "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_is_not_completed_before_24_hours",
     "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_with_a_future_start_date_waits_after_the_one_before",
+    "test:backend/tests/integration/services/test_rollout_end_date.py::test_a_schedule_past_its_end_date_is_passed_over",
 ]
 
 [[unit]]

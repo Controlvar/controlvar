@@ -1022,8 +1022,13 @@ text = "Gradual Rollouts — set up a staged rollout schedule with automatic pro
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Safety Monitoring — configure automatic rollback if error rates spike"
-by = ["exempt:baseline"]
+text = "Safety Monitoring — automatic rollback if error rates spike: off by default, and a superuser turns it on in Admin → Safety"
+by = [
+    "test:backend/tests/unit/services/test_automatic_rollbacks_default_off.py::test_the_column_defaults_to_off",
+    "test:backend/tests/unit/services/test_automatic_rollbacks_default_off.py::test_the_request_schema_defaults_to_off",
+    "test:backend/tests/integration/api/test_safety_api.py::TestSafetySettings::test_non_superuser_cannot_update_settings",
+    "test:frontend/src/tests/admin/SafetySettingsForm.test.tsx::save calls AdminService.updateSafetySettings with the backend shape",
+]
 
 [[unit]]
 text = "SDK Documentation — full SDK integration guide"

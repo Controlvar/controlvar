@@ -18,7 +18,9 @@ A rollout schedule is a plan attached to a feature flag. It defines:
 
 The platform's background scheduler processes active schedules every 15 minutes
 (`ROLLOUT_CHECK_INTERVAL_MINUTES`) and starts a time-based stage once its `start_date` has
-passed and every stage before it is complete.
+passed and every stage before it is complete. Once the schedule's `end_date` has passed, the
+scheduler passes the schedule over: no stage starts or completes by itself, and the schedule
+stays `active`.
 
 ---
 
@@ -149,9 +151,9 @@ curl -s -X POST localhost:8000/api/v1/rollout-schedules/$SCHEDULE_ID/activate \
 ```
 <!-- expect: "active" -->
 
-It prints `"active"`. From now on the scheduler starts a time-based stage once its
-`start_date` has passed and every stage before it is complete. Activating a schedule doesn't
-change the flag: it is still at 0%.
+It prints `"active"`. From now until the schedule's `end_date`, the scheduler starts a
+time-based stage once its `start_date` has passed and every stage before it is complete.
+Activating a schedule doesn't change the flag: it is still at 0%.
 
 ---
 
@@ -169,7 +171,7 @@ stage starts. Percentages must not decrease from one stage to the next.
 
 | Trigger Type | Description |
 |--------------|-------------|
-| `time_based` | The stage starts by itself once its `start_date` has passed and every stage before it is complete; with no `start_date`, on the scheduler's first pass after that. The scheduler completes it no sooner than 24 hours after it starts, or the hours its `trigger_configuration` gives as `duration`. |
+| `time_based` | Before the schedule's `end_date`, the stage starts by itself once its `start_date` has passed and every stage before it is complete; with no `start_date`, on the scheduler's first pass after that. The scheduler completes it no sooner than 24 hours after it starts, or the hours its `trigger_configuration` gives as `duration`. |
 | `manual` | The stage starts only when you advance it. |
 | `metric_based` | Accepted, but not implemented in this release: such a stage never starts by itself. |
 

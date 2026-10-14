@@ -564,5 +564,6 @@ What is stored for each report, on both endpoints:
 ## Next Steps
 
 - [Gradual Rollouts](rollouts.md) — set up a staged rollout schedule with automatic progression
-- [Safety Monitoring](safety.md) — configure automatic rollback if error rates spike
+- [Safety Monitoring](safety.md) — automatic rollback if error rates spike: off by default, and a
+  superuser turns it on in **Admin → Safety**
 - [SDK Documentation](../sdk/javascript.md) — full SDK integration guide
