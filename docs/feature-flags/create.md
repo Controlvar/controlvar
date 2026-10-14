@@ -12,11 +12,11 @@ written against the stack from the [Quick Start](../getting-started/quick-start.
   on `localhost`. On your own deployment, use its URL wherever this page says
   `localhost:8000` or `localhost:3000`.
 - **A user account with the ADMIN or DEVELOPER role.** Creating, changing and turning a
-  flag on all take a user login. An API key can't do them (the API answers `401`). An
-  administrator creates accounts under **Admin → Users**. The examples below use the demo
+  flag on all take a user login. An API key can't do them (the API answers `401`). A
+  superuser creates accounts under **Admin → Users**. The examples below use the demo
   administrator, `admin@demo.com`.
 - **An API key**, to evaluate the flag the way your application will. The API section
-  creates one; in the dashboard, it's **Admin → API Keys**.
+  creates one; in the dashboard, a superuser can also create one under **Admin → API Keys**.
 
 ---
 

@@ -89,7 +89,9 @@ dashboard has no LLM screen.
 Results include:
 - **Mean and 95% confidence interval** for latency, cost, auto-eval score, and business metric;
   the interval uses the exact t critical value at n - 1 degrees of freedom
-- **A p-value** (treatment vs control) from Welch's t-test: the exact two-tailed value from
-  the t distribution at the Welch-Satterthwaite degrees of freedom, at every sample size
+- **A p-value** (treatment vs control) on the business metric, or on the auto-eval score
+  when either variant has no business metric, from Welch's t-test: the exact two-tailed
+  value from the t distribution at the Welch-Satterthwaite degrees of freedom, at every
+  sample size
 - **Cohen's d effect size** for business metric and auto-eval score
 - **Winner determination** based on the highest mean business metric (falls back to auto-eval score)

@@ -140,8 +140,9 @@ The API answers `201 Created`. A new schedule is a `draft`, and every stage is `
 
 The response also carries the schedule's `id`, `feature_flag_id`, `owner_id`, dates and
 settings, and each stage's `id`. A schedule is refused with `422` when its target
-percentages decrease, when its stage orders aren't 1, 2, 3 and so on without gaps, or
-when a stage order is above 1000.
+percentages decrease, when two stages have the same stage order or the orders leave a
+gap, or when a stage order is above 1000. The orders need not start at 1: 5, 6, 7 is
+accepted.
 
 ### Step 4: Activate the schedule
 

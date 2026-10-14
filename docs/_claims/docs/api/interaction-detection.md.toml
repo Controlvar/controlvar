@@ -39,7 +39,11 @@ by = [
 
 [[unit]]
 text = "Only each experiment's primary metric is tested, and only a conversion metric; pairs are tested one at a time, with no correction across pairs."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_interaction_page_claims.py::test_only_the_primary_metric_is_tested",
+    "test:backend/tests/unit/services/test_interaction_page_claims.py::test_a_pair_is_corrected_only_across_the_experiments_own_treatments",
+    "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_experiment_level_reasons_give_one_row_and_spare_the_other",
+]
 
 [[unit]]
 text = "An interaction does not mean either experiment is wrong."
@@ -172,7 +176,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The overlap of two experiments, in any status, and the interaction test (beta)."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_interaction_pair_any_status.py::test_the_pair_route_answers_in_any_status"]
 
 [[unit]]
 text = "With only the 40 shared users, nothing can be tested yet:"
@@ -315,6 +319,14 @@ by = [
 ]
 
 [[unit]]
+text = "\"No interaction\" with few users is weak evidence."
+by = ["test:backend/tests/unit/services/test_interaction_page_claims.py::test_the_relative_lift_example_is_not_significant_at_200_users_per_group"]
+
+[[unit]]
+text = "The test has little power when the groups are small: the constant-relative-lift table above, an interaction with 2,000 users in each group, gives X² = 0.85 and p = 0.36 with 200 users in each group, which is not significant."
+by = ["test:backend/tests/unit/services/test_interaction_page_claims.py::test_the_relative_lift_example_is_not_significant_at_200_users_per_group"]
+
+[[unit]]
 text = "Rows that are not tested"
 by = ["exempt:baseline"]
 
@@ -393,7 +405,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The test can also flag an interaction that is not there when one experiment changes who enters the other, for example when B's treatment sends more visitors to A's page."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_interaction_page_claims.py::test_a_change_in_who_enters_a_can_read_as_an_interaction"]
 
 [[unit]]
 text = "Check it by comparing, for each of B's variants, the share of its users who are also in A."

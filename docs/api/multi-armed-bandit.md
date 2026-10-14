@@ -159,7 +159,7 @@ looks like this:
 | `current_weight` | Current traffic allocation fraction (0–1, sums to 1.0 across variants) |
 | `pulls` | Total assignments to this variant |
 | `successes` | Converting users in this variant: users assigned to it with at least one conversion event, each counted once |
-| `regret_reduction_pct` | Estimated regret reduction compared with a uniform split; `null` until there is data |
+| `regret_reduction_pct` | Estimated regret reduction compared with a uniform split; `null` until there is data, and while the weights do no better than a uniform split |
 | `recommendation` | `EXPLORING`, `CONVERGING`, or `DEPLOYING_<variant name>` once one variant dominates |
 | `last_updated` | When the weights were last computed; `null` before the first update |
 | `seed`, `n_samples` | The random seed and draws per variant of the last Thompson-sampling update; `null` for the other algorithms |

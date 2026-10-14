@@ -13,7 +13,11 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "POST /api/v1/tracking/assign/batch (beta) assigns up to 1,000 users in one request."
-by = ["docex:docs/guides/assign-customer-list.md#2500"]
+by = [
+    "docex:docs/guides/assign-customer-list.md#2500",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_1000_users_are_accepted",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_422_assigns_nobody_and_repeats_no_id",
+]
 
 [[unit]]
 text = "Each user gets what POST /api/v1/tracking/assign would give them, with the bandit weights read at the start of the request: the global holdout, the experiment's mutual exclusion group and its targeting rules apply to each new user, and a user who is already assigned keeps their variant."

@@ -140,11 +140,18 @@ by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestJudge
 
 [[unit]]
 text = "It takes a criteria (default helpfulness) and a judge_model (default LLM_DEFAULT_JUDGE_MODEL)."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_the_judge_request_defaults_are_helpfulness_and_the_setting",
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_the_judge_defaults_to_helpfulness_and_the_configured_model",
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_the_judge_uses_the_criteria_and_model_a_request_names",
+]
 
 [[unit]]
 text = "The judge is called through the Anthropic SDK, so judge_model names a Claude model."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_the_judge_defaults_to_helpfulness_and_the_configured_model",
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_the_judge_uses_the_criteria_and_model_a_request_names",
+]
 
 [[unit]]
 text = "A judge call that fails scores the response 0.5."
@@ -214,7 +221,7 @@ by = [
 
 [[unit]]
 text = "Add / update variants | DEVELOPER or ADMIN"
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_llm_variants_and_cost.py::test_adding_and_updating_variants_takes_developer_or_admin"]
 
 [[unit]]
 text = "Get completion | Any authenticated user (READ)"

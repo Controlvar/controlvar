@@ -29,7 +29,7 @@ by = ["test:backend/tests/unit/services/test_llm_experiment_service.py::TestCost
 
 [[unit]]
 text = "Local | A model served by Ollama at http://localhost:11434 on the API's own host | The address is fixed; token counts are word counts, and cost is $0.00"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_llm_provider_wiring.py::test_the_local_provider_calls_ollama_on_the_api_host_counting_words"]
 
 [[unit]]
 text = "ANTHROPIC_API_KEY enables Anthropic variants in POST /llm-experiments/{id}/complete, the LLM-as-judge (POST /llm-experiments/{id}/judge), and the platform's own AI features (POST /ai/design and POST /ai/interpret/{id})."
@@ -37,7 +37,7 @@ by = ["test:backend/tests/unit/services/test_ai_design_service.py"]
 
 [[unit]]
 text = "OPENAI_API_KEY, which the OpenAI SDK reads, enables OpenAI variants in /complete."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_llm_provider_wiring.py::test_openai_variants_use_the_key_and_gateway_the_openai_sdk_reads"]
 
 [[unit]]
 text = "With neither set, no provider is called: /complete answers 502 for that variant, the judge records its fallback score of 0.5, and the AI features use their templates."
@@ -49,7 +49,10 @@ by = [
 
 [[unit]]
 text = "ANTHROPIC_BASE_URL and OPENAI_BASE_URL point the SDKs at a proxy or gateway."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_openai_variants_use_the_key_and_gateway_the_openai_sdk_reads",
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_anthropic_variants_go_to_the_gateway_anthropic_base_url_names",
+]
 
 [[unit]]
 text = "The Google provider needs no extra package: a google variant calls the Gemini REST API with the key in GEMINI_API_KEY, and GEMINI_BASE_URL (default https://generativelanguage.googleapis.com) points it at a proxy or gateway."
@@ -143,7 +146,11 @@ by = [
 
 [[unit]]
 text = "Per-variant cost is in GET /api/v1/llm-experiments/{id}/results (mean_cost_usd); the dashboard has no LLM screen."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/integration/api/test_llm_variants_and_cost.py::test_each_variants_mean_cost_is_in_the_results",
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_the_dashboard_has_no_llm_screen",
+    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_module_dashboard_pages",
+]
 
 [[unit]]
 text = "Statistical Analysis"
@@ -162,8 +169,12 @@ by = [
 ]
 
 [[unit]]
-text = "A p-value (treatment vs control) from Welch's t-test: the exact two-tailed value from the t distribution at the Welch-Satterthwaite degrees of freedom, at every sample size"
-by = ["test:backend/tests/unit/services/test_llm_analytics.py::TestWelchPValueIsExact::test_p_value_matches_scipy_welch"]
+text = "A p-value (treatment vs control) on the business metric, or on the auto-eval score when either variant has no business metric, from Welch's t-test: the exact two-tailed value from the t distribution at the Welch-Satterthwaite degrees of freedom, at every sample size"
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestWelchPValueIsExact::test_p_value_matches_scipy_welch",
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_the_p_value_is_on_the_business_metric_when_both_variants_have_one",
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_the_p_value_falls_back_to_the_auto_eval_score",
+]
 
 [[unit]]
 text = "Cohen's d effect size for business metric and auto-eval score"

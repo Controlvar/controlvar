@@ -29,7 +29,10 @@ by = ["docex:docs/websocket-streaming.md#\"event\": \"results_update\""]
 
 [[unit]]
 text = "After 30 seconds with no message from the client it sends a fresh one (RESULTS_STREAM_INTERVAL_SECONDS, read when the API starts); a ping or a refresh starts that wait again."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/api/test_results_stream_interval.py::test_the_interval_is_30_seconds_unless_set_when_the_api_starts",
+    "test:backend/tests/unit/api/test_results_stream_interval.py::test_every_wait_is_the_full_interval_and_a_message_starts_it_again",
+]
 
 [[unit]]
 text = "The socket needs an access token; see Authentication below for the three ways to send it."
@@ -151,7 +154,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "In the dashboard, the ⚡ Live tab of an experiment's results page shows this stream."
-by = ["untested:T"]
+by = ["test:frontend/src/tests/pages/results-reading.test.tsx::opens the results stream of this experiment"]
 
 [[unit]]
 text = "Authentication"

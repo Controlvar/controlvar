@@ -110,7 +110,12 @@ by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
 
 [[unit]]
 text = "It calls the sample-size endpoint shown below at a significance of 1 − the confidence level, treats the minimum detectable effect as a relative change (5% of a 12% baseline is 12.6%, not 17%), and assumes users are split evenly between the variants."
-by = ["untested:T"]
+by = [
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::asks the sample-size endpoint only when the button is pressed, in fractions, without a login redirect",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::sends each power option, and 1 minus each confidence level as the significance",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::sends the number of variants on the Variants step",
+    "test:backend/tests/unit/api/test_sample_size_pinned_answer.py::test_twelve_percent_baseline_five_percent_relative_mde",
+]
 
 [[unit]]
 text = "It makes no correction for comparing several variants with the control, even when one is chosen above, so with three or more variants the experiment needs more users than it says; the Power Calculator applies a Bonferroni correction, so its number is higher."
@@ -179,7 +184,7 @@ by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
 
 [[unit]]
 text = "Drafts are held in the API process's memory, so they do not survive a restart and are not shared between replicas."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_wizard_drafts_live_in_one_process.py::test_a_draft_is_not_seen_by_another_process"]
 
 [[unit]]
 text = "The wizard endpoints are deprecated and may be removed in a later release."
@@ -380,7 +385,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "primary_metric_id and guardrail_metric_ids are the event names the metrics count, such as checkout_completed:"
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_wizard_submit_builds.py::test_a_submitted_draft_creates_the_documented_experiment"]
 
 [[unit]]
 text = "It prints \"targeting\"."
@@ -475,7 +480,7 @@ by = ["docex:docs/guides/experiment-wizard.md#\"name\": \"Checkout CTA Button Co
 
 [[unit]]
 text = "A multivariate draft gets three variants (33/33/34), and a feature_flag_rollout draft gets a held-back control with {\"enabled\": false} and a treatment with {\"enabled\": true}, at 50% each."
-by = ["untested:T"]
+by = ["test:backend/tests/integration/api/test_wizard_submit_builds.py::test_a_submitted_draft_creates_the_documented_experiment"]
 
 [[unit]]
 text = "Review the experiment and start it when you're ready."

@@ -236,7 +236,7 @@ Return the power curve — sample size required per variant for a range of effec
 
 **Example**: `GET /api/v1/power/curve?baseline=0.05&alpha=0.05&power=0.80&mde=0.10`
 
-**Response**:
+**Response**, abridged to 3 of its 15 points:
 ```json
 {
   "points": [
