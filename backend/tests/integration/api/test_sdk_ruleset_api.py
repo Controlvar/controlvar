@@ -259,6 +259,31 @@ class TestOwnerRole:
         assert response.status_code == 403
         assert response.json()["detail"] == OWNER_ROLE_DETAIL
 
+    def test_a_key_acts_as_its_creator_not_another_user(self, client, db_session):
+        # Two users of different roles; the key belongs to the older one.
+        creator = _make_user(db_session, UserRole.DEVELOPER)
+        key = _key(client, creator, ["sdk:ruleset"])["key"]
+        other = _make_user(db_session, UserRole.VIEWER)
+        assert other.created_at > creator.created_at
+        assert _get(client, key).status_code == 200
+
+        # Swap their roles: the creator's decides.
+        creator.role, other.role = UserRole.VIEWER, UserRole.DEVELOPER
+        db_session.commit()
+        response = _get(client, key)
+        assert response.status_code == 403
+        assert response.json()["detail"] == OWNER_ROLE_DETAIL
+
+        # A DEVELOPER again, then deactivated while the other stays active:
+        # the key no longer signs anyone in.
+        creator.role = UserRole.DEVELOPER
+        db_session.commit()
+        assert _get(client, key).status_code == 200
+        creator.is_active = False
+        db_session.commit()
+        assert other.is_active
+        assert _get(client, key).status_code == 401
+
     def test_a_stored_scope_on_a_viewers_key_is_refused(self, client, db_session):
         viewer = _make_user(db_session, UserRole.VIEWER)
         created = _key(client, viewer)

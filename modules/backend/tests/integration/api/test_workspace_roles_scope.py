@@ -14,8 +14,10 @@ Through the workspace routes, against a real database, with the callers of
 * nor which existing ones a user can change: the OWNER and ADMIN of a
   workspace, both platform VIEWERs, cannot rename a flag or an experiment that
   a member of their workspace created, or list or delete that member's API
-  key; a platform DEVELOPER in no workspace renames both, and a platform ADMIN
-  in no workspace lists and deletes the key.
+  key; the member, a platform DEVELOPER, renames both; a platform DEVELOPER in
+  no workspace renames both, and a platform ADMIN in no workspace lists and
+  deletes the key. The OWNER, the ADMIN and the member each list and delete
+  a key of their own.
 """
 
 from __future__ import annotations
@@ -201,6 +203,22 @@ def _rename(as_user, user, url):
     return as_user(user, "PUT", url, json={"name": f"Renamed {uuid.uuid4().hex[:8]}"})
 
 
+def _list_and_delete_own_key(as_user, user, present=None, absent=None):
+    """``user`` makes a key, finds it in their own list, and deletes it."""
+    made = as_user(user, "POST", "/api/v1/api-keys", json={"name": "own"})
+    assert made.status_code == 201, made.text
+    listed = as_user(user, "GET", "/api/v1/api-keys")
+    assert listed.status_code == 200, listed.text
+    ids = {k["id"] for k in listed.json()}
+    assert made.json()["id"] in ids
+    if present is not None:
+        assert present in ids
+    if absent is not None:
+        assert absent not in ids
+    deleted = as_user(user, "DELETE", f"/api/v1/api-keys/{made.json()['id']}")
+    assert deleted.status_code == 204, deleted.text
+
+
 def test_a_workspace_role_neither_grants_nor_limits_a_change(
     as_user, ws_people, db_session
 ):
@@ -223,15 +241,14 @@ def test_a_workspace_role_neither_grants_nor_limits_a_change(
     ruleset_key = {"name": "ruleset", "scopes": ["sdk:ruleset"]}
 
     # The workspace's OWNER and ADMIN read the flag and the experiment, as any
-    # platform VIEWER does, and change neither; nor the member's key.
+    # platform VIEWER does, and change neither; nor the member's key. Each lists
+    # and deletes a key of their own.
     for member in (owner, admin):
         assert as_user(member, "GET", flag_url).status_code == 200
         assert as_user(member, "GET", experiment_url).status_code == 200
         assert _rename(as_user, member, flag_url).status_code == 403
         assert _rename(as_user, member, experiment_url).status_code == 403
-        own_keys = as_user(member, "GET", "/api/v1/api-keys")
-        assert own_keys.status_code == 200, own_keys.text
-        assert key_id not in {k["id"] for k in own_keys.json()}
+        _list_and_delete_own_key(as_user, member, absent=key_id)
         assert as_user(member, "GET", "/api/v1/api-keys?all=true").status_code == 403
         gone = as_user(member, "DELETE", f"/api/v1/api-keys/{key_id}")
         assert gone.status_code == 403, gone.text
@@ -242,6 +259,13 @@ def test_a_workspace_role_neither_grants_nor_limits_a_change(
         as_user(creator, "GET", experiment_url).json()["name"]
         == experiment.json()["name"]
     )
+
+    # The member, a platform DEVELOPER, still renames both, and lists and
+    # deletes a key of their own.
+    for url in (flag_url, experiment_url):
+        renamed = _rename(as_user, creator, url)
+        assert renamed.status_code == 200, renamed.text
+    _list_and_delete_own_key(as_user, creator, present=key_id)
 
     # A platform DEVELOPER in no workspace renames both, and may hold a key
     # that only a role that can change flags may hold.

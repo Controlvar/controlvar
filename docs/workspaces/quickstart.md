@@ -8,7 +8,8 @@ connect an SDK.
 
 A workspace groups members and their workspace roles. It does not limit which
 experiments, feature flags or API keys anyone can see or change: that is decided
-by each user's platform role across the whole installation. See the
+by each user's platform role across the whole installation (and, for an API key,
+who created it). See the
 [Workspace Overview](./overview.md#what-workspaces-do-not-do).
 
 ---
