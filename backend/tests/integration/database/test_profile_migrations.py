@@ -446,3 +446,34 @@ def test_downgrade_drops_the_tables_the_migration_created(test_db, scratch_schem
     result = _alembic(scratch_schema, "downgrade", UNAPPLY_MODULES_BRANCH)
     assert result.returncode == 0, result.stderr[-2000:]
     assert not set(RBAC_TABLES) & _tables(test_db, scratch_schema)
+
+
+# ---------------------------------------------------------------------------
+# 4. A relative step with two heads
+# ---------------------------------------------------------------------------
+def test_a_relative_step_is_refused_with_two_heads_and_a_named_revision_applies(
+    test_db, scratch_schema
+):
+    """A full checkout against a database at the core head, with the modules
+    branch still to apply: ``upgrade +1`` is refused and applies nothing;
+    ``upgrade`` naming the revision applies it."""
+    assert _bootstrap(scratch_schema).returncode == 0
+    _make_core_built_schema(test_db, scratch_schema)
+    core_heads = _heads(_core_only_config())
+    assert len(_heads(_REAL_ALEMBIC_CONFIG())) == 2
+    assert bootstrap.recorded_revisions(test_db, scratch_schema) == core_heads
+
+    relative = _alembic(scratch_schema, "upgrade", "+1")
+    assert relative.returncode != 0, relative.stdout[-2000:]
+    assert "Relative revision +1 didn't produce 1 migrations" in relative.stderr, (
+        relative.stderr[-2000:]
+    )
+    assert bootstrap.recorded_revisions(test_db, scratch_schema) == core_heads
+    assert not set(RBAC_TABLES) & _tables(test_db, scratch_schema)
+
+    named = _alembic(scratch_schema, "upgrade", MODULES_FIRST)
+    assert named.returncode == 0, named.stderr[-2000:]
+    assert bootstrap.recorded_revisions(test_db, scratch_schema) == core_heads | {
+        MODULES_FIRST
+    }
+    assert set(RBAC_TABLES) <= _tables(test_db, scratch_schema)

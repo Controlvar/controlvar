@@ -1703,6 +1703,25 @@ MECHANISMS: Dict[str, Mechanism] = {
             "After it registers the API revision it reads back what ECS stored, and refuses to create the CodeDeploy deployment unless the backend container sets RUN_MIGRATIONS=false exactly.",
         ),
     ),
+    # The Deploy refuses while one of the API's 5xx alarms is in ALARM.
+    "deploy-refuses-on-an-api-alarm": Mechanism(
+        "backend/tests/unit/infrastructure/test_refuse_alarm_active.py"
+        "::test_the_step_refuses_on_alarm_as_written",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "The first Deploy may be refused by the API's 5xx alarms.",
+            "Anything that reaches the schema-less API in that window, a scanner included, can put experimentation-api-5xx-blue-<env> or -green-<env> into ALARM, and the Deploy refuses to start while one is.",
+        ),
+    ),
+    # ... before it builds anything.
+    "deploy-alarm-check-runs-first": Mechanism(
+        "backend/tests/unit/infrastructure/test_refuse_alarm_active.py"
+        "::test_it_runs_before_the_build_and_immediately_before_the_snapshot",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "Anything that reaches the schema-less API in that window, a scanner included, can put experimentation-api-5xx-blue-<env> or -green-<env> into ALARM, and the Deploy refuses to start while one is.",
+        ),
+    ),
     # ix_users_email_lower refuses a second account with the address.
     "email-lower-collision": Mechanism(
         "backend/tests/integration/database/test_users_email_lower_migration.py"
