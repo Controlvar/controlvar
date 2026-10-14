@@ -97,7 +97,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Entries in experimentation.phi_audit_logs are written by two routes: POST /audit-logs, which records the access you send, and POST /decrypt, which records a READ by the calling user."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/api/test_hipaa_routes_and_status.py::test_two_routes_write_the_phi_audit_log_and_decrypt_records_a_read"]
 
 [[unit]]
 text = "Each entry has:"
@@ -282,11 +282,11 @@ by = ["test:modules/backend/tests/integration/api/test_hipaa_api.py::TestEncrypt
 
 [[unit]]
 text = "HIPAA_ENABLED | Returned as hipaa_enabled by /data-residency. The routes work the same either way."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/api/test_hipaa_routes_and_status.py::test_the_hipaa_settings_are_reported_and_change_nothing_else"]
 
 [[unit]]
 text = "HIPAA_ALLOWED_REGIONS | Returned by /data-residency beside the deployment's region (default [\"us-east-1\",\"us-west-2\"])."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/api/test_hipaa_routes_and_status.py::test_the_hipaa_settings_are_reported_and_change_nothing_else"]
 
 [[unit]]
 text = "HIPAA_AUDIT_LOG_RETENTION_YEARS | Written into each new audit log entry as retention_years (default 6)."
@@ -306,11 +306,12 @@ by = [
     "test:modules/backend/tests/unit/services/test_hipaa_service.py::TestGetHipaaStatus::test_overall_hipaa_ready_true_when_all_requirements_met",
     "test:modules/backend/tests/unit/services/test_hipaa_service.py::TestGetHipaaStatus::test_overall_hipaa_ready_false_when_missing_requirements",
     "test:modules/backend/tests/unit/services/test_hipaa_service.py::TestGetHipaaStatus::test_overall_hipaa_ready_false_with_no_allowed_regions",
+    "test:modules/backend/tests/unit/api/test_hipaa_routes_and_status.py::test_ready_needs_an_active_baa_a_key_and_an_allowed_region",
 ]
 
 [[unit]]
 text = "It reports configuration; it does not inspect stored data or logs."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/api/test_hipaa_routes_and_status.py::test_ready_needs_an_active_baa_a_key_and_an_allowed_region"]
 
 [[unit]]
 text = "Security Notes"

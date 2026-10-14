@@ -571,7 +571,7 @@ after the examples above. What the analyst can do is unchanged.
 
 ### Grant a Temporary Export Permission
 
-This records a week-long export grant for a data analyst without changing their role. The grant is stored and shown by Get Effective Permissions, but no permission check reads it: it does **not** let the analyst export anything their base role does not already allow ([#891](https://github.com/getexperimently/experimently/issues/891)). To let someone export today, give them a base role that holds the permission.
+This records a week-long export grant for a data analyst without changing their role. The grant is stored and shown by Get Effective Permissions, but no permission check reads it: it does **not** let the analyst export anything their base role does not already allow ([#891](https://github.com/getexperimently/experimently/issues/891)).
 
 ```{.bash exec}
 WEEK=$(jq -nr 'now + 7*86400 | todate')

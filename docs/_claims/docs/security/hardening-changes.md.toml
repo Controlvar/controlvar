@@ -60,7 +60,7 @@ by = ["test:backend/tests/unit/security/test_security_hardening.py::TestSecurity
 
 [[unit]]
 text = "Expand Permissions-Policy to additionally restrict usb and magnetometer."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/middleware/test_hardening_in_place.py::test_permissions_policy_restricts_usb_and_magnetometer"]
 
 [[unit]]
 text = "The API reference pages, /api/v1/docs (Swagger UI) and /api/v1/redoc (ReDoc), matched by exact path, get a different Content-Security-Policy instead (DOCS_CSP in the middleware): scripts and stylesheets from https://cdn.jsdelivr.net, ReDoc's Google Fonts and its logo image, Swagger UI's one inline script by its sha256 hash, and the OpenAPI document from the same origin."
@@ -72,7 +72,7 @@ by = [
 
 [[unit]]
 text = "It allows no other inline script and no eval."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_docs_page_csp.py::test_the_docs_policy_allows_no_inline_or_eval_script"]
 
 [[unit]]
 text = "The dashboard's nginx proxies these two paths without adding its own policy, so the API's is the only one the browser sees."
@@ -87,7 +87,10 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "RateLimitMiddleware enforces per-IP, per-path sliding-window limits."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestSlidingWindowRateLimiter::test_window_expiry",
+    "test:backend/tests/unit/middleware/test_hardening_in_place.py::test_cors_sends_no_cookies_cross_origin_and_limits_are_per_ip_and_path",
+]
 
 [[unit]]
 text = "Counters live in Redis (RedisRateLimiter, shared across API instances); when Redis is unreachable the middleware falls back to an in-process sliding window so requests are never rejected because the limiter is down."
@@ -98,7 +101,7 @@ by = [
 
 [[unit]]
 text = "Each process counts on its own while Redis is unavailable, so per-IP limits are multiplied by the number of API processes (the running task count)."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/middleware/test_hardening_in_place.py::test_without_redis_each_process_counts_on_its_own"]
 
 [[unit]]
 text = "The limiter tries Redis again every 30 s, with redis-py's client retries turned off so a retry holds a request for at most one connect timeout (2 s), and returns to shared counts within 30 s of Redis recovering."
@@ -146,19 +149,22 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "allow_methods changed from [\"\"] to an explicit list: [\"GET\", \"POST\", \"PUT\", \"DELETE\", \"PATCH\"]."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/middleware/test_hardening_in_place.py::test_cors_allows_these_methods_and_headers_only"]
 
 [[unit]]
 text = "OPTIONS is handled automatically by the CORS middleware; HEAD and TRACE are not needed."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/middleware/test_hardening_in_place.py::test_cors_allows_these_methods_and_headers_only",
+    "test:backend/tests/unit/middleware/test_preflight_and_429_cors.py::test_the_limiter_does_not_count_a_preflight",
+]
 
 [[unit]]
 text = "allow_headers changed from [\"\"] to an explicit list: [\"Authorization\", \"Content-Type\", \"X-API-Key\"]."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/middleware/test_hardening_in_place.py::test_cors_allows_these_methods_and_headers_only"]
 
 [[unit]]
 text = "Only headers the API actually uses are permitted."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/middleware/test_hardening_in_place.py::test_cors_allows_these_methods_and_headers_only"]
 
 [[unit]]
 text = "expose_headers lists X-Request-ID, Retry-After, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Window and X-Total-Count, so clients can read these response headers cross-origin."
@@ -185,7 +191,7 @@ by = [
 
 [[unit]]
 text = "Credentials are not allowed cross-origin."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/middleware/test_hardening_in_place.py::test_cors_sends_no_cookies_cross_origin_and_limits_are_per_ip_and_path"]
 
 [[unit]]
 text = "4. Input Length Constraints (backend/app/schemas/)"
@@ -257,7 +263,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "AssignmentBase. | same as above | max_length=255"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/middleware/test_hardening_in_place.py::test_the_tracking_schemas_bound_their_fields"]
 
 [[unit]]
 text = "AssignmentRequest.experiment_key | min_length=1 only | + max_length=100"
@@ -273,11 +279,11 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "EventQueryParams.user_id | no constraint | max_length=255"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/middleware/test_hardening_in_place.py::test_the_tracking_schemas_bound_their_fields"]
 
 [[unit]]
 text = "EventQueryParams.event_type | no constraint | max_length=100"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/middleware/test_hardening_in_place.py::test_the_tracking_schemas_bound_their_fields"]
 
 [[unit]]
 text = "Why it matters"
@@ -301,7 +307,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Pydantic validates these limits before any database interaction occurs."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/middleware/test_hardening_in_place.py::test_a_value_over_its_limit_is_refused_before_the_database_is_used"]
 
 [[unit]]
 text = "5. Configuration Hardening (backend/app/core/config.py)"
@@ -309,27 +315,34 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Added CORS_ORIGINS: List[str] as an alternative plain-string CORS origins config that can be set via env var as a comma-separated string."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/middleware/test_hardening_in_place.py::test_cors_origins_takes_a_comma_separated_string"]
 
 [[unit]]
 text = "Added a validate_secret_key field validator that raises a ValueError at application startup if:"
 by = ["test:backend/tests/unit/security/test_security_hardening.py::TestConfigSecurity::test_secret_key_validated_in_production"]
 
 [[unit]]
-text = "ENVIRONMENT == \"prod\" and TESTING env var is not set"
-by = ["exempt:baseline"]
+text = "ENVIRONMENT is staging or production, and"
+by = ["test:backend/tests/unit/middleware/test_hardening_in_place.py::test_a_short_or_placeholder_secret_key_stops_staging_and_production"]
 
 [[unit]]
 text = "SECRET_KEY is shorter than 32 characters or is one of the well-known weak defaults (default-secret-key-for-testing, secret, changeme, etc.)"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/middleware/test_hardening_in_place.py::test_a_short_or_placeholder_secret_key_stops_staging_and_production",
+    "test:backend/tests/unit/core/test_config_environment.py::TestModuleImportSelection::test_weak_secret_key_in_production_refuses_to_boot",
+]
 
 [[unit]]
 text = "This prevents the application from starting in production with a weak key."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/middleware/test_hardening_in_place.py::test_a_short_or_placeholder_secret_key_stops_staging_and_production",
+    "test:backend/tests/unit/core/test_config_environment.py::TestModuleImportSelection::test_weak_secret_key_in_production_refuses_to_boot",
+]
 
 [[unit]]
-text = "Later, TESTING stopped being an exception: the settings now refuse TESTING together with ENVIRONMENT=staging or production outright, so the check applies in every staging and production start."
+text = "As first added, the check covered only ENVIRONMENT=prod and was skipped when TESTING was set; today it covers staging and production, and nothing skips it there, because the settings refuse TESTING together with ENVIRONMENT=staging or production outright."
 by = [
+    "test:backend/tests/unit/middleware/test_hardening_in_place.py::test_a_short_or_placeholder_secret_key_stops_staging_and_production",
     "test:backend/tests/unit/core/test_config_environment.py::TestModuleImportSelection::test_testing_with_production_refuses_to_import",
     "test:backend/tests/unit/core/test_settings_rules_testing_flag.py",
 ]

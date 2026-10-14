@@ -31,7 +31,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The sso module adds Single Sign-On (SSO) through OpenID Connect (OIDC) and OAuth 2 providers; it is part of the full profile and, like every module, Apache-2.0."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_sso_is_a_module_of_the_full_profile_under_apache_2"]
 
 [[unit]]
 text = "An administrator creates one SSO configuration per email domain; users of that domain then sign in through the identity provider (IdP) instead of with a password."
@@ -39,15 +39,18 @@ by = ["test:modules/backend/tests/integration/api/test_sso_api.py::TestCreateSSO
 
 [[unit]]
 text = "SSO sign-in needs AUTH_PROVIDER=local."
-by = ["untested:A"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_sso_session_is_a_local_token_that_cognito_does_not_accept"]
 
 [[unit]]
 text = "When AUTH_PROVIDER is cognito, an SSO sign-in does not sign the user in (#707)."
-by = ["untested:A"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_sso_session_is_a_local_token_that_cognito_does_not_accept"]
 
 [[unit]]
 text = "SAML 2.0 sign-in is not available yet; use OIDC"
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_saml_acs_token_is_still_not_a_session",
+    "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_a_saml_only_domain_goes_back_as_sso_saml_only",
+]
 
 [[unit]]
 text = "A SAML configuration can be created, and its metadata and ACS are served, but a SAML sign-in does not give the user a session."
@@ -109,15 +112,21 @@ by = [
 
 [[unit]]
 text = "The providers microsoft, azure_ad and onelogin are not supported yet: signing in through a configuration of one of those types is refused."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_unsupported_providers_are_refused_at_login_and_callback",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestVerifiedEmail::test_other_providers_are_refused",
+]
 
 [[unit]]
 text = "SAML 2.0 sign-in is not available yet; use OIDC (for Okta, the okta provider type)."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_saml_acs_token_is_still_not_a_session",
+    "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_a_saml_only_domain_goes_back_as_sso_saml_only",
+]
 
 [[unit]]
 text = "Google and GitHub send no groups, so a role_mapping has no effect on their sign-ins: see Group-to-Role Mapping."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_only_okta_asks_for_groups_among_the_sign_in_providers"]
 
 [[unit]]
 text = "Overview"
@@ -125,11 +134,14 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "A user signs in from the dashboard, through an OIDC or OAuth 2 provider."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_a_dashboard_sign_in_hands_off_a_code_not_the_token"]
 
 [[unit]]
 text = "(SAML 2.0 sign-in is not available yet; use OIDC.)"
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_saml_acs_token_is_still_not_a_session",
+    "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_a_saml_only_domain_goes_back_as_sso_saml_only",
+]
 
 [[unit]]
 text = "The platform checks what comes back: that an OIDC sign-in was started in this browser and its ID token, or a SAML assertion's signature."
@@ -158,7 +170,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "PUBLIC_BASE_URL is the origin users reach the service at, for example https://app.example.com."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/api/test_sso_redirect_uri.py::test_public_base_url_wins_over_the_request"]
 
 [[unit]]
 text = "The URLs below are built from it, and an IdP compares them exactly, so set it before registering them."
@@ -196,7 +208,11 @@ by = [
 
 [[unit]]
 text = "SAML_SP_ACS_URL is one value for the whole deployment, not one per configuration, and incoming assertions are checked against it: set it to the ACS URL above."
-by = ["untested:T"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_the_acs_url_is_one_setting_for_every_configuration",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_each_check_refuses_an_assertion_that_fails_it",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_assertion_that_passes_every_check_is_accepted",
+]
 
 [[unit]]
 text = "Trying it on the Docker Compose stack"
@@ -204,7 +220,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "docker-compose.yml starts the core profile, and its api service passes on only the variables it names, so a PUBLIC_BASE_URL set in the shell or in a .env file never reaches the API."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_compose_passes_the_api_only_the_variables_it_names"]
 
 [[unit]]
 text = "Start the full profile with an override file that sets it."
@@ -282,7 +298,10 @@ by = [
 
 [[unit]]
 text = "The provider returns to the same callback it always has, {PUBLIC_BASE_URL}/api/v1/auth/sso/oidc/{provider}/callback: nothing changes in the identity provider's registration."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/api/test_sso_redirect_uri.py::test_the_uri_is_identical_whatever_the_request_claims",
+    "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_a_dashboard_sign_in_hands_off_a_code_not_the_token",
+]
 
 [[unit]]
 text = "The callback redirects to <dashboard>/sso/complete#code=<hand-off code>."
@@ -321,7 +340,10 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "That code expires after 60 seconds, and without the secret held by the tab that started the sign-in it cannot be exchanged."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_a_code_is_dead_after_sixty_seconds",
+    "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_a_code_without_its_secret_is_refused",
+]
 
 [[unit]]
 text = "A domain whose only active configuration is SAML cannot start here: the dashboard says SAML sign-in is not available yet and to ask an administrator to set up OIDC sign-in (sso_saml_only)."
@@ -461,7 +483,7 @@ by = [
 
 [[unit]]
 text = "A refusal in the callback is logged at WARNING with its sso_error, status, detail and request ID, and an unexpected error at ERROR with its traceback."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_callback_refusals_and_failures_are_logged"]
 
 [[unit]]
 text = "The API log writes the callback's query values (the provider's code and state, and anything else it sends) as [redacted]."
@@ -473,7 +495,10 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "return_to must be one of the dashboard origins the API accepts."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_return_to_must_be_a_configured_dashboard_origin",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_the_dashboard_sign_in_needs_domain_return_to_and_handoff",
+]
 
 [[unit]]
 text = "These are:"
@@ -523,7 +548,10 @@ by = ["test:backend/tests/unit/core/test_cors_allow_list_by_environment.py"]
 
 [[unit]]
 text = "A callback that arrives without the sign-in's cookie, or with a cookie the API did not issue, cannot say which dashboard it came from."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_no_cookie_goes_to_the_primary_origin_as_sso_state",
+    "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_a_cookie_that_is_not_ours_never_chooses_the_destination",
+]
 
 [[unit]]
 text = "It is sent to the primary dashboard origin (the first DASHBOARD_ORIGINS entry, otherwise PUBLIC_BASE_URL's origin) at /login?sso_error=sso_state."
@@ -549,7 +577,7 @@ by = [
 
 [[unit]]
 text = "Its optional org_domain parameter is compared with the stored org_domain exactly, so pass it lower-case; without it, the first active configuration of that provider is used."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_the_api_sign_in_compares_org_domain_exactly"]
 
 [[unit]]
 text = "Its callback answers JSON: access_token, token_type, user_id, email, role and provider."
@@ -561,7 +589,10 @@ by = [
 
 [[unit]]
 text = "SAML 2.0 sign-in is not available yet; use OIDC."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_saml_acs_token_is_still_not_a_session",
+    "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_a_saml_only_domain_goes_back_as_sso_saml_only",
+]
 
 [[unit]]
 text = "The identity provider POSTs a SAML assertion to the ACS, which checks it and creates or updates the account, but the JSON it answers with (access_token, token_type, user_id, email, role) is not a session: neither the API nor the dashboard accepts that token."
@@ -587,7 +618,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "All paths are under /api/v1."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_every_sso_route_is_under_api_v1"]
 
 [[unit]]
 text = "The configuration endpoints need a signed-in user whose role is admin, or a superuser; any other signed-in user gets 403."
@@ -613,7 +644,10 @@ by = [
 
 [[unit]]
 text = "GET | /api/v1/auth/sso/login | Starts a dashboard sign-in: domain, return_to and handoff are all required, and a missing or malformed one is a 400. Rate-limited to 30 a minute"
-by = ["untested:T"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_the_dashboard_sign_in_needs_domain_return_to_and_handoff",
+    "test:backend/tests/unit/middleware/test_route_rate_limits.py::test_the_sso_routes_take_ten_and_thirty_a_minute",
+]
 
 [[unit]]
 text = "POST | /api/v1/auth/sso/exchange | Exchanges a dashboard sign-in's hand-off code and secret for a session ({access_token, token_type, user}); rate-limited like the password login, 10 a minute"
@@ -713,7 +747,11 @@ by = [
 
 [[unit]]
 text = "entity_id | string | Yes | SAML: the IdP's entity ID, which must equal the Issuer of its assertions. OIDC and OAuth 2: the client ID"
-by = ["untested:T"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_entity_id_is_the_client_id_of_an_oidc_sign_in",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_each_check_refuses_an_assertion_that_fails_it",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_assertion_that_passes_every_check_is_accepted",
+]
 
 [[unit]]
 text = "sso_url | string | SAML, Okta | SAML: the IdP's single sign-on URL. Okta: the authorization server, e.g. https://acme.okta.com/oauth2/default. Not used by google and github. Must be https"
@@ -725,7 +763,7 @@ by = [
 
 [[unit]]
 text = "x509_certificate | string | SAML | The IdP's signing certificate, base64, with or without the BEGIN/END CERTIFICATE lines"
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_the_certificate_may_have_or_lack_its_pem_lines"]
 
 [[unit]]
 text = "client_secret | string | OIDC, OAuth 2 | The client secret. Never returned by the API"
@@ -733,7 +771,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "role_mapping | object | No | IdP group name to platform role; default {}. See Group-to-Role Mapping"
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_role_mapping_keys_match_exactly_and_default_to_empty"]
 
 [[unit]]
 text = "is_active | boolean | No | Default true. false stops every sign-in through this configuration"
@@ -819,7 +857,7 @@ by = [
 
 [[unit]]
 text = "For role_mapping, configure the authorization server to put a groups claim in the user info; the sign-in asks for the groups scope."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_only_okta_asks_for_groups_among_the_sign_in_providers"]
 
 [[unit]]
 text = "Google Workspace (OIDC)"
@@ -880,7 +918,7 @@ by = [
 
 [[unit]]
 text = "GitHub sends no groups or teams, so every new account is a viewer."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_only_okta_asks_for_groups_among_the_sign_in_providers"]
 
 [[unit]]
 text = "JIT User Provisioning"
@@ -892,7 +930,7 @@ by = ["journey:sso-sign-in#account-created"]
 
 [[unit]]
 text = "There is no setting to turn this off; to stop sign-ins through a configuration, set its is_active to false."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_provisioning_cannot_be_turned_off_and_is_active_stops_sign_in"]
 
 [[unit]]
 text = "A sign-in is accepted only for an email address in the configuration's org_domain, exactly: bob@acme.com for acme.com, but not bob@eu.acme.com or bob@acme.io."
@@ -923,7 +961,10 @@ by = [
 
 [[unit]]
 text = "The email address must be one the identity provider has verified:"
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestVerifiedEmail::test_an_unverified_email_is_refused",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestGitHubVerifiedEmail::test_otherwise_refused",
+]
 
 [[unit]]
 text = "Provider | Where the email comes from | Required"
@@ -955,7 +996,7 @@ by = [
 
 [[unit]]
 text = "SAML | the Name ID if it contains @, otherwise the email attribute, otherwise the emailaddress claim | the assertion's signature (see SAML Assertion Validation)"
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_the_email_is_the_name_id_with_an_at_else_the_email_attribute_else_the_claim"]
 
 [[unit]]
 text = "For Okta and Google, the user info's sub must also equal the ID token's."
@@ -1029,7 +1070,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The role_mapping field maps the group names the IdP sends to platform roles."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_role_mapping_keys_match_exactly_and_default_to_empty"]
 
 [[unit]]
 text = "Rules:"
@@ -1041,7 +1082,7 @@ by = ["test:modules/backend/tests/unit/services/test_sso_service.py::TestMapRole
 
 [[unit]]
 text = "Keys are matched exactly, including case, against the group names the IdP sends."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_role_mapping_keys_match_exactly_and_default_to_empty"]
 
 [[unit]]
 text = "The user's groups are read in the order the IdP sends them, and the first one that has a mapping decides the role."
@@ -1088,11 +1129,17 @@ by = ["test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py
 
 [[unit]]
 text = "Groups come from SAML assertions and from Okta."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_only_okta_asks_for_groups_among_the_sign_in_providers",
+    "test:modules/backend/tests/unit/services/test_saml_library_validation.py::test_a_genuine_assertion_signed_by_the_configured_certificate_is_accepted",
+]
 
 [[unit]]
 text = "Google and GitHub send none, so for them the mapping never applies: new users are viewer, and existing users keep their role."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_only_okta_asks_for_groups_among_the_sign_in_providers",
+    "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_sign_in_with_no_mapped_group_keeps_an_admins_role",
+]
 
 [[unit]]
 text = "Security"
@@ -1155,11 +1202,14 @@ by = [
 
 [[unit]]
 text = "The ID token's signature is not checked."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_service.py::TestVerifyIDToken::test_a_good_token_is_accepted"]
 
 [[unit]]
 text = "It comes straight from the token endpoint over TLS, which OpenID Connect Core §3.1.3.7 allows in place of a signature check."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestProviderEndpointsAreHttps::test_an_http_okta_sso_url_is_refused_outside_test",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestVerifyIDToken::test_a_good_token_is_accepted",
+]
 
 [[unit]]
 text = "For the same reason, every provider endpoint must use https: an Okta configuration whose sso_url is not https is refused when it is created or updated (400) and at sign-in, in every environment except test."
@@ -1197,7 +1247,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "SAML needs the python3-saml library, which the full profile's image installs from modules/requirements.lock."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_saml_comes_from_python3_saml_in_the_modules_lock"]
 
 [[unit]]
 text = "It checks, before an assertion is accepted:"
@@ -1205,31 +1255,46 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "a signature on the response or on the assertion, made with the configured x509_certificate;"
-by = ["untested:T"]
+by = [
+    "test:modules/backend/tests/unit/services/test_saml_library_validation.py::test_the_library_refuses",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_assertion_that_passes_every_check_is_accepted",
+]
 
 [[unit]]
 text = "the Issuer equals the configuration's entity_id;"
-by = ["untested:T"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_each_check_refuses_an_assertion_that_fails_it",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_assertion_that_passes_every_check_is_accepted",
+]
 
 [[unit]]
 text = "the Audience, when present, includes SAML_SP_ENTITY_ID;"
-by = ["untested:T"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_each_check_refuses_an_assertion_that_fails_it",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_assertion_that_passes_every_check_is_accepted",
+]
 
 [[unit]]
 text = "the Destination and the Recipient, when present, match SAML_SP_ACS_URL;"
-by = ["untested:T"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_each_check_refuses_an_assertion_that_fails_it",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_assertion_that_passes_every_check_is_accepted",
+]
 
 [[unit]]
 text = "NotBefore and NotOnOrAfter, with 5 minutes of clock skew allowed."
-by = ["untested:T"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_each_check_refuses_an_assertion_that_fails_it",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_assertion_that_passes_every_check_is_accepted",
+]
 
 [[unit]]
 text = "Only the HTTP-POST binding is accepted."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_only_the_http_post_binding_and_no_authentication_request"]
 
 [[unit]]
 text = "Sign-in is IdP-initiated: the platform sends no authentication request, so there is none for a response to answer."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_only_the_http_post_binding_and_no_authentication_request"]
 
 [[unit]]
 text = "Without python3-saml, every SAML route answers 501, except in ENVIRONMENT=development and test, where a stand-in reads the Name ID and validates nothing."
@@ -1250,11 +1315,11 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The configuration holds one certificate."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_a_configuration_holds_one_certificate"]
 
 [[unit]]
 text = "When the IdP switches to a new signing certificate, update x509_certificate with PUT /api/v1/auth/sso/configs/{config_id} at the same time; assertions signed with the other certificate are refused until the two agree."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_saml_library_validation.py::test_the_library_refuses"]
 
 [[unit]]
 text = "Environment Variables"
@@ -1273,19 +1338,26 @@ by = [
 
 [[unit]]
 text = "DASHBOARD_ORIGINS | Where a dashboard sign-in may return to, when that is not PUBLIC_BASE_URL; see DASHBOARD_ORIGINS"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/core/test_dashboard_origins.py::test_the_first_dashboard_origins_entry_is_primary",
+    "test:backend/tests/unit/core/test_cors_allow_list_by_environment.py::test_dashboard_origins_are_added_after_cors_origins_once_each",
+]
 
 [[unit]]
 text = "SAML_SP_ENTITY_ID | This service's SAML entity ID, which the IdP puts in the Audience. Default https://experimently.example.com"
-by = ["untested:T"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_the_saml_sp_settings_and_their_defaults",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_each_check_refuses_an_assertion_that_fails_it",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_assertion_that_passes_every_check_is_accepted",
+]
 
 [[unit]]
 text = "SAML_SP_ACS_URL | The ACS URL the metadata advertises and assertions are checked against. Default https://experimently.example.com/auth/sso/saml/acs, which is not a route of this API: set it"
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_the_saml_sp_settings_and_their_defaults"]
 
 [[unit]]
 text = "SECRET_KEY | Signs the sign-in cookie and the hand-off code (through derived keys), and sessions"
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_sso_service.py::TestOIDCLoginState::test_a_cookie_signed_with_the_raw_secret_is_refused"]
 
 [[unit]]
 text = "ENVIRONMENT | development adds the localhost dashboard origins and allows the SAML stand-in; test also allows the stand-in and http provider endpoints"
@@ -1297,11 +1369,11 @@ by = [
 
 [[unit]]
 text = "There are no environment variables for a provider's client ID or secret: they are fields of the configuration."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_provider_client_ids_and_secrets_are_configuration_fields_and_the_oidc_settings_are_unread"]
 
 [[unit]]
 text = "The OIDC_GOOGLE_, OIDC_GITHUB_ and OIDC_MICROSOFT_ settings exist but nothing reads them."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_provider_client_ids_and_secrets_are_configuration_fields_and_the_oidc_settings_are_unread"]
 
 [[unit]]
 text = "Troubleshooting"
@@ -1325,7 +1397,7 @@ by = ["test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py:
 
 [[unit]]
 text = "The dashboard's origin is neither PUBLIC_BASE_URL's origin nor listed in DASHBOARD_ORIGINS."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_return_to_must_be_a_configured_dashboard_origin"]
 
 [[unit]]
 text = "Set DASHBOARD_ORIGINS to the origin shown in the browser's address bar, with no path and no trailing slash, for example https://app.example.com."
@@ -1337,15 +1409,15 @@ by = ["test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py:
 
 [[unit]]
 text = "The callback arrived at a different host from the one the sign-in started on."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_the_sign_in_cookie_is_host_only_secure_http_only_and_lasts_ten_minutes"]
 
 [[unit]]
 text = "The cookie belongs to one host: the login and the callback must both be on PUBLIC_BASE_URL's host."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_the_sign_in_cookie_is_host_only_secure_http_only_and_lasts_ten_minutes"]
 
 [[unit]]
 text = "The browser blocked the cookie, or the API is served over plain http from a host other than localhost: the cookie is Secure."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_the_sign_in_cookie_is_host_only_secure_http_only_and_lasts_ten_minutes"]
 
 [[unit]]
 text = "The same message, or \"OIDC state does not match this browser's sign-in\", when the callback link was opened in another browser, or opened twice."
@@ -1356,19 +1428,22 @@ by = [
 
 [[unit]]
 text = "\"OIDC sign-in expired; start it again\" (sso_expired)"
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_expired_sign_in_says_so"]
 
 [[unit]]
 text = "More than 10 minutes passed between starting the sign-in and returning from the provider."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_the_sign_in_cookie_is_host_only_secure_http_only_and_lasts_ten_minutes",
+    "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_an_expired_sign_in_is_sso_expired",
+]
 
 [[unit]]
 text = "\"OIDC provider endpoints must use https; check this SSO configuration's sso_url\""
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_service.py::TestSsoUrlIsHttpsWhenSaved::test_create_refuses_an_okta_sso_url_that_is_not_https"]
 
 [[unit]]
 text = "An Okta configuration's sso_url is http://."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_sso_service.py::TestSsoUrlIsHttpsWhenSaved::test_create_refuses_an_okta_sso_url_that_is_not_https"]
 
 [[unit]]
 text = "Use the https URL of the authorization server."
@@ -1376,7 +1451,10 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Creating or updating an Okta configuration with an sso_url that is not https is answered 400 with this message."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSsoUrlIsHttpsWhenSaved::test_create_refuses_an_okta_sso_url_that_is_not_https",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSsoUrlIsHttpsWhenSaved::test_update_refuses_an_http_sso_url",
+]
 
 [[unit]]
 text = "\"OIDC ID token was not accepted (iss)\""
@@ -1384,11 +1462,14 @@ by = ["test:modules/backend/tests/unit/services/test_sso_service.py::TestVerifyI
 
 [[unit]]
 text = "Okta: sso_url is not the authorization server that issued the token."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_sso_service.py::TestExpectedIssuers::test_okta_custom_authorization_server_is_its_sso_url"]
 
 [[unit]]
 text = "For the default custom server it is https://acme.okta.com/oauth2/default; for the org server, https://acme.okta.com/oauth2."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestExpectedIssuers::test_okta_custom_authorization_server_is_its_sso_url",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestExpectedIssuers::test_okta_org_authorization_server_is_the_org_url",
+]
 
 [[unit]]
 text = "The other reasons in brackets are missing, malformed, aud, azp, exp and nonce; for aud, check that entity_id is the client ID."
@@ -1403,7 +1484,7 @@ by = ["test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py
 
 [[unit]]
 text = "The configuration's provider_type is microsoft, azure_ad or onelogin."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_unsupported_providers_are_refused_at_login_and_callback"]
 
 [[unit]]
 text = "Use a supported provider type: okta, google or github (SAML 2.0 sign-in is not available yet; use OIDC)."
@@ -1411,27 +1492,36 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "\"The identity provider has not verified this account's email address\" (sso_unverified)"
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_unverified_or_off_domain_email_says_so"]
 
 [[unit]]
 text = "Okta or Google sent email_verified other than true, or GitHub has no verified address in org_domain (or more than one, none of them primary)."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestVerifiedEmail::test_an_unverified_email_is_refused",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestGitHubVerifiedEmail::test_otherwise_refused",
+]
 
 [[unit]]
 text = "\"This account's email is not in the domain this single sign-on is configured for\" (sso_domain)"
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_unverified_or_off_domain_email_says_so"]
 
 [[unit]]
 text = "The email's domain is not exactly org_domain (a subdomain is a different domain), or a Google account's Workspace domain (hd) is not the email's domain."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_unverified_or_off_domain_email_says_so",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestVerifiedEmail::test_google_requires_its_workspace_domain_to_be_the_emails",
+]
 
 [[unit]]
 text = "\"An SSO configuration already exists for this domain\""
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_a_second_configuration_for_a_domain_says_so"]
 
 [[unit]]
 text = "Another configuration has the same org_domain, ignoring case, surrounding spaces and a leading @."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_a_second_configuration_for_a_domain_says_so",
+    "test:modules/backend/tests/integration/api/test_sso_org_domain_normalised.py::test_create_is_refused_for_a_domain_that_differs_only_in_case",
+]
 
 [[unit]]
 text = "List the configurations and update or delete that one."
@@ -1439,11 +1529,14 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "\"SAML validation failed: …\""
-by = ["untested:T"]
+by = [
+    "test:modules/backend/tests/unit/services/test_saml_library_validation.py::test_the_library_refuses",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_each_check_refuses_an_assertion_that_fails_it",
+]
 
 [[unit]]
 text = "The library refused the assertion; the codes after the colon are python3-saml's, for example invalid_response."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_saml_library_validation.py::test_the_library_refuses"]
 
 [[unit]]
 text = "Check, in this order:"
@@ -1451,19 +1544,28 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "x509_certificate is the IdP's current signing certificate, and the IdP signs the response or the assertion."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_saml_library_validation.py::test_the_library_refuses"]
 
 [[unit]]
 text = "entity_id is exactly the Issuer the IdP sends."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_each_check_refuses_an_assertion_that_fails_it",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_assertion_that_passes_every_check_is_accepted",
+]
 
 [[unit]]
 text = "SAML_SP_ACS_URL is the ACS URL the IdP posts to, and SAML_SP_ENTITY_ID the audience it sends."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_each_check_refuses_an_assertion_that_fails_it",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_assertion_that_passes_every_check_is_accepted",
+]
 
 [[unit]]
 text = "The API's clock is right: more than 5 minutes of skew fails."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_each_check_refuses_an_assertion_that_fails_it",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_an_assertion_that_passes_every_check_is_accepted",
+]
 
 [[unit]]
 text = "\"Failed to parse SAML response\""
@@ -1471,7 +1573,7 @@ by = ["test:modules/backend/tests/integration/api/test_saml_acs_answers.py::test
 
 [[unit]]
 text = "The ACS could not read the SAMLResponse form field: it is not base64, or not a SAML response."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_saml_error_messages.py::test_an_unreadable_saml_response_gets_a_fixed_message_and_the_request_id"]
 
 [[unit]]
 text = "The message ends with a request ID; search the API log for it."
@@ -1479,23 +1581,23 @@ by = ["test:modules/backend/tests/integration/api/test_saml_acs_answers.py::test
 
 [[unit]]
 text = "The log line starts SAML response refused: and carries the parser's reason."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_saml_error_messages.py::test_the_log_line_carries_the_reason_the_class_and_the_request_id"]
 
 [[unit]]
 text = "\"SAML single sign-on is not available in this deployment: …\""
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_saml_without_its_library_says_so"]
 
 [[unit]]
 text = "python3-saml is not installed, or cannot be imported."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_saml_without_its_library_says_so"]
 
 [[unit]]
 text = "The full profile's image installs it; a hand-built environment needs it from modules/requirements.txt, and it needs the xmlsec1 and libxml2 libraries."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_saml_comes_from_python3_saml_in_the_modules_lock"]
 
 [[unit]]
 text = "\"SSO config '…' is not active\""
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_provisioning_cannot_be_turned_off_and_is_active_stops_sign_in"]
 
 [[unit]]
 text = "The SAML configuration's is_active is false; its ACS and metadata answer 404."
@@ -1510,7 +1612,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Check that the role_mapping keys exactly match the group names the IdP sends, including case."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_role_mapping_keys_match_exactly_and_default_to_empty"]
 
 [[unit]]
 text = "Use a SAML tracer browser extension to see a SAML assertion's groups."
@@ -1518,15 +1620,18 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The first of the user's groups that has a mapping decides, in the order the IdP sends them."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestMapRole::test_first_matching_group_wins",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestMapRole::test_multiple_groups_first_match",
+]
 
 [[unit]]
 text = "An existing user whose groups match nothing keeps their role."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_sign_in_with_no_mapped_group_keeps_an_admins_role"]
 
 [[unit]]
 text = "Google and GitHub send no groups."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_only_okta_asks_for_groups_among_the_sign_in_providers"]
 
 [[unit]]
 text = "A domain's users are not offered SSO"
@@ -1538,8 +1643,8 @@ by = ["test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py
 
 [[unit]]
 text = "The configuration must be active (is_active: true): GET /api/v1/auth/sso/configs/{config_id}."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_provisioning_cannot_be_turned_off_and_is_active_stops_sign_in"]
 
 [[unit]]
 text = "A SAML-only domain cannot sign in: SAML 2.0 sign-in is not available yet; use OIDC."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_a_saml_only_domain_goes_back_as_sso_saml_only"]
