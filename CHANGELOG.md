@@ -17,6 +17,10 @@ reason why.
 
 * **api:** a split URL variant's `traffic_allocation` outside 0 to 100 is refused with 422 on create and update, where only the sum was checked; a `PUT` that sends back a stored configuration with such a value answers 422 until the value is corrected, and the split URL preview of one answers 409.
 
+### Upgrade notes
+
+* **targeting (#1232):** experiment targeting now answers `array_length` as flag targeting does: it honours `additional_value` (`gt`, `gte`, `lt`, `lte`, `between`) and counts the length of text and objects, where before it compared the exact length of a list. It also no longer refuses a whole rule set because a condition carries `attribute_type`; the condition is answered from the value, as on flags. So the enrolment of NEW users into an experiment with such a condition may change, in either direction: most conditions now enrol more users, and most conditions wrapped in `NOT` now enrol fewer (before, a `NOT` around `array_length` enrolled nearly everyone). Users already assigned keep their variant, and reverting this release does not unassign users enrolled in the meantime. Feature-flag answers do not change. Rules written in the dashboard are not affected: the dashboard does not store `array_length` or `attribute_type`. To list the experiments concerned, run `python -m backend.scripts.check_targeting_rules --enrolment-changes` with the API's database settings.
+
 ### Bug Fixes
 
 * **api:** a split URL variant's traffic_allocation must be 0 to 100, and the CUPED covariate description says what the code does ([#1230](https://github.com/getexperimently/experimently/issues/1230)) ([f7ef181](https://github.com/getexperimently/experimently/commit/f7ef18136e2773bfd4d35e587624c297720e9567))
