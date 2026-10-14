@@ -38,8 +38,11 @@ text = "A workspace groups members and their workspace roles."
 by = ["journey:workspaces-quickstart#add-member", "journey:workspaces-quickstart#members"]
 
 [[unit]]
-text = "It does not limit which experiments, feature flags or API keys anyone can see or change: that is decided by each user's platform role across the whole installation."
-by = ["untested:T"]
+text = "It does not limit which experiments, feature flags or API keys anyone can see or change: that is decided by each user's platform role across the whole installation (and, for an API key, who created it)."
+by = [
+    "test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_a_workspace_role_neither_grants_nor_limits_a_change",
+    "test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_the_platform_role_not_the_workspace_decides",
+]
 
 [[unit]]
 text = "See the Workspace Overview."
@@ -109,7 +112,15 @@ by = [
 
 [[unit]]
 text = "A superuser can create a platform key in the dashboard under Admin → API Keys, and a key acts as the user who created it."
-by = ["untested:T"]
+by = [
+    "test:frontend/src/tests/components/AppShell.test.tsx::shows Experiments, Feature Flags, Segments, Admin and Docs for an ADMIN",
+    "test:frontend/src/tests/components/AppShell.test.tsx::shows Admin to a superuser whatever their role",
+    "test:frontend/src/tests/pages/admin-accounts-and-keys.test.tsx::names Users and API Keys in its sidebar",
+    "test:frontend/src/tests/pages/admin-accounts-and-keys.test.tsx::a superuser creates an API key under Admin → API Keys",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestOwnerRole::test_a_key_acts_as_its_creator_not_another_user",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestOwnerRole::test_a_demoted_owners_key_stops_working",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_inactive_owner_is_401",
+]
 
 [[unit]]
 text = "The SDKs authenticate with a platform API key, created with POST /api/v1/api-keys -- not with a workspace key."
