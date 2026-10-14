@@ -8,7 +8,7 @@ API with a bearer token for the story.
 
 | File | What it is |
 |---|---|
-| `devices.py` | Deterministic population of simulated devices (seeded RNG) following the spec mix: iOS 55% (16.x/17.x/18.x = 20/60/20), Android 45% (12.x/13.x/14.x = 25/35/40), regions US 45 · GB 15 · DE 12 · IN 18 · BR 10, premium 30%, employee 1%, app 3.1.0/3.2.0/3.2.1 = 30/50/20. `Device.attributes()` is the targeting `context` (`os`, `os_version`, `app_version`, `region`, `tier`, `employee`, `device_model`, `device_id`). `PRESET_DEVICES` mirrors the app's five device presets. |
+| `devices.py` | Deterministic population of simulated devices (seeded RNG) following the spec mix: iOS 55% (16.x/17.x/18.x = 20/60/20), Android 45% (12.x/13.x/14.x = 25/35/40), regions US 45 · GB 15 · DE 12 · IN 18 · BR 10, premium 30%, employee 1%, app 3.1.0/3.2.0/3.2.1 = 30/50/20. `Device.attributes()` is the targeting `context` (`os`, `os_version`, `app_version`, `region`, `tier`, `employee`, `device_model`, `device_id`). `PRESET_DEVICES` has a device for each of the app's five presets, with ids of its own (`preset-…`). |
 | `traffic.py` | Ticks through app sessions: evaluates the 4 flags (`GET /feature-flags/evaluate/{key}?user_id=&context=<url-encoded JSON>`), assigns the 5 experiments (`POST /tracking/assign` with `context`), walks the screens with the spec's true rates and sends the §3 events through `POST /tracking/batch`. `assigned: false` (global holdout, mutual exclusion group, targeting) means no events for that experiment. Prints stats every 10 s. |
 | `rollout_story.py` | The 7-step "Player v2" narrative (see below). |
 | `test_traffic.py`, `test_story.py` | Offline pytest tests (fake clients, no network). |
@@ -43,8 +43,8 @@ Options: `--api-url` (default `http://localhost:8000`), `--api-key` (default: `d
 `--population-seed` (keep it fixed so device ids are stable), `--incident {off,android12}`, `--max-ticks`,
 `--no-probe`, `--dry-run`.
 
-At start-up it prints what the five app presets get right now (flag on/off + `reason`, variant + `assigned`/`reason`),
-e.g. the internal tester gets `player_v2=ON(targeting_rule)` and `ai_search` is ON only for iOS 17+ / US / premium.
+At start-up it prints what those five devices get right now (flag on/off + `reason`, variant + `assigned`/`reason`).
+The employee's device gets `player_v2=ON(targeting_rule)`, and `ai_search` is ON only for iOS 17+ / US / premium.
 
 Exit codes: `0` ok · `2` bad or missing API key, or `--incident` without the server key · `3` catalogue not
 seeded / not ACTIVE · `4` API unreachable.
@@ -58,11 +58,13 @@ The reports are sent with the StreamPulse server key, the way the StreamPulse se
 devices' crash reports: only reports sent with a server-side key (scope `sdk:ruleset`) count toward a
 flag's error rate and automatic rollback. A report sent with the app's key is stored, and the flag's
 safety check shows it as not counted.
-A crashed app gets relaunched by its user (crash loop, `INCIDENT_RELAUNCHES = 2`): every relaunch re-evaluates
-the flag — still ON — and crashes again, so half of the incident ticks are Android 12 devices. Safety monitoring
-computes `error_rate = crash reports ÷ flag evaluations` over the last 15 minutes: with the flag at 25% the rate
-lands around 10-15% (critical threshold 5%) after a minute or two at rate ≥ 5; at the 5% stage it stays below the
-threshold (≈ 3%, warning only), which is why the story runs the incident after the 25% step.
+Every incident session is an Android 12 device's, and a crashed app gets relaunched by its user (crash loop,
+`INCIDENT_RELAUNCHES = 4`): every relaunch re-evaluates the flag — still ON — and crashes again. Safety
+monitoring computes `error_rate = crash reports ÷ flag evaluations` over the last 15 minutes, and every
+evaluation of the flag counts, the steady traffic's too. With the flag at 25%, the incident's reports come to
+well over 5% (the critical threshold) of its own and an equally busy steady traffic's evaluations, so the rate
+climbs past 5% while the incident runs; step 3 of the story runs it until the check is critical, at most
+5 rounds of 90 seconds.
 
 ## Rollout story
 
@@ -94,13 +96,14 @@ Other options: `--api-url`, `--api-key` (for the step-3 traffic), `--dashboard-u
 |---|---|---|
 | 1 | Prints the flag (5%, `employee equals true` → 100%), the 4-stage schedule, safety config and check | `GET /feature-flags/`, `/rollout-schedules/?feature_flag_id=`, `/safety/...` |
 | 2 | Completes stage 1 → stage 2 in progress → flag 25% | `PUT /rollout-schedules/stages/{id}` (trigger → manual), `POST .../stages/{id}/advance` |
-| 3 | Runs `traffic.py --incident android12 --rate 6 --duration 90` as a subprocess, then the safety check | `GET /safety/feature-flags/{id}/check` |
+| 3 | Runs `traffic.py --incident android12 --rate 6 --duration 90` as a subprocess, then the safety check; while the check is still healthy, runs it again, at most 5 rounds in all | `GET /safety/feature-flags/{id}/check` |
 | 4 | Automatic rollbacks ON → polls the flag (up to 6 min) until the safety scheduler sets it to 5%; OFF (or timeout) → manual rollback. Either way the rollback pauses the flag's rollout schedule | `GET /safety/settings`, `POST /safety/feature-flags/{id}/rollback?percentage=5&reason=` |
 | 5 | Adds `app_version semver_gte 3.2.1` (→ 100%) next to the employee group, dashboard shape, OR | `PUT /feature-flags/{id}` `{targeting_rules}` |
 | 6 | Waits until the check is healthy again (the 15-minute error window), resumes the schedule the rollback paused, then stage 3 → 50% | `POST /rollout-schedules/{id}/activate`, then as step 2 |
 | 7 | Stage 4 → 100%, completes the schedule, removes the rules | as step 2 + `PUT /feature-flags/{id}` |
 
-Every step is idempotent — re-running it prints the current state and writes nothing. Notes:
+Every step but step 3 is idempotent: re-running it prints the current state and writes nothing.
+Re-running step 3 runs the incident again. Notes:
 
 - The seeded stages are `time_based`; the advance endpoint only accepts `manual` stages, so the story switches a
   stage's trigger to manual right before advancing it (and says so).
@@ -110,8 +113,8 @@ Every step is idempotent — re-running it prints the current state and writes n
   matched by the `employee equals true` rule keep Player v2 through it, and it pauses the rollout schedule,
   which step 6 resumes (a rollback to 0% would turn the flag off for everyone; see
   [What a rollback changes](../../../docs/feature-flags/safety.md#what-a-rollback-changes)).
-- After the incident the flag stays critical until the 15-minute window slides past the crash reports; step 6
-  waits for that (pass `--no-wait` to skip, at the cost of the scheduler rolling the flag back again).
+- After the incident the flag stays critical until its error rate over the last 15 minutes is back at 5% or
+  below; step 6 waits for that (pass `--no-wait` to skip, at the cost of the scheduler rolling the flag back again).
 - Reset the whole story with `python backend/scripts/seed_streampulse.py --reset` followed by a reseed.
 
 ## Tests
