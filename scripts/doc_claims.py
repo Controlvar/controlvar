@@ -914,24 +914,7 @@ CLAIMS_DEFERRED: Tuple[str, ...] = (
 
 #: In-scope documents not registered yet. The rollout: it only shrinks, and a
 #: document leaves it in the pull request that registers it.
-CLAIMS_PENDING: Tuple[str, ...] = (
-    "docs/cognito_integration.md",
-    "docs/deployment/README.md",
-    "docs/deployment/deployment-guide.md",
-    "docs/deployment/disaster-recovery.md",
-    "docs/deployment/iam-permissions.md",
-    "docs/deployment/rollback-runbook.md",
-    "docs/deployment/secrets-management.md",
-    "docs/development/database/backup.md",
-    "docs/infrastructure/aws-iam-setup.md",
-    "docs/infrastructure/cloudwatch-setup.md",
-    "docs/infrastructure/dynamodb-readme.md",
-    "docs/infrastructure/network-security-readme.md",
-    "docs/infrastructure/vpc-stack-implementation.md",
-    "docs/self-hosting/cdk.md",
-    "docs/self-hosting/monitoring.md",
-    "infrastructure/cdk/README.md",
-)
+CLAIMS_PENDING: Tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------------------

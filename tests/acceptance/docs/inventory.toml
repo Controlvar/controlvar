@@ -532,34 +532,6 @@ reason = "its API steps run on a stack in Doc Examples"
 class = "exec"
 reason = "its API steps run on a stack in Doc Examples"
 
-[pages."infrastructure/dynamodb-readme.md"]
-class = "aws"
-exercised_by = ["run the first stack deploy"]
-reason = "the CDK DynamoDB tables"
-
-[pages."infrastructure/vpc-stack-implementation.md"]
-class = "aws"
-exercised_by = [
-    "run the first stack deploy",
-    "tear down, with the residue measured",
-]
-reason = "the CDK VPC stack"
-
-[pages."infrastructure/network-security-readme.md"]
-class = "aws"
-exercised_by = ["run the first stack deploy"]
-reason = "describes the AWS network the CDK stacks create (subnets, NAT gateways, endpoints, security groups and ACLs)"
-
-[pages."infrastructure/aws-iam-setup.md"]
-class = "aws"
-exercised_by = ["none"]
-reason = "IAM users for deploying to AWS"
-
-[pages."infrastructure/cloudwatch-setup.md"]
-class = "aws"
-exercised_by = ["none"]
-reason = "CloudWatch logging set-up"
-
 [pages."development/guidelines.md"]
 class = "reference"
 reason = "contributor guidelines; no reader flow"
@@ -697,7 +669,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 153
+walked = 148
 
 # The front door, and the policy beside it.
 

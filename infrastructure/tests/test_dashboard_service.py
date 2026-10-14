@@ -442,3 +442,72 @@ def test_the_guard_script_finds_this_stack_s_resources(dev):
     assert guard["API_PATH"] in {
         v for _, _, conds, _ in _rules(dev) for vals in conds for v in vals
     }
+
+
+# --- what the CDK page says about the load balancer and the API service -----------
+
+
+@pytest.mark.regression
+def test_port_80_only_redirects_to_https_443(dev):
+    """The AWS CDK Deployment page: the HTTP listener redirects to HTTPS, permanently."""
+    listeners = [
+        r["Properties"]
+        for r in _by_type(dev, "AWS::ElasticLoadBalancingV2::Listener").values()
+        if r["Properties"].get("Port") == 80
+    ]
+    assert len(listeners) == 1, listeners
+    (http,) = listeners
+    assert http["Protocol"] == "HTTP"
+    assert http["DefaultActions"] == [
+        {
+            "Type": "redirect",
+            "RedirectConfig": {
+                "Port": "443",
+                "Protocol": "HTTPS",
+                "StatusCode": "HTTP_301",
+            },
+        }
+    ], http["DefaultActions"]
+
+
+@pytest.mark.regression
+def test_the_api_service_is_under_codedeploy_and_the_dashboard_is_not(dev):
+    """The API's new tasks come only from a CodeDeploy deployment; the
+    dashboard's service is ECS's own rolling controller."""
+    controllers = {
+        r["Properties"]["ServiceName"]: r["Properties"].get(
+            "DeploymentController", {"Type": "ECS"}
+        )["Type"]
+        for r in _by_type(dev, "AWS::ECS::Service").values()
+    }
+    assert controllers == {
+        "experimentation-backend-dev": "CODE_DEPLOY",
+        "experimentation-dashboard-dev": "ECS",
+    }, controllers
+
+
+@pytest.mark.regression
+def test_the_api_and_dashboard_log_groups(dev):
+    """The log groups the deployment guide and the runbook send an operator to
+    (the migration task's is the migrations stack's)."""
+    names = sorted(
+        r["Properties"]["LogGroupName"]
+        for r in _by_type(dev, "AWS::Logs::LogGroup").values()
+    )
+    assert names == [
+        "/ecs/experimentation-backend-dev",
+        "/ecs/experimentation-dashboard-dev",
+    ], names
+
+
+@pytest.mark.regression
+def test_the_app_creates_no_dns_record():
+    """The CDK page: the alias records for the hostname are added by hand after
+    the first deploy, because no stack creates one."""
+    records = [
+        (stack.stack_name, lid)
+        for stack in _synth("dev").stacks
+        for lid, r in stack.template.get("Resources", {}).items()
+        if r["Type"].startswith("AWS::Route53::")
+    ]
+    assert records == [], records

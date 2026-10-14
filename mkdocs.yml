@@ -31,6 +31,10 @@ exclude_docs: |
   planning/
   _claims/
 strict: true
+# A link to an anchor a page does not have is logged at INFO by default, which
+# strict does not fail on; at "warn" it does.
+validation:
+  anchors: warn
 theme:
   name: material
   features:
@@ -187,12 +191,6 @@ nav:
   - Using the API Docs: api/api-docs-guide.md
   - Data Export: api/data-export.md
   - Dimensional Analysis: api/dimensional-analysis.md
-- Infrastructure Reference:
-  - DynamoDB: infrastructure/dynamodb-readme.md
-  - VPC & Networking: infrastructure/vpc-stack-implementation.md
-  - Network Security: infrastructure/network-security-readme.md
-  - IAM: infrastructure/aws-iam-setup.md
-  - CloudWatch: infrastructure/cloudwatch-setup.md
 - Contributing:
   - Development Guidelines: development/guidelines.md
   - Testing Guide: development/testing-guide.md

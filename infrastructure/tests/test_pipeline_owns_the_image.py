@@ -241,3 +241,27 @@ def test_the_deploy_workflow_never_writes_the_bootstrap_tag():
         f"{DEPLOY_WORKFLOW.name} pushes no backend image, so the check above "
         "is reading the wrong file"
     )
+
+
+@pytest.mark.regression
+def test_the_api_runs_from_experimentation_platform_backend_which_no_stack_creates(
+    assembly,
+):
+    """The AWS CDK Deployment page: the API image comes from the ECR repository
+    experimentation-platform/backend, which the CDK does not create."""
+    backend = [
+        image
+        for (_, _, container), image in _container_images(assembly).items()
+        if container == "backend"
+    ]
+    assert backend, "no backend container in the app"
+    assert all("/experimentation-platform/backend:" in image for image in backend), (
+        backend
+    )
+    created = [
+        (stack.stack_name, lid)
+        for stack in assembly.stacks
+        for lid, r in stack.template.get("Resources", {}).items()
+        if r["Type"] == "AWS::ECR::Repository"
+    ]
+    assert not created, created
