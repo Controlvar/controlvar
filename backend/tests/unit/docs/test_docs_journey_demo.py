@@ -680,12 +680,13 @@ def test_a_key_both_tables_hold_is_the_nav_page():
     assert loader.guide_root(context, "demo/DEMO_GUIDE.md") == REPO_ROOT
 
 
-def test_the_demo_documents_have_their_journeys_and_the_simulators_waits():
+def test_the_demo_documents_have_their_journeys():
     documents = loader.context_for(REPO_ROOT).inventory["documents"]
     journeys = sorted((RUNNER_ROOT / "journeys").glob("demo-*.yaml"))
     assert [path.stem for path in journeys] == [
         "demo-guide",
         "demo-shoplab",
+        "demo-streampulse-simulator",
         "demo-streampulse",
     ]
     for path in journeys:
@@ -694,7 +695,7 @@ def test_the_demo_documents_have_their_journeys_and_the_simulators_waits():
         entry = documents[data["guide"]]
         assert entry["journey"] == path.stem and "pending" not in entry
     simulator = documents["demo/streampulse/simulator/README.md"]
-    assert simulator["pending"] is True and simulator["planned"] == "D73"
+    assert simulator["journey"] == "demo-streampulse-simulator"
 
 
 # ---------------------------------------------------------------------------
@@ -727,7 +728,12 @@ def test_the_demo_job_runs_demo_local_alone(runner_conftest):
             path, ("demo-local",), {"DOCS_JOURNEY_STACKS": "demo-local"}
         )
     ]
-    assert selected == ["demo-guide", "demo-shoplab", "demo-streampulse"]
+    assert selected == [
+        "demo-guide",
+        "demo-shoplab",
+        "demo-streampulse-simulator",
+        "demo-streampulse",
+    ]
     default = [
         path.stem
         for path in sorted((RUNNER_ROOT / "journeys").glob("*.yaml"))
