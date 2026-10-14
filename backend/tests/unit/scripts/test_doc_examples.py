@@ -1193,10 +1193,61 @@ def test_a_timeout_kills_the_group_and_names_the_block(tmp_path):
         problems
     )
     background = int(pidfile.read_text())
-    import os as _os
+    assert _dies(background), f"the background sleep {background} is still running"
 
+
+def _gone_or_zombie(pid: int) -> bool:
+    """True once ``pid`` has exited. A process killed after its parent died is
+    a zombie until whoever inherited it reaps it, and ``kill(pid, 0)`` still
+    succeeds on a zombie, so its state is read as well. Only ``kill`` saying
+    there is no such process, or ``ps`` saying Z, counts: an empty or failed
+    ``ps`` does not, and the caller asks again."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    state = subprocess.run(
+        ["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True
+    ).stdout.strip()
+    return state.startswith("Z")
+
+
+def _dies(pid: int, within: float = 10.0) -> bool:
+    """Wait up to ``within`` seconds for ``pid`` to exit: SIGKILL is delivered
+    asynchronously. A process that survived the kill never satisfies this."""
+    import time
+
+    deadline = time.monotonic() + within
+    while not _gone_or_zombie(pid):
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.05)
+    return True
+
+
+def test_a_killed_process_nobody_has_reaped_counts_as_gone():
+    """The two kill tests once asked only ``kill(pid, 0)``, which succeeds on a
+    zombie: core-build failed with "DID NOT RAISE ProcessLookupError" whenever
+    the orphaned sleep had not been reaped yet. Here the zombie is made on
+    purpose (killed, not yet waited for) and must count as gone."""
+    child = subprocess.Popen(["sleep", "300"])
+    try:
+        child.kill()
+        assert _dies(child.pid)
+        os.kill(child.pid, 0)  # still a zombie: the old check fails here
+    finally:
+        child.wait()
     with pytest.raises(ProcessLookupError):
-        _os.kill(background, 0)
+        os.kill(child.pid, 0)
+
+
+def test_a_process_that_is_still_running_does_not_count_as_gone():
+    child = subprocess.Popen(["sleep", "300"])
+    try:
+        assert not _dies(child.pid, within=0.3)
+    finally:
+        child.kill()
+        child.wait()
 
 
 def test_the_failure_issue_job_waits_for_render_examples_and_summary_only():
@@ -2430,10 +2481,7 @@ def test_the_deadline_kills_the_process_group_and_names_the_block(tmp_path):
     assert "p.md:8: block did not reach its end (the run deadline (" in joined
     assert "was reached; process group killed)" in joined
     background = int(pidfile.read_text())
-    import os as _os
-
-    with pytest.raises(ProcessLookupError):
-        _os.kill(background, 0)
+    assert _dies(background), f"the background sleep {background} is still running"
 
 
 def test_a_stack_start_stops_at_the_deadline_too(tmp_path):
