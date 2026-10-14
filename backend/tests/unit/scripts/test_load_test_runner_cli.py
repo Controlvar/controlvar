@@ -266,14 +266,15 @@ def test_locust_is_pinned_and_the_pinned_version_is_installed():
     assert importlib.metadata.version("locust") == pinned
 
 
-#: Option A's baseline command, as the page gives it: no --headless, so
-#: Locust serves its web UI instead of running.
-WEB_UI_ARGS = (
-    "-f",
-    "backend/tests/performance/locustfiles/api_load_test.py",
-    "--host",
-    "http://localhost:8000",
-)
+#: Option A's three commands, as the page gives them: no --headless, so
+#: Locust serves its web UI instead of running. The spike test's shape class
+#: sets the users and the ramp itself, so Locust serves the page with
+#: hide_common_options true; the other two leave it unset.
+WEB_UI_LOCUSTFILES = {
+    "baseline": ("api_load_test.py", False),
+    "spike": ("spike_test.py", True),
+    "endurance": ("endurance_test.py", False),
+}
 WEB_UI = "http://127.0.0.1:8089"
 
 
@@ -283,10 +284,14 @@ def _get(url: str) -> str:
         return response.read().decode("utf-8")
 
 
-def test_the_web_ui_is_on_8089_with_number_of_users_ramp_up_and_start(tmp_path):
-    """The interactive run serves Locust's web UI on port 8089, and the pinned
+@pytest.mark.parametrize("profile", sorted(WEB_UI_LOCUSTFILES))
+def test_the_web_ui_is_on_8089_and_its_form_follows_the_locustfile(tmp_path, profile):
+    """The interactive run serves Locust's web UI on port 8089. The pinned
     Locust's form has the Number of users and Ramp up fields and a Start
-    button. The form is never submitted, so nothing is sent to the host."""
+    button, and disables both fields when the page says hide_common_options,
+    which it does for the spike test's shape and not for the other two. The
+    form is never submitted, so nothing is sent to the host."""
+    locustfile, shaped = WEB_UI_LOCUSTFILES[profile]
     locust = Path(sys.executable).with_name("locust")
     command = str(locust) if locust.is_file() else shutil.which("locust")
     assert command, "the locust command is not installed"
@@ -298,7 +303,13 @@ def test_the_web_ui_is_on_8089_with_number_of_users_ramp_up_and_start(tmp_path):
     log = tmp_path / "locust.log"
     with log.open("w") as output:
         process = subprocess.Popen(
-            [command, *WEB_UI_ARGS],
+            [
+                command,
+                "-f",
+                f"backend/tests/performance/locustfiles/{locustfile}",
+                "--host",
+                "http://localhost:8000",
+            ],
             cwd=REPO_ROOT,
             stdin=subprocess.DEVNULL,
             stdout=output,
@@ -318,10 +329,27 @@ def test_the_web_ui_is_on_8089_with_number_of_users_ramp_up_and_start(tmp_path):
             bundle = _get(f"{WEB_UI}/{scripts[0]}")
         finally:
             process.terminate()
-            process.wait(timeout=30)
+            try:
+                process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=30)
     assert "Starting web interface at http://0.0.0.0:8089" in log.read_text()
-    assert "label:`Number of users (peak concurrency)`,name:`userCount`" in bundle
-    assert "label:`Ramp up (users started/second)`,name:`spawnRate`" in bundle
+
+    (hidden,) = re.findall(r'"hide_common_options": *(true|false|null)\b', page)
+    assert (hidden == "true") is shaped, (profile, hidden)
+
+    # The form's own function: its hideCommonOptions parameter is what
+    # disables the two fields.
+    form = bundle.rindex("function ", 0, bundle.index("name:`userCount`"))
+    params = re.match(r"function [A-Za-z_$]+\(\{([^}]{1,2000})\}", bundle[form:])
+    assert params, bundle[form : form + 300]
+    (flag,) = re.findall(r"\bhideCommonOptions:([A-Za-z_$]+)", params.group(1))
+    for label, name in (
+        ("Number of users (peak concurrency)", "userCount"),
+        ("Ramp up (users started/second)", "spawnRate"),
+    ):
+        assert f"disabled:!!{flag},label:`{label}`,name:`{name}`" in bundle, name
     assert re.search(
         r"type:`submit`,variant:`contained`,children:[A-Za-z_$]+\?`Update`:`Start`\}",
         bundle,
