@@ -5,10 +5,6 @@
 # (D73 G5e) are TR3's: that pull request gives each one a test: target.
 # The untested lines of the architecture, migrations, logging and load-testing
 # pages (D73 G5d) are TR3's: that pull request gives each one a test: target.
-# The untested:T lines of the experiments and statistics pages (D73 G5b) are TR1's:
-# that pull request gives each one a test: target.
-# The untested:T lines of the feature flag, rollout, targeting operator and segment
-# pages (D73 G5a) are TR1's: that pull request gives each one a test: target.
 exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	0e2a8558fe91
 exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	2ceb5a66d539
 exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	49c6ccbf4aca
