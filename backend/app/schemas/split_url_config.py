@@ -5,7 +5,8 @@ Defines the data structures for split URL experiment configuration,
 including URL variants, traffic allocation, and cookie settings.
 
 CORE. This module is pure declarative validation (at least two variants,
-allocations summing to 100) with no routing behaviour, and it types
+each allocation from 0 to 100, the allocations summing to 100) with no routing
+behaviour, and it types
 ``ExperimentCreate.split_url_config`` / ``ExperimentUpdate.split_url_config``.
 Keeping it in the core is what stops that field degrading to unvalidated
 JSON when the split_url module is not installed. The routing itself —
@@ -14,7 +15,7 @@ JSON when the split_url module is not installed. The routing itself —
 
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class SplitUrlVariant(BaseModel):
@@ -26,14 +27,17 @@ class SplitUrlVariant(BaseModel):
 
     name: str
     url: str
-    traffic_allocation: float  # Percentage: 0–100
+    # A percentage, from 0 to 100 inclusive (#1194): -50 and 150 used to pass
+    # while the sum was right.
+    traffic_allocation: float = Field(ge=0, le=100)
 
 
 class SplitUrlConfig(BaseModel):
     """
     Configuration for a split URL experiment.
 
-    Requires at least 2 URL variants whose traffic_allocation values sum to 100.
+    Requires at least 2 URL variants whose traffic_allocation values are each
+    from 0 to 100 and sum to 100.
     """
 
     model_config = ConfigDict(from_attributes=True)

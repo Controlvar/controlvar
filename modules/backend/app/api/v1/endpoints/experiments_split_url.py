@@ -17,12 +17,20 @@ from typing import Any, Dict
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from backend.app.models.user import User
 from backend.app.schemas.split_url_config import SplitUrlConfig
 from backend.app.services.experiment_service import ExperimentService
 from modules.backend.app.services import split_url_service
+
+#: The answer to a preview of a stored ``split_url_config`` that no longer
+#: validates. Fixed text: it carries nothing from the stored config, and
+#: ``{id}`` is the route's own placeholder, not a value.
+SPLIT_URL_CONFIG_NOT_VALID_DETAIL = (
+    "split_url_config is not valid; update it with PUT /api/v1/experiments/{id}"
+)
 
 
 async def preview_split_url_assignment(
@@ -48,6 +56,8 @@ async def preview_split_url_assignment(
         HTTPException 403: If user does not have DEVELOPER or ADMIN role
         HTTPException 404: If experiment not found
         HTTPException 400: If experiment is not a split_url type or has no config
+        HTTPException 409: If the stored config is not valid (one saved before
+            each allocation was held to 0-100, say); it is answered, not served
     """
     # Only ADMIN and DEVELOPER roles may use the preview endpoint
     is_admin_or_developer = (
@@ -101,7 +111,17 @@ async def preview_split_url_assignment(
 
     # Parse the config — it may be a dict (from DB JSONB) or already a SplitUrlConfig
     if isinstance(raw_config, dict):
-        config = SplitUrlConfig(**raw_config)
+        try:
+            config = SplitUrlConfig(**raw_config)
+        except ValidationError:
+            # Stored JSONB is not re-validated on read: a config saved before
+            # the range check (#1194) can be one no request could store now.
+            # The caller can fix it with a PUT, so it is a conflict, not a
+            # server error. No part of the config is echoed.
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=SPLIT_URL_CONFIG_NOT_VALID_DETAIL,
+            ) from None
     else:
         config = raw_config
 

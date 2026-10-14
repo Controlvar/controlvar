@@ -183,6 +183,8 @@ NOT_DOCS_TESTS = {
     "backend/tests/unit/scripts/test_load_test_runner.py": "docs/api only",
     # Reads only docs/api/openapi-v1.stable.json (same reason as above).
     "backend/tests/unit/api/test_segment_preview_limits.py": "docs/api only",
+    # Reads only the two docs/api/ OpenAPI snapshots (same reason as above).
+    "backend/tests/unit/schemas/test_cuped_covariate_description.py": ("docs/api only"),
     # Reads only docs/api/openapi-v1.stable.json (same reason as above).
     "backend/tests/unit/api/test_user_response_email_schema.py": "docs/api only",
     # Reads only docs/api/openapi-v1.stable.json and docs/api/stability.md
