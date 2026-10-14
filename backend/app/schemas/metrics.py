@@ -186,4 +186,31 @@ class MetricsSummary(BaseModel):
     rule_match_rate: Optional[float] = Field(
         None, description="Percentage of rule matches"
     )
-    error_rate: Optional[float] = Field(None, description="Percentage of errors")
+    error_rate: Optional[float] = Field(
+        None,
+        description=(
+            "Errors that count toward the safety check, as a percentage (0-100) "
+            "of the flag evaluations in the period; null when the period has no "
+            "flag evaluations. Errors are counted by the safety check's rule: "
+            "flag evaluations that failed on the server count, and only a report "
+            "sent with a server-side key (an API key with the ``sdk:ruleset`` "
+            "scope, whose owner can change feature flags) counts; the reports "
+            "that do not count are in ``uncounted_error_count``. The value still "
+            "differs from the safety check's ``error_rate`` in three ways: the "
+            "period is ``start_date`` to ``end_date`` (by default the 30 days "
+            "before now), not the last 15 minutes; the denominator is the "
+            "aggregated flag evaluations of ``period``, not the raw flag "
+            "evaluations; and the unit is a percentage, not a fraction (0-1)."
+        ),
+    )
+    uncounted_error_count: int = Field(
+        ...,
+        ge=0,
+        description=(
+            "Error reports in the period that are stored but do not count toward "
+            "``error_rate`` or the safety check: those sent with a key that is "
+            "not a server-side key, and those stored before 0.29.0. The safety "
+            "check shows the same reports in its own window as "
+            "``details.uncounted_error_count``."
+        ),
+    )

@@ -158,6 +158,7 @@ class TestMetricsSchemaValidation:
             "avg_latency": 125.5,
             "rule_match_rate": 75.0,
             "error_rate": 2.5,
+            "uncounted_error_count": 3,
         }
 
         # This should not raise an exception
@@ -169,6 +170,7 @@ class TestMetricsSchemaValidation:
         assert summary.avg_latency == 125.5
         assert summary.rule_match_rate == 75.0
         assert summary.error_rate == 2.5
+        assert summary.uncounted_error_count == 3
 
     def test_model_config_correctly_applied(self):
         """Test that model_config is correctly applied in Pydantic v2 style."""
@@ -188,3 +190,38 @@ class TestMetricsSchemaValidation:
         # This is challenging to test directly, but we can verify the config exists
         assert hasattr(RawMetricResponse, "model_config")
         assert RawMetricResponse.model_config.get("from_attributes") is True
+
+
+#: The phrase the published API documentation uses for the keys whose error
+#: reports count (the tracking/errors operations' descriptions); the summary
+#: repeats it word for word rather than paraphrasing it.
+SERVER_SIDE_KEY = (
+    "a server-side key (an API key with the ``sdk:ruleset`` scope, whose owner "
+    "can change feature flags)"
+)
+
+
+@pytest.mark.regression
+def test_the_summary_error_rate_description_names_the_rule_and_three_differences():
+    """``MetricsSummary.error_rate`` says which errors count, in the published
+    words, and every way it still differs from the safety check's rate: the
+    period, the denominator and the unit (#1206)."""
+    schema = MetricsSummary.model_json_schema()
+    error_rate = " ".join(schema["properties"]["error_rate"]["description"].split())
+
+    assert SERVER_SIDE_KEY in error_rate
+    assert "uncounted_error_count" in error_rate
+    # The period.
+    assert "``start_date`` to ``end_date``" in error_rate
+    assert "the 30 days before now" in error_rate
+    assert "not the last 15 minutes" in error_rate
+    # The denominator.
+    assert "the aggregated flag evaluations of ``period``" in error_rate
+    assert "not the raw flag evaluations" in error_rate
+    # The unit.
+    assert "a percentage (0-100)" in error_rate
+    assert "not a fraction (0-1)" in error_rate
+
+    assert "uncounted_error_count" in schema["required"]
+    assert schema["properties"]["uncounted_error_count"]["type"] == "integer"
+    assert schema["properties"]["uncounted_error_count"]["minimum"] == 0

@@ -360,6 +360,15 @@ by = [
 ]
 
 [[unit]]
+text = "GET /api/v1/metrics/summary | #1206 | error_rate counts only the errors the safety check counts: an error report stored with request_data.source \"client\" is left out, where every error_logs row in the period used to count, so the rate can be lower than before for the same data. The new uncounted_error_count is the number of such reports in the period. The period (start_date to end_date, by default the 30 days before now), the denominator (the aggregated flag evaluations) and the unit (a percentage) are unchanged, and still differ from the check's. The OpenAPI document changes only in MetricsSummary, which adds the required uncounted_error_count and describes error_rate, and in the operation's description. See Which errors count."
+by = [
+    "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_counts_errors_by_the_safety_checks_rule",
+    "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_still_differs_from_the_check_in_period_and_denominator",
+    "test:backend/tests/unit/api/test_metrics_schemas.py::test_the_summary_error_rate_description_names_the_rule_and_three_differences",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
 text = "Deprecated operations"
 by = ["exempt:baseline"]
 

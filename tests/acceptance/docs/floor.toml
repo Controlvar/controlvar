@@ -120,6 +120,7 @@ routes = [
   "/api/v1/llm-experiments/{experiment_id}/results",
   "/api/v1/llm-experiments/{experiment_id}/start",
   "/api/v1/mcp/manifest",
+  "/api/v1/metrics/summary",
   "/api/v1/modules",
   "/api/v1/mutual-exclusion-groups",
   "/api/v1/mutual-exclusion-groups/{group_id}",
