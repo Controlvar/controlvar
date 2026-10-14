@@ -28,8 +28,7 @@ curl -s localhost:8000/api/v1/auth/me -H "Authorization: Bearer $TOKEN" | jq .ro
 It prints `"ADMIN"`.
 
 **An ACTIVE experiment.** This creates one for an email campaign, with two subject lines and
-a targeting rule that admits customers in the US only, and starts it. The collection URL ends
-with a slash; without it the API answers `307`, which `curl` doesn't follow:
+a targeting rule that admits customers in the US only, and starts it:
 
 ```{.bash exec}
 EXP_ID=$(curl -s -X POST localhost:8000/api/v1/experiments/ \
@@ -58,9 +57,7 @@ curl -s -X POST localhost:8000/api/v1/experiments/$EXP_ID/start \
 
 It prints `active`.
 
-**An API key with the `sdk:ruleset` scope**, created by an ADMIN or a DEVELOPER. In the
-dashboard that is **Admin → API Keys → Create API Key** with **Server-side local evaluation
-(sdk:ruleset)** ticked. The same scope lets the key download every feature flag's targeting
+**An API key with the `sdk:ruleset` scope**, created by an ADMIN or a DEVELOPER. The same scope lets the key download every feature flag's targeting
 rules, so keep it on a server and never ship it to a browser or a mobile app. This creates one
 and saves it in `$KEY`:
 
@@ -74,7 +71,7 @@ printf '%s\n' "${KEY:0:5}"
 ```
 <!-- expect: eptk_ -->
 
-It prints `eptk_`. The key is shown only in this response: store it in a secrets manager.
+It prints `eptk_`.
 
 ## Send the list
 
@@ -212,11 +209,6 @@ wc -l < assignments.csv
 
 It prints `2500`, one line per customer.
 
-- **Time.** A request of 1,000 new users takes seconds, not milliseconds: each user is checked
-  and saved on its own. Users already assigned are quicker.
-- **Timeouts.** Give the HTTP client a timeout of at least 60 seconds. On AWS the load balancer
-  in front of the API closes a request after 60 seconds idle; if that happens the server still
-  finishes the chunk, and sending it again returns the same answers.
 - **One chunk at a time.** Chunks sent in parallel share the 60-a-minute limit and the API's
   database connections with every other request.
 

@@ -761,6 +761,28 @@ MECHANISMS: Dict[str, Mechanism] = {
             ),
         ),
     ),
+    # Which dashboard image a plain `docker build` gives, on the modules page.
+    "dashboard-image-default": Mechanism(
+        "backend/tests/unit/infrastructure/test_dashboard_image_docs.py"
+        "::test_the_modules_page_names_the_dockerfile_default",
+        holds=(
+            (
+                "docs/getting-started/modules.md",
+                r"^For the dashboard, EXPERIMENTLY_PROFILE=core is the default",
+            ),
+        ),
+    ),
+    # The quick start's rollout example: which of its two users the 10% holds.
+    "quick-start-rollout": Mechanism(
+        "backend/tests/unit/docs/test_quick_start_doc.py"
+        "::test_the_rollout_puts_user_2_in_and_user_123_out",
+        holds=(
+            (
+                "docs/getting-started/quick-start.md",
+                r"user-2 is inside the 10%, user-123 is not",
+            ),
+        ),
+    ),
     # The signature identity the release page verifies with (its IDENTITY=
     # line): the release paths it accepts, and every other signer it refuses.
     "release-identity-accepts": Mechanism(
@@ -811,11 +833,17 @@ MECHANISMS: Dict[str, Mechanism] = {
             ),
             (
                 "docs/sdk-guide.md",
-                r'^"Verified live" means the SDK\'s contract_smoke entry point passed',
+                r'^"Verified live" means the SDK\'s contract_smoke entry point passed'
+                r" tests/sdk-contract/live/run_live_contract\.py against a running"
+                r" backend \(see tests/sdk-contract/README\.md\); the SDK Live Contract"
+                r" CI job repeats this on every pull request, with --strict, for"
+                r" [a-z, -]{1,200} \(the sdks: list of the job in pr-qa-gate\.yml\)\.$",
             ),
             (
                 "docs/sdk-guide.md",
-                r'^Rows marked "not yet" have a contract_smoke entry point',
+                r'^Rows marked "not yet" have a contract_smoke entry point that no CI'
+                r" job runs against a live backend; their unit tests run in the nightly"
+                r" tier and on pull requests that touch them\.$",
             ),
         ),
     ),
@@ -837,6 +865,19 @@ MECHANISMS: Dict[str, Mechanism] = {
             (
                 "docs/api/warehouse-analytics.md",
                 r"\b(?:BigQuery|Snowflake|Amazon Athena) is available\b",
+            ),
+        ),
+    ),
+    # The Doc Examples guide's "When the check fails" sample is what the check
+    # prints; the sentence above the sample says what that output is.
+    "doc-examples-failure-sample": Mechanism(
+        "backend/tests/unit/scripts/test_doc_examples.py"
+        "::test_the_authoring_pages_sample_is_what_the_check_prints",
+        holds=(
+            (
+                "docs/development/doc-examples.md",
+                r"^Every problem is reported in the same run, one line each, naming"
+                r" the page \(and the line, where there is one\) and what to change\.$",
             ),
         ),
     ),
@@ -874,23 +915,9 @@ CLAIMS_DEFERRED: Tuple[str, ...] = (
 #: In-scope documents not registered yet. The rollout: it only shrinks, and a
 #: document leaves it in the pull request that registers it.
 CLAIMS_PENDING: Tuple[str, ...] = (
-    "README.md",
-    "SECURITY.md",
     "demo/streampulse/simulator/README.md",
-    "docs/README.md",
-    "docs/api/bayesian.md",
-    "docs/api/cuped.md",
     "docs/api/endpoints.md",
-    "docs/api/interaction-detection.md",
-    "docs/api/multi-armed-bandit.md",
-    "docs/api/mutual-exclusion-groups.md",
-    "docs/api/sequential-testing.md",
-    "docs/api/split-url.md",
-    "docs/architecture/README.md",
-    "docs/architecture/models.md",
-    "docs/architecture/overview.md",
     "docs/architecture/technical-guide.md",
-    "docs/auth/cognito-auth-testing.md",
     "docs/cognito_integration.md",
     "docs/deployment/README.md",
     "docs/deployment/deployment-guide.md",
@@ -899,45 +926,15 @@ CLAIMS_PENDING: Tuple[str, ...] = (
     "docs/deployment/rollback-runbook.md",
     "docs/deployment/secrets-management.md",
     "docs/development/database/backup.md",
-    "docs/development/database/migrations.md",
-    "docs/development/database/usage.md",
-    "docs/development/dependency-injection.md",
-    "docs/development/doc-examples.md",
-    "docs/development/guidelines.md",
-    "docs/development/testing-guide.md",
-    "docs/development/workflow-explanation.md",
     "docs/feature-flags/safety.md",
-    "docs/getting-started/README.md",
-    "docs/getting-started/architecture.md",
-    "docs/getting-started/concepts.md",
-    "docs/getting-started/faq.md",
-    "docs/getting-started/modules.md",
-    "docs/getting-started/pre-commit-hooks.md",
-    "docs/getting-started/python-virtual-env-setup.md",
-    "docs/getting-started/quick-start.md",
-    "docs/getting-started/vscode-settings.md",
-    "docs/guides/assign-customer-list.md",
-    "docs/guides/dashboard-and-api.md",
-    "docs/guides/experiment-wizard.md",
-    "docs/guides/user-guide.md",
     "docs/infrastructure/aws-iam-setup.md",
     "docs/infrastructure/cloudwatch-setup.md",
     "docs/infrastructure/dynamodb-readme.md",
     "docs/infrastructure/network-security-readme.md",
     "docs/infrastructure/vpc-stack-implementation.md",
-    "docs/llm-evaluation/overview.md",
-    "docs/llm-evaluation/quickstart.md",
-    "docs/logging_standards.md",
-    "docs/performance/load-testing.md",
     "docs/sdk/local-evaluation.md",
     "docs/self-hosting/cdk.md",
-    "docs/self-hosting/migrations.md",
     "docs/self-hosting/monitoring.md",
-    "docs/statistics/fdr-correction.md",
-    "docs/statistics/post-stratification.md",
-    "docs/statistics/power-analysis.md",
-    "docs/websocket-streaming.md",
-    "docs/workspaces/overview.md",
     "infrastructure/cdk/README.md",
 )
 

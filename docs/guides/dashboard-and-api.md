@@ -1,10 +1,5 @@
 # What the Dashboard Does, and What Is API Only
 
-Everything Experimently does is in the REST API. The dashboard covers the everyday loop: create
-an experiment, start it, read its results, and create, target, roll out and switch off feature
-flags. Some capabilities work through the API, and through the SDKs where they apply, but have no
-screen yet.
-
 The table lists each capability and where you do it today:
 
 - **Dashboard**: a screen in the dashboard does it.
@@ -43,7 +38,6 @@ The table lists each capability and where you do it today:
 | Archive and unarchive a feature flag | API only | [Running experiments](user-guide.md) |
 | Create a bandit experiment | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | Set a bandit's weights by hand | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
-| See how a bandit's weights changed over time | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | Global holdouts: create, activate, and read their results (beta) | API only | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
 | Mutual exclusion groups | API only | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
 | Split-URL experiments (full profile) | API only | [Split URL testing](../api/split-url.md) |
@@ -53,13 +47,3 @@ The table lists each capability and where you do it today:
 | The effect size in the metric comparison table | API only | [Running experiments](user-guide.md) |
 | Each variant's confidence interval on the results page | API only | [Running experiments](user-guide.md) |
 | Bayesian priors, loss threshold and credible level | API only | [Bayesian analysis](../api/bayesian.md) |
-
-Screens for the API-only rows are planned for after launch. The open work is tracked in
-[issue #442](https://github.com/getexperimently/experimently/issues/442).
-
-!!! note "For contributors: this table is checked"
-    `backend/tests/unit/docs/test_dashboard_and_api.py` gives each row a marker the screen
-    carries in its markup. It fails when a row says **API only** while the dashboard has that
-    screen, and when a row says **Dashboard** while the screen is missing or no page test checks
-    it. A pull request that adds one of these screens changes its row to **Dashboard** in the
-    same change.

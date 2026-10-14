@@ -146,7 +146,7 @@ def test_the_irreversible_line_and_the_do_not_kill_lines_are_stated():
     assert "**Migration still running**" in prose
     assert "run the Deploy workflow again for the same tag" in prose
     assert "no setting changes that for one deploy" in prose
-    assert "That is a laptop number" in prose
+    assert "the first measure of it is your own staging run's log line" in prose
     assert "use the migration's log line instead of the queries above" in prose
     assert "first-conversion day in the daily results can move by one day" in prose
 

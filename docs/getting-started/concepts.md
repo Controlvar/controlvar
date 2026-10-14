@@ -19,17 +19,9 @@ dark-mode: false  →  show light theme
 
 Common uses: gradual rollouts, kill switches, beta programs, maintenance mode.
 
-### Multivariate Flags
+### Several Experiences
 
-Instead of a boolean, the flag returns one of several string values. Each value maps to a different experience.
-
-```text
-checkout-layout: "classic"
-checkout-layout: "simplified"
-checkout-layout: "one-page"
-```
-
-Common uses: testing more than two variants, configuring UI themes, enabling different feature tiers per plan.
+A flag is on or off for each user: it carries no variants or values. To serve one of several experiences, run a multivariate experiment instead. Each of its variants carries a `configuration`, which `POST /api/v1/tracking/assign` returns.
 
 ### Why Use Feature Flags
 
@@ -62,10 +54,10 @@ An experiment can have one control and one or more treatments. With two variants
 
 ### Statistical Significance
 
-Statistical significance tells you how confident you are that the difference between control and treatment is real — not just random noise. It is expressed as a p-value.
+Statistical significance tells you whether a difference between control and treatment is larger than random noise would usually produce. It is expressed as a p-value: the probability of seeing results as extreme as these if there were no true effect.
 
-- **p-value < 0.05**: 95% confidence the difference is real. Standard threshold for most experiments.
-- **p-value < 0.01**: 99% confidence. Use for high-stakes decisions.
+- **p-value < 0.05**: a difference this large would appear less than 5% of the time if there were no true effect. Standard threshold for most experiments.
+- **p-value < 0.01**: a difference this large would appear less than 1% of the time if there were no true effect. Use for high-stakes decisions.
 
 A result is statistically significant when p < your chosen alpha threshold (usually 0.05).
 
@@ -75,12 +67,12 @@ A result is statistically significant when p < your chosen alpha threshold (usua
 
 ## Variants
 
-A variant is one of the possible experiences in an experiment. Every experiment has at least two variants:
+A variant is one of the possible experiences in an experiment. A running experiment has at least two variants:
 
 - **Control variant**: the baseline experience (usually what users see today)
 - **Treatment variant(s)**: the new experience(s) you are testing
 
-Each variant is assigned a **traffic weight** — the fraction of eligible users who will be shown that variant. Weights must sum to 100% (or less if you want to exclude some users from the experiment entirely).
+Each variant is assigned a **traffic weight** — the fraction of eligible users who will be shown that variant. The weights must add up to exactly 100%; anything else is refused with `422` ("Traffic allocations must sum to 100% (currently 90%)"). To keep users out of an experiment, use targeting rules or the global holdout.
 
 ### Variants vs Feature Flags
 
@@ -97,9 +89,8 @@ A metric is the measurable outcome you use to evaluate whether a variant is bett
 | Type | Description | Example |
 |------|-------------|---------|
 | **Conversion** | Binary: did the event happen or not? | Clicked button, completed checkout, signed up |
-| **Revenue** | Dollar value | Order value, lifetime value |
-| **Count** | How many times the event occurred | Page views per session, items added to cart |
-| **Duration** | Time measurement | Session length, time to first action |
+
+A metric can also be created with the type `revenue`, `count` or `duration`, but the results analyse every metric as a conversion: whether each user sent the metric's event, not the event's value. See [Limitations](limitations.md).
 
 ### Primary vs Secondary Metrics
 
@@ -124,10 +115,10 @@ User bucketing is the process of assigning each user to a variant. The platform 
 The assignment is computed as a deterministic hash of `experiment_key + user_id`. This means:
 
 - The same user always gets the same variant for a given experiment (sticky assignment)
-- No database lookup is needed to retrieve the assignment — it can be computed on the fly
+- The API stores each assignment, and a user who already has one gets it back unchanged, even if the weights have changed since
 - Sticky assignment survives server restarts, cache clears, and SDK reinitializations
 
-The hash output is mapped to a bucket number (0–99). Variant boundaries are set by traffic weights: if control has 50% weight and treatment has 50% weight, users with bucket 0–49 get control and users with bucket 50–99 get treatment.
+The hash puts each user in one of 100 buckets, numbered 0 to 99, and the traffic weights divide the buckets between the variants in order: with 50% control and 50% treatment, buckets 0–49 get control and buckets 50–99 get treatment. A multi-armed bandit experiment places new users by the bandit's current weights instead.
 
 ### Why Consistent Bucketing Matters
 
@@ -135,27 +126,25 @@ Without consistent bucketing, a user could see the control variant on Monday and
 
 ---
 
-## Traffic Allocation vs Rollout Percentage
+## Variant Weights vs Rollout Percentage
 
 These two concepts are related but distinct:
 
-### Traffic Allocation (Experiments)
+### Variant Weights (Experiments)
 
-Traffic allocation is the fraction of users who are included in the experiment at all. An experiment with 80% traffic allocation means 20% of eligible users are excluded from the experiment entirely and see the default experience.
-
-Within the 80% who are included, users are split between variants according to their weights.
+An experiment has no separate traffic allocation: every eligible user is assigned, and the variant weights decide how users are split. Users are left out of an experiment only by its targeting rules, a mutual exclusion group or the global holdout.
 
 ### Rollout Percentage (Feature Flags)
 
 Rollout percentage is the fraction of users for whom a feature flag evaluates to `true` (enabled). A feature flag at 10% rollout means 10% of users see the feature and 90% do not.
 
-Unlike experiment traffic allocation, rollout percentage is usually increased over time as confidence grows.
+Unlike variant weights, a rollout percentage is usually increased over time as confidence grows.
 
 ---
 
 ## Targeting Rules
 
-Targeting rules define which users are eligible for an experiment or feature flag. A user who does not match the targeting rules is excluded entirely — they are not assigned to any variant and do not count in the results.
+Targeting rules define which users are eligible for an experiment, and which users a feature flag's rules turn on. In an experiment, a new user who does not match the rules is not assigned: the API answers with the control variant and `"assigned": false`, records no assignment, and the user does not count in the results. For a feature flag, a user no rule matches gets the flag's rollout percentage.
 
 ### Attribute-Based Rules
 
@@ -198,7 +187,7 @@ This would target enterprise users in the US or Canada who have had their accoun
 
 ## Environments
 
-The platform supports multiple environments so you can test experiments and flags in staging before they reach production users.
+One deployment is one environment: flags, experiments and API keys carry no environment field. To test experiments and flags in staging before they reach production users, run staging and production as separate deployments.
 
 ### Staging vs Production
 
@@ -207,7 +196,7 @@ The platform supports multiple environments so you can test experiments and flag
 | **staging** | Test experiment logic, SDK integration, and targeting rules before launch |
 | **production** | Live experiments and flags serving real users |
 
-Each environment has separate feature flag states and separate experiment assignments. A feature flag that is 100% enabled in staging has no effect in production unless you also enable it there.
+Each deployment has its own database, so its feature flag states and experiment assignments are its own. A feature flag that is 100% enabled in staging has no effect in production unless you also enable it there.
 
 ### Environment Variables
 
@@ -226,7 +215,7 @@ Your SDK client is initialized with an API key, which is stored in the database 
 | **Confidence interval** | Range of values within which the true effect size likely falls |
 | **Control** | The baseline variant; typically the existing experience |
 | **Conversion rate** | Fraction of users who completed a defined action |
-| **Covariate** | Pre-experiment user attribute used in CUPED variance reduction |
+| **Covariate** | In CUPED, the pre-experiment data used to adjust a result: here, whether the user sent the metric's event before being assigned |
 | **CUPED** | Controlled-experiment Using Pre-Experiment Data; a variance reduction technique |
 | **Effect size** | The magnitude of the difference between variants |
 | **Experiment** | A controlled test that assigns users to variants and measures outcomes |
@@ -244,6 +233,6 @@ Your SDK client is initialized with an API key, which is stored in the database 
 | **Segment** | A subset of users defined by shared attributes |
 | **Statistical significance** | p-value below the chosen alpha threshold |
 | **Targeting rule** | An attribute-based condition that determines experiment eligibility |
-| **Traffic allocation** | Fraction of eligible users included in an experiment |
+| **Traffic weight** | The share of an experiment's users a variant gets; the weights add up to 100% |
 | **Treatment** | A non-control variant in an experiment |
 | **Variant** | One of the possible experiences in an experiment |

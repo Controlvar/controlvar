@@ -12,8 +12,8 @@
 # scripts/doc_examples.py), and each page's residual counts can only fall.
 
 [meta]
-documents = 50
-exec = 305
+documents = 53
+exec = 303
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -90,6 +90,7 @@ universe = [
     "docs/getting-started/docker-guide.md",
     "docs/getting-started/environment-setup.md",
     "docs/getting-started/faq.md",
+    "docs/getting-started/limitations.md",
     "docs/getting-started/modules.md",
     "docs/getting-started/pre-commit-hooks.md",
     "docs/getting-started/python-virtual-env-setup.md",
@@ -178,6 +179,20 @@ expects = 11
 
 [[document]]
 path = "docs/development/doc-examples.md"
+environment = "bare"
+exec = 0
+skip = 3
+expects = 0
+
+[[document]]
+path = "docs/development/guidelines.md"
+environment = "bare"
+exec = 0
+skip = 1
+expects = 0
+
+[[document]]
+path = "docs/development/testing-guide.md"
 environment = "bare"
 exec = 0
 skip = 3
@@ -285,7 +300,7 @@ expects = 18
 path = "docs/llm-evaluation/quickstart.md"
 environment = "stack"
 exec = 6
-skip = 4
+skip = 0
 expects = 8
 
 [[document]]
@@ -369,7 +384,7 @@ expects = 8
 path = "docs/websocket-streaming.md"
 environment = "stack"
 exec = 4
-skip = 1
+skip = 0
 expects = 8
 
 # Stream E batch 2: the demo READMEs, contract-only until Stream F runs the
@@ -416,6 +431,13 @@ exec = 0
 skip = 6
 expects = 0
 
+[[document]]
+path = "docs/auth/cognito-auth-testing.md"
+environment = "bare"
+exec = 0
+skip = 1
+expects = 0
+
 # Its sign-in is walked by the sso-sign-in docs journey (tests/acceptance/docs/),
 # on the compose stack its override file starts; its blocks need a tenant.
 [[document]]
@@ -441,18 +463,13 @@ reason = "starts the production stack on a Docker host: the compose-production w
 [pending]
 "backend/lambda/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
 "backend/lambda/event_processor/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
-"docs/api/split-url.md" = { comments = 0, unlabelled = 3, syntax = 0 }
-"docs/architecture/models.md" = { comments = 0, unlabelled = 1, syntax = 1 }
-"docs/auth/cognito-auth-testing.md" = { comments = 0, unlabelled = 0, syntax = 0 }
+"docs/api/split-url.md" = { comments = 0, unlabelled = 2, syntax = 0 }
 "docs/deployment/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/deployment/deployment-guide.md" = { comments = 0, unlabelled = 1, syntax = 2 }
 "docs/deployment/disaster-recovery.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/deployment/iam-permissions.md" = { comments = 0, unlabelled = 1, syntax = 1 }
 "docs/deployment/rollback-runbook.md" = { comments = 0, unlabelled = 1, syntax = 0 }
 "docs/deployment/secrets-management.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"docs/development/guidelines.md" = { comments = 0, unlabelled = 2, syntax = 0 }
-"docs/development/testing-guide.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"docs/development/workflow-explanation.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/getting-started/pre-commit-hooks.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/getting-started/python-virtual-env-setup.md" = { comments = 0, unlabelled = 1, syntax = 0 }
 "docs/getting-started/vscode-settings.md" = { comments = 0, unlabelled = 0, syntax = 0 }
@@ -541,7 +558,7 @@ expects = 39
 path = "docs/architecture/technical-guide.md"
 environment = "stack"
 exec = 4
-skip = 4
+skip = 0
 expects = 4
 
 [[document]]
@@ -563,8 +580,8 @@ expects = 25
 [[document]]
 path = "docs/self-hosting/migrations.md"
 environment = "stack"
-exec = 7
-skip = 12
+exec = 6
+skip = 11
 expects = 5
 
 # The contributor pages: the Quick Start's stack and a development virtual
@@ -579,9 +596,9 @@ expects = 6
 [[document]]
 path = "docs/performance/load-testing.md"
 environment = "stack-dev"
-exec = 10
-skip = 6
-expects = 8
+exec = 9
+skip = 5
+expects = 7
 
 # #1075: the integration pages' setup and inbound webhook examples, each
 # signing in first and signing its deliveries as the page says. Nothing on

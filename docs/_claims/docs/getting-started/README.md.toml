@@ -1,0 +1,72 @@
+# What verifies each unit of docs/getting-started/README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/getting-started/README.md"
+
+[[unit]]
+text = "Getting Started Guide"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The pages in this directory, in the order a new reader needs them:"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Quick start — start the local stack with Docker, then run a first experiment and a feature flag"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Limitations — what Experimently does not do, and what happens instead"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Core concepts — experiments, variants, metrics, feature flags and targeting"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Architecture overview — the components and where each request goes"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "FAQ"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Modules and profiles — the core and full profiles"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Docker guide — the local development stack: services, ports and profiles"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The development compose file"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Environment setup — .env files and the settings the API reads"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "For working on the code:"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Python virtual environment"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Pre-commit hooks"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Editor settings"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Need Help?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Ask in a GitHub issue."
+by = ["exempt:navigation"]

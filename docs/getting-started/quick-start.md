@@ -1,16 +1,16 @@
 # Quick Start
 
-From a fresh clone to a running experiment in about ten minutes. Everything below runs
-locally with Docker; no AWS account and no external identity provider is needed.
+This guide takes you from a fresh clone to a running experiment and a feature flag. Everything
+below runs locally with Docker; no AWS account and no external identity provider is needed.
 
 ---
 
 ## Prerequisites
 
-| Tool | Version | Check |
-|------|---------|-------|
-| Docker with Compose v2 | 24+ | `docker compose version` |
-| `curl` and `jq` | any | `jq --version` |
+| Tool | Check |
+|------|-------|
+| Docker with Compose v2 | `docker compose version` |
+| `curl` and `jq` | `jq --version` |
 
 Only needed if you want to run the backend or dashboard outside Docker: Python 3.11+, Node.js 22+.
 
@@ -46,8 +46,8 @@ publishes its ports on `127.0.0.1` only. Change `FIRST_SUPERUSER_PASSWORD`, `SEC
 and `POSTGRES_PASSWORD` in a `.env` file next to `docker-compose.yml` before anyone else
 uses it, and run a server from the published images in
 [`deploy/compose/compose.yml`](https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml)
-instead. The header comment of `docker-compose.yml` lists every variable, the optional
-`demo`, `tools` and `aws` profiles, and the host-port overrides.
+instead. The header comment of `docker-compose.yml` describes the optional `demo`, `tools`
+and `aws` profiles and the host-port overrides.
 
 Verify:
 
@@ -152,7 +152,7 @@ curl -s -X POST localhost:8000/api/v1/tracking/track \
 
 It prints `"cta_click"`, the event it stored.
 
-The same two calls exist in every SDK; see the [SDK guide](../sdk-guide.md).
+The SDKs make the same two calls; see the [SDK guide](../sdk-guide.md).
 
 ---
 
@@ -225,9 +225,8 @@ Run these from the repository root; the backend is imported as `backend.app.*`.
 
 ## Demo applications
 
-`docker compose --profile demo up -d` adds ShopLab (http://localhost:3200) and StreamPulse
-(http://localhost:3300), two sample products wired to the platform through the public
-SDK path, each with a traffic simulator. See [demo/DEMO_GUIDE.md](https://github.com/getexperimently/experimently/blob/main/demo/DEMO_GUIDE.md).
+To see the platform drive two sample apps, ShopLab and StreamPulse, follow the
+[demo guide](https://github.com/getexperimently/experimently/blob/main/demo/DEMO_GUIDE.md).
 
 ---
 
@@ -240,9 +239,10 @@ docker compose logs api --tail 100
 ```
 <!-- expect: [entrypoint] starting: -->
 
-The entrypoint prints the bootstrap and seed steps. A `SECRET_KEY` shorter than 32
+The entrypoint prints the bootstrap and seed steps. With `ENVIRONMENT=staging` or
+`production`, a `SECRET_KEY` shorter than 32
 characters, or `DEV_AUTH_BYPASS=true` with `ENVIRONMENT=production`, stops the API on
-purpose.
+purpose. This stack runs with `ENVIRONMENT=development`, which accepts a short `SECRET_KEY`.
 
 **Port already in use**
 
@@ -265,6 +265,8 @@ The event's `event_name` must equal the metric's `event_name`, the experiment mu
 
 ## What's next
 
+- [Limitations](limitations.md) — what Experimently does not do, and what happens instead
+- [Docker Compose on one host](https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml) — run Experimently where others can reach it
 - [SDK guide](../sdk-guide.md) — endpoint contract and per-SDK status
 - [Docker guide](docker-guide.md) — the local development stack: services, ports and profiles
 - [User guide](../guides/user-guide.md) — for experiment designers and analysts

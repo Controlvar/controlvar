@@ -1,105 +1,24 @@
 # CI workflows
 
-What runs on a pull request, what is required to merge, and what runs on a schedule.
-All workflows live in `.github/workflows/`. Required checks are enforced by branch
-protection on `main`; a pull request cannot be merged while any of them is red.
+The checks a pull request has to pass to merge, and how to run them yourself. The
+workflows are in `.github/workflows/`.
 
-## Required checks on every pull request
+## Required checks
 
-The status name is what branch protection matches on — the job's `name:`, not its
-id — so renaming a job silently drops its gate. Read the live list with:
+The checks `main` requires are `REQUIRED_CHECKS` in `scripts/configure-repo.sh`,
+the script that writes them to branch protection. Branch protection matches a
+required check by its status name, which is the job's `name:`, not its id. So
+change a required job's `name:` and that list in the same pull request.
 
-```bash
-gh api repos/<owner>/<repo>/branches/main/protection --jq '.required_status_checks.contexts'
-```
+`scripts/check_required_checks.sh` prints each difference between what
+`configure-repo.sh` would write and the live branch protection. Run it with your
+own `gh` login: the Actions token cannot read branch protection.
 
-| Check (status name) | Workflow | What it runs |
-|---------------------|----------|--------------|
-| Unit Tests | `pr-qa-gate.yml` | `backend/tests/unit` (+ Lambda tests) against a Postgres service |
-| Module Tests | `pr-qa-gate.yml` | `modules/backend/tests` with both requirement sets installed |
-| Smoke Tests | `pr-qa-gate.yml` | `backend/tests/smoke`: app import, route wiring, auth wiring |
-| Base Requirements Only | `pr-qa-gate.yml` | the modules must register on `backend/requirements.txt` alone (`scripts/check_modules_register.py`), then the smoke suite |
-| Frontend Tests | `pr-qa-gate.yml` | `npm test`, `tsc --noEmit`, `next build` |
-| SDK Contract Tests | `pr-qa-gate.yml` | cross-SDK golden vectors (`tests/sdk-contract`) |
-| SDK Live Contract / sdk-live-contract (core) | `pr-qa-gate.yml` | boots the API with `seed_sdk_contract`, drives every SDK through assign / evaluate / track |
-| SDK Unit Tests | `sdk-unit-tests.yml` | aggregate of the per-SDK legs (each leg runs only when its SDK changed) |
-| core-build | `pr-qa-gate.yml` | `scripts/core_build.sh`: copy the tree, delete `modules/`, rebuild and run the suites |
-| full-build | `pr-qa-gate.yml` | the same sequence on the full tree |
-| Browser E2E | `pr-qa-gate.yml` | Playwright specs against a booted stack |
-| Docker Smoke | `pr-qa-gate.yml` | builds `experimently-api:core` and `experimently-web:core`, starts `docker-compose.yml`, checks `/health/ready`, that `/api/v1/experiments` is a 401 without credentials, logs in as the seeded admin, mints an API key, assigns a user to `sdk_contract_ab` and verifies nginx routing for a dynamic dashboard route |
-| integration-tests | `integration-tests.yml` | `backend/tests/integration` with Postgres and Redis services |
-| lint | `lint.yml` | ruff, import-linter, REUSE, lock check, eslint, tsc, hadolint, actionlint |
-| regression-guard | `regression-guard.yml` | a pull request labelled `bug` must change a test file |
-| conventional-title † | `conventional-title.yml` | the pull request title must be a conventional commit, because it becomes the squash subject release-please parses (#167) |
-| Security Scan Summary | `security-scan.yml` | Bandit, npm audit, Semgrep (`p/python`, `p/security-audit`, `p/secrets`, `p/owasp-top-ten`), Gitleaks, Trivy on the four built images (API and dashboard, core and full), and a Trivy credential scan of `backend/`, `modules/` and those images that prints only path, rule, severity and line |
-| Release Gate Summary | `release-gate.yml` | backend gate (unit + smoke), frontend gate (test + build), security gate (Bandit + Gitleaks) |
-| CDK Stack Tests (Python) | `infrastructure-tests.yml` | `infrastructure/tests`, including a real `cdk synth` of both profiles (`TestTheAppActuallySynthesises`) |
+## Running a check yourself
 
-† `conventional-title` runs on every pull request but is **not yet** in branch
-protection. Requiring it today would block all 35 open Dependabot pull
-requests, whose titles predate the `commit-message.prefix` added to
-`.github/dependabot.yml` — that only affects pull requests Dependabot opens
-from now on. Add it once that backlog is cleared.
-
-Deliberately **not** required, because it is path-filtered and a required check
-that never reports leaves a pull request permanently pending: `cognito-integration`
-(`cognito-integration-tests.yml`). `CDK Stack Tests (Python)` used to be in this
-list for the same reason; its path filter was removed when it grew a real
-`cdk synth` (see below), so it can now be required. The per-job checks behind an aggregate
-(`Backend Gate`, `Frontend Gate`, `Security Gate`; `Python Security Scan`,
-`Semgrep SAST`, …; `Select SDKs` and the per-SDK legs) are not listed either —
-their summary job is.
-
-## Other pull-request and push workflows
-
-| Workflow | Trigger | Purpose |
-|----------|---------|---------|
-| `cognito-integration-tests.yml` | changes under `backend/app/**` or `backend/tests/integration/auth/**` | `backend/tests/integration/auth` with moto's Cognito mock; no database, so DB-backed auth tests live in `backend/tests/integration/api` instead |
-| `security-scan.yml` | push, pull request, weekly | as above |
-
-## Scheduled workflows
-
-| Workflow | Schedule | Purpose |
-|----------|----------|---------|
-| `nightly-qa.yml` | nightly | unit, integration, smoke, SDK contract, frontend and accessibility suites in one run |
-| `performance-tests.yml` | weekly and on demand | Locust load test against a freshly started API; SLA thresholds in `backend/tests/performance` |
-| `security-scan.yml` | weekly | full scan including the container image |
-| `dependabot-lock.yml` | weekdays 09:00 UTC, and on demand | regenerates `runtime.lock` / `modules.lock` on Dependabot branches and pushes the result. Dependabot updates `runtime.txt` but cannot produce `uv pip compile --generate-hashes` output, so without this every runtime-dependency bump fails `lint` and `Unit Tests` (#185) |
-
-## AWS deployment workflows
-
-`deploy.yml`, `db-migrate.yml` and `rollback.yml` act on AWS, for the `staging` or `prod`
-environment chosen when they are dispatched: they build and push the API image and roll it out
-through CodeDeploy, run the migration task, and roll back. None of them runs `cdk deploy`;
-the stacks are deployed by hand. Each is dispatched from `main` only, and refuses -- red, not
-skipped -- unless that GitHub environment has its `AWS_ACCOUNT_ID` and
-`AWS_ROLE_ARN` secrets, so a fork or an unconfigured checkout never deploys anything. See
-[docs/deployment](../deployment/README.md).
-
-## Running the same checks locally
-
-```bash
-source venv/bin/activate && export APP_ENV=test TESTING=true
-python -m pytest backend/tests/unit backend/tests/smoke -q -p no:cov
-python -m pytest backend/tests/integration -q -p no:cov
-cd frontend && npm test && npx tsc --noEmit && npm run build
-make test-sdk
-docker compose up -d --wait && curl -sf localhost:8000/health/ready
-```
-
-- `python -m pytest backend/tests/unit backend/tests/smoke -q -p no:cov`: Unit + Smoke
-- `python -m pytest backend/tests/integration -q -p no:cov`: integration-tests
-- `cd frontend && npm test && npx tsc --noEmit && npm run build`: Frontend Tests
-- `make test-sdk`: SDK Contract Tests (needs node and go)
-- `docker compose up -d --wait && curl -sf localhost:8000/health/ready`: Docker Smoke, first half
-
-Postgres must be reachable on `localhost:5432` for the backend suites (`docker compose up -d postgres`).
-
-## Conventions
-
-- Backend tests are organised by directory (`unit`, `integration`, `smoke`, `contract`, `e2e`);
-  the PR gates run by directory, not by marker, so an unmarked test still runs. Markers are
-  declared in `[tool.pytest.ini_options]` in `pyproject.toml` (there is no `pytest.ini`).
-- Every bug fix ships with a regression test in the suite that would have caught it.
-- A new workflow must either be added to the required-checks list in branch protection
-  or documented here as advisory.
+- `lint`: see "Lint and format" in the
+  [Development Guidelines](guidelines.md#lint-and-format).
+- `core-build`: `make core-build`, which runs `scripts/core_build.sh`. It copies
+  the tree, deletes `modules/` from the copy, then rebuilds and tests it, and never
+  touches your checkout.
+- The backend and dashboard suites: see the [Testing Guide](testing-guide.md).

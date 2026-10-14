@@ -1,0 +1,827 @@
+# What verifies each unit of docs/getting-started/faq.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/getting-started/faq.md"
+
+[[unit]]
+text = "Frequently Asked Questions"
+by = ["exempt:label"]
+
+[[unit]]
+text = "General"
+by = ["exempt:label"]
+
+[[unit]]
+text = "What is Experimently?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Experimently is a self-hosted experimentation platform for running A/B tests, feature flags, and controlled rollouts."
+by = [
+    "docex:docs/getting-started/quick-start.md#\"assigned\": true",
+    "docex:docs/getting-started/quick-start.md#\"reason\": \"rollout\"",
+    "journey:feature-flag-rollout#at-ten",
+]
+
+[[unit]]
+text = "It provides a complete solution for data-driven product development: design experiments, assign users to variants, track conversion events, run statistical analysis, and make shipping decisions — all in one platform."
+by = [
+    "docex:docs/getting-started/quick-start.md#\"assigned\": true",
+    "docex:docs/getting-started/quick-start.md#\"cta_click\"",
+    "docex:docs/getting-started/quick-start.md#\"total_conversions\": 1",
+    "docex:docs/getting-started/quick-start.md#\"enabled\": true",
+]
+
+[[unit]]
+text = "The platform includes a REST API backend (FastAPI), a React management dashboard, client SDKs (JavaScript, Python, Java, React), and AWS CDK infrastructure code."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_app_has_exactly_two_ecs_services",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names",
+    "test:infrastructure/tests/test_app_profiles.py::TestTheAppActuallySynthesises::test_synth_completes",
+]
+
+[[unit]]
+text = "Is it open source and self-hostable?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Yes."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit"]
+
+[[unit]]
+text = "The code is Apache-2.0, with the client SDKs MIT, and you run it yourself: Docker Compose on one host, the Helm chart on Kubernetes, or the AWS CDK app in your AWS account."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_chart_is_installed_on_a_kind_cluster",
+    "test:infrastructure/tests/test_app_profiles.py::TestTheAppActuallySynthesises::test_synth_completes",
+]
+
+[[unit]]
+text = "Your experiment data is stored in your own PostgreSQL database."
+by = [
+    "test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate",
+    "test:backend/tests/integration/services/test_conversion_event_matching.py::TestResultsEngineCountsSdkEvents::test_get_experiment_results_uses_event_name",
+]
+
+[[unit]]
+text = "Features you configure send data where you point them: LLM evaluation to the model provider you choose, alerting to Slack or a mail server, and warehouse analysis to your warehouse."
+by = [
+    "test:backend/tests/unit/services/test_llm_gemini_provider.py::test_base_url_is_overridable",
+    "test:backend/tests/unit/services/test_notification_service_v2.py::TestNotifyExperimentStarted::test_calls_slack_send",
+    "test:backend/tests/unit/services/test_notification_service_v2.py::TestNotifyExperimentStarted::test_calls_email_send",
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py::test_mean_run_end_to_end",
+]
+
+[[unit]]
+text = "On AWS, the CDK app in infrastructure/cdk/ defines the environment: the API and the dashboard as ECS Fargate services behind one Application Load Balancer, the Aurora PostgreSQL database and the Redis cache."
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_app_has_exactly_two_ecs_services",
+    "test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists",
+]
+
+[[unit]]
+text = "The dashboard starts on the web:bootstrap image you push first."
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_dashboard_container_never_proxies_the_api"]
+
+[[unit]]
+text = "After that, each run of the Deploy workflow rolls the release onto the dashboard too: it builds the release's dashboard image (or reuses the one already in ECR for that version), registers a new dashboard task definition with it, rolls the dashboard service onto it once the API is serving the same release, and smoke-tests the dashboard through the public URL (Deployment Guide)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_dashboard_image_is_built_like_the_apis_before_anything_is_migrated",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_r1_through_the_step_the_dashboard_rolls_out_when_the_api_is_serving",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_r10_the_dashboard_is_not_touched_unless_the_api_serves_this_revision",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_dashboard_steps_follow_the_api_smoke_with_no_if",
+]
+
+[[unit]]
+text = "The CDK does not create a CloudFront distribution."
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway"]
+
+[[unit]]
+text = "A checkout that also has modules/ gets the real-time DynamoDB counters table and the Kinesis/OpenSearch/Glue data lake alongside them — see AWS CDK Deployment for which stacks each profile deploys."
+by = ["test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_full_checkout_builds_the_module_stacks"]
+
+[[unit]]
+text = "What AWS services does it require?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A full production deployment uses the following AWS services:"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists"]
+
+[[unit]]
+text = "Service | Purpose"
+by = ["exempt:label"]
+
+[[unit]]
+text = "ECS Fargate | Hosts the FastAPI application"
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_app_has_exactly_two_ecs_services"]
+
+[[unit]]
+text = "Aurora PostgreSQL | Primary relational database"
+by = [
+    "test:infrastructure/tests/test_aurora_engine.py::test_the_cluster_uses_an_orderable_engine_version",
+    "test:infrastructure/tests/test_front_door_cdk.py::test_only_prod_has_an_aurora_reader",
+    "test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate",
+]
+
+[[unit]]
+text = "ElastiCache Redis | Rate-limit counters and the API's caches"
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRateLimiter::test_uses_redis_when_available",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_the_experiment_detail_is_cached_and_served_from_the_cache",
+]
+
+[[unit]]
+text = "DynamoDB | Full profile: the counters module's counters, which only its own routes write"
+by = [
+    "test:infrastructure/tests/test_front_door_cdk.py::test_the_full_profiles_counters_table",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_assignment_and_tracking_write_no_counter",
+]
+
+[[unit]]
+text = "Lambda | No request or event processing: placeholder functions that do nothing, and a daily Glue ETL trigger in the full profile. Assignment and flag evaluation are API calls (AWS Integration)"
+by = [
+    "test:infrastructure/tests/test_front_door_cdk.py::test_three_application_functions_and_none_from_an_asset",
+    "test:infrastructure/tests/test_front_door_cdk.py::test_no_lambda_serves_requests_and_the_one_fed_events_does_nothing",
+]
+
+[[unit]]
+text = "CloudFront | Not created by the CDK. Only the split-URL module's Lambda@Edge construct would use it, and its router has no configuration source yet (#393)"
+by = [
+    "test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway",
+    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_cloudfront_distribution_created",
+    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration",
+]
+
+[[unit]]
+text = "Kinesis | Full profile only: a stream feeding Firehose and the S3 data lake. The API does not write to it today"
+by = [
+    "test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_api_writes_no_kinesis_stream_firehose_or_opensearch_domain",
+]
+
+[[unit]]
+text = "OpenSearch | Full profile only: a domain is created; nothing writes to it today"
+by = [
+    "test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_api_writes_no_kinesis_stream_firehose_or_opensearch_domain",
+]
+
+[[unit]]
+text = "Cognito | A user pool the CDK creates; sign-in uses local accounts by default (Cognito Integration)"
+by = [
+    "test:infrastructure/tests/test_auth_stack.py::test_the_user_pool_allows_admin_create_user_only",
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_sign_in_is_local_by_default",
+]
+
+[[unit]]
+text = "S3 | Full profile only: the analytics data lake, Athena results and Glue scripts. The dashboard is an ECS service, not files in S3"
+by = [
+    "test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists",
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_app_has_exactly_two_ecs_services",
+]
+
+[[unit]]
+text = "CloudWatch | Logging, metrics, and dashboards"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists"]
+
+[[unit]]
+text = "Secrets Manager | The JWT signing secret, the first administrator's password, and the database user and its password; in the full profile, also the audit signing key"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_the_api_reads_its_secrets_from_secrets_manager"]
+
+[[unit]]
+text = "CodeDeploy | Blue/green deployments for the API service"
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_api_canary_is_fifteen_minutes"]
+
+[[unit]]
+text = "For local development, Docker Compose provides PostgreSQL and Redis, and LocalStack can emulate most AWS services."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_default_stack_is_postgres_redis_the_api_and_the_dashboard",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_header_describes_the_profiles_and_the_port_overrides",
+]
+
+[[unit]]
+text = "How is user assignment consistent across requests?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "User-to-variant assignment uses a deterministic consistent hash of experiment_key + user_id."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_assignment_hashes_the_experiment_key_and_the_user",
+    "test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches",
+]
+
+[[unit]]
+text = "Because the hash is deterministic, the same user always receives the same variant for a given experiment — regardless of which server processes the request, whether the cache is warm, or whether the SDK has been restarted."
+by = [
+    "test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky",
+]
+
+[[unit]]
+text = "The hash decides a new user's variant from the experiment's traffic weights."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_the_weights_divide_the_100_buckets_between_the_variants_in_order"]
+
+[[unit]]
+text = "The API then stores the assignment, and a user who already has one gets it back unchanged, even if the weights have changed since."
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_existing_assignment_is_sticky_when_weights_change"]
+
+[[unit]]
+text = "What statistical methods are supported?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The platform supports a range of statistical approaches:"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Method | Description"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Frequentist (Fisher's exact test) | Each treatment against the control: a two-sided Fisher's exact test on the users who converted and the users who did not. Every metric in the results is analysed as a conversion today; warehouse analysis (beta) compares a mean metric with Welch's t-test"
+by = [
+    "test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py::test_binomial_metric_result_characterisation",
+    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_a_revenue_metric_is_analysed_as_a_conversion",
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py::test_mean_run_end_to_end",
+]
+
+[[unit]]
+text = "Sequential testing (mSPRT) | Continuous monitoring with valid p-values at any sample size"
+by = [
+    "test:backend/tests/unit/services/test_sequential_testing_service.py::TestMSPRT::test_always_valid_p_value_range",
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_overwhelming_difference_stays_finite_and_stops",
+]
+
+[[unit]]
+text = "Always-valid confidence intervals | Confidence sequences that are valid at every look"
+by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_anytime_coverage"]
+
+[[unit]]
+text = "Alpha spending (O'Brien-Fleming, Pocock) | Not computed yet: the response's alpha_spending is empty; use the mSPRT, which is valid under continuous monitoring"
+by = [
+    "test:backend/tests/unit/api/test_sequential_contract.py::test_alpha_spending_is_empty_with_a_notice",
+    "test:backend/tests/integration/api/test_sequential_alpha_api.py::test_no_alpha_spending_table_for_a_stored_experiment",
+]
+
+[[unit]]
+text = "CUPED | Variance reduction from each user's own events before assignment (API only)"
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_recovers_the_seeded_history"]
+
+[[unit]]
+text = "Bayesian (Beta-Binomial) | Posterior credible intervals, Bayes factors, probability of superiority, ROPE (priors and thresholds through the API only)"
+by = [
+    "test:backend/tests/integration/api/test_bayesian_results_api.py::TestBayesianResultsEnabled::test_bayesian_variant_results_structure",
+    "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestTurningBayesianOn::test_create_persists_config_and_enables_analysis",
+]
+
+[[unit]]
+text = "Multi-armed bandit | Thompson Sampling, UCB1, and Epsilon-Greedy adaptive traffic allocation"
+by = [
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerIntegration::test_thompson_weights_shift_toward_better_variant",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerIntegration::test_ucb1_weights_shift_toward_better_variant",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerIntegration::test_epsilon_greedy_converges_to_best_variant",
+]
+
+[[unit]]
+text = "Dimensional analysis | Segment-level breakdowns with Bonferroni correction and heterogeneous treatment effect detection"
+by = [
+    "test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestComputeSegmentResults::test_bonferroni_correction_applied_to_alpha",
+    "test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestDetectHTE::test_hte_detected_when_effects_differ_strongly",
+]
+
+[[unit]]
+text = "Interaction detection (beta) | Jaccard overlap between experiments; whether one experiment's lift on its primary conversion metric differs across another's arms (API only)"
+by = [
+    "test:backend/tests/unit/services/test_interaction_detection_service.py::TestOverlapDetection::test_compute_user_overlap_partial_overlap",
+    "test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_every_treatment_has_a_row",
+]
+
+[[unit]]
+text = "What the dashboard does, and what is API only says which of these the dashboard shows."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "What SDKs are available?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The JavaScript SDK is on npm (npm install @getexperimently/js-sdk, 0.1.0, beta) and the Python SDK is on PyPI (pip install experimently, 0.1.0, beta)."
+by = [
+    "mechanism:sdk-doc-versions",
+    "journey:sdk-javascript#quick-start-user-on",
+    "journey:sdk-python#quick-start-user-on",
+]
+
+[[unit]]
+text = "The Go SDK installs by module path, and the other SDKs from a clone of this repository: each SDK's page (Go, Java, React) says how."
+by = ["journey:sdk-go#quick-start-user-on"]
+
+[[unit]]
+text = "SDK | Package"
+by = ["exempt:label"]
+
+[[unit]]
+text = "JavaScript / TypeScript | @getexperimently/js-sdk (npm)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "Python | experimently (PyPI)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "Java / JVM | com.getexperimently:experimently-sdk (Maven/Gradle)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "React | @getexperimently/react-sdk (npm)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "13 of the 16 SDKs run experiment variant assignment, feature flag evaluation and event tracking against a live API in CI, in the SDK Live Contract job of pr-qa-gate.yml."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_thirteen_of_the_sixteen_sdks_run_the_live_contract"]
+
+[[unit]]
+text = "The Java SDK includes Spring Boot auto-configuration."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_java_sdk_has_spring_boot_auto_configuration",
+    "test:sdk/java/spring-boot-starter/src/test/java/com/getexperimently/sdk/spring/ExperimentationStarterRegistrationTest.java::springBootDiscoversTheAutoConfiguration",
+]
+
+[[unit]]
+text = "The React SDK includes hooks, an HOC, and SSR support for Next.js."
+by = [
+    "test:sdk/react/src/__tests__/useFeatureFlag.test.tsx::starts with loading: true and isEnabled: false",
+    "test:sdk/react/src/__tests__/withExperimentation.test.tsx::wraps the component and passes flagEvaluation prop",
+    "test:sdk/react/src/__tests__/ServerClient.test.ts::creates client with valid config",
+]
+
+[[unit]]
+text = "Getting Started"
+by = ["exempt:label"]
+
+[[unit]]
+text = "How do I get started?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Follow the Quick Start Guide."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "It walks you through:"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Starting the local stack with Docker Compose: Postgres, Redis, the API and the dashboard"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Signing in"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Creating and starting an experiment, in the dashboard or through the API"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Creating an API key"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Assigning a user and tracking an event"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Reading the results, then creating and evaluating a feature flag"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "For a full AWS deployment, see CDK Deployment."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "What is the difference between a feature flag and an experiment?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Feature flags control whether a feature is visible to a user."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "They are primarily operational tools — used for gradual rollouts, kill switches, and beta programs."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "A flag has no statistical analysis attached to it."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_has_no_results_route"]
+
+[[unit]]
+text = "Experiments are scientific tools for causal measurement."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "They split users into variants, track defined metrics, and apply statistical tests to determine whether a variant is better than the control."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Experiments have a defined start and end date and produce a ship/no-ship recommendation."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "You can combine both: run a feature behind a flag during an experiment, then graduate the flag to 100% after the experiment concludes."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Data and Analytics"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Can I use my own data warehouse?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Yes, if it is Snowflake or BigQuery."
+by = ["test:modules/backend/tests/unit/warehouse/test_connectors.py::test_enabled_connectors_exact"]
+
+[[unit]]
+text = "Warehouse analysis (beta, full profile) runs an experiment's analysis on your own tables, and each warehouse becomes available once its connector has been checked against a real account: Snowflake and BigQuery are available, and Amazon Athena is not yet."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_enabled_connectors_exact",
+    "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_verified_connectors_are_enabled_as_shipped",
+]
+
+[[unit]]
+text = "See Warehouse analysis."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "How does CUPED variance reduction work?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "CUPED (Controlled-experiment Using Pre-Experiment Data) reduces result noise by adjusting each conversion rate for whether users sent the metric's event in the days before they were assigned."
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_recovers_the_seeded_history"]
+
+[[unit]]
+text = "The adjustment uses a regression slope (theta) pooled within the experiment's arms."
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_recovers_the_seeded_history"]
+
+[[unit]]
+text = "When that history predicts the outcome, lower variance means you reach statistical significance with fewer users, or detect smaller effects with the same sample size."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "History counts only if the server received it before the user was assigned, so send it before you start the experiment."
+by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_recovers_the_seeded_history"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}/cuped reports it; see CUPED documentation."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "What is Bayesian experimentation vs frequentist?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Frequentist testing (the default) computes a p-value: the probability of seeing results as extreme as these if there were no true effect."
+by = ["test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py::test_binomial_metric_result_characterisation"]
+
+[[unit]]
+text = "You make a binary decision: reject the null hypothesis (p < 0.05) or fail to reject it."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Bayesian testing maintains a probability distribution over the possible true values of the metric."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "It gives you:"
+by = ["exempt:theory"]
+
+[[unit]]
+text = "A credible interval: the range where the true effect likely falls, with a specified probability"
+by = ["test:backend/tests/integration/api/test_bayesian_results_api.py::TestBayesianResultsEnabled::test_bayesian_variant_results_structure"]
+
+[[unit]]
+text = "Probability of superiority: P(treatment > control), a natural way to communicate results"
+by = ["test:backend/tests/integration/api/test_bayesian_results_api.py::TestBayesianResultsEnabled::test_bayesian_variant_results_structure"]
+
+[[unit]]
+text = "A Bayes factor: how much more likely the data is under the alternative hypothesis than the null"
+by = ["test:backend/tests/integration/api/test_bayesian_results_api.py::TestBayesianResultsEnabled::test_bayesian_variant_results_structure"]
+
+[[unit]]
+text = "Bayesian methods are more flexible for continuous monitoring and provide richer output than a binary p-value."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Frequentist methods are more familiar, have established reporting conventions, and are often required for regulatory or compliance reporting."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "See Bayesian Experimentation API to enable Bayesian analysis on your experiments."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "How does Split URL testing work?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Split URL testing would send different users to different URLs — for example, /checkout vs /checkout-v2 — with a Lambda@Edge router at the CDN."
+by = ["test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_returns_302_redirect"]
+
+[[unit]]
+text = "It does not split traffic yet: the router has no configuration source in this release (#393)."
+by = [
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerPassThrough::test_no_config_header_passes_through",
+    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration",
+]
+
+[[unit]]
+text = "The split-URL module ships a CloudFront construct with a Lambda@Edge router, which no stack uses: you add it to a stack yourself."
+by = [
+    "test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway",
+    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_lambda_edge_attached_to_viewer_request",
+]
+
+[[unit]]
+text = "The router reads a cookie to check whether the visitor has already been assigned."
+by = [
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerExistingCookie::test_existing_valid_cookie_passes_through",
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_returns_302_redirect",
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_the_fingerprint_is_ip_and_user_agent_not_a_user_id",
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_cookie_ttl_defaults_to_30_days",
+]
+
+[[unit]]
+text = "If not, it hashes the client fingerprint (IP address and User-Agent) to pick a variant, returns a 302 redirect to the variant URL, and sets a cookie that lasts cookie_ttl_days (30 days by default)."
+by = [
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerExistingCookie::test_existing_valid_cookie_passes_through",
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_returns_302_redirect",
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_the_fingerprint_is_ip_and_user_agent_not_a_user_id",
+    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_cookie_ttl_defaults_to_30_days",
+]
+
+[[unit]]
+text = "A request that carries a cookie naming a known variant URL passes through without being bucketed again."
+by = ["test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerExistingCookie::test_existing_valid_cookie_passes_through"]
+
+[[unit]]
+text = "See Split URL Testing API for setup and the CDK construct reference."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Compliance and Security"
+by = ["exempt:label"]
+
+[[unit]]
+text = "What compliance certifications are supported?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "On 2026-10-13 the project held no certification."
+tag = "X"
+by = ["exempt:intent"]
+
+[[unit]]
+text = "The platform provides audit-trail controls that customers use as evidence in their own SOC 2 or ISO/IEC 27001 programs; the compliance module adds tamper-evident signing and report packs."
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_create",
+    "test:modules/backend/tests/unit/api/test_compliance_signing.py::TestAuditEventSignature::test_audit_event_has_hmac_signature",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestComplianceReports::test_soc2_report_returns_200",
+]
+
+[[unit]]
+text = "Creating, changing and deleting experiments and feature flags (and, in the full profile, warehouse connections, sources and analysis runs) is recorded in the compliance audit trail."
+by = [
+    "test:backend/tests/integration/api/test_compliance_api.py::TestListAuditEvents::test_admin_can_list_audit_events",
+    "test:backend/tests/unit/services/test_audit_log_service.py::TestAuditLogServiceLog::test_log_event_signs_event_with_hmac",
+]
+
+[[unit]]
+text = "With the compliance module each event is signed with HMAC-SHA256 under the AUDIT_HMAC_KEY setting; without it events are recorded unsigned."
+by = ["test:backend/tests/unit/services/test_audit_log_service.py::TestAuditLogServiceLog::test_log_event_signs_event_with_hmac"]
+
+[[unit]]
+text = "Logins, role changes and exports are not recorded in this trail; logins and role changes are recorded in the other audit log, GET /api/v1/audit-logs."
+by = ["test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact"]
+
+[[unit]]
+text = "Pre-built compliance reports are available at:"
+by = ["test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestComplianceReports::test_soc2_report_returns_200"]
+
+[[unit]]
+text = "GET /api/v1/compliance/reports/soc2 — SOC 2 report, by default over the last 365 days"
+by = [
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_the_compliance_reports_cover_365_and_730_days_by_default",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestComplianceReports::test_soc2_report_returns_200",
+]
+
+[[unit]]
+text = "GET /api/v1/compliance/reports/iso27001 — ISO 27001 report, by default over the last 730 days"
+by = [
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_the_compliance_reports_cover_365_and_730_days_by_default",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestComplianceReports::test_iso27001_report_returns_200",
+]
+
+[[unit]]
+text = "Full audit log export (JSON or CSV) is available for SIEM ingestion at GET /api/v1/compliance/export."
+by = [
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_admin_can_export_csv",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_admin_can_export_json",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "See Compliance Audit Trail API for full documentation."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Can I integrate with Jira, Salesforce, or GitHub?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "In one direction."
+by = ["test:modules/backend/tests/unit/services/test_integration_wiring.py::test_nothing_calls_jira_salesforce_or_github"]
+
+[[unit]]
+text = "The platform stores one configuration for each and receives their webhooks, authenticating every delivery against the integration's webhook secret."
+by = [
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestCreateIntegration::test_admin_can_create_jira_integration",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_jira_webhook_with_a_valid_signature_is_processed",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_salesforce_webhook_with_the_shared_secret_header_is_processed",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_rejects_an_invalid_signature",
+]
+
+[[unit]]
+text = "Nothing in the platform calls Jira, Salesforce or GitHub yet, and a delivery changes nothing in the platform:"
+by = [
+    "mechanism:integrations-claims",
+    "test:modules/backend/tests/unit/services/test_integration_wiring.py::test_nothing_calls_jira_salesforce_or_github",
+    "test:modules/backend/tests/unit/services/test_integration_wiring.py::test_a_webhook_delivery_writes_no_row",
+]
+
+[[unit]]
+text = "Jira: receives issue events, signed by Jira Cloud or carrying the secret from Jira Server"
+by = [
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_jira_webhook_with_a_valid_signature_is_processed",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_salesforce_webhook_with_the_shared_secret_header_is_processed",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_rejects_an_invalid_signature",
+]
+
+[[unit]]
+text = "Salesforce: receives JSON from a Flow HTTP Callout, an Apex callout or a relay"
+by = [
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_jira_webhook_with_a_valid_signature_is_processed",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_salesforce_webhook_with_the_shared_secret_header_is_processed",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_rejects_an_invalid_signature",
+]
+
+[[unit]]
+text = "GitHub: receives push, pull_request and issues events, each signed with HMAC-SHA256"
+by = [
+    "test:modules/backend/tests/unit/services/test_github_service.py::TestGitHubWebhook::test_verify_webhook_signature",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_jira_webhook_with_a_valid_signature_is_processed",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_salesforce_webhook_with_the_shared_secret_header_is_processed",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_rejects_an_invalid_signature",
+]
+
+[[unit]]
+text = "Integrations are created by an ADMIN at POST /api/v1/integrations, are addressed by their type afterwards (GET /api/v1/integrations/github; there is one of each type), and have per-service webhook endpoints at POST /api/v1/integrations/webhooks/github (also /jira, /salesforce)."
+by = [
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestCreateIntegration::test_admin_can_create_jira_integration",
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestCreateIntegration::test_duplicate_type_returns_409",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "See Integrations API, Salesforce Integration, and GitHub Integration for detailed setup guides."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Access Control"
+by = ["exempt:label"]
+
+[[unit]]
+text = "What roles and permissions are available?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The platform uses a layered role-based access control system with four built-in roles:"
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_there_are_four_built_in_roles",
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_viewer_permissions",
+]
+
+[[unit]]
+text = "Role | What They Can Do"
+by = ["exempt:label"]
+
+[[unit]]
+text = "VIEWER | Reads every experiment, flag and result and changes none; can create an API key, which writes tracking data"
+by = [
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_viewer_permissions",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged",
+    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_a_viewers_own_key_assigns_users_and_tracks_events",
+]
+
+[[unit]]
+text = "ANALYST | View all experiments, results, audit logs, and reports"
+by = ["test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_analyst_permissions"]
+
+[[unit]]
+text = "DEVELOPER | Create and manage experiments and feature flags; read integration settings, but not change them"
+by = [
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_developer_permissions",
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestListIntegrations::test_developer_can_list_integrations",
+]
+
+[[unit]]
+text = "ADMIN | Full access: user management, compliance exports, global settings, integrations"
+by = [
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_admin_has_permission",
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestCreateIntegration::test_admin_can_create_jira_integration",
+]
+
+[[unit]]
+text = "Beyond the four base roles, admins can create custom roles with specific per-resource and per-action permissions."
+by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_expired_direct_grant_not_included"]
+
+[[unit]]
+text = "They can also grant direct permission to a user for a specific resource, with an optional expiry timestamp for temporary access."
+by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_expired_direct_grant_not_included"]
+
+[[unit]]
+text = "Both are stored and shown by GET /api/v1/rbac/users/{user_id}/permissions, but no permission check reads them yet: what a user can do is decided by their base role (#891)."
+by = [
+    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_creates_role_with_name",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+]
+
+[[unit]]
+text = "See RBAC API Reference for the full role and permission management API."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "How do API keys work?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "API keys are used for SDK authentication and server-to-server calls."
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key"]
+
+[[unit]]
+text = "Unlike JWT tokens, which sign a user in, API keys do not expire unless they are created with an expiry (expires_at)."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_an_api_key_expires_only_when_given_an_expiry",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_with_expiry",
+]
+
+[[unit]]
+text = "Any active key authenticates every API-key route (flag evaluation, tracking) as the user who created it; its scopes do not narrow that."
+by = [
+    "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
+    "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_every_route_under_the_sdk_prefix_requires_the_scope",
+    "journey:api-key-first-assignment#ruleset-scope",
+    "journey:api-key-first-assignment#assign",
+    "journey:api-key-first-assignment#track",
+]
+
+[[unit]]
+text = "The one exception is the server-side SDK routes (GET /api/v1/sdk/ruleset, POST /api/v1/tracking/evaluations, POST /api/v1/tracking/assign/batch), which require the sdk:ruleset scope."
+by = [
+    "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
+    "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_every_route_under_the_sdk_prefix_requires_the_scope",
+    "journey:api-key-first-assignment#ruleset-scope",
+    "journey:api-key-first-assignment#assign",
+    "journey:api-key-first-assignment#track",
+]
+
+[[unit]]
+text = "Create an API key via POST /api/v1/api-keys with a name."
+by = ["journey:api-key-first-assignment#create-key"]
+
+[[unit]]
+text = "The full key value is shown only once at creation time — store it securely."
+by = ["journey:api-key-first-assignment#create-key"]
+
+[[unit]]
+text = "To use it, pass the key in the X-API-Key: <key> header on all SDK requests."
+by = ["docex:docs/getting-started/quick-start.md#\"assigned\": true"]
+
+[[unit]]
+text = "Keys can be listed (without exposing the secret) and revoked at any time."
+by = [
+    "journey:api-key-first-assignment#dismiss",
+    "journey:api-key-first-assignment#last-used",
+    "journey:api-key-first-assignment#confirm-delete",
+    "journey:api-key-first-assignment#refused",
+]
+
+[[unit]]
+text = "See API Key Management for best practices."
+by = ["exempt:navigation"]

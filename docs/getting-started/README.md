@@ -1,63 +1,23 @@
 # Getting Started Guide
 
-This directory contains documentation to help you get started with Experimently.
+The pages in this directory, in the order a new reader needs them:
 
-## Files
+1. [Quick start](quick-start.md) — start the local stack with Docker, then run a first experiment and a feature flag
+2. [Limitations](limitations.md) — what Experimently does not do, and what happens instead
+3. [Core concepts](concepts.md) — experiments, variants, metrics, feature flags and targeting
+4. [Architecture overview](architecture.md) — the components and where each request goes
+5. [FAQ](faq.md)
+6. [Modules and profiles](modules.md) — the core and full profiles
+7. [Docker guide](docker-guide.md) — the local development stack: services, ports and profiles
+8. [The development compose file](docker-compose-file.md)
+9. [Environment setup](environment-setup.md) — `.env` files and the settings the API reads
 
-1. [Environment Setup](environment-setup.md)
-   - System requirements
-   - Development environment setup
-   - Configuration files
-   - Environment variables
-   - Local development tools
+For working on the code:
 
-2. [Docker Guide](docker-guide.md)
-   - Container setup
-   - Docker Compose configuration
-   - Service orchestration
-   - Development containers
-   - Production deployment
-
-3. [Quick start](quick-start.md) — prerequisites and first run
-   - System dependencies
-   - Software versions
-   - Hardware requirements
-   - Network requirements
-   - Security prerequisites
-
-## Quick Start
-
-1. Check the [prerequisites in the quick start](quick-start.md) to make sure your system is ready
-2. Follow the [Environment Setup](environment-setup.md) guide to set up your development environment
-3. Use [Docker](docker-guide.md) to run the platform locally
-
-## Common Tasks
-
-1. **Local Development**
-   - [Environment files and variables](environment-setup.md#2-environment-variables)
-   - [Selecting an environment](environment-setup.md#3-environment-selection)
-   - [Reading settings in code](environment-setup.md#accessing-settings-in-code)
-
-2. **Docker Setup**
-   - [Prerequisites](docker-guide.md#prerequisites)
-   - [Starting the services](docker-guide.md#step-1-start-services)
-   - [What the compose file defines](docker-guide.md#docker-compose-file-overview)
-
-3. **Python environment**
-   - [Virtual environment and the requirements profiles](python-virtual-env-setup.md)
-   - [Pre-commit hooks](pre-commit-hooks.md)
-   - [Editor configuration](vscode-settings.md)
-
-## Related Documentation
-
-- [Development Guidelines](../development/guidelines.md) - Coding standards and practices
-- [API Documentation](../api/README.md) - API reference and usage
-- [Authentication Guide](../auth/README.md) - Auth setup and configuration
-- [Architecture Overview](../architecture/README.md) - System architecture
+- [Python virtual environment](python-virtual-env-setup.md)
+- [Pre-commit hooks](pre-commit-hooks.md)
+- [Editor settings](vscode-settings.md)
 
 ## Need Help?
 
-- Review the [Environment Setup](environment-setup.md) guide
-- Check the [Docker Guide](docker-guide.md) for container management
-- See the [quick start](quick-start.md) for prerequisites and versions
-- Contact the development team for assistance
+Ask in a [GitHub issue](https://github.com/getexperimently/experimently/issues).
