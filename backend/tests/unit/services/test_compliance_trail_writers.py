@@ -190,6 +190,18 @@ def test_nothing_changes_or_deletes_an_event_once_written():
             "def f(db):\n    db.execute(text('UPDATE audit_events_v2 SET outcome = 1'))\n",
             True,
         ),
+        (
+            "def f(db, s):\n"
+            "    db.execute(text(f'UPDATE {s}.audit_events_v2 SET outcome = 1'))\n",
+            True,
+        ),
+        (
+            "from backend.app.models.compliance_audit_event import"
+            " ComplianceAuditEvent as Event\n"
+            "def f(db, i):\n"
+            "    db.delete(db.get(Event, i))\n",
+            True,
+        ),
         # Not a change: signing a new event before it is stored.
         (
             "def f(db):\n"
@@ -205,6 +217,8 @@ def test_nothing_changes_or_deletes_an_event_once_written():
         "session-delete",
         "rewrite",
         "sql",
+        "f-string",
+        "aliased-model",
         "new-event",
     ],
 )

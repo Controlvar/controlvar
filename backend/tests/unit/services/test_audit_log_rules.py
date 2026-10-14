@@ -256,64 +256,102 @@ def test_nothing_deletes_an_audit_entry():
 @pytest.mark.parametrize(
     "source, found",
     [
-        ("def f(db):\n    db.execute(delete(AuditLog))\n", True),
-        (
+        pytest.param(
+            "def f(db):\n    db.execute(delete(AuditLog))\n",
+            True,
+            id="delete-statement",
+        ),
+        pytest.param(
             "def f(db):\n    db.query(AuditLog).filter(AuditLog.id == 1).delete()\n",
             True,
+            id="query-delete",
         ),
-        (
-            "def f(db, i):\n"
-            "    entry = db.query(AuditLog).filter(AuditLog.id == i).first()\n"
-            "    db.delete(entry)\n",
+        pytest.param(
+            "def f(db, i):\n    entry = db.query(AuditLog).filter(AuditLog.id == i).first()\n    db.delete(entry)\n",
             True,
+            id="session-delete",
         ),
-        (
-            "def f(db):\n"
-            "    for entry in db.query(AuditLog).all():\n"
-            "        db.delete(entry)\n",
+        pytest.param(
+            "def f(db):\n    for entry in db.query(AuditLog).all():\n        db.delete(entry)\n",
             True,
+            id="loop-delete",
         ),
-        ("def f(db):\n    db.execute(text('DELETE FROM audit_logs'))\n", True),
-        (
-            "def f(db):\n"
-            "    entry = db.query(AuditLog).first()\n"
-            "    def later():\n"
-            "        db.delete(entry)\n"
-            "    return later\n",
+        pytest.param(
+            "def f(db):\n    [db.delete(e) for e in db.query(AuditLog).all()]\n",
             True,
+            id="comprehension",
         ),
-        # Not a removal: a new entry, and deleting another model's row.
-        (
+        pytest.param(
+            "def f(db):\n    if (e := db.query(AuditLog).first()):\n        db.delete(e)\n",
+            True,
+            id="walrus",
+        ),
+        pytest.param(
+            "def f(db):\n    db.execute(text('DELETE FROM audit_logs'))\n",
+            True,
+            id="sql",
+        ),
+        pytest.param(
+            'def f(db, schema):\n    db.execute(text(f"DELETE FROM {schema}.audit_logs"))\n',
+            True,
+            id="f-string",
+        ),
+        pytest.param(
+            'def f(db, schema):\n    db.execute(text("DELETE\\n  FROM " + schema + ".audit_logs WHERE id = " + str(1)))\n',
+            True,
+            id="concatenation",
+        ),
+        pytest.param(
+            "from backend.app.models.audit_log import AuditLog as AL\n\ndef f(db):\n    db.execute(delete(AL))\n",
+            True,
+            id="aliased-model",
+        ),
+        pytest.param(
+            "def f(db):\n    model = AuditLog\n    db.query(model).delete()\n",
+            True,
+            id="assigned-model",
+        ),
+        pytest.param(
+            "from sqlalchemy import delete as rm\n\ndef f(db):\n    db.execute(rm(AuditLog))\n",
+            True,
+            id="aliased-verb",
+        ),
+        pytest.param(
+            "def f(db):\n    remove = db.delete\n    entry = db.query(AuditLog).first()\n    remove(entry)\n",
+            True,
+            id="assigned-verb",
+        ),
+        pytest.param(
+            "def f(db):\n    entry = db.query(AuditLog).first()\n    def later():\n        db.delete(entry)\n    return later\n",
+            True,
+            id="closure",
+        ),
+        # Not a removal: a new entry, another model's row, a read, another table.
+        pytest.param(
             "def f(db):\n    entry = AuditLog(user_email='a')\n    db.add(entry)\n",
             False,
+            id="new-entry",
         ),
-        (
-            "def f(db, i):\n"
-            "    flag = db.query(FeatureFlag).get(i)\n"
-            "    db.query(AuditLog).count()\n"
-            "    db.delete(flag)\n",
+        pytest.param(
+            "def f(db, i):\n    flag = db.query(FeatureFlag).get(i)\n    db.query(AuditLog).count()\n    db.delete(flag)\n",
             False,
+            id="other-row",
         ),
-        # A name one function reads is not the same name in another.
-        (
-            "def f(db):\n"
-            "    entry = db.query(AuditLog).first()\n"
-            "    return entry\n"
-            "def g(db, entry):\n"
-            "    db.delete(entry)\n",
+        pytest.param(
+            "def f(db):\n    entry = db.query(AuditLog).first()\n    return entry\ndef g(db, entry):\n    db.delete(entry)\n",
             False,
+            id="other-function",
         ),
-    ],
-    ids=[
-        "delete-statement",
-        "query-delete",
-        "session-delete",
-        "loop-delete",
-        "sql",
-        "closure",
-        "new-entry",
-        "other-row",
-        "other-function",
+        pytest.param(
+            'def f(db, schema):\n    db.execute(text(f"SELECT * FROM {schema}.audit_logs"))\n',
+            False,
+            id="a-read",
+        ),
+        pytest.param(
+            'def f(db, schema):\n    db.execute(text("DELETE FROM " + schema + ".feature_flags"))\n',
+            False,
+            id="other-table",
+        ),
     ],
 )
 def test_the_scan_sees_each_way_to_remove_an_entry(source, found):
