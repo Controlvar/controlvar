@@ -1,0 +1,528 @@
+# What verifies each unit of docs/feature-flags/rollouts.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/feature-flags/rollouts.md"
+
+[[unit]]
+text = "Gradual Rollouts"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A gradual rollout raises a feature flag's rollout percentage over time, in controlled stages."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Instead of flipping a flag from 0% to 100% in one step, you roll out to 10%, watch for problems, expand to 50%, confirm everything is healthy, then go to 100%."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What a Rollout Schedule Is"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A rollout schedule is a plan attached to a feature flag."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It defines:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "a sequence of stages, each with a target rollout percentage;"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "a trigger type for each stage: time-based (the scheduler starts it at its start_date, once the stages before it are complete) or manual (it starts only when you advance it);"
+by = [
+    "test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_is_stage_eligible_for_activation",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_starts_once_the_stage_before_it_is_complete",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_after_a_pending_manual_stage_never_starts",
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutStages::test_advance_manual_stage_on_active_schedule",
+]
+
+[[unit]]
+text = "optional start and end dates for the whole schedule."
+by = ["test:backend/tests/integration/api/test_rollout_schedules_api.py::TestCreateScheduleValidation::test_create_schedule_end_before_start_returns_422"]
+
+[[unit]]
+text = "The platform's background scheduler processes active schedules every 15 minutes (ROLLOUT_CHECK_INTERVAL_MINUTES) and starts a time-based stage once its start_date has passed and every stage before it is complete."
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_interval_defaults_come_from_settings",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_starts_once_the_stage_before_it_is_complete",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_with_a_future_start_date_waits_after_the_one_before",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_after_a_manual_stage_in_progress_never_starts",
+]
+
+[[unit]]
+text = "Once the schedule's end_date has passed, the scheduler passes the schedule over: no stage starts or completes by itself, and the schedule stays active."
+by = [
+    "test:backend/tests/integration/services/test_rollout_end_date.py::test_a_schedule_past_its_end_date_is_passed_over",
+    "test:backend/tests/integration/services/test_rollout_end_date.py::test_a_schedule_before_its_end_date_advances",
+]
+
+[[unit]]
+text = "Creating a Rollout Schedule via API"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Run these in one terminal, in order, against the stack from the Quick Start."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each step uses the shell variables set by the ones before it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "URLs."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The collection URL ends with a slash (/api/v1/rollout-schedules/)."
+by = [
+    "test:backend/tests/unit/middleware/test_relative_slash_redirect.py",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Without it the API answers 307 Temporary Redirect, which curl doesn't follow, so nothing happens and nothing is printed."
+by = [
+    "test:backend/tests/unit/middleware/test_relative_slash_redirect.py",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Step 1: Log in"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Changing a flag's rollout takes a user with the ADMIN or DEVELOPER role:"
+by = ["test:backend/tests/smoke/test_flag_change_routes_guarded.py::test_the_inventory_is_exact"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Step 2: Create the flag"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A schedule belongs to a flag."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This creates one, switched on at 0%, and saves its id in $FLAG_ID (see Creating Feature Flags for the details):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"status\": \"active\" and \"rollout_percentage\": 0."
+by = ["docex:docs/feature-flags/rollouts.md#\"status\": \"active\""]
+
+[[unit]]
+text = "Step 3: Create the rollout schedule"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This schedule has three stages:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Initial Canary, 10%, manual: you start it when you're ready."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Expanded Rollout, 50%, time-based, with a start_date a week from now."
+by = [
+    "docex:docs/feature-flags/rollouts.md#\"status\":\"draft\"",
+    "journey:feature-flag-rollout#create-schedule",
+]
+
+[[unit]]
+text = "It comes after a manual stage, so it does not start by itself (see Trigger Types)."
+by = [
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_after_a_manual_stage_in_progress_never_starts",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_after_a_pending_manual_stage_never_starts",
+]
+
+[[unit]]
+text = "Full Rollout, 100%, manual: a human approval gate before everyone gets the feature."
+by = [
+    "journey:feature-flag-rollout#advance-full",
+    "journey:feature-flag-rollout#at-hundred",
+]
+
+[[unit]]
+text = "Dates are UTC, in ISO 8601 form."
+by = [
+    "test:backend/tests/unit/core/test_rollout_scheduler_tz.py::TestAsUtc::test_naive_is_assumed_utc",
+    "test:backend/tests/unit/core/test_rollout_scheduler_tz.py::TestAsUtc::test_aware_is_converted_to_utc",
+]
+
+[[unit]]
+text = "The first two lines work them out from today with jq, so the example always uses dates in the future."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "In your own schedule you can write them out (2027-01-08T00:00:00Z)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The command saves the schedule's id in $SCHEDULE_ID, and the first stage's in $CANARY_ID:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The API answers 201 Created."
+by = [
+    "docex:docs/feature-flags/rollouts.md#\"status\":\"draft\"",
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestCreateRolloutSchedule::test_created_schedule_default_status_is_draft",
+    "journey:feature-flag-rollout#create-schedule",
+]
+
+[[unit]]
+text = "A new schedule is a draft, and every stage is pending:"
+by = [
+    "docex:docs/feature-flags/rollouts.md#\"status\":\"draft\"",
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestCreateRolloutSchedule::test_created_schedule_default_status_is_draft",
+    "journey:feature-flag-rollout#create-schedule",
+]
+
+[[unit]]
+text = "The response also carries the schedule's id, feature_flag_id, owner_id, dates and settings, and each stage's id."
+by = [
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestGetRolloutSchedule::test_get_schedule_response_fields",
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestCreateRolloutSchedule::test_created_schedule_stores_stages_and_owner",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "A schedule is refused with 422 when its target percentages decrease, when its stage orders aren't 1, 2, 3 and so on without gaps, or when a stage order is above 1000."
+by = ["untested:T"]
+
+[[unit]]
+text = "Step 4: Activate the schedule"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"active\"."
+by = ["exempt:baseline"]
+count = 2
+
+[[unit]]
+text = "From now until the schedule's end_date, the scheduler starts a time-based stage once its start_date has passed and every stage before it is complete."
+by = [
+    "test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_is_stage_eligible_for_activation",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_starts_once_the_stage_before_it_is_complete",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_with_a_future_start_date_waits_after_the_one_before",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_after_a_manual_stage_in_progress_never_starts",
+    "test:backend/tests/integration/services/test_rollout_end_date.py::test_a_schedule_past_its_end_date_is_passed_over",
+    "test:backend/tests/integration/services/test_rollout_end_date.py::test_a_schedule_before_its_end_date_advances",
+]
+
+[[unit]]
+text = "Activating a schedule doesn't change the flag: it is still at 0%."
+by = [
+    "journey:feature-flag-rollout#still-zero",
+    "journey:feature-flag-rollout#nobody-at-zero",
+]
+
+[[unit]]
+text = "Rollout Stages"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Target Percentage"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each stage has a target_percentage: the rollout percentage the flag is set to when that stage starts."
+by = [
+    "docex:docs/feature-flags/rollouts.md#\"status\": \"in_progress\"",
+    "journey:feature-flag-rollout#at-ten",
+    "journey:feature-flag-rollout#at-hundred",
+]
+
+[[unit]]
+text = "Percentages must not decrease from one stage to the next."
+by = ["test:backend/tests/integration/api/test_rollout_schedules_api.py::TestCreateScheduleValidation::test_create_schedule_with_decreasing_percentages_fails"]
+
+[[unit]]
+text = "Valid: 10 → 50 → 100."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Invalid: 10 → 50 → 25."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Trigger Types"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Trigger Type | Description"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "time_based | Before the schedule's end_date, the stage starts by itself once its start_date has passed and every stage before it is complete; with no start_date, on the scheduler's first pass after that. The scheduler completes it no sooner than 24 hours after it starts, or the hours its trigger_configuration gives as duration."
+by = [
+    "test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_is_stage_eligible_for_activation",
+    "test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_is_stage_eligible_for_completion",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_starts_once_the_stage_before_it_is_complete",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_is_not_completed_before_24_hours",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_with_a_future_start_date_waits_after_the_one_before",
+    "test:backend/tests/integration/services/test_rollout_end_date.py::test_a_schedule_past_its_end_date_is_passed_over",
+]
+
+[[unit]]
+text = "manual | The stage starts only when you advance it."
+by = [
+    "test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_is_stage_eligible_for_activation",
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutStages::test_advance_manual_stage_on_active_schedule",
+]
+
+[[unit]]
+text = "metric_based | Accepted, but not implemented in this release: such a stage never starts by itself."
+by = [
+    "test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_is_stage_eligible_for_activation",
+    "test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_is_stage_eligible_for_completion",
+]
+
+[[unit]]
+text = "The scheduler never completes a manual stage, so a time-based stage after a manual stage never starts by itself."
+by = [
+    "test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_is_stage_eligible_for_completion",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_after_a_manual_stage_in_progress_never_starts",
+]
+
+[[unit]]
+text = "Advance the manual stage a second time to move on (see Manual Advancement)."
+by = ["test:backend/tests/unit/core/test_rollout_stage_order.py::test_advancing_a_manual_stage_in_progress_starts_the_next_stage_at_once"]
+
+[[unit]]
+text = "Stage Lifecycle"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "When a stage starts, it becomes in_progress and the flag's rollout percentage is set to the stage's target."
+by = [
+    "docex:docs/feature-flags/rollouts.md#\"status\": \"in_progress\"",
+    "journey:feature-flag-rollout#advance-canary",
+    "journey:feature-flag-rollout#at-ten",
+]
+
+[[unit]]
+text = "When the scheduler starts the next stage, the previous one becomes completed."
+by = ["test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_scheduler_complete_stage_and_activate_next"]
+
+[[unit]]
+text = "Time-Based Triggers"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "For time_based stages, set a start_date in UTC, in ISO 8601 form:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The scheduler checks every 15 minutes, so a stage set for 09:00 UTC may not start until 09:15."
+by = ["test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults"]
+
+[[unit]]
+text = "Plan your schedule with this buffer in mind."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "All dates are in UTC."
+by = [
+    "test:backend/tests/unit/core/test_rollout_scheduler_tz.py::TestAsUtc::test_naive_is_assumed_utc",
+    "test:backend/tests/unit/core/test_rollout_scheduler_tz.py::TestAsUtc::test_aware_is_converted_to_utc",
+]
+
+[[unit]]
+text = "If your business runs on a specific timezone, convert before setting dates."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Manual Advancement"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Advance a manual stage to start it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This starts the canary:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The stage is in_progress, and the flag is now at 10%."
+by = ["docex:docs/feature-flags/rollouts.md#\"status\": \"in_progress\""]
+
+[[unit]]
+text = "Advancing a manual stage that is in progress completes it and starts the next stage at once, whatever that stage's trigger and start_date."
+by = ["test:backend/tests/unit/core/test_rollout_stage_order.py::test_advancing_a_manual_stage_in_progress_starts_the_next_stage_at_once"]
+
+[[unit]]
+text = "The advance takes effect at once, and the schedule must be active."
+by = [
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutStages::test_advance_stage_on_paused_schedule_returns_400_and_changes_nothing",
+    "journey:feature-flag-rollout#at-ten",
+]
+
+[[unit]]
+text = "Only a manual stage can be advanced; advancing a time-based one answers 400."
+by = [
+    "journey:feature-flag-rollout#time-based-refused",
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutStages::test_advance_time_based_stage_returns_400",
+]
+
+[[unit]]
+text = "A manual advance is not held back by the earlier stages or by min_stage_duration: advancing the 100% stage first would put the flag at 100% at once."
+by = [
+    "journey:feature-flag-rollout#advance-full",
+    "journey:feature-flag-rollout#at-hundred",
+    "journey:feature-flag-rollout#users-at-hundred",
+]
+
+[[unit]]
+text = "min_stage_duration (in hours) applies only to the stages the scheduler starts."
+by = ["untested:T"]
+
+[[unit]]
+text = "Manual stages are recommended for the final rollout to 100%: they serve as a human approval gate before full deployment."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Pausing a Schedule"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "If you observe problems during a rollout, pause the schedule to stop the automatic stages:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"paused\"."
+by = [
+    "docex:docs/feature-flags/rollouts.md#\"paused\"",
+    "journey:feature-flag-rollout#paused-keeps-ten",
+]
+
+[[unit]]
+text = "Pausing does not change the flag's current rollout percentage; it only stops future stage transitions."
+by = [
+    "docex:docs/feature-flags/rollouts.md#\"paused\"",
+    "journey:feature-flag-rollout#paused-keeps-ten",
+]
+
+[[unit]]
+text = "A safety rollback pauses the flag's active schedule the same way, and it stays paused until you resume it."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p10_a_tick_and_a_stage_advance_after_a_rollback_leave_users_off",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py",
+]
+
+[[unit]]
+text = "When you have investigated and resolved the issue, resume the schedule by activating it again:"
+by = [
+    "journey:feature-flag-rollout#resume",
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutScheduleLifecycle::test_activate_paused_schedule",
+]
+
+[[unit]]
+text = "Monitoring Progress"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "View Schedule Status"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "In the dashboard, the flag's page shows the schedule read-only under Rollout schedule: its status, its name, and each stage with its trigger, target percentage and status."
+by = [
+    "journey:feature-flag-rollout#flag-page",
+    "journey:feature-flag-rollout#flag-page-at-hundred",
+]
+
+[[unit]]
+text = "The Rollout percentage below it is the flag's percentage now."
+by = ["journey:feature-flag-rollout#flag-page"]
+
+[[unit]]
+text = "To list every schedule for a flag, filter the collection by feature_flag_id:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints 1."
+by = [
+    "docex:docs/feature-flags/rollouts.md#1",
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestListRolloutSchedules::test_list_returns_paginated_structure",
+]
+
+[[unit]]
+text = "The response is {\"items\": [...], \"total\", \"skip\", \"limit\"}."
+by = [
+    "docex:docs/feature-flags/rollouts.md#1",
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestListRolloutSchedules::test_list_returns_paginated_structure",
+]
+
+[[unit]]
+text = "Cancelling a Schedule"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "To stop a rollout entirely:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"cancelled\"."
+by = [
+    "docex:docs/feature-flags/rollouts.md#\"cancelled\"",
+    "journey:feature-flag-rollout#cancel-keeps-hundred",
+]
+
+[[unit]]
+text = "The flag's current rollout percentage is not changed."
+by = [
+    "docex:docs/feature-flags/rollouts.md#\"cancelled\"",
+    "journey:feature-flag-rollout#cancel-keeps-hundred",
+]
+
+[[unit]]
+text = "To roll back, change the flag itself (see Creating Feature Flags), or use a safety rollback: a rollback to 0% turns the flag off and pauses its schedule."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p10_a_tick_and_a_stage_advance_after_a_rollback_leave_users_off",
+]
+
+[[unit]]
+text = "Common Gotchas"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rollout percentages must not decrease across stages."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "You cannot delete stages from an active schedule: cancel the schedule first."
+by = ["test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutStages::test_delete_stage_from_active_schedule_returns_400"]
+
+[[unit]]
+text = "Stage orders must be sequential (1, 2, 3, with no gaps), and no higher than 1000."
+by = [
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestCreateScheduleValidation::test_create_schedule_non_sequential_stage_orders_returns_422",
+    "test:backend/tests/integration/api/test_rollout_stage_order_bounds_api.py::test_create_with_a_stage_order_above_the_bound_answers_422",
+]
+
+[[unit]]
+text = "Time-based start_date values are in UTC."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Manual stages must be advanced explicitly: they never start by themselves, even after the schedule's end_date."
+by = ["test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_is_stage_eligible_for_activation"]
+
+[[unit]]
+text = "A manual advance takes effect at once, whatever the earlier stages and min_stage_duration say."
+by = [
+    "journey:feature-flag-rollout#advance-full",
+    "journey:feature-flag-rollout#at-hundred",
+]

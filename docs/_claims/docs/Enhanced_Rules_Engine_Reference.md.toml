@@ -1,0 +1,667 @@
+# What verifies each unit of docs/Enhanced_Rules_Engine_Reference.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/Enhanced_Rules_Engine_Reference.md"
+
+[[unit]]
+text = "Targeting Rules: Operator Reference"
+by = ["exempt:label"]
+
+[[unit]]
+text = "This is the operator reference for targeting rules: what each operator matches, and the value it takes."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Flag targeting and experiment targeting answer every operator on this page the same way."
+by = [
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_both_evaluators_answer_each_operator_alike",
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_both_evaluators_answer_the_native_spellings_alike",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_between_includes_both_bounds_for_numbers",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_before_and_after_are_strict",
+]
+
+[[unit]]
+text = "Two shapes"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Rules are saved in one of two shapes:"
+by = [
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_accepted",
+    "test:backend/tests/unit/core/test_experiment_targeting_validation.py::test_accepted",
+]
+
+[[unit]]
+text = "Dashboard, the shape the dashboard's rule builder writes: {\"logical_operator\", \"groups\": [{\"logical_operator\", \"conditions\": [{\"attribute\", \"operator\", \"value\"}]}]}."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestNormaliseShapes::test_dashboard_shape_produces_single_rule",
+    "journey:feature-flag-create#rule-users",
+]
+
+[[unit]]
+text = "Its operators are the dashboard names in the table below."
+by = ["test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_every_dashboard_operator_is_covered"]
+
+[[unit]]
+text = "Segment rules take this shape only."
+by = ["test:backend/tests/unit/core/test_segment_rule_validation.py::test_refused"]
+
+[[unit]]
+text = "Native: {\"rules\": [{\"id\", \"rule\": {\"operator\", \"conditions\", \"groups\"}, \"rollout_percentage\", \"priority\"}], \"default_rule\"}."
+by = ["test:backend/tests/unit/core/test_targeting_adapter.py::TestNormaliseShapes::test_native_shape_passthrough"]
+
+[[unit]]
+text = "A condition is {\"attribute\", \"operator\", \"value\", \"additional_value\"}, with the native names below."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestNormaliseShapes::test_native_shape_passthrough",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestEngineExtensions::test_geo_distance_accepts_schema_shape",
+]
+
+[[unit]]
+text = "Groups can hold groups."
+by = ["test:backend/tests/unit/core/test_rules_engine.py::TestRuleGroupEvaluation::test_nested_groups"]
+
+[[unit]]
+text = "A list of rules, the legacy [{\"type\": ...}] shape, is refused when it is saved."
+by = [
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
+    "test:backend/tests/unit/core/test_experiment_targeting_validation.py::test_refused",
+]
+
+[[unit]]
+text = "Creating Feature Flags lists what else is refused, and how the request's context is matched against the attributes."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Each level combines its conditions and groups with AND (all of them hold), OR (at least one holds) or NOT (not all of them hold)."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine.py::TestRuleGroupEvaluation::test_and_operator",
+    "test:backend/tests/unit/core/test_rules_engine.py::TestRuleGroupEvaluation::test_or_operator",
+    "test:backend/tests/unit/core/test_rules_engine.py::TestRuleGroupEvaluation::test_not_operator",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_not_holds_when_not_all_of_its_conditions_hold",
+]
+
+[[unit]]
+text = "Operators"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A condition on an attribute the request's context does not carry does not hold, except is_null; a segment condition reads no attribute."
+by = [
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_a_condition_on_a_missing_attribute_does_not_hold",
+    "test:backend/tests/unit/services/test_experiment_targeting_missing_attribute.py::test_experiment_targeting_matches_the_flag_answer",
+    "test:backend/tests/unit/core/test_segment_condition.py::test_required_attributes_skip_only_segment_conditions",
+]
+
+[[unit]]
+text = "Dashboard | Native | The condition holds when"
+by = ["exempt:label"]
+
+[[unit]]
+text = "equals | eq | the attribute equals the value. Text and a number or boolean are compared as that type (\"17\" equals 17, \"true\" equals true); two texts are compared as they are."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_simple_operator_map",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestEngineExtensions::test_lenient_equality_only_between_string_and_typed",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_equals_editor_string_matches_typed_context",
+]
+
+[[unit]]
+text = "not_equals | neq | the attribute does not equal the value, compared as equals compares."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_simple_operator_map",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_equals_not_equals",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestEngineExtensions::test_lenient_equality_only_between_string_and_typed",
+]
+
+[[unit]]
+text = "greater_than, greater_than_or_equal, less_than, less_than_or_equal | gt, gte, lt, lte | the attribute compares so with the value, both read as numbers: text that is a number (\"21\") counts."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_simple_operator_map",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestNumericCoercion::test_comparisons_evaluate_against_numeric_context",
+    "test:backend/tests/unit/core/test_rules_engine_out_of_range.py::test_comparable_values_still_compare",
+]
+
+[[unit]]
+text = "in | in | the attribute equals one of the values, compared as equals compares."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_simple_operator_map",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_in_and_not_in_evaluate",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestEngineExtensions::test_lenient_equality_only_between_string_and_typed",
+]
+
+[[unit]]
+text = "not_in | not_in | the attribute equals none of the values."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_simple_operator_map",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_in_and_not_in_evaluate",
+]
+
+[[unit]]
+text = "contains, not_contains | contains, not_contains | the attribute, as text, contains the value, or does not."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_simple_operator_map",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_string_operators",
+    "test:backend/tests/unit/core/test_rules_engine.py::TestConditionEvaluation::test_contains_operator",
+]
+
+[[unit]]
+text = "starts_with, ends_with | starts_with, ends_with | the attribute starts, or ends, with the value."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_simple_operator_map",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_string_operators",
+]
+
+[[unit]]
+text = "regex | match_regex | the attribute contains a match for the pattern (below)."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_simple_operator_map",
+    "test:backend/tests/unit/core/test_pattern_match.py::test_semantics",
+]
+
+[[unit]]
+text = "is_null | is_null | the attribute is missing or empty: null, blank text, or an empty list or object."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_simple_operator_map",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_is_null_and_is_not_null",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_is_null_holds_for_an_empty_value_and_is_not_null_for_any_other",
+]
+
+[[unit]]
+text = "is_not_null | is_not_null | the attribute is there and is not empty in that sense."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_simple_operator_map",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_is_null_and_is_not_null",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_is_null_holds_for_an_empty_value_and_is_not_null_for_any_other",
+]
+
+[[unit]]
+text = "array_contains | contains_all | the attribute is a list holding every value, or text containing every value."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_array_contains_wraps_scalar_and_maps_to_contains_all",
+    "test:backend/tests/unit/core/test_contains_operators_non_list.py::test_a_string_attribute_with_string_items_matches_by_substring",
+]
+
+[[unit]]
+text = "array_intersects | contains_any | the attribute is a list holding at least one of the values, or text containing one of them."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_array_intersects_maps_to_contains_any",
+    "test:backend/tests/unit/core/test_contains_operators_non_list.py::test_a_string_attribute_with_string_items_matches_by_substring",
+]
+
+[[unit]]
+text = "semver_eq, semver_gt, semver_lt, semver_gte, semver_lte | semantic_version, with additional_value eq, gt, lt, gte or lte | the attribute is a version that compares so with the value (below)."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_semver_operators_map_to_semantic_version_with_additional_value",
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_the_issue_cases",
+]
+
+[[unit]]
+text = "geo_within_radius | geo_distance | the attribute is a point within the radius (below)."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_simple_operator_map",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_geo_within_radius_shapes",
+]
+
+[[unit]]
+text = "time_window | time_window | the attribute is a moment inside the window (below)."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_simple_operator_map",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_time_window_evaluates",
+]
+
+[[unit]]
+text = "in_segment, not_in_segment | in_segment, not_in_segment | the user is, or is not, a member of the segment (below)."
+by = [
+    "test:backend/tests/unit/core/test_segment_condition.py::test_membership_answers_from_a_frozenset",
+    "test:backend/tests/unit/core/test_segment_condition.py::test_dashboard_segment_rules_evaluate_on_both_paths",
+]
+
+[[unit]]
+text = "none | between | the attribute is a number, or a date, from value to additional_value, both included."
+by = [
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_between_includes_both_bounds_for_numbers",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_between_includes_both_bounds_for_dates",
+]
+
+[[unit]]
+text = "none | before, after | the attribute is a date before, or after, the value (below)."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine.py::TestConditionEvaluation::test_date_operators",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_before_and_after_are_strict",
+]
+
+[[unit]]
+text = "The native shape also accepts array_length, json_path and percentage_bucket."
+by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_the_native_shape_accepts_the_operators_the_reference_leaves_out"]
+
+[[unit]]
+text = "Flag targeting and experiment targeting do not answer them alike, so they are not documented here."
+by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_flags_and_experiments_answer_the_left_out_operators_differently"]
+
+[[unit]]
+text = "Operator details"
+by = ["exempt:label"]
+
+[[unit]]
+text = "MATCH_REGEX (match_regex)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Tests if the value contains a match for the pattern (a search, not an anchored match: use ^ and $ to anchor)."
+by = ["test:backend/tests/unit/core/test_pattern_match.py::test_semantics"]
+
+[[unit]]
+text = "Patterns use RE2 syntax, which differs from Python's re:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "\\w, \\d, \\s and \\b are ASCII-only; use \\p{L}, \\p{N} or [[:alpha:]] for other scripts."
+by = ["test:backend/tests/unit/core/test_pattern_match.py::test_semantics"]
+
+[[unit]]
+text = "$ matches only at the very end of the value, not before a final newline."
+by = ["test:backend/tests/unit/core/test_pattern_match.py::test_semantics"]
+
+[[unit]]
+text = "Lookahead, lookbehind, backreferences, \\Z, (?x), (?u), (?a), \\N{...}, a counted repetition over 1000, and very large Unicode repetitions such as [\\p{L}\\p{N}]{1,300} are refused."
+by = [
+    "test:backend/tests/unit/core/test_pattern_match.py::test_refused_constructs",
+    "test:backend/tests/unit/core/test_pattern_match.py::test_the_refusal_is_re2s_own_text",
+]
+
+[[unit]]
+text = "Values longer than 256 characters are not evaluated."
+by = ["test:backend/tests/unit/core/test_pattern_match.py::test_a_value_over_the_limit_is_not_evaluated"]
+
+[[unit]]
+text = "When a pattern is refused or a value cannot be evaluated, the whole ruleset is not applied for that evaluation: a flag evaluates disabled with reason error, a user is not eligible for the experiment (control), and a user is not a member of the segment."
+by = [
+    "test:backend/tests/unit/core/test_pattern_ruleset_abort.py::test_flag_nested_not_is_disabled",
+    "test:backend/tests/unit/core/test_pattern_ruleset_abort.py::test_experiment_targeting_is_ineligible",
+    "test:backend/tests/unit/core/test_pattern_ruleset_abort.py::test_segment_membership_is_not_granted",
+]
+
+[[unit]]
+text = "python -m backend.scripts.check_regex_rules lists stored patterns that are refused or use the ASCII-only classes or $."
+by = [
+    "test:backend/tests/unit/scripts/test_check_regex_rules.py::test_one_refused_and_one_ascii_class_pattern",
+    "test:backend/tests/unit/scripts/test_check_regex_rules.py::test_classify",
+]
+
+[[unit]]
+text = "A pattern RE2 refuses answers 422 when experiment or feature-flag targeting rules are saved; python -m backend.scripts.check_targeting_rules lists the flags whose stored rules a save would now refuse, including such patterns."
+by = [
+    "test:backend/tests/unit/core/test_experiment_targeting_validation.py",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
+    "test:backend/tests/integration/api/test_flag_targeting_validated.py::test_the_check_script_lists_stored_rules_and_writes_nothing",
+]
+
+[[unit]]
+text = "SEMANTIC_VERSION (semantic_version)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The attribute and the value are versions such as 1.2.3 or 1.2.3-beta.1; a leading v on the attribute is ignored."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_semver.py::TestSemanticVersionInvalidFormat::test_invalid_format_with_v_prefix",
+    "test:backend/tests/unit/core/test_rules_engine_semver.py::TestSemanticVersionEquals::test_equal_with_prerelease",
+]
+
+[[unit]]
+text = "An attribute that is not a whole version, such as \"17.4\", does not match."
+by = ["test:backend/tests/unit/core/test_rules_engine_semver.py::TestSemanticVersionInvalidFormat::test_invalid_format_two_parts"]
+
+[[unit]]
+text = "In the dashboard shape a short value is filled in: 17 is 17.0.0 and 17.4 is 17.4.0."
+by = ["test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_semver_short_versions_are_padded"]
+
+[[unit]]
+text = "A pre-release comes before its release (1.2.3-beta.1 is lower than 1.2.3), and eq ignores build metadata (1.0.0+build.1 equals 1.0.0+build.2)."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_semver.py::TestSemanticVersionGreaterThan::test_prerelease_less_than_release",
+    "test:backend/tests/unit/core/test_rules_engine_semver.py::TestSemanticVersionEquals::test_equal_with_build_metadata",
+]
+
+[[unit]]
+text = "A native condition with no additional_value compares with eq."
+by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_a_semantic_version_with_no_comparison_is_eq"]
+
+[[unit]]
+text = "GEO_DISTANCE (geo_distance)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The attribute is a point: [latitude, longitude], or an object with lat and lon (or latitude and longitude)."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceFormats::test_array_format",
+    "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceFormats::test_latitude_longitude_keys",
+    "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceFormats::test_mixed_key_formats",
+]
+
+[[unit]]
+text = "The condition holds when the great-circle distance from the rule's point is at most the radius, in kilometres unless the rule gives miles or meters."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceWithinRadius::test_exactly_on_radius_boundary",
+    "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceWithinRadius::test_default_unit_kilometers",
+    "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceUnits::test_miles_unit",
+    "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceUnits::test_meters_unit",
+    "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceHaversineAccuracy::test_medium_distance_accuracy",
+]
+
+[[unit]]
+text = "Dashboard: {\"lat\": 37.7749, \"lon\": -122.4194, \"radius\": 15, \"unit\": \"km\"}, the list [37.7749, -122.4194, 15, \"km\"] or the text \"37.7749,-122.4194,15,km\"."
+by = ["test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_geo_within_radius_shapes"]
+
+[[unit]]
+text = "The unit is optional."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_simple_operator_map",
+    "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceWithinRadius::test_default_unit_kilometers",
+]
+
+[[unit]]
+text = "Native: value is [latitude, longitude], and additional_value is the radius, or {\"radius\": 15, \"unit\": \"km\"}."
+by = ["test:backend/tests/unit/core/test_targeting_adapter.py::TestEngineExtensions::test_geo_distance_accepts_schema_shape"]
+
+[[unit]]
+text = "TIME_WINDOW (time_window)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Tests if a moment falls within a time window."
+by = ["test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowTimeOfDay::test_time_range_match"]
+
+[[unit]]
+text = "The moment is the attribute's value: an ISO 8601 string, a Unix timestamp or a datetime."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowFormats::test_iso_string_input",
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowFormats::test_timestamp_input",
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowTimezone::test_timezone_aware_match",
+]
+
+[[unit]]
+text = "An attribute sent as null means the current time; an attribute that is not sent does not match."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowFormats::test_current_time_default",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_a_condition_on_a_missing_attribute_does_not_hold",
+]
+
+[[unit]]
+text = "This window is open from 09:00 to 17:00, Monday to Friday, from 1 to 31 January"
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowCombined::test_weekday_business_hours_match",
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowCombined::test_date_and_time_range_match",
+]
+
+[[unit]]
+text = "Keys that say when the window is open (every key given must hold):"
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowCombined::test_weekday_outside_business_hours",
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowCombined::test_weekend_during_business_hours",
+]
+
+[[unit]]
+text = "start_time, end_time: HH:MM or HH:MM:SS, both or neither."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowInvalidInputs::test_invalid_time_format",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_a_window_with_one_half_of_a_pair_cannot_be_read",
+]
+
+[[unit]]
+text = "The end minute is included; a start after the end spans midnight (22:00 to 02:00)."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowTimeOfDay::test_time_range_exact_end",
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowTimeOfDay::test_overnight_time_range",
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowInvalidInputs::test_end_before_start_time",
+]
+
+[[unit]]
+text = "days: day numbers, 0 = Monday to 6 = Sunday."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowDayOfWeek::test_single_day_match",
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowDayOfWeek::test_weekend_match",
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowInvalidInputs::test_invalid_day_range",
+]
+
+[[unit]]
+text = "start_date, end_date: YYYY-MM-DD, both or neither; both days are included."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowDateRange::test_date_range_exact_start",
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowDateRange::test_date_range_exact_end",
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowInvalidInputs::test_invalid_date_format",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_a_window_with_one_half_of_a_pair_cannot_be_read",
+]
+
+[[unit]]
+text = "timezone (optional), a name such as Europe/Paris, reads the moment in that timezone."
+by = ["test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowTimezone::test_timezone_conversion"]
+
+[[unit]]
+text = "Without it, the moment's own clock time is compared."
+by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_a_window_without_a_timezone_compares_the_moments_own_clock_time"]
+
+[[unit]]
+text = "start and end: the Condition schema requires them, but the engine does not read them."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowInvalidInputs::test_a_window_with_no_key_the_engine_reads_matches_nobody",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_time_window_keeps_both_spellings",
+]
+
+[[unit]]
+text = "A rule saved from the dashboard stores start and end as HH:MM, and those are read as start_time and end_time."
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_time_window_keeps_both_spellings",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_time_window_evaluates",
+]
+
+[[unit]]
+text = "In the native shape, give start_time and end_time (or the other keys) as well, as the example does."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A window with none of those keys, or with one that cannot be read (days not 0-6, a time that is not HH:MM, an unknown timezone, a date that is not YYYY-MM-DD), is refused, and a warning is logged once."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowInvalidInputs::test_a_window_with_no_key_the_engine_reads_matches_nobody",
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowInvalidInputs::test_invalid_day_range",
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowInvalidInputs::test_invalid_time_format",
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowInvalidInputs::test_invalid_date_format",
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowInvalidInputs::test_invalid_timezone",
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_an_unreadable_window_matches_nobody_and_is_reported",
+]
+
+[[unit]]
+text = "For a user whose evaluation reaches the window, the evaluation is abandoned: the flag answers off for that user, with reason error, the experiment does not enrol them, and a segment that holds the window cannot be decided for them."
+by = [
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_an_unreadable_window_abandons_the_whole_ruleset",
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_an_unreadable_window_in_a_zero_percent_rule_turns_the_flag_off",
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_a_segment_whose_window_cannot_be_read_is_unavailable",
+]
+
+[[unit]]
+text = "A user decided by an earlier rule never reaches it, and a window in default_rule is never read."
+by = [
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_a_user_decided_by_an_earlier_rule_never_reaches_an_unreadable_window",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_a_window_in_default_rule_is_never_read",
+]
+
+[[unit]]
+text = "So a window with ISO datetimes in start and end is refused, in either shape (accepting them is #1156)."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowInvalidInputs::test_a_window_with_no_key_the_engine_reads_matches_nobody",
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_the_time_window_cases",
+]
+
+[[unit]]
+text = "For a window between two moments, use after and before (below) in an AND group."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Flag targeting and experiment targeting read a window the same way."
+by = [
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_the_time_window_cases",
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_both_evaluators_answer_the_native_spellings_alike",
+]
+
+[[unit]]
+text = "BEFORE (before), AFTER (after)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "before and after compare dates: an ISO 8601 string or a Unix timestamp, in the attribute and in the value."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine.py::TestConditionEvaluation::test_date_operators",
+    "test:backend/tests/unit/core/test_rules_engine.py::TestRulesEngine::test_date_operator_evaluation",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_before_and_after_read_a_unix_timestamp_in_the_attribute",
+]
+
+[[unit]]
+text = "The condition holds when the attribute is strictly before, or strictly after, the value."
+by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_before_and_after_are_strict"]
+
+[[unit]]
+text = "IN_SEGMENT (in_segment), NOT_IN_SEGMENT (not_in_segment)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "in_segment, not_in_segment."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "{\"attribute\": \"segment\", \"operator\": \"in_segment\", \"value\": \"<segment id>\"}."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "One segment per condition; to match any of several, put one condition per segment in an OR group."
+by = ["test:backend/tests/unit/core/test_segment_targeting_validation.py::test_refused_with_fixed_text"]
+
+[[unit]]
+text = "A ruleset can use at most 10 different segments."
+by = ["test:backend/tests/unit/core/test_segment_targeting_validation.py::test_ten_segments_accepted_eleven_refused"]
+
+[[unit]]
+text = "A user is a member of an ID-list segment when the user the flag or experiment is evaluated for (the request's user_id) is in its list, and of a rules segment when the attributes sent with the request match its rules; in a segment's rules, user_id is that same user, whatever the context says."
+by = [
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_flags_and_experiments_agree",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_context_user_id_does_not_decide_membership",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_flag_agrees_with_segment_evaluate",
+]
+
+[[unit]]
+text = "Membership is decided by the server from its own records: nothing in the context you send makes a user a member."
+by = [
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_a_caller_cannot_supply_membership",
+    "test:backend/tests/unit/core/test_segment_condition.py::test_a_context_attribute_named_segment_does_not_decide",
+]
+
+[[unit]]
+text = "A condition on the attribute segment with any other operator, such as equals, compares the context value as before."
+by = ["test:backend/tests/unit/core/test_segment_condition.py::test_segment_attribute_with_equals"]
+
+[[unit]]
+text = "Saving rules that name a segment that is unknown, inactive or archived, or whose rules are not valid, answers 422, and a segment condition in a native default_rule (returned without its conditions being evaluated) is refused."
+by = [
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_reference_refused_on_flag_create",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_reference_refused_on_flag_update",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_reference_refused_on_experiment_create",
+    "test:backend/tests/unit/core/test_segment_targeting_validation.py::test_refused_with_fixed_text",
+]
+
+[[unit]]
+text = "When the server cannot decide a user's membership of a segment the rules name (a flag unarchived after its segment was archived, a segment rule whose pattern cannot be evaluated for this context), it does not guess: the flag answers enabled: false with reason: \"error\" and the experiment does not enrol the user (reason: \"targeting\"), whichever of the two operators the condition uses."
+by = [
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_unavailable_segment_fails_closed",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_database_error_fails_closed",
+]
+
+[[unit]]
+text = "Flags that use a segment are always evaluated by the server, never by an SDK's local evaluation."
+by = ["test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_segment_flags_are_remote"]
+
+[[unit]]
+text = "A segment condition requires nothing from the context."
+by = ["test:backend/tests/unit/core/test_segment_condition.py::test_required_attributes_skip_only_segment_conditions"]
+
+[[unit]]
+text = "A user who lacks an attribute is not refused outright: on experiments, as on flags, they fail only the conditions on that attribute (is_null passes), so another OR branch can still enrol them, and they match a NOT group on that attribute (a user with no country matches NOT (country equals US), but not country not_equals US)."
+by = [
+    "test:backend/tests/unit/services/test_experiment_targeting_missing_attribute.py::test_experiment_targeting_matches_the_flag_answer",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_or_targeting_enrols_a_user_lacking_the_other_branch_attribute",
+]
+
+[[unit]]
+text = "Users already assigned to an experiment keep their assignment."
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_existing_assignment_is_sticky_when_weights_change"]
+
+[[unit]]
+text = "See Segments."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "When a rule cannot be evaluated"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Some conditions cannot be decided for a user: a regex pattern that is refused, or a value it cannot evaluate; a time_window that cannot be read; a comparison with a number too large for a floating-point number, or with a timestamp no date can hold; and a segment whose membership the server cannot decide."
+by = [
+    "test:backend/tests/unit/core/test_pattern_ruleset_abort.py::test_flag_nested_not_is_disabled",
+    "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowInvalidInputs::test_a_window_with_no_key_the_engine_reads_matches_nobody",
+    "test:backend/tests/unit/core/test_rules_engine_out_of_range.py::test_an_out_of_range_value_is_unevaluable",
+    "test:backend/tests/unit/core/test_segment_condition.py::test_absent_membership_raises",
+]
+
+[[unit]]
+text = "The whole ruleset is abandoned for that user, so no later rule and no default_rule applies, and a NOT around the condition does not turn it into a match:"
+by = [
+    "test:backend/tests/unit/core/test_pattern_ruleset_abort.py::test_flag_broad_default_rule_is_not_returned",
+    "test:backend/tests/unit/core/test_pattern_ruleset_abort.py::test_the_engine_raises_through_a_nested_not",
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_an_unreadable_window_abandons_the_whole_ruleset",
+]
+
+[[unit]]
+text = "the flag answers enabled: false with reason: \"error\";"
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_out_of_range.py::test_the_flag_answers_off_with_reason_error",
+    "test:backend/tests/unit/core/test_pattern_ruleset_abort.py::test_flag_nested_not_is_disabled",
+]
+
+[[unit]]
+text = "the user is not eligible for the experiment;"
+by = [
+    "test:backend/tests/unit/core/test_pattern_ruleset_abort.py::test_experiment_targeting_is_ineligible",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_an_out_of_range_comparison_makes_the_user_ineligible_for_an_experiment",
+]
+
+[[unit]]
+text = "a flag or an experiment that names a segment whose rules hold the condition answers as above, because the user's membership of that segment cannot be decided."
+by = [
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_a_segment_whose_window_cannot_be_read_is_unavailable",
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_not_in_segment_over_a_segment_whose_window_cannot_be_read",
+]
+
+[[unit]]
+text = "Usage examples"
+by = ["exempt:label"]
+
+[[unit]]
+text = "These are dashboard-shape rules, as the builder saves them."
+by = ["exempt:example"]
+
+[[unit]]
+text = "Users on iOS 15 or later, on an iPhone or an iPad:"
+by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_the_ios_example"]
+
+[[unit]]
+text = "A context of {\"platform\": \"iOS\", \"os_version\": \"16.2.0\", \"device_type\": \"iPhone\"} matches."
+by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_the_ios_example"]
+
+[[unit]]
+text = "Users within 15 km of San Francisco:"
+by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_the_san_francisco_example"]
+
+[[unit]]
+text = "A context with \"location\": [37.8044, -122.2712] (Oakland, 13.4 km away) matches; with a radius of 10 it does not."
+by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_the_san_francisco_example"]
+
+[[unit]]
+text = "US users over 18, or verified Canadian users:"
+by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_the_us_or_canada_example"]
