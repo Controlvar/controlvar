@@ -48,7 +48,7 @@ puts "   flag = client.evaluate_flag('dark-mode', 'user-123')"
 puts "   # GET /api/v1/feature-flags/evaluate/dark-mode?user_id=user-123"
 puts "   flag.key       # => 'dark-mode'"
 puts "   flag.enabled?  # => true / false (false on any failure)"
-puts "   flag.config    # => the flag's config payload, or nil"
+puts "   flag.config    # => nil today: the evaluate route returns config: null"
 puts
 puts "   client.feature_enabled?('dark-mode', 'user-123')  # => true / false"
 puts

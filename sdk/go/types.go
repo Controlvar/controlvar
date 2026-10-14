@@ -24,8 +24,9 @@ type EvalResult struct {
 	Key string `json:"key"`
 	// Enabled is the server's decision for this user.
 	Enabled bool `json:"enabled"`
-	// Config is the flag's config payload when the server returns a JSON
-	// object. It is nil when the server returns null or a non-object value.
+	// Config is nil today: the evaluate route returns null for every flag. It
+	// holds the JSON object if the server ever sends one, and is nil for null
+	// or a non-object value.
 	Config map[string]any `json:"config,omitempty"`
 }
 

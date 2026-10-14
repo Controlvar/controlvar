@@ -145,8 +145,8 @@ public struct EvalResult: Codable {
     public let key: String
     /// Whether the flag is enabled for this user (decided by the server).
     public let enabled: Bool
-    /// The flag's `config` payload when it is a JSON object; `nil` when the server returned
-    /// `null` or a non-object value.
+    /// `nil` today: the evaluate route returns `config: null` for every flag. It holds the
+    /// JSON object if the server ever sends one, and is `nil` for `null` or a non-object value.
     public let config: [String: Any]?
 
     public init(key: String, enabled: Bool, config: [String: Any]? = nil) {
@@ -365,7 +365,7 @@ public enum ExperimentationError: Error, LocalizedError {
     case networkError(Error)
     /// The server response could not be decoded.
     case decodingError(Error)
-    /// The requested feature flag is unknown or not ACTIVE (HTTP 404).
+    /// The requested feature flag key is unknown (HTTP 404).
     case flagNotFound(String)
     /// The requested experiment is unknown or not ACTIVE (HTTP 404).
     case experimentNotFound(String)
@@ -383,7 +383,7 @@ public enum ExperimentationError: Error, LocalizedError {
         case .decodingError(let err):
             return "Decoding error: \(err.localizedDescription)"
         case .flagNotFound(let key):
-            return "Feature flag not found or not active: '\(key)'"
+            return "Feature flag not found: '\(key)'"
         case .experimentNotFound(let key):
             return "Experiment not found or not active: '\(key)'"
         case .serverError(let code, let msg):

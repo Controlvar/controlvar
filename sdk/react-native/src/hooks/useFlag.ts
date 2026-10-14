@@ -25,8 +25,8 @@ function initialState(flagKey: string, loading: boolean): FlagState {
  * `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…`.
  *
  * @param flagKey  The feature flag key to evaluate.
- * @param _attributes  Accepted for signature compatibility; the evaluate
- *   endpoint takes only the user id, so attributes are not sent.
+ * @param _attributes  Accepted for signature compatibility and not sent: the
+ *   evaluate endpoint takes a context, which this SDK does not send yet.
  * @returns `{ key, enabled, config, value, loading, error }` — `enabled` (and
  *   its alias `value`) is `true` when the server enabled the flag for this
  *   user, `false` while loading or on failure.

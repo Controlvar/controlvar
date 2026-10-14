@@ -227,7 +227,7 @@ describe('ExperimentationProvider — resolveBooleanEvaluation()', () => {
     expect(result.value).toBe(true);
     expect(result.reason).toBe(StandardResolutionReasons.ERROR);
     expect(result.errorCode).toBe(ErrorCode.FLAG_NOT_FOUND);
-    expect(result.errorMessage).toContain('nonexistent');
+    expect(result.errorMessage).toBe('Flag "nonexistent" not found');
   });
 
   test('network error → defaultValue with GENERAL and reason ERROR', async () => {

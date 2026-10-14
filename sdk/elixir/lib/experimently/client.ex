@@ -78,14 +78,15 @@ defmodule Experimently.Client do
   Evaluate a feature flag for a user. The server decides.
 
   Returns `{:ok, %FlagEvaluation{key, enabled, config}}`, or `{:error, reason}`
-  on a network/HTTP failure (including `{:api_error, 404, _}` when the flag is
-  not ACTIVE). A cached evaluation, when present, is returned instead of
-  calling the server. Failures are never cached.
+  on a network/HTTP failure (including `{:api_error, 404, _}` for an unknown
+  flag key; a flag that is not ACTIVE is `{:ok, _}` with `enabled: false`). A
+  cached evaluation, when present, is returned instead of calling the server.
+  Failures are never cached.
 
   ## Options
   - `:skip_cache` — bypass the cache and ask the server (default: `false`)
-  - `:attributes` — accepted for symmetry with `get_assignment/4`; the evaluate
-    endpoint only takes the user id
+  - `:attributes` — accepted for symmetry with `get_assignment/4` and not sent:
+    the evaluate endpoint takes a context, which this SDK does not send yet
   """
   @spec evaluate_flag(server(), String.t(), String.t(), keyword()) ::
           {:ok, FlagEvaluation.t()} | {:error, term()}

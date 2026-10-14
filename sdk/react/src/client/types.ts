@@ -23,7 +23,9 @@ export interface UserContext {
  * Result of evaluating a feature flag for a user.
  *
  * `variant` is derived from the server response: `null` when the flag is off,
- * otherwise `config.variant` when that is a string, else `'on'`.
+ * otherwise `config.variant` when that is a string, else `'on'`. The evaluate
+ * route returns `config: null` for every flag, so an enabled flag's variant is
+ * `'on'`.
  */
 export interface FeatureFlagEvaluation {
   flagKey: string;

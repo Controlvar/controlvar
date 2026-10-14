@@ -95,7 +95,7 @@ Future<void> _run() async {
     //    evaluateFlag never throws, so a failure shows up as "nothing cached".
     final flag = await client.evaluateFlag(flagKey, userId);
     if (!client.getEvaluatedFlags(userId).contains(flagKey)) {
-      _fail('flag evaluation failed for $flagKey (not ACTIVE, bad key, or API unreachable)');
+      _fail('flag evaluation failed for $flagKey (unknown flag key, bad key, or API unreachable)');
     }
 
     // 3. Track `purchase` with a value and the experiment key → POST /tracking/track.

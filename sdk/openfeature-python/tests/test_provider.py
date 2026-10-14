@@ -185,7 +185,7 @@ class TestResolveBooleanDetails:
 
     def test_not_found_returns_default_with_flag_not_found(self):
         provider, transport = make_provider()
-        transport.respond(404, json={"detail": "Feature flag with key 'missing' not found or not active"})
+        transport.respond(404, json={"detail": "Feature flag with key 'missing' not found"})
         result = provider.resolve_boolean_details("missing", True, CTX)
         assert result.value is True
         assert result.error_code == ErrorCode.FLAG_NOT_FOUND

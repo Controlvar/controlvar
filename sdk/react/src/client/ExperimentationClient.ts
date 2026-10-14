@@ -194,7 +194,8 @@ export class ExperimentationClient {
 
   /**
    * Evaluate a flag and return just the variant:
-   * `null` when off, else `config.variant` when it is a string, else `'on'`.
+   * `null` when off, else `config.variant` when it is a string, else `'on'`
+   * (the evaluate route returns `config: null` for every flag, so `'on'`).
    */
   async evaluateFeatureFlag(user: UserContext, flagKey: string): Promise<string | null> {
     const evaluation = await this.evaluateFeatureFlagDetailed(user, flagKey);

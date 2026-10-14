@@ -9,14 +9,16 @@
  *
  * Resolution rules:
  *   boolean → `enabled`
- *   string  → `config.variant` when it is a string (or `config` itself when it is a string)
- *   number  → `config.value` when it is a number (or `config` itself when it is a number)
- *   object  → `config` when it is a non-null object
- *   anything else → the caller's default with reason DEFAULT; a disabled flag
- *   yields the default with reason DISABLED for non-boolean types.
+ *   string, number, object → the caller's default with reason DEFAULT. The
+ *   evaluate endpoint returns `config: null` for every flag, so there is
+ *   nothing to read. The provider would read `config.variant` (or `config`
+ *   itself, for a string), `config.value` (or `config` itself, for a number)
+ *   and `config` (for an object) if the server ever sent one.
+ *   A disabled flag yields the default with reason DISABLED for non-boolean types.
  *
  * Context mapping: `targetingKey` → `user_id`. Other context attributes are
- * NOT sent — the evaluate endpoint takes only the user id.
+ * NOT sent: the evaluate endpoint takes a `context`, which this provider does
+ * not send yet.
  *
  * Experiments and event tracking are not OpenFeature concepts; use
  * `provider.client` (the underlying JS SDK client) for `getAssignment`,
@@ -248,7 +250,7 @@ export class ExperimentationProvider implements Provider {
         return {
           ok: false,
           errorCode: ErrorCode.FLAG_NOT_FOUND,
-          errorMessage: `Flag "${flagKey}" not found or not active`,
+          errorMessage: `Flag "${flagKey}" not found`,
         };
       }
       if (code === 'INVALID_RESPONSE') {

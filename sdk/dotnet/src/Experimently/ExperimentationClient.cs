@@ -66,12 +66,12 @@ public class ExperimentationClient : IDisposable
     /// <param name="flagKey">The feature flag key.</param>
     /// <param name="userId">The user ID.</param>
     /// <param name="attributes">
-    /// Accepted for source compatibility; the evaluate endpoint takes no context, so they are not sent.
+    /// Accepted for source compatibility and not sent: the evaluate endpoint takes a context, which this SDK does not send yet.
     /// </param>
     /// <returns>
     /// The server's decision (<c>Key</c>, <c>Enabled</c>, <c>Config</c>). Never throws: on failure
     /// the cached value is returned when present, otherwise a disabled result
-    /// (<see cref="FlagEvaluationResult.Disabled"/>). A 404 means the flag is unknown or not ACTIVE.
+    /// (<see cref="FlagEvaluationResult.Disabled"/>). A 404 means the flag key is unknown; a flag that is not ACTIVE is a normal answer with <c>Enabled</c> false.
     /// </returns>
     public async Task<FlagEvaluationResult> EvaluateFlagAsync(
         string flagKey,

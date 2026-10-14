@@ -4,7 +4,7 @@ module Experimently
   #
   #   key     - String  : the flag key you asked for
   #   enabled - Boolean : the server's decision for this user
-  #   config  - Object  : the flag's config payload as returned by the server (nil when none)
+  #   config  - Object  : nil today: the evaluate route returns config: null for every flag
   FlagEvaluation = Struct.new(:key, :enabled, :config, keyword_init: true) do
     # @return [Boolean] true only when the server reported the flag as enabled
     def enabled?

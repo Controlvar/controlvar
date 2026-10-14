@@ -38,8 +38,8 @@ class EvalResult {
   /// Whether the flag is enabled for the user (decided by the server).
   final bool enabled;
 
-  /// The flag's `config` payload as returned by the server — any JSON value —
-  /// or `null`.
+  /// `null` today: the evaluate route returns `config: null` for every flag. It
+  /// holds the JSON value if the server ever sends one.
   final dynamic config;
 
   const EvalResult({required this.key, required this.enabled, this.config});

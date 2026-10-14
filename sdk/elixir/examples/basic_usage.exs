@@ -48,7 +48,7 @@ case Experimently.evaluate_flag(client, "dark-mode", user_id) do
     IO.puts("  => Authentication failed — check your API key")
 
   {:error, {:api_error, 404, _body}} ->
-    IO.puts("  => Flag not found or not ACTIVE — using default")
+    IO.puts("  => Flag not found — using default")
 
   {:error, {:network_error, reason}} ->
     IO.puts("  => Network error: #{inspect(reason)} — using default")

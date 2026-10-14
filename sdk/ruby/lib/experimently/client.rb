@@ -56,11 +56,13 @@ module Experimently
     #
     # @param flag_key    [String] feature flag key
     # @param user_id     [String] user identifier
-    # @param _attributes [Hash]   accepted for API symmetry with get_assignment;
-    #                             the evaluate endpoint only takes the user id
+    # @param _attributes [Hash]   accepted for API symmetry with get_assignment
+    #                             and not sent: the evaluate endpoint takes a
+    #                             context, which this SDK does not send yet
     # @return [FlagEvaluation] never nil. On a network/HTTP failure (including
-    #   404 when the flag is not ACTIVE) the flag is reported as disabled;
-    #   a cached evaluation, when present, is returned instead.
+    #   404 for an unknown flag key) the flag is reported as disabled; a flag
+    #   that is not ACTIVE is a normal answer with enabled false. A cached
+    #   evaluation, when present, is returned instead.
     def evaluate_flag(flag_key, user_id, _attributes = {})
       cache_key = flag_cache_key(user_id, flag_key)
       cached = @cache.get(cache_key)

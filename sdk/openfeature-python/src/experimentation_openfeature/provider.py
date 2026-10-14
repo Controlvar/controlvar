@@ -11,14 +11,16 @@ Resolution rules
 ----------------
 * ``EvaluationContext.targeting_key`` is the platform ``user_id`` and is
   required: without it the default value is returned with
-  ``TARGETING_KEY_MISSING``. Context attributes are **not** sent — the
-  evaluate endpoint takes no context.
+  ``TARGETING_KEY_MISSING``. Context attributes are **not** sent: the
+  evaluate endpoint takes a ``context``, which this provider does not send yet.
 * boolean flags   -> ``enabled``.
-* string flags    -> ``config["variant"]`` (or ``config`` itself when it is a
-  string); otherwise the default value with reason ``DEFAULT``.
-* integer/float   -> ``config["value"]`` (or ``config`` itself when numeric;
-  ``bool`` is never accepted as a number).
-* object flags    -> ``config`` when it is a dict or list.
+* string, integer/float and object flags -> the default value with reason
+  ``DEFAULT``: the evaluate endpoint returns ``config: null`` for every flag,
+  so there is nothing to read. The provider would read ``config["variant"]``
+  (or ``config`` itself when it is a string) for a string, ``config["value"]``
+  (or ``config`` itself when numeric; ``bool`` is never accepted as a number)
+  for a number, and ``config`` when it is a dict or list for an object, if the
+  server ever sent one.
 * A disabled flag resolves non-boolean requests to the default value with
   reason ``DISABLED``.
 * Failures never raise: 404 -> ``FLAG_NOT_FOUND``, anything else ->
