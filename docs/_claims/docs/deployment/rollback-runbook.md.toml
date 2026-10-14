@@ -562,7 +562,7 @@ text = "Watching it during a rollback shows nothing happening and reads as a fai
 by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_api_service_is_under_codedeploy_and_the_dashboard_is_not"]
 
 [[unit]]
-text = "Do not read the service's runningCount instead: for the hour after a shift the replaced task set keeps running beside the new one, so the service counts both (on staging on 2026-10-04 (UTC) it counted 4 tasks of 2 desired after a rollback that had worked: #295)."
+text = "Read the PRIMARY task set's counts, not the service's runningCount: for the hour after a shift the replaced task set keeps running beside the new one, so the service counts both (on staging on 2026-10-04 (UTC) it counted 4 tasks of 2 desired after a rollback that had worked: #295)."
 by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-5982176639"]
 
 [[unit]]
@@ -1155,8 +1155,11 @@ text = "Why."
 by = ["exempt:label"]
 
 [[unit]]
-text = "A revision without it runs the database bootstrap each time a task starts, and a bootstrap refuses a database a newer release migrated."
-by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated"]
+text = "A revision without RUN_MIGRATIONS=false runs the database bootstrap each time a task starts, and a bootstrap refuses a database a newer release migrated."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated",
+    "test:backend/tests/unit/core/test_operator_facing_runtime.py::test_a_task_migrates_on_start_unless_its_revision_sets_run_migrations_false",
+]
 
 [[unit]]
 text = "Fix."
@@ -1306,7 +1309,10 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "To undo the migration a release added, open that migration file (backend/app/db/migrations/versions/ for core, modules/backend/app/db/migrations/versions/ for a module, which exists only in a full-profile image) and use its down_revision, e.g."
-by = ["test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_module_migrations_ship_in_the_full_image_only"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_migration_files_are_in_the_core_and_the_module_directory",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_module_migrations_ship_in_the_full_image_only",
+]
 
 [[unit]]
 text = "37dcb2969766 to undo 4c2c09a2b3e8."

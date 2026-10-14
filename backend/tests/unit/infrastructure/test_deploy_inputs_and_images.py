@@ -103,9 +103,14 @@ def test_every_workflow_refuses_an_environment_that_is_not_configured(
     }
     if "PUBLIC_BASE_URL" in step.get("env", {}):
         env["PUBLIC_BASE_URL"] = "https://app.example.com"
-    # The step's env reads secrets, which the Runner does not resolve: the
-    # values arrive as the env the step maps them to.
-    assert set(step["env"]) >= {"ACCOUNT_ID", "ROLE_ARN_SET"}
+    # The values come from the environment's own secrets and variable, and
+    # nowhere else. The Runner does not resolve secrets, so the test then
+    # gives the step what those expressions would evaluate to.
+    assert step["env"]["ACCOUNT_ID"] == "${{ secrets.AWS_ACCOUNT_ID }}"
+    assert step["env"]["ROLE_ARN_SET"] == "${{ secrets.AWS_ROLE_ARN != '' }}"
+    if "PUBLIC_BASE_URL" in step["env"]:
+        assert step["env"]["PUBLIC_BASE_URL"] == "${{ vars.PUBLIC_BASE_URL }}"
+    assert job["environment"] == "${{ inputs.environment }}"
     runner.scenario([])
     code, out, _, _ = runner.run(workflow, {**step, "env": {}}, {}, {}, **env)
     assert (code != 0) is refused, out
@@ -122,6 +127,7 @@ def test_every_workflow_refuses_an_environment_that_is_not_configured(
 @needs_workflows
 def test_deploy_also_refuses_an_environment_without_its_public_url(runner):
     (job,) = [j for j in _load(DEPLOY)["jobs"].values() if "environment" in j]
+    assert job["steps"][0]["env"]["PUBLIC_BASE_URL"] == "${{ vars.PUBLIC_BASE_URL }}"
     runner.scenario([])
     code, out, _, _ = runner.run(
         DEPLOY,
@@ -237,6 +243,92 @@ def test_the_secrets_check_wants_each_secret_by_complete_arn_and_existing(
     capsys, references, existing, profile, expected
 ):
     assert _check(references, existing, profile) == expected, capsys.readouterr().out
+
+
+def _family(*secrets: str) -> dict:
+    variables = {
+        "jwt-secret": "SECRET_KEY",
+        "first-superuser-password": "FIRST_SUPERUSER_PASSWORD",
+        "audit-hmac-key": "AUDIT_HMAC_KEY",
+    }
+    return {
+        "containerDefinitions": [
+            {
+                "name": "backend",
+                "secrets": [
+                    {"name": variables[s], "valueFrom": _arn(s)} for s in secrets
+                ],
+            }
+        ]
+    }
+
+
+ALL_THREE = ("jwt-secret", "first-superuser-password", "audit-hmac-key")
+
+
+@needs_workflows
+@pytest.mark.parametrize(
+    "migrate, profile, refused",
+    [
+        (ALL_THREE, "full", False),
+        (("first-superuser-password", "audit-hmac-key"), "full", True),
+        (("jwt-secret", "first-superuser-password"), "full", True),
+        (("jwt-secret", "first-superuser-password"), "core", False),
+    ],
+    ids=["full", "migration-without-jwt", "migration-without-audit-key", "core"],
+)
+def test_the_deploy_step_checks_both_task_definitions_for_the_profile(
+    runner, migrate, profile, refused
+):
+    """deploy.yml's own step: the API's and the migration's families are each
+    read and held to the profile's secrets."""
+    from backend.tests.unit.infrastructure.test_dashboard_deploy_wiring import rule
+
+    api = ALL_THREE if profile == "full" else ALL_THREE[:2]
+    rules = [
+        rule(
+            "ecs describe-task-definition",
+            "experimentation-backend-staging",
+            answers=[_family(*api)],
+        ),
+        rule(
+            "ecs describe-task-definition",
+            "experimentation-migrate-staging",
+            answers=[_family(*migrate)],
+        ),
+        rule(
+            "ecs describe-task-definition",
+            "experimentation-dashboard-staging",
+            answers=[{"containerDefinitions": [{"name": "dashboard"}]}],
+        ),
+    ]
+    for name in ALL_THREE:
+        arn = _arn(name)
+        rules.append(
+            rule(
+                "secretsmanager describe-secret",
+                arn,
+                answers=[{"ARN": arn, "Name": f"{PREFIX}/{name}"}],
+            )
+        )
+    runner.scenario(rules)
+    code, out, _, _ = runner.run(
+        DEPLOY,
+        _step(DEPLOY, "Every secret the task definitions reference exists"),
+        {},
+        {"profile": profile},
+        EXPECTED_ACCOUNT_ID=ACCOUNT,
+    )
+    assert (code != 0) is refused, out
+    read = {
+        c[c.index("--task-definition") + 1]
+        for c in runner.calls()
+        if c[:2] == ["ecs", "describe-task-definition"]
+    }
+    assert {
+        "experimentation-backend-staging",
+        "experimentation-migrate-staging",
+    } <= read
 
 
 @needs_workflows
@@ -397,6 +489,7 @@ def _first_release_with(pattern: str) -> str:
 
 def test_segment_targeting_arrived_in_0_22_0():
     assert _first_release_with(r"can target a segment") == "0.22.0"
+    assert "#871" in _release_sections()["0.22.0"]
     from backend.app.core.targeting_adapter import DASHBOARD_OPERATORS
 
     assert {"in_segment", "not_in_segment"} <= set(DASHBOARD_OPERATORS)
@@ -544,3 +637,31 @@ def test_database_migration_takes_no_image_and_runs_the_one_serving():
     (job,) = [j for j in document["jobs"].values() if "environment" in j]
     (serving,) = [s for s in job["steps"] if s.get("id") == "serving"]
     assert "taskSets[?status=='PRIMARY'].taskDefinition" in serving["run"]
+
+
+def test_the_migration_files_are_in_the_core_and_the_module_directory():
+    """alembic reads exactly these two directories; the core one holds the
+    core chain, the module one (present in a full checkout) the modules
+    branch."""
+    ini = (REPO_ROOT / "backend" / "app" / "db" / "alembic.ini").read_text(
+        encoding="utf-8"
+    )
+    block = re.search(r"^version_locations =\n((?:[ \t]+\S.*\n)+)", ini, re.M)
+    assert block, "version_locations moved"
+    locations = [line.strip() for line in block.group(1).splitlines()]
+    assert locations == [
+        "%(here)s/migrations/versions",
+        "%(here)s/../../../modules/backend/app/db/migrations/versions",
+    ], locations
+    core = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "versions"
+    assert list(core.glob("d29a479daafe_*.py")), (
+        "the core chain is not in its directory"
+    )
+    if MODULES:
+        module = (
+            REPO_ROOT / "modules" / "backend" / "app" / "db" / "migrations" / "versions"
+        )
+        assert module.is_dir(), module
+        assert list(module.glob("modules_0001_*.py")), (
+            "the modules branch is not in its directory"
+        )

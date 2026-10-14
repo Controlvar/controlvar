@@ -448,6 +448,14 @@ def test_the_snapshot_and_the_migration_come_before_the_deployment_and_nothing_u
     # Each of those steps has no `if:`: one that fails stops the job there.
     for key in ("snapshot", "migrate", "api-td", "api-td-check", "codedeploy"):
         assert "if" not in _step(DEPLOY, key), key
+    # And none of the deploy job's steps that change or check what serves
+    # carries on past its own failure: only the Slack steps may.
+    for step in _deploy_steps():
+        if "continue-on-error" in step:
+            assert (
+                str(step.get("uses", "")).startswith("slackapi/")
+                or step.get("name") == "Say Slack was not notified"
+            ), step.get("name")
 
 
 def _stored(environment: list[dict] | None, name: str = "backend") -> dict:
@@ -635,10 +643,16 @@ def test_the_dashboard_rolls_out_only_after_the_api_shifted_and_answered():
 
 
 @pytest.mark.regression
-def test_a_dashboard_answering_anything_but_html_200_fails_the_dashboard_smoke(runner):
+@pytest.mark.parametrize(
+    "answer",
+    ["404 text/plain", "200 text/plain", "200 application/json", "503 text/html"],
+)
+def test_a_dashboard_answering_anything_but_html_200_fails_the_dashboard_smoke(
+    runner, answer
+):
     step = _step(DEPLOY, "Smoke test the dashboard through the public URL")
     runner.scenario([])
-    runner.curl("404 text/plain", "not found")
+    runner.curl(answer, "not the dashboard")
     code, out, _, _ = runner.run(
         DEPLOY, step, _outputs(), {}, SMOKE_ATTEMPTS="2", SMOKE_SLEEP_SECONDS="0"
     )

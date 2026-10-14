@@ -396,7 +396,9 @@ def test_it_sends_no_request_to_the_api_or_the_dashboard():
     """No smoke test: no step, and no script a step runs, makes an HTTP
     request; /health is checked by hand afterwards."""
     http = re.compile(
-        r"\b(curl|wget|urllib|http\.client|httpx|requests|socket)\b|https?://"
+        r"\b(curl|wget|nc|ncat|netcat|telnet|socat|openssl s_client)\b"
+        r"|\b(urllib3?|http\.client|httpx|requests|aiohttp|socket)\b"
+        r"|/dev/tcp/|https?://"
     )
     scripts: set[str] = set()
     for name, code in _runs():
@@ -418,7 +420,8 @@ def test_it_sends_no_request_to_the_api_or_the_dashboard():
             line for line in text.splitlines() if not line.lstrip().startswith("#")
         )
         found = re.search(
-            r"\b(curl|wget)\b|^\s*(?:import|from) (urllib|http|httpx|requests|socket)\b",
+            r"\b(curl|wget|nc|ncat|netcat|telnet|socat)\b|/dev/tcp/"
+            r"|^\s*(?:import|from) (urllib3?|http|httpx|requests|aiohttp|socket)\b",
             code,
             re.M,
         )
@@ -451,3 +454,14 @@ def test_it_does_not_check_whether_the_target_runs_migrations_on_start(
     for name, code_text in _runs():
         assert not re.search(r"\.environment\b|environment\[\?", code_text), name
         assert "refuse_migrating_api_revision" not in code_text, name
+        # The setting's name appears only inside the text the summary prints,
+        # never in a command that reads or compares it.
+        for line in code_text.splitlines():
+            if "RUN_MIGRATIONS" not in line:
+                continue
+            before = line.split("RUN_MIGRATIONS", 1)[0]
+            assert name == "Run summary", (name, line.strip()[:120])
+            assert before.count('"') % 2 == 1, line.strip()[:120]
+            assert not re.search(r"\b(grep|jq|case|test|awk|sed)\b|\[", line), (
+                line.strip()[:120]
+            )

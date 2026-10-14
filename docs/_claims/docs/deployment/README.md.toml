@@ -364,6 +364,8 @@ by = [
 [[unit]]
 text = "The deploy's \"Every secret the task definitions reference exists\" step checks that both task definitions reference it (and the two every profile needs) by complete ARN, and that each one exists, before it builds anything."
 by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_deploy_step_checks_both_task_definitions_for_the_profile",
+    "test:backend/tests/unit/infrastructure/test_deployment_secrets.py::test_the_deploy_preflight_checks_exactly_the_secrets_the_stacks_name",
     "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_secrets_check_wants_each_secret_by_complete_arn_and_existing",
     "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_secrets_check_runs_before_anything_is_built",
 ]
@@ -718,6 +720,7 @@ text = "Every row is injected by the ECS task definitions (infrastructure/cdk/st
 by = [
     "test:infrastructure/tests/test_operator_facing_stacks.py::test_both_backend_task_definitions_carry_the_secrets_you_create",
     "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_without_each_secret_the_application_refuses_to_start_in_production",
+    "test:backend/tests/unit/infrastructure/test_deployment_secrets.py::test_without_the_audit_key_the_modules_refuse_to_register",
     "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_image_carries_no_env_file",
     "test:backend/tests/unit/infrastructure/test_deployment_secrets.py::test_the_task_definition_boots_the_application_in_production",
 ]
@@ -725,6 +728,8 @@ by = [
 [[unit]]
 text = "Deploy refuses the run if one is missing, before it builds anything."
 by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_deploy_step_checks_both_task_definitions_for_the_profile",
+    "test:backend/tests/unit/infrastructure/test_deployment_secrets.py::test_the_deploy_preflight_checks_exactly_the_secrets_the_stacks_name",
     "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_secrets_check_runs_before_anything_is_built",
     "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_secrets_check_wants_each_secret_by_complete_arn_and_existing",
 ]

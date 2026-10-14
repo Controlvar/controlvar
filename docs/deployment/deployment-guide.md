@@ -256,7 +256,9 @@ python3 scripts/check_live_target_group.py --env "$ENVIRONMENT" --expect "$API_L
   grep -cE 'AWS::EC2::SecurityGroup(Egress|Ingress)' "cdk-diff-$ENVIRONMENT.txt"
 ```
 
-Replace the three example values with yours before running anything.
+Replace the three example values with yours before running anything. Each step
+runs only if the one before it succeeded, so a check that refuses a value stops
+the diff, and a diff that fails prints no count at all, which is not a `0`.
 Read the whole file, not only the count. Do not pipe the diff into another command: a
 pipe reports the last command's exit status, so a failed diff can look like a
 clean one.

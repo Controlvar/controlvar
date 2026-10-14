@@ -380,6 +380,10 @@ def test_the_full_profiles_three_buckets(synths, env):
     lake_stack, lake = by_id["DataLakeBucket"]
     assert lake_stack == f"experimentation-analytics-{env}"
     assert _props(lake)["VersioningConfiguration"] == {"Status": "Enabled"}
+    # Only the data lake: nothing restores an object in the other two.
+    for name in ("AthenaResultsBucket", "GlueScriptsBucket"):
+        versioning = _props(by_id[name][1]).get("VersioningConfiguration")
+        assert versioning in (None, {"Status": "Suspended"}), (name, versioning)
     results_stack, results = by_id["AthenaResultsBucket"]
     assert results_stack == f"experimentation-glue-etl-{env}"
     rules = _props(results)["LifecycleConfiguration"]["Rules"]

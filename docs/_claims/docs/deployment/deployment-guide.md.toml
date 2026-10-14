@@ -453,6 +453,13 @@ text = "Replace the three example values with yours before running anything."
 by = ["exempt:instruction"]
 
 [[unit]]
+text = "Each step runs only if the one before it succeeded, so a check that refuses a value stops the diff, and a diff that fails prints no count at all, which is not a 0."
+by = [
+    "test:backend/tests/unit/infrastructure/test_check_live_target_group.py::test_a_new_environment_starts_in_blue",
+    "test:backend/tests/unit/infrastructure/test_check_dashboard_image.py::test_expect_a_different_digest_is_refused",
+]
+
+[[unit]]
 text = "Read the whole file, not only the count."
 by = ["exempt:instruction"]
 
