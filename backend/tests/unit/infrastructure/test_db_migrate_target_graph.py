@@ -44,9 +44,10 @@ pytestmark = pytest.mark.skipif(
 #: revision of the newest core migration when it became the example; every core
 #: revision added since joins its list (``37dcb2969766``, #440), and the
 #: documents that name it must say what those revisions' downgrades drop
-#: (``test_documented_downgrade_targets.py``).
+#: (``test_documented_downgrade_targets.py``).  Since ``4c2c09a2b3e8`` (#1206)
+#: the example is ``37dcb2969766``, whose list is that one revision.
 NAMED_DOWNGRADES = {
-    "d29a479daafe": ["37dcb2969766"],
+    "37dcb2969766": ["4c2c09a2b3e8"],
     "modules_0001_rbac": ["modules_0002_warehouse_analysis"],
 }
 BRANCH_POINT = "a7b8c9d0e1f2"
@@ -105,9 +106,9 @@ def test_the_branch_point_also_unapplies_the_modules_branch():
     """Backs the help text: "a core id at or below a7b8c9d0e1f2 also unapplies
     the modules branch"."""
     plan = _downgrade_plan(_script(), BRANCH_POINT)
-    # The nine core revisions above it (through 37dcb2969766, #440) and the
+    # The ten core revisions above it (through 4c2c09a2b3e8, #1206) and the
     # modules branch's two.
-    assert len(plan) == 11, plan
+    assert len(plan) == 12, plan
     assert [r for r in plan if r.startswith(MODULES_PREFIX)] == [
         "modules_0002_warehouse_analysis",
         "modules_0001_rbac",
