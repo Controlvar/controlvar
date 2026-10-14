@@ -82,8 +82,17 @@
 #                                    all, is a usage error (exit 2), not a
 #                                    silent "nothing ran, OK".
 #
-# Exit status: 0 when every step passed; 1 at the first failing step, after
-# printing `core-build: FAILED at step <name>`; 2 for a usage error.
+# Exit status: 0 only when every step it was asked for ran to the end and
+# passed; otherwise non-zero, after printing `core-build: FAILED at step
+# <name>` -- the failing command's own status for a failing step, 128+n when
+# the script itself is stopped by SIGINT, SIGTERM or SIGHUP (130, 143, 129);
+# 2 for a usage error.  The summary lists every step of the sequence with its
+# outcome: ok, skipped (not asked for), FAILED, or not run (asked for, never
+# reached).
+#
+# A signal sent to the script alone is acted on once the command the step is
+# running returns (bash runs a trap only between commands); one sent to the
+# whole process group, as Ctrl-C does, stops that command too.
 # =========================================================================
 set -euo pipefail
 
@@ -204,9 +213,17 @@ export PYTHONDONTWRITEBYTECODE=1
 SCRATCH_SCHEMA="core_build_$$"
 SCRATCH_SCHEMA_CREATED=0
 COPY=""
-CURRENT_STEP="setup"
-STEP_REPORT=()
 STARTED_AT=$SECONDS
+# What is running right now: "setup" (arguments, preflight) until the first
+# step starts, then each step from its start until it returns.  A run that
+# ends while STEP_RUNNING is 1 ended inside CURRENT_STEP, whatever $? says.
+CURRENT_STEP="setup"
+STEP_STARTED=$SECONDS
+STEP_RUNNING=1
+# The signal that stopped the script, if one did (on_signal sets it).
+SIGNALLED=""
+# The sequence this invocation runs (set below, once the steps are checked).
+SEQUENCE=""
 
 # -------------------------------------------------------------------------
 # Reporting
@@ -246,14 +263,52 @@ on_exit() {
     trap - EXIT
     drop_scratch_schema
     local total=$((SECONDS - STARTED_AT))
+    local step var outcome failed_at="" not_run=""
+    [ "$STEP_RUNNING" = 1 ] && failed_at="$CURRENT_STEP"
+    # The summary is the whole sequence, not just the steps that got as far
+    # as reporting: a step that was asked for and never finished is a line
+    # of its own, so it cannot drop out of the summary unnoticed.
     printf '\n[core-build] summary (--profile %s):\n' "$PROFILE" >&2
-    local line
-    for line in "${STEP_REPORT[@]:-}"; do
-        [ -n "$line" ] && printf '  %s\n' "$line" >&2
+    if [ "$failed_at" = setup ]; then
+        printf '  %-14s FAILED  (%ss)\n' setup "$((SECONDS - STEP_STARTED))" >&2
+    fi
+    for step in $SEQUENCE; do
+        var="STEP_RESULT_$step"
+        if [ -n "${!var:-}" ]; then
+            outcome="${!var}"
+        elif ! want_step "$step"; then
+            outcome="skipped"
+        elif [ "$failed_at" = "$step" ]; then
+            outcome="FAILED  ($((SECONDS - STEP_STARTED))s)"
+            [ -n "$SIGNALLED" ] && outcome="$outcome, stopped by SIG$SIGNALLED"
+        else
+            outcome="not run"
+            not_run="${not_run:+$not_run, }$step"
+            # Ended between two steps: the first one it never reached is
+            # where the run stopped.
+            [ -z "$failed_at" ] && failed_at="$step"
+        fi
+        printf '  %-14s %s\n' "$step" "$outcome" >&2
     done
+    # A signal the script has no trap for (SIGUSR1, SIGALRM, ...) still runs
+    # this function, with $? the status of the last command that finished --
+    # 0, as often as not.  A run that did not finish every step it was asked
+    # for is not a success, whatever $? says.
+    if [ "$status" -eq 0 ] && [ -n "$failed_at" ]; then
+        status=1
+    fi
     if [ "$status" -ne 0 ]; then
-        printf '  %-14s FAILED  (%ss)\n' "$CURRENT_STEP" "$((SECONDS - ${STEP_STARTED:-SECONDS}))" >&2
-        printf '\ncore-build: FAILED at step %s (exit %s) after %ss\n' "$CURRENT_STEP" "$status" "$total" >&2
+        if [ -n "$failed_at" ]; then
+            printf '\ncore-build: FAILED at step %s (exit %s) after %ss\n' "$failed_at" "$status" "$total" >&2
+        else
+            printf '\ncore-build: FAILED after its last step (exit %s) after %ss\n' "$status" "$total" >&2
+        fi
+        if [ -n "$SIGNALLED" ]; then
+            printf 'core-build: stopped by SIG%s\n' "$SIGNALLED" >&2
+        fi
+        if [ -n "$not_run" ]; then
+            printf 'core-build: asked for but not run: %s\n' "$not_run" >&2
+        fi
         if [ -n "$COPY" ] && [ -d "$COPY" ]; then
             printf 'core-build: the working copy is kept for inspection: %s\n' "$COPY" >&2
         fi
@@ -270,6 +325,20 @@ on_exit() {
 }
 trap on_exit EXIT
 
+# Without these, SIGTERM or SIGHUP ends bash after running on_exit with $? set
+# to the last command that FINISHED (0, usually), so the summary printed
+# "core-build: OK" with the interrupted step simply missing from it, and the
+# copy was deleted under a step that was still running in it.  SIGINT sent to
+# the script alone was ignored outright whenever the step's command did not
+# die of it.  A trapped signal is recorded and ends the run with 128+n.
+on_signal() {
+    [ -z "$SIGNALLED" ] && SIGNALLED="$1"
+    exit "$2"
+}
+trap 'on_signal HUP 129' HUP
+trap 'on_signal INT 130' INT
+trap 'on_signal TERM 143' TERM
+
 want_step() {
     # No filter: run everything.  With a filter, run only the named steps
     # (copy and strip are forced when the copy does not exist yet).
@@ -284,15 +353,18 @@ run_step() {
     local name="$1"
     if ! want_step "$name"; then
         log "skipping step $name (--steps $STEPS)"
-        STEP_REPORT+=("$(printf '%-14s skipped' "$name")")
         return 0
     fi
     CURRENT_STEP="$name"
     STEP_STARTED=$SECONDS
+    STEP_RUNNING=1
     banner "$name"
     "step_$name"
+    STEP_RUNNING=0
     local elapsed=$((SECONDS - STEP_STARTED))
-    STEP_REPORT+=("$(printf '%-14s ok      (%ss)' "$name" "$elapsed")")
+    # on_exit reads this back by name: a step has a result only once it
+    # has returned.
+    printf -v "STEP_RESULT_$name" 'ok      (%ss)' "$elapsed"
     log "step $name ok in ${elapsed}s"
 }
 
@@ -848,6 +920,7 @@ if [ "$REUSING_COPY" = 1 ]; then
     KEEP=1
     warn "reusing the existing copy $COPY; copy/strip are not re-run"
 fi
+STEP_RUNNING=0   # setup is done
 
 for _step in $SEQUENCE; do
     run_step "$_step"

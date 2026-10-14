@@ -16,11 +16,14 @@ Rows created here are deleted in fixture teardown because the shared test
 database is not truncated between tests.
 """
 
+import os
+import time
 import uuid
 from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy import text
 
 from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.models.analysis_snapshot import AnalysisSnapshot
@@ -121,6 +124,36 @@ def _snapshots(db_session, experiment_id, kind=None):
     if kind:
         query = query.filter(AnalysisSnapshot.kind == kind)
     return query.order_by(AnalysisSnapshot.created_at).all()
+
+
+def _utc_days(rows):
+    """The UTC calendar day of each row's ``as_of``.
+
+    ``as_of`` is stored as an instant, but it comes back in the database
+    session's time zone, not in UTC: with the session in a zone west of UTC,
+    the UTC midnight a row is keyed on reads as an hour of the day before, so
+    ``as_of.date()`` names the wrong day (#1218).
+    """
+    return {r.as_of.astimezone(timezone.utc).date() for r in rows}
+
+
+@pytest.fixture
+def local_time_zone(request):
+    """Run the test with this process in the time zone ``request.param``."""
+    zone = request.param
+    previous = os.environ.get("TZ")
+    os.environ["TZ"] = zone
+    time.tzset()
+    try:
+        # The probe took: the process is not on UTC.
+        assert time.localtime().tm_gmtoff != 0, zone
+        yield zone
+    finally:
+        if previous is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = previous
+        time.tzset()
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +328,52 @@ class TestResultsSrmAndSnapshots:
         assert len(rows) == 3
         assert {r.kind for r in rows} == {"frequentist", "bayesian", "cuped"}
         # Every row sits on the UTC day bucket, which is also the seed bucket.
-        assert {r.as_of.date() for r in rows} == {datetime.now(timezone.utc).date()}
+        assert _utc_days(rows) == {datetime.now(timezone.utc).date()}
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize(
+        "local_time_zone", ["Etc/GMT+12", "Pacific/Kiritimati"], indirect=True
+    )
+    def test_the_day_bucket_is_the_utc_day_in_any_local_time_zone(
+        self, admin_client, db_session, seeded_experiment, local_time_zone
+    ):
+        """A snapshot is keyed on the UTC day, whatever zone reads or writes it.
+
+        The polling test above failed whenever the database session's time
+        zone was west of UTC (#1218): it took ``as_of.date()`` in that zone.
+        The keying itself is UTC.  Here both this process and the session
+        that reads the rows are put in a zone whose date differs from UTC's:
+        UTC-12 before 12:00 UTC, UTC+14 from 10:00 UTC.  Etc/GMT+12 is
+        UTC-12 (the POSIX sign is inverted).
+        """
+        control, treatment = _variants(seeded_experiment)
+        _seed(db_session, seeded_experiment, control, 80, 8)
+        _seed(db_session, seeded_experiment, treatment, 80, 12)
+        for path, params in (
+            ("", {"use_cache": "false"}),
+            ("/bayesian", {}),
+            ("/cuped", {}),
+        ):
+            response = admin_client.get(
+                f"/api/v1/results/{seeded_experiment.id}{path}", params=params
+            )
+            assert response.status_code == 200, response.text
+        today = datetime.now(timezone.utc).date()
+
+        # Read the rows in a session set to the same zone (until the
+        # fixture's rollback ends this transaction).
+        db_session.execute(
+            text("SELECT set_config('TimeZone', :zone, true)"),
+            {"zone": local_time_zone},
+        )
+        assert db_session.execute(text("SHOW TIME ZONE")).scalar() == local_time_zone
+        db_session.expire_all()
+        rows = _snapshots(db_session, seeded_experiment.id)
+
+        assert {r.kind for r in rows} == {"frequentist", "bayesian", "cuped"}
+        assert _utc_days(rows) == {today}
+        utc_midnight = datetime(today.year, today.month, today.day, tzinfo=timezone.utc)
+        assert {r.as_of for r in rows} == {utc_midnight}
 
     def test_experiments_results_route_shares_srm(
         self, admin_client, db_session, seeded_experiment

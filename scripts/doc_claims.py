@@ -159,11 +159,13 @@ its rows (``plan_document`` has the rules): covered rows give targets, from
 
 A target that does not resolve in this tree is printed. Uncovered T, S and A
 rows give ``untested:<tag>``; a unit with no row ``exempt:baseline``; both are
-ledgered. A unit new since SHA gets no entry. An R or X row still on the page
-makes the exit status 1 and that page is not written. A row that does not map
-(some excerpts are not verbatim) is printed for the author to map by hand,
-never dropped; the units on its line get no entry. An audit with no row is
-refused: an empty or cut-off file would otherwise read as "nothing found".
+ledgered. A unit new since SHA gets no entry. An R or X row whose own excerpt
+(normalised as a unit is) is still on the page makes the exit status 1 and that
+page is not written; the units it maps to get no entry either way. A row that
+does not map (some excerpts are not verbatim) is printed for the author to map
+by hand, never dropped; the units on its line get no entry. An audit with no
+row is refused: an empty or cut-off file would otherwise read as "nothing
+found".
 
 ``sync DOC`` prints each unit that is not in the registry beside the
 registered units within a difflib ratio of 0.9 (inputs cut to 2,000
@@ -3206,28 +3208,20 @@ def outside_prose(raw: Sequence[str], visible: Sequence[str], line: int) -> bool
     )
 
 
-def on_page(
-    row: Row,
-    old_lines: Sequence[str],
-    mapped: Sequence[Unit],
-    texts: Mapping[str, int],
-    flat: str,
-) -> bool:
-    """Whether what an R or X row names is still on the page: *texts* are its
-    units now, *flat* its whole text normalised.
+def on_page(row: Row, flat: str) -> bool:
+    """Whether an R or X row's own excerpt is still on the page: *flat* is the
+    page's whole text (fences included), normalised as a unit is.
 
-    Yes when a unit it maps to is still there word for word, when every
-    fragment of its excerpt is, or when its own line at the audit commit is."""
-    if any(u.text in texts for u in mapped):
-        return True
-    found = fragments(row.text)
-    if found and all(f in flat for f in found):
-        return True
-    if 1 <= row.line <= len(old_lines):
-        line = normalise(old_lines[row.line - 1].strip())
-        if len(line) >= 12 and line in flat:
-            return True
-    return False
+    Yes when every fragment of the excerpt (``fragments``: split at an
+    ellipsis and after a sentence, normalised) is in *flat*; an excerpt too
+    short to give a fragment is looked for whole. Nothing else counts (#1189):
+    not the units the row maps to, not the other units on its line, and not
+    its line at the audit commit. Each of those can outlive the excerpt -- a
+    unit that is only the start of an excerpt running into a fence, a fence's
+    first line repeated elsewhere, a sentence sharing the line -- and each
+    used to refuse a page whose false text was already rewritten."""
+    found = fragments(row.text) or [normalise(row.text)]
+    return all(piece and piece in flat for piece in found)
 
 
 @dataclasses.dataclass
@@ -3257,7 +3251,8 @@ def plan_document(resolver: Resolver, document: Document, rows: Sequence[Row]) -
     Rows map to the units of the page at the audit commit by line; a unit whose
     text is unchanged on the page now carries its rows forward:
 
-    * an R or X row still on the page: listed, and no registry is written;
+    * an R or X row whose excerpt is still on the page: listed, and no
+      registry is written;
     * a T, S or A row: ``untested:<tag>`` (the heaviest of A, S, T), ledgered;
     * covered rows: the targets their ``by`` names that resolve here;
     * no row: ``exempt:baseline``, ledgered;
@@ -3298,7 +3293,7 @@ def plan_document(resolver: Resolver, document: Document, rows: Sequence[Row]) -
         inside = outside_prose(old_raw, old_visible, row.line)
         mapped, on_line = ([], []) if inside else units_of_row(old_spans, row)
         if row.tag in MUST_GO:
-            if on_page(row, old_raw, mapped or on_line, on_now, flat):
+            if on_page(row, flat):
                 counts["R/X on the page"] += 1
                 plan.present.append(row.label())
             else:
