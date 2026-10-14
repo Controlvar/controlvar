@@ -48,7 +48,9 @@ because Redis holds only cache and rate-limit state.
 the Aurora retention) and checks the retention, replication and log figures in this table
 against it.
 
-Check what a cluster actually keeps before you rely on it:
+A cluster deployed from an earlier version of the CDK app, which set no retention, keeps
+CloudFormation's default of one day until its database stack is redeployed. Check what a
+cluster actually keeps before you rely on it:
 
 ```bash
 aws rds describe-db-clusters --db-cluster-identifier "$CLUSTER" \

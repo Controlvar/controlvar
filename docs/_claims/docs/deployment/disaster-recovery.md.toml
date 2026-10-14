@@ -100,6 +100,10 @@ text = "infrastructure/tests/test_disaster_recovery_doc.py synthesises the prod 
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "A cluster deployed from an earlier version of the CDK app, which set no retention, keeps CloudFormation's default of one day until its database stack is redeployed."
+by = ["exempt:third-party"]
+
+[[unit]]
 text = "Check what a cluster actually keeps before you rely on it:"
 by = ["exempt:instruction"]
 
