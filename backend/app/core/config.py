@@ -430,6 +430,10 @@ class Settings(BaseSettings):
     # start/end date has passed. The lifespan passes this to it (#484). A
     # value below 1 is refused: 0 would make the loop spin without sleeping.
     EXPERIMENT_SCHEDULER_INTERVAL_MINUTES: int = Field(default=15, ge=1)
+    # The live results stream (websocket_results.py) sends each connected
+    # client a fresh snapshot this often, whatever the client sends (#1193).
+    # Read when a socket connects. Above zero: 0 would send without pause.
+    RESULTS_STREAM_INTERVAL_SECONDS: float = Field(default=30, gt=0)
 
     # Per-IP ceiling for SDK-facing endpoints (/tracking/*, flag evaluation).
     # Far above the 300/min default because one server-side SDK or NAT egress

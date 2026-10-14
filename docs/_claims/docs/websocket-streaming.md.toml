@@ -28,10 +28,11 @@ text = "On connect the server sends an initial snapshot."
 by = ["docex:docs/websocket-streaming.md#\"event\": \"results_update\""]
 
 [[unit]]
-text = "After 30 seconds with no message from the client it sends a fresh one (RESULTS_STREAM_INTERVAL_SECONDS, read when the API starts); a ping or a refresh starts that wait again."
+text = "Then it sends a fresh one every 30 seconds (RESULTS_STREAM_INTERVAL_SECONDS, read when the API starts), whatever the client sends in between."
 by = [
-    "test:backend/tests/unit/api/test_results_stream_interval.py::test_the_interval_is_30_seconds_unless_set_when_the_api_starts",
-    "test:backend/tests/unit/api/test_results_stream_interval.py::test_every_wait_is_the_full_interval_and_a_message_starts_it_again",
+    "test:backend/tests/integration/api/test_websocket_results.py::TestPeriodicSnapshots::test_a_client_that_pings_often_still_gets_snapshots_on_schedule",
+    "test:backend/tests/integration/api/test_websocket_results.py::TestPeriodicSnapshots::test_the_interval_is_30_seconds_by_default",
+    "test:backend/tests/integration/api/test_websocket_results.py::TestPeriodicSnapshots::test_the_interval_is_read_from_the_environment",
 ]
 
 [[unit]]

@@ -817,6 +817,23 @@ class TestPreviewAudience:
         assert response.status_code == 200, response.text
         assert response.json()["sample_size"] <= 45
 
+    def test_preview_refuses_conditions_plus_groups_times_sample_size_over_50000(
+        self, admin_client
+    ):
+        """49 conditions and one group at sample_size 1,000 is 50,000 and is
+        previewed; 50 conditions and one group is 51,000 and is a 422."""
+        seg = _create_segment(admin_client, "Preview Size Segment")
+        for count, expected in ((49, 200), (50, 422)):
+            rules = _rules(*[_eq(f"a{i}", "x") for i in range(count)])
+            response = admin_client.post(
+                f"/api/v1/segments/{seg['id']}/preview?sample_size=1000",
+                json={"name": seg["name"], "rules": rules},
+            )
+            assert response.status_code == expected, response.text
+            if expected == 422:
+                [error] = response.json()["detail"]
+                assert error["loc"] == ["query", "sample_size"]
+
     @pytest.mark.regression
     def test_preview_refuses_a_sample_size_the_match_regex_conditions_exceed(
         self, admin_client

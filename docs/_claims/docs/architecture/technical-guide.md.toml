@@ -1,0 +1,646 @@
+# What verifies each unit of docs/architecture/technical-guide.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/architecture/technical-guide.md"
+
+[[unit]]
+text = "Technical Guide"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Implementation reference for Experimently: authentication, targeting rules, assignment, results, the background schedulers and caching."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The components, and where each request goes, are in the Architecture Overview, and the data models in Data Models."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Authentication System"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Two Authentication Methods"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "1."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Bearer Token (JWT)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Used by human users in the dashboard"
+by = ["test:frontend/src/tests/services/experiments.test.ts::sends the bearer token when one is stored"]
+
+[[unit]]
+text = "Obtained via POST /api/v1/auth/login"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Validated by the API against its own accounts (AUTH_PROVIDER=local, the default); the other provider is described in AWS Cognito Integration"
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestGetCurrentUserLocal::test_valid_token_loads_user_by_id",
+    "test:backend/tests/unit/core/test_config_environment.py::TestAuthSettings::test_defaults",
+]
+
+[[unit]]
+text = "Expires per ACCESS_TOKEN_EXPIRE_MINUTES"
+by = ["test:backend/tests/unit/security/test_security_hardening.py"]
+
+[[unit]]
+text = "Get a token."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The login takes the account's email, not a username; on the Quick Start stack the administrator is admin@demo.com:"
+by = ["test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_success_shape"]
+
+[[unit]]
+text = "Use the token."
+by = ["test:backend/tests/unit/middleware/test_relative_slash_redirect.py"]
+
+[[unit]]
+text = "The experiments collection's URL ends with a slash: without it the API answers 307 Temporary Redirect, which curl does not follow, so nothing is printed."
+by = ["test:backend/tests/unit/middleware/test_relative_slash_redirect.py"]
+
+[[unit]]
+text = "On the Quick Start stack it prints the names of its three demo experiments, among them Checkout Button Color."
+by = ["docex:docs/architecture/technical-guide.md#Checkout Button Color"]
+
+[[unit]]
+text = "If it prints an error from jq instead, the login failed and $TOKEN holds no token."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "2."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "API Key"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Used by SDKs and server-to-server tracking calls"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Static key, stored hashed in DB"
+by = ["test:backend/tests/integration/api/test_api_keys_api.py"]
+
+[[unit]]
+text = "Passed via X-API-Key header"
+by = ["docex:docs/architecture/technical-guide.md#\"variant_name\": \"green_button\""]
+
+[[unit]]
+text = "Required for all /api/v1/tracking/ endpoints"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Any signed-in user, whatever their role, can create a key, and an API key writes tracking data."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key",
+]
+
+[[unit]]
+text = "This creates one with the token above (see API Keys); the full key is shown only in this response:"
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_lists_only_own_keys_without_secret",
+]
+
+[[unit]]
+text = "It prints eptk_, the start of every key."
+by = ["docex:docs/architecture/technical-guide.md#eptk_"]
+
+[[unit]]
+text = "Then assign a user to the Quick Start stack's active checkout_button_color experiment with it."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The body is JSON, so the request says so with Content-Type:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "User u1 is assigned the green_button variant (\"assigned\": true), and keeps it on every later call."
+by = [
+    "docex:docs/architecture/technical-guide.md#\"variant_name\": \"green_button\"",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky",
+]
+
+[[unit]]
+text = "Role-Based Access Control (RBAC)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each role's permissions are listed in RBAC."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Experiments and feature flags: what a user can do depends on their role; the owner is recorded but does not decide access."
+by = [
+    "test:backend/tests/unit/core/test_feature_flag_access_rule.py",
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+]
+
+[[unit]]
+text = "Permission checks in code (both return a bool; the caller raises the 403):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rules Engine"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The rules engine evaluates targeting rules to determine if a user should be included in an experiment or feature flag."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rule Structure"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rules are stored in the shape the dashboard's rule builder writes: a top-level logical_operator combining groups, each group combining its conditions."
+by = [
+    "test:backend/tests/integration/api/test_experiment_targeting_create.py",
+    "test:backend/tests/integration/api/test_experiment_targeting_update.py",
+]
+
+[[unit]]
+text = "An experiment's targeting_rules must use this shape; any other is refused with 422 on create and update."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The operators a stored rule can use are listed under \"Targeting Rules\" in the API endpoints reference."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Assignment Algorithm"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "When a user calls /api/v1/tracking/assign:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Stored assignment: a user who already has one gets it back, unchanged"
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_existing_assignment_is_sticky_when_weights_change",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_sticky_assignment_bypasses_all_eligibility_checks",
+]
+
+[[unit]]
+text = "Eligibility (new users only): the global holdout, then the experiment's mutual exclusion group, then its targeting rules."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_mutual_exclusion_assigns_each_user_to_exactly_one_experiment",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_native_targeting_rules_gate_new_users",
+]
+
+[[unit]]
+text = "An ineligible user gets the control variant with assigned: false, and no assignment is stored"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Traffic split: hash the user with the experiment's key (the first four bytes of MD5(\"{user_id}:{key}\"), little-endian, divided by 2^32: the hash every SDK implements, backend/app/core/consistent_hash.py) → bucket 0-99"
+by = [
+    "test:backend/tests/unit/core/test_consistent_hash.py",
+    "journey:experiment-results#traffic",
+]
+
+[[unit]]
+text = "Variant selection: the bucket picks a variant by the cumulative traffic allocations."
+by = [
+    "journey:experiment-results#traffic",
+    "test:backend/tests/unit/services/test_bandit_routing.py",
+]
+
+[[unit]]
+text = "A bandit experiment routes a new user by its current weights instead"
+by = [
+    "journey:experiment-results#traffic",
+    "test:backend/tests/unit/services/test_bandit_routing.py",
+]
+
+[[unit]]
+text = "Persistence: save the assignment to the assignments table"
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky"]
+
+[[unit]]
+text = "This means:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Assignment is sticky: the stored row is returned on every later call, even after the traffic allocation changes"
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_existing_assignment_is_sticky_when_weights_change"]
+
+[[unit]]
+text = "Consistent across devices (same user_id = same variant)"
+by = ["test:backend/tests/unit/core/test_consistent_hash.py"]
+
+[[unit]]
+text = "No session dependency"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Results Engine"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The results engine computes:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Statistical Methods"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Conversion metrics (Fisher's exact test):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Every metric in the results is analysed as a conversion today"
+by = ["test:backend/tests/unit/services/test_binomial_effect_size.py::test_every_metric_is_a_fisher_test_on_conversions_with_cohens_h"]
+
+[[unit]]
+text = "For each treatment against the control: a 2×2 table of users who converted and users who did not, from the users assigned to each variant"
+by = [
+    "journey:experiment-results#results-api",
+    "test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py",
+]
+
+[[unit]]
+text = "Two-sided Fisher's exact test (scipy.stats.fisher_exact); the response's statistical_test_used is fisher_exact"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Effect size: Cohen's h"
+by = ["test:backend/tests/unit/services/test_binomial_effect_size.py::test_every_metric_is_a_fisher_test_on_conversions_with_cohens_h"]
+
+[[unit]]
+text = "Mean metrics (Welch's t-test):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Used by warehouse analysis (beta, the warehouse module) for a metric that is a mean"
+by = ["test:backend/tests/unit/services/test_mean_metric_result.py"]
+
+[[unit]]
+text = "Welch's t-test for unequal variances; statistical_test_used is welch_t_test"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Effect size: Cohen's d"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Multiple comparisons correction:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each experiment stores a correction method and a confidence level: Benjamini-Hochberg (FDR) at 0.95 by default, Bonferroni or none on request."
+by = [
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_new_experiment_stores_benjamini_hochberg_at_095",
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_superuser_cannot_change_the_settings_once_out_of_draft",
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_the_sample_size_plan_uses_the_stored_settings",
+]
+
+[[unit]]
+text = "The results, the sample-size plan, the export and the report use them; a results request may name another for itself."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Locked once the experiment leaves draft."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "CUPED follows the stored level and correction; sequential testing does not follow the stored level."
+by = [
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_uses_the_stored_confidence_level",
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_c2_the_stored_correction_applies_across_three_treatments",
+]
+
+[[unit]]
+text = "REST Endpoints"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Sample Size"
+by = ["exempt:label"]
+
+[[unit]]
+text = "How a sample size is computed, and the defaults, are in Power Analysis."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Background Schedulers"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Five background jobs start with the API process (lifespan in backend/app/main.py):"
+by = ["test:backend/tests/unit/core/test_lifespan_schedulers.py::test_lifespan_starts_and_stops_them_outside_tests"]
+
+[[unit]]
+text = "Scheduler | Default cycle | Responsibility"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Experiment scheduler | EXPERIMENT_SCHEDULER_INTERVAL_MINUTES (15) | Starts draft experiments at start_date, resumes paused ones at a scheduled resume_at, stops experiments at end_date"
+by = [
+    "test:backend/tests/unit/core/test_experiment_scheduler_interval.py",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py",
+]
+
+[[unit]]
+text = "Rollout scheduler | ROLLOUT_CHECK_INTERVAL_MINUTES (15) | Advances feature-flag rollout stages"
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_interval_defaults_come_from_settings",
+]
+
+[[unit]]
+text = "Metrics scheduler | 15 min | Aggregates raw metrics"
+by = [
+    "test:backend/tests/unit/core/test_metrics_scheduler.py::test_the_scheduler_the_api_starts_runs_every_15_minutes",
+    "test:backend/tests/unit/core/test_metrics_scheduler.py::test_scheduler_aggregate_metrics",
+]
+
+[[unit]]
+text = "Safety monitor | SAFETY_CHECK_INTERVAL_MINUTES (5) | Checks each active feature flag against its safety thresholds; rolls one back when automatic rollbacks are on"
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_no_rollback_when_automatic_rollbacks_disabled",
+]
+
+[[unit]]
+text = "Bandit scheduler | BANDIT_UPDATE_INTERVAL_MINUTES (5) | Recomputes multi-armed bandit weights (DynamoDB counters when their pulls and successes are at least PostgreSQL's, else PostgreSQL)"
+by = ["test:backend/tests/unit/services/test_bandit_scheduler.py"]
+
+[[unit]]
+text = "Experiment Scheduler (every EXPERIMENT_SCHEDULER_INTERVAL_MINUTES, default 15)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Transitions experiments based on start_date, resume_at and end_date:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "DRAFT + start_date ≤ now → ACTIVE"
+by = [
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p6_due_draft_activates",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p2_scheduled_resume_is_recorded_and_fires",
+]
+
+[[unit]]
+text = "PAUSED + resume_at ≤ now → ACTIVE (the notification says \"resumed automatically\")"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "ACTIVE + end_date ≤ now → COMPLETED"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A paused experiment's start_date is when it first started and never resumes it: a PAUSED experiment with no resume_at stays paused, across ticks and restarts, until someone starts it."
+by = [
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p1_paused_experiment_with_past_start_stays_paused",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p5_status_change_clears_the_resume",
+    "test:backend/tests/integration/database/test_experiment_resume_at_migration.py",
+]
+
+[[unit]]
+text = "PUT /schedule on a PAUSED experiment stores its start_date as resume_at and leaves the experiment's own start_date alone."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Any change of status clears resume_at (an ORM listener on Experiment.status), and a database constraint (ck_experiments_resume_only_when_paused) refuses a resume_at on any status but PAUSED."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Rollout Scheduler (every ROLLOUT_CHECK_INTERVAL_MINUTES, default 15)"
+by = ["test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults"]
+
+[[unit]]
+text = "Advances feature flag rollout stages:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Activates TIME_BASED stages once their start_date has passed (a stage never starts early, even when the previous stage has completed)"
+by = ["test:backend/tests/unit/core/test_rollout_scheduler_tz.py::TestNaiveStageTimestamps::test_future_naive_start_date_is_not_eligible"]
+
+[[unit]]
+text = "Completes an IN_PROGRESS stage after its trigger_configuration.duration hours (default 24)"
+by = ["test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_is_stage_eligible_for_completion"]
+
+[[unit]]
+text = "Updates rollout_percentage on FeatureFlag"
+by = [
+    "journey:feature-flag-rollout#at-ten",
+    "journey:feature-flag-rollout#status",
+]
+
+[[unit]]
+text = "Transitions stage status: PENDING → IN_PROGRESS → COMPLETED"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Safety Monitor (every SAFETY_CHECK_INTERVAL_MINUTES, default 5)"
+by = ["test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults"]
+
+[[unit]]
+text = "Checks every active feature flag against its thresholds: those of its own safety configuration or, when it has none, the global defaults."
+by = [
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_a_flag_with_its_own_configuration_is_checked_against_its_own_thresholds_only",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+]
+
+[[unit]]
+text = "A flag whose configuration has enabled: false is skipped."
+by = [
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestCheckFeatureFlagSafety::test_disabled_config_is_healthy_with_no_metrics",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestShouldRollback::test_config_disabled_returns_false",
+]
+
+[[unit]]
+text = "For each other flag it:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "reads error metrics from error_logs and latency metrics from raw_metrics, over the last 15 minutes;"
+by = [
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_the_check_reads_the_last_15_minutes_of_errors_and_latency",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetErrorMetrics::test_computes_rate_and_error_type_breakdown",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetLatencyMetrics::test_computes_real_latency_statistics",
+]
+
+[[unit]]
+text = "compares each configured metric against its thresholds;"
+by = ["test:backend/tests/integration/services/test_safety_service_coverage.py::TestCheckFeatureFlagSafety::test_error_rate_metric_breaches_critical_threshold"]
+
+[[unit]]
+text = "when automatic rollbacks are on and a critical threshold is breached, rolls the flag back to its rollback_percentage and records a SafetyRollbackRecord."
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_no_rollback_when_automatic_rollbacks_disabled",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+]
+
+[[unit]]
+text = "How to configure it, which errors count and what a rollback changes are in Safety Monitoring."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Bandit Scheduler (every BANDIT_UPDATE_INTERVAL_MINUTES)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Recomputes variant weights for multi-armed bandit experiments and persists them in bandit_state; POST /api/v1/tracking/assign routes new users by those weights."
+by = [
+    "test:backend/tests/unit/services/test_bandit_routing.py",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py",
+]
+
+[[unit]]
+text = "See Multi-Armed Bandit."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Caching Architecture"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What the API keeps in Redis is listed under \"Redis (ElastiCache)\" in the Architecture Overview."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Cache Invalidation"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Invalidate results cache for an experiment:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Feature flags need no invalidation: the API reads the flag list, a flag's detail and its evaluation from the database on every request."
+by = [
+    "test:backend/tests/smoke/test_no_flag_cache.py::test_flag_routes_do_not_depend_on_the_cache",
+    "test:backend/tests/integration/api/test_flag_reads_after_writers.py",
+]
+
+[[unit]]
+text = "The Database and its Migrations"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The schema, the models and the constraints the database enforces are in Data Models."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "A new migration is written as Creating New Migrations says."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "API Conventions"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Each route's request, response and status codes are in the API reference at /api/v1/docs."
+by = [
+    "test:backend/tests/unit/models/test_fast_api_setup.py::test_api_docs_available",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Use Cases"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Targeting High-Value Users"
+by = ["exempt:example"]
+
+[[unit]]
+text = "Scenario: Only run an experiment for users on a paid plan, in the US/EU, who have been active in the last 30 days."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An experiment's groups do not nest, so \"and either of these two\" is written as two groups joined by OR, each carrying the shared conditions:"
+by = ["test:backend/tests/unit/core/test_experiment_targeting_validation.py::test_refused"]
+
+[[unit]]
+text = "Pass the user's attributes as the context of POST /api/v1/tracking/assign:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Performance Characteristics"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What decides throughput today:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Each API container runs one uvicorn worker process (WEB_CONCURRENCY, which defaults to 1 in the image, both compose files and the Helm chart; the AWS task definition does not set it)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_api_workers_and_scaling.py::test_the_image_compose_files_and_chart_default_to_one_worker",
+    "test:backend/tests/unit/infrastructure/test_api_workers_and_scaling.py::test_the_aws_stacks_do_not_set_it",
+    "test:backend/tests/unit/scripts/test_entrypoint_seed_force_and_workers.py::test_web_concurrency_is_the_number_of_uvicorn_workers",
+]
+
+[[unit]]
+text = "In that process, most SDK routes (a single assignment, event tracking and flag evaluation) do their database work one request at a time (#823)."
+by = ["test:backend/tests/unit/api/test_sdk_routes_run_on_the_event_loop.py::test_each_route_is_a_coroutine_that_takes_the_synchronous_session"]
+
+[[unit]]
+text = "So throughput grows with the number of API tasks or replicas, not with the number of requests sent at once to one of them: on AWS the service's task count (its floor is API_DESIRED_COUNT in infrastructure/cdk/app.py), with the Helm chart api.replicaCount."
+by = [
+    "test:backend/tests/unit/infrastructure/test_api_workers_and_scaling.py::test_the_api_task_count_and_its_floor_are_api_desired_count",
+    "test:backend/tests/unit/infrastructure/test_api_workers_and_scaling.py::test_the_chart_runs_api_replica_count_api_pods",
+    "test:backend/tests/unit/api/test_sdk_routes_run_on_the_event_loop.py::test_each_route_is_a_coroutine_that_takes_the_synchronous_session",
+]
+
+[[unit]]
+text = "Infrastructure (AWS)"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "What the AWS stacks create, and how a request reaches the API and the dashboard, is in Architecture on AWS."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Monitoring & Observability"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Metrics"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The metrics the API exports, and the CloudWatch dashboards and alarms, are in Monitoring and Observability."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Log Structure"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The fields on each log line are in Logging Standards."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Dashboards"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Scheduler health: http://localhost:8000/api/v1/docs#/Scheduler%20Health"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "CloudWatch: the API's log group, /ecs/experimentation-backend-<env>"
+by = ["test:infrastructure/tests/test_standing_alarms.py::test_the_error_filter_is_on_the_api_tasks_log_group"]
+
+[[unit]]
+text = "Health: http://localhost:8000/health"
+by = ["test:backend/tests/unit/core/test_health_endpoints.py"]

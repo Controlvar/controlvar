@@ -17,6 +17,7 @@ Usage:
 """
 
 import argparse
+import copy
 import os
 import random
 import sys
@@ -733,6 +734,39 @@ def seed_recommendation_mab_experiment(db, admin_user) -> Experiment:
 # Feature Flags
 # ---------------------------------------------------------------------------
 
+# Safety thresholds in the shape the safety check reads (``MetricThreshold``,
+# backend/app/schemas/safety.py): an error rate above 5% is critical. Both
+# new_dashboard_ui's safety config and the global ``default_metrics`` use it.
+SAFETY_METRICS = {
+    "error_rate": {
+        "critical_threshold": 0.05,
+        "comparison_type": "greater_than",
+    }
+}
+
+# What this seed wrote before #1205. ``MetricThreshold`` reads none of these
+# keys, so the check saw no threshold at all. A re-run replaces exactly this
+# value and leaves any other alone.
+UNREAD_SAFETY_METRICS = {
+    "error_rate": {
+        "threshold": 0.05,
+        "window_minutes": 10,
+        "comparison": "greater_than",
+    }
+}
+
+
+def replace_unread_safety_metrics(row, column: str) -> bool:
+    """Set ``row.<column>`` to ``SAFETY_METRICS`` if it holds the unread keys.
+
+    Returns True when it changed the row. A row with any other value,
+    including one changed on the dashboard, is left as it is.
+    """
+    if row is None or getattr(row, column) != UNREAD_SAFETY_METRICS:
+        return False
+    setattr(row, column, copy.deepcopy(SAFETY_METRICS))
+    return True
+
 
 def seed_feature_flags(db, admin_user) -> dict:
     """Seed new_dashboard_ui and beta_features feature flags."""
@@ -744,7 +778,18 @@ def seed_feature_flags(db, admin_user) -> dict:
     existing1 = db.query(FeatureFlag).filter(FeatureFlag.key == key1).first()
     if existing1:
         flags[key1] = existing1
-        print(f"    '{key1}' already exists, skipping.")
+        config1 = (
+            db.query(FeatureFlagSafetyConfig)
+            .filter(FeatureFlagSafetyConfig.feature_flag_id == existing1.id)
+            .first()
+        )
+        if replace_unread_safety_metrics(config1, "metrics"):
+            print(
+                f"    '{key1}' already exists; rewrote its safety thresholds "
+                "in the shape the safety check reads."
+            )
+        else:
+            print(f"    '{key1}' already exists, skipping.")
     else:
         flag1 = FeatureFlag(
             key=key1,
@@ -815,13 +860,7 @@ def seed_feature_flags(db, admin_user) -> dict:
         safety_cfg = FeatureFlagSafetyConfig(
             feature_flag_id=flag1.id,
             enabled=True,
-            metrics={
-                "error_rate": {
-                    "threshold": 0.05,
-                    "window_minutes": 10,
-                    "comparison": "greater_than",
-                }
-            },
+            metrics=copy.deepcopy(SAFETY_METRICS),
             rollback_percentage=0,
         )
         db.add(safety_cfg)
@@ -1028,18 +1067,19 @@ def seed_safety_settings(db):
 
     existing = db.query(SafetySettings).first()
     if existing:
-        print("    Safety settings already exist, skipping.")
+        if replace_unread_safety_metrics(existing, "default_metrics"):
+            db.commit()
+            print(
+                "    Safety settings already exist; rewrote their default "
+                "thresholds in the shape the safety check reads."
+            )
+        else:
+            print("    Safety settings already exist, skipping.")
         return
 
     settings_obj = SafetySettings(
         enable_automatic_rollbacks=True,
-        default_metrics={
-            "error_rate": {
-                "threshold": 0.05,
-                "window_minutes": 10,
-                "comparison": "greater_than",
-            }
-        },
+        default_metrics=copy.deepcopy(SAFETY_METRICS),
     )
     db.add(settings_obj)
     db.commit()

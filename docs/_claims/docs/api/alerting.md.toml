@@ -17,7 +17,7 @@ by = [
 
 [[unit]]
 text = "Email is sent only by the test route described on this page."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_notification_delivery_rules.py::test_only_the_test_route_sends_email"]
 
 [[unit]]
 text = "Notification failure is always non-fatal — if a Slack message or email cannot be sent, the platform operation that triggered it continues normally and the failure is logged."
@@ -64,7 +64,11 @@ by = [
 
 [[unit]]
 text = "Scheduled experiment change | ✅ | ❌ | The scheduler started, resumed or completed an experiment; the start, pause and complete routes send nothing"
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_notification_delivery_rules.py::test_scheduled_changes_go_to_slack_and_no_route_sends_a_notification",
+    "test:backend/tests/unit/schedulers/test_scheduler_notifications.py::TestExperimentSchedulerNotifications::test_experiment_started_calls_notify",
+    "test:backend/tests/unit/schedulers/test_scheduler_notifications.py::TestExperimentSchedulerNotifications::test_experiment_completed_calls_notify",
+]
 
 [[unit]]
 text = "Rollout stage advance | ✅ | ❌ | Rollout schedule progressed to next stage"
@@ -79,7 +83,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "These are settings of the API process: put them in its environment (on the Quick Start stack, the api service's environment: in docker-compose.yml), then restart it."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_notification_delivery_rules.py::test_the_settings_are_read_from_the_api_process_environment"]
 
 [[unit]]
 text = "Both channels are off until you turn them on."
@@ -102,7 +106,10 @@ by = ["test:backend/tests/unit/services/test_slack_notifier.py"]
 
 [[unit]]
 text = "SLACK_DEFAULT_CHANNEL | The channel every event's message goes to (default #platform-alerts)."
-by = ["test:backend/tests/unit/services/test_slack_notifier.py::TestSendMessage::test_send_message_uses_default_channel"]
+by = [
+    "test:backend/tests/unit/services/test_slack_notifier.py::TestSendMessage::test_send_message_uses_default_channel",
+    "test:backend/tests/unit/services/test_notification_delivery_rules.py::test_every_slack_message_goes_to_the_default_channel",
+]
 
 [[unit]]
 text = "EMAIL_ENABLED | true turns email on; the default is false."
@@ -117,23 +124,23 @@ by = [
 
 [[unit]]
 text = "SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD | The SMTP server (port 587 by default)."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_notification_delivery_rules.py::test_smtp_uses_port_587_by_default"]
 
 [[unit]]
 text = "EMAIL_FROM_ADDRESS, EMAIL_FROM_NAME | The sender of every email."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_notification_delivery_rules.py::test_every_email_is_sent_from_the_configured_sender"]
 
 [[unit]]
 text = "NOTIFICATION_ADMIN_EMAILS | A JSON array of addresses. No notification is sent to them."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_notification_delivery_rules.py::test_admin_emails_are_a_json_array_and_are_never_sent_to"]
 
 [[unit]]
 text = "NOTIFICATION_ADMIN_EMAILS is a JSON array."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_notification_delivery_rules.py::test_admin_emails_are_a_json_array_and_are_never_sent_to"]
 
 [[unit]]
 text = "A plain comma-separated list stops the API from starting, with error parsing value for field \"NOTIFICATION_ADMIN_EMAILS\"."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_notification_delivery_rules.py::test_a_comma_separated_admin_email_list_stops_the_api_from_starting"]
 
 [[unit]]
 text = "Notification Preferences API"
@@ -148,7 +155,10 @@ by = [
 
 [[unit]]
 text = "The preferences are stored and returned; sending does not read them, so every event's Slack message goes to SLACK_DEFAULT_CHANNEL."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_notification_delivery_rules.py::test_preferences_are_not_read_when_sending",
+    "test:backend/tests/unit/services/test_notification_delivery_rules.py::test_every_slack_message_goes_to_the_default_channel",
+]
 
 [[unit]]
 text = "Only the test notification below can name another channel."
@@ -204,7 +214,7 @@ by = ["docex:docs/api/alerting.md#\"notify_rollout_advanced\": true"]
 
 [[unit]]
 text = "The fields are notify_experiment_started, notify_experiment_completed, notify_safety_rollback, notify_rollout_advanced, slack_channel and email_override; any other field is ignored."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_notification_delivery_rules.py::test_the_preference_fields_and_any_other_field_is_ignored"]
 
 [[unit]]
 text = "GET /api/v1/notifications/admin/preferences"
@@ -310,11 +320,11 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "View own preferences | Any authenticated user"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_notification_delivery_rules.py::test_any_signed_in_user_reads_and_updates_their_own_preferences"]
 
 [[unit]]
 text = "Update own preferences | Any authenticated user"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_notification_delivery_rules.py::test_any_signed_in_user_reads_and_updates_their_own_preferences"]
 
 [[unit]]
 text = "Send test notification | DEVELOPER"

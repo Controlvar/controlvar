@@ -74,11 +74,14 @@ by = [
 
 [[unit]]
 text = "Each role has a specific set of permissions that determine what actions they can perform on various resources."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_the_role_decides_which_operations_are_available"]
 
 [[unit]]
 text = "The Admin role is not a superuser."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_the_admin_role_is_not_a_superuser",
+    "test:frontend/src/tests/admin/withAdminGuard.test.tsx::refuses a non-superuser by default, whatever their role",
+]
 
 [[unit]]
 text = "Managing user accounts (/api/v1/admin/users), global safety settings, and a flag's per-flag safety config (error-rate and latency thresholds, rollback percentage) and its rollback are gated on the separate is_superuser account flag, not on a role: an Admin without it is refused these the same as any other role."
@@ -90,7 +93,11 @@ by = [
 
 [[unit]]
 text = "The dashboard's Users, API Keys, Safety settings and Roles pages also require a superuser."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_the_users_api_keys_and_safety_pages_need_a_superuser",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_roles_page_needs_a_superuser",
+    "test:frontend/src/tests/admin/withAdminGuard.test.tsx::refuses a non-superuser by default, whatever their role",
+]
 
 [[unit]]
 text = "Through the API, the Admin role alone may list and delete other users' API keys (GET /api/v1/api-keys?all=true, DELETE /api/v1/api-keys/{id}) and manage custom Roles; only the dashboard pages for those need the superuser flag."
@@ -203,7 +210,7 @@ by = ["test:modules/backend/tests/unit/api/test_rbac_integration.py::TestRBACInt
 
 [[unit]]
 text = "The User column is ROLE_PERMISSIONS' entry for the User resource (backend/app/core/permissions.py); it is not what the dashboard or the /api/v1/admin/ routes enforce."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_the_admin_role_is_not_a_superuser"]
 
 [[unit]]
 text = "Those routes -- list, read, update, delete and deactivate a user, and the dashboard's Users page -- depend on deps.get_current_superuser directly and ignore this table entirely: an Admin without is_superuser gets a 403 from every one of them, the same as every other role."
@@ -218,7 +225,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "A user who creates a resource is recorded as its owner."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_feature_flag_ownership.py::TestCreatePersistsOwner::test_creator_is_recorded_as_owner_and_manages_the_flag"]
 
 [[unit]]
 text = "What that record decides depends on the resource."
@@ -246,7 +253,7 @@ by = ["test:backend/tests/unit/api/v1/endpoints/test_experiment_permissions.py::
 
 [[unit]]
 text = "Who owns the experiment is not considered."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller"]
 
 [[unit]]
 text = "Changing one -- PUT /{experiment_id}, schedule, start, pause, complete, archive and metadata -- needs the role's READ and UPDATE on experiments."
@@ -257,7 +264,7 @@ by = [
 
 [[unit]]
 text = "Who owns the experiment is not considered, so ANALYST and VIEWER change no experiment, including one they own."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller"]
 
 [[unit]]
 text = "Deleting one (DELETE /{experiment_id}) needs the role's READ and DELETE on experiments, and the experiment must be in DRAFT."
@@ -265,7 +272,7 @@ by = ["test:backend/tests/unit/api/v1/endpoints/test_experiment_permissions.py::
 
 [[unit]]
 text = "Who owns the experiment is not considered: ADMIN and DEVELOPER may delete any DRAFT experiment."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller"]
 
 [[unit]]
 text = "A clone (POST /{experiment_id}/clone) needs READ on the source and the role's CREATE on experiments."

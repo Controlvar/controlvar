@@ -169,7 +169,7 @@ This means:
 
 ## Results Engine
 
-The analytics results engine (`backend/app/services/analysis_service.py`) computes:
+The results engine computes:
 
 ### Statistical Methods
 
@@ -218,9 +218,9 @@ Five background jobs start with the API process (`lifespan` in `backend/app/main
 | Scheduler | Default cycle | Responsibility |
 |-----------|---------------|----------------|
 | Experiment scheduler | `EXPERIMENT_SCHEDULER_INTERVAL_MINUTES` (15) | Starts draft experiments at `start_date`, resumes paused ones at a scheduled `resume_at`, stops experiments at `end_date` |
-| Rollout scheduler | 15 min | Advances feature-flag rollout stages |
+| Rollout scheduler | `ROLLOUT_CHECK_INTERVAL_MINUTES` (15) | Advances feature-flag rollout stages |
 | Metrics scheduler | 15 min | Aggregates raw metrics |
-| Safety monitor | 5 min | Checks per-flag safety thresholds, triggers rollbacks |
+| Safety monitor | `SAFETY_CHECK_INTERVAL_MINUTES` (5) | Checks each active feature flag against its safety thresholds; rolls one back when automatic rollbacks are on |
 | Bandit scheduler | `BANDIT_UPDATE_INTERVAL_MINUTES` (5) | Recomputes multi-armed bandit weights (DynamoDB counters when their pulls and successes are at least PostgreSQL's, else PostgreSQL) |
 
 ### Experiment Scheduler (every `EXPERIMENT_SCHEDULER_INTERVAL_MINUTES`, default 15)
@@ -246,7 +246,7 @@ PUT /api/v1/experiments/{id}/schedule
 }
 ```
 
-### Rollout Scheduler (every 15 min)
+### Rollout Scheduler (every `ROLLOUT_CHECK_INTERVAL_MINUTES`, default 15)
 
 Advances feature flag rollout stages:
 - Activates `TIME_BASED` stages once their `start_date` has passed (a stage never starts early, even
@@ -255,26 +255,19 @@ Advances feature flag rollout stages:
 - Updates `rollout_percentage` on FeatureFlag
 - Transitions stage status: `PENDING → IN_PROGRESS → COMPLETED`
 
-### Safety Monitor (every 5 min)
+### Safety Monitor (every `SAFETY_CHECK_INTERVAL_MINUTES`, default 5)
 
-Monitors active feature flags that have an enabled safety configuration:
-- Reads error metrics from `error_logs` and latency metrics from `raw_metrics`
-- Compares each configured metric against its thresholds
-- Rolls the flag back to its `rollback_percentage` when a critical threshold is breached
-- Records a `SafetyRollbackRecord`
+Checks every active feature flag against its thresholds: those of its own safety configuration
+or, when it has none, the global defaults. A flag whose configuration has `enabled: false` is
+skipped. For each other flag it:
+- reads error metrics from `error_logs` and latency metrics from `raw_metrics`, over the last 15
+  minutes;
+- compares each configured metric against its thresholds;
+- when automatic rollbacks are on and a critical threshold is breached, rolls the flag back to
+  its `rollback_percentage` and records a `SafetyRollbackRecord`.
 
-```python
-# Configure safety for a feature flag
-POST /api/v1/safety/feature-flags/{feature_flag_id}/config
-{
-  "enabled": true,
-  "metrics": {
-    "error_rate": {"warning_threshold": 0.02, "critical_threshold": 0.05, "comparison_type": "greater_than"},
-    "p95_latency": {"warning_threshold": 300, "critical_threshold": 500, "comparison_type": "greater_than"}
-  },
-  "rollback_percentage": 0
-}
-```
+How to configure it, which errors count and what a rollback changes are in
+[Safety Monitoring](../feature-flags/safety.md).
 
 ### Bandit Scheduler (every `BANDIT_UPDATE_INTERVAL_MINUTES`)
 
@@ -320,12 +313,12 @@ Each route's request, response and status codes are in the API reference at
 
 ## Use Cases
 
-### Use Case 3: Targeting High-Value Users
+### Targeting High-Value Users
 
 **Scenario:** Only run an experiment for users on a paid plan, in the US/EU, who have been active in the last 30 days.
 
-Groups do not nest, so "and either of these two" is written as two groups joined
-by `OR`, each carrying the shared conditions:
+An experiment's groups do not nest, so "and either of these two" is written as two
+groups joined by `OR`, each carrying the shared conditions:
 
 ```json
 {
@@ -373,48 +366,9 @@ Pass the user's attributes as the `context` of `POST /api/v1/tracking/assign`:
 
 ---
 
-### Use Case 4: Safety-Gated Feature Flag
-
-**Scenario:** New payment provider integration with auto-rollback if error rate > 2%.
-
-```python
-# Create flag
-POST /api/v1/feature-flags
-{"key": "new-payment-provider", "rollout_percentage": 5}
-
-# Configure safety monitoring
-POST /api/v1/safety/feature-flags/{feature_flag_id}/config
-{
-  "feature_flag_id": "FLAG_ID",
-  "max_error_rate": 0.02,     # 2% error rate triggers rollback
-  "max_latency_p99": 2000,    # 2s p99 latency threshold
-  "window_seconds": 300,      # Monitor over 5-minute windows
-  "auto_rollback": true,
-  "rollback_percentage": 0    # Roll back to 0% on trigger
-}
-
-# Track errors in your payment service
-POST /api/v1/tracking/track
-{
-  "event_type": "payment_error",
-  "user_id": "user-123",
-  "feature_flag_key": "new-payment-provider",
-  "value": 1
-}
-```
-
-If the error threshold is breached, the safety monitor rolls the flag back to its configured
-`rollback_percentage` and creates a rollback record. A target of `0` (the default) turns the flag off for
-every user, including users matched by a targeting rule; a target from 1 to 100 lowers only the global
-rollout percentage. Either way the flag's active rollout schedule is paused. See
-[What a rollback changes](../feature-flags/safety.md#what-a-rollback-changes).
-
----
-
 ## Performance Characteristics
 
-This page publishes no throughput or latency figure: none has been measured on a
-deployment. What decides throughput today:
+What decides throughput today:
 
 - Each API container runs one uvicorn worker process (`WEB_CONCURRENCY`, which defaults to `1`
   in the image, both compose files and the Helm chart; the AWS task definition does not set it).
@@ -436,15 +390,10 @@ What the AWS stacks create, and how a request reaches the API and the dashboard,
 
 ## Monitoring & Observability
 
-### Key Metrics (CloudWatch)
+### Metrics
 
-- `api.request.duration` — p50, p95, p99 per endpoint
-- `rules.evaluation.duration` — rules engine latency
-- `assignment.throughput` — assignments per second
-- `event.ingestion.rate` — events per second
-- `feature_flag.evaluation.rate` — evaluations per second
-- `db.query.duration` — query latency
-- `cache.hit_rate` — cache efficiency
+The metrics the API exports, and the CloudWatch dashboards and alarms, are in
+[Monitoring and Observability](../self-hosting/monitoring.md).
 
 ### Log Structure
 
