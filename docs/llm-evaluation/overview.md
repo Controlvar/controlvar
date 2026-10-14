@@ -32,9 +32,13 @@ API with the key in `GEMINI_API_KEY`, and `GEMINI_BASE_URL` (default
 `summarization`, `code_generation` or `embedding`.
 
 `evaluation_metric` is one of `business_metric`, `human_rating`, `latency`, `cost`,
-`accuracy`, `relevance` or `fluency`. It does not choose the winner: the winner is always
-the variant with the highest mean business metric, or, with no business metric, the highest
-mean auto-eval score.
+`accuracy`, `relevance` or `fluency`. It does not choose the winner: the results compare
+every variant on one metric, named in `winner_metric`, and the winner is the variant with the
+highest mean on it. The metric is `business_metric` when every variant has at least one
+business-metric value; otherwise it is `auto_eval`, compared across the variants that have an
+auto-eval score. A variant with no evaluations at all has no business-metric value, so it
+keeps the experiment off `business_metric`. `winner_metric` is null when no variant has a
+value for the chosen metric.
 
 ---
 
@@ -91,5 +95,8 @@ Results include:
   the interval uses the exact t critical value at n - 1 degrees of freedom
 - **A p-value** (treatment vs control) from Welch's t-test: the exact two-tailed value from
   the t distribution at the Welch-Satterthwaite degrees of freedom, at every sample size
-- **Cohen's d effect size** for business metric and auto-eval score
-- **Winner determination** based on the highest mean business metric (falls back to auto-eval score)
+- **Cohen's d effect size** (each treatment vs control) on the metric `winner_metric` names,
+  like the p-value
+- **Winner determination** on one metric for every variant, named in `winner_metric`
+  (`business_metric` or `auto_eval`, as above, or null when no variant has a value for the
+  chosen metric); each variant's p-value and effect size are on that metric
