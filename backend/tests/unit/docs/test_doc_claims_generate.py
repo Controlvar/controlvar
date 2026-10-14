@@ -776,6 +776,193 @@ def test_generate_exits_1_and_writes_nothing_while_r_or_x_is_on_the_page(
     assert not (root / dc.LEDGER).exists()
 
 
+# ---------------------------------------------------------------------------
+# An R or X row is judged by its own excerpt (#1189)
+# ---------------------------------------------------------------------------
+OLD_ENDPOINTS = """# Endpoints
+
+## Read a flag
+
+- **Response**: 200 OK
+
+```json
+{"cached": true, "ttl": 300}
+```
+
+## List flags
+
+- **Response**: 200 OK
+
+```json
+{"items": []}
+```
+
+## Delete a flag
+
+```text
+### 404 Not Found
+The flag comes back after a day.
+```
+
+## Errors
+
+```text
+### 404 Not Found
+No flag has that key.
+```
+
+Flags are read from the database. Reads take 5 ms.
+"""
+
+#: The same page with each false line rewritten. What the rows below also
+#: stood on is still there: "- **Response**: 200 OK" twice, "### 404 Not
+#: Found" in two fences, and the first sentence of the last line.
+NOW_ENDPOINTS = (
+    OLD_ENDPOINTS.replace('{"cached": true, "ttl": 300}', '{"key": "beta"}')
+    .replace("The flag comes back after a day.", "The flag is gone for good.")
+    .replace("Reads take 5 ms.", "Reads wait for the database.")
+)
+
+#: (id, the line's needle, the excerpt): each excerpt is gone from the page
+#: now, but something else the row stood on is not.
+REWRITTEN_ROWS = [
+    (
+        "runs into a fence after a unit that is unchanged",
+        "- **Response**: 200 OK",
+        '- **Response**: 200 OK\n```json\n{"cached": true, "ttl": 300}',
+    ),
+    (
+        "on a fence whose first line repeats",
+        "### 404 Not Found",
+        "### 404 Not Found\nThe flag comes back after a day.",
+    ),
+    (
+        "on a line it shares with an unchanged sentence",
+        "Reads take 5 ms.",
+        "Flags are read from the database. Reads take 5 ms.",
+    ),
+    (
+        "not verbatim, on a line it shares with an unchanged sentence",
+        "Reads take 5 ms.",
+        "reads are answered in 5ms",
+    ),
+]
+
+
+def endpoints_tree(root: Path, now: str) -> Path:
+    return build(root, {**FILES, "docs/guide.md": now})
+
+
+def endpoints_old():
+    return old_texts(**{"docs/guide.md": OLD_ENDPOINTS})
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("tag", ["R", "X"])
+@pytest.mark.parametrize(
+    "needle, excerpt",
+    [r[1:] for r in REWRITTEN_ROWS],
+    ids=[r[0] for r in REWRITTEN_ROWS],
+)
+def test_a_row_whose_excerpt_is_gone_lets_the_page_be_written(
+    tmp_path, capsys, tag, needle, excerpt
+):
+    """The page is written once the row's own excerpt has left it.
+
+    It used to be refused while a unit the row mapped to, another unit on its
+    line, or its line at the audit commit was still somewhere on the page,
+    however the false text itself had been rewritten.
+    """
+    root = endpoints_tree(tmp_path, NOW_ENDPOINTS)
+    audit = [row(needle, tag=tag, text=excerpt, old=OLD_ENDPOINTS)]
+    assert generate(root, audit, old_text=endpoints_old()) == 0
+    out = capsys.readouterr().out
+    assert "STILL ON THE PAGE" not in out, out
+    assert "R/X on the page 0 (gone 1)" in out, out
+    assert (root / dc.registry_path("docs/guide.md")).is_file()
+
+
+@pytest.mark.parametrize(
+    "needle, excerpt",
+    [r[1:] for r in REWRITTEN_ROWS[:3]]
+    + [("- **Response**: 200 OK", '**Response**: 200 OK ... "ttl": 300')],
+    ids=[r[0] for r in REWRITTEN_ROWS[:3]] + ["split by an ellipsis"],
+)
+def test_a_row_whose_excerpt_is_still_there_stops_the_page(
+    tmp_path, capsys, needle, excerpt
+):
+    """The same rows on the page before the rewrite: each excerpt is on it
+    (normalised as a unit is, fences included), so nothing is written."""
+    root = endpoints_tree(tmp_path, OLD_ENDPOINTS)
+    audit = [row(needle, tag="R", text=excerpt, old=OLD_ENDPOINTS)]
+    assert generate(root, audit, old_text=endpoints_old()) == 1
+    out = capsys.readouterr().out
+    assert "R OR X STILL ON THE PAGE" in out, out
+    assert "R/X on the page 1 (gone 0)" in out, out
+    assert not (root / dc.registry_path("docs/guide.md")).exists()
+
+
+#: A page whose false lines are outside prose: a front-matter key and an HTML
+#: comment. Neither holds a unit, so ``check`` has nothing to report there.
+OLD_HIDDEN = """---
+title: Endpoints
+cache: flags are cached for an hour
+---
+
+# Endpoints
+
+<!-- Reads are answered from the cache in 5 ms. -->
+
+Flags are read from the database.
+"""
+
+#: (id, the page, the line's needle, a paraphrase of it): each false line is
+#: still on the page, and none of the excerpts is on it, then or now.
+UNPLACED_ROWS = [
+    ("in a fence", OLD_GUIDE, "answers in 5 ms", "responds within five milliseconds"),
+    (
+        "in an HTML comment",
+        OLD_HIDDEN,
+        "Reads are answered from the cache",
+        "reads come from the cache in five milliseconds",
+    ),
+    (
+        "in front matter",
+        OLD_HIDDEN,
+        "cache: flags are cached",
+        "the cache keeps a flag for sixty minutes",
+    ),
+]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("tag", ["R", "X"])
+@pytest.mark.parametrize(
+    "page, needle, excerpt",
+    [r[1:] for r in UNPLACED_ROWS],
+    ids=[r[0] for r in UNPLACED_ROWS],
+)
+def test_a_row_neither_its_excerpt_nor_a_unit_places_stops_the_page(
+    tmp_path, capsys, tag, page, needle, excerpt
+):
+    """Fail closed: a paraphrased excerpt on a line that holds no unit.
+
+    The excerpt cannot say whether the false text is gone (it was never on
+    the page), and no unit is held back for ``check`` to report, so counting
+    the row as gone would write a registry that ``check`` passes while the
+    false line stays. The row is printed for hand mapping instead.
+    """
+    root = build(tmp_path, {**FILES, "docs/guide.md": page})
+    audit = [row(needle, tag=tag, text=excerpt, old=page)]
+    assert generate(root, audit, old_text=old_texts(**{"docs/guide.md": page})) == 1
+    out = capsys.readouterr().out
+    assert "R OR X NOT PLACED" in out, out
+    assert f"docs/guide.md:{line_of(page, needle)} " in out, out
+    assert excerpt in out, out
+    assert "R/X on the page 0 (gone 0), R/X not placed 1" in out, out
+    assert not (root / dc.registry_path("docs/guide.md")).exists()
+
+
 @pytest.mark.parametrize(
     "document, refusal",
     [

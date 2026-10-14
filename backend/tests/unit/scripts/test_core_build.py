@@ -1,15 +1,18 @@
-"""`scripts/core_build.sh` — argument handling.
+"""`scripts/core_build.sh` — argument handling, and what a stopped step reports.
 
 The script is the proof that a profile stands on its own, so the one thing it
 must never do is report success without having run anything.  These tests
-drive the real script; they stop at argument parsing, well before the copy
-step, so they need no database, no gitleaks and no network.
+drive the real script.  Most stop at argument parsing, well before the copy
+step; the ones about a step that does not finish run it past preflight with
+stand-in tools.  None needs a database, the build's own tools or the network.
 """
 
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -151,3 +154,220 @@ class TestStepSelection:
         """A filtered run still needs a tree; asking for copy does not duplicate it."""
         assert listed("--steps", "licences") == ["copy", "strip", "licences"]
         assert listed("--steps", "copy,strip") == ["copy", "strip"]
+
+
+# ---------------------------------------------------------------------------
+# A step that does not finish (#1220)
+# ---------------------------------------------------------------------------
+#
+# These tests run the real script past preflight with stand-in tools: `--dir`
+# names a directory that already looks like a copy (it has
+# backend/app/main.py), so copy and strip are not run and nothing is copied,
+# and PYTHON is a shell script.  Every preflight probe it is given passes, and
+# every pytest session passes -- except the suite named by FAKE_SUITE, which
+# does what FAKE_ACTION says:
+#
+#   die    the step's process sends SIGTERM to itself;
+#   wait   it creates FAKE_MARKER, then waits until FAKE_RELEASE exists, so the
+#          test can signal the script while the step is running.
+#
+# No database, no git repository and no network: the tests run the same in
+# core_build.sh's own copy, which has no .git.
+
+_FAKE_PYTHON = """#!/bin/sh
+case " $* " in
+    *" -m pytest $FAKE_SUITE "*) ;;
+    *) exit 0 ;;
+esac
+case "$FAKE_ACTION" in
+    die)
+        kill -TERM $$
+        sleep 5
+        ;;
+    wait)
+        : > "$FAKE_MARKER"
+        i=0
+        while [ ! -e "$FAKE_RELEASE" ] && [ "$i" -lt 600 ]; do
+            sleep 0.1
+            i=$((i + 1))
+        done
+        ;;
+esac
+exit 0
+"""
+
+
+def _executable(path: Path, text: str) -> None:
+    path.write_text(text)
+    path.chmod(0o755)
+
+
+def _default_sigint() -> None:
+    # A shell cannot trap a signal it was started with ignored (POSIX), and a
+    # pytest started in the background inherits SIGINT ignored.
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+
+class _Build:
+    """The script, started against a stand-in copy and stand-in tools."""
+
+    def __init__(self, tmp_path: Path) -> None:
+        self.copy = tmp_path / "copy"
+        (self.copy / "backend" / "app").mkdir(parents=True)
+        (self.copy / "backend" / "app" / "main.py").write_text("")
+        tools = tmp_path / "bin"
+        tools.mkdir()
+        for tool in ("git", "node", "npm", "gitleaks"):
+            _executable(tools / tool, "#!/bin/sh\nexit 0\n")
+        _executable(tools / "fake-python", _FAKE_PYTHON)
+        self.marker = tmp_path / "step-started"
+        self.release = tmp_path / "step-may-return"
+        self.env = {
+            **os.environ,
+            "PATH": f"{tools}{os.pathsep}{os.environ.get('PATH', '')}",
+            "PYTHON": str(tools / "fake-python"),
+            # So the script does not activate a ./venv beside it.
+            "VIRTUAL_ENV": str(tmp_path),
+            "FAKE_MARKER": str(self.marker),
+            "FAKE_RELEASE": str(self.release),
+            "FAKE_SUITE": "backend/tests/unit",
+            "FAKE_ACTION": "none",
+        }
+        for name in ("CORE_BUILD_STEPS", "CORE_BUILD_DIR"):
+            self.env.pop(name, None)
+        self.proc: subprocess.Popen | None = None
+
+    def start(self, steps: str, action: str) -> subprocess.Popen:
+        self.proc = subprocess.Popen(
+            [str(_SCRIPT), "--dir", str(self.copy), "--steps", steps],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={**self.env, "FAKE_ACTION": action},
+            # Its own process group, so a signal to the group reaches the
+            # script and its step and nothing else.
+            start_new_session=True,
+            preexec_fn=_default_sigint,
+        )
+        return self.proc
+
+    def wait_until_the_step_runs(self) -> None:
+        deadline = time.monotonic() + 30
+        while not self.marker.exists():
+            assert self.proc is not None and self.proc.poll() is None, (
+                "the script ended before the step started:\n" + self.finish()[1]
+            )
+            assert time.monotonic() < deadline, "the step never started"
+            time.sleep(0.05)
+
+    def finish(self) -> tuple[int, str]:
+        assert self.proc is not None
+        self.release.touch()
+        _, err = self.proc.communicate(timeout=60)
+        return self.proc.returncode, err
+
+    def cleanup(self) -> None:
+        self.release.touch()
+        if self.proc is not None and self.proc.poll() is None:
+            os.killpg(self.proc.pid, signal.SIGKILL)
+            self.proc.communicate(timeout=10)
+
+
+@pytest.fixture
+def build(tmp_path):
+    started = _Build(tmp_path)
+    yield started
+    started.cleanup()
+
+
+def summary(err: str) -> dict[str, str]:
+    """Step name -> outcome, from the summary the script prints last."""
+    assert "summary (--profile core):" in err, err
+    lines = err.split("summary (--profile core):", 1)[1].splitlines()
+    outcomes = {}
+    for line in lines[1:]:
+        if not line.startswith("  "):
+            break
+        name, _, outcome = line.strip().partition(" ")
+        outcomes[name] = outcome.strip()
+    return outcomes
+
+
+class TestAStepThatDoesNotFinish:
+    """A gate that says OK after one of its steps was stopped passes for the
+    wrong reason (#1220)."""
+
+    def test_the_stand_ins_pass_when_nothing_goes_wrong(self, build):
+        """The control: the same harness, no signal, every step ok."""
+        build.start("unit,integration", action="none")
+        status, err = build.finish()
+        assert status == 0, err
+        assert "core-build: OK" in err
+        outcomes = summary(err)
+        assert outcomes["unit"].startswith("ok"), outcomes
+        assert outcomes["integration"].startswith("ok"), outcomes
+        assert outcomes["smoke"] == "skipped", outcomes
+
+    @pytest.mark.regression
+    def test_a_step_whose_process_is_killed_fails_and_names_every_step(self, build):
+        """The step's own process dies of SIGTERM partway through.
+
+        The script stops at that step, and the summary still has a line for
+        the step it never reached: it used to list only the steps that had
+        run, so `integration` vanished from it.
+        """
+        build.start("unit,integration", action="die")
+        status, err = build.finish()
+        assert status != 0, err
+        assert "core-build: OK" not in err
+        assert "core-build: FAILED at step unit" in err
+        outcomes = summary(err)
+        assert outcomes["unit"].startswith("FAILED"), outcomes
+        assert outcomes["integration"] == "not run", outcomes
+        assert "asked for but not run: integration" in err
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize("target", ["script", "group"])
+    @pytest.mark.parametrize(
+        "signum", [signal.SIGTERM, signal.SIGINT, signal.SIGHUP], ids=lambda s: s.name
+    )
+    def test_a_signal_to_the_script_mid_step_ends_it_non_zero(
+        self, build, signum, target
+    ):
+        """Stopping the script while a step runs is a failure at that step.
+
+        SIGTERM used to run the summary with $? = 0 -- `core-build: OK`,
+        the running step missing -- and delete the copy under the step;
+        SIGINT to the script alone was ignored.  `group` is what Ctrl-C and
+        most outside time limits do; `script` is a `kill <pid>`.
+        """
+        proc = build.start("unit,integration", action="wait")
+        build.wait_until_the_step_runs()
+        if target == "group":
+            os.killpg(proc.pid, signum)
+        else:
+            os.kill(proc.pid, signum)
+        status, err = build.finish()
+        assert status == 128 + signum, err
+        assert "core-build: OK" not in err
+        assert "core-build: FAILED at step unit" in err
+        assert f"stopped by {signum.name}" in err
+        outcomes = summary(err)
+        assert outcomes["unit"].startswith("FAILED"), outcomes
+        assert outcomes["integration"] == "not run", outcomes
+
+    @pytest.mark.regression
+    def test_a_signal_with_no_trap_is_still_not_ok(self, build):
+        """SIGUSR1 ends bash after the summary runs with $? = 0.
+
+        The script cannot name the signal, but a run that ended inside a
+        step must not report OK.
+        """
+        proc = build.start("unit", action="wait")
+        build.wait_until_the_step_runs()
+        os.kill(proc.pid, signal.SIGUSR1)
+        status, err = build.finish()
+        assert status != 0, err
+        assert "core-build: OK" not in err
+        assert "core-build: FAILED at step unit" in err
+        assert summary(err)["unit"].startswith("FAILED"), err
