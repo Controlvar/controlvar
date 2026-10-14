@@ -128,7 +128,7 @@ by = ["exempt:instruction"]
 text = "It prints eptk_, the start of every key."
 by = [
     "docex:docs/api/endpoints.md#eptk_",
-    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+    "test:backend/tests/unit/models/test_api_key_prefix.py::test_every_generated_key_starts_with_eptk",
 ]
 
 [[unit]]
@@ -1191,7 +1191,10 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Headers: X-API-Key: {api_key}"
-by = ["test:backend/tests/smoke/test_openfeature_routes.py::test_the_valid_key_reaches_a_route_that_is_still_mounted"]
+by = [
+    "test:backend/tests/integration/api/test_sdk_routes_need_an_api_key.py::test_no_key_is_401",
+    "test:backend/tests/integration/api/test_sdk_routes_need_an_api_key.py::test_an_unknown_key_is_401",
+]
 count = 5
 
 [[unit]]
@@ -1432,7 +1435,7 @@ by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestPar
 
 [[unit]]
 text = "counts always has all four keys."
-by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestParity::test_each_user_gets_what_a_single_call_gives"]
+by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestCounts::test_counts_has_all_four_keys_when_three_of_them_are_zero"]
 
 [[unit]]
 text = "Errors: see the table below."
@@ -1451,7 +1454,14 @@ by = [
 
 [[unit]]
 text = "Any other 4xx assigns nobody."
-by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_422_assigns_nobody_and_repeats_no_id"]
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_422_assigns_nobody_and_repeats_no_id",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_no_key_is_401",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_key_without_the_scope_is_403",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_scoped_key_whose_owner_lost_the_role_is_403",
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_unknown_or_inactive_experiment_is_404",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_a_request_over_the_limit_never_reaches_the_route",
+]
 
 [[unit]]
 text = "Rate limit: 60 requests a minute per client address, counted separately from the other tracking routes (60 × 1,000 = 60,000 users a minute)."
@@ -1637,7 +1647,7 @@ by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestAdminUser
 [[unit]]
 text = "Description: List all users, newest first (superuser only)"
 by = [
-    "test:backend/tests/integration/api/test_admin_users_api.py::TestAdminUserList::test_a_non_superuser_is_refused",
+    "test:backend/tests/integration/api/test_admin_user_routes_need_a_superuser.py::test_a_non_superuser_cannot_list_update_or_delete_through_the_admin_routes",
     "test:backend/tests/integration/api/test_admin_users_api.py::TestAdminUserList::test_newest_first_so_pagination_is_deterministic",
 ]
 
@@ -1684,8 +1694,8 @@ by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_super
 [[unit]]
 text = "Description: Update any user, including is_superuser (superuser only)"
 by = [
-    "test:backend/tests/integration/api/test_admin_user_routes_need_a_superuser.py::test_a_non_superuser_cannot_update_or_delete_through_the_admin_routes",
-    "test:backend/tests/integration/api/test_admin_user_routes_need_a_superuser.py::test_a_superuser_updates_and_deletes_through_the_admin_routes",
+    "test:backend/tests/integration/api/test_admin_user_routes_need_a_superuser.py::test_a_non_superuser_cannot_list_update_or_delete_through_the_admin_routes",
+    "test:backend/tests/integration/api/test_admin_user_routes_need_a_superuser.py::test_a_superuser_lists_updates_and_deletes_through_the_admin_routes",
 ]
 
 [[unit]]
@@ -1706,7 +1716,10 @@ by = ["test:backend/tests/integration/api/test_own_access_put.py::TestOwnAccessR
 
 [[unit]]
 text = "409 \"Email already registered\" when the request sets an email address that another account holds in any letter case."
-by = ["test:backend/tests/integration/api/test_user_email_case_conflict.py::TestUpdate::test_a_case_variant_of_another_accounts_address_answers_409"]
+by = [
+    "test:backend/tests/integration/api/test_user_email_case_conflict.py::TestUpdate::test_a_case_variant_of_another_accounts_address_answers_409",
+    "test:backend/tests/integration/api/test_user_email_case_conflict.py::TestUpdate::test_an_identical_address_answers_409",
+]
 
 [[unit]]
 text = "409 \"Username already registered\" when the request sets a username another account has."
@@ -1836,7 +1849,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 [[unit]]
 text = "Description: Delete user (superuser only)"
 by = [
-    "test:backend/tests/integration/api/test_admin_user_routes_need_a_superuser.py::test_a_non_superuser_cannot_update_or_delete_through_the_admin_routes",
+    "test:backend/tests/integration/api/test_admin_user_routes_need_a_superuser.py::test_a_non_superuser_cannot_list_update_or_delete_through_the_admin_routes",
     "test:backend/tests/integration/api/test_own_access_put.py::TestDeleteAnswersAsDocumented::test_a_superuser_cannot_delete_their_own_account",
 ]
 
@@ -2312,7 +2325,10 @@ by = [
 
 [[unit]]
 text = "Any other value is refused with 422, nothing is changed, and the error is on [\"body\", \"status\"] with the message status changes through POST /api/v1/experiments/{id}/start, /pause, /complete or /archive; it cannot be set by an update."
-by = ["test:backend/tests/integration/api/test_experiment_status_lifecycle_only.py::test_put_a_different_status_is_refused_for_every_role"]
+by = [
+    "test:backend/tests/integration/api/test_experiment_status_lifecycle_only.py::test_put_a_different_status_is_refused_for_every_role",
+    "test:backend/tests/integration/api/test_experiment_status_lifecycle_only.py::test_superuser_cannot_move_a_non_draft_status_through_put",
+]
 
 [[unit]]
 text = "POST /api/v1/experiments/ always creates a draft."

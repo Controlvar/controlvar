@@ -42,7 +42,7 @@ def _row(db_session, user_id) -> dict:
 
 
 @pytest.mark.parametrize("role", list(UserRole), ids=lambda r: r.value)
-def test_a_non_superuser_cannot_update_or_delete_through_the_admin_routes(
+def test_a_non_superuser_cannot_list_update_or_delete_through_the_admin_routes(
     db_session, role
 ):
     actor = _account(db_session, is_superuser=False, role=role)
@@ -50,6 +50,8 @@ def test_a_non_superuser_cannot_update_or_delete_through_the_admin_routes(
     before = _row(db_session, target.id)
     client = make_client_for_user(db_session, actor)
 
+    listed = client.get("/api/v1/admin/users")
+    assert listed.status_code == 403, listed.text
     put = client.put(
         URL.format(target.id),
         json={"username": target.username, "email": target.email, "full_name": "x"},
@@ -60,11 +62,12 @@ def test_a_non_superuser_cannot_update_or_delete_through_the_admin_routes(
     assert _row(db_session, target.id) == before
 
 
-def test_a_superuser_updates_and_deletes_through_the_admin_routes(db_session):
+def test_a_superuser_lists_updates_and_deletes_through_the_admin_routes(db_session):
     actor = _account(db_session, is_superuser=True, role=UserRole.ADMIN)
     target = _account(db_session, is_superuser=False, role=UserRole.VIEWER)
     client = make_client_for_user(db_session, actor)
 
+    assert client.get("/api/v1/admin/users").status_code == 200
     put = client.put(
         URL.format(target.id),
         json={"username": target.username, "email": target.email, "full_name": "y"},

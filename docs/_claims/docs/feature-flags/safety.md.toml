@@ -470,6 +470,7 @@ by = [
     "test:frontend/src/tests/pages/feature-flag-detail.test.tsx::shows Unhealthy when the safety check fails a threshold and re-checks on demand",
     "test:frontend/src/tests/pages/feature-flag-detail.test.tsx::says the error rate cannot be computed, in text, when errors arrive with no evaluations",
     "test:frontend/src/tests/pages/feature-flag-detail.test.tsx::says how many error reports were stored but not counted, only when there are some",
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_the_check_reads_the_last_15_minutes_of_errors_and_latency",
 ]
 
 [[unit]]
