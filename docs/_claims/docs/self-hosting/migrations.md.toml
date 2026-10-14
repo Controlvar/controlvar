@@ -15,10 +15,10 @@ by = [
 ]
 
 [[unit]]
-text = "All schema changes — new tables, columns, indexes, and constraints — are expressed as versioned migration scripts that can be applied forward or rolled back."
+text = "Each migration is a versioned script, with an upgrade() and a downgrade() function."
 by = [
-    "test:backend/tests/unit/db/test_alembic_commands.py::test_every_migration_can_be_applied_and_rolled_back",
-    "test:backend/tests/integration/database/test_segment_members_migration.py::test_upgraded_and_bootstrapped_schemas_match",
+    "test:backend/tests/unit/db/test_alembic_commands.py::test_every_migration_has_an_upgrade_and_a_downgrade",
+    "test:backend/tests/unit/db/test_alembic_commands.py::test_migration_files_live_in_the_core_versions_directory_one_revision_each",
 ]
 
 [[unit]]
@@ -46,8 +46,11 @@ text = "Where the commands run."
 by = ["test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_migration_command_config_exists_in_the_image_layout"]
 
 [[unit]]
-text = "Every command on this page runs inside the API container, with the image's own alembic and the container's POSTGRES_ settings: docker compose exec api ..., from the directory of your compose file (the repository root for the Quick Start stack, deploy/compose/ for the production compose file)."
-by = ["test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_migration_command_config_exists_in_the_image_layout"]
+text = "Every alembic and bootstrap command on this page runs inside the API container, with the image's own alembic and the container's POSTGRES_ settings: docker compose exec api ..., from the directory of your compose file (the repository root for the Quick Start stack, deploy/compose/ for the production compose file)."
+by = [
+    "mechanism:migration-page-alembic-in-the-api",
+    "test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_migration_command_config_exists_in_the_image_layout",
+]
 
 [[unit]]
 text = "The image keeps the repository's layout under its working directory /app, so -c backend/app/db/alembic.ini is the same path there as in a checkout."
@@ -409,7 +412,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Docker Compose."
-by = ["untested:S"]
+by = ["exempt:label"]
 count = 2
 
 [[unit]]
@@ -429,7 +432,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Helm."
-by = ["untested:S"]
+by = ["exempt:label"]
 count = 2
 
 [[unit]]
@@ -1023,7 +1026,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "cdk deploy alone no longer creates the schema."
-by = ["untested:A"]
+by = ["test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations"]
 
 [[unit]]
 text = "After the first cdk deploy of an environment, the API runs against an empty database until the first Deploy (or a Database Migration run) creates it."
@@ -1055,11 +1058,11 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Rolling back relies on backward-compatible migrations."
-by = ["untested:A"]
+by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_api_serves_a_database_a_newer_release_migrated"]
 
 [[unit]]
 text = "A rollback runs the older release against the newer schema."
-by = ["untested:A"]
+by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_api_serves_a_database_a_newer_release_migrated"]
 
 [[unit]]
 text = "That works only when the migrations in between are backward-compatible (see Migration Guidelines)."

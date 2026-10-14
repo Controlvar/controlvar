@@ -2096,12 +2096,9 @@ untested:A	docs/integrations/aws.md	b140acb89c24
 untested:A	docs/integrations/aws.md	c1dd40961599
 untested:A	docs/integrations/aws.md	d635b3b8da9b
 untested:A	docs/self-hosting/migrations.md	103d9d6888c4
-untested:A	docs/self-hosting/migrations.md	18f3d15cfa23
 untested:A	docs/self-hosting/migrations.md	240e6c380d76
-untested:A	docs/self-hosting/migrations.md	a1e2060ef9da
 untested:A	docs/self-hosting/migrations.md	d5b74d852de0
 untested:A	docs/self-hosting/migrations.md	ef95de008f71
-untested:A	docs/self-hosting/migrations.md	fa2572ad45ba
 untested:S	README.md	b20bbc7b6e3c
 untested:S	demo/DEMO_GUIDE.md	196d9f0d10f5
 untested:S	demo/DEMO_GUIDE.md	19caa19c04b1
@@ -2118,8 +2115,6 @@ untested:S	docs/api/dimensional-analysis.md	0b38d42b47e1
 untested:S	docs/api/dimensional-analysis.md	9c43cab8aa6f
 untested:S	docs/performance/load-testing.md	771f47b623fa
 untested:S	docs/self-hosting/migrations.md	1c59d2c0c1d5
-untested:S	docs/self-hosting/migrations.md	3cb27031933e
-untested:S	docs/self-hosting/migrations.md	4f9ec4a259cd
 untested:S	docs/self-hosting/migrations.md	6ed565315f44
 untested:S	docs/self-hosting/migrations.md	b1be92b5ddf2
 untested:S	docs/self-hosting/migrations.md	be0f10ba7d29

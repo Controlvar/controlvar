@@ -13,7 +13,6 @@ address and retire the other. These are the facts it rests on:
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import sys
 import textwrap
@@ -28,16 +27,31 @@ pytestmark = [pytest.mark.unit]
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
+#: Every column of ``users``. None records when the account last signed in;
+#: a column added here is a change to that answer, to be read before it is.
+USERS_COLUMNS = [
+    "created_at",
+    "email",
+    "external_id",
+    "first_name",
+    "hashed_password",
+    "id",
+    "is_active",
+    "is_superuser",
+    "last_name",
+    "preferences",
+    "role",
+    "settings",
+    "updated_at",
+    "username",
+]
+
+
 @pytest.mark.regression
 def test_there_is_no_last_sign_in_column():
     from backend.app.models.user import User
 
-    columns = sorted(User.__table__.columns.keys())
-    assert "email" in columns and "is_active" in columns, columns
-    recorded = [
-        c for c in columns if re.search(r"last_(login|sign|seen|active|access)", c)
-    ]
-    assert recorded == [], recorded
+    assert sorted(User.__table__.columns.keys()) == USERS_COLUMNS
 
 
 @pytest.mark.regression

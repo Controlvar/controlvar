@@ -9,7 +9,6 @@ bootstrap connect with is read from what each builds. No database.
 
 from __future__ import annotations
 
-import ast
 import importlib.util
 import os
 import subprocess
@@ -87,15 +86,17 @@ def test_migration_files_live_in_the_core_versions_directory_one_revision_each()
 
 
 @pytest.mark.regression
-def test_every_migration_can_be_applied_and_rolled_back():
+def test_every_migration_has_an_upgrade_and_a_downgrade():
+    """Each revision module, as alembic loads it, has both functions."""
     script = _script()
-    missing = []
-    for revision in script.walk_revisions():
-        tree = ast.parse(Path(revision.path).read_text(encoding="utf-8"))
-        defined = {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
-        for name in ("upgrade", "downgrade"):
-            if name not in defined:
-                missing.append(f"{revision.revision}: no {name}()")
+    revisions = list(script.walk_revisions())
+    assert revisions
+    missing = [
+        f"{revision.revision}: no {name}()"
+        for revision in revisions
+        for name in ("upgrade", "downgrade")
+        if not callable(getattr(revision.module, name, None))
+    ]
     assert not missing, missing
 
 

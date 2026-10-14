@@ -1598,6 +1598,16 @@ MECHANISMS: Dict[str, Mechanism] = {
             ),
         ),
     ),
+    # Every alembic and bootstrap command of the operator page runs in the API
+    # container.
+    "migration-page-alembic-in-the-api": Mechanism(
+        "backend/tests/unit/docs/test_migration_pages.py"
+        "::test_every_alembic_and_bootstrap_command_runs_in_the_api_container",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "Every alembic and bootstrap command on this page runs inside the API container, with the image's own alembic and the container's POSTGRES_ settings: docker compose exec api ..., from the directory of your compose file (the repository root for the Quick Start stack, deploy/compose/ for the production compose file).",
+        ),
+    ),
     # heads, and the order upgrade heads applies, in a full checkout.
     "alembic-plan-full": Mechanism(
         "backend/tests/unit/db/test_alembic_plan.py"

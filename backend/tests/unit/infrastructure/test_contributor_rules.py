@@ -16,6 +16,7 @@ of it:
 
 from __future__ import annotations
 
+import configparser
 import os
 import re
 import shlex
@@ -230,14 +231,27 @@ def test_the_conventional_title_check_refuses_any_other_title(title):
 # The backend suites, as the pull-request checks run them
 # ---------------------------------------------------------------------------
 
-#: Arguments that select part of a suite.
-_NARROWING = re.compile(r"^(-m|-k|--deselect|--ignore)(=|$)")
+#: Options that run part of a suite, however they are written: a marker or
+#: keyword expression (``-m EXPR``, ``-mEXPR``, ``-m=EXPR``, or bundled as in
+#: ``-qm EXPR``), a deselection, an ignored path, or only the last failures.
+_NARROWING = re.compile(
+    r"^(?:-(?!-)[A-Za-z]{0,10}[mk]|--deselect|--ignore|--lf\b|--last-failed"
+    r"|--sw\b|--stepwise)"
+)
+#: Where PYTEST_ADDOPTS is given a value in a step's script, including one
+#: written to $GITHUB_ENV for the steps after it.
+_ADDOPTS_SET = re.compile(
+    r"PYTEST_ADDOPTS=(?:\"([^\"\n]{0,500})\"|'([^'\n]{0,500})'|(\S{1,500}))"
+)
+
+
+def _workflow(workflow: str) -> dict:
+    return yaml.safe_load((WORKFLOWS / workflow).read_text(encoding="utf-8"))
 
 
 def _pytest_steps(workflow: str, job: str) -> list[list[str]]:
-    data = yaml.safe_load((WORKFLOWS / workflow).read_text(encoding="utf-8"))
     runs = []
-    for step in data["jobs"][job]["steps"]:
+    for step in _workflow(workflow)["jobs"][job]["steps"]:
         for line in step.get("run", "").replace("\\\n", " ").splitlines():
             if not line.strip().startswith("python -m pytest"):
                 continue
@@ -252,6 +266,50 @@ def _suite_runs(workflow: str, job: str, suite: str) -> list[list[str]]:
         for words in _pytest_steps(workflow, job)
         if any(w.rstrip("/") == f"backend/tests/{suite}" for w in words)
     ]
+
+
+def _added_options(workflow: str, job: str) -> list[str]:
+    """Every value PYTEST_ADDOPTS is given for *job*: the workflow's, the job's
+    and each step's ``env``, and any the job's scripts set."""
+    data = _workflow(workflow)
+    found = []
+    scopes = [data, data["jobs"][job], *data["jobs"][job]["steps"]]
+    for scope in scopes:
+        value = (scope.get("env") or {}).get("PYTEST_ADDOPTS")
+        if value is not None:
+            found.append(str(value))
+    for step in data["jobs"][job]["steps"]:
+        for match in _ADDOPTS_SET.finditer(step.get("run", "")):
+            found.append(next(g for g in match.groups() if g is not None))
+    return found
+
+
+def _config_options() -> list[str]:
+    """``addopts`` from every file pytest reads its configuration from."""
+    found = []
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text("utf-8"))
+    found.append(pyproject["tool"]["pytest"]["ini_options"].get("addopts", ""))
+    for name, section in (
+        ("pytest.ini", "pytest"),
+        ("tox.ini", "pytest"),
+        ("setup.cfg", "tool:pytest"),
+    ):
+        path = REPO_ROOT / name
+        if path.is_file():
+            parser = configparser.ConfigParser()
+            parser.read(path, encoding="utf-8")
+            if parser.has_option(section, "addopts"):
+                found.append(parser.get(section, "addopts"))
+    return found
+
+
+def _narrowing(words: list[str]) -> list[str]:
+    """The narrowing options in *words*, an ``-o addopts=...`` override's too."""
+    found = [w for w in words if _NARROWING.match(w)]
+    for word in words:
+        if word.startswith("addopts="):
+            found += _narrowing(shlex.split(word[len("addopts=") :]))
+    return found
 
 
 @pytest.mark.regression
@@ -269,18 +327,50 @@ def test_the_pull_request_checks_run_unit_integration_and_smoke_with_no_marker_f
     runs = _suite_runs(workflow, job, suite)
     assert runs, f"{workflow} {job} runs no backend/tests/{suite}"
     for words in runs:
-        narrowing = [w for w in words if _NARROWING.match(w)]
-        assert not narrowing, (suite, words)
-    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text("utf-8"))
-    addopts = pyproject["tool"]["pytest"]["ini_options"].get("addopts", "")
-    assert not any(_NARROWING.match(w) for w in addopts.split()), addopts
+        assert not _narrowing(words), (suite, words)
+    for value in _added_options(workflow, job) + _config_options():
+        assert not _narrowing(shlex.split(value)), (suite, value)
+
+
+@pytest.mark.parametrize(
+    "words, narrowed",
+    [
+        (["-m", "unit"], True),
+        (["-munit"], True),
+        (["-m=unit"], True),
+        (["-qm", "unit"], True),
+        (["-k", "slow"], True),
+        (["--deselect", "x"], True),
+        (["--ignore=backend/tests/unit/core"], True),
+        (["--lf"], True),
+        (["-o", "addopts=-m unit"], True),
+        (["-p", "no:cov", "-q", "--tb=short", "-x", "--junitxml=u.xml"], False),
+        (["--maxfail=1"], False),
+    ],
+)
+def test_the_narrowing_options_are_recognised(words, narrowed):
+    assert bool(_narrowing(words)) is narrowed
+
+
+def _marker_expressions(words: list[str]) -> list[str]:
+    found = []
+    for i in range(len(words)):
+        word = words[i]
+        if word == "-m":
+            found.append(words[i + 1])
+        elif word.startswith("-m="):
+            found.append(word[3:])
+        elif re.match(r"^-(?!-)[A-Za-z]{0,10}m", word):
+            rest = word.split("m", 1)[1]
+            found.append(rest if rest else words[i + 1])
+    return found
 
 
 @pytest.mark.regression
 @pytest.mark.parametrize("suite", ["e2e", "contract"])
 def test_the_e2e_and_contract_suites_run_with_their_marker(suite):
     (words,) = _suite_runs("integration-tests.yml", "shard", suite)
-    assert words[words.index("-m") + 1] == suite, words
+    assert _marker_expressions(words) == [suite], words
 
 
 @pytest.mark.regression

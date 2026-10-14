@@ -3458,14 +3458,25 @@ def test_each_environment_starts_what_it_needs_before_the_page(
 def test_the_workflow_runs_the_check_and_the_examples_on_every_pull_request():
     workflow = yaml.safe_load(DOC_EXAMPLES_WORKFLOW.read_text())
     triggers = workflow[True]  # PyYAML reads the key `on` as True
+    # No filter of any kind (paths, paths-ignore, branches, types): every pull
+    # request, whatever it changes.
     assert "pull_request" in triggers
-    assert not (triggers["pull_request"] or {}).get("paths")
+    assert triggers["pull_request"] in (None, {}), triggers["pull_request"]
     jobs = workflow["jobs"]
     for job, command in (
         ("render", "python scripts/doc_examples.py --check"),
         ("examples", "python scripts/doc_examples.py --run --shard"),
     ):
-        assert "if" not in jobs[job], job
+        # Neither job, nor any job it waits for, is conditional.
+        waits, seen = [job], set()
+        while waits:
+            name = waits.pop()
+            if name in seen:
+                continue
+            seen.add(name)
+            assert "if" not in jobs[name], name
+            needs = jobs[name].get("needs") or []
+            waits += [needs] if isinstance(needs, str) else list(needs)
         runs = [s.get("run", "") for s in jobs[job]["steps"]]
         assert any(command in run for run in runs), (job, command)
 

@@ -1,6 +1,6 @@
 # Database Migrations
 
-The platform uses **Alembic** for PostgreSQL schema management. All schema changes — new tables, columns, indexes, and constraints — are expressed as versioned migration scripts that can be applied forward or rolled back.
+The platform uses **Alembic** for PostgreSQL schema management. Each migration is a versioned script, with an `upgrade()` and a `downgrade()` function.
 
 ---
 
@@ -16,9 +16,9 @@ Migration files live in `backend/app/db/migrations/versions/`. Each file represe
 `heads` (plural) and never `head`: alembic refuses the singular when more than
 one head exists.
 
-**Where the commands run.** Every command on this page runs inside the API
-container, with the image's own alembic and the container's `POSTGRES_*`
-settings: `docker compose exec api ...`, from the directory of your compose file
+**Where the commands run.** Every alembic and bootstrap command on this page runs
+inside the API container, with the image's own alembic and the container's
+`POSTGRES_*` settings: `docker compose exec api ...`, from the directory of your compose file
 (the repository root for the [Quick Start](../getting-started/quick-start.md)
 stack, `deploy/compose/` for the production compose file). The image keeps the
 repository's layout under its working directory `/app`, so

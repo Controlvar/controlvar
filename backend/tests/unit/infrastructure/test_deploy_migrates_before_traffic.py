@@ -82,16 +82,34 @@ def test_the_migration_task_runs_before_the_deployment_that_shifts_traffic():
         )
 
 
+def _commands(script: str) -> list[str]:
+    """The script's commands, one per line, continuation lines joined."""
+    return [
+        line.strip()
+        for line in script.replace("\\\n", " ").splitlines()
+        if line.strip()
+    ]
+
+
 @pytest.mark.regression
 def test_a_failed_migration_stops_the_deploy_before_any_traffic_moves():
     steps = _steps(DEPLOY, "deploy")
     names = _names(steps)
+    migrate = steps[names.index(MIGRATE)]
+    commands = _commands(migrate["run"])
+    # The task runner's exit status is the step's: it is the last command, in
+    # strict mode, with nothing after it that could replace or swallow it.
+    assert commands[0] == "set -euo pipefail", commands
+    last = commands[-1]
+    assert last.startswith("bash scripts/run_migration_task.sh "), commands
+    assert not any(mark in last for mark in ("||", ";", "|", "&")), last
+    assert not any(c.startswith(("set +", "trap ")) for c in commands), commands
+    # And no step from it to the traffic shift runs once a step has failed.
     for step in steps[names.index(MIGRATE) : names.index(SHIFT) + 1]:
         name = step.get("name")
         assert not step.get("continue-on-error"), name
-        condition = str(step.get("if", ""))
-        assert "always()" not in condition and "failure()" not in condition, name
-        assert "set -euo pipefail" in step.get("run", "set -euo pipefail"), name
+        assert "if" not in step, (name, step.get("if"))
+        assert _commands(step["run"])[0] == "set -euo pipefail", name
 
 
 @pytest.mark.regression
