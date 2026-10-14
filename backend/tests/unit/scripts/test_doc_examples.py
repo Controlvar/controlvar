@@ -3215,7 +3215,7 @@ def test_a_page_runs_with_only_path_home_user_tmpdir_and_dockers_settings(
 ):
     names = {
         "PATH": "/bin",
-        "HOME": "/home/x",
+        "HOME": "/var/empty",
         "USER": "x",
         "TMPDIR": "/tmp",
         "DOCKER_HOST": "unix:///d.sock",
