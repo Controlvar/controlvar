@@ -810,7 +810,13 @@ CLI_FLAG_CHECKED = {
         "rds describe-db-cluster-snapshots",
         "cloudformation describe-stacks",
     },
-    "rollback-runbook.md": {"rds describe-db-cluster-snapshots"},
+    # Method 2's stop step: the three calls that free the deployment group.
+    "rollback-runbook.md": {
+        "rds describe-db-cluster-snapshots",
+        "deploy list-deployments",
+        "deploy get-deployment",
+        "deploy stop-deployment",
+    },
     "secrets-management.md": {
         "rds modify-db-cluster",
         "logs filter-log-events",
@@ -824,16 +830,22 @@ def test_every_aws_flag_the_recovery_pages_print_is_one_the_cli_has(page):
     """`aws <service> <operation>` takes its flags from botocore's service
     model, which is also what the AWS CLI reads: a flag that is not a member of
     the operation's input is refused with exit 252 when it is pasted
-    mid-incident. Checked offline, for every `aws rds`, `aws logs` and
-    `aws cloudformation` command the page prints."""
+    mid-incident. Checked offline, for every `aws rds`, `aws logs`,
+    `aws cloudformation` and `aws deploy` (botocore's `codedeploy`) command the
+    page prints."""
     from botocore import xform_name
     from botocore.session import get_session
 
     text = (DOCS / "deployment" / page).read_text(encoding="utf-8")
     blocks = re.findall(r"```bash\n(.*?)```", text, re.S)
     found = set()
-    for service in ("rds", "logs", "cloudformation"):
-        model = get_session().get_service_model(service)
+    for service, model_name in (
+        ("rds", "rds"),
+        ("logs", "logs"),
+        ("cloudformation", "cloudformation"),
+        ("deploy", "codedeploy"),
+    ):
+        model = get_session().get_service_model(model_name)
         flags_of = {
             xform_name(op).replace("_", "-"): {
                 xform_name(member).replace("_", "-")

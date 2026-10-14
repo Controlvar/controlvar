@@ -219,7 +219,8 @@ the dashboard outside CloudFormation and a `cdk deploy` undoes them silently:
   onto it; before the first deploy it runs `:bootstrap` and the check says so. A `cdk deploy` that
   changes the dashboard's task definition in any way re-points the service at CloudFormation's own
   revision, whose image is `web:<dashboard_image_tag>` -- `web:bootstrap` when
-  the value is not given.
+  the value is not given. The dashboard silently goes back to the placeholder,
+  and every probe stays green.
 
 Two read-only checks print the values to pass, and refuse a value that does not
 match what is running. Run them from the repository root: the first prints

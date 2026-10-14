@@ -402,6 +402,13 @@ by = [
 ]
 
 [[unit]]
+text = "The dashboard silently goes back to the placeholder, and every probe stays green."
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_dashboard_container_never_proxies_the_api",
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_dashboard_target_group_probes_the_static_healthz",
+]
+
+[[unit]]
 text = "Two read-only checks print the values to pass, and refuse a value that does not match what is running."
 by = [
     "test:backend/tests/unit/infrastructure/test_check_live_target_group.py::test_listener_and_primary_task_set_disagreeing_is_refused",

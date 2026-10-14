@@ -410,6 +410,38 @@ registers into this family too, and its revisions carry the `bootstrap` image
 tag; pick the target with Method 1 Step 1's listing, which prints the image
 beside each revision.
 
+**Step 2b. Stop the deployment in flight first.** CodeDeploy accepts one
+deployment per deployment group at a time, so Step 3 is refused while the bad
+deploy's deployment is still active. List what is active:
+
+```bash
+aws deploy list-deployments \
+  --application-name experimentation-platform-$ENV \
+  --deployment-group-name "experimentation-$ENV" \
+  --include-only-statuses Created Queued InProgress Baking Ready \
+  --query deployments --output text
+```
+
+For each id it prints, read who created it:
+
+```bash
+aws deploy get-deployment --deployment-id d-XXXXXXXXX \
+  --query 'deploymentInfo.{status:status,creator:creator}'
+```
+
+If the creator is `codeDeployRollback`, do not stop it: CodeDeploy is already
+putting the API back ([An alarm rolled the API back](#an-alarm-rolled-the-api-back)).
+Otherwise stop it, with auto-rollback:
+
+```bash
+aws deploy stop-deployment --deployment-id d-XXXXXXXXX --auto-rollback-enabled
+```
+
+On a staging account on 2026-10-03 (UTC), stopping the in-flight deployment
+returned the API both times it was tried
+([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5971647359)).
+Run the list again until it prints nothing, then go on.
+
 **Step 3.** Deploy the previous task definition through CodeDeploy.
 
 NOT `aws ecs update-service --task-definition`. This service has a CodeDeploy
@@ -633,6 +665,7 @@ alarms for its own deployment. It is wrong in three cases:
 - the environment has no schema yet. `cdk deploy` does not create it: the
   first Deploy's migration does, and until then the API answers real requests
   with 500 ([Deployment Guide, section 1.6](deployment-guide.md#16-the-stacks)).
+  Those 500s can put an alarm into ALARM, and Deploy then refuses to start.
   Rollback has nothing to go back to. Whether to deploy unwatched is
   decided by a person at that moment.
 

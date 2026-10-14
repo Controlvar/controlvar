@@ -598,6 +598,42 @@ text = "CloudFormation registers into this family too, and its revisions carry t
 by = ["test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_bootstrap_tag_is_overridable"]
 
 [[unit]]
+text = "Step 2b."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Stop the deployment in flight first."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "CodeDeploy accepts one deployment per deployment group at a time, so Step 3 is refused while the bad deploy's deployment is still active."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "List what is active:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "For each id it prints, read who created it:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "If the creator is codeDeployRollback, do not stop it: CodeDeploy is already putting the API back (An alarm rolled the API back)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Otherwise stop it, with auto-rollback:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "On a staging account on 2026-10-03 (UTC), stopping the in-flight deployment returned the API both times it was tried (#295)."
+by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-5971647359"]
+
+[[unit]]
+text = "Run the list again until it prints nothing, then go on."
+by = ["exempt:instruction"]
+
+[[unit]]
 text = "Step 3."
 by = ["exempt:label"]
 count = 2
@@ -919,6 +955,13 @@ by = ["exempt:advice"]
 [[unit]]
 text = "cdk deploy does not create it: the first Deploy's migration does, and until then the API answers real requests with 500 (Deployment Guide, section 1.6)."
 by = ["untested:S"]
+
+[[unit]]
+text = "Those 500s can put an alarm into ALARM, and Deploy then refuses to start."
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_each_alarm_is_exactly_the_specified_one",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_every_refusal_comes_before_the_first_aws_mutation",
+]
 
 [[unit]]
 text = "Rollback has nothing to go back to."
