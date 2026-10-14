@@ -6,6 +6,7 @@ at the database layer for Experiment, Variant, Metric, and FeatureFlag models.
 """
 
 import uuid
+from datetime import datetime
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -141,6 +142,36 @@ class TestExperimentConstraints:
         db_session.add(variant)
         with pytest.raises((IntegrityError, Exception)):
             db_session.flush()
+        db_session.rollback()
+
+    def test_end_date_must_be_after_start_date(self, db_session, make_experiment):
+        """check_experiment_dates: an end date on or before the start is refused."""
+        exp = make_experiment(name="Date Order")
+        exp.start_date = datetime(2026, 3, 1, 12, 0)
+        exp.end_date = datetime(2026, 3, 1, 12, 1)
+        db_session.flush()  # after the start: accepted
+        exp.end_date = datetime(2026, 3, 1, 12, 0)  # the same moment is not after it
+        with pytest.raises(IntegrityError, match="check_experiment_dates"):
+            db_session.flush()
+        db_session.rollback()
+
+    def test_the_database_does_not_check_that_allocations_sum_to_100(
+        self, db_session, make_experiment
+    ):
+        """Only the API checks the sum: rows written directly may sum to anything."""
+        exp = make_experiment(name="Allocation Sum")
+        db_session.add_all(
+            [
+                Variant(experiment_id=exp.id, name="A", traffic_allocation=30),
+                Variant(experiment_id=exp.id, name="B", traffic_allocation=30),
+            ]
+        )
+        db_session.flush()  # 60 in all: the database accepts it
+        total = sum(
+            v.traffic_allocation
+            for v in db_session.query(Variant).filter(Variant.experiment_id == exp.id)
+        )
+        assert total == 60
         db_session.rollback()
 
     def test_assignment_unique_per_experiment_user(

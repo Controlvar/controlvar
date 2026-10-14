@@ -18,11 +18,15 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.tests.unit.docs.test_cognito_onboarding_docs import (
+    PASSWORD_PLACEHOLDER,
     POOL_PLACEHOLDER,
     onboarding_commands,
 )
 
 REGION = "us-east-1"
+#: What the administrator types at the documented password prompt: it meets
+#: the reference pool's policy.
+TYPED_PASSWORD = "Choose-A-Password-1"
 
 
 def create_reference_like_pool(idp: Any) -> Tuple[str, str]:
@@ -68,15 +72,17 @@ def run_documented_onboarding(
 
     Returns the parameters of the ``admin_set_user_password`` step (the
     username and password the user then signs in with).  ``edit`` may change
-    the calls before they run; the tamper tests use it.
+    the calls before they run; the tamper tests use it.  ``$PASSWORD`` is what
+    the administrator typed at the prompt, :data:`TYPED_PASSWORD`.
     """
     calls = onboarding_commands()
     if edit is not None:
         edit(calls)
     password_step: Dict[str, Any] = {}
+    typed = {POOL_PLACEHOLDER: pool_id, PASSWORD_PLACEHOLDER: TYPED_PASSWORD}
     for operation, params in calls:
         concrete = {
-            key: (pool_id if value == POOL_PLACEHOLDER else value)
+            key: (typed[value] if isinstance(value, str) and value in typed else value)
             for key, value in params.items()
         }
         getattr(idp, operation)(**concrete)

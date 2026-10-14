@@ -31,7 +31,7 @@ import textwrap
 
 import pytest
 
-from backend.tests.smoke.modules_manifest import REPO_ROOT, load
+from backend.tests.smoke.modules_manifest import MODULES_DIR, REPO_ROOT, load
 
 pytestmark = pytest.mark.smoke
 
@@ -65,6 +65,49 @@ _REGISTRY_PROBE = """
     print(json.dumps({
         "tables": sorted(t.split(".")[-1] for t in Base.metadata.tables),
         "unresolved": [],
+    }))
+"""
+
+
+_MODEL_HOMES_PROBE = """
+    import json
+
+    from sqlalchemy.orm import configure_mappers
+
+    from backend.app.core import hooks
+    from backend.app.db.session import engine
+    from backend.app.models import register_core_models
+    from backend.app.modules_loader import load_modules
+
+    Base = register_core_models()
+    core = sorted({m.class_.__module__ for m in Base.registry.mappers})
+    loaded = load_modules(with_routers=False)
+    hooks.import_registered_models()
+    configure_mappers()
+    every = {m.class_.__module__ for m in Base.registry.mappers}
+    print(json.dumps({
+        "dialect": engine.dialect.name,
+        "core": core,
+        "modules": sorted(every - set(core)),
+        "loaded": loaded,
+    }))
+"""
+
+
+_CORE_MODULES_PROBE = """
+    import json
+    import sys
+
+    import backend.app.models as models
+
+    listed = list(models.CORE_MODEL_MODULES)
+    Base = models.register_core_models()
+    print(json.dumps({
+        "listed": listed,
+        "unimported": sorted(
+            n for n in listed if f"backend.app.models.{n}" not in sys.modules
+        ),
+        "mapped": sorted({m.class_.__module__ for m in Base.registry.mappers}),
     }))
 """
 
@@ -132,3 +175,34 @@ class TestCoreModelRegistry:
                 f"{table}.workspace_id must stay nullable"
             )
             assert column["indexed"] is True, f"{table}.workspace_id must stay indexed"
+
+    def test_every_model_is_a_sqlalchemy_class_under_the_models_packages(self):
+        """The API's data is PostgreSQL through SQLAlchemy, and every mapped
+        class is defined under ``backend/app/models/``, or for a module under
+        that module tree's ``backend/app/models/`` (a fresh interpreter, so
+        nothing a test imported earlier counts)."""
+        result = _run_in_fresh_interpreter(_MODEL_HOMES_PROBE)
+        assert result["dialect"] == "postgresql", result["dialect"]
+        assert result["core"], "no core model is mapped: this checked nothing"
+        stray = [m for m in result["core"] if not m.startswith("backend.app.models.")]
+        assert not stray, f"core models defined outside backend/app/models/: {stray}"
+        if (REPO_ROOT / MODULES_DIR).is_dir():
+            assert result["loaded"] and result["modules"], result
+            home = f"{MODULES_DIR}.backend.app.models."
+            stray = [m for m in result["modules"] if not m.startswith(home)]
+            assert not stray, f"module models defined outside {home}: {stray}"
+        else:
+            assert result["modules"] == [], result["modules"]
+
+    def test_every_core_model_module_is_in_core_model_modules_and_registered(self):
+        """``register_core_models()`` imports every module ``CORE_MODEL_MODULES``
+        names, and every mapped core class is in one of them."""
+        result = _run_in_fresh_interpreter(_CORE_MODULES_PROBE)
+        assert result["listed"], "CORE_MODEL_MODULES is empty"
+        assert result["unimported"] == [], result["unimported"]
+        unlisted = [
+            m
+            for m in result["mapped"]
+            if m.removeprefix("backend.app.models.") not in result["listed"]
+        ]
+        assert not unlisted, f"mapped but not in CORE_MODEL_MODULES: {unlisted}"

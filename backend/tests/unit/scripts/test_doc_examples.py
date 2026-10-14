@@ -17,6 +17,7 @@ import http.server
 import importlib.util
 import io
 import json
+import os
 import pathlib
 import re
 import socket
@@ -3167,3 +3168,341 @@ def test_the_full_profile_probe_leaves_the_api_s_port_free():
     assert busy == [], (
         "the API's port is still held after the probe and the server are done"
     )
+
+
+# ---------------------------------------------------------------------------
+# The authoring page's rules, each driven through the check (#1142, D73 TR3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "info, timeout",
+    [
+        ("{.bash exec}", 120),
+        ("{.bash exec timeout=1}", 1),
+        ("{.bash exec timeout=1200}", 1200),
+        ("{.bash exec timeout=3600}", 3600),
+    ],
+)
+def test_an_exec_timeout_is_1_to_3600_seconds_and_120_when_not_given(info, timeout):
+    (block,) = blocks(page(f"{FENCE}{info}\nprintf hi\n{FENCE}\n<!-- expect: hi -->"))
+    assert block.timeout == timeout
+    for refused_value in (0, 3601):
+        text = page(
+            f"{FENCE}{{.bash exec timeout={refused_value}}}\nprintf hi\n{FENCE}"
+        )
+        assert "timeout must be 1-3600" in refused(text)
+
+
+@pytest.mark.parametrize("start", [dx.STACK_UP, dx.STACK_FULL_UP])
+def test_both_stack_starts_may_print_without_an_expectation(start):
+    assert start in (
+        "docker compose up -d --wait",
+        "EXPERIMENTLY_PROFILE=full docker compose up -d --wait",
+    )
+    printed = dx.Outcome(
+        reached=True, rc=0, flags="ehuB", pipefail="pf", stdout="#1 build\n"
+    )
+    assert (
+        dx.judge([dx.Block(3, "exec", "bash", start)], [printed], None, 0, "p.md") == []
+    )
+    other = dx.Block(3, "exec", "bash", start + " --build")
+    assert "no expectation" in dx.judge([other], [printed], None, 0, "p.md")[0]
+
+
+def test_a_page_runs_with_only_path_home_user_tmpdir_and_dockers_settings(
+    monkeypatch,
+):
+    names = {
+        "PATH": "/bin",
+        "HOME": "/var/empty",
+        "USER": "x",
+        "TMPDIR": "/tmp",
+        "DOCKER_HOST": "unix:///d.sock",
+        "DOCKER_CONTEXT": "c",
+        "DOCKER_CONFIG": "/d",
+        "DOCKER_CERT_PATH": "/c",
+        "DOCKER_TLS_VERIFY": "1",
+        "LANG": "C.UTF-8",
+        "VIRTUAL_ENV": "/venv",
+        "POSTGRES_PASSWORD": "from-the-caller",
+        "AWS_PROFILE": "callers",
+    }
+    for name, value in names.items():
+        monkeypatch.setenv(name, value)
+    env = dx.scrubbed_env("docex-unit", {})
+    passed = {k for k in env if k in names}
+    assert passed == {"PATH", "HOME", "USER", "TMPDIR"} | {
+        n for n in names if n.startswith("DOCKER_")
+    }
+    # And what the runner sets itself: the page's compose project, no .env
+    # file, and AWS configuration files that are empty.
+    set_here = set(env) - passed
+    compose = {"COMPOSE_PROJECT_NAME", "COMPOSE_DISABLE_ENV_FILE"}
+    assert compose <= set_here, set_here
+    assert env["COMPOSE_PROJECT_NAME"] == "docex-unit"
+    aws = set_here - compose
+    assert len(aws) == 2 and all(name.startswith("AWS_") for name in aws), aws
+    assert {env[name] for name in aws} == {os.devnull}
+
+
+@pytest.mark.parametrize("keyword", ["export", "declare", "local", "readonly"])
+def test_a_masked_substitution_is_refused_for_each_keyword(keyword):
+    text = page(f"{FENCE}{{.bash exec}}\n{keyword} X=$(false)\n{FENCE}")
+    assert "masks the substitution" in refused(text)
+    (ok,) = blocks(page(f"{FENCE}{{.bash exec}}\nX=$(true)\n{keyword} X\n{FENCE}"))
+    assert dx.block_problems(ok, "p.md") == []
+
+
+@pytest.mark.parametrize(
+    "body, tool",
+    [
+        ("pip install x", "pip"),
+        ("npm ci", "npm"),
+        ("yarn add x", "yarn"),
+        ("go get example.com/x", "go get"),
+        ("cargo install x", "cargo install"),
+    ],
+)
+def test_the_package_managers_the_page_names_are_refused(body, tool):
+    assert f"may not run '{tool}'" in refused(
+        page(f"{FENCE}{{.bash exec}}\n{body}\n{FENCE}")
+    )
+
+
+#: The skip-reason categories the authoring page's table lists, in its order.
+AUTHORING_CATEGORIES = [
+    "checkout",
+    "dev",
+    "server",
+    "aws",
+    "idp",
+    "secret",
+    "registry",
+    "toolchain",
+    "destructive",
+    "demo",
+    "fragment",
+    "timing",
+]
+
+
+@pytest.mark.parametrize("category", AUTHORING_CATEGORIES)
+def test_every_category_the_authoring_page_lists_is_accepted(category):
+    body = {
+        "registry": "pip install experimently",
+        "timing": GATE,
+    }.get(category, "printf hi")
+    (block,) = blocks(
+        page(f'{FENCE}{{.bash skip reason="{category}: the words"}}\n{body}\n{FENCE}')
+    )
+    assert dx.category_of(block.reason) == category
+    assert dx.block_problems(block, "p.md") == []
+    (bug,) = blocks(
+        page(f'{FENCE}{{.bash skip reason="bug #123: x"}}\nprintf x\n{FENCE}')
+    )
+    assert dx.category_of(bug.reason) == "bug"
+    assert set(dx.CATEGORIES) == set(AUTHORING_CATEGORIES) | {"bug"}
+
+
+def test_the_check_prints_how_many_skipped_blocks_each_category_holds(repo, capsys):
+    write(
+        repo,
+        "docs/p.md",
+        page(
+            f"{FENCE}{{.bash exec}}\nprintf hi\n{FENCE}\n<!-- expect: hi -->",
+            f'{FENCE}{{.bash skip reason="dev: x"}}\nprintf no\n{FENCE}',
+            f'{FENCE}{{.bash skip reason="dev: y"}}\nprintf no\n{FENCE}',
+            f'{FENCE}{{.bash skip reason="server: z"}}\nprintf no\n{FENCE}',
+        ),
+    )
+    dx.check(enrol(repo, GOOD.replace("skip = 1", "skip = 3")))
+    out = capsys.readouterr().out
+    assert "exec blocks: 1; skip blocks by category: dev 2, server 1" in out, out
+
+
+def test_the_check_prints_the_counts_it_finds(repo, capsys):
+    dx.check(enrol(repo, GOOD))
+    assert "docs/p.md: 1 exec, 1 skip, 1 expects (bare)" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "what, ceiling, worse",
+    [
+        ("unlabelled", (0, 1, 0), "\n```\nmore\n```\n"),
+        ("syntax", (0, 1, 1), "\n```bash\nprintf 'y\n```\n"),
+    ],
+)
+def test_each_pending_residual_can_only_fall(
+    pending_repo, monkeypatch, what, ceiling, worse
+):
+    """The comment residual is test_a_pending_residual_can_only_fall's; the
+    other two are counted the same way."""
+    text = "# Ops\n\n```bash\naws s3 ls\n```\n\n```\nout\n```\n"
+    if what == "syntax":
+        text += "\n```bash\nprintf 'x\n```\n"
+    write(pending_repo, "docs/ops.md", text)
+    monkeypatch.setattr(dx, "PENDING_FROZEN", {"docs/ops.md": ceiling})
+    entry = f'"docs/ops.md" = {{ comments = 0, unlabelled = 1, syntax = {ceiling[2]} }}'
+    body = WITH_PENDING.replace(
+        '"docs/ops.md" = { comments = 1, unlabelled = 1, syntax = 0 }', entry
+    )
+    dx.check(enrol(pending_repo, body))
+    write(pending_repo, "docs/ops.md", text + worse)
+    raised = body.replace(f"{what} = 1", f"{what} = 2")
+    found = problems_of(enrol(pending_repo, raised))
+    assert any("the residual can only fall" in p for p in found), found
+
+
+def test_an_entry_has_exactly_the_five_keys(repo):
+    for body in (
+        GOOD.replace("    expects = 1\n", ""),
+        GOOD.replace("    expects = 1\n", '    expects = 1\n    title = "x"\n'),
+    ):
+        with pytest.raises(dx.Refused) as excinfo:
+            dx.load(enrol(repo, body))
+        assert "want ['environment', 'exec', 'expects', 'path', 'skip']" in str(
+            excinfo.value
+        )
+    dx.load(enrol(repo, GOOD))
+
+
+def test_an_exempt_reason_is_1_to_200_characters(repo):
+    write(repo, "docs/ops.md", "# Ops\n\n```bash\naws s3 ls\n```\n")
+    base = GOOD.replace(
+        'universe = ["docs/p.md"]', 'universe = ["docs/ops.md", "docs/p.md"]'
+    )
+
+    def with_reason(reason: str) -> pathlib.Path:
+        return enrol(
+            repo,
+            base
+            + f'\n    [[exempt]]\n    path = "docs/ops.md"\n    reason = "{reason}"\n',
+        )
+
+    dx.check(with_reason("x"))
+    dx.check(with_reason("r" * 200))
+    for reason in ("", "r" * 201):
+        assert any(
+            "exempt needs a reason (1-200 characters)" in p
+            for p in problems_of(with_reason(reason))
+        )
+
+
+def test_a_malformed_shell_fence_on_an_enrolled_page_names_the_file_and_line(repo):
+    write(
+        repo,
+        "docs/p.md",
+        page(
+            f"{FENCE}{{.bash exec}}\nprintf hi\n{FENCE}\n<!-- expect: hi -->",
+            f'{FENCE}{{.bash skip reason="dev: x"}}\nprintf no\n{FENCE}',
+            f"{FENCE}bash\nprintf untagged\n{FENCE}",
+        ),
+    )
+    found = problems_of(enrol(repo, GOOD))
+    line = (repo / "docs/p.md").read_text().split("\n").index(f"{FENCE}bash") + 1
+    assert any(
+        p.startswith(f"docs/p.md:{line}: ") and "untagged" in p for p in found
+    ), found
+
+
+def test_only_runs_one_page(repo, no_docker):
+    toml = _shard_repo(repo, 3)
+    fake = FakePages()
+    dx.run(toml, only="docs/q01.md", run_page=fake)
+    assert fake.ran == ["docs/q01.md"]
+    with pytest.raises(dx.Refused, match="is not enrolled"):
+        dx.run(toml, only="docs/nowhere.md", run_page=fake)
+
+
+@pytest.mark.parametrize(
+    "environment, start",
+    [
+        ("bare", None),
+        ("stack", dx.STACK_UP),
+        ("stack-full", dx.STACK_FULL_UP),
+    ],
+)
+def test_each_environment_starts_what_it_needs_before_the_page(
+    monkeypatch, environment, start
+):
+    """bare starts nothing; stack runs the Quick Start's start first; and
+    stack-full the full profile's, then asks GET /api/v1/modules for the profile."""
+    started, probed = [], []
+    monkeypatch.setattr(dx, "preflight", lambda env: [])
+    monkeypatch.setattr(dx, "project_resources", lambda project: [])
+    monkeypatch.setattr(
+        dx,
+        "_docker",
+        lambda *a, env=None, timeout=120: dx.subprocess.CompletedProcess(a, 0, "", ""),
+    )
+
+    def run_bounded(argv, env, timeout, deadline=None):
+        started.append(argv[-1])
+        return 0, "", "", None
+
+    def profile(rel, fetch=None):
+        probed.append(rel)
+        return
+
+    monkeypatch.setattr(dx, "run_bounded", run_bounded)
+    monkeypatch.setattr(dx, "full_profile_problem", profile)
+    monkeypatch.setattr(dx, "execute_counted", lambda b, rel, env, d=None: ([], 1))
+    doc = {"path": "p.md", "environment": environment, "exec": 1}
+    problems, reached = dx.run_document(doc, [], 0, {}, None, io.StringIO())
+    assert (problems, reached) == ([], 1)
+    assert started == ([start] if start else [])
+    assert probed == (["p.md"] if environment == "stack-full" else [])
+
+
+def test_the_workflow_runs_the_check_and_the_examples_on_every_pull_request():
+    workflow = yaml.safe_load(DOC_EXAMPLES_WORKFLOW.read_text())
+    triggers = workflow[True]  # PyYAML reads the key `on` as True
+    # No filter of any kind (paths, paths-ignore, branches, types): every pull
+    # request, whatever it changes.
+    assert "pull_request" in triggers
+    assert triggers["pull_request"] in (None, {}), triggers["pull_request"]
+    jobs = workflow["jobs"]
+    for job, command in (
+        ("render", "python scripts/doc_examples.py --check"),
+        ("examples", "python scripts/doc_examples.py --run --shard"),
+    ):
+        # Neither job, nor any job it waits for, is conditional.
+        waits, seen = [job], set()
+        while waits:
+            name = waits.pop()
+            if name in seen:
+                continue
+            seen.add(name)
+            assert "if" not in jobs[name], name
+            needs = jobs[name].get("needs") or []
+            waits += [needs] if isinstance(needs, str) else list(needs)
+        runs = [s.get("run", "") for s in jobs[job]["steps"]]
+        assert any(command in run for run in runs), (job, command)
+
+
+def test_each_page_runs_under_a_compose_project_of_its_own(monkeypatch):
+    projects = []
+    monkeypatch.setattr(dx, "preflight", lambda env: [])
+    monkeypatch.setattr(dx, "project_resources", lambda project: [])
+    monkeypatch.setattr(
+        dx,
+        "_docker",
+        lambda *a, env=None, timeout=120: (
+            projects.append(("down", env["COMPOSE_PROJECT_NAME"]))
+            or dx.subprocess.CompletedProcess(a, 0, "", "")
+        ),
+    )
+
+    def execute(blocks, rel, env, deadline=None):
+        projects.append(("run", env["COMPOSE_PROJECT_NAME"]))
+        return [], 1
+
+    monkeypatch.setattr(dx, "execute_counted", execute)
+    for index in (0, 1):
+        doc = {"path": f"p{index}.md", "environment": "bare", "exec": 1}
+        dx.run_document(doc, [], index, {}, None, io.StringIO())
+    (run_a, down_a, run_b, down_b) = projects
+    assert run_a[1] == down_a[1] and run_b[1] == down_b[1]
+    assert run_a[1] != run_b[1]
+    assert all(name.startswith("docex-") for _, name in projects)

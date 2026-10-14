@@ -11,6 +11,7 @@ from enum import Enum
 
 from sqlalchemy import (
     Column,
+    ColumnElement,
     DateTime,
     Float,
     ForeignKey,
@@ -181,6 +182,26 @@ REPORT_SOURCE_SERVER = "server"
 REPORT_SOURCE_CLIENT = "client"
 
 
+def counted_error_filter() -> ColumnElement[bool]:
+    """The ``error_logs`` rows that count toward a flag's error numbers.
+
+    The one rule, shared by the safety check (``SafetyService.get_error_metrics``)
+    and the metrics summary (``MetricsService.get_metrics_summary``): every row
+    except those whose ``request_data->>'source'`` is :data:`REPORT_SOURCE_CLIENT`.
+    The test is ``IS DISTINCT FROM``, so rows with no ``source`` count: flag
+    evaluations that failed on the server (``{"context": ...}``) and rows whose
+    ``request_data`` is SQL ``NULL`` or JSON ``null``. A plain ``!=`` would drop
+    those, because it is NULL, not true, for them.
+    """
+    return ErrorLog.request_data["source"].astext.is_distinct_from(REPORT_SOURCE_CLIENT)
+
+
+def uncounted_error_filter() -> ColumnElement[bool]:
+    """The ``error_logs`` rows that are stored but do not count: the complement
+    of :func:`counted_error_filter`, reported as ``uncounted_error_count``."""
+    return ErrorLog.request_data["source"].astext == REPORT_SOURCE_CLIENT
+
+
 class ErrorLog(Base, BaseModel):
     """
     Detailed log of errors that occur during flag evaluation.
@@ -191,8 +212,9 @@ class ErrorLog(Base, BaseModel):
     Rows come from flag evaluations that fail on the server
     (``request_data = {"context": ...}``) and from error reports
     (``request_data["source"]`` is :data:`REPORT_SOURCE_SERVER` or
-    :data:`REPORT_SOURCE_CLIENT`). Safety monitoring counts every row except
-    those stamped :data:`REPORT_SOURCE_CLIENT`.
+    :data:`REPORT_SOURCE_CLIENT`). Safety monitoring and the metrics summary
+    count every row except those stamped :data:`REPORT_SOURCE_CLIENT`
+    (:func:`counted_error_filter`).
     """
 
     __tablename__ = "error_logs"

@@ -9,11 +9,14 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Logging is structlog, configured once in backend/app/core/logger.py."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/core/test_logging_standards.py::test_the_api_configures_structlog_once_when_it_starts",
+    "test:backend/tests/unit/core/test_logging_standards.py::test_configuring_again_replaces_the_handler_rather_than_adding_one",
+]
 
 [[unit]]
 text = "In production every event renders as a single-line JSON object, which is what CloudWatch Logs Insights expects; in development it renders as colourised text through structlog's dev renderer."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/core/test_logging_standards.py::test_production_writes_one_json_line_and_development_colourised_text"]
 
 [[unit]]
 text = "The switch is json_logs."
@@ -29,7 +32,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Every keyword becomes its own JSON field, so variant=\"control\" is queryable in Logs Insights."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/core/test_logging_standards.py::test_every_keyword_is_its_own_json_field"]
 
 [[unit]]
 text = "Interpolating it into the message (f\"variant {variant}\") buries it in a string and is not."
@@ -49,7 +52,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "timestamp | TimeStamper(fmt=\"iso\")"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/core/test_logging_standards.py::test_the_timestamp_is_iso_8601"]
 
 [[unit]]
 text = "level | add_log_level"
@@ -57,19 +60,19 @@ by = ["test:backend/tests/unit/core/test_logger.py::test_a_rendered_line_carries
 
 [[unit]]
 text = "event | the message — structlog's name for it, not message"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/core/test_logging_standards.py::test_the_message_is_the_event_field_not_message"]
 
 [[unit]]
 text = "logger | add_logger_name"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/core/test_logging_standards.py::test_the_logger_field_is_the_loggers_name"]
 
 [[unit]]
 text = "service | _add_service, the configured service name"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/core/test_logging_standards.py::test_the_service_field_is_the_configured_service_name"]
 
 [[unit]]
 text = "exception | format_exc_info, only in JSON mode and only when exc_info is set"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/core/test_logging_standards.py::test_the_exception_field_is_json_mode_only_and_needs_exc_info"]
 
 [[unit]]
 text = "Per-request fields"
@@ -123,7 +126,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "DEBUG | detail for local debugging; not enabled in production"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/core/test_logging_standards.py::test_production_logs_at_info_so_debug_lines_are_not_written"]
 
 [[unit]]
 text = "INFO | normal operational events — an assignment made, a rollout stage advanced"
@@ -205,7 +208,10 @@ by = ["test:backend/tests/unit/services/test_assignment_evaluation_logs_no_user_
 
 [[unit]]
 text = "No request or response body is masked."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/core/test_logging_standards.py::test_the_application_does_not_mount_the_logging_middleware",
+    "test:backend/tests/unit/core/test_logging_standards.py::test_only_the_logging_middleware_names_the_masking_helper",
+]
 
 [[unit]]
 text = "backend/app/utils/masking.py blanks password, token, api_key, secret, credential, authorization, access_token, refresh_token, private_key and friends, and partially masks emails, phone numbers, credit card numbers and IP addresses."
@@ -219,11 +225,14 @@ by = [
 
 [[unit]]
 text = "Only LoggingMiddleware (backend/app/middleware/logging_middleware.py) calls it, and the application does not mount that middleware."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/core/test_logging_standards.py::test_only_the_logging_middleware_names_the_masking_helper",
+    "test:backend/tests/unit/core/test_logging_standards.py::test_the_application_does_not_mount_the_logging_middleware",
+]
 
 [[unit]]
 text = "A keyword you pass to logger.info(...) lands in CloudWatch verbatim."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/core/test_logging_standards.py::test_a_keyword_is_written_as_it_was_given"]
 
 [[unit]]
 text = "So log the identifier, not the object."
@@ -241,11 +250,14 @@ by = [
 
 [[unit]]
 text = "To follow one user through the system, use the data that is kept for it: the assignments and events tables, and error_logs."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/core/test_logging_standards.py::test_the_assignment_event_and_error_tables_keep_the_users_id"]
 
 [[unit]]
 text = "No middleware binds the dashboard user's id to a log line; the audit log records who changed what."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/core/test_logging_standards.py::test_no_middleware_binds_the_users_id_to_a_log_line",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_update_records_only_what_changed",
+]
 
 [[unit]]
 text = "Query values are redacted in uvicorn's access and error logs: a filter on the uvicorn.access and uvicorn.error loggers blanks the values backend/app/core/query_redaction.py recognises, and keeps the parameter names."

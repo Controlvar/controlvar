@@ -464,8 +464,8 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("The platform uses Alembic for PostgreSQL schema management"),
     ),
     "CloudWatch dashboards, Prometheus metrics": (
-        lede("integrates with AWS CloudWatch, Prometheus"),
-        says("## CloudWatch Dashboards"),
+        lede("adds the CloudWatch dashboards"),
+        lede("exposes Prometheus metrics"),
         says("## Prometheus Metrics"),
     ),
     # Guides & Tutorials

@@ -461,6 +461,16 @@ class TestAPIKeySecurity:
         hashed = hash_api_key("sk-test-abc123def456")
         assert verify_api_key("sk-wrong-key", hashed) is False
 
+    def test_the_stored_hash_is_the_hex_sha256_of_the_key(self):
+        """The secrets-management page tells an operator to compute KEY_HASH
+        as the key's hex SHA-256 to find it in the logs."""
+        import hashlib
+
+        from backend.app.core.security import hash_api_key
+
+        key = "sk-test-abc123def456"
+        assert hash_api_key(key) == hashlib.sha256(key.encode()).hexdigest()
+
 
 # ---------------------------------------------------------------------------
 # Audit Log Column Sizes

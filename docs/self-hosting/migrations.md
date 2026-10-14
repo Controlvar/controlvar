@@ -1,6 +1,6 @@
 # Database Migrations
 
-The platform uses **Alembic** for PostgreSQL schema management. All schema changes — new tables, columns, indexes, and constraints — are expressed as versioned migration scripts that can be applied forward or rolled back.
+The platform uses **Alembic** for PostgreSQL schema management. Each migration is a versioned script, with an `upgrade()` and a `downgrade()` function.
 
 ---
 
@@ -16,9 +16,9 @@ Migration files live in `backend/app/db/migrations/versions/`. Each file represe
 `heads` (plural) and never `head`: alembic refuses the singular when more than
 one head exists.
 
-**Where the commands run.** Every command on this page runs inside the API
-container, with the image's own alembic and the container's `POSTGRES_*`
-settings: `docker compose exec api ...`, from the directory of your compose file
+**Where the commands run.** Every alembic and bootstrap command on this page runs
+inside the API container, with the image's own alembic and the container's
+`POSTGRES_*` settings: `docker compose exec api ...`, from the directory of your compose file
 (the repository root for the [Quick Start](../getting-started/quick-start.md)
 stack, `deploy/compose/` for the production compose file). The image keeps the
 repository's layout under its working directory `/app`, so
@@ -187,7 +187,7 @@ downgrade is a no-op — it will not drop populated tables it never made.
 This revision replaces the `warehouse_connections` table with a new one and
 adds `warehouse_sources` and `warehouse_analysis_runs`. **Every row of the
 earlier `warehouse_connections` is deleted** — connections saved through the
-earlier warehouse endpoints — and nothing is copied into the new table. Recreate connections in Warehouse › Connections.
+earlier warehouse endpoints — and nothing is copied into the new table.
 
 Downgrading it cannot bring those rows back: `downgrade modules@-1` drops the
 three tables it created and puts back an **empty** table of the earlier shape.
@@ -484,9 +484,7 @@ labelled `(modules)`.
 
 ## Environment Variables
 
-Alembic and the bootstrap connect with these settings. In the API container they
-are already set, by the compose file, the Helm chart or the task definition; set
-them yourself only when you run alembic somewhere else. The defaults below are the
+Alembic and the bootstrap connect with these settings. The defaults below are the
 Quick Start compose file's:
 
 | Variable | Quick Start default | Description |
@@ -502,6 +500,15 @@ The database server's `TimeZone` must be `UTC`, as it is in the bundled PostgreS
 compose files and the Helm chart. On another time zone, some times the API stores move by the
 zone's offset: an experiment's `updated_at`, for example. Its start and end dates are stored in
 UTC whatever the zone.
+
+To see the bundled database's time zone:
+
+```{.bash exec}
+docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SHOW TimeZone"'
+```
+<!-- expect: UTC -->
+
+It prints `UTC`.
 
 ---
 
@@ -632,11 +639,7 @@ names:
 - restore the backup taken before that upgrade, and run the older image
   against the restored database.
 
-Do not edit `alembic_version` to make the older image start. Removing the
-newer revision's row leaves that release's schema changes in place while
-alembic no longer knows about them: the older image then re-runs migrations
-from the wrong position, and rolling forward again fails on a relation that
-already exists.
+Do not edit `alembic_version` to make the older image start.
 
 The refusal is at start-up, so instances of the older image that were
 already running keep running. That, and the window in every rolling upgrade
@@ -701,8 +704,7 @@ What this means for you:
   `segment_members` and its rows; it refuses while that table has any.
   [`4c2c09a2b3e8`](#4c2c09a2b3e8-keeps-rollback-records-without-a-safety-configuration)
   is backward-compatible for a rollback, and undoing it changes nothing.
-- **Docker Compose and the Helm chart are deliberately unchanged.** Compose runs
-  one API container, which is the only writer and keeps `RUN_MIGRATIONS=true`.
+- Compose runs one API container, which is the only writer and keeps `RUN_MIGRATIONS=true`.
   The chart already keeps the bootstrap out of the serving container: it runs
   it in an init container.
 

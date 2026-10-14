@@ -2,13 +2,5 @@
 
 This directory contains AWS CDK code for deploying the experimentation platform infrastructure.
 
-## Prerequisites
-
-- AWS CLI configured with appropriate credentials
-- Node.js 14.x or later
-- Python 3.11 or later
-- AWS CDK Toolkit installed globally: `npm install -g aws-cdk`
-
-## Getting Started
-
-1. Create a virtual environment:
+To deploy it, follow [AWS CDK Deployment](../../docs/self-hosting/cdk.md), which
+lists the prerequisites and the environment variables `app.py` reads.

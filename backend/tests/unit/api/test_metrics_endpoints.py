@@ -64,6 +64,7 @@ def test_get_metrics_summary(client):
             avg_latency=45.5,
             rule_match_rate=75.0,
             error_rate=2.5,
+            uncounted_error_count=3,
         )
 
         # Make the request
@@ -85,6 +86,7 @@ def test_get_metrics_summary(client):
         assert data["avg_latency"] == 45.5
         assert data["rule_match_rate"] == 75.0
         assert data["error_rate"] == 2.5
+        assert data["uncounted_error_count"] == 3
 
         # Verify the service was called with the right parameters
         mock_summary.assert_called_once()
