@@ -1,0 +1,365 @@
+# What verifies each unit of docs/guides/segments.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/guides/segments.md"
+
+[[unit]]
+text = "Segments"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A segment is a named group of users."
+by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_kind_cannot_be_changed"]
+
+[[unit]]
+text = "It is one of two kinds, chosen when you create it and never changed:"
+by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_kind_cannot_be_changed"]
+
+[[unit]]
+text = "Rules (kind: rules, the default): the users whose attributes match conditions you set, such as plan is enterprise."
+by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_kind_defaults_to_rules"]
+
+[[unit]]
+text = "The rule format and its limits are in the API reference."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "ID list (kind: id_list): the users whose user_id you upload, for example a customer export."
+by = [
+    "docex:docs/guides/segments.md#{\"kind\":\"id_list\",\"rules\":null,\"member_count\":0}",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_kind_an_id_list_is_created_without_rules",
+]
+
+[[unit]]
+text = "This page is about these."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The member routes are beta (x-stability: beta): their shape may still change."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "The full contract and every refusal are in the API reference."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The examples run against the Quick Start stack and its demo data."
+by = ["docex:docs/guides/segments.md#\"ADMIN\""]
+
+[[unit]]
+text = "Sign in"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Changing a segment takes the ADMIN or DEVELOPER role."
+by = [
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_roles_analyst_cannot_change_members",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_roles_viewer_cannot_change_members",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_roles_developer_changes_members",
+    "test:backend/tests/smoke/test_segment_change_routes_guarded.py",
+]
+
+[[unit]]
+text = "Sign in as the demo administrator:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Create an ID-list segment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "An ID-list segment has no rules."
+by = ["docex:docs/guides/segments.md#{\"kind\":\"id_list\",\"rules\":null,\"member_count\":0}"]
+
+[[unit]]
+text = "This creates one and saves its id in $SEGMENT:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints {\"kind\":\"id_list\",\"rules\":null,\"member_count\":0}."
+by = ["docex:docs/guides/segments.md#{\"kind\":\"id_list\",\"rules\":null,\"member_count\":0}"]
+
+[[unit]]
+text = "Add IDs"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Send up to 10,000 IDs per request."
+by = [
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_request_limits",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_ids_are_matched_exactly",
+]
+
+[[unit]]
+text = "Each is 1 to 255 characters and is matched exactly: not trimmed, not case-folded."
+by = [
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_request_limits",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_ids_are_matched_exactly",
+]
+
+[[unit]]
+text = "It prints {\"added\":3,\"already_members\":0,\"member_count\":3}."
+by = ["docex:docs/guides/segments.md#{\"added\":3,\"already_members\":0,\"member_count\":3}"]
+
+[[unit]]
+text = "Sending the same IDs again is safe."
+by = [
+    "docex:docs/guides/segments.md#{\"added\":1,\"already_members\":1,\"member_count\":4}",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_add_and_remove_are_idempotent",
+]
+
+[[unit]]
+text = "An ID already in the segment is counted in already_members and left alone, so after a failure you can send the whole chunk again:"
+by = [
+    "docex:docs/guides/segments.md#{\"added\":1,\"already_members\":1,\"member_count\":4}",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_add_and_remove_are_idempotent",
+]
+
+[[unit]]
+text = "It prints {\"added\":1,\"already_members\":1,\"member_count\":4}."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Add IDs from a file"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A segment holds at most 1,000,000 IDs."
+by = ["untested:T"]
+
+[[unit]]
+text = "Send a longer file in chunks of 10,000, one request at a time, and stop at the first error."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "This writes 25,000 IDs, one per line, to a file in a scratch directory, sends them in three chunks and prints each answer."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Each body is piped to curl (--data-binary @-): 10,000 IDs are too long for one command-line argument on Linux."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints one line per chunk."
+by = ["docex:docs/guides/segments.md#\"member_count\":25004"]
+
+[[unit]]
+text = "The last is {\"added\":5000,\"already_members\":0,\"member_count\":25004}."
+by = ["docex:docs/guides/segments.md#\"member_count\":25004"]
+
+[[unit]]
+text = "The file's IDs are written cust-000001 to cust-025000, so none of them was in the segment before (cust-001 is a different ID)."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A request over a limit answers 422 and adds nothing."
+by = [
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_request_limits",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_request_limits_on_remove",
+]
+
+[[unit]]
+text = "The message names the field and the position, never an ID: add: at most 10,000 IDs per request, add[17]: an ID is 1 to 255 characters, or, past the cap, this segment would have 1,000,250 members; a segment holds at most 1,000,000."
+by = [
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_request_limits",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_request_limits_on_remove",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_the_segment_cap_writes_nothing",
+]
+
+[[unit]]
+text = "Check a user"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A user is a member when the user_id in the context you send is in the list:"
+by = [
+    "docex:docs/guides/segments.md#true",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_evaluate_an_id_list",
+]
+
+[[unit]]
+text = "It prints true."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A user_id that is not in the list, or a context with no user_id, prints false."
+by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_evaluate_an_id_list"]
+
+[[unit]]
+text = "Remove IDs"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints {\"removed\":1,\"not_members\":1,\"member_count\":25003}: cust-999 was not a member."
+by = ["docex:docs/guides/segments.md#{\"removed\":1,\"not_members\":1,\"member_count\":25003}"]
+
+[[unit]]
+text = "Target a flag or an experiment at a segment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A targeting condition names the segment by id: {\"attribute\": \"segment\", \"operator\": \"in_segment\", \"value\": \"<segment id>\"}, or not_in_segment for everyone else."
+by = [
+    "docex:docs/guides/segments.md#active",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_rules_naming_an_active_segment_are_accepted",
+]
+
+[[unit]]
+text = "This creates a flag that is on only for the segment's members (its rollout outside the segment is 0%):"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints active."
+by = [
+    "docex:docs/guides/segments.md#active",
+    "docex:docs/guides/segments.md#cust-001 {\"enabled\":true,\"reason\":\"targeting_rule\"}",
+]
+
+[[unit]]
+text = "Evaluating it takes an API key."
+by = [
+    "docex:docs/guides/segments.md#active",
+    "docex:docs/guides/segments.md#cust-001 {\"enabled\":true,\"reason\":\"targeting_rule\"}",
+]
+
+[[unit]]
+text = "cust-001 is in the list and cust-999 is not:"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "It prints one line per user: cust-001 gets {\"enabled\":true,\"reason\":\"targeting_rule\"}, and cust-999 falls through to the 0% rollout, {\"enabled\":false,\"reason\":\"rollout\"}."
+by = ["docex:docs/guides/segments.md#cust-001 {\"enabled\":true,\"reason\":\"targeting_rule\"}"]
+
+[[unit]]
+text = "An experiment takes the same condition in its targeting_rules; a user who is not a member gets the control variant with assigned: false and reason: \"targeting\"."
+by = ["test:backend/tests/integration/api/test_segment_targeting_api.py::test_flags_and_experiments_agree"]
+
+[[unit]]
+text = "The server decides membership."
+by = [
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_a_caller_cannot_supply_membership",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_context_user_id_does_not_decide_membership",
+]
+
+[[unit]]
+text = "For an ID list, the user is the user_id the flag or the assignment is evaluated for; a user_id (or anything else) in the context you send does not make a user a member."
+by = [
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_a_caller_cannot_supply_membership",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_context_user_id_does_not_decide_membership",
+]
+
+[[unit]]
+text = "At most 10 segments per ruleset, one per condition; put several conditions in an OR group to match any of them."
+by = ["test:backend/tests/unit/core/test_segment_targeting_validation.py::test_ten_segments_accepted_eleven_refused"]
+
+[[unit]]
+text = "Saving rules that name a segment that is unknown, inactive or archived answers 422."
+by = [
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_reference_refused_on_flag_create",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_reference_refused_on_experiment_create",
+]
+
+[[unit]]
+text = "If the server cannot decide membership when the flag is evaluated (the flag was unarchived after its segment was archived, say), the flag answers {\"enabled\": false, \"reason\": \"error\"} and the experiment does not enrol the user, for in_segment and not_in_segment alike."
+by = ["test:backend/tests/integration/api/test_segment_targeting_api.py::test_unavailable_segment_fails_closed"]
+
+[[unit]]
+text = "SDKs that evaluate flags locally ask the server about a flag that uses a segment: see Local evaluation."
+by = ["test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_segment_flags_are_remote"]
+
+[[unit]]
+text = "The full rule is in the API reference."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Archive a segment"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "A segment that a flag or an experiment still uses cannot be archived or made inactive: it answers 409 and lists them."
+by = [
+    "docex:docs/guides/segments.md#{\"code\":\"segment_in_use\",\"flags\":1}",
+    "test:backend/tests/integration/api/test_segment_in_use.py::test_a_disabled_flag_and_a_paused_experiment_block",
+]
+
+[[unit]]
+text = "A flag counts until it is archived, and an experiment until it is completed or archived, because until then its rules can still be evaluated."
+by = [
+    "test:backend/tests/integration/api/test_segment_in_use.py::test_a_disabled_flag_and_a_paused_experiment_block",
+    "test:backend/tests/integration/api/test_segment_in_use.py::test_each_live_experiment_status_blocks",
+    "test:backend/tests/integration/api/test_segment_in_use.py::test_an_unused_segment_archives",
+]
+
+[[unit]]
+text = "It prints {\"code\":\"segment_in_use\",\"flags\":1}."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "The full answer is {\"detail\": {\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{\"id\", \"key\", \"name\"}], \"experiments\": [{\"id\", \"key\", \"name\", \"status\"}]}}."
+by = ["test:backend/tests/integration/api/test_segment_in_use.py::test_a_disabled_flag_and_a_paused_experiment_block"]
+
+[[unit]]
+text = "Remove the segment from those rules, or archive the flag, then archive the segment."
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Limits"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "Limit | Value"
+by = ["exempt:baseline"]
+
+[[unit]]
+text = "IDs per request | 1 to 10,000"
+by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_request_limits"]
+
+[[unit]]
+text = "Characters per ID | 1 to 255"
+by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_request_limits"]
+
+[[unit]]
+text = "IDs per segment | 1,000,000"
+by = ["untested:T"]
+
+[[unit]]
+text = "Who can change members | ADMIN and DEVELOPER (ANALYST and VIEWER get 403)"
+by = [
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_roles_analyst_cannot_change_members",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_roles_viewer_cannot_change_members",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_roles_developer_changes_members",
+]
+
+[[unit]]
+text = "Segments per targeting ruleset | 10"
+by = ["test:backend/tests/unit/core/test_segment_targeting_validation.py::test_ten_segments_accepted_eleven_refused"]
+
+[[unit]]
+text = "A request body is at most 5 MiB (5,242,880 bytes); a larger one is answered 413."
+by = [
+    "test:backend/tests/integration/api/test_request_body_limit.py::test_the_limit_is_5_mib",
+    "test:backend/tests/integration/api/test_request_body_limit.py::test_every_route_answers_413_to_a_declared_length_over_the_limit",
+]
+
+[[unit]]
+text = "10,000 IDs of 255 ASCII characters come to about 2.6 MB, but the ID limit counts characters, not bytes: with long non-ASCII IDs, send fewer per request."
+by = ["untested:T"]
+
+[[unit]]
+text = "Each add or remove writes one segment_update entry to the audit log with the counts, never the IDs."
+by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_segment_members_add_and_remove_record_counts_only"]
+
+[[unit]]
+text = "A rules segment answers 409 on the member routes, and so does an archived one."
+by = [
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_kind_member_routes_refuse_a_rules_segment",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_kind_member_routes_refuse_an_archived_segment",
+]
+
+[[unit]]
+text = "Before you roll a database back past the release that added ID lists, read 37dcb2969766: its downgrade deletes every list's members, so it refuses while any list has members."
+by = ["test:backend/tests/integration/database/test_segment_members_migration.py"]

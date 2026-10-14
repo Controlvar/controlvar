@@ -16,7 +16,7 @@ with ``before`` in an ``AND`` group is a window between two moments.
 
 from __future__ import annotations
 
-import ast
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, Tuple
@@ -44,7 +44,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PAGE = REPO_ROOT / "docs" / "Enhanced_Rules_Engine_Reference.md"
-HEADING = "#### TIME_WINDOW (`time_window`)"
+HEADING = "### TIME_WINDOW (`time_window`)"
 
 #: Inside the example's window: 09:00-17:00, Monday to Friday, 1-31 January 2024.
 INSIDE = [
@@ -74,17 +74,12 @@ def _prose() -> str:
 
 
 def _example() -> Dict[str, Any]:
-    """The example's ``Condition(...)`` keyword arguments, read without running it."""
-    code = _section().split("```python\n", 1)[1].split("```", 1)[0]
-    call = ast.parse(code, mode="eval").body
-    assert isinstance(call, ast.Call) and call.func.id == "Condition", code
-    kwargs: Dict[str, Any] = {}
-    for keyword in call.keywords:
-        if keyword.arg == "operator":
-            assert keyword.value.value.id == "OperatorType", code
-            kwargs["operator"] = OperatorType[keyword.value.attr]
-        else:
-            kwargs[keyword.arg] = ast.literal_eval(keyword.value)
+    """The example's native condition, the section's ```json block, as the
+    ``Condition`` keyword arguments it gives."""
+    code = _section().split("```json\n", 1)[1].split("```", 1)[0]
+    kwargs: Dict[str, Any] = json.loads(code)
+    assert set(kwargs) <= set(Condition.model_fields), code
+    kwargs["operator"] = OperatorType(kwargs["operator"])
     return kwargs
 
 
