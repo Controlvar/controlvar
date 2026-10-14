@@ -342,7 +342,9 @@ class LLMExperimentResults(BaseModel):
             "every variant has at least one business-metric value, otherwise "
             "auto_eval (the judge score), compared across the variants that "
             "have one. The winner and every variant's p_value and effect_size "
-            "are on this metric. Null when no variant has a value for it."
+            "are on this metric. A variant with no evaluations has no "
+            "business-metric value. Null when no variant has a value for the "
+            "chosen metric."
         ),
     )
     total_evaluations: int
