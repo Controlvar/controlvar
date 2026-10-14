@@ -185,7 +185,8 @@ class SafetyRollbackRecordResponse(SafetyRollbackRecordBase):
     """Response schema for safety rollback record."""
 
     id: UUID
-    safety_config_id: UUID
+    # None for a flag that had no safety configuration of its own (#1206).
+    safety_config_id: Optional[UUID] = None
     created_at: datetime
     success: bool
     executed_by_user_id: Optional[UUID] = None  # NULL for automatic rollbacks

@@ -21,6 +21,12 @@
 # Before #196 the same calls answered 502 "LLM provider error: No module named
 # 'anthropic'".
 #
+# Then the judge (POST /judge) scores those completions through the same
+# Anthropic client. The stub's text carries no score, so every evaluation must
+# come back unscored -- `"score": null`, `"error": "no_score"` -- and the
+# results must count every completion as unscored. Before #1192 each one was
+# stored as 0.5 and counted as a score.
+#
 #   API_URL  the api service (default http://localhost:8000)
 #   ADMIN_EMAIL / ADMIN_PASSWORD  the seeded demo admin
 #
@@ -79,11 +85,13 @@ code="$(curl -s -o "$work/started.json" -w '%{http_code}' -X POST "$API_URL/api/
 # provider has answered once. 40 users at 50/50 miss one provider with
 # probability 2^-39.
 declare -A seen=()
+completed=0
 for i in $(seq 1 40); do
     code="$(curl -s -o "$work/complete.json" -w '%{http_code}' -X POST \
         "$API_URL/api/v1/llm-experiments/$EXP/complete" "${auth[@]}" \
         --data "{\"user_id\": \"docker-smoke-llm-$i\", \"input_variables\": {\"word\": \"ok\"}}")"
     [ "$code" = "200" ] || fail "POST /complete (user $i): HTTP $code $(head -c 300 "$work/complete.json")"
+    completed=$((completed + 1))
     provider="$(jq -er .provider "$work/complete.json")"
     text="$(jq -er .response "$work/complete.json")"
     [ "$text" = "stub-$provider-ok" ] || fail "provider $provider answered '$text', expected 'stub-$provider-ok'"
@@ -97,6 +105,25 @@ for i in $(seq 1 40); do
 done
 [ -n "${seen[anthropic]:-}" ] || fail "no /complete was routed to the anthropic variant"
 [ -n "${seen[openai]:-}" ] || fail "no /complete was routed to the openai variant"
+
+# The judge, through the image's Anthropic client to the stub, on every
+# completion above. The stub's reply has no JSON score, so nothing is scored.
+code="$(curl -s -o "$work/judged.json" -w '%{http_code}' -X POST "$API_URL/api/v1/llm-experiments/$EXP/judge" \
+    "${auth[@]}" --data '{"criteria": "helpfulness"}')"
+[ "$code" = "200" ] || fail "POST /judge: HTTP $code $(head -c 300 "$work/judged.json")"
+judged="$(jq -er 'length' "$work/judged.json")"
+[ "$judged" = "$completed" ] || fail "the judge answered $judged entries for $completed completions"
+jq -e 'all(.[]; .score == null and .error == "no_score")' "$work/judged.json" >/dev/null \
+    || fail "a judge entry has a score from a reply with none (expected score null, error no_score): $(head -c 300 "$work/judged.json")"
+code="$(curl -s -o "$work/results.json" -w '%{http_code}' "$API_URL/api/v1/llm-experiments/$EXP/results" "${auth[@]}")"
+[ "$code" = "200" ] || fail "GET /results: HTTP $code $(head -c 300 "$work/results.json")"
+unscored="$(jq -er '.total_auto_eval_unscored' "$work/results.json")"
+per_variant="$(jq -er '[.variant_stats[].n_auto_eval_unscored] | add' "$work/results.json")"
+[ "$unscored" = "$completed" ] && [ "$per_variant" = "$completed" ] \
+    || fail "the results count $unscored unscored ($per_variant by variant) for $completed completions"
+jq -e 'all(.variant_stats[]; .mean_auto_eval_score == null)' "$work/results.json" >/dev/null \
+    || fail "a variant has an auto-eval mean although nothing was scored: $(head -c 300 "$work/results.json")"
+echo "llm smoke: the judge left all $completed completions unscored, and the results count them"
 
 # And the stub saw both, so the 200s are not something else answering.
 "${COMPOSE[@]}" exec -T llm-stub python -c \

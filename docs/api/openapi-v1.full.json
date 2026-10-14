@@ -9337,6 +9337,12 @@
             "title": "Status",
             "type": "string"
           },
+          "total_auto_eval_unscored": {
+            "description": "Evaluations in the experiment with no judge score: not judged yet, or the call failed or gave no usable score.",
+            "minimum": 0,
+            "title": "Total Auto Eval Unscored",
+            "type": "integer"
+          },
           "total_evaluations": {
             "title": "Total Evaluations",
             "type": "integer"
@@ -9347,6 +9353,22 @@
             },
             "title": "Variant Stats",
             "type": "array"
+          },
+          "winner_metric": {
+            "anyOf": [
+              {
+                "enum": [
+                  "business_metric",
+                  "auto_eval"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The one metric every variant is compared on: business_metric when every variant has at least one business-metric value, otherwise auto_eval (the judge score), compared across the variants that have one. The winner and every variant's p_value and effect_size are on this metric. A variant with no evaluations has no business-metric value. Null when no variant has a value for the chosen metric.",
+            "title": "Winner Metric"
           },
           "winner_variant_id": {
             "anyOf": [
@@ -9379,7 +9401,8 @@
           "variant_stats",
           "winner_variant_id",
           "winner_variant_name",
-          "total_evaluations"
+          "total_evaluations",
+          "total_auto_eval_unscored"
         ],
         "title": "LLMExperimentResults",
         "type": "object"
@@ -10382,7 +10405,7 @@
                 "type": "null"
               }
             ],
-            "description": "Percentage of errors",
+            "description": "Errors that count toward the safety check, as a percentage of the aggregated flag evaluations in the period (it can exceed 100 when errors outnumber them); null when the period has no aggregated flag evaluations. Errors are counted by the safety check's rule: flag evaluations that failed on the server count, and only a report sent with a server-side key (an API key with the ``sdk:ruleset`` scope, whose owner can change feature flags) counts; the reports that do not count are in ``uncounted_error_count``. The value still differs from the safety check's ``error_rate`` in three ways: the period is ``start_date`` to ``end_date`` (by default the 30 days before now), not the last 15 minutes; the denominator is the aggregated flag evaluations of ``period``, not the raw flag evaluations; and the unit is a percentage, not a fraction.",
             "title": "Error Rate"
           },
           "rule_match_rate": {
@@ -10402,6 +10425,12 @@
             "title": "Total Evaluations",
             "type": "integer"
           },
+          "uncounted_error_count": {
+            "description": "Error reports in the period that are stored but do not count toward ``error_rate`` or the safety check: those sent with a key that is not a server-side key, and those stored before 0.29.0. The safety check shows the same reports in its own window as ``details.uncounted_error_count``.",
+            "minimum": 0,
+            "title": "Uncounted Error Count",
+            "type": "integer"
+          },
           "unique_users": {
             "description": "Number of unique users",
             "title": "Unique Users",
@@ -10410,7 +10439,8 @@
         },
         "required": [
           "total_evaluations",
-          "unique_users"
+          "unique_users",
+          "uncounted_error_count"
         ],
         "title": "MetricsSummary",
         "type": "object"
@@ -17166,6 +17196,12 @@
             ],
             "title": "Mean Latency Ms"
           },
+          "n_auto_eval_unscored": {
+            "description": "Evaluations with no judge score: not judged yet, or the call failed or gave no usable score; left out of the auto-eval statistics.",
+            "minimum": 0,
+            "title": "N Auto Eval Unscored",
+            "type": "integer"
+          },
           "n_evaluations": {
             "title": "N Evaluations",
             "type": "integer"
@@ -17195,6 +17231,7 @@
           "variant_name",
           "is_control",
           "n_evaluations",
+          "n_auto_eval_unscored",
           "mean_latency_ms",
           "latency_ci_lower",
           "latency_ci_upper",
@@ -18183,7 +18220,7 @@
   "info": {
     "description": "API for managing experiments and feature flags in test environment",
     "title": "Experimently",
-    "version": "0.31.1"
+    "version": "0.32.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -27879,7 +27916,7 @@
     },
     "/api/v1/llm-experiments/{experiment_id}/judge": {
       "post": {
-        "description": "Use a judge LLM (default: Claude 3.5 Sonnet) to score all responses in\nthis experiment on the specified criteria (e.g. 'helpfulness', 'accuracy').\n\nReturns a list of LLMJudgeResult objects with scores 0–1.",
+        "description": "Use a judge LLM (default: LLM_DEFAULT_JUDGE_MODEL) to score all responses in\nthis experiment on the specified criteria (e.g. 'helpfulness', 'accuracy').\n\nReturns one result per evaluation: its score from 0 to 1, stored as the\nevaluation's auto_eval_score. When the judge call fails or the reply has no\nusable score, no score is stored: the result's score is null, error is\n\"call_failed\" or \"no_score\", and an earlier score is replaced by null.",
         "operationId": "run_judge_api_v1_llm_experiments__experiment_id__judge_post",
         "parameters": [
           {
@@ -28715,7 +28752,7 @@
     },
     "/api/v1/metrics/summary": {
       "get": {
-        "description": "Get summary statistics for feature flag metrics.",
+        "description": "Get summary statistics for feature flag metrics over ``start_date`` to ``end_date``, by default the 30 days before now. ``error_rate`` counts errors by the safety check's rule, and ``uncounted_error_count`` is the error reports that do not count.",
         "operationId": "get_metrics_summary_api_v1_metrics_summary_get",
         "parameters": [
           {

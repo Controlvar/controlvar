@@ -311,13 +311,13 @@ def test_the_alarms_the_page_describes(templates, prod, page):
     # restore's cutover moves onto the restored cluster (scripts/
     # restore_repoint.sh renames, it does not repoint the parameter). Before
     # the cutover the restored cluster is not watched; after it, it is, with
-    # no redeploy -- expected, and checked by the staging rehearsal.
+    # no redeploy, as the staging rehearsal of 2026-10-11 showed.
     assert (
         "Before the cutover the restored cluster is not watched by `AuroraHighCPU-$ENV` either."
     ) in page
     assert (
         "The cutover gives the restored cluster that identifier, so from then on the alarm "
-        "is expected to watch it with no redeploy; the staging rehearsal checks that."
+        "watches it with no redeploy, as it did in the staging rehearsal on 2026-10-11"
     ) in page
     assert "is redeployed. Until then the alarm watches the failed cluster" not in page
     # Scenario 5: one Redis alarm per node, on the nodes' real ids.

@@ -1,0 +1,162 @@
+# What verifies each unit of docs/development/database/backup.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/development/database/backup.md"
+
+[[unit]]
+text = "Database Backup Schedules and Retention Policies"
+by = ["exempt:label"]
+
+[[unit]]
+text = "This page lists the backups the CDK stacks configure for each data store."
+by = ["exempt:label"]
+
+[[unit]]
+text = "The recovery procedures are in the Disaster Recovery Plan."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Aurora PostgreSQL"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Backup Mechanism"
+by = ["exempt:label"]
+count = 2
+
+[[unit]]
+text = "Aurora PostgreSQL protects the cluster with:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Automated backups: a daily snapshot and continuous backup of the transaction log, which together allow point-in-time recovery to any moment within the retention period"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Manual snapshots: deploy.yml takes one before every deploy's migration (pre-deploy-<env>-<tag>-<time>); they are kept until you delete them"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_snapshot_is_taken_before_the_migration_from_the_stack_output"]
+
+[[unit]]
+text = "A final snapshot when the prod database stack is deleted"
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_only_prod_takes_a_final_snapshot_of_its_cluster"]
+
+[[unit]]
+text = "Backup and Maintenance Windows"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The stack sets no preferred backup window and no preferred maintenance window, so Aurora chooses both for the cluster's region."
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_aurora_sets_no_backup_or_maintenance_window"]
+
+[[unit]]
+text = "Retention Policy"
+by = ["exempt:label"]
+count = 2
+
+[[unit]]
+text = "Environment | Automated Backup Retention | Point-in-Time Recovery | Manual Snapshot Retention"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Production | 35 days | Up to 35 days | Until manually deleted"
+by = ["test:infrastructure/tests/test_database_wiring.py::test_backups_and_instances_per_environment"]
+
+[[unit]]
+text = "Staging | 35 days | Up to 35 days | Until manually deleted"
+by = ["test:infrastructure/tests/test_database_wiring.py::test_backups_and_instances_per_environment"]
+
+[[unit]]
+text = "Any other | 1 day | Up to 1 day | Until manually deleted"
+by = ["test:infrastructure/tests/test_database_wiring.py::test_dev_keeps_one_day_of_backups"]
+
+[[unit]]
+text = "Implementation"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The retention is what the stack sets: aurora_backup_retention_days() in infrastructure/cdk/stacks/environments.py returns it per environment, and infrastructure/cdk/stacks/enhanced_database_stack.py passes it to the cluster as backup=rds.BackupProps(retention=Duration.days(...))."
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_aurora_keeps_the_retention_the_environment_function_returns"]
+
+[[unit]]
+text = "35 days is the most Aurora allows."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "DynamoDB Tables"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every DynamoDB table the stacks create has point-in-time recovery on."
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_every_dynamodb_table_has_point_in_time_recovery"]
+
+[[unit]]
+text = "No stack schedules an on-demand backup."
+by = ["test:infrastructure/tests/test_hand_made_resources.py::test_no_stack_schedules_a_rotation_or_a_backup"]
+
+[[unit]]
+text = "ElastiCache Redis"
+by = ["exempt:label"]
+
+[[unit]]
+text = "ElastiCache Redis uses snapshot-based backups:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Automatic Snapshots: Taken daily during the configured backup window"
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_redis_snapshots_daily_in_its_window_and_keeps_them_per_environment"]
+
+[[unit]]
+text = "Backup Windows"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Environment | Backup Window (UTC) | Maintenance Window (UTC)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Development | 02:00-03:00 | Sun 04:00-05:00"
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_redis_snapshots_daily_in_its_window_and_keeps_them_per_environment"]
+
+[[unit]]
+text = "Staging | 02:00-03:00 | Sun 04:00-05:00"
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_redis_snapshots_daily_in_its_window_and_keeps_them_per_environment"]
+
+[[unit]]
+text = "Production | 02:00-03:00 | Sun 04:00-05:00"
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_redis_snapshots_daily_in_its_window_and_keeps_them_per_environment"]
+
+[[unit]]
+text = "Environment | Snapshot Retention"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Development | 1 day"
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_redis_snapshots_daily_in_its_window_and_keeps_them_per_environment"]
+
+[[unit]]
+text = "Staging | 3 days"
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_redis_snapshots_daily_in_its_window_and_keeps_them_per_environment"]
+
+[[unit]]
+text = "Production | 7 days"
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_redis_snapshots_daily_in_its_window_and_keeps_them_per_environment"]
+
+[[unit]]
+text = "Failover"
+by = ["exempt:label"]
+
+[[unit]]
+text = "In prod the replication group has three nodes and fails over automatically; staging runs one node, with no failover."
+by = ["test:infrastructure/tests/test_redis_sizing.py::test_replication_group_sizing"]
+
+[[unit]]
+text = "Encryption"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Aurora PostgreSQL: Backups are encrypted using the same KMS key as the database"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_aurora_storage_is_encrypted_with_the_stacks_kms_key"]
+
+[[unit]]
+text = "ElastiCache Redis: Snapshots are encrypted if the cluster has encryption at rest enabled"
+by = ["test:infrastructure/tests/test_redis_sizing.py::test_encryption_is_unchanged"]

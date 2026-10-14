@@ -1,0 +1,549 @@
+# What verifies each unit of docs/deployment/iam-permissions.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/deployment/iam-permissions.md"
+
+[[unit]]
+text = "IAM permissions for deploying"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Three identities touch an AWS account that runs Experimently, and they need different things."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Keep them separate: the one that deploys releases every week should not be able to rewrite the account."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Identity | Who uses it | When | What it needs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Bootstrap | a human, once per account and region | cdk bootstrap | create the CDK toolkit stack (below)"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "cdk deploy | a human standing up or changing an environment | ENVIRONMENT=<env> cdk deploy … | sts:AssumeRole on the bootstrap's cdk- roles, and a few one-off extras"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Workflow role | GitHub Actions, through OIDC | Deploy, Rollback, Database Migration | exactly the generated list below"
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_deploy_rollback_and_database_migration_assume_the_role_and_nothing_else",
+    "test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_the_committed_policy_is_what_the_generator_writes",
+]
+
+[[unit]]
+text = "Nothing in this repository creates any of them."
+by = [
+    "test:infrastructure/tests/test_hand_made_resources.py::test_no_stack_creates_an_identity_that_could_deploy",
+    "test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_resources_are_star_but_snapshot_tagging_and_passing_roles",
+]
+
+[[unit]]
+text = "They are set up by a person with IAM rights in the account, before the first deploy (deployment guide, section 1)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "1. The bootstrap identity"
+by = ["exempt:label"]
+
+[[unit]]
+text = "cdk bootstrap aws://<account>/<region> creates the CDKToolkit CloudFormation stack: an S3 bucket and an ECR repository for assets, SSM parameter /cdk-bootstrap/hnb659fds/version, and the IAM roles cdk-hnb659fds-{deploy,cfn-exec,file-publishing,image-publishing,lookup}-role-<account>-<region>."
+by = ["test:infrastructure/tests/test_synth_inputs.py::test_every_stack_deploys_through_the_default_bootstrap"]
+
+[[unit]]
+text = "It creates them with its caller's own permissions, IAM roles included, so run it once, as an administrator of the account."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Nothing afterwards should use it."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "2. The cdk deploy identity"
+by = ["exempt:label"]
+
+[[unit]]
+text = "With a modern bootstrap, cdk deploy does not use its caller's permissions to create resources: it assumes the bootstrap roles, and CloudFormation acts as cdk-hnb659fds-cfn-exec-role-…."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "The caller needs:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "sts:AssumeRole on arn:aws:iam::<account>:role/cdk-hnb659fds-;"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "for the one-off steps the deployment guide has them do by hand: ecr:CreateRepository and push rights on experimentation-platform/backend and experimentation-platform/web, secretsmanager:CreateSecret on /<env>/experimentation/, and acm:RequestCertificate / acm:DescribeCertificate (plus route53:ChangeResourceRecordSets if DNS is in Route 53)."
+by = ["test:infrastructure/tests/test_hand_made_resources.py::test_what_a_person_creates_by_hand_no_stack_creates"]
+
+[[unit]]
+text = "Check it before relying on it:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "3. The workflow role (GitHub OIDC)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "One role per environment, each trusted only by jobs bound to that GitHub environment, and each holding the same permissions policy."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_the_trust_policy_admits_one_environments_jobs_exactly",
+    "test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_deploy_rollback_and_database_migration_assume_the_role_and_nothing_else",
+]
+
+[[unit]]
+text = "Trust policy"
+by = ["exempt:label"]
+
+[[unit]]
+text = "infrastructure/cdk/github-actions-trust-policy.json is the template."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Replace <AWS_ACCOUNT_ID> and <ENVIRONMENT> (staging or prod) and create one role from each copy."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It pins the token's sub claim exactly -- StringEquals, no wildcard:"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_the_trust_policy_admits_one_environments_jobs_exactly"]
+
+[[unit]]
+text = "That is GitHub's immutable subject: the owner and the repository by name and numeric id."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "On 2026-10-02 (UTC) a job of this repository bound to the staging environment received repo:getexperimently@328439352/experimently@1367480368:environment:staging (run)."
+by = ["evidence:https://github.com/getexperimently/experimently/actions/runs/36972395116"]
+
+[[unit]]
+text = "A fork or a copy of this repository has another prefix: the OIDC subject probe below prints yours."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The :environment:<name> suffix is what a job that declares environment: receives, which is the only kind of job in these workflows that assumes the role."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_one_environment_bound_job_per_workflow",
+    "test:backend/tests/unit/infrastructure/test_aws_session_duration.py::test_no_local_action_assumes_the_role",
+]
+
+[[unit]]
+text = "Before writing the policy, decode a real token."
+by = ["test:backend/tests/unit/infrastructure/test_oidc_sub_probe.py::test_the_probe_prints_exactly_sub_aud_and_environment"]
+
+[[unit]]
+text = "Before the first staging deploy, run a throwaway job bound to the staging environment that prints only the payload of its OIDC token's sub claim, and the trust policy is written from what it printed."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The OIDC subject probe workflow (.github/workflows/oidc-sub-probe.yml; Actions → OIDC subject probe → Run workflow, from main) is that job: it prints sub, aud and environment and never the token."
+by = [
+    "test:backend/tests/unit/infrastructure/test_oidc_sub_probe.py::test_it_is_dispatched_by_hand_only",
+    "test:backend/tests/unit/infrastructure/test_oidc_sub_probe.py::test_the_probe_prints_exactly_sub_aud_and_environment",
+    "test:backend/tests/unit/infrastructure/test_oidc_sub_probe.py::test_a_refused_request_prints_nothing_secret",
+]
+
+[[unit]]
+text = "Protect the environment first (see GitHub side)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A sub that does not match fails AssumeRoleWithWebIdentity with \"Not authorized\", which is the safe direction."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "The account also needs the GitHub OIDC provider (token.actions.githubusercontent.com, audience sts.amazonaws.com), once."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Session length"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Each environment role needs a MaxSessionDuration of 10800 seconds (3 hours)."
+by = ["test:backend/tests/unit/infrastructure/test_aws_session_duration.py::test_the_aws_session_lasts_as_long_as_the_job"]
+
+[[unit]]
+text = "The workflows ask for a session as long as the job may run: role-duration-seconds is 9600 in deploy.yml (a 160-minute job) and 5400 in db-migrate.yml and rollback.yml (90-minute jobs)."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_workflow_asks_for_a_session_as_long_as_its_job"]
+
+[[unit]]
+text = "IAM's default maximum is one hour, and a request above the role's maximum fails at the \"Configure AWS credentials\" step, before anything has changed."
+by = ["test:backend/tests/unit/infrastructure/test_aws_session_duration.py::test_the_aws_session_lasts_as_long_as_the_job"]
+
+[[unit]]
+text = "Create the role with --max-session-duration 10800."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "For a role that already exists:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Permissions policy"
+by = ["exempt:label"]
+
+[[unit]]
+text = "infrastructure/cdk/github-actions-deploy-policy.json, generated -- like the table below -- by scripts/iam_actions.py from every aws <service> <verb> in deploy.yml, rollback.yml, db-migrate.yml, the local actions under .github/actions/, the scripts those run, and any script listed in STAGED_SCRIPTS there (one the role will run that no workflow names yet, so the policy can be re-applied before the deploy that needs it)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_the_generator_reads_the_workflows_their_actions_and_every_script_they_run",
+    "test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_the_committed_policy_is_what_the_generator_writes",
+]
+
+[[unit]]
+text = "A unit test fails when a workflow gains a call the committed copies do not grant, so the list cannot fall behind the workflows."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_the_committed_policy_is_what_the_generator_writes",
+    "test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls",
+]
+
+[[unit]]
+text = "iam:PassRole is granted only for passing roles to ECS tasks."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_resources_are_star_but_snapshot_tagging_and_passing_roles"]
+
+[[unit]]
+text = "Resources are , except rds:AddTagsToResource, which is granted only on cluster snapshots (below)."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_resources_are_star_but_snapshot_tagging_and_passing_roles"]
+
+[[unit]]
+text = "ecs:UpdateService is on too, and that is a deliberate choice, not an oversight."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_resources_are_star_but_snapshot_tagging_and_passing_roles"]
+
+[[unit]]
+text = "It is there for scripts/ecs_rolling_rollout.sh, which rolls the dashboard service out to a new revision, but the action can also change any service's desired count, load balancers and deployment controller, the API's included."
+by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_a_code_deploy_service_is_refused"]
+
+[[unit]]
+text = "It adds no reach the role lacks: the role already holds ecs:RunTask, ecs:RegisterTaskDefinition and iam:PassRole to ECS tasks on , which together run any image with any task role in the account, so that grant dominates it."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_resources_are_star_but_snapshot_tagging_and_passing_roles"]
+
+[[unit]]
+text = "Six of the actions are not visible in the workflow text and come from AWS's documentation of what the call needs: iam:PassRole (registering and running a task definition that names roles), codedeploy:GetDeploymentConfig / codedeploy:RegisterApplicationRevision / codedeploy:GetApplicationRevision (creating a deployment from an AppSpec, below), rds:AddTagsToResource (a cluster snapshot that copies the cluster's tags, below), and codedeploy:UpdateDeploymentGroup (creating one with --override-alarm-configuration, below)."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_six_actions_come_from_what_a_call_implies"]
+
+[[unit]]
+text = "Confirm the whole list with aws iam simulate-principal-policy before the first staging deploy."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "codedeploy:UpdateDeploymentGroup is there because of a flag, not a verb (#148)."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_update_deployment_group_comes_from_the_alarm_override_flag_alone"]
+
+[[unit]]
+text = "The API's deployment group has two 5xx alarms, and CodeDeploy stops every deployment to the group while one of them is in ALARM."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_both_target_groups_and_nothing_else_are_watched"]
+
+[[unit]]
+text = "The release being rolled back is usually what holds it there, so Rollback creates its deployment with the group's alarms overridden (--override-alarm-configuration), always, and Deploy does the same only under its break-glass input (Fix forward while an alarm is firing)."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_preflight_refusals.py::test_rollback_overrides_the_alarms_always_and_deploy_only_under_the_break_glass"]
+
+[[unit]]
+text = "Overriding alarms on CreateDeployment needs the UpdateDeploymentGroup permission, which scripts/iam_actions.py grants for that flag; there is no narrower action."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_update_deployment_group_comes_from_the_alarm_override_flag_alone",
+    "test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls",
+]
+
+[[unit]]
+text = "The role can already create a deployment of any AppSpec, and it cannot change the group's service role, because iam:PassRole is granted only to ECS tasks."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_resources_are_star_but_snapshot_tagging_and_passing_roles"]
+
+[[unit]]
+text = "A role created before an update to this policy must have it re-applied."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The policy is applied by hand, so a role keeps whatever it was given."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The forward-deploy traffic shift (#143) added four read actions: cloudformation:DescribeStackResources, elasticloadbalancing:DescribeListeners, elasticloadbalancing:DescribeRules and elasticloadbalancing:DescribeTargetHealth."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "A role without them fails the deploy red at the traffic shift."
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_could_not_tell_is_red_not_green",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_no_approval_before_ready_even_with_every_target_healthy",
+]
+
+[[unit]]
+text = "The run stops with \"Could not tell whether the API is serving\" (AccessDenied on describe-target-health once the deployment is Ready), and it never approves the shift."
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_could_not_tell_is_red_not_green",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_no_approval_before_ready_even_with_every_target_healthy",
+]
+
+[[unit]]
+text = "Nothing shifts, and CodeDeploy stops the unapproved deployment when its 30-minute approval wait ends."
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_an_unapproved_deployment_is_stopped_after_30_minutes",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_could_not_tell_is_red_not_green",
+]
+
+[[unit]]
+text = "Re-apply infrastructure/cdk/github-actions-deploy-policy.json to every environment's role before its next deploy."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The dashboard rollout (#69) adds ecs:UpdateService and ecs:ListTasks: Deploy and Rollback both run scripts/ecs_rolling_rollout.sh, which points the dashboard's service at a new revision and, when a rollout fails, lists its stopped tasks."
+by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_an_older_revisions_stopped_task_is_not_reported"]
+
+[[unit]]
+text = "Roles created from a policy before the dashboard rollout lack ecs:UpdateService and ecs:ListTasks; re-apply this policy in every account before the first deploy of a release that includes the dashboard rollout."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A role without them stops at the dashboard's update-service with \"ecs:UpdateService was denied\", after the API has already shifted, and Deploy then refuses a re-run until that CodeDeploy deployment is no longer active (about an hour)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_a_denied_update_says_which_permission",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_active_deployment_is_refused_by_name_and_never_stopped",
+]
+
+[[unit]]
+text = "The API's alarms (#148) add codedeploy:UpdateDeploymentGroup and a codedeploy:GetDeployment read in Deploy."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "Roles created from a policy before the alarms lack codedeploy:UpdateDeploymentGroup; re-apply this policy in every account before the first cdk deploy that adds the alarms."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Without it, Rollback's create-deployment is expected to be refused with AccessDenied in the middle of an incident, and so is a Deploy with the alarm override; that has not been rehearsed on AWS as of v0.31.1."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "The deployment group's own read of its alarms (cloudwatch:DescribeAlarms) is on CodeDeploy's service role, which the CDK creates; the workflow role's grant of the same action, below, is a separate one."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_codedeploy_role_reads_the_alarms"]
+
+[[unit]]
+text = "Deploy's alarm pre-flight (#297, scripts/refuse_alarm_active.py) adds two reads: codedeploy:GetDeploymentGroup, for the alarm names the group polls, and cloudwatch:DescribeAlarms, for their states."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "Roles created from a policy before the pre-flight lack codedeploy:GetDeploymentGroup and cloudwatch:DescribeAlarms; re-apply this policy in every account before the first deploy of a release that includes the pre-flight."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The failure without them is loud and safe: every deploy stops at \"Could not read the API's alarms\", before anything is built, snapshotted or migrated."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_preflight_refusals.py::test_an_alarm_read_that_is_refused_stops_every_deploy",
+    "test:backend/tests/unit/infrastructure/test_deploy_preflight_refusals.py::test_deploy_runs_the_alarm_check_first_and_overrides_only_when_ticked",
+]
+
+[[unit]]
+text = "The pre-migration snapshot (#744) adds rds:AddTagsToResource, which no command names: the CDK's Aurora cluster copies its tags to each snapshot, and AWS authorizes that copy as a tagging call on the new snapshot."
+by = ["test:infrastructure/tests/test_database_wiring.py::test_backups_and_instances_per_environment"]
+
+[[unit]]
+text = "scripts/iam_actions.py grants it from its IMPLIED table, only on cluster snapshots (arn:aws:rds:::cluster-snapshot:)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_resources_are_star_but_snapshot_tagging_and_passing_roles",
+    "test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_six_actions_come_from_what_a_call_implies",
+]
+
+[[unit]]
+text = "Roles created from a policy before #744 lack rds:AddTagsToResource; re-apply this policy in every account before the next deploy."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The failure without it is loud and safe: Deploy's \"Snapshot the database before migrating\" step (and Database Migration's \"Take a snapshot first\") stops with \"not authorized to perform: rds:AddTagsToResource on resource: arn:aws:rds:...:cluster-snapshot:...\", and nothing is snapshotted, migrated or shifted."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_snapshot_is_taken_before_the_migration_from_the_stack_output",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_migrate_snapshots_before_it_reads_or_changes_the_schema",
+]
+
+[[unit]]
+text = "codedeploy:GetApplicationRevision (#754) was added after the staging rollback rehearsal on 2026-10-03 (UTC), where its absence stopped Rollback (#295)."
+by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-5963917501"]
+
+[[unit]]
+text = "Roles created from a policy before #754 lack it; re-apply this policy in every account before the next rollback."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The failure without it comes after the in-flight deployment has been stopped: Rollback's \"Roll back via CodeDeploy\" step stops with \"not authorized to perform: codedeploy:GetApplicationRevision\", and no rollback deployment is created."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_every_rollback_refusal_comes_before_the_first_aws_mutation"]
+
+[[unit]]
+text = "Action | Needed by"
+by = ["exempt:label"]
+
+[[unit]]
+text = "cloudformation:DescribeStackResources | scripts/check_live_target_group.py: aws cloudformation describe-stack-resources"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "cloudformation:DescribeStacks | .github/actions/stack-outputs/action.yml: aws cloudformation describe-stacks"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "cloudwatch:DescribeAlarms | scripts/refuse_alarm_active.py: aws cloudwatch describe-alarms"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "codedeploy:ContinueDeployment | .github/workflows/rollback.yml: aws deploy continue-deployment<br>scripts/shift_traffic.py: aws deploy continue-deployment"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "codedeploy:CreateDeployment | .github/workflows/deploy.yml: aws deploy create-deployment<br>.github/workflows/rollback.yml: aws deploy create-deployment"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "codedeploy:GetApplicationRevision | .github/workflows/deploy.yml: aws deploy create-deployment<br>.github/workflows/rollback.yml: aws deploy create-deployment"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "codedeploy:GetDeployment | .github/workflows/deploy.yml: aws deploy get-deployment<br>.github/workflows/rollback.yml: aws deploy get-deployment<br>scripts/refuse_active_deployment.py: aws deploy get-deployment<br>scripts/shift_traffic.py: aws deploy get-deployment"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "codedeploy:GetDeploymentConfig | .github/workflows/deploy.yml: aws deploy create-deployment<br>.github/workflows/rollback.yml: aws deploy create-deployment"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "codedeploy:GetDeploymentGroup | scripts/refuse_alarm_active.py: aws deploy get-deployment-group"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "codedeploy:ListDeployments | .github/workflows/rollback.yml: aws deploy list-deployments<br>scripts/refuse_active_deployment.py: aws deploy list-deployments"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "codedeploy:RegisterApplicationRevision | .github/workflows/deploy.yml: aws deploy create-deployment<br>.github/workflows/rollback.yml: aws deploy create-deployment"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "codedeploy:StopDeployment | .github/workflows/rollback.yml: aws deploy stop-deployment"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "codedeploy:UpdateDeploymentGroup | .github/workflows/deploy.yml: aws deploy create-deployment --override-alarm-configuration<br>.github/workflows/rollback.yml: aws deploy create-deployment --override-alarm-configuration"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecr:BatchCheckLayerAvailability | .github/workflows/deploy.yml: docker pull<br>.github/workflows/deploy.yml: docker push"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecr:BatchGetImage | .github/workflows/deploy.yml: docker pull"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecr:CompleteLayerUpload | .github/workflows/deploy.yml: docker push"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecr:DescribeImages | .github/workflows/deploy.yml: aws ecr describe-images"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecr:DescribeRepositories | .github/workflows/deploy.yml: aws ecr describe-repositories"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecr:GetAuthorizationToken | .github/workflows/deploy.yml: uses aws-actions/amazon-ecr-login"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecr:GetDownloadUrlForLayer | .github/workflows/deploy.yml: docker pull"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecr:InitiateLayerUpload | .github/workflows/deploy.yml: docker push"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecr:PutImage | .github/workflows/deploy.yml: docker push"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecr:UploadLayerPart | .github/workflows/deploy.yml: docker push"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecs:DescribeClusters | .github/workflows/deploy.yml: aws ecs describe-clusters"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecs:DescribeServices | .github/workflows/db-migrate.yml: aws ecs describe-services<br>.github/workflows/deploy.yml: aws ecs describe-services<br>.github/workflows/rollback.yml: aws ecs describe-services<br>scripts/check_dashboard_image.py: aws ecs describe-services<br>scripts/check_live_target_group.py: aws ecs describe-services<br>scripts/ecs_rolling_rollout.sh: aws ecs describe-services<br>scripts/shift_traffic.py: aws ecs describe-services"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecs:DescribeTaskDefinition | .github/workflows/db-migrate.yml: aws ecs describe-task-definition<br>.github/workflows/deploy.yml: aws ecs describe-task-definition<br>.github/workflows/rollback.yml: aws ecs describe-task-definition<br>scripts/check_dashboard_image.py: aws ecs describe-task-definition<br>scripts/check_task_secrets.py: aws ecs describe-task-definition<br>scripts/ecs_rolling_rollout.sh: aws ecs describe-task-definition<br>scripts/refuse_migrating_api_revision.py: aws ecs describe-task-definition<br>scripts/register_task_definition.sh: aws ecs describe-task-definition"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecs:DescribeTasks | scripts/ecs_rolling_rollout.sh: aws ecs describe-tasks<br>scripts/run_migration_task.sh: aws ecs describe-tasks"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecs:ListTasks | scripts/ecs_rolling_rollout.sh: aws ecs list-tasks"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecs:RegisterTaskDefinition | scripts/register_task_definition.sh: aws ecs register-task-definition"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecs:RunTask | scripts/run_migration_task.sh: aws ecs run-task"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "ecs:UpdateService | scripts/ecs_rolling_rollout.sh: aws ecs update-service"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "elasticloadbalancing:DescribeListeners | scripts/check_live_target_group.py: aws elbv2 describe-listeners"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "elasticloadbalancing:DescribeRules | scripts/check_live_target_group.py: aws elbv2 describe-rules"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "elasticloadbalancing:DescribeTargetHealth | scripts/shift_traffic.py: aws elbv2 describe-target-health"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "iam:PassRole | scripts/register_task_definition.sh: aws ecs register-task-definition<br>scripts/run_migration_task.sh: aws ecs run-task"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "logs:GetLogEvents | scripts/run_migration_task.sh: aws logs get-log-events"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "rds:AddTagsToResource | .github/workflows/db-migrate.yml: aws rds create-db-cluster-snapshot<br>.github/workflows/deploy.yml: aws rds create-db-cluster-snapshot"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "rds:CreateDBClusterSnapshot | .github/workflows/db-migrate.yml: aws rds create-db-cluster-snapshot<br>.github/workflows/deploy.yml: aws rds create-db-cluster-snapshot"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "rds:DescribeDBClusterSnapshots | .github/workflows/db-migrate.yml: aws rds wait db-cluster-snapshot-available<br>.github/workflows/deploy.yml: aws rds wait db-cluster-snapshot-available"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "secretsmanager:DescribeSecret | scripts/check_task_secrets.py: aws secretsmanager describe-secret"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_role_policy.py::test_each_action_is_needed_by_exactly_these_calls"]
+
+[[unit]]
+text = "GitHub side"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Each environment's protection, its AWS_ACCOUNT_ID and AWS_ROLE_ARN secrets and its PUBLIC_BASE_URL variable are section 1.5 of the deployment guide."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "SLACK_BOT_TOKEN may be a repository secret; it is optional."
+by = [
+    "test:backend/tests/unit/infrastructure/test_slack_optional.py::test_the_job_derives_slack_on_from_the_secret",
+    "test:backend/tests/unit/infrastructure/test_slack_optional.py::test_the_summary_says_once_that_slack_was_not_notified",
+]

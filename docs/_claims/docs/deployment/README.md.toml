@@ -1,0 +1,843 @@
+# What verifies each unit of docs/deployment/README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/deployment/README.md"
+
+[[unit]]
+text = "Deployment Documentation"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Operational documentation for deploying and operating Experimently in an AWS account."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "There are two environments, staging and prod, and one path for both: the same stacks (ENVIRONMENT=<env> cdk deploy) and the same three workflows, each dispatched with environment: staging or environment: prod."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_environment_is_a_closed_choice_of_staging_and_prod"]
+
+[[unit]]
+text = "Below, <env> is one of those two words, spelled exactly so -- the CDK, the GitHub environments and the secret paths all use it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Document Index"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Document | Audience | Description"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Deployment Guide | DevOps / Engineers | The ordered first-deploy checklist, then every deploy after it"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "IAM Permissions | Account administrators | The three identities, and the workflow role's generated policy"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Rollback Runbook | On-call Engineers | How to roll back a deployment"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Disaster Recovery | SRE / DevOps | DR scenarios, runbooks, and recovery procedures"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Secrets Management | DevOps / Security | How secrets are stored, injected, and rotated"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Before the first deploy"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every workflow refuses -- a red run, not a skipped one -- an environment that is not configured."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_every_refusal_comes_before_the_first_aws_mutation",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_refusals_say_what_to_do",
+]
+
+[[unit]]
+text = "The GitHub environment's protection, its AWS_ACCOUNT_ID and AWS_ROLE_ARN secrets and its PUBLIC_BASE_URL variable are section 1.5 of the deployment guide."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "SLACK_BOT_TOKEN (repository secret, optional) posts to #deployments."
+by = [
+    "test:backend/tests/unit/infrastructure/test_slack_optional.py::test_each_slack_step_is_gated_and_the_result_keeps_always",
+    "test:backend/tests/unit/infrastructure/test_slack_optional.py::test_the_summary_says_once_that_slack_was_not_notified",
+]
+
+[[unit]]
+text = "Without it, Deploy and Rollback skip their Slack steps and say so in one line of the run summary."
+by = [
+    "test:backend/tests/unit/infrastructure/test_slack_optional.py::test_each_slack_step_is_gated_and_the_result_keeps_always",
+    "test:backend/tests/unit/infrastructure/test_slack_optional.py::test_the_summary_says_once_that_slack_was_not_notified",
+]
+
+[[unit]]
+text = "The AWS side -- IAM, certificate, ECR, secrets, stacks -- is the ordered checklist in the deployment guide."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Quick Reference"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Deploy"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A release tag: release-please cuts them (vX.Y.Z)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Release Gate runs on every push to main, so the tagged commit has a result; for a tag cut before that, run it on the tag: gh workflow run release-gate.yml --ref vX.Y.Z."
+by = ["test:backend/tests/unit/infrastructure/test_release_gate_triggers.py::test_the_gate_runs_on_every_push_to_main"]
+
+[[unit]]
+text = "Actions → Deploy → Run workflow, from main: pick environment, type the tag as version, pick the profile (below)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Approve the run when the environment asks."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "There is one approval per deploy, and nothing in AWS has changed before it."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_one_environment_bound_job_per_workflow",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_every_refusal_comes_before_the_first_aws_mutation",
+]
+
+[[unit]]
+text = "Read the run summary: it names what was built and deployed for both halves -- the API and the dashboard, each with its new revision and what was serving before -- and hands you one rollback line that covers both."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_summary_prints_exactly_the_values_rollback_accepts",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_summary_hands_over_the_rollback_line",
+]
+
+[[unit]]
+text = "What has run against a real AWS account."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Deploy has run to success on a staging account, most recently v0.31.0 on 2026-10-13 (UTC) (run)."
+by = ["evidence:https://github.com/getexperimently/experimently/actions/runs/38423251771"]
+
+[[unit]]
+text = "On 2026-10-04 (UTC) and on 2026-10-11 (UTC) the Rollback workflow ran there end to end, putting the API and the dashboard back on the previous release (run, run)."
+by = [
+    "evidence:https://github.com/getexperimently/experimently/actions/runs/37217043185",
+    "evidence:https://github.com/getexperimently/experimently/actions/runs/38098724258",
+]
+
+[[unit]]
+text = "On 2026-10-11 (UTC) a 5xx alarm forced into ALARM in the hour after a deploy's traffic shift stopped the deployment there, and CodeDeploy moved the API back to the previous revision by itself (#295, #148)."
+by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595"]
+
+[[unit]]
+text = "How the traffic moves."
+by = ["exempt:label"]
+
+[[unit]]
+text = "The deploy creates a CodeDeploy blue/green deployment."
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_no_approval_until_every_target_is_healthy_and_counted",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_no_approval_before_ready_even_with_every_target_healthy",
+]
+
+[[unit]]
+text = "When CodeDeploy reports it Ready, the deploy checks that every target in the new task set's target group is healthy, as many as the task set wants, and then approves the shift."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_no_approval_until_every_target_is_healthy_and_counted"]
+
+[[unit]]
+text = "The deployment group's canary sends 10% of traffic to the new revision, waits 15 minutes, then sends the rest."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_api_canary_is_fifteen_minutes"]
+
+[[unit]]
+text = "A canary of 15 minutes gives a 5xx alarm, which needs errors in 2 of 3 minutes, time to fire while 10% of traffic is on the new revision."
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_each_alarm_is_exactly_the_specified_one",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_api_canary_is_fifteen_minutes",
+]
+
+[[unit]]
+text = "The run succeeds when the new revision is the API's PRIMARY task set and the HTTPS listener's /api/ rule forwards to that task set's target group."
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_succeeded_but_not_serving_is_red",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_the_predicate_is_zero_only_when_serving",
+]
+
+[[unit]]
+text = "The summary then prints the live group and the -c api_live_target_group=<blue|green> value the next cdk deploy of the Fargate stack needs."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_summary_prints_the_live_group_and_says_what_the_alarms_watch"]
+
+[[unit]]
+text = "Then the dashboard."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_r1_through_the_step_the_dashboard_rolls_out_when_the_api_is_serving",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_r10_the_dashboard_is_not_touched_unless_the_api_serves_this_revision",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_dashboard_steps_follow_the_api_smoke_with_no_if",
+]
+
+[[unit]]
+text = "Only after the API answers its smoke request, the deploy registers the dashboard's task definition with the new image's digest, checks the API is still serving this run's revision, and rolls the dashboard's ECS service onto it."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_r1_through_the_step_the_dashboard_rolls_out_when_the_api_is_serving",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_r10_the_dashboard_is_not_touched_unless_the_api_serves_this_revision",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_dashboard_steps_follow_the_api_smoke_with_no_if",
+]
+
+[[unit]]
+text = "It succeeds only when the dashboard's PRIMARY deployment is the new revision, COMPLETED, with every task running (a circuit-breaker rollback is red), GET / answers 200 with text/html, and a last check finds the API still serving this run's revision."
+by = [
+    "test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_r1_a_completed_rollout_of_this_revision_succeeds",
+    "test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_a_circuit_breaker_rollback_is_not_a_success",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_recheck_is_the_last_assertion",
+]
+
+[[unit]]
+text = "The summary prints the dashboard's running digest as -c dashboard_image_tag=sha256:<hex> for the next cdk deploy."
+by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_a_whole_successful_tail_is_green_and_says_so"]
+
+[[unit]]
+text = "A dashboard failure leaves the new API in place; Deploy refuses a re-run for about an hour after the shift, and the rollback line reverts the API too, so the dashboard alone goes back with rollback-runbook.md Method 2."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_summary_says_the_api_changed_only_for_exits_1_and_3",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_active_deployment_is_refused_by_name_and_never_stopped",
+]
+
+[[unit]]
+text = "Alarms watch the API's canary and the hour after it."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_both_target_groups_and_nothing_else_are_watched"]
+
+[[unit]]
+text = "The deployment group has two alarms, experimentation-api-5xx-blue-<env> and experimentation-api-5xx-green-<env>, one per target group (#148)."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_both_target_groups_and_nothing_else_are_watched"]
+
+[[unit]]
+text = "While either is in ALARM, CodeDeploy stops the deployment and rolls the API back to the previous revision by itself."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm"]
+
+[[unit]]
+text = "That can happen after the run has gone green, in the hour CodeDeploy keeps the previous task set, and nothing announces it in #deployments: the run summary says until when, and how to check."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_summary_says_until_when_the_alarms_watch_and_how_to_check",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_codedeploy_keeps_the_previous_task_set_an_hour_after_the_shift",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+]
+
+[[unit]]
+text = "The alarms watch the API's target 5xx only (at least 5 in a minute and at least 5% of that target group's requests, for 2 minutes of 3)."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_each_alarm_is_exactly_the_specified_one"]
+
+[[unit]]
+text = "A release that answers wrongly with a 2xx is not caught, nor are the load balancer's own 502 and 504, and an alarm does not roll back the dashboard."
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_dashboard_has_no_alarm",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_each_alarm_is_exactly_the_specified_one",
+]
+
+[[unit]]
+text = "After that hour, the response to a bad release is Rollback."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "One deploy per environment per hour."
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summarys_bake_is_the_groups_termination_wait",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_active_deployment_is_refused_by_name_and_never_stopped",
+]
+
+[[unit]]
+text = "After the shift, CodeDeploy keeps the previous task set for an hour, and the deployment stays active that whole time."
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_codedeploy_keeps_the_previous_task_set_an_hour_after_the_shift"]
+
+[[unit]]
+text = "CodeDeploy accepts no second deployment meanwhile, so a deploy dispatched within the hour is refused before it changes anything."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_active_deployment_is_refused_by_name_and_never_stopped"]
+
+[[unit]]
+text = "The refusal names the deployment and roughly how long it has left."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_the_time_left_is_estimated_from_the_creation_time"]
+
+[[unit]]
+text = "The deploy never stops that deployment: stopping one whose traffic has shifted rolls back a release that succeeded."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_no_stop_deployment_after_continue_deployment",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_rollback_stops_every_status_the_deploy_refuses_on",
+]
+
+[[unit]]
+text = "Rollback does stop it, deliberately."
+by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_rollback_validates_both_before_it_stops_anything_and_stops_unconditionally"]
+
+[[unit]]
+text = "When an alarm stopped it instead, CodeDeploy's own rollback may be active for up to an hour: do not use Rollback for that release, which refuses while CodeDeploy's rollback is active; see An alarm rolled the API back."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_codedeploys_own_rollback_is_named_and_rollback_is_not_advised"]
+
+[[unit]]
+text = "One at a time per environment."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_concurrency_is_per_environment_and_never_cancels"]
+
+[[unit]]
+text = "Deploy and Database Migration share a concurrency group per environment and are never cancelled mid-run."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_concurrency_is_per_environment_and_never_cancels"]
+
+[[unit]]
+text = "Rollback has its own group, so it never waits behind a deploy."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_concurrency_is_per_environment_and_never_cancels"]
+
+[[unit]]
+text = "Full procedure: deployment-guide.md"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Which profile?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Deploy asks for a profile, and the answer is a decision about what the environment is, not a build detail:"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_profile.py::TestTheProfileIsAnExplicitInput::test_the_workflow_takes_a_profile_input_defaulting_to_full"]
+
+[[unit]]
+text = "profile | image | compliance audit log"
+by = ["exempt:label"]
+
+[[unit]]
+text = "full (default) | backend/Dockerfile --target full: backend/ plus modules/backend/ and the module-only dependencies | HMAC-SHA256 signed by the compliance module (AuditSigningService)"
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_profile.py::TestTheProfileIsAnExplicitInput::test_the_workflow_builds_exactly_the_two_images_the_cdk_imports",
+    "test:backend/tests/unit/test_modules_loader.py",
+]
+
+[[unit]]
+text = "core | --target core: backend/ only, no modules/ directory at all | unsigned — hooks.audit_signer stays NullAuditSigner, every event is written with hmac_signature = NULL, and verify() reports those rows as intact"
+by = [
+    "test:backend/tests/unit/test_modules_loader.py::TestNeverRaises::test_a_register_that_blows_up_leaves_the_core_running",
+    "test:backend/tests/unit/infrastructure/test_core_checkout_image.py::test_core_is_the_last_stage_so_it_is_the_default_target",
+]
+
+[[unit]]
+text = "Nothing at runtime flags the difference: /health/ready answers 200 either way (it reports profile, it does not judge it) and abort_if_modules_broken() only fires for a broken modules package, never for an absent one."
+by = [
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_ready_reports_the_profile",
+    "test:backend/tests/unit/test_modules_loader.py::TestBrokenModulesAbortStartup::test_a_clean_load_is_never_an_abort",
+    "test:backend/tests/unit/test_modules_loader.py::TestMountingIsInsideTheGuard::test_main_aborts_on_the_failure_not_on_the_return_value",
+]
+
+[[unit]]
+text = "So core also requires ticking accept_unsigned_audit_log; the workflow refuses the run otherwise, in its preflight, before anything assumes an AWS role."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_profile.py::TestTheProfileIsAnExplicitInput::test_core_cannot_be_deployed_without_acknowledging_the_unsigned_log",
+    "test:backend/tests/unit/infrastructure/test_deploy_profile.py::TestTheProfileIsAnExplicitInput::test_the_guard_runs_before_any_aws_credential_is_issued",
+]
+
+[[unit]]
+text = "The profile must also be the one the stacks were deployed with: a full image needs AUDIT_HMAC_KEY, which only a full checkout's stacks inject."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_every_refusal_comes_before_the_first_aws_mutation"]
+
+[[unit]]
+text = "The deploy reads both task-definition families and refuses a mismatch in either direction before it builds anything."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_refusals_say_what_to_do",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_every_refusal_comes_before_the_first_aws_mutation",
+]
+
+[[unit]]
+text = "full needs one secret core does not: /<env>/experimentation/audit-hmac-key (→ AUDIT_HMAC_KEY)."
+by = [
+    "test:infrastructure/tests/test_secret_arns.py::test_the_core_profile_does_not_need_the_audit_key_but_checks_one_given",
+    "test:infrastructure/tests/test_secret_arns.py::test_the_full_profile_refuses_to_synthesise_without_the_audit_key",
+]
+
+[[unit]]
+text = "modules.register(hooks) builds the modules' settings as its very first step and their validator rejects the shipped dev default in staging and production, so a full image without it never registers the modules — abort_if_modules_broken() refuses to start the API and require_modules_or_absent() fails every alembic command, including the migration task."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deployment_secrets.py::test_without_the_audit_key_the_modules_refuse_to_register",
+    "test:backend/tests/unit/test_modules_loader.py::TestBrokenModulesAbortStartup::test_a_failure_refuses_to_start_outside_development",
+    "test:backend/tests/unit/test_modules_loader.py::TestNeverRaises::test_schema_builders_refuse_a_half_registered_package",
+]
+
+[[unit]]
+text = "The deploy's \"Every secret the task definitions reference exists\" step checks that both task definitions reference it (and the two every profile needs) by complete ARN, and that each one exists, before it builds anything."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_deploy_step_checks_both_task_definitions_for_the_profile",
+    "test:backend/tests/unit/infrastructure/test_deployment_secrets.py::test_the_deploy_preflight_checks_exactly_the_secrets_the_stacks_name",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_secrets_check_wants_each_secret_by_complete_arn_and_existing",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_secrets_check_runs_before_anything_is_built",
+]
+
+[[unit]]
+text = "Create it with secrets-management.md."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Emergency Rollback"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Method 1 — GitHub Actions (preferred): Actions → Rollback, from main: environment, the task_definition_arn the deploy's run summary printed (experimentation-backend-<env>:<n>), the optional dashboard_task_definition_arn it printed beside it (experimentation-dashboard-<env>:<n>; empty leaves the dashboard as it is), and a reason."
+by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_dashboard_input_is_optional_and_the_api_input_still_required"]
+
+[[unit]]
+text = "The API is always rolled back."
+by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_rollback_validates_both_before_it_stops_anything_and_stops_unconditionally"]
+
+[[unit]]
+text = "Method 2 — AWS CLI:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The service has a CODE_DEPLOY deployment controller (fargate_service_stack.py), and ECS rejects a task-definition change through UpdateService on such a service — \"Unable to update task definition on services with a CODE_DEPLOY deployment controller\"."
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_api_service_is_under_codedeploy_and_the_dashboard_is_not"]
+
+[[unit]]
+text = "Rolling back means creating a CodeDeploy deployment that names the older revision — and approving it, because the deployment group parks for 30 minutes waiting for ContinueDeployment and then stops, which auto-rollback turns back into the revision you were rolling away from."
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_an_unapproved_deployment_is_stopped_after_30_minutes",
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_its_deployment_is_all_at_once_names_the_target_and_overrides_the_alarms",
+]
+
+[[unit]]
+text = "Use Method 1."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If the workflow itself is unavailable, rollback-runbook.md Method 2 has the full sequence."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "How to find the previous task definition, with its image — the revision list alone is not enough, because CloudFormation also registers into this family with a bootstrap image that may not exist in ECR (#82)."
+by = [
+    "test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_bootstrap_tag_is_overridable",
+    "test:infrastructure/tests/test_pipeline_owns_the_image.py::test_no_task_definition_names_a_mutable_tag",
+]
+
+[[unit]]
+text = "A revision a deploy registered names its image by digest (…/backend@sha256:…)."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_every_task_definition_registered_names_the_digest"]
+
+[[unit]]
+text = "Full rollback procedure: rollback-runbook.md"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Database Migration"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A deploy runs its own migration."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_migration_runs_the_revision_it_registered"]
+
+[[unit]]
+text = "Actions → Database Migration is for the rest -- chiefly undoing one:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "From main: environment (staging or prod), direction (upgrade or downgrade), target (heads to upgrade; the revision id to end at to downgrade)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_migrate_refuses_relative_and_whole_graph_targets",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_migrate_accepts_a_revision_id_and_heads",
+]
+
+[[unit]]
+text = "Relative steps such as -1, head and base are refused: a full image has two heads."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_migrate_refuses_relative_and_whole_graph_targets",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_migrate_accepts_a_revision_id_and_heads",
+]
+
+[[unit]]
+text = "It runs with the image the API is serving (the PRIMARY task set), and refuses when nothing is serving yet."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_migrate_runs_the_serving_image_and_refuses_when_there_is_none"]
+
+[[unit]]
+text = "It snapshots the database first."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_migrate_snapshots_before_it_reads_or_changes_the_schema"]
+
+[[unit]]
+text = "The task's log is printed in the run; it is also CloudWatch log group /ecs/experimentation-migrate-<env>."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_run_prints_the_migration_tasks_last_100_log_lines",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_the_migration_task_logs_to_its_group_under_migrate_backend",
+]
+
+[[unit]]
+text = "Health Checks"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The last two commands below are the dashboard's: GET / (everything that is not an API path) answers 200 text/html, and, as a rolling service, what it runs is its PRIMARY deployment, not a task set."
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_https_default_action_is_the_dashboard",
+    "test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_r7_serving_before_is_the_primary_deployment",
+]
+
+[[unit]]
+text = "Through the public origin (PUBLIC_BASE_URL)."
+by = ["exempt:label"]
+
+[[unit]]
+text = "/health is readiness: it runs the database check, and it is what the load balancer probes:"
+by = [
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_the_load_balancer_probes_the_api_on_health",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_not_ready_when_database_down",
+    "test:backend/tests/unit/core/test_operator_facing_runtime.py::test_the_database_check_runs_select_1_and_nothing_else",
+]
+
+[[unit]]
+text = "It prints:"
+by = ["exempt:label"]
+count = 2
+
+[[unit]]
+text = "Outside production it also reports version, environment and each check's detail (Monitoring)."
+by = ["test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_production_hides_details"]
+
+[[unit]]
+text = "The smoke test the deploy runs: a real route, unauthenticated:"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_smoke_test_is_a_real_request_through_the_public_origin"]
+
+[[unit]]
+text = "Then ask ECS what is running and serving."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The block sets ENV=staging; for production, change it to ENV=prod:"
+by = ["exempt:instruction"]
+count = 3
+
+[[unit]]
+text = "Names"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Everything the workflows and the runbooks address, per environment."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Where the CDK generates a name, the stack publishes it as an output and the workflows read it from there."
+by = [
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_every_generated_name_a_workflow_reads_is_a_stack_output",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_the_aurora_cluster_identifier_is_generated_and_published",
+]
+
+[[unit]]
+text = "infrastructure/tests/test_workflow_names_exist.py checks every row with a resource type against a synth of staging and prod."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "What | Name | Resource type"
+by = ["exempt:label"]
+
+[[unit]]
+text = "ECS cluster | experimentation-<env> | AWS::ECS::Cluster"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
+
+[[unit]]
+text = "API service | experimentation-backend-<env> | AWS::ECS::Service"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
+
+[[unit]]
+text = "API task definition family | experimentation-backend-<env> | AWS::ECS::TaskDefinition"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
+
+[[unit]]
+text = "Migration task definition family | experimentation-migrate-<env> | AWS::ECS::TaskDefinition"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
+
+[[unit]]
+text = "Dashboard service | experimentation-dashboard-<env> | AWS::ECS::Service"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
+
+[[unit]]
+text = "Dashboard task definition family | experimentation-dashboard-<env> | AWS::ECS::TaskDefinition"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
+
+[[unit]]
+text = "API log group | /ecs/experimentation-backend-<env> | AWS::Logs::LogGroup"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
+
+[[unit]]
+text = "Migration log group | /ecs/experimentation-migrate-<env> | AWS::Logs::LogGroup"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
+
+[[unit]]
+text = "Dashboard log group | /ecs/experimentation-dashboard-<env> | AWS::Logs::LogGroup"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
+
+[[unit]]
+text = "CodeDeploy application | experimentation-platform-<env> | AWS::CodeDeploy::Application"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
+
+[[unit]]
+text = "CodeDeploy deployment group | experimentation-<env> | AWS::CodeDeploy::DeploymentGroup"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
+
+[[unit]]
+text = "Redis replication group | experimentation-redis-<env>-redis | AWS::ElastiCache::ReplicationGroup"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
+
+[[unit]]
+text = "Aurora credentials (generated) | experimentation-database-<env>-aurora-credentials | AWS::SecretsManager::Secret"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
+
+[[unit]]
+text = "Fargate stack | experimentation-fargate-<env> | stack"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_the_three_stacks_the_workflows_address_exist"]
+
+[[unit]]
+text = "Database stack | experimentation-database-<env> | stack"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_the_three_stacks_the_workflows_address_exist"]
+
+[[unit]]
+text = "Migrations stack | experimentation-migrations-<env> | stack"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_the_three_stacks_the_workflows_address_exist"]
+
+[[unit]]
+text = "Aurora cluster identifier | generated: output ClusterIdentifier of experimentation-database-<env> | —"
+by = [
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_the_aurora_cluster_identifier_is_generated_and_published",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_every_generated_name_a_workflow_reads_is_a_stack_output",
+]
+
+[[unit]]
+text = "Task subnets and security group | outputs TaskSubnets, TaskSecurityGroup of experimentation-fargate-<env> | —"
+by = [
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_the_stacks_say_what_a_workflow_needs_to_address",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_every_generated_name_a_workflow_reads_is_a_stack_output",
+]
+
+[[unit]]
+text = "Secrets you create | /<env>/experimentation/<name> (Secrets Manager) | —"
+by = ["test:infrastructure/tests/test_secret_arns.py::test_every_hand_made_secret_is_a_literal_complete_arn"]
+
+[[unit]]
+text = "Parameters the stacks write | /experimentation/<env>/... (SSM -- the other order, #67) | —"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_every_parameter_the_stacks_write_is_under_experimentation_env"]
+
+[[unit]]
+text = "API image | experimentation-platform/backend:<tag>-<profile>, run by digest; :bootstrap for cdk deploy | —"
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_image_is_pushed_once_as_tag_and_profile",
+    "test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_bootstrap_tag_is_overridable",
+]
+
+[[unit]]
+text = "Dashboard image | experimentation-platform/web:<tag>-<profile>, run by digest; :bootstrap only for the first cdk deploy | —"
+by = [
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_dashboard_image_is_built_like_the_apis_before_anything_is_migrated",
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_dashboard_container_never_proxies_the_api",
+]
+
+[[unit]]
+text = "GitHub environment | staging, prod | —"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_environment_is_a_closed_choice_of_staging_and_prod"]
+
+[[unit]]
+text = "There is no :latest and no bare :<tag>: each release is pushed once per profile as :<tag>-<profile> (reused, not rebuilt, when the same release is deployed again into the same account), and every task definition the workflows register names the image by digest, so a later push to a tag cannot change what a running environment starts."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_image_is_pushed_once_as_tag_and_profile",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_an_existing_tag_is_reused_not_rebuilt",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_every_task_definition_registered_names_the_digest",
+]
+
+[[unit]]
+text = "A deploy into an account whose ECR does not hold the release builds it there from the tag, and refuses an image whose labels name another commit or profile."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_an_existing_tag_is_reused_not_rebuilt",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_image_is_built_from_the_release_and_labelled_with_its_commit",
+]
+
+[[unit]]
+text = "The dashboard image is built with an empty NEXT_PUBLIC_API_URL, so it calls the API on its own origin and one image serves any environment."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_dashboard_image_is_built_with_an_empty_api_url",
+    "test:frontend/src/tests/services/api.test.ts::defaults to same-origin (empty string)",
+]
+
+[[unit]]
+text = "Required AWS Secrets Manager Secrets"
+by = ["exempt:label"]
+
+[[unit]]
+text = "These secrets must exist before the Fargate and migrations stacks are deployed."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "See secrets-management.md for creation commands."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Secret Path | Injected as | Description"
+by = ["exempt:label"]
+
+[[unit]]
+text = "/<env>/experimentation/jwt-secret | SECRET_KEY | JWT signing secret (minimum 32 characters)"
+by = ["test:backend/tests/unit/security/test_owasp_compliance.py::TestCryptographicFailures::test_secret_key_minimum_length"]
+
+[[unit]]
+text = "/<env>/experimentation/first-superuser-password | FIRST_SUPERUSER_PASSWORD | Password for the first administrator; the default admin is refused in staging and production"
+by = ["test:backend/tests/unit/core/test_config_environment.py::TestHardenedSecrets::test_committed_placeholders_are_refused"]
+
+[[unit]]
+text = "/<env>/experimentation/audit-hmac-key | AUDIT_HMAC_KEY | profile: full only — signs the compliance audit log; the modules refuse to register without it"
+by = [
+    "test:infrastructure/tests/test_secret_arns.py::test_the_full_profile_refuses_to_synthesise_without_the_audit_key",
+    "test:modules/backend/tests/unit/services/test_audit_signing_service.py",
+]
+
+[[unit]]
+text = "The task definitions name each of these by its complete ARN, which cdk takes from JWT_SECRET_ARN, FIRST_SUPERUSER_PASSWORD_SECRET_ARN and, on full, AUDIT_HMAC_KEY_SECRET_ARN, in every environment."
+by = [
+    "test:infrastructure/tests/test_secret_arns.py::test_every_hand_made_secret_is_a_literal_complete_arn",
+    "test:infrastructure/tests/test_secret_arns.py::test_a_missing_input_is_refused_in_every_environment",
+]
+
+[[unit]]
+text = "Read each with aws secretsmanager describe-secret --secret-id /<env>/experimentation/<name> --query ARN --output text; recreating a secret changes its ARN, so update the input and run cdk deploy again (Secrets Management)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The database credentials are not in this table: POSTGRES_USER and POSTGRES_PASSWORD come from the secret the database stack generates for Aurora (experimentation-database-<env>-aurora-credentials), and POSTGRES_SERVER from its writer endpoint."
+by = [
+    "test:infrastructure/tests/test_database_wiring.py::test_credentials_are_the_secret_aurora_was_created_with",
+    "test:infrastructure/tests/test_database_wiring.py::test_postgres_server_is_this_environments_writer_endpoint",
+]
+
+[[unit]]
+text = "Nothing to create."
+by = [
+    "test:infrastructure/tests/test_database_wiring.py::test_credentials_are_the_secret_aurora_was_created_with",
+    "test:infrastructure/tests/test_redis_wiring.py::test_there_is_no_redis_url_and_no_redis_secret",
+]
+
+[[unit]]
+text = "Every row is injected by the ECS task definitions (infrastructure/cdk/stacks/fargate_service_stack.py and migration_task_stack.py) and is one the application refuses to start without: the image ships no .env file, so the task definition is the only source."
+by = [
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_both_backend_task_definitions_carry_the_secrets_you_create",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_without_each_secret_the_application_refuses_to_start_in_production",
+    "test:backend/tests/unit/infrastructure/test_deployment_secrets.py::test_without_the_audit_key_the_modules_refuse_to_register",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_image_carries_no_env_file",
+    "test:backend/tests/unit/infrastructure/test_deployment_secrets.py::test_the_task_definition_boots_the_application_in_production",
+]
+
+[[unit]]
+text = "Deploy refuses the run if one is missing, before it builds anything."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_deploy_step_checks_both_task_definitions_for_the_profile",
+    "test:backend/tests/unit/infrastructure/test_deployment_secrets.py::test_the_deploy_preflight_checks_exactly_the_secrets_the_stacks_name",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_secrets_check_runs_before_anything_is_built",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_secrets_check_wants_each_secret_by_complete_arn_and_existing",
+]
+
+[[unit]]
+text = "Redis is not in this table: the API task takes REDIS_HOST and REDIS_PORT from the Redis stack's primary endpoint and sets REDIS_SSL=true, because the replication group refuses plaintext."
+by = [
+    "test:infrastructure/tests/test_redis_wiring.py::test_the_task_gets_the_replication_groups_primary_endpoint",
+    "test:infrastructure/tests/test_redis_wiring.py::test_the_task_speaks_tls_to_a_replication_group_that_requires_it",
+    "test:infrastructure/tests/test_redis_wiring.py::test_there_is_no_redis_url_and_no_redis_secret",
+]
+
+[[unit]]
+text = "Nothing to create; see Redis: nothing to create, which also says how the staging rehearsal proves the tasks really reach it (REDIS_REQUIRED=true, or checks.redis.status in /health/ready)."
+by = [
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_redis_down_fails_readiness_when_required",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_redis_down_does_not_fail_readiness_by_default",
+]
+
+[[unit]]
+text = "Infrastructure Stacks"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An environment's stacks, by stack id — what cdk deploy takes, and what cdk list prints."
+by = ["exempt:label"]
+
+[[unit]]
+text = "cdk deploy --all deploys them in the order their dependencies need."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "experimentation-auth-<env> — Cognito user pool and app client"
+by = ["test:infrastructure/tests/test_auth_stack.py::test_the_user_pool_allows_admin_create_user_only"]
+
+[[unit]]
+text = "experimentation-vpc-<env> — VPC, subnets, NAT gateways"
+by = ["test:infrastructure/tests/test_vpc_stack.py::test_vpc_created"]
+
+[[unit]]
+text = "experimentation-dynamodb-<env> — the three DynamoDB tables (events, feature flags, overrides)"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_the_dynamodb_compute_and_migrations_stacks_hold_what_the_list_says"]
+
+[[unit]]
+text = "experimentation-database-<env> — Aurora PostgreSQL cluster"
+by = ["test:infrastructure/tests/test_aurora_engine.py"]
+
+[[unit]]
+text = "experimentation-redis-<env> — ElastiCache Redis replication group"
+by = ["test:infrastructure/tests/test_redis_sizing.py::test_replication_group_sizing"]
+
+[[unit]]
+text = "experimentation-compute-<env> — ECS cluster, task security group, database-access Lambda"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_the_dynamodb_compute_and_migrations_stacks_hold_what_the_list_says"]
+
+[[unit]]
+text = "experimentation-monitoring-<env> — CloudWatch dashboards, alarms and the SNS topic they email"
+by = ["test:infrastructure/tests/test_standing_alarms.py::test_every_standing_alarm_emails_the_topic_but_the_per_colour_two"]
+
+[[unit]]
+text = "experimentation-fargate-<env> — Fargate services, ALB, CodeDeploy blue/green"
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_app_has_exactly_two_ecs_services",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+]
+
+[[unit]]
+text = "experimentation-migrations-<env> — ECS task definition for Alembic (plural)"
+by = [
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_the_dynamodb_compute_and_migrations_stacks_hold_what_the_list_says",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_migration_task_upgrades_and_stamps_every_head",
+]
+
+[[unit]]
+text = "With modules/ present, three more: experimentation-dynamodb-counters-<env>, experimentation-analytics-<env> and experimentation-glue-etl-<env>."
+by = ["test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_full_checkout_builds_the_module_stacks"]
+
+[[unit]]
+text = "Standing an environment up for the first time (CDK handles ordering), with CERTIFICATE_ARN, PUBLIC_BASE_URL and ALARM_EMAIL exported as deployment guide §1.6 shows."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "ALARM_EMAIL is required for staging and prod: synth refuses to run without it."
+by = [
+    "test:infrastructure/tests/test_alarm_email.py::test_staging_and_prod_require_it",
+    "test:infrastructure/tests/test_alarm_email.py::test_the_app_refuses_to_synthesise_staging_or_prod_without_it",
+]
+
+[[unit]]
+text = "Confirm the SNS subscription it creates from the inbox afterwards, or no alarm reaches anyone:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "On an environment that is already running, deploy the Fargate stack on its own with the pins the deployment guide gives, never --all."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Useful AWS CLI Commands"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Watch what is serving during a deployment: the PRIMARY task set moves, services[0].taskDefinition does not (it is frozen at CreateService):"
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_api_service_is_under_codedeploy_and_the_dashboard_is_not"]
+
+[[unit]]
+text = "Recent API errors (the API's JSON lines whose level is error or critical; dev and demo write console lines, which this does not match):"
+by = ["test:infrastructure/tests/test_standing_alarms.py::test_the_error_filter_is_on_the_api_tasks_log_group"]
+
+[[unit]]
+text = "Aurora cluster status (its identifier is generated: read it from the stack):"
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_the_aurora_cluster_identifier_is_generated_and_published"]

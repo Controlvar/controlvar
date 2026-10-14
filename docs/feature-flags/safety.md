@@ -38,6 +38,13 @@ goes for an `sdk:ruleset` key whose owner has since lost the role. To have app e
 them to your server and forward them from there with a server-side key; see
 [Reporting client-side errors](create.md#reporting-client-side-errors).
 
+`GET /api/v1/metrics/summary` counts errors by the same rule: its `error_rate` leaves out the
+reports that do not count, and its `uncounted_error_count` is the number of them in its period.
+That `error_rate` still differs from the check's in three ways: it covers `start_date` to
+`end_date` (by default the 30 days before now), not the last 15 minutes; it divides by the
+aggregated flag evaluations (of its `period`, by default `day`), not the raw ones; and it is a
+percentage, not a fraction, which can exceed 100 when errors outnumber those evaluations.
+
 ---
 
 ## Metrics You Can Monitor
@@ -363,7 +370,9 @@ target; use a target of `0` for such a flag.
 
 Every rollback (automatic or manual) is stored in the `safety_rollback_records` table
 (`feature_flag_id`, `safety_config_id`, `trigger_type`, `trigger_reason`, `previous_percentage`,
-`target_percentage`, `success`, `executed_by_user_id`, `created_at`). The rollback response includes the
+`target_percentage`, `success`, `executed_by_user_id`, `created_at`). `safety_config_id` is the flag's
+own safety configuration, or null for a flag that has none and is checked against the global defaults: a
+rollback does not give such a flag a configuration, so it stays on the defaults. The rollback response includes the
 record's id as `rollback_record_id`. No endpoint lists the records, and the dashboard lists only the
 manual rollbacks made in the current browser session, so query the table for automatic ones.
 
@@ -455,9 +464,11 @@ stays paused until you resume it explicitly with `POST /api/v1/rollout-schedules
 (see [Rollout Schedules](rollouts.md#pausing-a-schedule)). The ids are in the rollback response's
 `details.paused_schedules`.
 
-**Check the flag's thresholds.** A rollback leaves the flag with a safety configuration of its
-own: a flag that had none gets one with no thresholds, so from then on it is not checked against
-the global defaults. If it should stay monitored, `POST` its thresholds (see
+**Check the flag's thresholds.** A rollback does not change the flag's safety configuration: a
+flag with one of its own keeps its thresholds, and a flag without one is still checked against the
+global defaults. A flag that an earlier release gave a configuration with no thresholds at a
+rollback keeps that configuration, and is not checked against the defaults; if it should be
+monitored, `POST` its thresholds (see
 [Create or Update a Flag's Configuration](#create-or-update-a-flags-configuration)).
 
 Watch the safety check for at least one full 15-minute window before expanding further. With

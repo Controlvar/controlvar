@@ -12,18 +12,8 @@ The platform's AWS infrastructure is defined as code using **AWS CDK v2**, in **
 |------|---------|---------|
 | AWS Account | Any | [Sign up](https://aws.amazon.com/) |
 | Python | 3.11+ | The CDK app is Python |
-| Node.js | 18+ | Only for the CDK CLI: `node --version` |
 | AWS CDK | v2 | `npm install -g aws-cdk` |
-| Docker | 20+ | Required for building container images |
-| AWS CLI | v2 | [Install guide](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) |
-
-### Configure AWS CLI
-
-```bash
-aws configure
-```
-
-It asks for your AWS access key ID, your secret access key, the default region (`us-west-2`) and the default output format (`json`).
+| Docker | | For the bootstrap images the [deployment guide](../deployment/deployment-guide.md) pushes |
 
 ---
 
@@ -149,8 +139,6 @@ export AUDIT_HMAC_KEY_SECRET_ARN=$(aws secretsmanager describe-secret \
 - **Recreating a secret changes its ARN.** Update the input and run
   `cdk deploy` again, or the next task start fails. Changing a secret's value
   keeps its ARN.
-- An ARN carries the account ID: keep these out of issues, pull requests and
-  logs.
 
 The application's own secret *values* (database password, JWT secret and the
 rest) are not read from your shell. The task definition takes them from Secrets
@@ -168,10 +156,6 @@ cd infrastructure/cdk
 pip install -r requirements.txt
 cdk deploy --all
 ```
-
-CDK will display a diff of all resources to be created and prompt for confirmation. Review the output carefully before confirming.
-
-The first full deployment takes approximately 20–40 minutes (Aurora and OpenSearch provisioning are the slowest steps).
 
 ### Point the hostname at the load balancer
 
@@ -210,8 +194,8 @@ printf 'zone %s\nalb  %s %s\n' "$ZONE_ID" "$ALB_DNS" "$ALB_ZONE"
 ```
 
 `ALB_DNS` is also the `ALBDnsName` output of `experimentation-fargate-<env>`.
-`ALB_ZONE` is the load balancer's own hosted zone id, which the alias needs; it
-is not the id of your zone.
+The alias records below take `ALB_ZONE` as their `HostedZoneId`, not
+`ZONE_ID`.
 
 Create, or update, an alias A record for each hostname, and wait for Route 53
 to apply the change:
@@ -278,7 +262,8 @@ migration while the release that contains it is still serving, before rolling
 the API back
 ([rollback runbook, Database Rollback Procedure](../deployment/rollback-runbook.md#database-rollback-procedure)).
 After the API has been rolled back, the emergency route is a point-in-time
-restore to a new cluster, which the API tasks cannot pick up today. See
+restore with `scripts/restore_repoint.sh`
+([Disaster Recovery, Scenario 4](../deployment/disaster-recovery.md#scenario-4-full-aurora-database-cluster-failure)). See
 [On AWS, the API does not migrate](migrations.md#on-aws-the-api-does-not-migrate)
 for why, and for an environment whose Fargate stack was deployed before this
 setting existed. Deploy refuses to deploy an API revision that lacks the
@@ -374,7 +359,21 @@ dashboard is still on `:bootstrap`.
 
 - VPC with public and private subnets across 2 availability zones
 - NAT gateways for outbound internet access from private subnets: two in `prod` (one per availability zone), one in every other environment
-- Security groups for ALB, ECS tasks, RDS, and ElastiCache
+
+The VPC is `10.0.0.0/16` across two availability zones, with a public, a
+private and an isolated `/24` in each: `10.0.0.0/24` and `10.0.1.0/24` public,
+`10.0.2.0/24` and `10.0.3.0/24` private, `10.0.4.0/24` and `10.0.5.0/24`
+isolated. It has gateway endpoints for S3 and DynamoDB, and interface
+endpoints, with private DNS, for Secrets Manager, ECR (API and Docker) and
+CloudWatch Logs. AWS bills each interface endpoint by the hour, used or not. The load
+balancer is the only resource open to the internet: its security group admits
+TCP 80 and 443 from anywhere, and no other security group rule admits the
+whole internet. It reaches the API tasks on 8000 and the dashboard tasks on
+8080, and nothing else. Aurora admits PostgreSQL (5432) from the API task
+group, which the migration task also runs in.
+
+The VPC stack also creates a bastion security group, which admits nobody
+unless you deploy with `-c bastion_ssh_cidr=<cidr>`.
 
 ### experimentation-database-<env> and experimentation-redis-<env>
 
@@ -387,7 +386,7 @@ dashboard is still on `:bootstrap`.
 
 - **ECS Fargate** cluster
 - ECS task definition for the API container (1 vCPU, 2 GB memory)
-- ECS service with 3 tasks (`desired_count=3`), auto-scaling between 3 and 10
+- ECS service for the API with 3 tasks in `prod`, 2 in `dev` and `staging` and 1 in `demo`, auto-scaling from that count up to 10
 - **Application Load Balancer** with an HTTPS listener and an HTTP-to-HTTPS redirect, in front of the API and the dashboard: `/api/*`, `/health`, `/health/*` and `/metrics` go to the API, everything else to the dashboard
 - The dashboard's own ECS service, `experimentation-dashboard-<env>` (rolling deployment with the circuit breaker; 1 task in `staging`, 2 in `prod`), started on `experimentation-platform/web:bootstrap`
 - AWS CodeDeploy deployment group for blue/green deployments
@@ -415,9 +414,9 @@ dashboard is still on `:bootstrap`.
 - **Kinesis Data Stream** (name generated by CloudFormation; it used to be
   `exp-events-<random>`, regenerated on every synth -- see #96)
 - **Firehose delivery stream** into the data-lake bucket
-- **OpenSearch Service** domain (single-node `t3.medium.search` for development; multi-node for production)
+- **OpenSearch Service** domain
 
-### experimentation-monitoring-<env>
+### experimentation-monitoring-<env> {#experimentation-monitoring}
 
 - CloudWatch dashboards `experimentation-platform-<env>` and
   `experimentation-application-metrics-<env>` (some of their widgets graph
@@ -470,10 +469,7 @@ to the deployment group. While either is in ALARM, CodeDeploy stops the
 deployment and rolls the API back by itself; it also rolls back a deployment
 that fails (new tasks that never become healthy) or is stopped. The alarms
 watch the API's target 5xx only: a release that answers wrongly with a 2xx,
-the load balancer's own 502 and 504, and the dashboard are not covered. The
-first `cdk deploy` that adds them changes the deployment group in place, and
-it needs the deploy workflow's role re-applied first
-([IAM permissions](../deployment/iam-permissions.md)). See the
+the load balancer's own 502 and 504, and the dashboard are not covered. See the
 [rollback runbook](../deployment/rollback-runbook.md#method-3-what-codedeploy-rolls-back-by-itself-and-when).
 
 ---
@@ -492,15 +488,16 @@ cdk diff "experimentation-fargate-$ENVIRONMENT" \
   -c dashboard_image_tag="$DASHBOARD_DIGEST" > "cdk-diff-$ENVIRONMENT.txt" 2>&1
 ```
 
-This shows additions, modifications, and deletions. Review carefully — some
-changes (like modifying an Aurora parameter group) require a replacement and
-will cause brief downtime. Do not deploy a diff with any line that names
+Do not deploy a diff with any line that names
 `AWS::EC2::SecurityGroupEgress` or `AWS::EC2::SecurityGroupIngress`: section
 1.6 of the Deployment Guide gives the stop rule and why.
 
 ---
 
 ## Destroying an environment
+
+The teardown has not been rehearsed on AWS as of v0.31.1: this section comes
+from the stacks' templates and AWS's documentation.
 
 Only `prod` keeps its data when its stacks are destroyed. Every other
 environment (`dev`, `staging`, `demo`) is disposable: its database, tables,
@@ -510,9 +507,9 @@ on the names the last one left behind. The rule is one line,
 `retains_data(env) == (env == "prod")`, in
 `infrastructure/cdk/stacks/environments.py`.
 
-Before destroying `prod`, export anything you need that the retained resources
+Before you destroy `prod`, export anything you need that the retained resources
 below do not already keep: `pg_dump` the database, export audit logs
-(`GET /api/v1/compliance/export`), archive CloudWatch logs.
+(`GET /api/v1/compliance/export`, full profile only), archive CloudWatch logs.
 
 ### Tearing an environment down
 
@@ -538,18 +535,14 @@ cdk destroy experimentation-vpc-<env>
 ```
 
 The glue, analytics and counters stacks exist only in a full checkout; skip
-their lines in a core one. `infrastructure/tests/test_teardown_instructions.py`
-checks this order against the synthesised imports and stack dependencies.
+their lines in a core one.
 
 The buckets outside `prod` are emptied before they are deleted:
 `auto_delete_objects=True` adds a custom resource backed by a CDK-provided
 Lambda (`Custom::S3AutoDeleteObjectsCustomResourceProvider`, with its own IAM
 role) that, when the stack is deleted, denies new writes to the bucket and
 deletes every object version and delete marker. It acts only on a bucket
-carrying the `aws-cdk:auto-delete-objects` tag, which is to say **a bucket
-deployed with this version or later**. A bucket deployed before it -- by an
-earlier version, whose template also said RETAIN -- is left behind by the
-teardown and must be emptied and deleted by hand.
+carrying the `aws-cdk:auto-delete-objects` tag.
 
 ### What `cdk destroy` leaves behind and bills
 
@@ -563,7 +556,7 @@ is yours to remove.
 | KMS key (the alias is deleted) | RETAIN; the final snapshot is encrypted with it | prod | per key per month | `aws kms schedule-key-deletion` -- only after the snapshot is gone |
 | Cognito user pool `experimentation-platform-users-prod` | RETAIN | prod | per monthly active user | `aws cognito-idp delete-user-pool` |
 | DynamoDB tables `experimentation-{events,feature-flags,overrides}-prod`, `experiment-counters-prod` | RETAIN | prod | capacity (the core tables are provisioned in prod) and storage | `aws dynamodb delete-table` |
-| DynamoDB tables `experimentation-{assignments,experiments}-prod`, from a production deployment made before the stack stopped creating them (#605). Nothing reads them. They are not left by `cdk destroy` but by the first `cdk deploy` of `experimentation-dynamodb-prod` after the upgrade, which removes them from the stack (and their auto-scaling) and keeps the tables | RETAIN | prod | provisioned capacity and storage | `aws dynamodb create-backup` if you want a copy, then `aws dynamodb delete-table` |
+| DynamoDB tables `experimentation-{assignments,experiments}-prod`, in a production environment deployed before #605 | no stack creates them any more, and nothing reads them | prod | provisioned capacity and storage | `aws dynamodb create-backup` if you want a copy, then `aws dynamodb delete-table` |
 | Log groups `/ecs/experimentation-{backend,dashboard,migrate}-prod` | RETAIN | prod | log storage | `aws logs delete-log-group` |
 | Data-lake, Athena-results and Glue-scripts buckets | RETAIN | prod (full) | storage, every object version | empty (all versions), then `aws s3 rb` |
 | Kinesis stream and OpenSearch domain | RETAIN | prod (full) | per shard-hour; per instance-hour | `aws kinesis delete-stream`; `aws opensearch delete-domain` |
@@ -590,9 +583,7 @@ Two things are deleted but not immediately:
 This version names the ECS cluster from `ENVIRONMENT` (`experimentation-<env>`;
 it was `experimentation-dev` in every environment, #142) and renames the
 CodeDeploy application to `experimentation-platform-<env>` (#139). **An
-environment deployed by an earlier version cannot be updated in place.** The
-cluster's name is part of an export the fargate stack imports, and
-CloudFormation refuses to change an export another stack is using, so
+environment deployed by an earlier version cannot be updated in place:**
 `cdk deploy --all` fails on the compute stack.
 
 The fargate stack is the only importer of that export -- the analytics stack
@@ -610,62 +601,8 @@ cdk deploy --all
 
 - `--exclusively` matters: without it the CDK CLI also destroys the stacks that
   depend on fargate, which is the migrations stack.
-- The two `delete-log-group` lines are needed because the earlier version's
-  template retained those log groups, and the destroy follows the template that
-  is deployed, not this one. A recreated fargate stack would otherwise fail on
-  the names. Skip the dashboard line if that log group does not exist.
+- Run the two `delete-log-group` lines: a recreated fargate stack would
+  otherwise fail on the names. Skip the dashboard line if that log group does
+  not exist.
 - Destroying fargate stops the API and the dashboard until the last step
   finishes; the database, Redis and the data stores are not touched.
-- `infrastructure/tests/test_teardown_instructions.py` derives the list
-  of stacks to destroy from the synthesised import graph and checks it against
-  the commands above.
-
----
-
-## Estimated AWS Costs
-
-Costs depend heavily on traffic volume and configuration. The following is a rough estimate for a small production deployment:
-
-The instance types below are what the CDK actually deploys with
-`environment=prod`, not a suggested sizing — read them out of
-`enhanced_database_stack.py`, `elasticache_redis_stack.py` and
-`fargate_service_stack.py` if you change them.
-
-| Service | What the stack deploys | Estimated Monthly Cost |
-|---------|------------------------|----------------------|
-| Aurora PostgreSQL | `db.r5.large` (`MEMORY5`/`LARGE`), 2 instances — writer + reader | ~$300 |
-| ElastiCache Redis | `cache.r6g.large` | ~$150 |
-| ECS Fargate | 3 tasks (`desired_count=3`, autoscaling 3–10), 1 vCPU / 2 GB each, 24/7 | ~$110 |
-| Lambda | placeholders and, in the full profile, the daily Glue ETL trigger; none processes events | ~$0 |
-| Kinesis | 2 shards | ~$30 |
-| OpenSearch | `t3.medium.search` | ~$60 |
-| ALB | one | ~$25 |
-| **Total estimate** | | **~$675/month** |
-
-Autoscaling is the figure to watch: Fargate is costed at the floor of three
-tasks. At the ceiling of ten it is roughly $370 rather than $110, so a
-sustained-load month lands nearer $935.
-
-For development/staging environments, you can significantly reduce costs by:
-- Non-prod environments already size down on their own: the CDK picks a
-  smaller Aurora instance, a single Redis node (`cache.t4g.medium` for
-  dev/test, `cache.t4g.small` for staging), a single Aurora instance rather than a
-  writer/reader pair, and one NAT gateway rather than two
-- Reducing Aurora to a single instance (disable the reader)
-- Using on-demand Lambda scaling instead of reserved capacity
-
----
-
-## Troubleshooting Common Deployment Issues
-
-### "Stack already exists" error
-
-If a stack was partially created, you may need to delete it from the AWS CloudFormation console before redeploying.
-
-### Aurora takes too long / times out
-
-Aurora provisioning can take 15–20 minutes. If CDK times out, check the CloudFormation console for `experimentation-database-<env>` — the deployment may still be running.
-
-### "Resource handler returned message" errors
-
-These are usually IAM or service limit errors. Check the full error message in the CloudFormation events console for details.

@@ -1,0 +1,1412 @@
+# What verifies each unit of docs/deployment/deployment-guide.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/deployment/deployment-guide.md"
+
+[[unit]]
+text = "Deployment Guide — Experimently"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Audience: whoever stands up an environment, and whoever deploys to it."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Environments: staging and prod -- one path for both."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_environment_is_a_closed_choice_of_staging_and_prod"]
+
+[[unit]]
+text = "<env> below is one of those two words, and ENV=staging (or prod) in a shell."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Region: us-west-2, the region the workflows act in (cdk.md)."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_one_region"]
+
+[[unit]]
+text = "Table of Contents"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Before the first deploy -- the ordered checklist"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The first deploys, and the rollback rehearsal"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Every deploy"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Pre-Deployment Checklist"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Post-Deployment Verification"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Deployment Architecture"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Troubleshooting"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "1. Before the first deploy"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Do these in this order, once per environment."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Each step says who does it, how to check it read-only, and where to stop."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Several are irreversible or billable, and each of those needs a person to say yes at the moment it happens."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "1.0 Decisions (founder)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Which AWS account (one per environment), which region (one: us-west-2 unless you change all three workflows), which profile (full or core), the domain (app.<domain>), a budget alarm and who owns the bill, and when a staging environment is torn down."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Nothing below should start without them."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "1.1 IAM (account administrator)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Three identities, described with their exact permissions in IAM Permissions: the bootstrap identity (once), the cdk deploy identity, and one workflow role per environment."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The workflow role's trust policy pins the OIDC subject exactly."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_workflow_roles_trust_policy_pins_the_oidc_subject_exactly"]
+
+[[unit]]
+text = "Decode a real token's sub first (a throwaway job bound to the staging environment printing only the payload's sub), and write the trust policy from what it printed, not from memory."
+by = ["test:backend/tests/unit/infrastructure/test_oidc_sub_probe.py::test_the_probe_prints_exactly_sub_aud_and_environment"]
+
+[[unit]]
+text = "Check: aws iam simulate-principal-policy for each identity (the IAM page gives the command)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Stop here if any action is denied."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "1.2 Certificate and domain"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An ACM certificate in the region the stacks deploy to (us-west-2), covering app.<domain>, with status ISSUED, before any cdk deploy."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "PUBLIC_BASE_URL=https://app.<domain>."
+by = ["exempt:example"]
+
+[[unit]]
+text = "It must print \"ISSUED\"."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If it prints anything else, stop here."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Nothing in the CDK creates a DNS record."
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_app_creates_no_dns_record"]
+
+[[unit]]
+text = "After the first cdk deploy, add an alias A record for app.<domain> (and api.<domain> if you use it) pointing at the load balancer experimentation-<env>; until then the hostname does not resolve and curl reports 000."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "AWS CDK Deployment, \"Point the hostname at the load balancer\" has the commands and the check."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "1.3 ECR repositories and the bootstrap images"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Two repositories, created once per account and region; nothing in the CDK creates them (a registry is account-scoped, the stacks are per-environment):"
+by = [
+    "test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_api_runs_from_experimentation_platform_backend_which_no_stack_creates",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_a_cdk_deploy_registers_revisions_naming_the_bootstrap_tag",
+]
+
+[[unit]]
+text = "Then push one image to each, tagged bootstrap, which the stacks' task definitions name until the first deploy."
+by = [
+    "test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_bootstrap_tag_is_overridable",
+    "test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_deploy_workflow_never_writes_the_bootstrap_tag",
+]
+
+[[unit]]
+text = "bootstrap is a tag the Deploy workflow never writes, so the revision CloudFormation registers cannot drift to a later build."
+by = ["test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_deploy_workflow_never_writes_the_bootstrap_tag"]
+
+[[unit]]
+text = "Build from the repository root with the profile you will deploy:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Both repositories survive a teardown (they are not in any stack)."
+by = [
+    "test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_api_runs_from_experimentation_platform_backend_which_no_stack_creates",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_nothing_is_built_for_a_second_region",
+]
+
+[[unit]]
+text = "1.4 Secrets"
+by = ["exempt:label"]
+
+[[unit]]
+text = "/<env>/experimentation/jwt-secret and /<env>/experimentation/first-superuser-password, plus /<env>/experimentation/audit-hmac-key on full (Secrets Management)."
+by = ["test:infrastructure/tests/test_secret_arns.py::test_a_missing_input_is_refused_in_every_environment"]
+
+[[unit]]
+text = "They must exist before the Fargate and migrations stacks: ECS will not start a task whose definition names a missing secret."
+by = ["test:infrastructure/tests/test_secret_arns.py::test_each_execution_role_reads_exactly_its_task_definitions_secrets"]
+
+[[unit]]
+text = "The database and Redis need nothing from you -- the stacks wire them."
+by = [
+    "test:infrastructure/tests/test_database_wiring.py::test_credentials_are_the_secret_aurora_was_created_with",
+    "test:infrastructure/tests/test_redis_wiring.py::test_there_is_no_redis_url_and_no_redis_secret",
+]
+
+[[unit]]
+text = "The task definitions name each secret by its complete ARN (it ends in a six-character suffix Secrets Manager chose), and the CDK takes the three ARNs from your shell."
+by = ["test:infrastructure/tests/test_secret_arns.py::test_every_hand_made_secret_is_a_literal_complete_arn"]
+
+[[unit]]
+text = "Read them by name, then check each one by the ARN itself: that is the string ECS will look up, and a check by name passes even when the ARN is wrong."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The third secret is for full only; on core, leave AUDIT_HMAC_KEY_SECRET_ARN unset and the loop skips it."
+by = [
+    "test:infrastructure/tests/test_secret_arns.py::test_the_core_profile_synthesises_without_the_audit_key",
+    "test:infrastructure/tests/test_secret_arns.py::test_the_full_profile_refuses_to_synthesise_without_the_audit_key",
+]
+
+[[unit]]
+text = "Keep the three exported for every cdk synth, cdk diff, cdk deploy and cdk destroy (section 1.6), and keep them out of issues, pull requests and chat: an ARN carries the account ID."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Recreating a secret changes its ARN: update the input and run cdk deploy again (Secrets Management)."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "1.5 GitHub (repository administrator)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "For each environment, protection first, then configuration:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Under Settings → Environments, give <env> a required reviewer and limit its deployment branches to main."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Check it before going on: gh api repos/<owner>/<repo>/environments/<env> --jq '.protection_rules, .deployment_branch_policy'."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Secrets AWS_ACCOUNT_ID and AWS_ROLE_ARN; variable PUBLIC_BASE_URL."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Setting them arms the workflows for that environment: gh secret set AWS_ACCOUNT_ID --env <env> (12 digits; it prompts for the value), gh secret set AWS_ROLE_ARN --env <env>, and gh variable set PUBLIC_BASE_URL --env <env> --body https://app.<domain>."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_every_workflow_refuses_an_environment_that_is_not_configured",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_deploy_also_refuses_an_environment_without_its_public_url",
+]
+
+[[unit]]
+text = "The account ID is a secret, not a variable, because workflow logs are public: a step's log header prints its variables before anything can mask them."
+by = [
+    "test:backend/tests/unit/infrastructure/test_workflow_account_id_private.py::test_the_aws_workflows_read_the_account_id_from_the_secret",
+    "test:backend/tests/unit/infrastructure/test_workflow_account_id_private.py::test_no_file_under_github_reads_the_account_id_from_a_variable",
+]
+
+[[unit]]
+text = "The workflows read secrets.AWS_ACCOUNT_ID only, so an AWS_ACCOUNT_ID variable left over from an older setup is ignored (and the run refuses as \"not configured\") -- move it to a secret, then delete the variable: gh variable delete AWS_ACCOUNT_ID --env <env>."
+by = [
+    "test:backend/tests/unit/infrastructure/test_workflow_account_id_private.py::test_no_file_under_github_reads_the_account_id_from_a_variable",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_account_variable_is_read_only_in_the_first_step",
+]
+
+[[unit]]
+text = "1.6 The stacks"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Bootstrap once per account and region, then deploy the stacks:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "JWT_SECRET_ARN, FIRST_SUPERUSER_PASSWORD_SECRET_ARN and (on full) AUDIT_HMAC_KEY_SECRET_ARN are required in every environment: the complete ARN of each secret, exported in this same shell as section 1.4 shows."
+by = [
+    "test:infrastructure/tests/test_secret_arns.py::test_a_missing_input_is_refused_in_every_environment",
+    "test:infrastructure/tests/test_secret_arns.py::test_the_core_profile_does_not_need_the_audit_key_but_checks_one_given",
+]
+
+[[unit]]
+text = "Synth refuses one that is missing, partial (no suffix), for a different environment (/prod/..."
+by = [
+    "test:infrastructure/tests/test_secret_arns.py::test_a_partial_arn_is_refused",
+    "test:infrastructure/tests/test_secret_arns.py::test_a_staging_arn_is_refused_in_a_prod_synth",
+    "test:infrastructure/tests/test_secret_arns.py::test_a_wrong_region_is_refused",
+    "test:infrastructure/tests/test_secret_arns.py::test_a_wrong_account_is_refused",
+]
+
+[[unit]]
+text = "in staging), region or account, or in the wrong variable, and says how to read the right value."
+by = [
+    "test:infrastructure/tests/test_secret_arns.py::test_a_partial_arn_is_refused",
+    "test:infrastructure/tests/test_secret_arns.py::test_a_staging_arn_is_refused_in_a_prod_synth",
+    "test:infrastructure/tests/test_secret_arns.py::test_a_wrong_region_is_refused",
+    "test:infrastructure/tests/test_secret_arns.py::test_a_wrong_account_is_refused",
+    "test:infrastructure/tests/test_secret_arns.py::test_the_jwt_arn_in_the_superuser_slot_is_refused",
+    "test:infrastructure/tests/test_secret_arns.py::test_a_missing_input_is_refused_in_every_environment",
+]
+
+[[unit]]
+text = "ALARM_EMAIL is required for staging and prod: the one address every alarm emails, including the two API 5xx alarms that roll a deployment back by themselves."
+by = [
+    "test:infrastructure/tests/test_alarm_email.py::test_staging_and_prod_require_it",
+    "test:infrastructure/tests/test_alarm_email.py::test_staging_and_prod_email_exactly_the_given_address",
+]
+
+[[unit]]
+text = "Synth refuses a missing value, a malformed one, or one at example.com/.net/.org."
+by = ["test:infrastructure/tests/test_alarm_email.py::test_a_bad_value_is_refused_in_every_environment"]
+
+[[unit]]
+text = "Keep it exported for every later cdk diff, cdk deploy and cdk destroy too."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Confirm the subscription before the first release deploy."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "SNS emails the address a confirmation link."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Until it is confirmed no alarm reaches anyone."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Do not click the link."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Confirm the link's Token= value with aws sns confirm-subscription --topic-arn \"$TOPIC_ARN\" --token \"$TOKEN_FROM_THE_LINK\" --authenticate-on-unsubscribe true, then check the subscription is no longer PendingConfirmation (AWS CDK Deployment has the commands)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "cdk deploy does not create the database schema."
+by = [
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_migration_runs_the_revision_it_registered",
+]
+
+[[unit]]
+text = "The API tasks run with RUN_MIGRATIONS=false and SEED= (empty); only the migration task, which the Deploy workflow runs before it shifts traffic, writes the schema."
+by = [
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_migration_runs_the_revision_it_registered",
+]
+
+[[unit]]
+text = "Until the first Deploy (section 2) the API runs against an empty database: /health answers 200 (through the hostname, once its alias record exists; section 1.2) and the load balancer's health checks pass, while real requests answer 500 and the API logs errors."
+by = [
+    "test:backend/tests/unit/core/test_operator_facing_runtime.py::test_health_answers_200_on_a_database_without_the_schema",
+    "test:backend/tests/unit/core/test_operator_facing_runtime.py::test_a_request_that_needs_a_table_answers_500_and_logs_an_error",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_the_load_balancer_probes_the_api_on_health",
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations",
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_seed",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_snapshot_and_the_migration_come_before_the_deployment_and_nothing_undoes_them",
+]
+
+[[unit]]
+text = "Expect that, and run the first Deploy soon after the stacks are up."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If a request in that window has put experimentation-api-5xx-blue-<env> or -green-<env> into ALARM, Deploy refuses to start; the way through is Deploy's break-glass (Rollback Runbook, \"Fix forward while an alarm is firing\"), and a person decides at that moment whether to use it."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_alarm_in_alarm_refuses_naming_it_and_since_when",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_break_glass_is_a_tick_box_and_a_reason_both_off_by_default",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_with_the_break_glass_an_alarm_in_alarm_is_a_warning",
+]
+
+[[unit]]
+text = "Docker Compose and the Helm chart are unchanged: compose runs one API container that migrates on start, and the chart runs the migration in an init container (Database Migrations)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_production_with_no_seed_and_no_bypass",
+    "test:backend/tests/unit/chart/test_chart_render.py::test_migrations_run_in_the_init_container_only",
+]
+
+[[unit]]
+text = "cdk deploy --all is for standing an environment up."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "On one that is already running, deploy experimentation-fargate-<env> on its own, pinned to what is live."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Both pins go on every such deploy, because releases reach the API and the dashboard outside CloudFormation and a cdk deploy undoes them silently:"
+by = [
+    "test:backend/tests/unit/infrastructure/test_check_live_target_group.py::test_the_default_agrees_with_the_cdk",
+    "test:backend/tests/unit/infrastructure/test_check_dashboard_image.py::test_the_context_key_is_the_one_the_cdk_reads",
+]
+
+[[unit]]
+text = "The API's live target group."
+by = ["exempt:label"]
+
+[[unit]]
+text = "CodeDeploy swaps the API's blue and green target groups outside CloudFormation, and a cdk deploy that names the empty one sends every API request to it while every probe stays green."
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_context_moves_both_rules_to_green",
+    "test:infrastructure/tests/test_alb_egress_to_tasks.py::test_blue_and_green_differ_only_in_the_api_routing",
+]
+
+[[unit]]
+text = "The dashboard's running digest."
+by = ["exempt:label"]
+
+[[unit]]
+text = "The dashboard service rolls under the ECS deployment controller."
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_api_service_is_under_codedeploy_and_the_dashboard_is_not"]
+
+[[unit]]
+text = "Each deploy registers a task definition revision for it, by image digest, that CloudFormation never saw, and rolls the service onto it; before the first deploy it runs :bootstrap and the check says so."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_dashboard_is_registered_by_digest_with_its_own_container",
+    "test:backend/tests/unit/infrastructure/test_check_dashboard_image.py::test_bootstrap_is_printed_as_a_tag_not_a_digest",
+]
+
+[[unit]]
+text = "A cdk deploy that changes the dashboard's task definition in any way re-points the service at CloudFormation's own revision, whose image is web:<dashboard_image_tag> -- web:bootstrap when the value is not given."
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_a_digest_pin_names_the_image_by_digest",
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_dashboard_image_tag_refuses_latest_and_empty",
+]
+
+[[unit]]
+text = "The dashboard silently goes back to the placeholder, and every probe stays green."
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_dashboard_container_never_proxies_the_api",
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_dashboard_target_group_probes_the_static_healthz",
+]
+
+[[unit]]
+text = "Two read-only checks print the values to pass, and refuse a value that does not match what is running."
+by = [
+    "test:backend/tests/unit/infrastructure/test_check_live_target_group.py::test_listener_and_primary_task_set_disagreeing_is_refused",
+    "test:backend/tests/unit/infrastructure/test_check_dashboard_image.py::test_expect_a_different_digest_is_refused",
+    "test:backend/tests/unit/infrastructure/test_check_live_target_group.py::test_the_operations_are_exactly_four_describe_calls",
+]
+
+[[unit]]
+text = "Run them from the repository root: the first prints api_live_target_group, the second dashboard_image_tag."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The commands after them print the image of the backend revision that is serving:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Set the three values you will pass: BACKEND_TAG is the backend image's tag (or bootstrap), API_LIVE is what the first check printed (blue or green), and DASHBOARD_DIGEST is what the second printed (sha256: and the hex digest)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Re-run both checks with them (each exits non-zero on a mismatch), then preview the deploy with the same pins, writing the diff to a file:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Replace the three example values with yours before running anything."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Each step runs only if the one before it succeeded, so a check that refuses a value stops the diff, and a diff that fails prints no count at all, which is not a 0."
+by = [
+    "test:backend/tests/unit/infrastructure/test_check_live_target_group.py::test_a_new_environment_starts_in_blue",
+    "test:backend/tests/unit/infrastructure/test_check_dashboard_image.py::test_expect_a_different_digest_is_refused",
+]
+
+[[unit]]
+text = "Read the whole file, not only the count."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Do not pipe the diff into another command: a pipe reports the last command's exit status, so a failed diff can look like a clean one."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Stop if the diff touches an ingress or egress rule."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Any line marked [-], [+] or [~] that names AWS::EC2::SecurityGroupEgress or AWS::EC2::SecurityGroupIngress means stop: the grep -cE above must print 0."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The load balancer reaches the API tasks over tcp 8000 and the dashboard tasks over tcp 8080."
+by = [
+    "test:infrastructure/tests/test_alb_egress_to_tasks.py::test_the_load_balancers_egress_is_exactly_the_two_targets",
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_alb_reaches_the_dashboard_on_8080_and_nothing_else_does",
+]
+
+[[unit]]
+text = "Losing the 8000 rule breaks every /api/v1 and /health request through the load balancer, while the dashboard at / keeps working, so the dashboard looking fine proves nothing."
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_api_paths_go_to_the_live_target_group_exactly",
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_https_default_action_is_the_dashboard",
+]
+
+[[unit]]
+text = "Losing the 8080 rule breaks the dashboard at /."
+by = ["test:infrastructure/tests/test_alb_egress_to_tasks.py::test_the_load_balancers_egress_is_exactly_the_two_targets"]
+
+[[unit]]
+text = "A count other than 0 is not something to fix at the console: do not deploy, re-run both checks, and open an issue with the diff file attached."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "When the count is 0, deploy with exactly the same pins:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Every deploy's run summary also prints the digest the dashboard is running after it, as -c dashboard_image_tag=sha256:<hex> with the matching --expect check."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_a_whole_successful_tail_is_green_and_says_so",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_summary_prints_the_live_group_and_says_what_the_alarms_watch",
+]
+
+[[unit]]
+text = "Re-run the check anyway before a cdk deploy: a Rollback or another deploy since then moves it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The dashboard pin is the digest the check prints (sha256:<hex>), not an image tag: a tag can be moved to other bytes, and the digest synthesises the image as experimentation-platform/web@sha256:<hex>, the exact image already running."
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_a_digest_pin_names_the_image_by_digest"]
+
+[[unit]]
+text = "If the check reports that the dashboard runs :bootstrap -- no release has reached it yet -- there is nothing to pin: leave dashboard_image_tag out of both cdk diff and cdk deploy, and skip its --expect."
+by = [
+    "test:backend/tests/unit/infrastructure/test_check_dashboard_image.py::test_bootstrap_is_printed_as_a_tag_not_a_digest",
+    "test:backend/tests/unit/infrastructure/test_check_dashboard_image.py::test_expect_must_be_a_digest",
+]
+
+[[unit]]
+text = "An empty DASHBOARD_DIGEST is not the same thing: synth refuses -c dashboard_image_tag= with no value."
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_dashboard_image_tag_refuses_latest_and_empty"]
+
+[[unit]]
+text = "If it reports any other tag, there is no digest to pin either: -c dashboard_image_tag=<that tag> names the same reference, which may since have been moved to other bytes."
+by = ["test:backend/tests/unit/infrastructure/test_check_dashboard_image.py::test_another_tag_is_printed_plainly_and_cannot_match_a_digest"]
+
+[[unit]]
+text = "Check: aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE --query \"StackSummaries[?contains(StackName, 'experimentation-')].StackName\"."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Stop here if a stack rolled back: the first missing secret or image is the usual cause (section 7)."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "2. The first deploys, and the rollback rehearsal"
+by = ["exempt:label"]
+
+[[unit]]
+text = "In staging, before prod is ever deployed:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Deploy tag A (section 3)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The first deploy's migration builds the schema from nothing (backend.app.db.bootstrap); until it has, the API answers real requests with 500 (section 1.6)."
+by = ["test:backend/tests/unit/infrastructure/test_migration_task_command.py::test_the_migration_task_bootstraps_rather_than_replaying_the_chain"]
+
+[[unit]]
+text = "Smoke through the public origin: curl -s https://app.<domain>/api/v1/experiments/ answers 401 {\"detail\":\"Not authenticated\"}."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_smoke_test_is_a_real_request_through_the_public_origin",
+    "test:backend/tests/integration/api/test_local_auth_path.py",
+]
+
+[[unit]]
+text = "Deploy tag B."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Roll back to A with the line tag B's run summary printed (Rollback Runbook)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Force an alarm during a canary."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Deploy tag B again once tag A's hour has passed, and while its canary runs set the green or blue alarm (whichever watches the new task set's target group) to ALARM by hand."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Do the same once in the hour after a shift."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The state set by hand lasts until the alarm's next evaluation; on staging on 2026-10-11 (UTC) the alarm was back to OK within two minutes (#295):"
+by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595"]
+
+[[unit]]
+text = "Tear down, and compare what is left with what cdk destroy leaves behind."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Tag B cannot be deployed within the hour after tag A's traffic shift: tag A's CodeDeploy deployment is still active while the old task set is kept, and the deploy refuses until it is not (section 3)."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_active_deployment_is_refused_by_name_and_never_stopped"]
+
+[[unit]]
+text = "What has run on staging:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "On 2026-10-02 (UTC), tag A deployed (run), and tag B, dispatched inside the hour after A's shift, was refused before it changed anything (run)."
+by = [
+    "evidence:https://github.com/getexperimently/experimently/actions/runs/37070072132",
+    "evidence:https://github.com/getexperimently/experimently/actions/runs/37074588665",
+]
+
+[[unit]]
+text = "On 2026-10-04 (UTC), v0.18.0 deployed and the Rollback workflow put the API and the dashboard back on the previous release (run, run)."
+by = [
+    "evidence:https://github.com/getexperimently/experimently/actions/runs/37213010211",
+    "evidence:https://github.com/getexperimently/experimently/actions/runs/37217043185",
+]
+
+[[unit]]
+text = "On 2026-10-11 (UTC), the Rollback workflow did it again (run), and a 5xx alarm forced into ALARM in the hour after a deploy's shift stopped that deployment, and CodeDeploy moved the API back by itself while the dashboard stayed on the new release (#295)."
+by = [
+    "evidence:https://github.com/getexperimently/experimently/actions/runs/38098724258",
+    "evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595",
+]
+
+[[unit]]
+text = "3. Every deploy"
+by = ["exempt:label"]
+
+[[unit]]
+text = "What has run against a real AWS account."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Deploy has run to success on a staging account, most recently v0.31.0 on 2026-10-13 (UTC) (run), and the Rollback workflow has run there end to end (section 2)."
+by = [
+    "evidence:https://github.com/getexperimently/experimently/actions/runs/38423251771",
+    "evidence:https://github.com/getexperimently/experimently/actions/runs/37217043185",
+    "evidence:https://github.com/getexperimently/experimently/actions/runs/38098724258",
+]
+
+[[unit]]
+text = "Deploy to staging before prod, and read the run and its summary closely."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A release tag."
+by = ["test:backend/tests/unit/infrastructure/test_release_gate_triggers.py::test_the_gate_runs_on_every_push_to_main"]
+
+[[unit]]
+text = "release-please cuts them; the Release Gate runs on every push to main, so the tag's commit has a result."
+by = ["test:backend/tests/unit/infrastructure/test_release_gate_triggers.py::test_the_gate_runs_on_every_push_to_main"]
+
+[[unit]]
+text = "For a tag cut before that: gh workflow run release-gate.yml --ref vX.Y.Z, then wait for it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Actions → Deploy → Run workflow, \"Use workflow from\" main (any other ref is refused: the workflow's own tooling comes from it), then environment, version (the tag), profile."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_a_dispatch_from_any_ref_but_main_is_refused"]
+
+[[unit]]
+text = "Preflight, with no AWS credentials: the dispatch ref, the profile acknowledgement, that version matches vX.Y.Z[-pre], exists, and is on main, and that its commit passed the Release Gate (the latest completed run wins; a run still in progress refuses)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_preflight_holds_no_secret_and_checks_the_release",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_tag_pattern",
+    "test:backend/tests/unit/infrastructure/test_verify_release_gate.py::test_the_latest_completed_run_wins",
+    "test:backend/tests/unit/infrastructure/test_verify_release_gate.py::test_running",
+]
+
+[[unit]]
+text = "Approve when the environment asks."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_every_refusal_comes_before_the_first_aws_mutation",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_one_environment_bound_job_per_workflow",
+]
+
+[[unit]]
+text = "Nothing in AWS has changed yet."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_every_refusal_comes_before_the_first_aws_mutation",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_one_environment_bound_job_per_workflow",
+]
+
+[[unit]]
+text = "The deploy job then, in order: refuses an unconfigured environment, the wrong AWS account, missing stacks, a profile the stacks were not deployed for, missing secrets or either ECR repository, a CodeDeploy deployment of this environment that is still active, and a dashboard service that is missing, mid-rollout or not on the ECS rolling controller -- all before any change -- and then builds :<tag>-<profile> from the tag (or reuses it if an earlier deploy of the same release into this account already pushed it), checks the image's labels name the tag's commit, does the same for the dashboard image (experimentation-platform/web:<tag>-<profile>, the profile passed as a build argument), and only then snapshots the database (pre-deploy-<env>-<tag>-<time>), registers and runs the migration by digest, registers the API revision by digest, refuses it if what ECS stored does not set RUN_MIGRATIONS=false on the backend container, and creates the CodeDeploy deployment."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_every_refusal_comes_before_the_first_aws_mutation",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_refusals_say_what_to_do",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_dashboard_refusals_come_before_the_first_mutation",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_image_is_pushed_once_as_tag_and_profile",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_an_existing_tag_is_reused_not_rebuilt",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_image_is_built_from_the_release_and_labelled_with_its_commit",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_dashboard_image_is_built_like_the_apis_before_anything_is_migrated",
+    "test:backend/tests/unit/infrastructure/test_deploy_profile.py::TestTheProfileIsAnExplicitInput::test_the_dashboard_image_is_built_for_the_requested_profile",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_snapshot_is_taken_before_the_migration_from_the_stack_output",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_every_task_definition_registered_names_the_digest",
+]
+
+[[unit]]
+text = "The traffic shift."
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_no_approval_until_every_target_is_healthy_and_counted",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_no_approval_before_ready_even_with_every_target_healthy",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_traffic_shift_follows_the_deployment_and_precedes_the_smoke",
+]
+
+[[unit]]
+text = "When CodeDeploy reports the deployment Ready, the run checks that every target in the new task set's target group is healthy and that their number is the task set's desired count."
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_no_approval_until_every_target_is_healthy_and_counted",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_no_approval_before_ready_even_with_every_target_healthy",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_traffic_shift_follows_the_deployment_and_precedes_the_smoke",
+]
+
+[[unit]]
+text = "Then it approves the shift (continue-deployment --deployment-wait-type READY_WAIT)."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_a_deploy_is_approved_on_healthy_targets_and_succeeds_when_serving"]
+
+[[unit]]
+text = "The canary sends 10% of traffic, waits 15 minutes (why 15), then sends the rest."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_api_canary_is_fifteen_minutes"]
+
+[[unit]]
+text = "The step succeeds when the new revision is the PRIMARY task set and scripts/check_live_target_group.py confirms that the /api/ rule forwards to that task set's target group (scripts/api_serving.py)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_succeeded_but_not_serving_is_red",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_the_predicate_is_zero_only_when_serving",
+]
+
+[[unit]]
+text = "A rule still split between blue and green means the shift is in progress, and the step waits."
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_a_split_rule_after_the_flip_is_still_shifting",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_a_split_in_either_rule_is_still_shifting",
+]
+
+[[unit]]
+text = "It gives up after CODEDEPLOY_DEADLINE_SECONDS (40 minutes: the canary's 15 and 25 for starting the tasks, the approval and the final shift) and never stops the deployment."
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_shift_deadline_is_the_canary_plus_the_allowance",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_a_deadline_after_the_approval_leaves_the_deployment_running",
+]
+
+[[unit]]
+text = "CodeDeploy does, if one of the deployment group's alarms goes into ALARM: it stops the deployment and rolls the API back by itself, and the step ends \"Rolled back by an alarm\" (result=alarm), naming the alarm."
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_alarm_after_the_approval_is_rolled_back_by_an_alarm_naming_it",
+]
+
+[[unit]]
+text = "There is nothing to roll back then; read An alarm rolled the API back."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The smoke request (GET ${PUBLIC_BASE_URL}/api/v1/experiments/ → 401 {\"detail\":\"Not authenticated\"})."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_smoke_test_is_a_real_request_through_the_public_origin",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_an_empty_smoke_url_fails_naming_the_environment",
+]
+
+[[unit]]
+text = "A failed smoke test does not roll back; the alarms may, while the deployment is active."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_forward_deploy_cannot_roll_back_a_successful_deployment",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_no_stop_deployment_after_continue_deployment",
+]
+
+[[unit]]
+text = "If the API is still on the new release, the run summary gives the line: Rollback: Actions → Rollback → environment=<env>, task_definition_arn=experimentation-backend-<env>:<n>."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_summary_hands_over_the_rollback_line"]
+
+[[unit]]
+text = "The dashboard, only after the API answered."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_r1_through_the_step_the_dashboard_rolls_out_when_the_api_is_serving",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_r10_the_dashboard_is_not_touched_unless_the_api_serves_this_revision",
+]
+
+[[unit]]
+text = "The run registers the dashboard's task definition with the new image's digest, checks again that the API is still serving this run's revision (a Rollback run may have started meanwhile), and rolls the dashboard's service onto the new revision, refusing if the dashboard is no longer on the revision it recorded before anything changed."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_r1_through_the_step_the_dashboard_rolls_out_when_the_api_is_serving",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_r10_the_dashboard_is_not_touched_unless_the_api_serves_this_revision",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_r11_the_dashboard_is_not_touched_when_it_changed_since_it_was_read",
+    "test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_r11_a_primary_other_than_expected_is_refused_before_any_change",
+]
+
+[[unit]]
+text = "It waits on the PRIMARY deployment until it is the new revision, COMPLETED, with every task running: a rollout the circuit breaker rolled back is red, not \"stable\"."
+by = [
+    "test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_r1_a_completed_rollout_of_this_revision_succeeds",
+    "test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_a_circuit_breaker_rollback_is_not_a_success",
+]
+
+[[unit]]
+text = "Then GET ${PUBLIC_BASE_URL}/ must answer 200 with text/html."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_recheck_is_the_last_assertion",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_a_whole_successful_tail_is_green_and_says_so",
+]
+
+[[unit]]
+text = "The last check of the run is the API check once more."
+by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_recheck_is_the_last_assertion"]
+
+[[unit]]
+text = "The summary names the live API target group and the dashboard's running digest, with the values for the next cdk deploy of experimentation-fargate-<env>: -c api_live_target_group=<blue|green> and -c dashboard_image_tag=sha256:<hex> (section 1.6), and a rollback line carrying both revisions."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_summary_prints_the_live_group_and_says_what_the_alarms_watch",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_summary_prints_exactly_the_values_rollback_accepts",
+]
+
+[[unit]]
+text = "The deploy job's timeout is 160 minutes: every wait in it is a named bound (snapshot, migration, traffic shift, dashboard rollout, the two smoke tests) and the sum leaves room for two uncached image builds."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_job_timeout_covers_every_named_wait",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_budget_is_not_vacuous",
+]
+
+[[unit]]
+text = "Alarms watch the API until the deployment ends (#148)."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm"]
+
+[[unit]]
+text = "The deployment group has two alarms, experimentation-api-5xx-blue-<env> and experimentation-api-5xx-green-<env>, one per target group, because CodeDeploy swaps the two on every deployment."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_both_target_groups_and_nothing_else_are_watched"]
+
+[[unit]]
+text = "Both are polled for the whole deployment: before the approval, in the canary, and in the hour after the shift while CodeDeploy keeps the previous task set."
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summarys_bake_is_the_groups_termination_wait",
+]
+
+[[unit]]
+text = "While either is in ALARM, CodeDeploy stops the deployment and rolls the API back to the previous revision by itself."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm"]
+
+[[unit]]
+text = "On 2026-10-03 (UTC) CodeDeploy stopped and reverted an API deployment on staging when an alarm went into ALARM (#295), and on 2026-10-11 (UTC) an alarm forced in the hour after the shift did the same (#295)."
+by = [
+    "evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-5971647359",
+    "evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595",
+]
+
+[[unit]]
+text = "An alarm in the time before the approval has not been rehearsed on AWS as of v0.31.1."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "An alarm fires on a minute with at least 5 target 5xx and at least 5% of that target group's requests, for 2 minutes of 3; a minute with no requests counts as fine."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_each_alarm_is_exactly_the_specified_one"]
+
+[[unit]]
+text = "What they do not catch:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "a release that answers wrongly with a 2xx, or with fewer errors than that;"
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_each_alarm_is_exactly_the_specified_one"]
+
+[[unit]]
+text = "the load balancer's own 502 and 504 (a task that crashed or timed out);"
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_each_alarm_is_exactly_the_specified_one"]
+
+[[unit]]
+text = "the dashboard: an alarm rolls back the API only, and a rollback in the hour after the shift leaves the dashboard on the new release;"
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_dashboard_has_no_alarm"]
+
+[[unit]]
+text = "anything after that hour, when the response is the Rollback workflow."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summarys_bake_is_the_groups_termination_wait"]
+
+[[unit]]
+text = "Two more things follow from the alarms watching both target groups."
+by = ["exempt:label"]
+
+[[unit]]
+text = "A live release already answering 5xx at the threshold (its own bug, or a failing dependency) stops every new deploy too, the fix included: see Fix forward while an alarm is firing."
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_both_target_groups_and_nothing_else_are_watched",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_alarm_in_alarm_refuses_naming_it_and_since_when",
+]
+
+[[unit]]
+text = "And every 5xx the API answers counts, its deliberate ones included: 501 on a module's route under the core profile, and 503 from /health/ready for a caller other than the load balancer."
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_each_alarm_is_exactly_the_specified_one",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_not_ready_when_database_down",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_create_split_url_experiment_returns_501",
+]
+
+[[unit]]
+text = "A rollback in the hour after the shift is not announced in the #deployments channel; the run summary gives the time the alarms stop watching and the command that shows whether one happened."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_summary_prints_the_live_group_and_says_what_the_alarms_watch"]
+
+[[unit]]
+text = "One deploy per environment per hour."
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summarys_bake_is_the_groups_termination_wait",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_active_deployment_is_refused_by_name_and_never_stopped",
+]
+
+[[unit]]
+text = "For an hour after the shift, CodeDeploy keeps the previous task set, and the deployment stays active that whole time."
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_codedeploy_keeps_the_previous_task_set_an_hour_after_the_shift"]
+
+[[unit]]
+text = "It accepts no second deployment meanwhile."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "So a deploy dispatched within that hour is refused at once, before anything is built, naming the deployment and roughly how long it has left."
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_active_deployment_is_refused_by_name_and_never_stopped",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_the_time_left_is_estimated_from_the_creation_time",
+]
+
+[[unit]]
+text = "A deployment that was never approved stays active until its 30-minute approval wait ends."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_an_unapproved_deployment_is_stopped_after_30_minutes"]
+
+[[unit]]
+text = "The deploy never stops a deployment itself."
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_active_deployment_is_refused_by_name_and_never_stopped",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_rollback_stops_every_status_the_deploy_refuses_on",
+]
+
+[[unit]]
+text = "Rollback does, on purpose."
+by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_rollback_validates_both_before_it_stops_anything_and_stops_unconditionally"]
+
+[[unit]]
+text = "Shipping a fix within that hour means Rollback first."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A fix-forward deploy is refused while the bad release's deployment is active."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_rollback_stops_every_status_the_deploy_refuses_on"]
+
+[[unit]]
+text = "Run Rollback, which stops that deployment and puts the previous revision back, and deploy the fix afterwards."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If an alarm already rolled the release back, do not run Rollback for it: the API is already going back, and Rollback refuses while CodeDeploy's own rollback is active (An alarm rolled the API back)."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_codedeploys_own_rollback_is_named_and_rollback_is_not_advised"]
+
+[[unit]]
+text = "Rollback's own CodeDeploy deployment is then the active one, and the next forward deploy is refused until it is no longer active: about another hour, because the 60-minute termination wait is a setting of the deployment group (the synthesised template's TerminateBlueInstancesOnDeploymentSuccess.TerminationWaitTimeInMinutes: 60) and create-deployment has no parameter that overrides it."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summarys_bake_is_the_groups_termination_wait"]
+
+[[unit]]
+text = "Rollback's all-at-once --deployment-config-name changes how traffic moves, not how long the old task set is kept."
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_its_deployment_is_all_at_once_names_the_target_and_overrides_the_alarms",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_codedeploy_keeps_the_previous_task_set_an_hour_after_the_shift",
+]
+
+[[unit]]
+text = "On staging on 2026-10-11 (UTC), the Rollback run's deployment stayed active for about an hour after its traffic shift (#295)."
+by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595"]
+
+[[unit]]
+text = "One deploy or manual migration per environment at a time."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_concurrency_is_per_environment_and_never_cancels"]
+
+[[unit]]
+text = "Backward-compatible migrations"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A deploy migrates before it shifts traffic, so for a while -- and for as long as a failed or stopped deploy leaves it so -- the previous release runs against the new schema."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_snapshot_is_taken_before_the_migration_from_the_stack_output",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_migration_runs_the_revision_it_registered",
+]
+
+[[unit]]
+text = "So write every migration so that the previous release can run against it: add columns and tables (nullable, or with defaults), and never drop or rename, in the same release, one the previous release reads."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Drop in a later release, once nothing running reads it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A rollback relies on the same rule."
+by = ["test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations"]
+
+[[unit]]
+text = "The API tasks do not migrate on start, so a rolled-back release runs against the newer schema as it is; it works only if every migration since that release is backward-compatible."
+by = ["test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations"]
+
+[[unit]]
+text = "For one that is not, the order matters: undo the migration while the release that contains it is still serving, and only then roll the API back (Rollback Runbook, Database Rollback Procedure, Step 2)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_migrate_runs_the_serving_image_and_refuses_when_there_is_none",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_database_migration_takes_no_image_and_runs_the_one_serving",
+]
+
+[[unit]]
+text = "Once the API has been rolled back, the workflow can no longer undo it."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_migrate_runs_the_serving_image_and_refuses_when_there_is_none"]
+
+[[unit]]
+text = "The emergency route is then a point-in-time restore (the same procedure, Step 3)."
+by = ["test:backend/tests/unit/infrastructure/test_restore_repoint.py::test_staging_forward_back_and_keep"]
+
+[[unit]]
+text = "4. Pre-Deployment Checklist"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Mandatory Checks"
+by = ["exempt:label"]
+
+[[unit]]
+text = "[ ] The tag's commit passed the Release Gate; the Deploy workflow refuses it otherwise"
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_preflight_holds_no_secret_and_checks_the_release"]
+
+[[unit]]
+text = "[ ] For prod: the same tag deployed to staging and smoke-tested"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Database Migration Checks (if migration is included)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "[ ] Migration applied in staging — no errors, no data loss"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "[ ] Migration is backward-compatible"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "[ ] The downgrade tested in staging (Actions → Database Migration, downgrade, target: the new migration's down_revision id)"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "5. Post-Deployment Verification"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The block sets ENV=staging; for production, change it to ENV=prod."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "/health is the readiness check: look at checks.database.status in what it prints."
+by = [
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_ready_when_database_up",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_not_ready_when_database_down",
+]
+
+[[unit]]
+text = "The unauthenticated request to /api/v1/experiments/ answers 401 {\"detail\":\"Not authenticated\"}."
+by = ["test:backend/tests/integration/api/test_local_auth_path.py::TestBypass::test_bypass_ignored_outside_dev_test"]
+
+[[unit]]
+text = "The last two commands are the dashboard's: GET / answers 200 text/html, and its PRIMARY deployment names the new revision, COMPLETED:"
+by = [
+    "test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_r1_a_completed_rollout_of_this_revision_succeeds",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_a_whole_successful_tail_is_green_and_says_so",
+]
+
+[[unit]]
+text = "Expected: Running == Desired and Pending 0, and Serving the revision the run summary named."
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_no_approval_until_every_target_is_healthy_and_counted",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_a_deploy_is_approved_on_healthy_targets_and_succeeds_when_serving",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_summary_says_until_when_the_alarms_watch_and_how_to_check",
+]
+
+[[unit]]
+text = "These are the API's PRIMARY task set's own counts; the service's runningCount also counts the replaced task set for the hour after a shift, so it reads higher than Desired then."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summarys_bake_is_the_groups_termination_wait"]
+
+[[unit]]
+text = "The dashboard's one PRIMARY deployment on the new dashboard revision, COMPLETED, running equal to desired."
+by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_r1_a_completed_rollout_of_this_revision_succeeds"]
+
+[[unit]]
+text = "6. Deployment Architecture"
+by = ["exempt:label"]
+
+[[unit]]
+text = "7. Troubleshooting"
+by = ["exempt:label"]
+
+[[unit]]
+text = "\"Deployment stuck in Pending\""
+by = ["exempt:label"]
+
+[[unit]]
+text = "\"Migration task failed\""
+by = ["exempt:label"]
+
+[[unit]]
+text = "The run prints the task's last 100 log lines."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_run_prints_the_migration_tasks_last_100_log_lines"]
+
+[[unit]]
+text = "The full log is CloudWatch log group /ecs/experimentation-migrate-<env>, stream migrate/backend/<task id>."
+by = [
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_the_migration_task_logs_to_its_group_under_migrate_backend",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_run_prints_the_migration_tasks_last_100_log_lines",
+]
+
+[[unit]]
+text = "A migration that failed half-way needs its downgrade before a re-deploy (Rollback Runbook)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "\"A deployment is still active\""
+by = ["exempt:label"]
+
+[[unit]]
+text = "The previous deploy's CodeDeploy deployment is still active: it is inside the hour CodeDeploy keeps the old task set, or it is waiting for an approval that the deploy never sent."
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_active_deployment_is_refused_by_name_and_never_stopped",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_the_time_left_is_estimated_from_the_creation_time",
+]
+
+[[unit]]
+text = "The refusal names it and estimates how long it has left."
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_active_deployment_is_refused_by_name_and_never_stopped",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_the_time_left_is_estimated_from_the_creation_time",
+]
+
+[[unit]]
+text = "Wait and re-run."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If the release it deployed is bad, run Rollback, which stops it and puts the older revision back."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Do not stop it by hand with --auto-rollback-enabled unless rolling that release back is what you want."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If the refusal says it is CodeDeploy's own rollback of an earlier deployment, an alarm (or a failed deployment) is already putting the API back: wait for it, and do not use Rollback, which refuses while it is active."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_codedeploys_own_rollback_is_named_and_rollback_is_not_advised"]
+
+[[unit]]
+text = "\"Rolled back by an alarm\""
+by = ["exempt:label"]
+
+[[unit]]
+text = "One of the deployment group's two 5xx alarms went into ALARM, and CodeDeploy stopped the deployment and rolled the API back by itself."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm"]
+
+[[unit]]
+text = "Read errorInformation first, then follow An alarm rolled the API back."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If it says \"Stopped by an alarm\" instead, the alarm was already firing before the traffic shift and nothing shifted: Fix forward while an alarm is firing."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_alarm_before_the_shift_is_stopped_by_an_alarm_and_nothing_shifted"]
+
+[[unit]]
+text = "\"This API revision would run migrations on start\""
+by = ["exempt:label"]
+
+[[unit]]
+text = "The API revision this run registered, copied from the family's newest one, does not set RUN_MIGRATIONS=false, most likely because the Fargate stack was last deployed from a checkout older than 0.14.0."
+by = [
+    "test:backend/tests/unit/infrastructure/test_task_definition_scripts.py::test_registers_the_digest_and_changes_nothing_else",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_api_revision_without_run_migrations_exactly_false_is_refused",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_api_tasks_stopped_migrating_on_start_in_0_14_0",
+]
+
+[[unit]]
+text = "No deployment was created and the previous revision keeps serving; the migration has been applied."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_migrated_warning_is_true_of_the_case_it_runs_in"]
+
+[[unit]]
+text = "Deploy the Fargate stack from a current checkout, pinned (section 1.6), then deploy again: Rollback Runbook."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "\"Traffic shift not approved\""
+by = ["exempt:label"]
+
+[[unit]]
+text = "The new task set's targets never all became healthy before the deadline, so the deploy did not approve the shift."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_unhealthy_until_the_deadline_is_never_approved_and_never_stopped"]
+
+[[unit]]
+text = "Nothing moved, and the previous revision keeps serving."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_unhealthy_until_the_deadline_is_never_approved_and_never_stopped"]
+
+[[unit]]
+text = "CodeDeploy stops the deployment when its 30-minute approval wait ends."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_an_unapproved_deployment_is_stopped_after_30_minutes"]
+
+[[unit]]
+text = "The migration has been applied."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_migrated_warning_is_true_of_the_case_it_runs_in"]
+
+[[unit]]
+text = "Read the API's log (/ecs/experimentation-backend-<env>) for why the new tasks fail their health check."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "\"Traffic shift not confirmed\""
+by = ["exempt:label"]
+
+[[unit]]
+text = "The deploy approved the shift, and when its deadline passed the new revision was not yet serving through the /api/ rule."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_a_deadline_after_the_approval_leaves_the_deployment_running"]
+
+[[unit]]
+text = "The deployment was not stopped, because stopping it could roll back a release that is succeeding."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_a_deadline_after_the_approval_leaves_the_deployment_running"]
+
+[[unit]]
+text = "Watch it with aws deploy get-deployment --deployment-id <id> and python3 scripts/api_serving.py experimentation-<env> experimentation-backend-<env> <new revision ARN> (exit 0 means it is serving)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_the_predicate_is_zero_only_when_serving",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_the_predicate_exit_codes",
+]
+
+[[unit]]
+text = "If the release is bad, use the rollback line."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The API route and the PRIMARY task set disagree"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The new revision is the PRIMARY task set, but the HTTPS listener's /api/ rule forwards to the other target group, with no split."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_unsplit_rule_on_the_other_group_after_the_flip_is_red"]
+
+[[unit]]
+text = "The API route is not where the new tasks are."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_unsplit_rule_on_the_other_group_after_the_flip_is_red"]
+
+[[unit]]
+text = "When the old task set is terminated, an hour after the shift, every API request gets a 503."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summarys_bake_is_the_groups_termination_wait"]
+
+[[unit]]
+text = "Until then the old task set keeps answering through the rule, so users see the previous release, not the new one."
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summarys_bake_is_the_groups_termination_wait"]
+
+[[unit]]
+text = "First check aws deploy get-deployment --deployment-id <id>."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If it is Stopped with ALARM_ACTIVE, this is not that question: an alarm stopped the deployment and CodeDeploy is already rolling the API back, putting the rule back first."
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_a_route_on_the_other_group_is_read_again_for_about_a_minute_before_it_is_reported",
+]
+
+[[unit]]
+text = "Do not dispatch Rollback; read An alarm rolled the API back."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The deploy re-reads the deployment for about a minute before it reports this, for that reason."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_a_route_on_the_other_group_is_read_again_for_about_a_minute_before_it_is_reported"]
+
+[[unit]]
+text = "Otherwise:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Roll back within the hour, with the rollback line in the run summary."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Then confirm with python3 scripts/check_live_target_group.py --env <env> that the rule names the group the previous revision runs in."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Before any further deploy, record the observation."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The dashboard did not roll out"
+by = ["exempt:label"]
+
+[[unit]]
+text = "These all come after the API has shifted, so the API is new and the dashboard is not (or its state is in question)."
+by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_dashboard_steps_follow_the_api_smoke_with_no_if"]
+
+[[unit]]
+text = "Three things hold for each:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Deploy refuses a re-run until the CodeDeploy deployment of this run is no longer active, about an hour after its traffic shift."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_active_deployment_is_refused_by_name_and_never_stopped"]
+
+[[unit]]
+text = "The rollback line in the run summary reverts the API too, not only the dashboard."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_summary_prints_exactly_the_values_rollback_accepts",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_rollback_rolls_the_dashboard_back",
+]
+
+[[unit]]
+text = "The dashboard alone, inside that hour, is the rollback runbook's Method 2, dashboard block."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The titles, and what each means:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "\"Dashboard not rolled out\" -- the API check before the rollout failed, so the dashboard was not touched."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_dashboard_refusals",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_summary_says_the_api_changed_only_for_exits_1_and_3",
+]
+
+[[unit]]
+text = "The line above it is the check's own: another revision is PRIMARY or a traffic shift is in progress (exit 1), the check could not tell because an AWS call failed or it crashed (exit 2), or the route and the tasks disagree (exit 3)."
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_the_predicate_exit_codes"]
+
+[[unit]]
+text = "Find out what changed the API (usually a Rollback run) before anything else."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "\"… rolled back by ECS\" -- the new dashboard's tasks did not become healthy, and the deployment circuit breaker put the previous revision back."
+by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_a_circuit_breaker_rollback_is_not_a_success"]
+
+[[unit]]
+text = "The task log is /ecs/experimentation-dashboard-<env>."
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_api_and_dashboard_log_groups"]
+
+[[unit]]
+text = "\"… changed during this run\" -- the dashboard's PRIMARY deployment is neither this run's revision nor the one before it: a Rollback run, another deploy or a cdk deploy changed it."
+by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_a_third_revision_during_the_wait_is_not_called_a_circuit_breaker"]
+
+[[unit]]
+text = "This run did not change it back."
+by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_r11_the_dashboard_is_not_touched_when_it_changed_since_it_was_read"]
+
+[[unit]]
+text = "\"… rollout did not finish\" -- the deadline passed with ECS still working on it."
+by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_r6_still_in_progress_at_the_deadline_is_not_rerun"]
+
+[[unit]]
+text = "The run stopped waiting and stopped nothing; watch the service."
+by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_r6_still_in_progress_at_the_deadline_is_not_rerun"]
+
+[[unit]]
+text = "\"Workflow role cannot update …\" -- the role predates the dashboard rollout; re-apply the policy (IAM permissions)."
+by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_a_denied_update_says_which_permission"]
+
+[[unit]]
+text = "\"Dashboard smoke test failed\" -- ECS reports the new revision serving, but GET / did not answer 200 text/html: check the HTTPS listener's default action in experimentation-fargate-<env>."
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_a_dashboard_answering_anything_but_html_200_fails_the_dashboard_smoke",
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_https_default_action_is_the_dashboard",
+]
+
+[[unit]]
+text = "\"API changed after the dashboard rolled out\" -- the last API check failed: the dashboard is new and the API may not be."
+by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_three_failure_messages_are_mutually_exclusive"]
+
+[[unit]]
+text = "Check both before anything else (scripts/api_serving.py, and the dashboard describe in section 5)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "\"API rolled back by an alarm, dashboard not\" -- the exception to the three points above."
+by = ["exempt:label"]
+
+[[unit]]
+text = "An API check failed because an alarm stopped the deployment after its shift, and CodeDeploy is moving the API back by itself."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_api_check_failed_by_an_alarm_after_the_shift_says_codedeploy_moves_it_back"]
+
+[[unit]]
+text = "The deployment is stopped, so a re-run is not refused for the hour, and there is nothing to roll back for the API: do not use the rollback line."
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_nothing_active_passes",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+]
+
+[[unit]]
+text = "If the dashboard is on this run's revision, put it back to match with Method 2's dashboard block, and read An alarm rolled the API back."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "\"Smoke test failing after deployment\""
+by = ["exempt:label"]
+
+[[unit]]
+text = "The smoke test rolls nothing back."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_forward_deploy_cannot_roll_back_a_successful_deployment"]
+
+[[unit]]
+text = "The API's alarms may, while the run's CodeDeploy deployment is active: if the API is already back on the previous revision, read An alarm rolled the API back."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_forward_deploy_cannot_roll_back_a_successful_deployment"]
+
+[[unit]]
+text = "Otherwise decide, and use the rollback line in the run summary."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The API's log is /ecs/experimentation-backend-<env>."
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]

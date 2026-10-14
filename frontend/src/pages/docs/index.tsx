@@ -44,7 +44,7 @@ const sections = [
   {
     category: 'LLM / AI Model Evaluation',
     icon: '🤖',
-    description: 'Compare model variants on a task; the winner has the best business metric, or the best LLM-judge score without one.',
+    description: 'Compare model variants on a task; the winner has the best business metric when every variant has one, and otherwise the best LLM-judge score.',
     links: [
       { label: 'Overview', href: docsUrl('llm-evaluation/overview'), desc: 'Supported providers, task types, variant assignment, judge scoring, cost estimation and the analysis' },
       { label: 'Quick Start', href: docsUrl('llm-evaluation/quickstart'), desc: 'Compare GPT-4o with Claude 3.5 Sonnet (steps 3–5 need provider API keys)' },

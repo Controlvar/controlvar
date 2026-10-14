@@ -184,13 +184,17 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         says("whatever the client sends in between"),
     ),
     # LLM / AI Model Evaluation
-    "Compare model variants on a task; the winner has the best business metric, or the best LLM-judge score without one.": (
+    "Compare model variants on a task; the winner has the best business metric when every variant has one, and otherwise the best LLM-judge score.": (
         lede(
             "compares two models on a customer support task",
             "docs/llm-evaluation/quickstart.md",
         ),
         says(
-            "the winner is always the variant with the highest mean business metric, or, with no business metric, the highest mean auto-eval score",
+            "the winner is the variant with the highest mean on it",
+            "docs/llm-evaluation/overview.md",
+        ),
+        says(
+            "The metric is business_metric when every variant has at least one business-metric value; otherwise it is auto_eval",
             "docs/llm-evaluation/overview.md",
         ),
         says(
@@ -464,8 +468,8 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("The platform uses Alembic for PostgreSQL schema management"),
     ),
     "CloudWatch dashboards, Prometheus metrics": (
-        lede("integrates with AWS CloudWatch, Prometheus"),
-        says("## CloudWatch Dashboards"),
+        lede("adds the CloudWatch dashboards"),
+        lede("exposes Prometheus metrics"),
         says("## Prometheus Metrics"),
     ),
     # Guides & Tutorials

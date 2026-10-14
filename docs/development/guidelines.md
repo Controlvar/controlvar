@@ -29,7 +29,7 @@ and the conventions, with the reasons for them, are in
 - Ruff formats and lints the Python and sorts its imports; its configuration is
   `[tool.ruff]` in `pyproject.toml`. Do not add black, isort or flake8 back.
 - `make format` formats and fixes the Python in place. `make lint` runs what the
-  `lint` check runs; "Lint" in `CONTRIBUTING.md` lists it.
+  `lint` check runs.
 - CI, the pre-commit hook and the virtual environment install the same ruff
   version.
 

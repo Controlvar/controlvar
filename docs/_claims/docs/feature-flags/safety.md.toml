@@ -136,6 +136,19 @@ text = "To have app errors count, send them to your server and forward them from
 by = ["exempt:advice"]
 
 [[unit]]
+text = "GET /api/v1/metrics/summary counts errors by the same rule: its error_rate leaves out the reports that do not count, and its uncounted_error_count is the number of them in its period."
+by = [
+    "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_counts_errors_by_the_safety_checks_rule",
+]
+
+[[unit]]
+text = "That error_rate still differs from the check's in three ways: it covers start_date to end_date (by default the 30 days before now), not the last 15 minutes; it divides by the aggregated flag evaluations (of its period, by default day), not the raw ones; and it is a percentage, not a fraction, which can exceed 100 when errors outnumber those evaluations."
+by = [
+    "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_counts_errors_by_the_safety_checks_rule",
+    "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_still_differs_from_the_check_in_period_and_denominator",
+]
+
+[[unit]]
 text = "Metrics You Can Monitor"
 by = ["exempt:label"]
 
@@ -263,7 +276,7 @@ by = [
 text = "It returns a default built from the global settings, with the nil UUID as id."
 by = [
     "test:backend/tests/integration/services/test_safety_service_coverage.py::TestAsyncFeatureFlagSafetyConfig::test_get_missing_config_returns_defaults_from_settings",
-    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_a_rollback_gives_a_flag_without_a_configuration_one_with_no_thresholds",
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_a_rollback_leaves_a_flag_without_a_configuration_on_the_defaults",
     "docex:docs/feature-flags/safety.md#\"id\": \"00000000-0000-0000-0000-000000000000\"",
     "journey:feature-flag-safety#default-config",
 ]
@@ -311,7 +324,10 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "enabled | boolean | No | Whether the monitor checks this flag (default true)"
-by = ["test:backend/tests/integration/services/test_safety_service_coverage.py::TestFeatureFlagSafetyConfigStatic::test_get_or_create_creates_new_config_with_defaults"]
+by = [
+    "test:backend/tests/integration/api/test_safety_config_nulls.py::test_a_create_that_leaves_metrics_out_stores_no_thresholds",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestShouldRollback::test_config_disabled_returns_false",
+]
 
 [[unit]]
 text = "metrics | object | No | Map of metric name → threshold (see above). An empty map means nothing is checked"
@@ -678,6 +694,14 @@ text = "The rollback response includes the record's id as rollback_record_id."
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
+text = "safety_config_id is the flag's own safety configuration, or null for a flag that has none and is checked against the global defaults: a rollback does not give such a flag a configuration, so it stays on the defaults."
+by = [
+    "test:backend/tests/integration/api/test_rollback_keeps_the_defaults.py::test_a_manual_rollback_leaves_the_flag_on_the_defaults_and_the_monitor_rolls_it_back_again",
+    "test:backend/tests/integration/api/test_rollback_keeps_the_defaults.py::test_an_automatic_rollback_leaves_the_flag_on_the_defaults_for_the_next_breach",
+    "test:backend/tests/integration/api/test_rollback_keeps_the_defaults.py::test_a_flag_with_its_own_config_keeps_it_unchanged",
+]
+
+[[unit]]
 text = "No endpoint lists the records, and the dashboard lists only the manual rollbacks made in the current browser session, so query the table for automatic ones."
 by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
@@ -806,12 +830,19 @@ text = "Check the flag's thresholds."
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "A rollback leaves the flag with a safety configuration of its own: a flag that had none gets one with no thresholds, so from then on it is not checked against the global defaults."
-by = ["test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_a_rollback_gives_a_flag_without_a_configuration_one_with_no_thresholds"]
+text = "A rollback does not change the flag's safety configuration: a flag with one of its own keeps its thresholds, and a flag without one is still checked against the global defaults."
+by = [
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_a_rollback_leaves_a_flag_without_a_configuration_on_the_defaults",
+    "test:backend/tests/integration/api/test_rollback_keeps_the_defaults.py::test_a_flag_with_its_own_config_keeps_it_unchanged",
+    "test:backend/tests/integration/api/test_rollback_keeps_the_defaults.py::test_a_manual_rollback_leaves_the_flag_on_the_defaults_and_the_monitor_rolls_it_back_again",
+]
 
 [[unit]]
-text = "If it should stay monitored, POST its thresholds (see Create or Update a Flag's Configuration)."
-by = ["exempt:instruction"]
+text = "A flag that an earlier release gave a configuration with no thresholds at a rollback keeps that configuration, and is not checked against the defaults; if it should be monitored, POST its thresholds (see Create or Update a Flag's Configuration)."
+by = [
+    "test:backend/tests/integration/api/test_rollback_keeps_the_defaults.py::test_an_empty_configuration_of_its_own_is_checked_against_nothing",
+    "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_a_database_at_the_previous_release_upgraded_with_heads",
+]
 
 [[unit]]
 text = "Watch the safety check for at least one full 15-minute window before expanding further."

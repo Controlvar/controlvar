@@ -681,6 +681,33 @@ def test_the_snapshot_is_taken_before_the_migration_from_the_stack_output():
 
 
 @pytest.mark.regression
+def test_db_migrate_snapshots_before_it_reads_or_changes_the_schema():
+    """Database Migration takes a pre-migration-<env>-<time> snapshot before
+    its first task, in either direction."""
+    (job,) = _environment_jobs(DB_MIGRATE).values()
+    steps = _steps(job)
+    (snapshot,) = _step_index(
+        steps, lambda s: "create-db-cluster-snapshot" in _run_of(s)
+    )
+    tasks = _step_index(steps, lambda s: "run_migration_task.sh" in _run_of(s))
+    assert len(tasks) == 2 and snapshot < min(tasks), (snapshot, tasks)
+    assert "if" not in steps[snapshot], steps[snapshot].get("if")
+    assert 'id="pre-migration-${TARGET_ENV}-' in _run_of(steps[snapshot])
+    assert "db-cluster-snapshot-available" in _run_of(steps[snapshot])
+
+
+@pytest.mark.regression
+def test_db_migrate_passes_no_x_argument_to_alembic():
+    """The runbook: the workflow cannot pass a migration's override
+    (-x allow_member_loss=true); such a downgrade is run by hand."""
+    (job,) = _environment_jobs(DB_MIGRATE).values()
+    (step,) = [s for s in _steps(job) if s.get("id") == "migrate"]
+    run = _run_of(step)
+    assert '"alembic", "-c", "backend/app/db/alembic.ini", $direction, $target]' in run
+    assert '"-x"' not in run and "allow_member_loss" not in run
+
+
+@pytest.mark.regression
 @pytest.mark.parametrize("path", [DEPLOY, DB_MIGRATE], ids=["deploy", "db-migrate"])
 def test_the_network_comes_from_the_stack_outputs(path):
     """Not `PROD_PRIVATE_SUBNET_IDS` secrets, which db-migrate read under other names."""
@@ -1049,7 +1076,7 @@ def test_db_migrate_refuses_relative_and_whole_graph_targets(
     assert code == 1, f"{direction} {target!r} was accepted:\n{log}"
     (error,) = [line for line in log.splitlines() if line.startswith("::error")]
     assert "nothing was migrated" in error
-    assert "d29a479daafe" in error, "the refusal does not show an id to name"
+    assert "37dcb2969766" in error, "the refusal does not show an id to name"
     # The target is printed only when it is made of safe characters, so an
     # operator's text cannot write a workflow command of its own.
     assert not any(line.startswith("::warning") for line in log.splitlines())

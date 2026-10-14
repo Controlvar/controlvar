@@ -1,6 +1,6 @@
 # Database Migrations
 
-The platform uses **Alembic** for PostgreSQL schema management. All schema changes — new tables, columns, indexes, and constraints — are expressed as versioned migration scripts that can be applied forward or rolled back.
+The platform uses **Alembic** for PostgreSQL schema management. Each migration is a versioned script, with an `upgrade()` and a `downgrade()` function.
 
 ---
 
@@ -16,9 +16,9 @@ Migration files live in `backend/app/db/migrations/versions/`. Each file represe
 `heads` (plural) and never `head`: alembic refuses the singular when more than
 one head exists.
 
-**Where the commands run.** Every command on this page runs inside the API
-container, with the image's own alembic and the container's `POSTGRES_*`
-settings: `docker compose exec api ...`, from the directory of your compose file
+**Where the commands run.** Every alembic and bootstrap command on this page runs
+inside the API container, with the image's own alembic and the container's
+`POSTGRES_*` settings: `docker compose exec api ...`, from the directory of your compose file
 (the repository root for the [Quick Start](../getting-started/quick-start.md)
 stack, `deploy/compose/` for the production compose file). The image keeps the
 repository's layout under its working directory `/app`, so
@@ -91,8 +91,8 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini history
 Output, for example:
 
 ```text
-d29a479daafe -> 37dcb2969766 (head), Segments: a kind (rules or id_list), and the members of an id list
-806901fb7735 -> d29a479daafe, Global holdouts: who each one covered, its own salt, and at most one active
+37dcb2969766 -> 4c2c09a2b3e8 (head), Safety rollback records: safety_config_id nullable, its foreign key ON DELETE SET NULL
+d29a479daafe -> 37dcb2969766, Segments: a kind (rules or id_list), and the members of an id list
 ...
 <base> -> 84a772608a6e, Initial schema
 ```
@@ -116,7 +116,7 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini current
 Output, for a full install (a core install prints the first line only):
 
 ```text
-37dcb2969766 (head)
+4c2c09a2b3e8 (head)
 modules_0002_warehouse_analysis (head)
 ```
 
@@ -187,7 +187,7 @@ downgrade is a no-op — it will not drop populated tables it never made.
 This revision replaces the `warehouse_connections` table with a new one and
 adds `warehouse_sources` and `warehouse_analysis_runs`. **Every row of the
 earlier `warehouse_connections` is deleted** — connections saved through the
-earlier warehouse endpoints — and nothing is copied into the new table. Recreate connections in Warehouse › Connections.
+earlier warehouse endpoints — and nothing is copied into the new table.
 
 Downgrading it cannot bring those rows back: `downgrade modules@-1` drops the
 three tables it created and puts back an **empty** table of the earlier shape.
@@ -398,6 +398,32 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini -x allow
 The Database Migration workflow does not pass `-x`, so on AWS it stops at this
 revision while any id list has members.
 
+### `4c2c09a2b3e8` keeps rollback records without a safety configuration
+
+This revision makes `safety_rollback_records.safety_config_id` nullable and
+changes its foreign key to `feature_flag_safety_configs` from ON DELETE CASCADE
+to ON DELETE SET NULL. It changes no row.
+
+From this release a rollback of a flag that has no safety configuration of its
+own leaves it with none, so the flag stays on the global default thresholds,
+and the rollback record's `safety_config_id` is null. Earlier releases gave such
+a flag an empty configuration of its own at the rollback, with no thresholds, so
+the monitor stopped checking it against the defaults. Those configurations
+stay: this release does not remove them
+([#1206](https://github.com/getexperimently/experimently/issues/1206)).
+
+Deleting a safety configuration keeps the flag's rollback records: their
+`safety_config_id` becomes null. Before this revision the delete took them with
+it.
+
+**The downgrade changes nothing.** `4c2c09a2b3e8`'s downgrade moves
+`alembic_version` back and leaves the column nullable and the key ON DELETE SET
+NULL. The rollback runbook undoes a migration while the release that contains it
+still serves, before the API is rolled back
+([Database Rollback Procedure](../deployment/rollback-runbook.md#database-rollback-procedure)),
+and this release records a null `safety_config_id` for each rollback of a flag
+on the defaults, which NOT NULL would refuse.
+
 Roll back to a specific revision:
 
 ```{.bash skip reason="fragment: <revision> is a revision ID from history"}
@@ -458,9 +484,7 @@ labelled `(modules)`.
 
 ## Environment Variables
 
-Alembic and the bootstrap connect with these settings. In the API container they
-are already set, by the compose file, the Helm chart or the task definition; set
-them yourself only when you run alembic somewhere else. The defaults below are the
+Alembic and the bootstrap connect with these settings. The defaults below are the
 Quick Start compose file's:
 
 | Variable | Quick Start default | Description |
@@ -476,6 +500,15 @@ The database server's `TimeZone` must be `UTC`, as it is in the bundled PostgreS
 compose files and the Helm chart. On another time zone, some times the API stores move by the
 zone's offset: an experiment's `updated_at`, for example. Its start and end dates are stored in
 UTC whatever the zone.
+
+To see the bundled database's time zone:
+
+```{.bash exec}
+docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SHOW TimeZone"'
+```
+<!-- expect: UTC -->
+
+It prints `UTC`.
 
 ---
 
@@ -606,11 +639,7 @@ names:
 - restore the backup taken before that upgrade, and run the older image
   against the restored database.
 
-Do not edit `alembic_version` to make the older image start. Removing the
-newer revision's row leaves that release's schema changes in place while
-alembic no longer knows about them: the older image then re-runs migrations
-from the wrong position, and rolling forward again fails on a relation that
-already exists.
+Do not edit `alembic_version` to make the older image start.
 
 The refusal is at start-up, so instances of the older image that were
 already running keep running. That, and the window in every rolling upgrade
@@ -673,8 +702,9 @@ What this means for you:
   [`37dcb2969766`](#37dcb2969766-adds-segments-made-from-a-list-of-user-ids)
   is backward-compatible for a rollback too, and undoing it drops
   `segment_members` and its rows; it refuses while that table has any.
-- **Docker Compose and the Helm chart are deliberately unchanged.** Compose runs
-  one API container, which is the only writer and keeps `RUN_MIGRATIONS=true`.
+  [`4c2c09a2b3e8`](#4c2c09a2b3e8-keeps-rollback-records-without-a-safety-configuration)
+  is backward-compatible for a rollback, and undoing it changes nothing.
+- Compose runs one API container, which is the only writer and keeps `RUN_MIGRATIONS=true`.
   The chart already keeps the bootstrap out of the serving container: it runs
   it in an init container.
 

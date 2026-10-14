@@ -226,7 +226,8 @@ def test_the_break_glass_is_explained_in_one_place():
     """EM condition 4(f)/(g): only the runbook's "Fix forward while an alarm is
     firing" names the input, and it says when to use it, what it gives up, that
     the next deploy is watched again, and that the CloudWatch tricks do not
-    unblock a deploy (unverified until the first staging rehearsal)."""
+    unblock a deploy, which is dated as not rehearsed, not "not yet verified"
+    under a rehearsal the page cites."""
     section = _runbook_section("Fix forward while an alarm is firing")
     flat = " ".join(section.split())
     assert "`override_alarms`" in flat and "`override_alarms_reason`" in flat
@@ -238,7 +239,8 @@ def test_the_break_glass_is_explained_in_one_place():
     assert "`aws cloudwatch disable-alarm-actions`" in flat
     assert "`aws cloudwatch set-alarm-state`" in flat
     assert "do not unblock a deploy" in flat
-    assert "not yet verified" in flat
+    assert "not yet verified" not in flat
+    assert "not unblock a deploy: expected, and not rehearsed on AWS as of v" in flat
     assert "ALARMS OVERRIDDEN" in flat
     # Nowhere else under docs/ names the input.
     others = [
@@ -303,17 +305,19 @@ def test_no_timed_only_wording_is_left():
 )
 def test_the_docs_say_what_has_run_against_aws(path):
     """Inverted from test_the_docs_say_the_deploy_path_is_unproven (EM B3b C8)
-    by #798. The forward deploy has run to success on staging; the Rollback
-    workflow has run there but not yet completed end to end. Each page says
-    both, and neither still calls the whole path unrun. The note is a
-    blockquote, so its `>` markers are dropped before the text is joined."""
+    by #798, and again once the Rollback workflow had completed end to end on
+    staging (2026-10-04 and 2026-10-11). Each page says, with the run, that
+    Deploy has run to success on a staging account and that the Rollback
+    workflow has run there end to end; neither still says it has not, or
+    calls the whole path unrun. The note is a blockquote, so its `>` markers
+    are dropped before the text is joined."""
     text = " ".join(re.sub(r"(?m)^>[ \t]?", "", path.read_text()).split())
     assert "Not yet run against a real AWS account" not in text, path.name
-    assert "forward deploy" in text and "has run to success on staging" in text
-    assert (
-        "The Rollback workflow has run on staging but has not yet completed "
-        "end to end there" in text
-    ), path.name
+    assert "has not yet completed end to end" not in text, path.name
+    assert "has been tested only against a simulated `aws`" not in text, path.name
+    assert "Deploy has run to success on a staging account" in text, path.name
+    assert re.search(r"Rollback workflow (?:ran|has run) there end to end", text)
+    assert "actions/runs/38423251771" in text, path.name
 
 
 @pytest.mark.regression
@@ -331,11 +335,14 @@ def test_the_public_docs_do_not_name_internal_streams():
 @pytest.mark.regression
 @pytest.mark.parametrize("path", [GUIDE, RUNBOOK], ids=lambda p: p.name)
 def test_the_fix_forward_cost_is_written_down(path):
-    """EM B3b C5: within the hour, Rollback first; then its own hour."""
+    """EM B3b C5: within the hour, Rollback first; then its own hour, which
+    a staging rollback showed on 2026-10-11 (no longer "expected behaviour")."""
     text = " ".join(path.read_text().split())
     assert re.search(r"Rollback first", text), path.name
     assert "the next forward deploy is refused until it is no longer active" in text
-    assert "expected behaviour" in text and "first staging deploy" in text
+    assert "deployment stayed active for about an hour after its traffic shift" in text
+    for stale in ("not yet observed", "not yet verified", "not yet rehearsed"):
+        assert stale not in text, (path.name, stale)
 
 
 @pytest.mark.regression
@@ -535,7 +542,7 @@ def _db_migrate_target_description() -> str:
 @pytest.mark.regression
 def test_the_db_migrate_help_names_an_id_and_does_not_suggest_minus_one():
     description = _db_migrate_target_description()
-    assert "d29a479daafe" in description
+    assert "37dcb2969766" in description
     # PE v2 C8: the modules example is not there on a core image.
     assert "modules_0001_rbac exists only in a full-profile image" in description
     assert _sentences_recommending_minus_one(description) == []
@@ -617,7 +624,9 @@ def test_the_runbook_undoes_a_migration_before_the_api_rollback():
         "with Steps 1 to 4 of [Restore from PITR](disaster-recovery.md#restore-from-pitr-preferred)"
     )
     assert stop < decided < link, (stop, decided, link)
-    assert "That path is **decided, not yet rehearsed**" in flat
+    # Rehearsed on staging (2026-10-11): the page says so, dated.
+    assert "It was rehearsed on a staging account on 2026-10-11" in flat
+    assert "not yet rehearsed" not in flat
     assert "aws rds restore-db-cluster-to-point-in-time" not in section
     assert "Decide which BEFORE an incident" not in section
     assert "issue 78" not in section
@@ -682,25 +691,26 @@ def _dr_section(heading: str, level: str = "##") -> str:
 
 @pytest.mark.regression
 def test_the_restore_path_is_the_script_and_says_what_it_cannot_do():
-    """T143: the restore is scripts/restore_repoint.sh, labelled "decided, not
-    yet rehearsed" until a staging rehearsal passes; it needs an `available`
-    cluster, so DR Scenario 4's own trigger (`failed`) has no decided path;
-    prod's reader step has run only against the fake; no repoint time is given
-    as measured. Every phase the page runs is one the script has, each in a
-    block of its own, so no pasted block runs `restore` and `cutover`
-    together."""
+    """T143: the restore is scripts/restore_repoint.sh. It was rehearsed on
+    staging on 2026-10-11, and the page says so, dated, with the measured
+    restore and cutover times; it needs an `available` cluster, so DR
+    Scenario 4's own trigger (`failed`) has no decided path; prod's reader step
+    has run only against the fake. Every phase the page runs is one the script
+    has, each in a block of its own, so no pasted block runs `restore` and
+    `cutover` together."""
     scenario = _dr_section("Scenario 4: Full Aurora Database Cluster Failure")
     flat = " ".join(scenario.split())
-    assert "**Decided, not yet rehearsed.**" in flat
+    assert "**Rehearsed on a staging account on 2026-10-11 (UTC)**" in flat
+    assert "not yet rehearsed" not in flat
     assert "**A cluster in status `failed` has no decided path.**" in flat
-    assert "Prod's `readers` step has run only against that fake" in flat
-    assert "an estimated 15 to 40 minutes, not measured" in flat
-    assert "plus the cutover's downtime, which is not measured yet" in flat
+    assert "Prod's `readers` step has run only against the fake AWS" in flat
+    assert "an estimated 15 to 40 minutes" not in flat
+    assert "not measured" not in flat
+    assert "12 min 45 s" in flat and "11 min 41 s" in flat
     assert "Decide before an incident" not in flat
     assert "#### If the script stops part-way" in scenario
-    # The downtime's monitors are expected, not measured (EM ruling R3).
-    assert "the load balancer is expected to answer 503 to every request" in flat
-    assert "measured; the staging rehearsal records them. A green" in flat
+    # What the rehearsal did not show stays unclaimed (EM ruling R3).
+    assert "that has not been rehearsed on AWS as of v" in flat
     # The rehearsal's own step numbers are not published, so the page names none.
     assert "step R5" not in flat
     assert "the load balancer answers 503" not in flat
@@ -798,10 +808,15 @@ CLI_FLAG_CHECKED = {
     "disaster-recovery.md": {
         "rds describe-db-clusters",
         "rds describe-db-cluster-snapshots",
-        "rds restore-db-cluster-from-snapshot",
         "cloudformation describe-stacks",
     },
-    "rollback-runbook.md": {"rds describe-db-cluster-snapshots"},
+    # Method 2's stop step: the three calls that free the deployment group.
+    "rollback-runbook.md": {
+        "rds describe-db-cluster-snapshots",
+        "deploy list-deployments",
+        "deploy get-deployment",
+        "deploy stop-deployment",
+    },
     "secrets-management.md": {
         "rds modify-db-cluster",
         "logs filter-log-events",
@@ -815,16 +830,22 @@ def test_every_aws_flag_the_recovery_pages_print_is_one_the_cli_has(page):
     """`aws <service> <operation>` takes its flags from botocore's service
     model, which is also what the AWS CLI reads: a flag that is not a member of
     the operation's input is refused with exit 252 when it is pasted
-    mid-incident. Checked offline, for every `aws rds`, `aws logs` and
-    `aws cloudformation` command the page prints."""
+    mid-incident. Checked offline, for every `aws rds`, `aws logs`,
+    `aws cloudformation` and `aws deploy` (botocore's `codedeploy`) command the
+    page prints."""
     from botocore import xform_name
     from botocore.session import get_session
 
     text = (DOCS / "deployment" / page).read_text(encoding="utf-8")
     blocks = re.findall(r"```bash\n(.*?)```", text, re.S)
     found = set()
-    for service in ("rds", "logs", "cloudformation"):
-        model = get_session().get_service_model(service)
+    for service, model_name in (
+        ("rds", "rds"),
+        ("logs", "logs"),
+        ("cloudformation", "cloudformation"),
+        ("deploy", "codedeploy"),
+    ):
+        model = get_session().get_service_model(model_name)
         flags_of = {
             xform_name(op).replace("_", "-"): {
                 xform_name(member).replace("_", "-")

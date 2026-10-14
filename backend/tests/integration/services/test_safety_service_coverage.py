@@ -23,9 +23,11 @@ corrected behaviour:
 * `create_feature_flag_safety_config(db, data, feature_flag_id=None)` takes
   the flag id explicitly (or reads `data.feature_flag_id` when present) and
   raises `ValueError` (not `AttributeError`) if neither is supplied.
-* `create_rollback_record(db, data, success=True, executed_by_user_id=None)`
-  resolves `safety_config_id` itself via `get_or_create_safety_config` and
-  maps the schema fields onto the real model columns.
+* A rollback never creates a safety config (#1206): `execute_rollback` reads
+  the flag's stored config, and its record's `safety_config_id` is that
+  config's id, or NULL for a flag on the global defaults. The helpers that
+  created one (`get_or_create_safety_config`, `_get_or_add_safety_config`,
+  `create_rollback_record`) are gone.
 * `check_feature_flag_safety` sources metric values from `get_error_metrics`/
   `get_latency_metrics` for recognised names and marks anything else as
   "unmeasured" (healthy, current_value 0, listed in
@@ -54,6 +56,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
+from backend.app.models.audit_log import ActionType, AuditLog
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.metrics.metric import ErrorLog, MetricType, RawMetric
 from backend.app.models.safety import (
@@ -66,7 +69,6 @@ from backend.app.schemas.safety import (
     FeatureFlagSafetyConfigCreate,
     FeatureFlagSafetyConfigUpdate,
     MetricThreshold,
-    SafetyRollbackRecordCreate,
     SafetySettingsCreate,
     SafetySettingsUpdate,
 )
@@ -310,7 +312,11 @@ class TestFeatureFlagSafetyConfigStatic:
 
     def test_update_modifies_existing_config(self, db_session, make_feature_flag):
         flag = make_feature_flag()
-        config = SafetyService.get_or_create_safety_config(db_session, flag.id)
+        config = SafetyService.create_feature_flag_safety_config(
+            db_session,
+            FeatureFlagSafetyConfigCreate(enabled=True, metrics={}),
+            feature_flag_id=flag.id,
+        )
         assert config.enabled is True
         assert config.rollback_percentage == 0
 
@@ -333,112 +339,6 @@ class TestFeatureFlagSafetyConfigStatic:
             db_session, flag.id, FeatureFlagSafetyConfigUpdate(enabled=False)
         )
         assert result is None
-
-    def test_get_or_create_creates_new_config_with_defaults(
-        self, db_session, make_feature_flag
-    ):
-        flag = make_feature_flag()
-        assert (
-            SafetyService.get_feature_flag_safety_config_record(db_session, flag.id)
-            is None
-        )
-
-        config = SafetyService.get_or_create_safety_config(db_session, flag.id)
-
-        assert config.id is not None
-        assert config.feature_flag_id == flag.id
-        assert config.enabled is True
-        assert config.metrics == {}
-        assert config.rollback_percentage == 0
-
-    def test_get_or_create_returns_existing_config_without_duplicating(
-        self, db_session, make_feature_flag
-    ):
-        flag = make_feature_flag()
-        first = SafetyService.get_or_create_safety_config(db_session, flag.id)
-        second = SafetyService.get_or_create_safety_config(db_session, flag.id)
-
-        assert first.id == second.id
-        count = (
-            db_session.query(FeatureFlagSafetyConfig)
-            .filter(FeatureFlagSafetyConfig.feature_flag_id == flag.id)
-            .count()
-        )
-        assert count == 1
-
-    def test_get_or_create_raises_for_missing_flag(self, db_session):
-        with pytest.raises(ValueError, match="does not exist"):
-            SafetyService.get_or_create_safety_config(db_session, uuid.uuid4())
-
-
-class TestCreateRollbackRecordStatic:
-    def test_creates_record_and_resolves_safety_config_id(
-        self, db_session, make_feature_flag, admin_user
-    ):
-        flag = make_feature_flag()
-        assert (
-            SafetyService.get_feature_flag_safety_config_record(db_session, flag.id)
-            is None
-        )
-
-        data = SafetyRollbackRecordCreate(
-            feature_flag_id=flag.id,
-            trigger_type="manual",
-            trigger_reason="test rollback",
-            previous_percentage=50,
-            target_percentage=0,
-        )
-        # executed_by_user_id is a real FK to users.id, so it must reference
-        # an actual persisted User row (see module docstring "STILL
-        # SUSPICIOUS" note about the opaque failure mode otherwise).
-        user_id = admin_user.id
-
-        record = SafetyService.create_rollback_record(
-            db_session, data, success=True, executed_by_user_id=user_id
-        )
-
-        assert record.id is not None
-        assert record.feature_flag_id == flag.id
-        assert record.trigger_type == "manual"
-        assert record.trigger_reason == "test rollback"
-        assert record.previous_percentage == 50
-        assert record.target_percentage == 0
-        assert record.success is True
-        assert record.executed_by_user_id == user_id
-
-        # get_or_create_safety_config was used to resolve safety_config_id -
-        # a config row now exists for the flag.
-        config = SafetyService.get_feature_flag_safety_config_record(
-            db_session, flag.id
-        )
-        assert config is not None
-        assert record.safety_config_id == config.id
-
-    def test_defaults_success_true_and_no_executor(self, db_session, make_feature_flag):
-        flag = make_feature_flag()
-        data = SafetyRollbackRecordCreate(
-            feature_flag_id=flag.id,
-            trigger_type="automatic",
-            trigger_reason="metric breach",
-            previous_percentage=100,
-            target_percentage=10,
-        )
-
-        record = SafetyService.create_rollback_record(db_session, data)
-
-        assert record.success is True
-        assert record.executed_by_user_id is None
-
-    def test_raises_value_error_for_missing_flag(self, db_session):
-        data = SafetyRollbackRecordCreate(
-            feature_flag_id=uuid.uuid4(),
-            trigger_type="manual",
-            trigger_reason="n/a",
-            previous_percentage=50,
-            target_percentage=0,
-        )
-        with pytest.raises(ValueError, match="does not exist"):
-            SafetyService.create_rollback_record(db_session, data)
 
 
 # ---------------------------------------------------------------------------
@@ -1505,9 +1405,14 @@ class TestExecuteRollback:
         assert "does not exist" in result.message
         assert result.details == {"reason": "probe"}
 
-    def test_happy_path_creates_record_and_updates_flag_without_prior_config(
+    @pytest.mark.regression
+    def test_happy_path_records_the_rollback_and_creates_no_config_for_a_flag_without_one(
         self, db_session, make_feature_flag, admin_user
     ):
+        """#1206: a flag with no safety config of its own still has none after
+        a rollback, so it stays on the global defaults; its record's
+        ``safety_config_id`` is NULL. This test asserted the opposite until
+        the rollback stopped creating one."""
         flag = make_feature_flag(status=FeatureFlagStatus.ACTIVE, rollout_percentage=75)
         assert (
             SafetyService.get_feature_flag_safety_config_record(db_session, flag.id)
@@ -1557,12 +1462,58 @@ class TestExecuteRollback:
         assert record.target_percentage == 0
         assert record.success is True
         assert record.executed_by_user_id == executor_id
-        # A safety config was auto-created (get_or_create_safety_config).
-        config = SafetyService.get_feature_flag_safety_config_record(
-            db_session, flag.id
+        # No safety config was created: the flag is still on the defaults.
+        assert (
+            SafetyService.get_feature_flag_safety_config_record(db_session, flag.id)
+            is None
         )
-        assert config is not None
-        assert record.safety_config_id == config.id
+        assert record.safety_config_id is None
+
+    @pytest.mark.regression
+    def test_every_rollback_is_recorded_and_audited_with_its_reason(
+        self, db_session, make_feature_flag, admin_user
+    ):
+        """A rollback writes a ``safety_rollback_records`` row and a
+        ``safety_rollback`` audit entry, both carrying the reason; a flag on
+        the global defaults gets no safety config for it (#1206)."""
+        flag = make_feature_flag(status=FeatureFlagStatus.ACTIVE, rollout_percentage=60)
+        service = SafetyService(db_session)
+
+        result = service.execute_rollback(
+            db_session,
+            flag.id,
+            reason="checkout errors observed",
+            trigger_type=RollbackTriggerType.MANUAL,
+            target_percentage=20,
+            executed_by_user_id=admin_user.id,
+        )
+
+        assert result.success is True
+        record = (
+            db_session.query(SafetyRollbackRecord)
+            .filter(SafetyRollbackRecord.id == result.rollback_record_id)
+            .one()
+        )
+        assert record.feature_flag_id == flag.id
+        assert record.trigger_type == "manual"
+        assert record.trigger_reason == "checkout errors observed"
+        assert (record.previous_percentage, record.target_percentage) == (60, 20)
+        assert record.success is True
+        assert record.executed_by_user_id == admin_user.id
+        assert record.safety_config_id is None
+        assert (
+            SafetyService.get_feature_flag_safety_config_record(db_session, flag.id)
+            is None
+        )
+        (entry,) = (
+            db_session.query(AuditLog)
+            .filter(
+                AuditLog.entity_id == flag.id,
+                AuditLog.action_type == ActionType.SAFETY_ROLLBACK.value,
+            )
+            .all()
+        )
+        assert entry.reason == "checkout errors observed"
 
     def test_happy_path_with_existing_config_and_custom_target_percentage(
         self, db_session, make_feature_flag

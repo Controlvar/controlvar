@@ -1,0 +1,221 @@
+# What verifies each unit of docs/self-hosting/monitoring.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/self-hosting/monitoring.md"
+
+[[unit]]
+text = "Monitoring and Observability"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The API exposes Prometheus metrics at /metrics, writes structured logs, and answers health probes."
+by = [
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestMetricsEndpoint::test_exposition_content_type",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestLiveness::test_live_is_200_and_does_not_touch_dependencies",
+]
+
+[[unit]]
+text = "On AWS, the CDK's monitoring stack adds the CloudWatch dashboards, the alarms and the SNS topic that emails them: see What Gets Deployed."
+by = ["test:infrastructure/tests/test_standing_alarms.py::test_every_standing_alarm_emails_the_topic_but_the_per_colour_two"]
+
+[[unit]]
+text = "Prometheus Metrics"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The API exposes a Prometheus-compatible metrics endpoint:"
+by = [
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestMetricsEndpoint::test_exposition_content_type",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestMetricsEndpoint::test_open_in_development_without_token",
+]
+
+[[unit]]
+text = "With METRICS_TOKEN set, a scrape sends it as Authorization: Bearer <token> or as ?token=<token>."
+by = [
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestMetricsEndpoint::test_token_required_when_configured",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestMetricsTokenComparison::test_the_right_token_still_passes",
+]
+
+[[unit]]
+text = "Without it, or with another value, the answer is 401."
+by = ["test:backend/tests/unit/core/test_health_endpoints.py::TestMetricsEndpoint::test_token_required_when_configured"]
+
+[[unit]]
+text = "With no METRICS_TOKEN, the endpoint answers in development and test, and answers 403 in every other environment."
+by = [
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestMetricsEndpoint::test_open_in_development_without_token",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestMetricsEndpoint::test_forbidden_outside_development_without_token",
+]
+
+[[unit]]
+text = "METRICS_ENABLED=false turns the endpoint off: it answers 404."
+by = ["test:backend/tests/unit/core/test_health_endpoints.py::TestMetricsEndpoint::test_disabled_returns_404"]
+
+[[unit]]
+text = "Key Metrics Exported"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Metric | Type | Description"
+by = ["exempt:label"]
+
+[[unit]]
+text = "http_requests_total | Counter | Total HTTP requests by method, endpoint and status code"
+by = ["test:backend/tests/unit/core/test_metrics.py::test_record_request_increments_counter"]
+
+[[unit]]
+text = "http_request_duration_seconds | Histogram | Request latency (p50, p95, p99 percentiles)"
+by = [
+    "test:backend/tests/unit/core/test_metrics.py::test_record_request_observes_histogram",
+    "test:backend/tests/unit/core/test_metrics.py::test_request_duration_histogram_buckets_cover_5ms_to_10s",
+]
+
+[[unit]]
+text = "experiment_assignments_total | Counter | Variant assignments by experiment and variant"
+by = [
+    "test:backend/tests/unit/core/test_metrics.py::test_record_experiment_assignment",
+    "test:backend/tests/unit/core/test_metrics_increments.py",
+]
+
+[[unit]]
+text = "feature_flag_evaluations_total | Counter | Flag evaluations by flag key and result"
+by = [
+    "test:backend/tests/unit/core/test_metrics.py::test_record_flag_evaluation",
+    "test:backend/tests/unit/core/test_metrics_increments.py",
+]
+
+[[unit]]
+text = "events_tracked_total | Counter | Tracked events by type"
+by = [
+    "test:backend/tests/unit/core/test_metrics.py::test_record_event_tracked",
+    "test:backend/tests/unit/core/test_metrics.py::test_record_event_tracked_bounds_label_cardinality",
+]
+
+[[unit]]
+text = "rate_limit_redis_fallback_active | Gauge | 1 while this process counts rate limits per process because Redis is unavailable; 0 while it counts them in Redis"
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRateLimiter::test_falls_back_on_redis_error",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRetry::test_a_runtime_error_then_redis_again_after_the_window",
+]
+
+[[unit]]
+text = "rate_limit_redis_fallbacks_total | Counter | Times this process switched rate limiting from Redis to per-process counting"
+by = ["test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRateLimiter::test_falls_back_on_redis_error"]
+
+[[unit]]
+text = "Each API process exports its own values: with more than one worker per container, a scrape sees the worker that answered it."
+by = ["test:backend/tests/unit/core/test_readiness_at_its_defaults.py::test_metrics_are_this_processs_own"]
+
+[[unit]]
+text = "While rate_limit_redis_fallback_active is 1, per-IP rate limits are multiplied by the number of API processes; the limiter tries Redis again every 30 s."
+by = ["test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRetry::test_a_runtime_error_then_redis_again_after_the_window"]
+
+[[unit]]
+text = "Sample Prometheus Scrape Config"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A job for the scrape_configs list of prometheus.yml, with the token in a file:"
+by = ["exempt:example"]
+
+[[unit]]
+text = "Structured Logging (structlog)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The API uses structlog for JSON-formatted structured logs."
+by = ["test:backend/tests/unit/core/test_logger.py::test_configure_logging_json_mode"]
+
+[[unit]]
+text = "Logging Standards lists the fields each line carries."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Standard Fields"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Field | Description"
+by = ["exempt:label"]
+
+[[unit]]
+text = "timestamp | ISO 8601 UTC timestamp"
+by = ["test:backend/tests/unit/core/test_logger.py::test_configure_logging_json_mode"]
+
+[[unit]]
+text = "level | debug, info, warning, error, critical"
+by = [
+    "test:backend/tests/unit/core/test_logger.py::test_a_rendered_line_carries_the_level_the_error_log_alarm_counts",
+    "test:infrastructure/tests/test_standing_alarms.py::test_the_error_filter_is_on_the_api_tasks_log_group",
+]
+
+[[unit]]
+text = "logger | Module path of the logging component"
+by = ["test:backend/tests/unit/core/test_logger.py::test_get_logger_accepts_module_name"]
+
+[[unit]]
+text = "request_id | Unique identifier for the HTTP request (correlates all log entries for one request)"
+by = [
+    "test:backend/tests/unit/core/test_logger.py::test_bind_log_context_accumulates",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestLiveness::test_live_carries_request_id",
+]
+
+[[unit]]
+text = "Health Check"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The API answers GET /health without authentication, for load balancers and monitoring."
+by = ["test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_health_alias_matches_ready"]
+
+[[unit]]
+text = "It is the readiness probe, the same as GET /health/ready:"
+by = ["test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_health_alias_matches_ready"]
+
+[[unit]]
+text = "Outside production it reports each check with its detail:"
+by = [
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_ready_when_database_up",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_ready_reports_the_profile",
+]
+
+[[unit]]
+text = "With ENVIRONMENT=production it leaves out version, environment and every detail except each check's status:"
+by = [
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_production_hides_details",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_production_reports_the_profile_but_not_the_cause",
+]
+
+[[unit]]
+text = "It answers 503 Service Unavailable with \"status\": \"unhealthy\" when PostgreSQL does not answer, when Redis does not answer and REDIS_REQUIRED=true, or when the disk check fails."
+by = [
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_not_ready_when_database_down",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_redis_down_fails_readiness_when_required",
+]
+
+[[unit]]
+text = "A failed check names the error's type outside production:"
+by = [
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_a_failed_check_reports_the_type_not_the_text",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_the_database_check_reports_only_the_type",
+]
+
+[[unit]]
+text = "Without REDIS_REQUIRED=true, a Redis that does not answer is reported as unhealthy under checks while the response stays 200 and \"healthy\"."
+by = ["test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_redis_down_does_not_fail_readiness_by_default"]
+
+[[unit]]
+text = "Free disk space of 1 GB or less is reported as \"low\" and does not fail the probe."
+by = ["test:backend/tests/unit/core/test_readiness_at_its_defaults.py::test_free_disk_of_1_gb_or_less_is_low_and_does_not_fail_the_probe"]
+
+[[unit]]
+text = "GET /health/live is the liveness probe: it answers 200 whenever the process is up and checks neither PostgreSQL nor Redis."
+by = ["test:backend/tests/unit/core/test_health_endpoints.py::TestLiveness::test_live_is_200_and_does_not_touch_dependencies"]
+
+[[unit]]
+text = "The ALB health check targets GET /health with a 5-second timeout and a 2/3 healthy/unhealthy threshold."
+by = ["test:infrastructure/tests/test_stack_graph.py::test_the_api_target_groups_check_health_on_slash_health"]
+
+[[unit]]
+text = "Tasks that fail health checks are automatically replaced by ECS."
+by = ["exempt:third-party"]
