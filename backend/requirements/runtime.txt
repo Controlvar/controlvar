@@ -9,7 +9,7 @@
 fastapi==0.141.1
 uvicorn==0.54.0
 websockets==15.0.1     # uvicorn WebSocket support (/api/v1/ws/...); uvicorn alone serves 404 for upgrades
-pydantic==2.13.5
+pydantic==2.14.1
 pydantic-settings==2.15.0
 email-validator==2.3.0
 python-multipart==0.0.32
@@ -23,7 +23,7 @@ psycopg2-binary==2.9.13
 redis==8.1.0
 
 # AWS (Cognito auth provider, SSM secrets, DynamoDB counters, CloudWatch logs)
-boto3==1.43.109
+boto3==1.43.111
 watchtower==3.4.0
 
 # HTTP clients (notifications, integrations)
@@ -45,8 +45,8 @@ sendgrid==6.12.5
 # ANTHROPIC_API_KEY / OPENAI_API_KEY themselves; with no key set, nothing calls
 # a provider. Google (google.generativeai) is not here: that provider is
 # tracked separately in #196.
-anthropic==1.12.1
-openai==3.26.0
+anthropic==1.13.0
+openai==3.29.0
 
 # Statistics
 numpy==1.26.4
