@@ -124,6 +124,10 @@ class = "journey"
 journey = "quick-start"
 reason = "the first-run guide: its shell steps run in Doc Examples; the journey walks the dashboard half"
 
+[pages."getting-started/limitations.md"]
+class = "reference"
+reason = "what the product does not do, and what happens instead; no steps to follow"
+
 [pages."getting-started/concepts.md"]
 class = "reference"
 reason = "vocabulary and concepts; no steps to follow"
@@ -665,7 +669,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 147
+walked = 148
 
 # The front door, and the policy beside it.
 

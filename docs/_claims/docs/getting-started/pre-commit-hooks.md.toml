@@ -1,0 +1,159 @@
+# What verifies each unit of docs/getting-started/pre-commit-hooks.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/getting-started/pre-commit-hooks.md"
+
+[[unit]]
+text = "Pre-commit Hooks"
+by = ["exempt:label"]
+
+[[unit]]
+text = ".pre-commit-config.yaml is already in the repository root."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_file_hygiene_hooks"]
+
+[[unit]]
+text = "You do not create it — you install it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "That is the whole setup."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "To run the hooks over the tree without committing:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "What actually runs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Three groups."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_config_has_three_groups"]
+
+[[unit]]
+text = "The file itself is the authority — read it rather than this page if the two ever disagree."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "File hygiene (pre-commit/pre-commit-hooks)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "hook | note"
+by = ["exempt:label"]
+
+[[unit]]
+text = "check-yaml | excludes the Helm chart's templates, which render to YAML but are not YAML"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_file_hygiene_hooks"]
+
+[[unit]]
+text = "check-json | excludes tsconfig.json — those are JSONC, and a strict JSON parser is wrong about them"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_file_hygiene_hooks"]
+
+[[unit]]
+text = "check-added-large-files | --maxkb=1024, for the two OpenAPI snapshots under docs/api/"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_file_hygiene_hooks"]
+
+[[unit]]
+text = "check-merge-conflict |"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_file_hygiene_hooks"]
+
+[[unit]]
+text = "debug-statements |"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_file_hygiene_hooks"]
+
+[[unit]]
+text = "detect-private-key |"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_file_hygiene_hooks"]
+
+[[unit]]
+text = "check-toml |"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_file_hygiene_hooks"]
+
+[[unit]]
+text = "check-case-conflict |"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_file_hygiene_hooks"]
+
+[[unit]]
+text = "Python lint and format (astral-sh/ruff-pre-commit)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "ruff --fix and ruff-format, both scoped to ^(backend|modules|scripts|tests/acceptance)/ — the same four trees as make lint and the lint CI job."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_ruff_hooks_cover_the_four_trees_at_the_pinned_version",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_make_lint_and_the_lint_job_run_the_same_checks",
+]
+
+[[unit]]
+text = "Keep the versions in step."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "The hook's rev: and the ruff== pin in backend/requirements.txt must match, or a commit that passes locally fails in CI on a formatting difference:"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_ruff_hooks_cover_the_four_trees_at_the_pinned_version"]
+
+[[unit]]
+text = "grep -A1 ruff-pre-commit .pre-commit-config.yaml | grep rev: the hook"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "grep '^ruff==' backend/requirements.txt: CI and the venv"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "ruff --version: what you have"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The publication check (repo: local)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Two hooks run the repository's publication check: on the staged files at each commit, and on the whole tree and the outgoing commit messages at each push."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_two_local_hooks_run_the_publication_check"]
+
+[[unit]]
+text = "This is a subset of the gate, not the gate"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Pre-commit runs no frontend checks — no eslint, no tsc."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_pre_commit_runs_no_frontend_check"]
+
+[[unit]]
+text = "Those live in make lint and in CI."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_make_lint_and_the_lint_job_run_the_same_checks"]
+
+[[unit]]
+text = "So a clean git commit is not a green pull request."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Before pushing:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "make lint: ruff, import-linter, reuse, the lock checks, eslint, tsc, hadolint, actionlint — exactly what the lint job runs"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_make_lint_and_the_lint_job_run_the_same_checks"]
+
+[[unit]]
+text = "Tips"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Bypassing the hooks is git commit --no-verify."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "It only defers the failure to CI, where it costs a round trip instead of a second."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "pre-commit autoupdate bumps every rev:."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Run make lint afterwards and update the matching pin in backend/requirements.txt in the same commit — an autoupdate that moves ruff on its own is precisely the version skew described above."
+by = ["exempt:advice"]

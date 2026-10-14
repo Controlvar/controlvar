@@ -1,0 +1,107 @@
+# What verifies each unit of docs/getting-started/vscode-settings.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/getting-started/vscode-settings.md"
+
+[[unit]]
+text = "VSCode Configuration"
+by = ["exempt:label"]
+
+[[unit]]
+text = ".vscode/ is in .gitignore, so these settings are not checked in — this page is the shared copy."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_editor_folder_is_ignored"]
+
+[[unit]]
+text = "Create the folder and paste the configuration in."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The goal is that your editor and the lint CI job agree."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Where a setting exists to match a repository rule, the rule is named — if the two ever drift, pyproject.toml and frontend/eslint.config.mjs win."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "settings.json"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Extensions"
+by = ["exempt:label"]
+
+[[unit]]
+text = "extension | id | why"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Python | ms-python.python |"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Pylance | ms-python.vscode-pylance |"
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Ruff | charliermarsh.ruff | format, import order and lint — all three"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "ESLint | dbaeumer.vscode-eslint | reads frontend/eslint.config.mjs"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "autoDocstring | njpwerner.autodocstring | Google-style docstrings"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Do not install the Black, isort or Flake8 extensions."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Ruff does all three jobs here ([tool.ruff] in pyproject.toml); running black alongside it produces formatting the lint job then rejects."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_ruff_is_the_one_python_formatter_and_linter"]
+
+[[unit]]
+text = "There is no Prettier in this repository — no config, no dependency."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_there_is_no_prettier_and_eslint_allows_no_warning"]
+
+[[unit]]
+text = "Do not set esbenp.prettier-vscode as the formatter for JS, TS, JSON or YAML; it will reformat files that nothing else in the toolchain formats, and the diff is noise."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "ESLint is the frontend gate (--max-warnings 0), alongside tsc --noEmit."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_there_is_no_prettier_and_eslint_allows_no_warning",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_make_lint_and_the_lint_job_run_the_same_checks",
+]
+
+[[unit]]
+text = "Notes"
+by = ["exempt:label"]
+
+[[unit]]
+text = "PYTHONPATH is set to the workspace root because the package is backend.app."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Everything runs from the repository root: uvicorn backend.app.main:app, not cd backend && uvicorn app.main:app."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "pytestArgs points at backend/tests."
+by = ["exempt:example"]
+
+[[unit]]
+text = "The integration tests need PostgreSQL; see Testing."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Editor settings are a convenience, not the contract."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Before pushing, run make lint — that is what the lint job runs."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_make_lint_and_the_lint_job_run_the_same_checks"]
