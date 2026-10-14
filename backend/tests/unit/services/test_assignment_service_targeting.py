@@ -341,7 +341,7 @@ class TestAssignmentServiceTargeting:
         }
 
         result = self.service._evaluate_experiment_targeting(
-            self.experiment, user_context_1, validate_attributes=False
+            self.experiment, user_context_1
         )
 
         assert result["eligible"] is True
@@ -356,7 +356,7 @@ class TestAssignmentServiceTargeting:
         }
 
         result = self.service._evaluate_experiment_targeting(
-            self.experiment, user_context_2, validate_attributes=False
+            self.experiment, user_context_2
         )
 
         assert result["eligible"] is True
@@ -371,7 +371,7 @@ class TestAssignmentServiceTargeting:
         }
 
         result = self.service._evaluate_experiment_targeting(
-            self.experiment, user_context_3, validate_attributes=False
+            self.experiment, user_context_3
         )
 
         assert result["eligible"] is False
@@ -420,9 +420,15 @@ class TestAssignmentServiceTargeting:
                 assert stats["avg_evaluation_time_ms"] > 0
                 assert stats["match_rate"] > 0
 
-    def test_targeting_with_validation_errors(self):
-        """Test targeting behavior with validation errors."""
-        # Create rules with specific attribute types
+    @pytest.mark.regression
+    def test_attribute_type_refuses_nothing(self):
+        """A condition's ``attribute_type`` refuses nothing (#1159).
+
+        ``v1.2.0``, which the experiment's own attribute check used to refuse
+        (so the user was never enrolled), is answered by the operator and
+        enrolled, as a flag matches it; a value that is not a version does not
+        match, and is not reported as a validation failure.
+        """
         rules_with_validation = {
             "version": "1.0",
             "rules": [
@@ -435,6 +441,7 @@ class TestAssignmentServiceTargeting:
                                 "attribute": "app_version",
                                 "operator": "semantic_version",
                                 "value": "1.2.0",
+                                "additional_value": "gte",
                                 "attribute_type": "semantic_version",
                             }
                         ],
@@ -451,23 +458,33 @@ class TestAssignmentServiceTargeting:
         self.mock_db.query.return_value.options.return_value.filter.return_value.first.return_value = self.experiment
         self.mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
 
-        # User context with invalid semantic version
-        user_context = {
-            "user_id": "test-user",
-            "app_version": "invalid-version",  # Invalid semantic version format
-        }
-
         result = self.service.assign_user_with_targeting(
             user_id="test-user",
             experiment_id=self.experiment_id,
-            user_context=user_context,
-            validate_attributes=True,
+            user_context={"user_id": "test-user", "app_version": "invalid-version"},
         )
-
-        # Should not assign due to validation error
         assert result["assignment"] is None
         assert result["targeting_matched"] is False
-        assert result["user_context_validated"] is False
+        assert result["user_context_validated"] is True
+
+        with (
+            patch.object(
+                self.service,
+                "get_assignment",
+                return_value={"variant_id": str(self.variant_a_id)},
+            ),
+            patch.object(
+                self.service, "_hash_user_to_variant", return_value=self.variant_a_id
+            ),
+        ):
+            result = self.service.assign_user_with_targeting(
+                user_id="test-user",
+                experiment_id=self.experiment_id,
+                user_context={"user_id": "test-user", "app_version": "v1.2.0"},
+            )
+        assert result["targeting_matched"] is True
+        assert result["targeting_rule_id"] == "validated_rule"
+        assert result["user_context_validated"] is True
 
     def test_exposure_tracking_with_targeting_info(self):
         """Test that exposure events include targeting information."""

@@ -48,9 +48,13 @@ A condition on an attribute the request's context does not carry does not hold, 
 | `in_segment`, `not_in_segment` | `in_segment`, `not_in_segment` | the user is, or is not, a member of the segment ([below](#in_segment-in_segment-not_in_segment-not_in_segment)). |
 | none | `between` | the attribute is a number, or a date, from `value` to `additional_value`, both included. |
 | none | `before`, `after` | the attribute is a date before, or after, the value ([below](#before-before-after-after)). |
+| none | `array_length` | the attribute is a list, text or object whose length compares with the value as `additional_value` says: `eq` (the default), `gt`, `gte`, `lt`, `lte`, or `between` a `{"min", "max"}` value, both included. A number or `null` has no length and does not match. |
 
-The native shape also accepts `array_length`, `json_path` and `percentage_bucket`. Flag
-targeting and experiment targeting do not answer them alike, so they are not documented here.
+The native shape also accepts `json_path` and `percentage_bucket`. Flag targeting and
+experiment targeting do not answer them alike, so they are not documented here.
+
+A native condition may also carry `attribute_type`. Neither flag targeting nor experiment
+targeting reads it: the condition is answered from the attribute's value alone.
 
 ## Operator details
 

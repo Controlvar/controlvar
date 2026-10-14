@@ -266,7 +266,6 @@ class TestRulesEvaluationCost:
                 matched_rule, metrics = self.service.evaluate_rules_with_validation(
                     targeting_rules=targeting_rules,
                     user_context=user_context,
-                    validate_attributes=True,
                     track_metrics=True,
                 )
                 assert metrics is not None
@@ -423,7 +422,6 @@ class TestRulesEvaluationCost:
             self.service.evaluate_rules_with_validation(
                 targeting_rules=targeting_rules,
                 user_context=generate_random_user_context(include_advanced_attrs=True),
-                validate_attributes=True,
                 track_metrics=True,
             )
             # Clear metrics periodically to prevent unbounded growth
@@ -462,7 +460,6 @@ class TestRulesEvaluationCost:
             matched_rule, metrics = service.evaluate_rules_with_validation(
                 targeting_rules=targeting_rules,
                 user_context=context,
-                validate_attributes=True,
                 track_metrics=True,
             )
             return (matched_rule.id if matched_rule else None, metrics.rule_id)
@@ -534,7 +531,6 @@ class TestRulesLatencyBenchmarks:
                 self.service.evaluate_rules_with_validation(
                     targeting_rules=targeting_rules,
                     user_context=user_context,
-                    validate_attributes=True,
                     track_metrics=True,
                 )
                 times.append((time.perf_counter() - start_time) * 1000)
@@ -642,7 +638,6 @@ class TestRulesLatencyBenchmarks:
                 RulesEvaluationService().evaluate_rules_with_validation(
                     targeting_rules=targeting_rules,
                     user_context=context,
-                    validate_attributes=True,
                     track_metrics=True,
                 )
 

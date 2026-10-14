@@ -233,17 +233,17 @@ ENGINE_CASES = {
     OperatorType.NOT_IN_SEGMENT: [],
 }
 
-#: The operators RulesEvaluationService implements itself (experiment targeting).
+#: The operators RulesEvaluationService implements itself (experiment
+#: targeting). ``array_length`` is the engine's since #1159, so its engine cases
+#: are driven through the service too.
 SERVICE_OPERATORS = {
     OperatorType.PERCENTAGE_BUCKET,
     OperatorType.JSON_PATH,
-    OperatorType.ARRAY_LENGTH,
 }
 
 SERVICE_CASES = {
     OperatorType.PERCENTAGE_BUCKET: [Case(MARKER, "half")],
     OperatorType.JSON_PATH: [Case([MARKER], "$.5", "x")],
-    OperatorType.ARRAY_LENGTH: [Case([MARKER], "three")],
 }
 
 

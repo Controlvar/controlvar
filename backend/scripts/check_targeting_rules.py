@@ -23,6 +23,12 @@ rules as a whole has the path ``targeting_rules``. Two kinds of line:
   rule matches no user (#733); the line says so, with the path of the first
   such condition. Every other legacy row gets the API's list refusal.
 
+Experiments get the same treatment (``experiments.targeting_rules``, also
+read and never written), with the experiment's status after its key
+(``DRAFT``, ``ACTIVE``, ...)::
+
+    experiment  7c2d...  checkout-test  ACTIVE  groups[0].conditions[0].operator  unknown operator
+
 Segments get the same treatment (#440). Segment rules use the targeting
 rule format and are checked when saved; a segment stored before that whose
 rules fail the check is left as it is, and is never evaluated:
@@ -34,6 +40,23 @@ its name in place of a key and a reason starting ``rules not valid``::
 
 A problem that belongs to a segment's rules as a whole has the path ``rules``.
 Rewrite the rules with ``PUT /api/v1/segments/{id}``.
+
+``--enrolment-changes`` prints a different report: every experiment whose
+stored rules hold a condition experiment targeting now reads as flag targeting
+does (#1159), so the users it enrols from now on may differ, in either
+direction. That is a native condition with the ``array_length`` operator
+(before, an experiment read only an exact length of a list, whatever
+``additional_value`` said; a ``default_rule``'s conditions are never read, so
+one there changes nothing), or one that carries ``attribute_type`` (before,
+a context value that failed the type refused the whole ruleset), at any depth,
+inside ``NOT`` too. One line per experiment, whatever its status, with the
+path of the first such condition::
+
+    experiment  7c2d...  checkout-test  ACTIVE  rules[0].rule.groups[1].conditions[0].operator  enrolment of new users may change: array_length
+
+Stored rules that assignment cannot read are listed too, with the path
+``targeting_rules`` and the reason ``could not be checked``. Users already
+assigned keep their variant.
 
 Connection settings are the ``POSTGRES_*`` environment variables that
 ``backend.app.db.bootstrap`` reads. Exit status: 0 whether or not anything is
@@ -49,13 +72,24 @@ from typing import Any, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 from backend.app.core.targeting_adapter import (
     TargetingRulesError,
+    validate_experiment_targeting,
     validate_flag_targeting,
     validate_segment_rules,
 )
+from backend.app.schemas.targeting_rule import (
+    OperatorType,
+    RuleGroup,
+    TargetingRules,
+)
+from backend.app.services.assignment_service import AssignmentService
 from backend.app.services.feature_flag_service import _LEGACY_OPERATORS
 
 ENTITY = "feature_flag"
 SEGMENT_ENTITY = "segment"
+EXPERIMENT_ENTITY = "experiment"
+
+#: Every ``--enrolment-changes`` reason starts with this.
+ENROLMENT_MAY_CHANGE = "enrolment of new users may change"
 
 #: The path printed for a problem that belongs to a segment's rules as a whole.
 WHOLE_SEGMENT_RULES_PATH = "rules"
@@ -83,9 +117,14 @@ class Finding:
     path: str
     reason: str
     entity: str = ENTITY
+    #: An experiment's status, printed after its key; ``None`` for the others.
+    status: Optional[str] = None
 
     def line(self) -> str:
-        return "\t".join((self.entity, self.row_id, self.key, self.path, self.reason))
+        fields = [self.entity, self.row_id, self.key]
+        if self.status is not None:
+            fields.append(self.status)
+        return "\t".join(fields + [self.path, self.reason])
 
     @property
     def matches_no_user(self) -> bool:
@@ -165,6 +204,122 @@ def segment_findings_for(rows: Iterable[Tuple[Any, Any, Any]]) -> Iterator[Findi
             yield found
 
 
+def _status(value: Any) -> str:
+    """The status as stored (``ACTIVE``), whether it is read as text or an enum."""
+    return str(getattr(value, "name", value) or "")
+
+
+def experiment_finding_for(
+    row_id: Any, key: Any, status: Any, rules: Any
+) -> Optional[Finding]:
+    """The line for one stored experiment, or ``None`` when the API accepts its
+    rules."""
+    row_id, key, status = str(row_id), str(key or ""), _status(status)
+    try:
+        validate_experiment_targeting(rules)
+    except TargetingRulesError as err:
+        path = err.path or WHOLE_RULES_PATH
+        return Finding(row_id, key, path, err.code, EXPERIMENT_ENTITY, status)
+    except Exception:
+        return Finding(
+            row_id, key, WHOLE_RULES_PATH, NOT_CHECKED, EXPERIMENT_ENTITY, status
+        )
+    return None
+
+
+def experiment_findings_for(
+    rows: Iterable[Tuple[Any, Any, Any, Any]],
+) -> Iterator[Finding]:
+    """Findings for ``(id, key, status, targeting_rules)`` experiment rows."""
+    for row_id, key, status, rules in rows:
+        found = experiment_finding_for(row_id, key, status, rules)
+        if found is not None:
+            yield found
+
+
+def conditions_read_differently(rules: TargetingRules) -> List[Tuple[str, str]]:
+    """``(path, what)`` for each condition experiment targeting reads differently
+    since #1159, in rule order, depth first, ``NOT`` groups included.
+
+    ``array_length`` counts only in ``rules``: a ``default_rule`` is returned
+    without its conditions being read. ``attribute_type`` counts in both, as
+    the check that read it did. An explicit stack, not recursion, so a deep
+    stored ruleset cannot stop the report.
+    """
+    found: List[Tuple[str, str]] = []
+    roots: List[Tuple[str, RuleGroup, bool]] = [
+        (f"rules[{index}].rule", rule.rule, True)
+        for index, rule in enumerate(rules.rules)
+    ]
+    if rules.default_rule is not None:
+        roots.append(("default_rule.rule", rules.default_rule.rule, False))
+    stack = list(reversed(roots))
+    while stack:
+        path, group, read = stack.pop()
+        for index, condition in enumerate(group.conditions):
+            at = f"{path}.conditions[{index}]"
+            if read and condition.operator == OperatorType.ARRAY_LENGTH:
+                found.append((f"{at}.operator", "array_length"))
+            if condition.attribute_type is not None:
+                found.append((f"{at}.attribute_type", "attribute_type"))
+        nested = list(enumerate(group.groups or []))
+        for index, child in reversed(nested):
+            stack.append((f"{path}.groups[{index}]", child, read))
+    return found
+
+
+def enrolment_change_for(
+    row_id: Any, key: Any, status: Any, rules: Any
+) -> Optional[Finding]:
+    """The ``--enrolment-changes`` line for one stored experiment, or ``None``.
+
+    The rules are read as assignment reads them: an empty value is no rules
+    (everyone is eligible), anything else goes through
+    ``AssignmentService._coerce_targeting_rules``, and a value that cannot be
+    read there is listed, not skipped.
+    """
+    row_id, key, status = str(row_id), str(key or ""), _status(status)
+    if not rules:
+        return None
+    try:
+        rules, _ = AssignmentService._coerce_targeting_rules(
+            rules, owner=f"experiment:{row_id}"
+        )
+        found = [] if rules is None else conditions_read_differently(rules)
+    except Exception:
+        return Finding(
+            row_id, key, WHOLE_RULES_PATH, NOT_CHECKED, EXPERIMENT_ENTITY, status
+        )
+    if not found:
+        return None
+    what = ", ".join(sorted({kind for _, kind in found}))
+    reason = f"{ENROLMENT_MAY_CHANGE}: {what}"
+    return Finding(row_id, key, found[0][0], reason, EXPERIMENT_ENTITY, status)
+
+
+def enrolment_changes_for(
+    rows: Iterable[Tuple[Any, Any, Any, Any]],
+) -> Iterator[Finding]:
+    """``--enrolment-changes`` findings for ``(id, key, status, rules)`` rows."""
+    for row_id, key, status, rules in rows:
+        found = enrolment_change_for(row_id, key, status, rules)
+        if found is not None:
+            yield found
+
+
+def read_experiment_rows(
+    connection: Any, schema: str
+) -> List[Tuple[Any, Any, Any, Any]]:
+    """Every experiment with stored targeting rules, whatever its status."""
+    from sqlalchemy import text
+
+    statement = text(
+        f'SELECT id, "key", "status", "targeting_rules" FROM "{schema}"."experiments" '
+        'WHERE "targeting_rules" IS NOT NULL ORDER BY id'
+    )
+    return [tuple(row) for row in connection.execute(statement).all()]
+
+
 def read_segment_rows(connection: Any, schema: str) -> List[Tuple[Any, Any, Any]]:
     """Every segment that is not archived, rules ``NULL`` included."""
     from sqlalchemy import text
@@ -188,20 +343,37 @@ def read_rows(connection: Any, schema: str) -> List[Tuple[Any, Any, Any]]:
 
 def scan(connection: Any, schema: str) -> List[Finding]:
     """Every finding in the database behind ``connection`` (read-only)."""
-    return list(findings_for(read_rows(connection, schema))) + list(
-        segment_findings_for(read_segment_rows(connection, schema))
+    return (
+        list(findings_for(read_rows(connection, schema)))
+        + list(experiment_findings_for(read_experiment_rows(connection, schema)))
+        + list(segment_findings_for(read_segment_rows(connection, schema)))
     )
+
+
+def scan_enrolment_changes(connection: Any, schema: str) -> List[Finding]:
+    """The ``--enrolment-changes`` findings (read-only)."""
+    return list(enrolment_changes_for(read_experiment_rows(connection, schema)))
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m backend.scripts.check_targeting_rules",
         description=(
-            "List stored feature-flag targeting rules that a create or an "
-            "update now refuses, and segments whose rules are not valid."
+            "List stored feature-flag and experiment targeting rules that a "
+            "create or an update now refuses, and segments whose rules are "
+            "not valid."
         ),
     )
-    parser.parse_args(argv)
+    parser.add_argument(
+        "--enrolment-changes",
+        action="store_true",
+        help=(
+            "list instead the experiments whose stored rules hold an "
+            "array_length or attribute_type condition: the new users they "
+            "enrol may change (#1159)"
+        ),
+    )
+    args = parser.parse_args(argv)
 
     from sqlalchemy import create_engine
 
@@ -220,7 +392,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         with engine.connect() as connection:
             connection.exec_driver_sql("SET TRANSACTION READ ONLY")
-            found = scan(connection, schema)
+            if args.enrolment_changes:
+                found = scan_enrolment_changes(connection, schema)
+            else:
+                found = scan(connection, schema)
             connection.rollback()
     except Exception as exc:
         print(
@@ -234,12 +409,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     for finding in found:
         print(finding.line())
+    if args.enrolment_changes:
+        print(
+            f"{len(found)} experiment(s) listed whose enrolment of new users may "
+            f"change (schema {schema!r}).",
+            file=sys.stderr,
+        )
+        return 0
     flags = [f for f in found if f.entity == ENTITY]
-    segments = len(found) - len(flags)
+    experiments = sum(1 for f in found if f.entity == EXPERIMENT_ENTITY)
+    segments = sum(1 for f in found if f.entity == SEGMENT_ENTITY)
     no_match = sum(1 for f in flags if f.matches_no_user)
     print(
         f"{len(flags)} flag(s) listed: {len(flags) - no_match} with rules the API "
         f"now refuses, {no_match} with a legacy rule that matches no user; "
+        f"{experiments} experiment(s) listed with rules the API now refuses; "
         f"{segments} segment(s) listed with rules not valid (schema {schema!r}).",
         file=sys.stderr,
     )

@@ -40,7 +40,7 @@ VECTORS = json.loads(VECTORS_PATH.read_text(encoding="utf-8"))
 
 #: Pinned. A change here is a change to what this SDK must answer locally: it moves only with a
 #: regenerated vectors file (and the backend pin in test_sdk_ruleset_vectors.py).
-EXPECTED_COUNTS = {"cases": 2181, "flags": 147, "must_local": 1294}
+EXPECTED_COUNTS = {"cases": 2191, "flags": 149, "must_local": 1294}
 
 RULESET = index_ruleset(VECTORS["ruleset"])
 

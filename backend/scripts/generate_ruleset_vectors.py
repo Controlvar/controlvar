@@ -614,6 +614,22 @@ def _remote_flags(corpus: Corpus) -> None:
             native(nrule("r", group("and", cond("tags", "array_length", 2)))),
         ),
         (
+            "op-array-length-gt",
+            native(nrule("r", group("and", cond("tags", "array_length", 2, "gt")))),
+        ),
+        (
+            "op-array-length-between",
+            native(
+                nrule(
+                    "r",
+                    group(
+                        "and",
+                        cond("tags", "array_length", {"min": 1, "max": 2}, "between"),
+                    ),
+                )
+            ),
+        ),
+        (
             "op-json-path",
             native(nrule("r", group("and", cond("doc", "json_path", "$.a")))),
         ),
@@ -646,6 +662,14 @@ def _remote_flags(corpus: Corpus) -> None:
     corpus.case("op-semver", USER, {"v": "1.2.99999999999999999999"})
     corpus.case("op-regex", USER, {"email": "abc"})
     corpus.case("op-array-contains", USER, {"tags": ["a", "b"]})
+    # array_length with the attribute sent: the length of text too, and each
+    # comparison, matched and not (#1159).
+    corpus.case("op-array-length", USER, {"tags": "ab"})
+    corpus.case("op-array-length", USER, {"tags": ["a", "b", "c"]})
+    corpus.case("op-array-length-gt", USER, {"tags": ["a", "b", "c"]})
+    corpus.case("op-array-length-gt", USER, {"tags": ["a", "b"]})
+    corpus.case("op-array-length-between", USER, {"tags": ["a", "b"]})
+    corpus.case("op-array-length-between", USER, {"tags": ["a", "b", "c"]})
 
 
 #: The segment the segment flags name, and who is a member of it. Membership

@@ -48,27 +48,9 @@ def test_a_validated_evaluation_error_carries_the_type_only(monkeypatch):
     service = RulesEvaluationService()
     monkeypatch.setattr(service, "_evaluate_targeting_rules_enhanced", _boom)
     _, metrics = service.evaluate_rules_with_validation(
-        MagicMock(), {}, validate_attributes=False, track_metrics=True
+        MagicMock(), {}, track_metrics=True
     )
     assert metrics.error == "Evaluation failed (RuntimeError)"
-
-
-def test_a_context_validation_error_carries_the_type_only(monkeypatch):
-    service = RulesEvaluationService()
-    monkeypatch.setattr(service, "_extract_required_attributes", _boom)
-    result = service.validate_user_context({}, MagicMock())
-    assert result.is_valid is False
-    assert result.error_message == "Validation error (RuntimeError)"
-
-
-def test_an_attribute_validation_error_carries_the_type_only():
-    result = RulesEvaluationService()._validate_attribute_value(
-        "plan", "premium", _RaisesOnCompare()
-    )
-    assert result.is_valid is False
-    assert result.error_message == (
-        "Validation error for attribute 'plan' (RuntimeError)"
-    )
 
 
 def test_a_rule_validation_error_carries_the_type_only(monkeypatch):

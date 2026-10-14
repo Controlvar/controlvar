@@ -34,7 +34,7 @@ pytestmark = pytest.mark.unit
 
 #: Pinned. A change here is a change to what the SDKs must answer locally:
 #: regenerate the vectors and say why in the pull request.
-EXPECTED_COUNTS = {"flags": 147, "cases": 2181, "must_local": 1294}
+EXPECTED_COUNTS = {"flags": 149, "cases": 2191, "must_local": 1294}
 
 #: The launch local-operator set (engine names).
 LAUNCH_LOCAL_OPERATORS = {

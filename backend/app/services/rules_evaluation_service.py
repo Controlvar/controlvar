@@ -1,8 +1,7 @@
 """
-Enhanced rules evaluation service with custom attribute validation and performance monitoring.
+Enhanced rules evaluation service with performance monitoring.
 
 This service provides advanced rule evaluation capabilities with:
-- Custom attribute validation
 - Performance metrics and monitoring
 - Error tracking and logging
 - Integration with assignment service
@@ -13,11 +12,9 @@ This service provides advanced rule evaluation capabilities with:
 import hashlib
 import json
 import logging
-import re
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend.app.core.evaluation_cache import EvaluationCache
@@ -25,7 +22,6 @@ from backend.app.core.log_once import EVALUATION_NOTES
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
 from backend.app.core.rule_compiler import RuleCompiler
 from backend.app.core.rules_engine import (
-    SEGMENT_OPERATORS,
     SegmentMembershipUnavailable,
     TimeWindowUnreadable,
     UserContext,
@@ -36,7 +32,6 @@ from backend.app.core.rules_engine import (
     apply_operator as base_apply_operator,
 )
 from backend.app.schemas.targeting_rule import (
-    AttributeType,
     Condition,
     LogicalOperator,
     OperatorType,
@@ -52,10 +47,6 @@ logger = logging.getLogger(__name__)
 # operators, caller-owned identifiers and fixed strings
 # (backend/tests/unit/core/test_evaluation_log_arguments.py).
 
-# Semantic version 2.0.0, from semver.org. A module constant, so the regex
-# call-site test (backend/tests/unit/core/test_regex_call_sites.py) accepts it.
-_SEMVER_PATTERN = r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$"
-
 
 @dataclass
 class RuleEvaluationMetrics:
@@ -67,15 +58,6 @@ class RuleEvaluationMetrics:
     error: Optional[str] = None
     complexity_score: int = 0
     attribute_count: int = 0
-
-
-@dataclass
-class AttributeValidationResult:
-    """Result of attribute validation."""
-
-    is_valid: bool
-    error_message: Optional[str] = None
-    normalized_value: Optional[Any] = None
 
 
 @dataclass
@@ -166,17 +148,18 @@ class RulesEvaluationService:
         self,
         targeting_rules: TargetingRules,
         user_context: UserContext,
-        validate_attributes: bool = True,
         track_metrics: bool = True,
         owner: str = "experiment",
     ) -> Tuple[Optional[TargetingRule], Optional[RuleEvaluationMetrics]]:
         """
-        Evaluate targeting rules with enhanced validation and monitoring.
+        Evaluate targeting rules with monitoring.
+
+        A condition's ``attribute_type`` is not read: the context's value is
+        given to the operator as it is, as on flags (#1159).
 
         Args:
             targeting_rules: The targeting rules to evaluate
             user_context: User context for evaluation
-            validate_attributes: Whether to validate attributes
             track_metrics: Whether to track evaluation metrics
             owner: Names the ruleset in the warning logged when a pattern
                 condition cannot be evaluated (``experiment:<id>``).
@@ -189,23 +172,6 @@ class RulesEvaluationService:
         metrics = None
 
         try:
-            # Validate user context if requested
-            if validate_attributes:
-                validation_result = self.validate_user_context(
-                    user_context, targeting_rules
-                )
-                if not validation_result.is_valid:
-                    # A property of this user's context, not of the rules.
-                    logger.debug("User context validation failed for %s", owner)
-                    if track_metrics:
-                        metrics = RuleEvaluationMetrics(
-                            rule_id="validation_failed",
-                            evaluation_time_ms=(time.time() - start_time) * 1000,
-                            matched=False,
-                            error=validation_result.error_message,
-                        )
-                    return None, metrics
-
             # Evaluate rules with enhanced operators
             matched_rule = self._evaluate_targeting_rules_enhanced(
                 targeting_rules, user_context
@@ -275,145 +241,6 @@ class RulesEvaluationService:
                 )
 
         return matched_rule, metrics
-
-    def validate_user_context(
-        self, user_context: UserContext, targeting_rules: TargetingRules
-    ) -> AttributeValidationResult:
-        """
-        Validate user context against rule requirements.
-
-        Args:
-            user_context: User context to validate
-            targeting_rules: Rules to extract validation requirements from
-
-        Returns:
-            AttributeValidationResult with validation status
-        """
-        try:
-            # Extract all attributes used in rules
-            required_attributes = self._extract_required_attributes(targeting_rules)
-
-            # Validate each attribute
-            for attr_name, attr_info in required_attributes.items():
-                if attr_name not in user_context:
-                    # An absent attribute is never a refusal of the whole
-                    # ruleset: it makes only its own condition false
-                    # (``is_null`` true), as on flags, and the evaluator then
-                    # composes AND, OR and NOT (#822).
-                    continue
-
-                # Validate attribute type and value
-                attr_value = user_context[attr_name]
-                attr_type = attr_info.get("type")
-
-                if attr_type:
-                    validation_result = self._validate_attribute_value(
-                        attr_name, attr_value, attr_type
-                    )
-                    if not validation_result.is_valid:
-                        return validation_result
-
-            return AttributeValidationResult(is_valid=True)
-
-        except Exception as e:
-            # The type only: the text can repeat an attribute value.
-            return AttributeValidationResult(
-                is_valid=False,
-                error_message=f"Validation error ({type(e).__name__})",
-            )
-
-    def _validate_attribute_value(
-        self, attr_name: str, attr_value: Any, attr_type: AttributeType
-    ) -> AttributeValidationResult:
-        """Validate an individual attribute value against its type."""
-        try:
-            if attr_type == AttributeType.STRING:
-                if not isinstance(attr_value, str):
-                    return AttributeValidationResult(
-                        is_valid=False,
-                        error_message=f"Attribute '{attr_name}' must be a string",
-                    )
-
-            elif attr_type == AttributeType.NUMBER:
-                if not isinstance(attr_value, (int, float)):
-                    try:
-                        float(attr_value)
-                    except (ValueError, TypeError):
-                        return AttributeValidationResult(
-                            is_valid=False,
-                            error_message=f"Attribute '{attr_name}' must be a number",
-                        )
-
-            elif attr_type == AttributeType.BOOLEAN:
-                if not isinstance(attr_value, bool):
-                    return AttributeValidationResult(
-                        is_valid=False,
-                        error_message=f"Attribute '{attr_name}' must be a boolean",
-                    )
-
-            elif attr_type == AttributeType.ARRAY:
-                if not isinstance(attr_value, (list, tuple)):
-                    return AttributeValidationResult(
-                        is_valid=False,
-                        error_message=f"Attribute '{attr_name}' must be an array",
-                    )
-
-            elif attr_type == AttributeType.DATE:
-                if isinstance(attr_value, str):
-                    try:
-                        datetime.fromisoformat(attr_value.replace("Z", "+00:00"))
-                    except ValueError:
-                        return AttributeValidationResult(
-                            is_valid=False,
-                            error_message=f"Attribute '{attr_name}' must be a valid ISO date string",
-                        )
-                elif not isinstance(attr_value, (datetime, int, float)):
-                    return AttributeValidationResult(
-                        is_valid=False,
-                        error_message=f"Attribute '{attr_name}' must be a date, timestamp, or ISO string",
-                    )
-
-            elif attr_type == AttributeType.GEO_COORDINATE:
-                if not isinstance(attr_value, (list, tuple)) or len(attr_value) != 2:
-                    return AttributeValidationResult(
-                        is_valid=False,
-                        error_message=f"Attribute '{attr_name}' must be [latitude, longitude]",
-                    )
-                try:
-                    lat, lon = float(attr_value[0]), float(attr_value[1])
-                    if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
-                        return AttributeValidationResult(
-                            is_valid=False,
-                            error_message=f"Attribute '{attr_name}' coordinates out of valid range",
-                        )
-                except (ValueError, TypeError):
-                    return AttributeValidationResult(
-                        is_valid=False,
-                        error_message=f"Attribute '{attr_name}' coordinates must be numeric",
-                    )
-
-            elif attr_type == AttributeType.SEMANTIC_VERSION:
-                if not isinstance(attr_value, str):
-                    return AttributeValidationResult(
-                        is_valid=False,
-                        error_message=f"Attribute '{attr_name}' must be a semantic version string",
-                    )
-                if not re.match(_SEMVER_PATTERN, attr_value):
-                    return AttributeValidationResult(
-                        is_valid=False,
-                        error_message=f"Attribute '{attr_name}' must be a valid semantic version (e.g., 1.2.3)",
-                    )
-
-            return AttributeValidationResult(is_valid=True)
-
-        except Exception as e:
-            # The type only: the text can repeat the attribute's value.
-            return AttributeValidationResult(
-                is_valid=False,
-                error_message=(
-                    f"Validation error for attribute '{attr_name}' ({type(e).__name__})"
-                ),
-            )
 
     def _evaluate_targeting_rules_enhanced(
         self, targeting_rules: TargetingRules, user_context: UserContext
@@ -538,10 +365,10 @@ class RulesEvaluationService:
         """Apply an operator for experiment targeting.
 
         Only the operators below are this service's own. Every other one,
-        ``semantic_version``, ``geo_distance`` (#1144) and ``time_window``
-        (#1145) among them, is ``rules_engine.apply_operator``, which also
-        answers flag targeting, so an experiment and a flag answer those rules
-        alike.
+        ``semantic_version``, ``geo_distance`` (#1144), ``time_window``
+        (#1145) and ``array_length`` (#1159) among them, is
+        ``rules_engine.apply_operator``, which also answers flag targeting, so
+        an experiment and a flag answer those rules alike.
         """
 
         # Handle new custom operators
@@ -551,8 +378,6 @@ class RulesEvaluationService:
             return self._evaluate_json_path(
                 actual_value, expected_value, additional_value
             )
-        elif operator == OperatorType.ARRAY_LENGTH:
-            return self._evaluate_array_length(actual_value, expected_value)
 
         # Fall back to base implementation for standard operators
         return base_apply_operator(
@@ -608,51 +433,6 @@ class RulesEvaluationService:
         except (ValueError, TypeError, json.JSONDecodeError, IndexError, KeyError):
             logger.debug("Failed to evaluate JSON path")
             return False
-
-    def _evaluate_array_length(self, array_value: Any, expected_length: Any) -> bool:
-        """Evaluate array length."""
-        try:
-            if not isinstance(array_value, (list, tuple)):
-                return False
-
-            return len(array_value) == int(expected_length)
-
-        except (ValueError, TypeError):
-            logger.debug("Failed to evaluate array length")
-            return False
-
-    def _extract_required_attributes(
-        self, targeting_rules: TargetingRules
-    ) -> Dict[str, Dict[str, Any]]:
-        """Extract every attribute used in targeting rules, with its declared type."""
-        attributes = {}
-
-        def extract_from_group(group: RuleGroup):
-            for condition in group.conditions:
-                if condition.operator in SEGMENT_OPERATORS:
-                    # Membership is not a context attribute: a segment
-                    # condition is answered from the resolved membership, so
-                    # it is not a context attribute (#440). Only the condition
-                    # is skipped; a customer attribute that is itself called
-                    # ``segment`` is still type-checked when present.
-                    continue
-                # No "required" marker: an absent attribute makes only its own
-                # condition false (#822), so presence is not checked here.
-                attributes[condition.attribute] = {
-                    "type": condition.attribute_type,
-                }
-
-            if group.groups:
-                for nested_group in group.groups:
-                    extract_from_group(nested_group)
-
-        for rule in targeting_rules.rules:
-            extract_from_group(rule.rule)
-
-        if targeting_rules.default_rule:
-            extract_from_group(targeting_rules.default_rule.rule)
-
-        return attributes
 
     def _calculate_rule_complexity(self, targeting_rules: TargetingRules) -> int:
         """Calculate complexity score for rules."""

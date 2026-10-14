@@ -228,7 +228,7 @@ def _native(dashboard_or_native: dict) -> TargetingRules:
 def test_experiment_targeting_is_ineligible(rules):
     service = RulesEvaluationService()
     matched, metrics = service.evaluate_rules_with_validation(
-        _native(rules), COMPETITOR, validate_attributes=False
+        _native(rules), COMPETITOR
     )
     assert matched is None
     assert metrics is not None and metrics.matched is False
@@ -238,7 +238,7 @@ def test_experiment_targeting_is_ineligible(rules):
     assert result.matched is False
 
     outcome = AssignmentService(MagicMock())._evaluate_experiment_targeting(
-        SimpleNamespace(targeting_rules=rules), COMPETITOR, validate_attributes=False
+        SimpleNamespace(targeting_rules=rules), COMPETITOR
     )
     assert outcome["eligible"] is False
 
@@ -303,7 +303,6 @@ def test_experiment_abandonment_is_reported_with_the_experiment_id(monkeypatch):
     outcome = AssignmentService(MagicMock())._evaluate_experiment_targeting(
         SimpleNamespace(id="exp-42", targeting_rules=nested_not(UNPARSEABLE)),
         COMPETITOR,
-        validate_attributes=False,
     )
     assert outcome["eligible"] is False
     assert seen == [("pattern condition could not be evaluated", "experiment:exp-42")]
