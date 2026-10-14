@@ -14,9 +14,12 @@ Pinned, because the verifier's PASS is only as good as these:
 * the python-suites matrix is ``SUITES``' pytest ones, each leg installing
   what its pull request job does (pytest only for sdk/python's suite and the
   SDK contract self-tests; Node.js beside backend/requirements.txt for the
-  CDK stack tests, with --import-mode=importlib), and the jest-suites matrix
-  its jest ones, each in its npm project (their reports written as JUnit);
-  every session names trees that exist, which ``suite_of`` reads;
+  CDK stack tests, with --import-mode=importlib; for the chart's render
+  tests, chart.yml's pinned helm, EXPERIMENTLY_CHART_TESTS=1 and its no-skip
+  check, with unit leaving their tree to it), and the jest-suites matrix its
+  jest ones, each in its npm project (their reports written as JUnit); every
+  session names trees that exist, and ignores only trees under its roots,
+  which ``suite_of`` reads;
   each runs ``--suite`` and uploads its reports as the artifact the verifier
   downloads, for 90 days; the verify job runs after every leg (``always()``),
   reads them, never ``--staging`` or ``--registry``, and keeps its record for
@@ -275,6 +278,75 @@ def test_the_cdk_leg_runs_as_the_cdk_stack_tests_job(doc):
     assert node["with"] == {"node-version": their_node["with"]["node-version"]}
 
 
+def test_the_chart_leg_runs_as_the_chart_job(doc):
+    """chart.yml's chart job: backend/requirements.txt, its pinned helm (the
+    same version and sha256) as $HELM, EXPERIMENTLY_CHART_TESTS=1, and a
+    zero-skip check over backend/tests/unit/chart. The unit session leaves the
+    tree to it: there every case skips, and a skipped case fails a target."""
+    chart = _load(WORKFLOWS / "chart.yml")
+    their_job = chart["jobs"]["chart"]
+    their_tests = next(
+        s
+        for s in their_job["steps"]
+        if "backend/tests/unit/chart" in str(s.get("run", ""))
+        and "pytest" in str(s.get("run", ""))
+    )
+    (session,) = rc.SUITES["chart"]
+    assert session.args == ("backend/tests/unit/chart",)
+    assert dict(session.env) == {"EXPERIMENTLY_CHART_TESTS": "1"}
+    assert their_tests["env"]["EXPERIMENTLY_CHART_TESTS"] == "1"
+    assert rc.suite_of("test:backend/tests/unit/chart/test_chart_render.py") == (
+        "chart"
+    )
+    unit = rc.SUITES["unit"][0]
+    assert unit.ignored == ("backend/tests/unit/chart",)
+    assert not unit.runs("backend/tests/unit/chart/test_chart_render.py")
+
+    job = doc["jobs"]["python-suites"]
+    leg = next(g for g in job["strategy"]["matrix"]["include"] if g["suite"] == "chart")
+    assert leg["deps"] == "backend"
+    install = next(
+        s
+        for s in job["steps"]
+        if s.get("name") == "Install helm (pinned, checksum-verified)"
+    )
+    assert install["if"] == "matrix.suite == 'chart'"
+    assert install["env"] == {
+        "HELM_VERSION": chart["env"]["HELM_VERSION"],
+        "HELM_SHA256": chart["env"]["HELM_SHA256"],
+    }
+    lines = [line.strip() for line in install["run"].splitlines()]
+    assert "set -euo pipefail" in lines
+    assert (
+        'printf \'%s  %s\\n\' "$HELM_SHA256" "$RUNNER_TEMP/helm.tgz" | sha256sum -c -'
+        in lines
+    )
+    assert (
+        'test "$("$bin/helm" version --template \'{{.Version}}\')" = "v${HELM_VERSION}"'
+        in lines
+    )
+    assert 'printf \'HELM=%s\\n\' "$bin/helm" >> "$GITHUB_ENV"' in lines
+    names = [s.get("name") for s in job["steps"]]
+    assert names.index("Install helm (pinned, checksum-verified)") < names.index(
+        "Run the suite"
+    )
+    skips = next(
+        s for s in job["steps"] if s.get("name") == "No chart test was skipped"
+    )
+    assert skips["if"] == "matrix.suite == 'chart'"
+    assert names.index("Run the suite") < names.index("No chart test was skipped")
+    assert skips["run"].strip() == (
+        'python3 scripts/check_junit_skips.py "$RUNNER_TEMP/junit/chart.xml"'
+        " backend/tests/unit/chart"
+    )
+    their_skips = [
+        str(s.get("run", ""))
+        for s in their_job["steps"]
+        if "check_junit_skips.py" in str(s.get("run", ""))
+    ]
+    assert their_skips and all("backend/tests/unit/chart" in r for r in their_skips)
+
+
 def test_the_frontend_session_searches_the_trees_its_jest_config_adds():
     """frontend/jest.config.js puts MODULES_DIR among its roots in a full tree,
     so the modules' jest tests are in the frontend report; the session says so."""
@@ -303,6 +375,15 @@ def test_every_pytest_session_names_trees_that_exist():
                 if root.startswith("modules/") and not (REPO_ROOT / "modules").is_dir():
                     continue  # scripts/core_build.sh's copy: modules/ deleted
                 assert (REPO_ROOT / root).is_dir(), (name, root)
+            # An --ignore that names no tree, or one outside the session's
+            # roots, leaves out nothing: suite_of would then send a target to
+            # a session that does not run it.
+            for tree in session.ignored:
+                assert (REPO_ROOT / tree).is_dir(), (name, tree)
+                assert any(tree.startswith(r + "/") for r in session.roots), (
+                    name,
+                    tree,
+                )
 
 
 def test_the_jest_matrix_runs_each_jest_suite_in_its_project(doc):
