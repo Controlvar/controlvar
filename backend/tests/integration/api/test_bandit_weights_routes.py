@@ -214,6 +214,10 @@ def test_regret_reduction_is_null_until_there_is_data_and_a_gain(
         (bandit - uniform) / uniform * 100.0, rel=1e-9
     )
 
+    # arm_a catches up (15/40 as well): null again on the next update.
+    _seed_variant(db_session, experiment, _arm(experiment, "arm_a"), 20, 10)
+    assert _update(admin_client, experiment)["regret_reduction_pct"] is None
+
 
 @pytest.mark.parametrize(
     "status, replaced",
