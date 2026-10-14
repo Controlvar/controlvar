@@ -27,6 +27,7 @@ from backend.app.services.llm_analytics_service import (
     _confidence_interval_95,
     _mean,
     _std,
+    _t_critical,
     _welch_t_test,
 )
 
@@ -117,6 +118,131 @@ class TestStatisticalHelpers:
 
     def test_cohens_d_too_few_samples(self):
         assert _cohens_d([1.0], [2.0]) is None
+
+
+# Fixed sample pairs for the exact Welch p-value (#1192). The comment on each
+# gives the Welch t statistic and degrees of freedom it produces.
+_WELCH_CASES = {
+    # t = 2.64, df = 6.0
+    "df_6": ([10.0, 12.0, 11.0, 13.0], [13.5, 14.0, 12.5, 15.5]),
+    # t = 2.52, df = 10.0
+    "df_10_t_2_5": (
+        [5.1, 4.8, 5.6, 5.0, 4.7, 5.3],
+        [5.5, 5.8, 5.1, 6.0, 5.3, 5.7],
+    ),
+    # t = 2.0004, df = 10.0: the old step table said 0.05; it is 0.073
+    "df_10_t_2_0": (
+        [5.1, 4.8, 5.6, 5.0, 4.7, 5.3],
+        [5.4, 5.7, 5.0, 5.9, 5.2, 5.6],
+    ),
+    # t = 3.20, df = 2.2 (three observations against twelve)
+    "df_2": (
+        [3.0, 5.0, 4.0],
+        [5.0, 6.0, 5.5, 6.5, 5.8, 6.2, 5.9, 6.1, 6.0, 5.7, 6.3, 5.6],
+    ),
+    # t = 0.55, df = 7.7 (unequal variances)
+    "unequal_variances": (
+        [0.62, 0.71, 0.55, 0.68, 0.74, 0.59, 0.66, 0.70, 0.63, 0.69],
+        [0.81, 0.52, 0.94, 0.47, 0.88, 0.60, 0.99, 0.41],
+    ),
+    # t = 0.01, df = 8.0: the old step table said 0.30; it is 0.99
+    "t_near_0": ([1.0, 2.0, 3.0, 4.0, 5.0], [1.2, 1.9, 3.1, 3.8, 5.05]),
+    # t = 3.09, df = 46.6: the old normal approximation said 0.0020
+    "df_over_30": (
+        [0.40 + 0.03 * ((i * 7) % 11) for i in range(25)],
+        [0.46 + 0.03 * ((i * 5) % 13) for i in range(25)],
+    ),
+}
+
+
+@pytest.mark.regression
+class TestWelchPValueIsExact:
+    """#1192: below 30 degrees of freedom the p-value was one of five steps
+    (0.01, 0.02, 0.05, 0.15, 0.30) and at 30 or more a normal approximation.
+    It is now the exact two-tailed Welch p-value."""
+
+    @pytest.mark.parametrize("case", sorted(_WELCH_CASES))
+    def test_p_value_matches_scipy_welch(self, case):
+        from scipy import stats
+
+        a, b = _WELCH_CASES[case]
+        expected = stats.ttest_ind(a, b, equal_var=False).pvalue
+        p = _welch_t_test(a, b)
+        assert p is not None
+        assert abs(p - expected) <= 1e-9, (case, p, expected)
+        # Order of the arms does not change a two-tailed p-value
+        assert abs(_welch_t_test(b, a) - expected) <= 1e-9
+
+    def test_t_near_zero_is_near_one(self):
+        a, b = _WELCH_CASES["t_near_0"]
+        assert _welch_t_test(a, b) > 0.99
+
+    def test_equal_means_is_exactly_one(self):
+        assert _welch_t_test([1.0, 2.0, 3.0], [0.0, 2.0, 4.0]) == 1.0
+
+    def test_degenerate_inputs_keep_their_contract(self):
+        assert _welch_t_test([1.0], [1.0, 2.0]) is None
+        assert _welch_t_test([1.0, 2.0], []) is None
+        # Zero variance in both arms: the standard error is 0
+        assert _welch_t_test([2.0, 2.0, 2.0], [5.0, 5.0]) == 1.0
+
+
+# Fixed samples for the exact 95 % interval (#1192), by degrees of freedom
+# (n - 1). The old table took the nearest listed df at or below, so df 12 used
+# df 10's 2.228 and df 99 used df 60's 2.000: intervals too wide.
+_CI_CASES = {
+    "df_1": [4.0, 7.0],
+    "df_10": [5.1, 4.8, 5.6, 5.0, 4.7, 5.3, 5.5, 5.8, 5.1, 6.0, 5.3],
+    "df_12": [
+        0.62,
+        0.71,
+        0.55,
+        0.68,
+        0.74,
+        0.59,
+        0.66,
+        0.70,
+        0.63,
+        0.69,
+        0.58,
+        0.72,
+        0.64,
+    ],
+    "df_39": [0.40 + 0.03 * ((i * 7) % 11) for i in range(40)],
+    "df_99": [200.0 + 15.0 * ((i * 5) % 13) for i in range(100)],
+}
+
+
+@pytest.mark.regression
+class TestConfidenceIntervalIsExact:
+    """#1192: the 95 % interval's t critical value came from a step table that
+    skipped most df, so the interval was too wide. It is now the exact t
+    quantile at df = n - 1."""
+
+    @pytest.mark.parametrize("case", sorted(_CI_CASES))
+    def test_interval_matches_scipy(self, case):
+        import statistics as st
+
+        from scipy import stats
+
+        values = _CI_CASES[case]
+        n = len(values)
+        lo_exp, hi_exp = stats.t.interval(
+            0.95, n - 1, loc=st.mean(values), scale=stats.sem(values)
+        )
+        lower, upper = _confidence_interval_95(values)
+        assert abs(lower - lo_exp) <= 1e-9, (case, lower, lo_exp)
+        assert abs(upper - hi_exp) <= 1e-9, (case, upper, hi_exp)
+
+    def test_t_critical_matches_published_table(self):
+        # Two-tailed 0.05 critical values from a printed t table
+        assert _t_critical(1) == pytest.approx(12.7062, abs=1e-4)
+        assert _t_critical(12) == pytest.approx(2.1788, abs=1e-4)
+        assert _t_critical(99) == pytest.approx(1.9842, abs=1e-4)
+
+    def test_degenerate_df_keeps_the_normal_value(self):
+        assert _t_critical(0) == 1.96
+        assert _t_critical(-1) == 1.96
 
 
 # ---------------------------------------------------------------------------

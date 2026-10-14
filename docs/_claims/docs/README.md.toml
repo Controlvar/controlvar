@@ -1,0 +1,99 @@
+# What verifies each unit of docs/README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/README.md"
+
+[[unit]]
+text = "Experimently Documentation"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Open-source A/B testing and feature flags that you run yourself."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit",
+    "docex:README.md#\"ADMIN\"",
+]
+
+[[unit]]
+text = "The core, the optional modules and the dashboard are Apache-2.0; the client SDKs are MIT."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit"]
+
+[[unit]]
+text = "Start Here"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Guide | What it covers"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Quick Start | Start the local stack with Docker, then create, start and read an experiment, an API key and a feature flag"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Demo guide | ShopLab and StreamPulse, two sample apps that ./demo/setup-local.sh starts with the platform"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Limitations | What Experimently does not do, and what happens instead"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Getting Started"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Core Concepts — experiments, variants, metrics, feature flags and targeting"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Architecture Overview — the components and where each request goes"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "FAQ"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Modules & Profiles — the core and full profiles, and what each module adds"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Self-Hosting"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Docker Compose on one host — the self-hosting stack, on the published images"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Kubernetes (Helm)"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "AWS CDK Deployment"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "SDKs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "JavaScript SDK, Python SDK and Go SDK"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "SDK contract & status — every SDK, how to install it, and what CI runs for it"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "API Reference"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Using the API Docs — the reference the server serves at /api/v1/docs"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Experiments and Authentication"
+by = ["exempt:navigation"]

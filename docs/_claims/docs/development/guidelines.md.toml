@@ -1,0 +1,84 @@
+# What verifies each unit of docs/development/guidelines.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/development/guidelines.md"
+
+[[unit]]
+text = "Development Guidelines"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The rules a change to this repository follows."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "How to set up, run and test the stack is in CONTRIBUTING.md, and the conventions, with the reasons for them, are in CLAUDE.md."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Python"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Write for Python 3.11, with type annotations."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Use Pydantic v2: field_validator, model_validator, ConfigDict, and BaseSettings from pydantic_settings."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Import application code by its full path, rooted at backend.app: from backend.app.models.metrics.metric import RawMetric."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Never root an import at app: Python loads app.models.metrics.metric as a different module from backend.app.models.metrics.metric, with different classes."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "This search finds such an import, and prints nothing when there is none:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A new core model's module goes in CORE_MODEL_MODULES in backend/app/models/__init__.py, which register_core_models() imports."
+by = ["untested:T"]
+
+[[unit]]
+text = "Lint and format"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Ruff formats and lints the Python and sorts its imports; its configuration is [tool.ruff] in pyproject.toml."
+by = ["untested:T"]
+
+[[unit]]
+text = "Do not add black, isort or flake8 back."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "make format formats and fixes the Python in place."
+by = ["untested:T"]
+
+[[unit]]
+text = "make lint runs what the lint check runs; \"Lint\" in CONTRIBUTING.md lists it."
+by = ["untested:T"]
+
+[[unit]]
+text = "CI, the pre-commit hook and the virtual environment install the same ruff version."
+by = ["test:backend/tests/unit/infrastructure/test_ruff_version_agrees.py::test_all_three_declaration_sites_name_one_version"]
+
+[[unit]]
+text = "Pull requests"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Write the title as a conventional commit, type(optional scope): description, with type one of feat fix perf deps docs build ci refactor test chore revert style."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The conventional-title check refuses any other title."
+by = ["untested:T"]
+
+[[unit]]
+text = "Sign off every commit and add a regression test to every bug fix: CONTRIBUTING.md and the Testing Guide say how."
+by = ["exempt:instruction"]

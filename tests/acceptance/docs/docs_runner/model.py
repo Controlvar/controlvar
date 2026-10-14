@@ -34,14 +34,14 @@ without ``pending``)::
             - heading "Quick Start" [level=1]
         fail: the Quick Start link does not lead to the Quick Start page
       - id: deploy-guide
-        doc: deployment-operations
+        doc: self-hosting
         do:
-          goto: /deployment/deployment-guide/
+          goto: /self-hosting/cdk/
         expect:
           status: 200
         snapshot: false                      # no ARIA snapshot: say why
         snapshot_reason: only that the page answers matters here
-        fail: the deployment guide does not answer
+        fail: the AWS CDK deployment page does not answer
         not_run: needs-aws                   # a reason from registry.py; reported NOT RUN
 
 ``do`` is exactly one action. ``expect`` lists what must hold after it. A step

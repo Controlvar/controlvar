@@ -1,0 +1,126 @@
+# What verifies each unit of docs/getting-started/python-virtual-env-setup.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/getting-started/python-virtual-env-setup.md"
+
+[[unit]]
+text = "Python Virtual Environment Setup Guide"
+by = ["exempt:label"]
+
+[[unit]]
+text = "This guide outlines how to set up and configure a Python virtual environment for the Experimently project."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The requirements layout"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The requirements/ directory already exists — you do not create it."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_requirements_profiles_resolve_to_one_file"]
+
+[[unit]]
+text = "It holds four profiles, and every one of them resolves to the same pins:"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_requirements_profiles_resolve_to_one_file"]
+
+[[unit]]
+text = "backend/requirements.txt is the single source of truth."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_requirements_profiles_resolve_to_one_file"]
+
+[[unit]]
+text = "It is what the CI test jobs and the developer venv install."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_test_jobs_install_backend_requirements"]
+
+[[unit]]
+text = "requirements/base.txt is a single -r ../backend/requirements.txt line, so the profiles cannot drift from it, and this page does not list the pins: read the file."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_requirements_profiles_resolve_to_one_file"]
+
+[[unit]]
+text = "To see what is pinned:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "grep -c '==' backend/requirements.txt: how many"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "grep '^fastapi' backend/requirements.txt: a specific one"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Note that requirements/prod.txt is not what the container installs — the image installs backend/requirements/runtime.lock."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_api_image_installs_the_runtime_lock"]
+
+[[unit]]
+text = "The prod profile is for running the API under gunicorn outside a container."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_requirements_profiles_resolve_to_one_file"]
+
+[[unit]]
+text = "Python version"
+by = ["exempt:label"]
+
+[[unit]]
+text = ".python-version pins 3.11.10, and pyproject.toml sets requires-python = \">=3.11\"."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_python_3_11_and_node_22"]
+
+[[unit]]
+text = "There is no setup.py or setup.cfg."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_platform_package_is_declared_in_pyproject_only"]
+
+[[unit]]
+text = "Editable install"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Packaging is declared in pyproject.toml ([project] name = \"experimently-platform\", with a [build-system] table)."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_platform_package_is_declared_in_pyproject_only"]
+
+[[unit]]
+text = "The name is not experimently: that is the Python SDK under sdk/python/."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_platform_package_is_declared_in_pyproject_only",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names",
+]
+
+[[unit]]
+text = "Usage Instructions"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Initial Setup"
+by = ["exempt:label"]
+
+[[unit]]
+text = "There is no setup script."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It is three commands, from the repository root:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "source venv/bin/activate: on Windows, venv\\Scripts\\activate"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Selecting a profile"
+by = ["exempt:label"]
+
+[[unit]]
+text = "pip install -r requirements/dev.txt: base + ipython, debugpy"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_requirements_profiles_resolve_to_one_file"]
+
+[[unit]]
+text = "pip install -r requirements/test.txt: base (test deps are pinned in base)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_requirements_profiles_resolve_to_one_file"]
+
+[[unit]]
+text = "pip install -r requirements/prod.txt: base + gunicorn"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_requirements_profiles_resolve_to_one_file"]
+
+[[unit]]
+text = "ruff (format, import order and lint) is pinned in backend/requirements.txt like everything else, so the version in your venv is the version CI runs — see Pre-commit Hooks."
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_ruff_hooks_cover_the_four_trees_at_the_pinned_version",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_make_lint_and_the_lint_job_run_the_same_checks",
+]

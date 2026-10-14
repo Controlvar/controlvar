@@ -1,0 +1,281 @@
+# What verifies each unit of SECURITY.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "SECURITY.md"
+
+[[unit]]
+text = "Security policy"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Experimently handles experiment assignments, feature-flag evaluations, audit records and, with the hipaa module installed, PHI."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key",
+    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_every_flag_evaluates_with_a_null_config",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_create",
+    "test:modules/backend/tests/integration/api/test_hipaa_api.py::TestEncryptDecrypt::test_admin_can_encrypt_phi",
+]
+
+[[unit]]
+text = "We take vulnerability reports seriously and we would rather hear about a problem from you than from an incident."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Reporting a vulnerability"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Do not open a public GitHub issue for a security problem."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Public issues are world-readable the moment they are created."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Report privately, by either route:"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "GitHub private vulnerability reporting (preferred) — on this repository, go to Security → Report a vulnerability."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "This creates a private advisory that only the maintainers and you can see."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Email — security@getexperimently.com."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Please include, as far as you have it:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "the affected component (backend API, dashboard, a specific SDK, a module under modules/, the CDK stacks) and the version, tag or commit SHA;"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "a description of the issue and what an attacker can achieve with it;"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "reproduction steps, a proof of concept, or a minimal request/response pair;"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "any configuration required to reproduce (auth provider, profile, installed modules);"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "whether you have disclosed it anywhere else, and any deadline you are working to."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A PGP key for encrypted reports is not yet published."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Until it is, send non-sensitive details by email and use the GitHub private advisory for anything that includes credentials, customer data or a working exploit."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "This file will be updated with a key fingerprint when one exists."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "What happens next"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Stage | Target"
+by = ["exempt:label"]
+
+[[unit]]
+text = "We acknowledge your report | 3 business days"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "We confirm or dispute the finding, with a severity | 10 business days"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Fix released for Critical and High severity | 14 days from confirmation"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Fix released for Medium and Low severity | Next scheduled release"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Public disclosure | 90 days from your report, or on the day the fix ships, whichever comes first"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "We will tell you which severity we assigned and why, using CVSS v3.1 as the reference."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "If we need longer than 90 days — for example a fix that requires a breaking change to an SDK contract — we will say so before day 90 and agree an extension with you rather than letting the clock run out silently."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "If we cannot agree, you are free to disclose at 90 days; we will not treat that as a breach of anything."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "We request a CVE for confirmed vulnerabilities in released versions and credit reporters in the advisory and the changelog unless you ask us not to."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Supported versions"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Experimently has not yet cut a 1.0.0 release."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_version_is_before_1_0"]
+
+[[unit]]
+text = "Until it does, only the latest release receives fixes: upgrade to it."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Version | Supported"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The latest release | ✅ Receives fixes"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Older releases and release candidates | ❌ Upgrade to the latest release"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Once 1.0.0 ships, the policy is: the current minor release and the one before it receive security fixes, for at least 6 months after the newer minor is released."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "The whole repository is covered by this policy: the core, the optional modules under modules/ (both Apache-2.0) and the SDKs (MIT)."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit"]
+
+[[unit]]
+text = "Scope"
+by = ["exempt:label"]
+
+[[unit]]
+text = "In scope:"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "the backend API, background schedulers and Lambda functions;"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "the dashboard;"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "the client SDKs in sdk/;"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "the optional modules in modules/ (workspaces, custom roles, SSO, HIPAA, compliance reporting, warehouse analytics, integrations, counters, ETL, split URL testing);"
+by = ["test:backend/tests/unit/core/test_module_names.py::test_the_registration_provides_exactly_the_known_modules"]
+
+[[unit]]
+text = "the shipped container images, docker-compose.yml and the CDK stacks;"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "authentication, authorisation, tenancy and audit-trail integrity."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Out of scope (report them anyway if you think we are wrong, but expect them to be closed as informational):"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "findings that require an attacker to already hold valid administrator credentials, unless they cross a documented trust boundary;"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "results from a default development configuration — DEV_AUTH_BYPASS=true, ENVIRONMENT=development, the seeded admin@demo.com account, the placeholder SECRET_KEY and first administrator's password in .env.example — which are documented as insecure and refuse to start under ENVIRONMENT=production;"
+by = [
+    "test:backend/tests/unit/core/test_config_environment.py::TestHardenedSecrets::test_committed_placeholders_are_refused",
+    "test:backend/tests/unit/core/test_config_environment.py::TestAuthSettings::test_bypass_rejected_in_staging_and_production",
+]
+
+[[unit]]
+text = "missing hardening headers or rate limits on the demo applications in demo/;"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "vulnerabilities in third-party dependencies with no exploitable path in this codebase (send them to the upstream project; open a normal issue here to ask for a bump);"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "volumetric denial of service, spam or social-engineering findings;"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "reports produced solely by an automated scanner with no demonstrated impact."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Safe harbour"
+by = ["exempt:label"]
+
+[[unit]]
+text = "If you make a good-faith effort to comply with this policy while researching a vulnerability in Experimently, we will consider your research authorised, we will not initiate or support legal action against you, and we will not report you to law enforcement."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "We will make it known that your actions were authorised if a third party brings legal action against you for research conducted under this policy."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Good faith means:"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "you only test against your own installation, or against infrastructure we have explicitly designated for testing — never against another user's data or another organisation's deployment;"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "you do not access, modify, destroy or exfiltrate data that is not yours, and you stop as soon as you have confirmed the vulnerability;"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "you do not degrade the availability of any service (no volumetric or destructive testing);"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "you give us a reasonable opportunity to fix the issue before disclosing it, per the timelines above;"
+by = ["exempt:policy"]
+
+[[unit]]
+text = "you comply with applicable law."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "This safe harbour is a commitment from the Experimently maintainers about how we will behave."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "It cannot bind a third party — if you test against someone else's hosted Experimently deployment, their terms and their law apply, not ours."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Hardening your own deployment"
+by = ["exempt:label"]
+
+[[unit]]
+text = "docs/security/ and docs/self-hosting/ cover the settings that matter most: ENVIRONMENT=production (which makes the configuration validators deny by default), AUTH_PROVIDER, DEV_AUTH_BYPASS=false, a real SECRET_KEY, TLS termination, and restricting /metrics with METRICS_TOKEN."
+by = [
+    "test:backend/tests/unit/core/test_config_environment.py::TestAuthSettings::test_bypass_rejected_in_staging_and_production",
+    "test:backend/tests/unit/core/test_config_environment.py::TestHardenedSecrets::test_committed_placeholders_are_refused",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestMetricsEndpoint::test_token_required_when_configured",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestMetricsEndpoint::test_forbidden_outside_development_without_token",
+]
