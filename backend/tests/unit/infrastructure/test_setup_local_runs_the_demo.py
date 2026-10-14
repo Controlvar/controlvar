@@ -111,6 +111,28 @@ def test_the_bandit_weights_are_recomputed_every_minute_and_every_5_by_default()
     assert Settings.model_fields["BANDIT_UPDATE_INTERVAL_MINUTES"].default == 5
 
 
+def test_the_safety_and_rollout_schedulers_run_every_minute_unless_already_set():
+    """The demo's schedulers check every minute; the backend's defaults are 5 and 15."""
+    text = _script(SETUP_LOCAL)
+    for name in ("SAFETY_CHECK_INTERVAL_MINUTES", "ROLLOUT_CHECK_INTERVAL_MINUTES"):
+        assert f'export {name}="${{{name}:-1}}"' in text, name
+    assert Settings.model_fields["SAFETY_CHECK_INTERVAL_MINUTES"].default == 5
+    assert Settings.model_fields["ROLLOUT_CHECK_INTERVAL_MINUTES"].default == 15
+    exported = text.index("export SAFETY_CHECK_INTERVAL_MINUTES")
+    assert exported < text.index("uvicorn backend.app.main:app"), (
+        "the backend must start with the intervals set"
+    )
+
+
+def test_the_script_runs_neither_the_crash_incident_nor_the_rollout_story():
+    """StreamPulse gets steady traffic only: no --incident, no rollout_story.py."""
+    commands = _commands(_script(SETUP_LOCAL))
+    simulator = [c for c in commands if "demo/streampulse/simulator/" in c]
+    assert simulator, "setup-local.sh starts no StreamPulse simulator"
+    assert not [c for c in simulator if "--incident" in c or "rollout_story" in c]
+    assert not [c for c in commands if "rollout_story" in c]
+
+
 def test_the_first_run_installs_the_python_and_node_dependencies_and_seeds_the_data():
     commands = _commands(_script(SETUP_LOCAL))
     assert 'pip install -r "$REPO_ROOT/backend/requirements.txt" -q' in commands

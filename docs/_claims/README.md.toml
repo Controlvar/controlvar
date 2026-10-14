@@ -138,7 +138,17 @@ by = [
 
 [[unit]]
 text = "StreamPulse (demo/streampulse, http://localhost:3300): a simulated mobile app with a device picker, targeting by OS version/region/tier, a kill switch, mutual exclusion and a scripted rollout story in which a crash spike triggers an automatic safety rollback."
-by = ["untested:S"]
+by = [
+    "journey:demo-streampulse#app",
+    "journey:demo-streampulse#premium-iphone",
+    "journey:demo-streampulse#rule-matches-the-premium-iphone",
+    "journey:demo-streampulse#rule-boundary",
+    "journey:demo-streampulse#recs-off-evaluated",
+    "journey:demo-streampulse#profile",
+    "journey:demo-streampulse-simulator#critical",
+    "journey:demo-streampulse-simulator#rolled-back",
+    "journey:demo-streampulse-simulator#by-the-monitor",
+]
 
 [[unit]]
 text = "Walkthrough: demo/DEMO_GUIDE.md."
