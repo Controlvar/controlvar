@@ -13,7 +13,7 @@
 
 [meta]
 documents = 53
-exec = 303
+exec = 304
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -571,9 +571,9 @@ expects = 25
 [[document]]
 path = "docs/self-hosting/migrations.md"
 environment = "stack"
-exec = 6
+exec = 7
 skip = 11
-expects = 5
+expects = 6
 
 # The contributor pages: the Quick Start's stack and a development virtual
 # environment at the repository root (stack-dev; CI's dev shards build it).

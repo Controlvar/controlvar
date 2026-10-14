@@ -98,3 +98,86 @@ def test_web_concurrency_is_the_number_of_uvicorn_workers(tmp_path, workers):
     started = [line for line in calls.splitlines() if line.startswith("uvicorn ")]
     assert len(started) == 1, calls
     assert f" --workers {workers}" in started[0] + " ", started[0]
+
+
+#: Records every call, and fails the bootstrap when BOOTSTRAP_FAILS is set.
+FAILING_BOOTSTRAP = """#!/usr/bin/env bash
+printf '%s %s\\n' "$(basename "$0")" "$*" >> "$STUB_LOG"
+if [ -n "${BOOTSTRAP_FAILS:-}" ] && [ "$*" = "-m backend.app.db.bootstrap" ]; then
+    exit 1
+fi
+exit 0
+"""
+
+
+def _started(calls: str) -> list[str]:
+    """The bootstrap and server lines, in the order the entrypoint ran them."""
+    return [
+        line
+        for line in calls.splitlines()
+        if line == "python -m backend.app.db.bootstrap" or line.startswith("uvicorn ")
+    ]
+
+
+@pytest.mark.regression
+def test_by_default_the_bootstrap_runs_on_every_start_before_the_api_serves(tmp_path):
+    """RUN_MIGRATIONS unset (empty here) is the image's default, true: the
+    bootstrap, then uvicorn; the Dockerfile does not change that default."""
+    for attempt in ("first", "second"):
+        code, stderr, calls = run(
+            tmp_path / attempt, "uvicorn", "backend.app.main:app", RUN_MIGRATIONS=""
+        )
+        assert code == 0, stderr
+        started = _started(calls)
+        assert started[0] == "python -m backend.app.db.bootstrap", calls
+        assert len(started) == 2 and started[1].startswith("uvicorn "), calls
+    dockerfile = (REPO_ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
+    assert "RUN_MIGRATIONS" not in dockerfile.replace(
+        "schema when RUN_MIGRATIONS=true", ""
+    ), "the Dockerfile sets RUN_MIGRATIONS"
+    assert 'ENTRYPOINT ["/app/backend/docker-entrypoint.sh"]' in dockerfile
+
+
+@pytest.mark.regression
+def test_the_api_does_not_start_when_the_bootstrap_fails(tmp_path):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for name, body in (("python", FAILING_BOOTSTRAP), ("uvicorn", STUB)):
+        (bin_dir / name).write_text(body)
+        (bin_dir / name).chmod(0o755)
+    log = tmp_path / "calls.log"
+    log.write_text("")
+    env = {
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}",
+        "HOME": str(tmp_path),
+        "STUB_LOG": str(log),
+        "APP_DIR_FOR_TEST": str(tmp_path),
+        "WAIT_FOR_DB": "false",
+        "RUN_MIGRATIONS": "true",
+        "BOOTSTRAP_FAILS": "1",
+        "OPENSSL_armcap": "0",
+        "ENVIRONMENT": "development",
+    }
+    driver = (
+        'cd() { builtin cd "$APP_DIR_FOR_TEST"; }; export -f cd; exec bash "$0" "$@"'
+    )
+    result = subprocess.run(
+        [BASH, "-c", driver, str(ENTRYPOINT), "uvicorn", "backend.app.main:app"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode != 0, result.stderr
+    assert _started(log.read_text()) == ["python -m backend.app.db.bootstrap"]
+
+
+@pytest.mark.regression
+def test_run_migrations_false_skips_the_bootstrap(tmp_path):
+    code, stderr, calls = run(
+        tmp_path, "uvicorn", "backend.app.main:app", RUN_MIGRATIONS="false"
+    )
+    assert code == 0, stderr
+    started = _started(calls)
+    assert len(started) == 1 and started[0].startswith("uvicorn "), calls
+    assert "RUN_MIGRATIONS=false: skipping bootstrap" in stderr

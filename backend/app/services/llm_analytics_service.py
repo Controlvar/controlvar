@@ -14,7 +14,7 @@ import json
 import logging
 import math
 import statistics
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 from uuid import UUID
 
 from scipy import stats
@@ -143,6 +143,29 @@ def _cohens_d(a: List[float], b: List[float]) -> Optional[float]:
     return mean_diff / math.sqrt(pooled_var)
 
 
+WinnerMetric = Literal["business_metric", "auto_eval"]
+
+
+def _choose_winner_metric(
+    bm_by_variant: Dict[str, List[float]],
+    ae_by_variant: Dict[str, List[float]],
+) -> Optional[WinnerMetric]:
+    """
+    The one metric every variant is compared on (#1214).
+
+    ``"business_metric"`` when every variant has at least one business-metric
+    value; otherwise ``"auto_eval"`` when at least one variant has a judge
+    score; otherwise None. The winner, and every variant's p-value and effect
+    size, use this metric, so a variant's business-metric mean is never
+    compared with another variant's judge mean.
+    """
+    if bm_by_variant and all(bm_by_variant.values()):
+        return "business_metric"
+    if any(ae_by_variant.values()):
+        return "auto_eval"
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Analytics Service
 # ---------------------------------------------------------------------------
@@ -165,8 +188,9 @@ class LLMEvaluationAnalyticsService:
           score (never judged, or the judge call failed or gave no score),
           which every auto-eval statistic leaves out
         - mean/CI for latency, cost, auto_eval_score, business_metric
-        - p-value and Cohen's d vs control
-        - winner determination
+        - p-value and Cohen's d vs control, on the winner's metric
+        - winner determination, on one metric for every variant
+          (``winner_metric``, #1214)
         """
         experiment = (
             db.query(LLMExperiment).filter(LLMExperiment.id == experiment_id).first()
@@ -190,22 +214,33 @@ class LLMEvaluationAnalyticsService:
                 evals_by_variant[vid] = []
             evals_by_variant[vid].append(ev)
 
-        # Find control variant evaluations
-        control_variant = next((v for v in experiment.variants if v.is_control), None)
-        control_bm: List[float] = []
-        control_ae: List[float] = []
-        if control_variant:
-            control_evals = evals_by_variant.get(str(control_variant.id), [])
-            control_bm = [
+        # Each variant's business-metric values and judge scores
+        bm_by_variant: Dict[str, List[float]] = {}
+        ae_by_variant: Dict[str, List[float]] = {}
+        for variant in experiment.variants:
+            vid = str(variant.id)
+            evals = evals_by_variant.get(vid, [])
+            bm_by_variant[vid] = [
                 e.business_metric_value
-                for e in control_evals
+                for e in evals
                 if e.business_metric_value is not None
             ]
-            control_ae = [
-                e.auto_eval_score
-                for e in control_evals
-                if e.auto_eval_score is not None
+            ae_by_variant[vid] = [
+                e.auto_eval_score for e in evals if e.auto_eval_score is not None
             ]
+
+        # One metric for the winner and for every p-value and effect size
+        winner_metric = _choose_winner_metric(bm_by_variant, ae_by_variant)
+        metric_by_variant: Dict[str, List[float]] = {}
+        if winner_metric == "business_metric":
+            metric_by_variant = bm_by_variant
+        elif winner_metric == "auto_eval":
+            metric_by_variant = ae_by_variant
+
+        control_variant = next((v for v in experiment.variants if v.is_control), None)
+        control_values: List[float] = []
+        if control_variant:
+            control_values = metric_by_variant.get(str(control_variant.id), [])
 
         variant_stats_list: List[VariantStats] = []
         winner_score: Optional[float] = None
@@ -220,35 +255,26 @@ class LLMEvaluationAnalyticsService:
             costs = [
                 e.estimated_cost_usd for e in evals if e.estimated_cost_usd is not None
             ]
-            ae_scores = [
-                e.auto_eval_score for e in evals if e.auto_eval_score is not None
-            ]
+            ae_scores = ae_by_variant[vid]
             n_unscored = len(evals) - len(ae_scores)
             hr_scores = [e.human_rating for e in evals if e.human_rating is not None]
-            bm_values = [
-                e.business_metric_value
-                for e in evals
-                if e.business_metric_value is not None
-            ]
+            bm_values = bm_by_variant[vid]
+            metric_values = metric_by_variant.get(vid, [])
 
             lat_ci = _confidence_interval_95(latencies)
             cost_ci = _confidence_interval_95(costs)
             ae_ci = _confidence_interval_95(ae_scores)
             bm_ci = _confidence_interval_95(bm_values)
 
-            # p-value and effect size vs control
+            # p-value and effect size vs control, on the winner's metric
             p_val: Optional[float] = None
             eff: Optional[float] = None
-            if not variant.is_control:
-                if bm_values and control_bm:
-                    p_val = _welch_t_test(control_bm, bm_values)
-                    eff = _cohens_d(control_bm, bm_values)
-                elif ae_scores and control_ae:
-                    p_val = _welch_t_test(control_ae, ae_scores)
-                    eff = _cohens_d(control_ae, ae_scores)
+            if not variant.is_control and metric_values and control_values:
+                p_val = _welch_t_test(control_values, metric_values)
+                eff = _cohens_d(control_values, metric_values)
 
-            # Determine winner by primary metric (business_metric > auto_eval)
-            primary_score = _mean(bm_values) if bm_values else _mean(ae_scores)
+            # The winner has the highest mean of the winner's metric
+            primary_score = _mean(metric_values)
             if primary_score is not None and (
                 winner_score is None or primary_score > winner_score
             ):
@@ -289,6 +315,7 @@ class LLMEvaluationAnalyticsService:
             variant_stats=variant_stats_list,
             winner_variant_id=winner_id,
             winner_variant_name=winner_name,
+            winner_metric=winner_metric,
             total_evaluations=len(all_evals),
             total_auto_eval_unscored=sum(
                 1 for e in all_evals if e.auto_eval_score is None

@@ -18,7 +18,5 @@ own `gh` login: the Actions token cannot read branch protection.
 
 - `lint`: see "Lint and format" in the
   [Development Guidelines](guidelines.md#lint-and-format).
-- `core-build`: `make core-build`, which runs `scripts/core_build.sh`. It copies
-  the tree, deletes `modules/` from the copy, then rebuilds and tests it, and never
-  touches your checkout.
+- `core-build`: `make core-build`, which runs `scripts/core_build.sh`.
 - The backend and dashboard suites: see the [Testing Guide](testing-guide.md).
