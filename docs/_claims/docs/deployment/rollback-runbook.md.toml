@@ -282,7 +282,7 @@ text = "It prints false for a revision that does not migrate on start."
 by = ["untested:T"]
 
 [[unit]]
-text = "If it prints None or true, that revision runs the older release's migrations on start, and against a newer schema it refuses to start."
+text = "One that prints None (no such variable) or prints true runs the older release's migrations on start, and against a newer schema it refuses to start."
 by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated"]
 
 [[unit]]

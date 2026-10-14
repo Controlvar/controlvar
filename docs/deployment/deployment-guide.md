@@ -425,7 +425,8 @@ The deploy job's timeout is 160 minutes: every wait in it is a named bound
 (snapshot, migration, traffic shift, dashboard rollout, the two smoke tests)
 and the sum leaves room for two uncached image builds.
 
-**Alarms watch the API until the deployment ends.** The deployment group has
+**Alarms watch the API until the deployment ends**
+([#148](https://github.com/getexperimently/experimently/issues/148)). The deployment group has
 two alarms, `experimentation-api-5xx-blue-<env>` and
 `experimentation-api-5xx-green-<env>`, one per target group, because
 CodeDeploy swaps the two on every deployment. Both are polled for the whole

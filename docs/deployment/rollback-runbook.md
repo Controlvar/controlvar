@@ -191,8 +191,8 @@ aws ecs describe-task-definition --task-definition "$TARGET_TD" \
   --output text
 ```
 
-It prints `false` for a revision that does not migrate on start. If it prints
-`None` or `true`, that revision runs the older
+It prints `false` for a revision that does not migrate on start. One that
+prints `None` (no such variable) or prints `true` runs the older
 release's migrations on start, and against a newer schema it refuses to
 start. Register a copy of it with
 `RUN_MIGRATIONS=false` added to the `backend` container's environment, and roll

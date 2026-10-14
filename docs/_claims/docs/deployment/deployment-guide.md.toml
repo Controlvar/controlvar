@@ -787,7 +787,7 @@ by = [
 ]
 
 [[unit]]
-text = "Alarms watch the API until the deployment ends."
+text = "Alarms watch the API until the deployment ends (#148)."
 by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm"]
 
 [[unit]]
