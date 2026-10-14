@@ -859,12 +859,16 @@ def test_only_generated_snowflake_statements_run(key):
 def test_no_secret_reaches_a_log_record(key, pair, caplog):
     """At DEBUG, with httpx and httpcore tracing, no key or JWT is logged."""
     caplog.set_level(logging.DEBUG)
+    # The application holds these two at WARNING (configure_logging); the test
+    # turns their tracing back on, which is what it exists to read.
+    caplog.set_level(logging.DEBUG, logger="httpx")
+    caplog.set_level(logging.DEBUG, logger="httpcore")
     fake = NetworkFake(happy())
     adapter(key, fake).run_query(metric_query(), Deadline(600))
     token = fake.requests[0].headers["authorization"].split(" ", 1)[1]
     private_b64 = base64.b64encode(pair.private_blob).decode()
     text = caplog.text + "".join(str(r.__dict__) for r in caplog.records)
-    assert caplog.records
+    assert any(r.name.split(".")[0] in ("httpx", "httpcore") for r in caplog.records)
     for secret in (token, token.split(".")[2], private_b64[40:80], "PRIVATE KEY"):
         assert secret not in text
 

@@ -618,11 +618,15 @@ def test_bytes_at_the_cap_run(key):
 def test_no_secret_reaches_a_log_record(key, pem, caplog):
     """At DEBUG, with httpx and httpcore tracing, no key, assertion or token is logged."""
     caplog.set_level(logging.DEBUG)
+    # The application holds these two at WARNING (configure_logging); the test
+    # turns their tracing back on, which is what it exists to read.
+    caplog.set_level(logging.DEBUG, logger="httpx")
+    caplog.set_level(logging.DEBUG, logger="httpcore")
     fake = GoogleFake(happy())
     adapter(key, fake, sleeper=lambda s: None).run_query(metric_query(), Deadline(600))
     assertion = fake.requests[0].form()["assertion"][0]
     text = caplog.text + "".join(str(r.__dict__) for r in caplog.records)
-    assert caplog.records
+    assert any(r.name.split(".")[0] in ("httpx", "httpcore") for r in caplog.records)
     for secret in (
         "synthetic-access-token-for-tests",
         assertion,

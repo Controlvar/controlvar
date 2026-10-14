@@ -16,6 +16,8 @@ import boto3
 import watchtower
 from pythonjsonlogger.jsonlogger import JsonFormatter
 
+from backend.app.core.logger import quiet_http_client_loggers
+
 
 class CustomJsonFormatter(JsonFormatter):
     """Custom JSON formatter that adds additional fields to log records."""
@@ -59,6 +61,7 @@ def setup_logging(
     enable_cloudwatch: bool = False,
 ) -> logging.Logger:
     """Set up logging configuration."""
+    quiet_http_client_loggers()
     logger = logging.getLogger()
     logger.setLevel(level)
 

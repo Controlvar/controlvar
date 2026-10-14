@@ -267,3 +267,15 @@ by = [
     "test:backend/tests/unit/core/test_query_redaction.py::test_a_listed_name_has_its_value_replaced_on_any_route",
     "test:backend/tests/unit/core/test_query_redaction.py::test_every_value_on_the_oidc_callback_is_replaced_and_every_name_kept",
 ]
+
+[[unit]]
+text = "The httpx and httpcore loggers are held at WARNING whatever LOG_LEVEL is, so the line the HTTP client writes for each outgoing request, which includes the host it called, is not in the log."
+by = [
+    "test:backend/tests/unit/core/test_logging_standards.py::test_the_http_clients_request_lines_are_not_written_at_any_log_level",
+    "test:backend/tests/unit/core/test_logging_standards.py::test_the_older_setup_function_holds_the_http_client_at_warning_too",
+    "test:backend/tests/unit/core/test_logging_standards.py::test_the_api_started_at_info_does_not_log_the_hosts_it_calls",
+]
+
+[[unit]]
+text = "A warning or an error from either is still written."
+by = ["test:backend/tests/unit/core/test_logging_standards.py::test_a_warning_from_the_http_client_is_still_written"]
