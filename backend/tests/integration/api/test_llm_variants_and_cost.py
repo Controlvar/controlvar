@@ -118,19 +118,30 @@ def test_each_variants_mean_cost_is_in_the_results(db_session, monkeypatch):
         experiment = _experiment(client, owner)
         started = client.post(f"{BASE}/{experiment['id']}/start", headers=auth(owner))
         assert started.status_code == 200, started.text
-        for i in range(12):
+        # Users until both variants have answered at least twice (the split is
+        # a hash of the experiment's id, so which users go where varies).
+        seen = {}
+        calls = 0
+        while min(seen.get(v["id"], 0) for v in experiment["variants"]) < 2:
+            assert calls < 60, seen
             resp = client.post(
                 f"{BASE}/{experiment['id']}/complete",
-                json={"user_id": f"llm-user-{i}", "input_variables": {"question": "q"}},
+                json={
+                    "user_id": f"llm-user-{calls}",
+                    "input_variables": {"question": "q"},
+                },
                 headers=auth(owner),
             )
             assert resp.status_code == 200, resp.text
+            variant_id = str(resp.json()["variant_id"])
+            seen[variant_id] = seen.get(variant_id, 0) + 1
+            calls += 1
         results = client.get(f"{BASE}/{experiment['id']}/results", headers=auth(owner))
         assert results.status_code == 200, results.text
         by_name = {v["variant_name"]: v for v in results.json()["variant_stats"]}
         # gpt-4o: $0.0025 and $0.010 per 1k tokens; gpt-4o-mini: $0.00015 and $0.0006.
         expected = {"control": 2 * 0.0025 + 0.010, "treatment": 2 * 0.00015 + 0.0006}
         for name, cost in expected.items():
-            if by_name[name]["n_evaluations"]:
-                assert by_name[name]["mean_cost_usd"] == pytest.approx(cost, rel=1e-9)
-        assert sum(v["n_evaluations"] for v in by_name.values()) == 12
+            assert by_name[name]["n_evaluations"] >= 2, by_name
+            assert by_name[name]["mean_cost_usd"] == pytest.approx(cost, rel=1e-9)
+        assert sum(v["n_evaluations"] for v in by_name.values()) == calls
