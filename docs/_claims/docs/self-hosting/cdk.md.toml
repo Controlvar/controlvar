@@ -5,7 +5,7 @@ document = "docs/self-hosting/cdk.md"
 
 [[unit]]
 text = "AWS CDK Deployment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The platform's AWS infrastructure is defined as code using AWS CDK v2, in Python: the app is infrastructure/cdk/app.py, and infrastructure/cdk/cdk.json runs it with python3 app.py."
@@ -39,15 +39,15 @@ by = [
 
 [[unit]]
 text = "Prerequisites"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Tool | Version | Install"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "AWS Account | Any | Sign up"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Python | 3.11+ | The CDK app is Python"
@@ -71,7 +71,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "One-Time Bootstrap"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "CDK bootstrap provisions the S3 bucket and IAM roles that CDK needs to deploy assets."
@@ -83,19 +83,22 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Example:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "You can find your account ID with:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Required Environment Variables"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "infrastructure/cdk/app.py reads these from the environment."
-by = ["exempt:baseline"]
+by = [
+    "test:infrastructure/tests/test_secret_arns.py::test_the_app_refuses_to_synthesise_without_an_input",
+    "test:infrastructure/tests/test_alarm_email.py::test_the_app_refuses_to_synthesise_staging_or_prod_without_it",
+]
 
 [[unit]]
 text = "cdk synth, cdk diff, cdk deploy and cdk destroy fail without the ones marked required, ALARM_EMAIL is required for staging and prod, and the three secret ARNs are required in every environment (below)."
@@ -103,7 +106,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "One region."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_one_region"]
 
 [[unit]]
 text = "The Deploy, Rollback and Database Migration workflows act in us-west-2 (AWS_REGION at the top of each), so deploy the stacks, the ECR repositories, the secrets and the certificate there too."
@@ -111,7 +114,7 @@ by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_one
 
 [[unit]]
 text = "To use another region, change it in all three workflows and use it everywhere below."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "ENVIRONMENT is dev (the default), staging, prod or demo:"
@@ -187,7 +190,7 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "Until it is confirmed, the alarms fire and nobody is told, and the link does not last for ever, so confirm it the same day."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Do not just click it: a subscription confirmed that way can be cancelled by the unsubscribe link in any alarm email, by anyone the email reaches."
@@ -195,7 +198,7 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "Instead, copy the Token= value out of the link and confirm it with --authenticate-on-unsubscribe true, after which unsubscribing takes an authenticated AWS call:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The last command must show the email subscription with a real ARN, not PendingConfirmation."
@@ -210,7 +213,7 @@ by = [
 
 [[unit]]
 text = "The secrets themselves must exist first (Secrets Management); read each ARN by name, read-only, in the region the stacks deploy to (the third only for the full profile):"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "JWT_SECRET_ARN, FIRST_SUPERUSER_PASSWORD_SECRET_ARN: always."
@@ -221,11 +224,15 @@ by = [
 
 [[unit]]
 text = "AUDIT_HMAC_KEY_SECRET_ARN: the full profile only (checked on core too if you set it)."
-by = ["exempt:baseline"]
+by = ["test:infrastructure/tests/test_secret_arns.py::test_the_core_profile_does_not_need_the_audit_key_but_checks_one_given"]
 
 [[unit]]
 text = "Each must be the complete ARN, arn:aws:secretsmanager:<region>:<account>:secret:/<env>/experimentation/<name>-<suffix>, in the stack's own account and region."
-by = ["exempt:baseline"]
+by = [
+    "test:infrastructure/tests/test_secret_arns.py::test_a_partial_arn_is_refused",
+    "test:infrastructure/tests/test_secret_arns.py::test_a_wrong_region_is_refused",
+    "test:infrastructure/tests/test_secret_arns.py::test_a_wrong_account_is_refused",
+]
 
 [[unit]]
 text = "Synth refuses a missing value, a partial ARN (one that stops at the name: ECS cannot resolve it), an ARN for a different environment (/prod/..."
@@ -237,7 +244,10 @@ by = [
 
 [[unit]]
 text = "in staging), or one variable's secret given in another."
-by = ["exempt:baseline"]
+by = [
+    "test:infrastructure/tests/test_secret_arns.py::test_a_staging_arn_is_refused_in_a_prod_synth",
+    "test:infrastructure/tests/test_secret_arns.py::test_the_jwt_arn_in_the_superuser_slot_is_refused",
+]
 
 [[unit]]
 text = "The refusal names the variable and the command above, and never prints the value."
@@ -253,7 +263,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Changing a secret's value keeps its ARN."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "An ARN carries the account ID: keep these out of issues, pull requests and logs."
@@ -268,19 +278,22 @@ by = [
 
 [[unit]]
 text = "The task definition takes them from Secrets Manager when each task starts; see the list in the Deployment README."
-by = ["exempt:baseline"]
+by = ["test:infrastructure/tests/test_secret_arns.py::test_each_execution_role_reads_exactly_its_task_definitions_secrets"]
 
 [[unit]]
 text = "The API image is pulled from the ECR repository experimentation-platform/backend, which the CDK does not create."
-by = ["test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_api_service_does_not_run_a_mutable_tag"]
+by = [
+    "test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_api_service_does_not_run_a_mutable_tag",
+    "test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_api_runs_from_experimentation_platform_backend_which_no_stack_creates",
+]
 
 [[unit]]
 text = "Deploy All Stacks"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Point the hostname at the load balancer"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "No stack creates a DNS record."
@@ -288,27 +301,27 @@ by = ["untested:T"]
 
 [[unit]]
 text = "After cdk deploy the load balancer is up, but the host in PUBLIC_BASE_URL (app.<domain>) does not resolve until you add an alias record for it in your Route 53 hosted zone."
-by = ["exempt:baseline"]
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_app_creates_no_dns_record"]
 
 [[unit]]
 text = "Until then curl reports 000, and the Deploy workflow's smoke test cannot reach the platform."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "Do this once per environment, after the first cdk deploy of the Fargate stack."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Add a record for every hostname the platform answers on: the host in PUBLIC_BASE_URL always, and any other name on the certificate that clients use (the commands below also add api.<domain>; leave that entry out if you do not use it)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Set the hosted zone's name and the two hostnames:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Look up the zone, and the load balancer by its name."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The Fargate stack names it experimentation-<env>, so this finds the right one in an account with more than one load balancer; do not take the first internet-facing one."
@@ -316,7 +329,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Both commands must print exactly one value:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "ALB_DNS is also the ALBDnsName output of experimentation-fargate-<env>."
@@ -328,11 +341,11 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Create, or update, an alias A record for each hostname, and wait for Route 53 to apply the change:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Check that each hostname reaches the platform:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each prints 200."
@@ -359,11 +372,11 @@ by = ["untested:T"]
 
 [[unit]]
 text = "When you tear an environment down, delete them (the same change with \"Action\": \"DELETE\"), or they are deleted with the hosted zone if you delete the zone itself."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "cdk deploy does not create the schema"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The API tasks never run database migrations: their task definition sets RUN_MIGRATIONS=false and SEED= (empty)."
@@ -381,7 +394,7 @@ by = [
 
 [[unit]]
 text = "So after the first cdk deploy of an environment the API runs against an empty database until the first Deploy:"
-by = ["exempt:baseline"]
+by = ["test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations"]
 
 [[unit]]
 text = "/health answers 200 through the hostname once its alias record exists (above), because it checks that the database answers, and the load balancer's health checks pass;"
@@ -397,7 +410,7 @@ by = ["untested:S"]
 
 [[unit]]
 text = "Run the first Deploy soon after the first cdk deploy."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Requests that reach the API in between, from scanners as much as from people, can put one of the API's 5xx alarms into ALARM, and Deploy refuses to start while one is."
@@ -417,7 +430,7 @@ by = ["test:backend/tests/unit/infrastructure/test_restore_repoint.py::test_stag
 
 [[unit]]
 text = "See On AWS, the API does not migrate for why, and for an environment whose Fargate stack was deployed before this setting existed."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Deploy refuses to deploy an API revision that lacks the setting, and says to cdk deploy the Fargate stack from a current checkout first."
@@ -425,11 +438,14 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Which stacks you get: core or full"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The CDK app deploys the stacks your checkout has, the same way the API loads the modules it finds."
-by = ["exempt:baseline"]
+by = [
+    "test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_full_checkout_builds_the_module_stacks",
+    "test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_core_checkout_builds_none_of_them",
+]
 
 [[unit]]
 text = "A core checkout has no modules/ directory and gets the core stacks below."
@@ -440,11 +456,11 @@ by = [
 
 [[unit]]
 text = "A full checkout also has modules/infrastructure/cdk/stacks, and cdk deploy --all then adds three more:"
-by = ["exempt:baseline"]
+by = ["test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_full_checkout_builds_the_module_stacks"]
 
 [[unit]]
 text = "Stack | Module | What it is"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "experimentation-dynamodb-counters-<env> | counters | The real-time counter table the bandit scheduler reads"
@@ -460,7 +476,7 @@ by = ["test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::tes
 
 [[unit]]
 text = "The first line the app prints says which profile it picked:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "EXPERIMENTLY_PROFILE — the same variable the container images and the API use — overrides the choice:"
@@ -476,7 +492,7 @@ by = ["test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::tes
 
 [[unit]]
 text = "Two things follow from the profile, so a core deployment is consistent rather than half-configured:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The monitoring stack's Kinesis widget and its iterator-age alarm are created only alongside the analytics stack, and they watch the stream that stack actually creates."
@@ -487,7 +503,10 @@ by = [
 
 [[unit]]
 text = "A core deployment has neither."
-by = ["exempt:baseline"]
+by = [
+    "test:infrastructure/tests/test_app_profiles.py::TestMonitoringFollowsTheProfile::test_the_core_profile_has_no_alarm_on_a_stream_it_never_creates",
+    "test:infrastructure/tests/test_app_profiles.py::TestMonitoringFollowsTheProfile::test_the_full_profile_keeps_it_on_the_real_stream",
+]
 
 [[unit]]
 text = "Without the counters stack there is no counter table: the bandit scheduler falls back to PostgreSQL for its statistics, which is the core behaviour."
@@ -495,11 +514,11 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Individual Stack Deployment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Deploy specific stacks during development or when updating a single component:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "cdk deploy takes a stack id, which cdk list prints for your environment -- not a class name:"
@@ -507,11 +526,11 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Deploy only the API service (faster for code changes):"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Deploy only monitoring resources:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Redeploying experimentation-fargate-<env> on a running environment needs two pins, printed by two read-only checks run from the repository root:"
@@ -540,15 +559,15 @@ by = [
 
 [[unit]]
 text = "The Deployment Guide, section 1.6 has the full sequence, including backend_image_tag and what to do when the dashboard is still on :bootstrap."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "What Gets Deployed"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "experimentation-vpc-<env>"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "VPC with public and private subnets across 2 availability zones"
@@ -563,12 +582,22 @@ text = "Security groups for ALB, ECS tasks, RDS, and ElastiCache"
 by = ["untested:T"]
 
 [[unit]]
-text = "The VPC is 10.0.0.0/16, with public, private and isolated subnets and gateway endpoints for S3 and DynamoDB."
+text = "The VPC is 10.0.0.0/16 across two availability zones, with a public, a private and an isolated /24 in each: 10.0.0.0/24 and 10.0.1.0/24 public, 10.0.2.0/24 and 10.0.3.0/24 private, 10.0.4.0/24 and 10.0.5.0/24 isolated."
 by = [
     "test:infrastructure/tests/test_vpc_stack.py::test_vpc_created",
-    "test:infrastructure/tests/test_vpc_stack.py::test_subnet_outputs",
-    "test:infrastructure/tests/test_vpc_stack.py::test_gateway_endpoints",
+    "test:infrastructure/tests/test_vpc_stack.py::test_subnet_layout",
 ]
+
+[[unit]]
+text = "It has gateway endpoints for S3 and DynamoDB, and interface endpoints, with private DNS, for Secrets Manager, ECR (API and Docker) and CloudWatch Logs."
+by = [
+    "test:infrastructure/tests/test_vpc_stack.py::test_gateway_endpoints",
+    "test:infrastructure/tests/test_vpc_stack.py::test_interface_endpoints",
+]
+
+[[unit]]
+text = "AWS bills each interface endpoint by the hour, used or not."
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "The load balancer is the only resource open to the internet: its security group admits TCP 80 and 443 from anywhere, and no other security group rule admits the whole internet."
@@ -591,7 +620,7 @@ by = ["test:infrastructure/tests/test_no_world_open_ingress.py::test_the_bastion
 
 [[unit]]
 text = "experimentation-database-<env> and experimentation-redis-<env>"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Aurora PostgreSQL cluster: writer + 1 reader on db.r5.large for prod, a single db.t3.medium in every other environment"
@@ -611,11 +640,11 @@ by = ["untested:T"]
 
 [[unit]]
 text = "experimentation-compute-<env> and experimentation-fargate-<env>"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "ECS Fargate cluster"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "ECS task definition for the API container (1 vCPU, 2 GB memory)"
@@ -630,6 +659,7 @@ text = "Application Load Balancer with an HTTPS listener and an HTTP-to-HTTPS re
 by = [
     "test:infrastructure/tests/test_dashboard_service.py::test_the_api_paths_go_to_the_live_target_group_exactly",
     "test:infrastructure/tests/test_no_world_open_ingress.py::test_nothing_else_is_open_to_the_internet",
+    "test:infrastructure/tests/test_dashboard_service.py::test_port_80_only_redirects_to_https_443",
 ]
 
 [[unit]]
@@ -661,7 +691,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "experimentation-dynamodb-<env> and experimentation-dynamodb-counters-<env>"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Core: the events, feature-flags and overrides tables"
@@ -673,7 +703,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "experimentation-analytics-<env> (full profile only — the etl module)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Kinesis Data Stream (name generated by CloudFormation; it used to be exp-events-<random>, regenerated on every synth -- see #96)"
@@ -689,7 +719,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "experimentation-monitoring-<env>"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "CloudWatch dashboards experimentation-platform-<env> and experimentation-application-metrics-<env> (some of their widgets graph metrics nothing publishes, #424)"
@@ -722,6 +752,7 @@ by = [
     "test:infrastructure/tests/test_standing_alarms.py::test_the_standing_alarms_are_exactly_these",
     "test:infrastructure/tests/test_standing_alarms.py::test_the_composite_is_exactly_blue_and_green_and_emails_the_topic",
     "test:infrastructure/tests/test_standing_alarms.py::test_the_error_filter_is_on_the_api_tasks_log_group",
+    "test:infrastructure/tests/test_standing_alarms.py::test_the_error_log_alarm_fires_on_10_lines_in_5_minutes",
 ]
 
 [[unit]]
@@ -734,11 +765,11 @@ by = ["test:infrastructure/tests/test_app_profiles.py::TestMonitoringFollowsTheP
 
 [[unit]]
 text = "A core deployment gets neither, rather than an alarm on a stream that does not exist."
-by = ["exempt:baseline"]
+by = ["test:infrastructure/tests/test_app_profiles.py::TestMonitoringFollowsTheProfile::test_the_core_profile_has_no_alarm_on_a_stream_it_never_creates"]
 
 [[unit]]
 text = "What is not deployed"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "CloudFront."
@@ -754,7 +785,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Blue/Green Deployment for Zero-Downtime Updates"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The API service uses blue/green deployment through AWS CodeDeploy, and the Deploy workflow is what drives it (deployment guide, section 3)."
@@ -766,7 +797,7 @@ by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_
 
 [[unit]]
 text = "For each deploy:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The workflow registers a new task definition and creates a CodeDeploy deployment"
@@ -790,7 +821,10 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Alarms watch the API's canary and the hour after it."
-by = ["exempt:baseline"]
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summarys_bake_is_the_groups_termination_wait",
+]
 
 [[unit]]
 text = "The Fargate stack creates two CloudWatch alarms, experimentation-api-5xx-blue-<env> and experimentation-api-5xx-green-<env>, one per target group, and attaches both to the deployment group."
@@ -812,11 +846,11 @@ by = [
 
 [[unit]]
 text = "See the rollback runbook."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Preview Changes with cdk diff"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Before deploying, preview what will change."
@@ -828,11 +862,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Write the diff to a file rather than piping it:"
-by = ["exempt:baseline"]
-
-[[unit]]
-text = "This shows additions, modifications, and deletions."
-by = ["exempt:third-party"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Do not deploy a diff with any line that names AWS::EC2::SecurityGroupEgress or AWS::EC2::SecurityGroupIngress: section 1.6 of the Deployment Guide gives the stop rule and why."
@@ -840,7 +870,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Destroying an environment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The teardown has not been rehearsed on AWS as of v0.31.1: this section comes from the stacks' templates and AWS's documentation."
@@ -864,7 +894,7 @@ by = ["exempt:advice"]
 
 [[unit]]
 text = "Tearing an environment down"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "cdk destroy --all destroys the stacks in dependency order."
@@ -883,20 +913,16 @@ text = "The glue, analytics and counters stacks exist only in a full checkout; s
 by = ["test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_core_checkout_builds_none_of_them"]
 
 [[unit]]
-text = "infrastructure/tests/test_environments_do_not_collide.py checks this order against the synthesised imports and stack dependencies."
-by = ["exempt:baseline"]
-
-[[unit]]
 text = "The buckets outside prod are emptied before they are deleted: auto_delete_objects=True adds a custom resource backed by a CDK-provided Lambda (Custom::S3AutoDeleteObjectsCustomResourceProvider, with its own IAM role) that, when the stack is deleted, denies new writes to the bucket and deletes every object version and delete marker."
 by = ["untested:T"]
 
 [[unit]]
-text = "It acts only on a bucket carrying the aws-cdk:auto-delete-objects tag, which is to say a bucket deployed with this version or later."
-by = ["exempt:baseline"]
+text = "It acts only on a bucket carrying the aws-cdk:auto-delete-objects tag."
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "What cdk destroy leaves behind and bills"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Everything below survives cdk destroy --all."
@@ -908,7 +934,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "What | Where it comes from | Environments | Billed while it exists | How to remove it"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The final snapshot CloudFormation takes of the Aurora cluster | the cluster's SNAPSHOT policy | prod | snapshot storage | aws rds delete-db-cluster-snapshot"
@@ -956,7 +982,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "ECR repositories experimentation-platform/backend and experimentation-platform/web, and their images | created by hand once per account (Deployment Guide) | shared by all environments | image storage | aws ecr delete-repository --force, once no environment needs them"
-by = ["exempt:instruction"]
+by = ["test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_api_runs_from_experimentation_platform_backend_which_no_stack_creates"]
 
 [[unit]]
 text = "The CDK bootstrap stack CDKToolkit: its cdk--assets-<account>-<region> bucket and cdk--container-assets- repository | cdk bootstrap, once per account and region | shared by all environments | storage | aws cloudformation delete-stack --stack-name CDKToolkit, after emptying the bucket"
@@ -968,7 +994,7 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "Two things are deleted but not immediately:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The database credentials secret (experimentation-database-<env>-aurora-credentials) may be scheduled for deletion with a recovery window rather than removed."
@@ -980,23 +1006,19 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "The KMS key outside prod is scheduled for deletion after the 30-day waiting period, and its alias is removed at once, so it does not block a redeploy."
-by = ["exempt:third-party"]
+by = ["test:infrastructure/tests/test_database_wiring.py::test_the_database_key_is_kept_in_prod_only"]
 
 [[unit]]
 text = "Moving an environment deployed before the rename"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "This version names the ECS cluster from ENVIRONMENT (experimentation-<env>; it was experimentation-dev in every environment, #142) and renames the CodeDeploy application to experimentation-platform-<env> (#139)."
 by = ["untested:T"]
 
 [[unit]]
-text = "An environment deployed by an earlier version cannot be updated in place."
+text = "An environment deployed by an earlier version cannot be updated in place: cdk deploy --all fails on the compute stack."
 by = ["untested:T"]
-
-[[unit]]
-text = "The cluster's name is part of an export the fargate stack imports, and CloudFormation refuses to change an export another stack is using, so cdk deploy --all fails on the compute stack."
-by = ["exempt:baseline"]
 
 [[unit]]
 text = "The fargate stack is the only importer of that export -- the analytics stack imports nothing from compute and is not touched."
@@ -1004,28 +1026,20 @@ by = ["untested:T"]
 
 [[unit]]
 text = "So, for each environment deployed before this change:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "--exclusively matters: without it the CDK CLI also destroys the stacks that depend on fargate, which is the migrations stack."
 by = ["untested:T"]
 
 [[unit]]
-text = "The two delete-log-group lines are needed because the earlier version's template retained those log groups, and the destroy follows the template that is deployed, not this one."
-by = ["exempt:baseline"]
-
-[[unit]]
-text = "A recreated fargate stack would otherwise fail on the names."
-by = ["exempt:baseline"]
+text = "Run the two delete-log-group lines: a recreated fargate stack would otherwise fail on the names."
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Skip the dashboard line if that log group does not exist."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Destroying fargate stops the API and the dashboard until the last step finishes; the database, Redis and the data stores are not touched."
 by = ["untested:T"]
-
-[[unit]]
-text = "infrastructure/tests/test_environments_do_not_collide.py derives the list of stacks to destroy from the synthesised import graph and checks it against the commands above."
-by = ["exempt:baseline"]

@@ -226,7 +226,8 @@ def test_the_break_glass_is_explained_in_one_place():
     """EM condition 4(f)/(g): only the runbook's "Fix forward while an alarm is
     firing" names the input, and it says when to use it, what it gives up, that
     the next deploy is watched again, and that the CloudWatch tricks do not
-    unblock a deploy (unverified until the first staging rehearsal)."""
+    unblock a deploy, which is dated as not rehearsed, not "not yet verified"
+    under a rehearsal the page cites."""
     section = _runbook_section("Fix forward while an alarm is firing")
     flat = " ".join(section.split())
     assert "`override_alarms`" in flat and "`override_alarms_reason`" in flat
@@ -238,7 +239,8 @@ def test_the_break_glass_is_explained_in_one_place():
     assert "`aws cloudwatch disable-alarm-actions`" in flat
     assert "`aws cloudwatch set-alarm-state`" in flat
     assert "do not unblock a deploy" in flat
-    assert "not yet verified" in flat
+    assert "not yet verified" not in flat
+    assert "not unblock a deploy: expected, and not rehearsed on AWS as of v" in flat
     assert "ALARMS OVERRIDDEN" in flat
     # Nowhere else under docs/ names the input.
     others = [
@@ -339,7 +341,8 @@ def test_the_fix_forward_cost_is_written_down(path):
     assert re.search(r"Rollback first", text), path.name
     assert "the next forward deploy is refused until it is no longer active" in text
     assert "deployment stayed active for about an hour after its traffic shift" in text
-    assert "not yet observed" not in text, path.name
+    for stale in ("not yet observed", "not yet verified", "not yet rehearsed"):
+        assert stale not in text, (path.name, stale)
 
 
 @pytest.mark.regression

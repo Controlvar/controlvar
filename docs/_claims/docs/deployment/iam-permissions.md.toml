@@ -5,7 +5,7 @@ document = "docs/deployment/iam-permissions.md"
 
 [[unit]]
 text = "IAM permissions for deploying"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Three identities touch an AWS account that runs Experimently, and they need different things."
@@ -13,11 +13,11 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Keep them separate: the one that deploys releases every week should not be able to rewrite the account."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Identity | Who uses it | When | What it needs"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Bootstrap | a human, once per account and region | cdk bootstrap | create the CDK toolkit stack (below)"
@@ -37,11 +37,11 @@ by = ["untested:T"]
 
 [[unit]]
 text = "They are set up by a person with IAM rights in the account, before the first deploy (deployment guide, section 1)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "1. The bootstrap identity"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "cdk bootstrap aws://<account>/<region> creates the CDKToolkit CloudFormation stack: an S3 bucket and an ECR repository for assets, SSM parameter /cdk-bootstrap/hnb659fds/version, and the IAM roles cdk-hnb659fds-{deploy,cfn-exec,file-publishing,image-publishing,lookup}-role-<account>-<region>."
@@ -53,11 +53,11 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "Nothing afterwards should use it."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "2. The cdk deploy identity"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "With a modern bootstrap, cdk deploy does not use its caller's permissions to create resources: it assumes the bootstrap roles, and CloudFormation acts as cdk-hnb659fds-cfn-exec-role-…."
@@ -65,7 +65,7 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "The caller needs:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "sts:AssumeRole on arn:aws:iam::<account>:role/cdk-hnb659fds-;"
@@ -77,11 +77,11 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Check it before relying on it:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "3. The workflow role (GitHub OIDC)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "One role per environment, each trusted only by jobs bound to that GitHub environment, and each holding the same permissions policy."
@@ -89,15 +89,15 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Trust policy"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "infrastructure/cdk/github-actions-trust-policy.json is the template."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Replace <AWS_ACCOUNT_ID> and <ENVIRONMENT> (staging or prod) and create one role from each copy."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It pins the token's sub claim exactly -- StringEquals, no wildcard:"
@@ -128,7 +128,7 @@ by = ["test:backend/tests/unit/infrastructure/test_oidc_sub_probe.py::test_the_p
 
 [[unit]]
 text = "Before the first staging deploy, run a throwaway job bound to the staging environment that prints only the payload of its OIDC token's sub claim, and the trust policy is written from what it printed."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The OIDC subject probe workflow (.github/workflows/oidc-sub-probe.yml; Actions → OIDC subject probe → Run workflow, from main) is that job: it prints sub, aud and environment and never the token."
@@ -140,7 +140,7 @@ by = [
 
 [[unit]]
 text = "Protect the environment first (see GitHub side)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "A sub that does not match fails AssumeRoleWithWebIdentity with \"Not authorized\", which is the safe direction."
@@ -152,7 +152,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Session length"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Each environment role needs a MaxSessionDuration of 10800 seconds (3 hours)."
@@ -164,19 +164,19 @@ by = ["untested:T"]
 
 [[unit]]
 text = "IAM's default maximum is one hour, and a request above the role's maximum fails at the \"Configure AWS credentials\" step, before anything has changed."
-by = ["exempt:third-party"]
+by = ["test:backend/tests/unit/infrastructure/test_aws_session_duration.py::test_the_aws_session_lasts_as_long_as_the_job"]
 
 [[unit]]
 text = "Create the role with --max-session-duration 10800."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "For a role that already exists:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Permissions policy"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "infrastructure/cdk/github-actions-deploy-policy.json, generated -- like the table below -- by scripts/iam_actions.py from every aws <service> <verb> in deploy.yml, rollback.yml, db-migrate.yml, the local actions under .github/actions/, the scripts those run, and any script listed in STAGED_SCRIPTS there (one the role will run that no workflow names yet, so the policy can be re-applied before the deploy that needs it)."
@@ -193,10 +193,6 @@ by = ["untested:T"]
 [[unit]]
 text = "Resources are , except rds:AddTagsToResource, which is granted only on cluster snapshots (below)."
 by = ["untested:T"]
-
-[[unit]]
-text = "Narrowing them to one environment's ARNs is worth doing; it is not done here, because the names mix generated identifiers (the Aurora cluster, the task roles) that are only known after cdk deploy."
-by = ["exempt:baseline"]
 
 [[unit]]
 text = "ecs:UpdateService is on too, and that is a deliberate choice, not an oversight."
@@ -274,7 +270,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Re-apply infrastructure/cdk/github-actions-deploy-policy.json to every environment's role before its next deploy."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The dashboard rollout (#69) adds ecs:UpdateService and ecs:ListTasks: Deploy and Rollback both run scripts/ecs_rolling_rollout.sh, which points the dashboard's service at a new revision and, when a rollout fails, lists its stopped tasks."
@@ -282,7 +278,7 @@ by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_
 
 [[unit]]
 text = "Roles created from a policy before the dashboard rollout lack ecs:UpdateService and ecs:ListTasks; re-apply this policy in every account before the first deploy of a release that includes the dashboard rollout."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "A role without them stops at the dashboard's update-service with \"ecs:UpdateService was denied\", after the API has already shifted, and Deploy then refuses a re-run until that CodeDeploy deployment is no longer active (about an hour)."
@@ -297,7 +293,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Roles created from a policy before the alarms lack codedeploy:UpdateDeploymentGroup; re-apply this policy in every account before the first cdk deploy that adds the alarms."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Without it, Rollback's create-deployment is expected to be refused with AccessDenied in the middle of an incident, and so is a Deploy with the alarm override; that has not been rehearsed on AWS as of v0.31.1."
@@ -313,7 +309,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Roles created from a policy before the pre-flight lack codedeploy:GetDeploymentGroup and cloudwatch:DescribeAlarms; re-apply this policy in every account before the first deploy of a release that includes the pre-flight."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The failure without them is loud and safe: every deploy stops at \"Could not read the API's alarms\", before anything is built, snapshotted or migrated."
@@ -321,7 +317,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "The pre-migration snapshot (#744) adds rds:AddTagsToResource, which no command names: the CDK's Aurora cluster copies its tags to each snapshot, and AWS authorizes that copy as a tagging call on the new snapshot."
-by = ["exempt:third-party"]
+by = ["test:infrastructure/tests/test_database_wiring.py::test_backups_and_instances_per_environment"]
 
 [[unit]]
 text = "scripts/iam_actions.py grants it from its IMPLIED table, only on cluster snapshots (arn:aws:rds:::cluster-snapshot:)."
@@ -329,47 +325,30 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Roles created from a policy before #744 lack rds:AddTagsToResource; re-apply this policy in every account before the next deploy."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The failure without it is loud and safe: Deploy's \"Snapshot the database before migrating\" step (and Database Migration's \"Take a snapshot first\") stops with \"not authorized to perform: rds:AddTagsToResource on resource: arn:aws:rds:...:cluster-snapshot:...\", and nothing is snapshotted, migrated or shifted."
-by = ["exempt:third-party"]
-
-[[unit]]
-text = "This is how the first staging deploy stopped."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_snapshot_is_taken_before_the_migration_from_the_stack_output",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_migrate_snapshots_before_it_reads_or_changes_the_schema",
+]
 
 [[unit]]
 text = "codedeploy:GetApplicationRevision (#754) was added after the staging rollback rehearsal on 2026-10-03 (UTC), where its absence stopped Rollback (#295)."
 by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-5963917501"]
 
 [[unit]]
-text = "AWS's CodeDeploy guide asks for it or codedeploy:RegisterApplicationRevision alongside CreateDeployment, and only the second was granted."
-by = ["exempt:baseline"]
-
-[[unit]]
-text = "Deploy's create-deployment, with an AppSpec for a new revision, passed."
-by = ["exempt:baseline"]
-
-[[unit]]
-text = "Rollback's, with an AppSpec for a revision deployed before (the previous task definition), was refused for codedeploy:GetApplicationRevision."
-by = ["exempt:baseline"]
-
-[[unit]]
-text = "Both are now granted."
-by = ["untested:T"]
-
-[[unit]]
 text = "Roles created from a policy before #754 lack it; re-apply this policy in every account before the next rollback."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The failure without it comes after the in-flight deployment has been stopped: Rollback's \"Roll back via CodeDeploy\" step stops with \"not authorized to perform: codedeploy:GetApplicationRevision\", and no rollback deployment is created."
-by = ["exempt:third-party"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_every_rollback_refusal_comes_before_the_first_aws_mutation"]
 
 [[unit]]
 text = "Action | Needed by"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "cloudformation:DescribeStackResources | scripts/check_live_target_group.py: aws cloudformation describe-stack-resources"
@@ -533,7 +512,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "GitHub side"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Each environment's protection, its AWS_ACCOUNT_ID and AWS_ROLE_ARN secrets and its PUBLIC_BASE_URL variable are section 1.5 of the deployment guide."

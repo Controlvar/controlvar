@@ -3,7 +3,7 @@
 The API exposes Prometheus metrics at `/metrics`, writes structured logs, and
 answers health probes. On AWS, the CDK's monitoring stack adds the CloudWatch
 dashboards, the alarms and the SNS topic that emails them: see
-[What Gets Deployed](cdk.md#experimentation-monitoring-env).
+[What Gets Deployed](cdk.md#experimentation-monitoring).
 
 ---
 

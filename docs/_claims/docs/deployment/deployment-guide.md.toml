@@ -5,11 +5,11 @@ document = "docs/deployment/deployment-guide.md"
 
 [[unit]]
 text = "Deployment Guide — Experimently"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Audience: whoever stands up an environment, and whoever deploys to it."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Environments: staging and prod -- one path for both."
@@ -17,7 +17,7 @@ by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the
 
 [[unit]]
 text = "<env> below is one of those two words, and ENV=staging (or prod) in a shell."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Region: us-west-2, the region the workflows act in (cdk.md)."
@@ -25,67 +25,67 @@ by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_one
 
 [[unit]]
 text = "Table of Contents"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Before the first deploy -- the ordered checklist"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "The first deploys, and the rollback rehearsal"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Every deploy"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Pre-Deployment Checklist"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Post-Deployment Verification"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Deployment Architecture"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Troubleshooting"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "1. Before the first deploy"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Do these in this order, once per environment."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each step says who does it, how to check it read-only, and where to stop."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Several are irreversible or billable, and each of those needs a person to say yes at the moment it happens."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "1.0 Decisions (founder)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Which AWS account (one per environment), which region (one: us-west-2 unless you change all three workflows), which profile (full or core), the domain (app.<domain>), a budget alarm and who owns the bill, and when a staging environment is torn down."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Nothing below should start without them."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "1.1 IAM (account administrator)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Three identities, described with their exact permissions in IAM Permissions: the bootstrap identity (once), the cdk deploy identity, and one workflow role per environment."
@@ -105,11 +105,11 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Stop here if any action is denied."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "1.2 Certificate and domain"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "An ACM certificate in the region the stacks deploy to (us-west-2), covering app.<domain>, with status ISSUED, before any cdk deploy."
@@ -117,11 +117,11 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "PUBLIC_BASE_URL=https://app.<domain>."
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "It must print \"ISSUED\"."
-by = ["exempt:third-party"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "If it prints anything else, stop here."
@@ -137,11 +137,11 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "AWS CDK Deployment, \"Point the hostname at the load balancer\" has the commands and the check."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "1.3 ECR repositories and the bootstrap images"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Two repositories, created once per account and region; nothing in the CDK creates them (a registry is account-scoped, the stacks are per-environment):"
@@ -160,7 +160,7 @@ by = ["test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_deplo
 
 [[unit]]
 text = "Build from the repository root with the profile you will deploy:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Both repositories survive a teardown (they are not in any stack)."
@@ -168,7 +168,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "1.4 Secrets"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "/<env>/experimentation/jwt-secret and /<env>/experimentation/first-superuser-password, plus /<env>/experimentation/audit-hmac-key on full (Secrets Management)."
@@ -176,7 +176,7 @@ by = ["test:infrastructure/tests/test_secret_arns.py::test_a_missing_input_is_re
 
 [[unit]]
 text = "They must exist before the Fargate and migrations stacks: ECS will not start a task whose definition names a missing secret."
-by = ["exempt:third-party"]
+by = ["test:infrastructure/tests/test_secret_arns.py::test_each_execution_role_reads_exactly_its_task_definitions_secrets"]
 
 [[unit]]
 text = "The database and Redis need nothing from you -- the stacks wire them."
@@ -195,7 +195,10 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "The third secret is for full only; on core, leave AUDIT_HMAC_KEY_SECRET_ARN unset and the loop skips it."
-by = ["exempt:baseline"]
+by = [
+    "test:infrastructure/tests/test_secret_arns.py::test_the_core_profile_synthesises_without_the_audit_key",
+    "test:infrastructure/tests/test_secret_arns.py::test_the_full_profile_refuses_to_synthesise_without_the_audit_key",
+]
 
 [[unit]]
 text = "Each check prints the secret's name; nothing prints an ARN."
@@ -203,7 +206,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Keep the three exported for every cdk synth, cdk diff, cdk deploy and cdk destroy (section 1.6), and keep them out of issues, pull requests and chat: an ARN carries the account ID."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Recreating a secret changes its ARN: update the input and run cdk deploy again (Secrets Management)."
@@ -211,11 +214,11 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "1.5 GitHub (repository administrator)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "For each environment, protection first, then configuration:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Under Settings → Environments, give <env> a required reviewer and limit its deployment branches to main."
@@ -223,11 +226,11 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Check it before going on: gh api repos/<owner>/<repo>/environments/<env> --jq '.protection_rules, .deployment_branch_policy'."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Secrets AWS_ACCOUNT_ID and AWS_ROLE_ARN; variable PUBLIC_BASE_URL."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Setting them arms the workflows for that environment: gh secret set AWS_ACCOUNT_ID --env <env> (12 digits; it prompts for the value), gh secret set AWS_ROLE_ARN --env <env>, and gh variable set PUBLIC_BASE_URL --env <env> --body https://app.<domain>."
@@ -249,11 +252,11 @@ by = [
 
 [[unit]]
 text = "1.6 The stacks"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Bootstrap once per account and region, then deploy the stacks:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "JWT_SECRET_ARN, FIRST_SUPERUSER_PASSWORD_SECRET_ARN and (on full) AUDIT_HMAC_KEY_SECRET_ARN are required in every environment: the complete ARN of each secret, exported in this same shell as section 1.4 shows."
@@ -273,7 +276,14 @@ by = [
 
 [[unit]]
 text = "in staging), region or account, or in the wrong variable, and says how to read the right value."
-by = ["exempt:baseline"]
+by = [
+    "test:infrastructure/tests/test_secret_arns.py::test_a_partial_arn_is_refused",
+    "test:infrastructure/tests/test_secret_arns.py::test_a_staging_arn_is_refused_in_a_prod_synth",
+    "test:infrastructure/tests/test_secret_arns.py::test_a_wrong_region_is_refused",
+    "test:infrastructure/tests/test_secret_arns.py::test_a_wrong_account_is_refused",
+    "test:infrastructure/tests/test_secret_arns.py::test_the_jwt_arn_in_the_superuser_slot_is_refused",
+    "test:infrastructure/tests/test_secret_arns.py::test_a_missing_input_is_refused_in_every_environment",
+]
 
 [[unit]]
 text = "ALARM_EMAIL is required for staging and prod: the one address every alarm emails, including the two API 5xx alarms that roll a deployment back by themselves."
@@ -288,7 +298,7 @@ by = ["test:infrastructure/tests/test_alarm_email.py::test_a_bad_value_is_refuse
 
 [[unit]]
 text = "Keep it exported for every later cdk diff, cdk deploy and cdk destroy too."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Confirm the subscription before the first release deploy."
@@ -300,11 +310,11 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "Until it is confirmed no alarm reaches anyone."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "Do not click the link."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Confirm the link's Token= value with aws sns confirm-subscription --topic-arn \"$TOPIC_ARN\" --token \"$TOKEN_FROM_THE_LINK\" --authenticate-on-unsubscribe true, then check the subscription is no longer PendingConfirmation (AWS CDK Deployment has the commands)."
@@ -330,7 +340,7 @@ by = ["untested:S"]
 
 [[unit]]
 text = "Expect that, and run the first Deploy soon after the stacks are up."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "If a request in that window has put experimentation-api-5xx-blue-<env> or -green-<env> into ALARM, Deploy refuses to start; the way through is Deploy's break-glass (Rollback Runbook, \"Fix forward while an alarm is firing\"), and a person decides at that moment whether to use it."
@@ -353,11 +363,14 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Both pins go on every such deploy, because releases reach the API and the dashboard outside CloudFormation and a cdk deploy undoes them silently:"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_check_live_target_group.py::test_the_default_agrees_with_the_cdk",
+    "test:backend/tests/unit/infrastructure/test_check_dashboard_image.py::test_the_context_key_is_the_one_the_cdk_reads",
+]
 
 [[unit]]
 text = "The API's live target group."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "CodeDeploy swaps the API's blue and green target groups outside CloudFormation, and a cdk deploy that names the empty one sends every API request to it while every probe stays green."
@@ -368,11 +381,11 @@ by = [
 
 [[unit]]
 text = "The dashboard's running digest."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The dashboard service rolls under the ECS deployment controller."
-by = ["exempt:baseline"]
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_api_service_is_under_codedeploy_and_the_dashboard_is_not"]
 
 [[unit]]
 text = "Each deploy registers a task definition revision for it, by image digest, that CloudFormation never saw, and rolls the service onto it; before the first deploy it runs :bootstrap and the check says so."
@@ -389,10 +402,6 @@ by = [
 ]
 
 [[unit]]
-text = "The dashboard silently goes back to the placeholder, and every probe stays green."
-by = ["exempt:baseline"]
-
-[[unit]]
 text = "Two read-only checks print the values to pass, and refuse a value that does not match what is running."
 by = [
     "test:backend/tests/unit/infrastructure/test_check_live_target_group.py::test_listener_and_primary_task_set_disagreeing_is_refused",
@@ -402,23 +411,23 @@ by = [
 
 [[unit]]
 text = "Run them from the repository root: the first prints api_live_target_group, the second dashboard_image_tag."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The commands after them print the image of the backend revision that is serving:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Set the three values you will pass: BACKEND_TAG is the backend image's tag (or bootstrap), API_LIVE is what the first check printed (blue or green), and DASHBOARD_DIGEST is what the second printed (sha256: and the hex digest)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Re-run both checks with them (each exits non-zero on a mismatch), then preview the deploy with the same pins, writing the diff to a file:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Replace the three example values with yours before running anything."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each step runs only if the one before it succeeded, so a check that refuses a value stops the diff, and a diff that fails prints no count at all, which is not a 0."
@@ -426,19 +435,19 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Read the whole file, not only the count."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Do not pipe the diff into another command: a pipe reports the last command's exit status, so a failed diff can look like a clean one."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Stop if the diff touches an ingress or egress rule."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Any line marked [-], [+] or [~] that names AWS::EC2::SecurityGroupEgress or AWS::EC2::SecurityGroupIngress means stop: the grep -cE above must print 0."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The load balancer reaches the API tasks over tcp 8000 and the dashboard tasks over tcp 8080."
@@ -456,15 +465,15 @@ by = [
 
 [[unit]]
 text = "Losing the 8080 rule breaks the dashboard at /."
-by = ["exempt:baseline"]
+by = ["test:infrastructure/tests/test_alb_egress_to_tasks.py::test_the_load_balancers_egress_is_exactly_the_two_targets"]
 
 [[unit]]
 text = "A count other than 0 is not something to fix at the console: do not deploy, re-run both checks, and open an issue with the diff file attached."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "When the count is 0, deploy with exactly the same pins:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Every deploy's run summary also prints the digest the dashboard is running after it, as -c dashboard_image_tag=sha256:<hex> with the matching --expect check."
@@ -475,7 +484,7 @@ by = [
 
 [[unit]]
 text = "Re-run the check anyway before a cdk deploy: a Rollback or another deploy since then moves it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The dashboard pin is the digest the check prints (sha256:<hex>), not an image tag: a tag can be moved to other bytes, and the digest synthesises the image as experimentation-platform/web@sha256:<hex>, the exact image already running."
@@ -506,7 +515,7 @@ by = ["exempt:advice"]
 
 [[unit]]
 text = "2. The first deploys, and the rollback rehearsal"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "In staging, before prod is ever deployed:"
@@ -514,7 +523,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Deploy tag A (section 3)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The first deploy's migration builds the schema from nothing (backend.app.db.bootstrap); until it has, the API answers real requests with 500 (section 1.6)."
@@ -529,23 +538,23 @@ by = [
 
 [[unit]]
 text = "Deploy tag B."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Roll back to A with the line tag B's run summary printed (Rollback Runbook)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Force an alarm during a canary."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Deploy tag B again once tag A's hour has passed, and while its canary runs set the green or blue alarm (whichever watches the new task set's target group) to ALARM by hand."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Do the same once in the hour after a shift."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The state set by hand lasts until the alarm's next evaluation; on staging on 2026-10-11 (UTC) the alarm was back to OK within two minutes (#295):"
@@ -558,18 +567,6 @@ by = ["exempt:instruction"]
 [[unit]]
 text = "Tag B cannot be deployed within the hour after tag A's traffic shift: tag A's CodeDeploy deployment is still active while the old task set is kept, and the deploy refuses until it is not (section 3)."
 by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_active_deployment_is_refused_by_name_and_never_stopped"]
-
-[[unit]]
-text = "Alarms watch the API's canary and the hour after it (#148): while either of the deployment group's two 5xx alarms is in ALARM, CodeDeploy stops the deployment and rolls the API back by itself (section 3)."
-by = ["exempt:baseline"]
-
-[[unit]]
-text = "A rollback in the hour after the shift comes after the run has gone green, and it is not announced in #deployments: the run summary gives the time the alarms stop watching and the command that shows whether it happened."
-by = ["untested:T"]
-
-[[unit]]
-text = "After that hour, the response to a bad release is the Rollback workflow."
-by = ["exempt:baseline"]
 
 [[unit]]
 text = "What has run on staging:"
@@ -598,11 +595,11 @@ by = [
 
 [[unit]]
 text = "3. Every deploy"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "What has run against a real AWS account."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Deploy has run to success on a staging account, most recently v0.31.0 on 2026-10-13 (UTC) (run), and the Rollback workflow has run there end to end (section 2)."
@@ -614,7 +611,7 @@ by = [
 
 [[unit]]
 text = "Deploy to staging before prod, and read the run and its summary closely."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "A release tag."
@@ -626,7 +623,7 @@ by = ["test:backend/tests/unit/infrastructure/test_release_gate_triggers.py::tes
 
 [[unit]]
 text = "For a tag cut before that: gh workflow run release-gate.yml --ref vX.Y.Z, then wait for it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Actions → Deploy → Run workflow, \"Use workflow from\" main (any other ref is refused: the workflow's own tooling comes from it), then environment, version (the tag), profile."
@@ -688,7 +685,7 @@ by = [
 
 [[unit]]
 text = "Then it approves the shift (continue-deployment --deployment-wait-type READY_WAIT)."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_a_deploy_is_approved_on_healthy_targets_and_succeeds_when_serving"]
 
 [[unit]]
 text = "The canary sends 10% of traffic, waits 15 minutes (why 15), then sends the rest."
@@ -721,7 +718,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "There is nothing to roll back then; read An alarm rolled the API back."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The smoke request (GET ${PUBLIC_BASE_URL}/api/v1/experiments/ → 401 {\"detail\":\"Not authenticated\"})."
@@ -773,7 +770,7 @@ by = [
 
 [[unit]]
 text = "The last check of the run is the API check once more."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_recheck_is_the_last_assertion"]
 
 [[unit]]
 text = "The summary names the live API target group and the dashboard's running digest, with the values for the next cdk deploy of experimentation-fargate-<env>: -c api_live_target_group=<blue|green> and -c dashboard_image_tag=sha256:<hex> (section 1.6), and a rollback line carrying both revisions."
@@ -791,7 +788,7 @@ by = [
 
 [[unit]]
 text = "Alarms watch the API until the deployment ends."
-by = ["exempt:baseline"]
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm"]
 
 [[unit]]
 text = "The deployment group has two alarms, experimentation-api-5xx-blue-<env> and experimentation-api-5xx-green-<env>, one per target group, because CodeDeploy swaps the two on every deployment."
@@ -799,14 +796,17 @@ by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_both_target_gro
 
 [[unit]]
 text = "Both are polled for the whole deployment: before the approval, in the canary, and in the hour after the shift while CodeDeploy keeps the previous task set."
-by = ["exempt:third-party"]
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summarys_bake_is_the_groups_termination_wait",
+]
 
 [[unit]]
 text = "While either is in ALARM, CodeDeploy stops the deployment and rolls the API back to the previous revision by itself."
-by = ["exempt:baseline"]
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm"]
 
 [[unit]]
-text = "On 2026-10-03 (UTC) an alarm stopped a deployment on staging and CodeDeploy reverted the API with no workflow involved (#295), and on 2026-10-11 (UTC) an alarm forced in the hour after the shift did the same (#295)."
+text = "On 2026-10-03 (UTC) CodeDeploy stopped and reverted an API deployment on staging when an alarm went into ALARM (#295), and on 2026-10-11 (UTC) an alarm forced in the hour after the shift did the same (#295)."
 by = [
     "evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-5971647359",
     "evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595",
@@ -822,7 +822,7 @@ by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_each_alarm_is_e
 
 [[unit]]
 text = "What they do not catch:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "a release that answers wrongly with a 2xx, or with fewer errors than that;"
@@ -842,7 +842,7 @@ by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summ
 
 [[unit]]
 text = "Two more things follow from the alarms watching both target groups."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A live release already answering 5xx at the threshold (its own bug, or a failing dependency) stops every new deploy too, the fix included: see Fix forward while an alarm is firing."
@@ -854,11 +854,14 @@ by = ["untested:T"]
 
 [[unit]]
 text = "A rollback in the hour after the shift is not announced in the #deployments channel; the run summary gives the time the alarms stop watching and the command that shows whether one happened."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_summary_prints_the_live_group_and_says_what_the_alarms_watch"]
 
 [[unit]]
 text = "One deploy per environment per hour."
-by = ["exempt:baseline"]
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summarys_bake_is_the_groups_termination_wait",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_active_deployment_is_refused_by_name_and_never_stopped",
+]
 
 [[unit]]
 text = "For an hour after the shift, CodeDeploy keeps the previous task set, and the deployment stays active that whole time."
@@ -866,7 +869,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "It accepts no second deployment meanwhile."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "So a deploy dispatched within that hour is refused at once, before anything is built, naming the deployment and roughly how long it has left."
@@ -888,11 +891,11 @@ by = [
 
 [[unit]]
 text = "Rollback does, on purpose."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_rollback_validates_both_before_it_stops_anything_and_stops_unconditionally"]
 
 [[unit]]
 text = "Shipping a fix within that hour means Rollback first."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "A fix-forward deploy is refused while the bad release's deployment is active."
@@ -900,7 +903,7 @@ by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_rol
 
 [[unit]]
 text = "Run Rollback, which stops that deployment and puts the previous revision back, and deploy the fix afterwards."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "If an alarm already rolled the release back, do not run Rollback for it: the API is already going back, and Rollback refuses while CodeDeploy's own rollback is active (An alarm rolled the API back)."
@@ -924,7 +927,7 @@ by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_con
 
 [[unit]]
 text = "Backward-compatible migrations"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A deploy migrates before it shifts traffic, so for a while -- and for as long as a failed or stopped deploy leaves it so -- the previous release runs against the new schema."
@@ -939,7 +942,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Drop in a later release, once nothing running reads it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "A rollback relies on the same rule."
@@ -963,11 +966,11 @@ by = ["test:backend/tests/unit/infrastructure/test_restore_repoint.py::test_stag
 
 [[unit]]
 text = "4. Pre-Deployment Checklist"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Mandatory Checks"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "[ ] The tag's commit passed the Release Gate; the Deploy workflow refuses it otherwise"
@@ -975,31 +978,31 @@ by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the
 
 [[unit]]
 text = "[ ] For prod: the same tag deployed to staging and smoke-tested"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Database Migration Checks (if migration is included)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "[ ] Migration applied in staging — no errors, no data loss"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "[ ] Migration is backward-compatible"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "[ ] The downgrade tested in staging (Actions → Database Migration, downgrade, target: the new migration's down_revision id)"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "5. Post-Deployment Verification"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The block sets ENV=staging; for production, change it to ENV=prod."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "/health is the readiness check: look at checks.database.status in what it prints."
@@ -1025,7 +1028,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "These are the API's PRIMARY task set's own counts; the service's runningCount also counts the replaced task set for the hour after a shift, so it reads higher than Desired then."
-by = ["exempt:baseline"]
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summarys_bake_is_the_groups_termination_wait"]
 
 [[unit]]
 text = "The dashboard's one PRIMARY deployment on the new dashboard revision, COMPLETED, running equal to desired."
@@ -1033,19 +1036,19 @@ by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_
 
 [[unit]]
 text = "6. Deployment Architecture"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "7. Troubleshooting"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "\"Deployment stuck in Pending\""
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "\"Migration task failed\""
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The run prints the task's last 100 log lines."
@@ -1057,11 +1060,11 @@ by = ["untested:T"]
 
 [[unit]]
 text = "A migration that failed half-way needs its downgrade before a re-deploy (Rollback Runbook)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "\"A deployment is still active\""
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The previous deploy's CodeDeploy deployment is still active: it is inside the hour CodeDeploy keeps the old task set, or it is waiting for an approval that the deploy never sent."
@@ -1072,19 +1075,22 @@ by = [
 
 [[unit]]
 text = "The refusal names it and estimates how long it has left."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_active_deployment_is_refused_by_name_and_never_stopped",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_the_time_left_is_estimated_from_the_creation_time",
+]
 
 [[unit]]
 text = "Wait and re-run."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "If the release it deployed is bad, run Rollback, which stops it and puts the older revision back."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Do not stop it by hand with --auto-rollback-enabled unless rolling that release back is what you want."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "If the refusal says it is CodeDeploy's own rollback of an earlier deployment, an alarm (or a failed deployment) is already putting the API back: wait for it, and do not use Rollback, which refuses while it is active."
@@ -1092,19 +1098,15 @@ by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::
 
 [[unit]]
 text = "\"Rolled back by an alarm\""
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "One of the deployment group's two 5xx alarms went into ALARM, and CodeDeploy stopped the deployment and rolled the API back by itself."
 by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm"]
 
 [[unit]]
-text = "The run names the alarm and says whether the previous revision is serving again."
-by = ["exempt:baseline"]
-
-[[unit]]
 text = "Read errorInformation first, then follow An alarm rolled the API back."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "If it says \"Stopped by an alarm\" instead, the alarm was already firing before the traffic shift and nothing shifted: Fix forward while an alarm is firing."
@@ -1112,7 +1114,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "\"This API revision would run migrations on start\""
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The API revision this run registered, copied from the family's newest one, does not set RUN_MIGRATIONS=false, most likely because the Fargate stack was last deployed from a checkout older than 0.14.0."
@@ -1120,15 +1122,15 @@ by = ["untested:T"]
 
 [[unit]]
 text = "No deployment was created and the previous revision keeps serving; the migration has been applied."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_migrated_warning_is_true_of_the_case_it_runs_in"]
 
 [[unit]]
 text = "Deploy the Fargate stack from a current checkout, pinned (section 1.6), then deploy again: Rollback Runbook."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "\"Traffic shift not approved\""
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The new task set's targets never all became healthy before the deadline, so the deploy did not approve the shift."
@@ -1136,7 +1138,7 @@ by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::
 
 [[unit]]
 text = "Nothing moved, and the previous revision keeps serving."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_unhealthy_until_the_deadline_is_never_approved_and_never_stopped"]
 
 [[unit]]
 text = "CodeDeploy stops the deployment when its 30-minute approval wait ends."
@@ -1144,15 +1146,15 @@ by = ["untested:T"]
 
 [[unit]]
 text = "The migration has been applied."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_migrated_warning_is_true_of_the_case_it_runs_in"]
 
 [[unit]]
 text = "Read the API's log (/ecs/experimentation-backend-<env>) for why the new tasks fail their health check."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "\"Traffic shift not confirmed\""
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The deploy approved the shift, and when its deadline passed the new revision was not yet serving through the /api/ rule."
@@ -1160,7 +1162,7 @@ by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::
 
 [[unit]]
 text = "The deployment was not stopped, because stopping it could roll back a release that is succeeding."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_a_deadline_after_the_approval_leaves_the_deployment_running"]
 
 [[unit]]
 text = "Watch it with aws deploy get-deployment --deployment-id <id> and python3 scripts/api_serving.py experimentation-<env> experimentation-backend-<env> <new revision ARN> (exit 0 means it is serving)."
@@ -1171,11 +1173,11 @@ by = [
 
 [[unit]]
 text = "If the release is bad, use the rollback line."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The API route and the PRIMARY task set disagree"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The new revision is the PRIMARY task set, but the HTTPS listener's /api/ rule forwards to the other target group, with no split."
@@ -1183,19 +1185,19 @@ by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::
 
 [[unit]]
 text = "The API route is not where the new tasks are."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_an_unsplit_rule_on_the_other_group_after_the_flip_is_red"]
 
 [[unit]]
 text = "When the old task set is terminated, an hour after the shift, every API request gets a 503."
-by = ["exempt:third-party"]
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summarys_bake_is_the_groups_termination_wait"]
 
 [[unit]]
 text = "Until then the old task set keeps answering through the rule, so users see the previous release, not the new one."
-by = ["exempt:third-party"]
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summarys_bake_is_the_groups_termination_wait"]
 
 [[unit]]
 text = "First check aws deploy get-deployment --deployment-id <id>."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "If it is Stopped with ALARM_ACTIVE, this is not that question: an alarm stopped the deployment and CodeDeploy is already rolling the API back, putting the rule back first."
@@ -1203,7 +1205,7 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Do not dispatch Rollback; read An alarm rolled the API back."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The deploy re-reads the deployment for about a minute before it reports this, for that reason."
@@ -1211,11 +1213,11 @@ by = ["untested:T"]
 
 [[unit]]
 text = "Otherwise:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Roll back within the hour, with the rollback line in the run summary."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Then confirm with python3 scripts/check_live_target_group.py --env <env> that the rule names the group the previous revision runs in."
@@ -1223,7 +1225,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Before any further deploy, record the observation."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Then see the fallbacks named in fargate_service_stack.py (ECS-native blue/green, or separate hosts)."
@@ -1231,15 +1233,15 @@ by = ["untested:T"]
 
 [[unit]]
 text = "The dashboard did not roll out"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "These all come after the API has shifted, so the API is new and the dashboard is not (or its state is in question)."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_dashboard_steps_follow_the_api_smoke_with_no_if"]
 
 [[unit]]
 text = "Three things hold for each:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Deploy refuses a re-run until the CodeDeploy deployment of this run is no longer active, about an hour after its traffic shift."
@@ -1254,11 +1256,11 @@ by = [
 
 [[unit]]
 text = "The dashboard alone, inside that hour, is the rollback runbook's Method 2, dashboard block."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "The titles, and what each means:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "\"Dashboard not rolled out\" -- the API check before the rollout failed, so the dashboard was not touched."
@@ -1269,19 +1271,19 @@ by = [
 
 [[unit]]
 text = "The line above it is the check's own: another revision is PRIMARY or a traffic shift is in progress (exit 1), the check could not tell because an AWS call failed or it crashed (exit 2), or the route and the tasks disagree (exit 3)."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_the_predicate_exit_codes"]
 
 [[unit]]
 text = "Find out what changed the API (usually a Rollback run) before anything else."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "\"… rolled back by ECS\" -- the new dashboard's tasks did not become healthy, and the deployment circuit breaker put the previous revision back."
 by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_a_circuit_breaker_rollback_is_not_a_success"]
 
 [[unit]]
-text = "The service events and a stopped task's reason are printed above; the task log is /ecs/experimentation-dashboard-<env>."
-by = ["exempt:baseline"]
+text = "The task log is /ecs/experimentation-dashboard-<env>."
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_api_and_dashboard_log_groups"]
 
 [[unit]]
 text = "\"… changed during this run\" -- the dashboard's PRIMARY deployment is neither this run's revision nor the one before it: a Rollback run, another deploy or a cdk deploy changed it."
@@ -1289,7 +1291,7 @@ by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_
 
 [[unit]]
 text = "This run did not change it back."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_r11_the_dashboard_is_not_touched_when_it_changed_since_it_was_read"]
 
 [[unit]]
 text = "\"… rollout did not finish\" -- the deadline passed with ECS still working on it."
@@ -1297,7 +1299,7 @@ by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_
 
 [[unit]]
 text = "The run stopped waiting and stopped nothing; watch the service."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_r6_still_in_progress_at_the_deadline_is_not_rerun"]
 
 [[unit]]
 text = "\"Workflow role cannot update …\" -- the role predates the dashboard rollout; re-apply the policy (IAM permissions)."
@@ -1313,15 +1315,11 @@ by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::t
 
 [[unit]]
 text = "Check both before anything else (scripts/api_serving.py, and the dashboard describe in section 5)."
-by = ["exempt:baseline"]
-
-[[unit]]
-text = "\"API deployed, dashboard not confirmed\" -- the summary line of all of the above: it says whether the API check passed, and what the dashboard is on."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "\"API rolled back by an alarm, dashboard not\" -- the exception to the three points above."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "An API check failed because an alarm stopped the deployment after its shift, and CodeDeploy is moving the API back by itself."
@@ -1329,15 +1327,18 @@ by = ["untested:T"]
 
 [[unit]]
 text = "The deployment is stopped, so a re-run is not refused for the hour, and there is nothing to roll back for the API: do not use the rollback line."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_nothing_active_passes",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+]
 
 [[unit]]
 text = "If the dashboard is on this run's revision, put it back to match with Method 2's dashboard block, and read An alarm rolled the API back."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "\"Smoke test failing after deployment\""
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The smoke test rolls nothing back."
@@ -1349,7 +1350,7 @@ by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the
 
 [[unit]]
 text = "Otherwise decide, and use the rollback line in the run summary."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The API's log is /ecs/experimentation-backend-<env>."

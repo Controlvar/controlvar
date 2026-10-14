@@ -54,7 +54,7 @@ POOL_PLACEHOLDER = "$COGNITO_USER_POOL_ID"
 #: The password step takes the password from this variable, which the line
 #: before it reads from a prompt that does not show it.
 PASSWORD_PLACEHOLDER = "$PASSWORD"
-PASSWORD_PROMPT = "read -rs -p 'Password: ' PASSWORD"
+PASSWORD_PROMPT = "printf 'Password: '; read -rs PASSWORD; printf '\\n'"
 
 # ---------------------------------------------------------------------------
 # The onboarding procedure

@@ -5,7 +5,7 @@ document = "infrastructure/cdk/README.md"
 
 [[unit]]
 text = "Experimently Infrastructure"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "This directory contains AWS CDK code for deploying the experimentation platform infrastructure."

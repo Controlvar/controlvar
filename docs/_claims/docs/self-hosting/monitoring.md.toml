@@ -5,7 +5,7 @@ document = "docs/self-hosting/monitoring.md"
 
 [[unit]]
 text = "Monitoring and Observability"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The API exposes Prometheus metrics at /metrics, writes structured logs, and answers health probes."
@@ -20,7 +20,7 @@ by = ["test:infrastructure/tests/test_standing_alarms.py::test_every_standing_al
 
 [[unit]]
 text = "Prometheus Metrics"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The API exposes a Prometheus-compatible metrics endpoint:"
@@ -53,11 +53,11 @@ by = ["test:backend/tests/unit/core/test_health_endpoints.py::TestMetricsEndpoin
 
 [[unit]]
 text = "Key Metrics Exported"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Metric | Type | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "http_requests_total | Counter | Total HTTP requests by method, endpoint and status code"
@@ -112,7 +112,7 @@ by = ["test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRetry::
 
 [[unit]]
 text = "Sample Prometheus Scrape Config"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A job for the scrape_configs list of prometheus.yml, with the token in a file:"
@@ -120,7 +120,7 @@ by = ["exempt:example"]
 
 [[unit]]
 text = "Structured Logging (structlog)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The API uses structlog for JSON-formatted structured logs."
@@ -132,11 +132,11 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Standard Fields"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Field | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "timestamp | ISO 8601 UTC timestamp"
@@ -162,7 +162,7 @@ by = [
 
 [[unit]]
 text = "Health Check"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The API answers GET /health without authentication, for load balancers and monitoring."
@@ -170,7 +170,7 @@ by = ["test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::tes
 
 [[unit]]
 text = "It is the readiness probe, the same as GET /health/ready:"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_health_alias_matches_ready"]
 
 [[unit]]
 text = "Outside production it reports each check with its detail:"
@@ -222,11 +222,11 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "Key Metrics to Watch"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Metric | Healthy Range | Action if Breached"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Safety rollback frequency | < 1/week | Investigate flag quality and error rate thresholds"

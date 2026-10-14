@@ -259,3 +259,38 @@ class TestSynthRefusesAMissingDatabase:
 
     def test_a_real_host_with_credentials_passes(self):
         self._require()("SomeStack", "aurora.example.internal", object())
+
+
+@pytest.mark.regression
+def test_backups_and_instances_per_environment(synth: _Synth):
+    """The disaster recovery plan, the runbook and the backup page: 35 days of
+    point-in-time backups in staging and prod, and a writer plus a reader in
+    prod only (one writer in staging)."""
+    _, cluster = synth.cluster()
+    assert cluster["Properties"]["BackupRetentionPeriod"] == 35
+    # Each snapshot gets the cluster's tags: the IAM page's rds:AddTagsToResource.
+    assert cluster["Properties"]["CopyTagsToSnapshot"] is True
+    instances = [
+        r
+        for r in synth.resources("database").values()
+        if r["Type"] == "AWS::RDS::DBInstance"
+    ]
+    assert len(instances) == {"staging": 1, "prod": 2}[synth.env], len(instances)
+
+
+@pytest.mark.regression
+def test_dev_keeps_one_day_of_backups():
+    """ "1 day elsewhere": the environments outside staging and prod."""
+    _, cluster = _Synth("dev").cluster()
+    assert cluster["Properties"]["BackupRetentionPeriod"] == 1
+
+
+@pytest.mark.regression
+def test_the_database_key_is_kept_in_prod_only(synth: _Synth):
+    """The CDK page: outside prod the database's KMS key goes with the stack
+    (scheduled for deletion); in prod it is retained with the final snapshot."""
+    (key,) = [
+        r for r in synth.resources("database").values() if r["Type"] == "AWS::KMS::Key"
+    ]
+    expected = {"staging": "Delete", "prod": "Retain"}[synth.env]
+    assert key.get("DeletionPolicy", "Delete") == expected, key.get("DeletionPolicy")

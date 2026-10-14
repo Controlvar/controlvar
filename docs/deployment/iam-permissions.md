@@ -114,9 +114,7 @@ list cannot fall behind the workflows. `iam:PassRole` is granted only for
 passing roles to ECS tasks.
 
 Resources are `*`, except `rds:AddTagsToResource`, which is granted only on
-cluster snapshots (below). Narrowing them to one environment's ARNs is worth doing;
-it is not done here, because the names mix generated identifiers (the Aurora
-cluster, the task roles) that are only known after `cdk deploy`.
+cluster snapshots (below).
 
 `ecs:UpdateService` is on `*` too, and that is a deliberate choice, not an
 oversight. It is there for `scripts/ecs_rolling_rollout.sh`, which rolls the
@@ -207,17 +205,11 @@ account before the next deploy. The failure without it is loud and safe:
 Deploy's "Snapshot the database before migrating" step (and Database
 Migration's "Take a snapshot first") stops with "not authorized to perform:
 rds:AddTagsToResource on resource: arn:aws:rds:...:cluster-snapshot:...",
-and nothing is snapshotted, migrated or shifted. This is how the first
-staging deploy stopped.
+and nothing is snapshotted, migrated or shifted.
 
 `codedeploy:GetApplicationRevision` (#754) was added after the staging
 rollback rehearsal on 2026-10-03 (UTC), where its absence stopped Rollback
-([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5963917501)). AWS's CodeDeploy guide asks for it *or*
-`codedeploy:RegisterApplicationRevision` alongside `CreateDeployment`, and
-only the second was granted. Deploy's `create-deployment`, with an AppSpec for
-a new revision, passed. Rollback's, with an AppSpec for a revision deployed
-before (the previous task definition), was refused for
-`codedeploy:GetApplicationRevision`. Both are now granted. Roles created from a
+([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5963917501)). Roles created from a
 policy before #754 lack it; re-apply this policy in every account before the
 next rollback. The failure without it comes after the in-flight deployment has
 been stopped: Rollback's "Roll back via CodeDeploy" step stops with "not

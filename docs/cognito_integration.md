@@ -140,7 +140,7 @@ their account on the platform.
    digit and a symbol. Type it at the `Password:` prompt, which does not show it.
 
     ```{.bash skip reason="aws: needs the Cognito user pool"}
-    read -rs -p 'Password: ' PASSWORD
+    printf 'Password: '; read -rs PASSWORD; printf '\n'
     aws cognito-idp admin-set-user-password --user-pool-id "$COGNITO_USER_POOL_ID" --username jdoe --password "$PASSWORD" --permanent
     ```
 

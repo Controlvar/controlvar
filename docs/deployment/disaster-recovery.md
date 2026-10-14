@@ -25,7 +25,7 @@ CLUSTER=$(aws cloudformation describe-stacks --stack-name "experimentation-datab
 
 Aurora backs up continuously. You can restore to any second between the start of the backup
 retention period and the cluster's `LatestRestorableTime`, which AWS documents as typically
-within 5 minutes of the present. That is where the 5-minute RPO comes from. The retention
+within 5 minutes of the present. The retention
 period is the limit: see the table below. If the API tasks or Redis fail, no data is lost,
 because Redis holds only cache and rate-limit state.
 
@@ -43,16 +43,12 @@ because Redis holds only cache and rate-limit state.
 | Secrets Manager | The database credentials secret (`experimentation-database-$ENV-aurora-credentials`), in the stack's region only. The CDK configures no replica regions. | Until deleted | Within its recovery window after deletion, `aws secretsmanager restore-secret`. There is no copy in another region |
 | Application logs | CloudWatch Logs only, with no export to S3. `/ecs/experimentation-backend-$ENV` and `/ecs/experimentation-dashboard-$ENV` are kept 90 days, and `/ecs/experimentation-migrate-$ENV` 30 days. | As listed | Not recoverable after expiry |
 | S3 (full profile only) | The analytics data lake bucket (versioned), and the Glue ETL stack's Athena results bucket (objects expire after 30 days) and Glue scripts bucket. None has cross-region replication. The core profile creates no bucket. | Kept when the prod stack is deleted; deleted with it elsewhere | Versioning restores an overwritten or deleted object in the data lake; nothing else |
-| Alembic migration history | Git repository | Per commit | Check out the release |
-| CDK infrastructure definitions | Git repository | Per commit | `cdk deploy` (time not measured) |
 
 `infrastructure/tests/test_disaster_recovery_doc.py` synthesises the prod app (and staging, for
 the Aurora retention) and checks the retention, replication and log figures in this table
 against it.
 
-The Aurora retention is what the stack sets. A cluster deployed from an earlier version of
-the CDK app, which set no retention, keeps CloudFormation's default of one day until its
-database stack is redeployed. Check what a cluster actually keeps before you rely on it:
+Check what a cluster actually keeps before you rely on it:
 
 ```bash
 aws rds describe-db-clusters --db-cluster-identifier "$CLUSTER" \
@@ -75,11 +71,7 @@ composite sends a true "no healthy task" email for it.
 
 ### Response
 
-No action is needed. ECS automatically:
-1. Finds the failing task through the target group's health check (`/health` every 30 s; 3 failures in a row mark the target unhealthy)
-2. Stops the unhealthy task
-3. Starts a replacement from the current task definition
-4. Registers the new task with the target group once its health checks pass
+No action is needed.
 
 ### Verification
 
@@ -183,10 +175,7 @@ so Aurora has to replace the instance.
 
 ### Automatic Failover (prod: Aurora handles this)
 
-In prod the cluster has a writer and a reader. When the writer fails, Aurora:
-1. Detects the failure
-2. Promotes the reader to writer
-3. Points the cluster endpoint at the new writer
+In prod the cluster has a writer and a reader.
 
 The API connects to the cluster (writer) endpoint. Its connection pool is configured to test
 each connection before use (`pool_pre_ping` in `backend/app/db/session.py`), so a connection
@@ -289,7 +278,7 @@ EVID=$(scripts/restore_repoint.sh read "$ENV")
 VPC groups or instances are not the database stack's, task definitions that do not take
 `POSTGRES_SERVER` from the cluster endpoint, a newest migration task revision that names an image
 tag rather than a digest (the message says how to register one), and an API that is already at 0
-tasks. It logs the times the cluster can be restored to.
+tasks.
 
 Step 2: Restore beside the original. Replace `2026-03-01T14:55:00Z` with the time to restore to,
 in UTC: just before the failure, or before the migration when you come from the
@@ -426,7 +415,7 @@ missing data as breaching, so a node that stops publishing metrics puts its alar
 
 ### Application Behavior During Redis Failure
 
-The API is designed to keep serving without Redis. What is pinned by tests:
+Without Redis, each of these pinned by the test named:
 - **Rate limiting** falls back to per-task counts, so per-IP limits are multiplied by the running
   task count, and retries Redis every 30 s
   (`backend/tests/unit/middleware/test_rate_limiter.py`).
@@ -549,9 +538,12 @@ period (35 days in prod and staging, 1 elsewhere). After that, the newest manual
 
 ### Response
 
-The restore is the one in [Restore from PITR](#restore-from-pitr-preferred) (Scenario 4),
-rehearsed on a staging account on 2026-10-11 (UTC), with the API stopped from the start so that nothing more is written to the
-damaged data. The outage therefore lasts from Step 2 until the cutover ends, restore included.
+The restore is the one in [Restore from PITR](#restore-from-pitr-preferred) (Scenario 4). Its
+rehearsal on a staging account on 2026-10-11 (UTC) restored beside the running API, which was down
+only for the cutover
+([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)).
+Here the API is stopped from the start instead, so that nothing more is written to the damaged
+data, and the outage lasts from Step 2 until the cutover ends, restore included.
 
 Step 1: Record the environment while the API still runs. `read` records the API's task count and
 scaling, which the cutover puts back at the end, so run it before Step 2; it refuses an API that

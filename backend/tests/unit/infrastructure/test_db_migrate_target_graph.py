@@ -47,6 +47,10 @@ pytestmark = pytest.mark.skipif(
 #: (``test_documented_downgrade_targets.py``).
 NAMED_DOWNGRADES = {
     "d29a479daafe": ["37dcb2969766"],
+    # docs/deployment/rollback-runbook.md, Step 2: "Going one further" and
+    # "Going further still".
+    "806901fb7735": ["37dcb2969766", "d29a479daafe"],
+    "1ab99332f0ba": ["37dcb2969766", "d29a479daafe", "806901fb7735"],
     "modules_0001_rbac": ["modules_0002_warehouse_analysis"],
 }
 BRANCH_POINT = "a7b8c9d0e1f2"

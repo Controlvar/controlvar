@@ -365,8 +365,12 @@ dashboard is still on `:bootstrap`.
 - NAT gateways for outbound internet access from private subnets: two in `prod` (one per availability zone), one in every other environment
 - Security groups for ALB, ECS tasks, RDS, and ElastiCache
 
-The VPC is `10.0.0.0/16`, with public, private and isolated subnets and
-gateway endpoints for S3 and DynamoDB. The load
+The VPC is `10.0.0.0/16` across two availability zones, with a public, a
+private and an isolated `/24` in each: `10.0.0.0/24` and `10.0.1.0/24` public,
+`10.0.2.0/24` and `10.0.3.0/24` private, `10.0.4.0/24` and `10.0.5.0/24`
+isolated. It has gateway endpoints for S3 and DynamoDB, and interface
+endpoints, with private DNS, for Secrets Manager, ECR (API and Docker) and
+CloudWatch Logs. AWS bills each interface endpoint by the hour, used or not. The load
 balancer is the only resource open to the internet: its security group admits
 TCP 80 and 443 from anywhere, and no other security group rule admits the
 whole internet. It reaches the API tasks on 8000 and the dashboard tasks on
@@ -417,7 +421,7 @@ unless you deploy with `-c bastion_ssh_cidr=<cidr>`.
 - **Firehose delivery stream** into the data-lake bucket
 - **OpenSearch Service** domain
 
-### experimentation-monitoring-<env>
+### experimentation-monitoring-<env> {#experimentation-monitoring}
 
 - CloudWatch dashboards `experimentation-platform-<env>` and
   `experimentation-application-metrics-<env>` (some of their widgets graph
@@ -489,7 +493,7 @@ cdk diff "experimentation-fargate-$ENVIRONMENT" \
   -c dashboard_image_tag="$DASHBOARD_DIGEST" > "cdk-diff-$ENVIRONMENT.txt" 2>&1
 ```
 
-This shows additions, modifications, and deletions. Do not deploy a diff with any line that names
+Do not deploy a diff with any line that names
 `AWS::EC2::SecurityGroupEgress` or `AWS::EC2::SecurityGroupIngress`: section
 1.6 of the Deployment Guide gives the stop rule and why.
 
@@ -536,16 +540,14 @@ cdk destroy experimentation-vpc-<env>
 ```
 
 The glue, analytics and counters stacks exist only in a full checkout; skip
-their lines in a core one. `infrastructure/tests/test_environments_do_not_collide.py`
-checks this order against the synthesised imports and stack dependencies.
+their lines in a core one.
 
 The buckets outside `prod` are emptied before they are deleted:
 `auto_delete_objects=True` adds a custom resource backed by a CDK-provided
 Lambda (`Custom::S3AutoDeleteObjectsCustomResourceProvider`, with its own IAM
 role) that, when the stack is deleted, denies new writes to the bucket and
 deletes every object version and delete marker. It acts only on a bucket
-carrying the `aws-cdk:auto-delete-objects` tag, which is to say **a bucket
-deployed with this version or later**.
+carrying the `aws-cdk:auto-delete-objects` tag.
 
 ### What `cdk destroy` leaves behind and bills
 
@@ -586,9 +588,7 @@ Two things are deleted but not immediately:
 This version names the ECS cluster from `ENVIRONMENT` (`experimentation-<env>`;
 it was `experimentation-dev` in every environment, #142) and renames the
 CodeDeploy application to `experimentation-platform-<env>` (#139). **An
-environment deployed by an earlier version cannot be updated in place.** The
-cluster's name is part of an export the fargate stack imports, and
-CloudFormation refuses to change an export another stack is using, so
+environment deployed by an earlier version cannot be updated in place:**
 `cdk deploy --all` fails on the compute stack.
 
 The fargate stack is the only importer of that export -- the analytics stack
@@ -606,12 +606,8 @@ cdk deploy --all
 
 - `--exclusively` matters: without it the CDK CLI also destroys the stacks that
   depend on fargate, which is the migrations stack.
-- The two `delete-log-group` lines are needed because the earlier version's
-  template retained those log groups, and the destroy follows the template that
-  is deployed, not this one. A recreated fargate stack would otherwise fail on
-  the names. Skip the dashboard line if that log group does not exist.
+- Run the two `delete-log-group` lines: a recreated fargate stack would
+  otherwise fail on the names. Skip the dashboard line if that log group does
+  not exist.
 - Destroying fargate stops the API and the dashboard until the last step
   finishes; the database, Redis and the data stores are not touched.
-- `infrastructure/tests/test_environments_do_not_collide.py` derives the list
-  of stacks to destroy from the synthesised import graph and checks it against
-  the commands above.

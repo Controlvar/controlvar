@@ -219,8 +219,7 @@ the dashboard outside CloudFormation and a `cdk deploy` undoes them silently:
   onto it; before the first deploy it runs `:bootstrap` and the check says so. A `cdk deploy` that
   changes the dashboard's task definition in any way re-points the service at CloudFormation's own
   revision, whose image is `web:<dashboard_image_tag>` -- `web:bootstrap` when
-  the value is not given. The dashboard silently goes back to the placeholder,
-  and every probe stays green.
+  the value is not given.
 
 Two read-only checks print the values to pass, and refuse a value that does not
 match what is running. Run them from the repository root: the first prints
@@ -334,14 +333,6 @@ Tag B cannot be deployed within the hour after tag A's traffic shift: tag A's
 CodeDeploy deployment is still active while the old task set is kept, and the
 deploy refuses until it is not (section 3).
 
-Alarms watch the API's canary and the hour after it
-([#148](https://github.com/getexperimently/experimently/issues/148)): while
-either of the deployment group's two 5xx alarms is in ALARM, CodeDeploy stops
-the deployment and rolls the API back by itself (section 3). A rollback in the hour after the shift comes after the run has gone
-green, and it is not announced in #deployments: the run summary gives the
-time the alarms stop watching and the command that shows whether it happened.
-After that hour, the response to a bad release is the Rollback workflow.
-
 **What has run on staging:**
 
 - On 2026-10-02 (UTC), tag A deployed
@@ -441,8 +432,8 @@ CodeDeploy swaps the two on every deployment. Both are polled for the whole
 deployment: before the approval, in the canary, and in the hour after the
 shift while CodeDeploy keeps the previous task set. While either is in ALARM,
 CodeDeploy stops the deployment and rolls the API back to the previous
-revision by itself. On 2026-10-03 (UTC) an alarm stopped a deployment on staging and
-CodeDeploy reverted the API with no workflow involved
+revision by itself. On 2026-10-03 (UTC) CodeDeploy stopped and reverted an API deployment
+on staging when an alarm went into ALARM
 ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5971647359)),
 and on 2026-10-11 (UTC) an alarm forced in the hour after the shift did the same
 ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)). An alarm in the time before the approval has not been rehearsed
@@ -624,8 +615,7 @@ it, and do not use Rollback, which refuses while it is active.
 ### "Rolled back by an alarm"
 
 One of the deployment group's two 5xx alarms went into ALARM, and CodeDeploy
-stopped the deployment and rolled the API back by itself. The run names the
-alarm and says whether the previous revision is serving again. Read
+stopped the deployment and rolled the API back by itself. Read
 `errorInformation` first, then follow
 [An alarm rolled the API back](rollback-runbook.md#an-alarm-rolled-the-api-back).
 If it says "Stopped by an alarm" instead, the alarm was already firing before
@@ -706,8 +696,7 @@ The titles, and what each means:
   before anything else.
 - **"… rolled back by ECS"** -- the new dashboard's tasks did not become
   healthy, and the deployment circuit breaker put the previous revision back.
-  The service events and a stopped task's reason are printed above; the task
-  log is `/ecs/experimentation-dashboard-<env>`.
+  The task log is `/ecs/experimentation-dashboard-<env>`.
 - **"… changed during this run"** -- the dashboard's PRIMARY deployment is
   neither this run's revision nor the one before it: a Rollback run, another
   deploy or a `cdk deploy` changed it. This run did not change it back.
@@ -722,8 +711,6 @@ The titles, and what each means:
   failed: the dashboard is new and the API may not be. Check both before
   anything else (`scripts/api_serving.py`, and the dashboard describe in
   section 5).
-- **"API deployed, dashboard not confirmed"** -- the summary line of all of the
-  above: it says whether the API check passed, and what the dashboard is on.
 - **"API rolled back by an alarm, dashboard not"** -- the exception to the three
   points above. An API check failed because an alarm stopped the deployment
   after its shift, and CodeDeploy is moving the API back by itself. The

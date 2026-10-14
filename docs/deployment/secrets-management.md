@@ -36,15 +36,14 @@ stacks (below).
 
 ### Database credentials: nothing to create
 
-There is no `db-password` secret any more (#78). The database stack generates
+The database stack generates
 Aurora's master credentials into its own secret,
 `experimentation-database-<env>-aurora-credentials` (JSON with `username` and
 `password` fields; the ARN is the stack's `SecretArn` output), and creates the
 cluster with them. Both backend task definitions read `POSTGRES_USER` and
 `POSTGRES_PASSWORD` from that secret's two fields, and `POSTGRES_SERVER` from
 the stack's writer endpoint, so the credentials the tasks present are by
-construction the ones the cluster has. A hand-made copy could only ever
-disagree with it.
+construction the ones the cluster has.
 
 The generated password may contain any printable character except
 `" @ / \`. The application percent-encodes `POSTGRES_USER` and
@@ -80,12 +79,7 @@ aws secretsmanager create-secret \
 
 ### Redis: nothing to create
 
-There is no Redis secret any more (#147). The old one held a connection URL,
-injected as a variable nothing in the application reads; every Redis client is
-built from `REDIS_HOST` and `REDIS_PORT`, which the task did not set, so the
-tasks talked to `localhost` and ran without Redis.
-
-The API task definition now takes its Redis connection from the Redis stack
+The API task definition takes its Redis connection from the Redis stack
 (`experimentation-redis-<env>`), as plain environment, not secrets:
 
 | Variable | Value |
@@ -103,17 +97,13 @@ there is no password to store: `REDIS_PASSWORD` stays unset.
 Redis is optional to the application: without it the rate limiter falls back
 to per-task memory (and retries Redis every 30 s) and the caches are skipped, and `/health/ready` still
 answers 200 unless `REDIS_REQUIRED=true`. So a Redis the tasks cannot reach (a
-TLS failure, say) does **not** fail a deployment by itself. Two things exist to
-catch it, and the first staging deploy uses one of them:
+TLS failure, say) does **not** fail a deployment by itself. Two things catch it:
 
 - set `REDIS_REQUIRED=true` in staging, so readiness -- the ALB health check --
   fails without Redis; or
 - read `checks.redis.status` from the `/health/ready` body, which is
   `healthy` or `unhealthy` in every environment (production shows the status
   only, not the error).
-
-This change sets neither: the deployed task keeps the default,
-`REDIS_REQUIRED=false`.
 
 ### First Superuser Password
 
@@ -261,8 +251,7 @@ the rest keep the old one.
 ### Rotate JWT Secret Immediately
 
 Rotating the JWT secret invalidates every token the API signed itself: local sign-in tokens and
-the tokens it issues after an SSO sign-in. Tokens issued by Cognito are not signed with it and
-are not affected. It does **not** take effect at once. Tasks that started before the change keep
+the tokens it issues after an SSO sign-in. It does **not** take effect at once. Tasks that started before the change keep
 accepting tokens signed with the old secret until the restart's traffic shift has completed;
 [How long the old value keeps working](#how-long-the-old-value-keeps-working) says how long that
 is. After the shift, users of those tokens must sign in again.
@@ -362,8 +351,7 @@ Step 3: Put the new key where the service that used the old one reads it (a secr
 that service's deployment settings, not Slack or email), and remove the old key from wherever it
 was copied.
 
-Step 4: Find out whether the key was used. The platform records little about a key's use, and
-none of it can list what one key did:
+Step 4: Find out whether the key was used. What the platform records about a key's use:
 
 - **`last_used_at`** on the key's row is when the key last authenticated a request, in UTC. The API writes
   it at most once a minute per key, so it can trail the last request by up to a minute. Step 1
@@ -428,8 +416,7 @@ The preferred way: run **Deploy** again with the release that is already serving
 
 2. **Actions → Deploy → Run workflow** from `main`, with `environment`, `version` the tag's
    `vX.Y.Z` part and `profile` its profile part.
-3. The environment's required reviewer approves the run, as for any deploy. Nothing in AWS has
-   changed before that.
+3. The environment's required reviewer approves the run, as for any deploy.
 
 With a release already deployed, the run (the [deployment guide](deployment-guide.md#3-every-deploy)
 has every step):
