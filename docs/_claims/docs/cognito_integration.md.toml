@@ -79,11 +79,18 @@ by = [
 
 [[unit]]
 text = "SSO sign-in needs AUTH_PROVIDER=local."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_cognito_mode_needs_no_iam.py::test_under_cognito_a_token_the_platform_issued_signs_nobody_in",
+    "test:modules/backend/tests/unit/api/test_sso_ends_with_the_platforms_token.py::test_the_sso_routes_answer_with_the_platforms_own_token",
+]
 
 [[unit]]
 text = "Under AUTH_PROVIDER=cognito the dashboard's sign-in form answers that its endpoint is not available, and an SSO sign-in does not sign the user in."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_cognito_mode_needs_no_iam.py::test_under_cognito_the_dashboards_sign_in_endpoint_is_not_available",
+    "test:backend/tests/unit/services/test_cognito_mode_needs_no_iam.py::test_under_cognito_a_token_the_platform_issued_signs_nobody_in",
+    "test:modules/backend/tests/unit/api/test_sso_ends_with_the_platforms_token.py::test_the_sso_routes_answer_with_the_platforms_own_token",
+]
 
 [[unit]]
 text = "Dashboard sign-in under Cognito is tracked in #708."
@@ -140,7 +147,10 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "No IAM permission is needed for sign-in: the platform reads the user's groups from their access token, not from the Cognito API."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_cognito_mode_needs_no_iam.py::test_every_cognito_call_the_platform_makes_needs_no_iam_permission",
+    "test:backend/tests/unit/services/test_cognito_mode_needs_no_iam.py::test_the_groups_are_the_access_tokens_claim",
+]
 
 [[unit]]
 text = "User pool requirements"
@@ -172,7 +182,10 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "The reference pool in infrastructure/cdk/stacks/authentication_stack.py already requires email."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_auth_stack.py::test_a_user_signs_in_with_a_username_or_an_email_address_and_has_one",
+    "test:infrastructure/tests/test_reference_user_pool.py::test_the_pool_requires_a_given_and_a_family_name",
+]
 
 [[unit]]
 text = "How a sign-in finds its account"
@@ -341,7 +354,7 @@ by = ["test:backend/tests/integration/api/test_users_me_role.py::test_users_me_r
 
 [[unit]]
 text = "The reference pool creates none."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_reference_user_pool.py::test_the_pool_creates_no_group"]
 
 [[unit]]
 text = "Create the user."
@@ -361,7 +374,7 @@ by = ["test:backend/tests/integration/auth/test_cognito_onboarding.py::test_a_us
 
 [[unit]]
 text = "The reference pool also requires given_name and family_name."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_reference_user_pool.py::test_the_pool_requires_a_given_and_a_family_name"]
 
 [[unit]]
 text = "Give them a permanent password."
@@ -373,7 +386,7 @@ by = ["test:backend/tests/integration/auth/test_cognito_onboarding.py::test_a_us
 
 [[unit]]
 text = "The password must meet the pool's policy: in the reference pool, at least 8 characters with upper case, lower case, a digit and a symbol."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_reference_user_pool.py::test_the_password_policy"]
 
 [[unit]]
 text = "Type it at the Password: prompt, which does not show it."
@@ -457,7 +470,10 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "<schema> is the platform's schema: experimentation unless you changed it (POSTGRES_SCHEMA; the Helm chart sets it from postgresql.schema)."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/db/test_schema_name.py::test_the_schema_is_resolved_the_same_way_everywhere",
+    "test:backend/tests/unit/db/test_schema_from_the_chart.py::test_the_chart_sets_the_schema_from_postgresql_schema",
+]
 
 [[unit]]
 text = "It returns exactly one row."
@@ -570,7 +586,10 @@ by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_
 
 [[unit]]
 text = "The record also carries cognito_username, sub and, where an account was involved, row_id, that account's id."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/integration/api/test_cognito_refusal_record_fields.py::test_a_refusal_involving_an_account_names_it_by_row_id",
+    "test:backend/tests/integration/api/test_cognito_refusal_record_fields.py::test_a_refusal_with_no_account_carries_no_row_id",
+]
 
 [[unit]]
 text = "For local_password, linked_elsewhere and legacy_unlinked, row_id is the account to link (see Linking an existing account)."
@@ -730,7 +749,7 @@ by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_
 
 [[unit]]
 text = "The reference app client in infrastructure/cdk/stacks/authentication_stack.py sets no token lifetime, so its access tokens last CDK's default of 60 minutes."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_reference_user_pool.py::test_the_app_client_sets_no_token_lifetime"]
 
 [[unit]]
 text = "To make a change take effect at once, sign the user out of every session, which revokes their tokens:"
