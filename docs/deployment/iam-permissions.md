@@ -132,10 +132,7 @@ a task definition that names roles), `codedeploy:GetDeploymentConfig` /
 (creating a deployment from an AppSpec, below),
 `rds:AddTagsToResource` (a cluster snapshot that copies the cluster's tags,
 below), and `codedeploy:UpdateDeploymentGroup` (creating one with
-`--override-alarm-configuration`, below). The first five are the `IMPLIED`
-table in `scripts/iam_actions.py`, each entry citing the AWS page it comes
-from; a command's other conditional requirements, and why each does not
-apply here, are listed beside it. Confirm the whole list with
+`--override-alarm-configuration`, below). Confirm the whole list with
 `aws iam simulate-principal-policy` before the first staging deploy.
 
 `codedeploy:UpdateDeploymentGroup` is there because of a flag, not a verb

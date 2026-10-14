@@ -142,11 +142,3 @@ disk space below 1 GB is reported as `"low"` and does not fail the probe.
 is up and checks neither PostgreSQL nor Redis.
 
 The ALB health check targets `GET /health` with a 5-second timeout and a 2/3 healthy/unhealthy threshold. Tasks that fail health checks are automatically replaced by ECS.
-
----
-
-## Key Metrics to Watch
-
-| Metric | Healthy Range | Action if Breached |
-|--------|---------------|-------------------|
-| Safety rollback frequency | < 1/week | Investigate flag quality and error rate thresholds |

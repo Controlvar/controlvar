@@ -210,7 +210,7 @@ run `cdk deploy` again, or the next task start fails with
 
 ## How Secrets Are Injected at Runtime
 
-The ECS task definition references secrets by their complete ARN. At container start, ECS fetches the current secret value from Secrets Manager and sets it as an environment variable. The container process reads the environment variable normally — it never calls Secrets Manager directly.
+The ECS task definition references secrets by their complete ARN. At container start, ECS fetches the current secret value from Secrets Manager and sets it as an environment variable.
 
 The API task definition in `infrastructure/cdk/stacks/fargate_service_stack.py`, and the
 migration task in `migration_task_stack.py`, import each secret by its complete ARN, from the
@@ -438,8 +438,7 @@ has every step):
 
 When the workflow is not available:
 [Restart the API on the revision it is serving](rollback-runbook.md#restart-the-api-on-the-revision-it-is-serving)
-in the Rollback Runbook. It registers a copy of the serving revision, creates the deployment
-all at once, approves the shift and confirms the new revision is serving, with no canary.
+in the Rollback Runbook.
 
 ### A deployment is still active
 

@@ -9,7 +9,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The platform's AWS infrastructure is defined as code using AWS CDK v2, in Python: the app is infrastructure/cdk/app.py, and infrastructure/cdk/cdk.json runs it with python3 app.py."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_synth_inputs.py::test_the_cdk_app_is_python_run_by_python3_app_py_on_cdk_v2"]
 
 [[unit]]
 text = "cdk deploy --all provisions the API, the dashboard and the data stores they need in your AWS account."
@@ -51,11 +51,10 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Python | 3.11+ | The CDK app is Python"
-by = ["untested:T"]
-
-[[unit]]
-text = "Node.js | 18+ | Only for the CDK CLI: node --version"
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_synth_inputs.py::test_ci_synthesises_the_app_on_python_3_11",
+    "test:infrastructure/tests/test_synth_inputs.py::test_the_cdk_app_is_python_run_by_python3_app_py_on_cdk_v2",
+]
 
 [[unit]]
 text = "AWS CDK | v2 | npm install -g aws-cdk"
@@ -64,10 +63,6 @@ by = ["test:infrastructure/tests/test_app_profiles.py::TestTheAppActuallySynthes
 [[unit]]
 text = "Docker | | For the bootstrap images the deployment guide pushes"
 by = ["exempt:instruction"]
-
-[[unit]]
-text = "AWS CLI | v2 | Install guide"
-by = ["untested:T"]
 
 [[unit]]
 text = "One-Time Bootstrap"
@@ -102,7 +97,11 @@ by = [
 
 [[unit]]
 text = "cdk synth, cdk diff, cdk deploy and cdk destroy fail without the ones marked required, ALARM_EMAIL is required for staging and prod, and the three secret ARNs are required in every environment (below)."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_synth_inputs.py::test_a_missing_certificate_or_public_url_stops_the_app",
+    "test:infrastructure/tests/test_alarm_email.py::test_the_app_refuses_to_synthesise_staging_or_prod_without_it",
+    "test:infrastructure/tests/test_secret_arns.py::test_the_app_refuses_to_synthesise_without_an_input",
+]
 
 [[unit]]
 text = "One region."
@@ -118,15 +117,18 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "ENVIRONMENT is dev (the default), staging, prod or demo:"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_synth_inputs.py::test_environment_defaults_to_dev_and_takes_four_names"]
 
 [[unit]]
 text = "Required: the ACM certificate for the load balancer's HTTPS listeners:"
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_synth_inputs.py::test_a_missing_certificate_or_public_url_stops_the_app",
+    "test:infrastructure/tests/test_synth_inputs.py::test_the_https_listeners_carry_the_certificate_given",
+]
 
 [[unit]]
 text = "Required: the absolute https:// origin users reach the platform at (one host, app.<domain>):"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_synth_inputs.py::test_a_missing_certificate_or_public_url_stops_the_app"]
 
 [[unit]]
 text = "ALARM_EMAIL is the one address every CloudWatch alarm emails, through the SNS topic experimentation-alerts-<env>."
@@ -170,11 +172,11 @@ by = ["test:infrastructure/tests/test_alarm_email.py::test_a_bad_value_is_refuse
 
 [[unit]]
 text = "Needed every time the app is synthesised."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_alarm_email.py::test_the_app_refuses_to_synthesise_staging_or_prod_without_it"]
 
 [[unit]]
 text = "That includes cdk diff and cdk destroy, not only cdk deploy."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_alarm_email.py::test_the_app_refuses_to_synthesise_staging_or_prod_without_it"]
 
 [[unit]]
 text = "Changing the value replaces the subscription, which then has to be confirmed again."
@@ -266,10 +268,6 @@ text = "Changing a secret's value keeps its ARN."
 by = ["exempt:third-party"]
 
 [[unit]]
-text = "An ARN carries the account ID: keep these out of issues, pull requests and logs."
-by = ["untested:T"]
-
-[[unit]]
 text = "The application's own secret values (database password, JWT secret and the rest) are not read from your shell."
 by = [
     "test:infrastructure/tests/test_secret_arns.py::test_each_execution_role_reads_exactly_its_task_definitions_secrets",
@@ -297,7 +295,10 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "No stack creates a DNS record."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_app_creates_no_dns_record",
+    "test:infrastructure/tests/test_hand_made_resources.py::test_what_a_person_creates_by_hand_no_stack_creates",
+]
 
 [[unit]]
 text = "After cdk deploy the load balancer is up, but the host in PUBLIC_BASE_URL (app.<domain>) does not resolve until you add an alias record for it in your Route 53 hosted zone."
@@ -325,7 +326,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "The Fargate stack names it experimentation-<env>, so this finds the right one in an account with more than one load balancer; do not take the first internet-facing one."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_the_load_balancer_is_named_for_its_environment_and_output"]
 
 [[unit]]
 text = "Both commands must print exactly one value:"
@@ -333,7 +334,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "ALB_DNS is also the ALBDnsName output of experimentation-fargate-<env>."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_the_load_balancer_is_named_for_its_environment_and_output"]
 
 [[unit]]
 text = "The alias records below take ALB_ZONE as their HostedZoneId, not ZONE_ID."
@@ -368,7 +369,10 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "cdk destroy does not remove these records: the stacks did not create them."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_app_creates_no_dns_record",
+    "test:infrastructure/tests/test_hand_made_resources.py::test_what_a_person_creates_by_hand_no_stack_creates",
+]
 
 [[unit]]
 text = "When you tear an environment down, delete them (the same change with \"Action\": \"DELETE\"), or they are deleted with the hosted zone if you delete the zone itself."
@@ -398,15 +402,22 @@ by = ["test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api
 
 [[unit]]
 text = "/health answers 200 through the hostname once its alias record exists (above), because it checks that the database answers, and the load balancer's health checks pass;"
-by = ["untested:S"]
+by = [
+    "test:backend/tests/integration/api/test_api_before_the_first_migration.py::test_health_is_200_and_real_requests_are_500_until_the_schema_exists",
+    "test:infrastructure/tests/test_stack_graph.py::test_the_api_target_groups_check_health_on_slash_health",
+]
 
 [[unit]]
 text = "real requests answer 500, and the API logs errors."
-by = ["untested:S"]
+by = ["test:backend/tests/integration/api/test_api_before_the_first_migration.py::test_health_is_200_and_real_requests_are_500_until_the_schema_exists"]
 
 [[unit]]
 text = "This is expected until the first Deploy creates the schema."
-by = ["untested:S"]
+by = [
+    "test:backend/tests/integration/api/test_api_before_the_first_migration.py::test_health_is_200_and_real_requests_are_500_until_the_schema_exists",
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations",
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_snapshot_is_taken_before_the_migration_from_the_stack_output",
+]
 
 [[unit]]
 text = "Run the first Deploy soon after the first cdk deploy."
@@ -414,15 +425,22 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Requests that reach the API in between, from scanners as much as from people, can put one of the API's 5xx alarms into ALARM, and Deploy refuses to start while one is."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_preflight_refusals.py::test_a_firing_api_alarm_refuses_the_deploy_before_anything_is_built",
+    "test:backend/tests/unit/infrastructure/test_deploy_preflight_refusals.py::test_deploy_runs_the_alarm_check_first_and_overrides_only_when_ticked",
+]
 
 [[unit]]
 text = "The way through is Deploy's existing break-glass (rollback runbook, \"Fix forward while an alarm is firing\"); whether to use it is decided by a person at that moment."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_preflight_refusals.py::test_with_the_break_glass_a_firing_alarm_is_a_warning_and_the_deploy_goes_on",
+    "test:backend/tests/unit/infrastructure/test_deploy_preflight_refusals.py::test_the_override_is_off_unless_a_person_ticks_it_with_a_reason",
+    "test:backend/tests/unit/infrastructure/test_deploy_preflight_refusals.py::test_deploy_runs_the_alarm_check_first_and_overrides_only_when_ticked",
+]
 
 [[unit]]
 text = "Rolling the API back runs the older release against the newer schema, which works only for backward-compatible migrations; for one that is not, undo the migration while the release that contains it is still serving, before rolling the API back (rollback runbook, Database Rollback Procedure)."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_preflight_refusals.py::test_rollback_changes_no_schema"]
 
 [[unit]]
 text = "After the API has been rolled back, the emergency route is a point-in-time restore with scripts/restore_repoint.sh (Disaster Recovery, Scenario 4)."
@@ -434,7 +452,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Deploy refuses to deploy an API revision that lacks the setting, and says to cdk deploy the Fargate stack from a current checkout first."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_preflight_refusals.py::test_an_api_revision_without_the_setting_is_refused_naming_the_cdk_deploy"]
 
 [[unit]]
 text = "Which stacks you get: core or full"
@@ -510,7 +528,11 @@ by = [
 
 [[unit]]
 text = "Without the counters stack there is no counter table: the bandit scheduler falls back to PostgreSQL for its statistics, which is the core behaviour."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerStatsFallback::test_falls_back_to_postgres_when_counter_module_is_absent",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerStatsFallback::test_falls_back_to_postgres_when_dynamodb_raises",
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_the_core_api_is_given_no_counters_table",
+]
 
 [[unit]]
 text = "Individual Stack Deployment"
@@ -575,11 +597,7 @@ by = ["test:infrastructure/tests/test_vpc_stack.py::test_vpc_created"]
 
 [[unit]]
 text = "NAT gateways for outbound internet access from private subnets: two in prod (one per availability zone), one in every other environment"
-by = ["untested:T"]
-
-[[unit]]
-text = "Security groups for ALB, ECS tasks, RDS, and ElastiCache"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_environments_do_not_collide.py::test_nat_gateway_count_per_environment"]
 
 [[unit]]
 text = "The VPC is 10.0.0.0/16 across two availability zones, with a public, a private and an isolated /24 in each: 10.0.0.0/24 and 10.0.1.0/24 public, 10.0.2.0/24 and 10.0.3.0/24 private, 10.0.4.0/24 and 10.0.5.0/24 isolated."
@@ -624,7 +642,10 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Aurora PostgreSQL cluster: writer + 1 reader on db.r5.large for prod, a single db.t3.medium in every other environment"
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_stack_graph.py::test_aurora_instances_per_environment",
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_aurora_instance_count_per_environment",
+]
 
 [[unit]]
 text = "ElastiCache Redis replication group: 3 nodes on cache.r6g.large for prod (automatic failover, Multi-AZ); a single node elsewhere, cache.t4g.small for staging and cache.t4g.medium otherwise, with no replica and so no failover"
@@ -632,11 +653,11 @@ by = ["test:infrastructure/tests/test_redis_sizing.py::test_replication_group_si
 
 [[unit]]
 text = "Subnet groups and parameter groups"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_the_subnet_and_parameter_groups"]
 
 [[unit]]
 text = "Redis snapshots kept 7 days in prod, 3 in staging, 1 otherwise"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_redis_snapshots_daily_in_its_window_and_keeps_them_per_environment"]
 
 [[unit]]
 text = "experimentation-compute-<env> and experimentation-fargate-<env>"
@@ -648,7 +669,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "ECS task definition for the API container (1 vCPU, 2 GB memory)"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_the_api_task_is_one_vcpu_and_two_gb"]
 
 [[unit]]
 text = "ECS service for the API with 3 tasks in prod, 2 in dev and staging and 1 in demo, auto-scaling from that count up to 10"
@@ -675,19 +696,30 @@ by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops
 
 [[unit]]
 text = "IAM task role for the API: the CloudWatchLogsFullAccess managed policy, secretsmanager:GetSecretValue on the secrets the task reads, and the ssmmessages and logs actions ECS Exec uses."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_api_task_and_data_resources.py::test_the_api_task_role_holds_exactly_these_permissions"]
 
 [[unit]]
 text = "The full profile adds dynamodb:Query and dynamodb:UpdateItem on the experiment-counters-<env> table alone, and sets DYNAMODB_COUNTERS_TABLE and AWS_DEFAULT_REGION on the API container."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_the_api_task_role_may_query_and_update_the_counters_table_only",
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_the_api_is_given_the_counters_table_the_counters_stack_creates",
+]
 
 [[unit]]
 text = "It also adds, for the ETL routes, glue:StartJobRun and glue:GetJobRun on this environment's two Glue jobs, glue:StartCrawler and glue:GetCrawler on its crawler, and glue:GetTable and glue:BatchCreatePartition on the catalog, the experimentation_<env> database and its tables, and sets the four GLUE_ names on the API container."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_the_api_task_role_may_use_this_environments_glue_objects",
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_the_glue_grant_names_exact_arns",
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_the_glue_grant_names_what_the_api_is_told",
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_the_api_is_given_the_glue_names_the_glue_stack_creates",
+]
 
 [[unit]]
 text = "There is no Kinesis, Cognito, Athena, S3 or other DynamoDB permission"
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_api_task_and_data_resources.py::test_the_api_task_role_holds_exactly_these_permissions",
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_the_api_task_role_may_query_and_update_the_counters_table_only",
+]
 
 [[unit]]
 text = "experimentation-dynamodb-<env> and experimentation-dynamodb-counters-<env>"
@@ -695,11 +727,14 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Core: the events, feature-flags and overrides tables"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_the_core_tables_and_the_full_profiles_counters_table"]
 
 [[unit]]
 text = "Full profile only (the counters module): the experiment-counters DynamoDB table with on-demand billing and a GSI for querying by experiment"
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_stack_graph.py::test_the_core_tables_and_the_full_profiles_counters_table",
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_the_core_api_is_given_no_counters_table",
+]
 
 [[unit]]
 text = "experimentation-analytics-<env> (full profile only — the etl module)"
@@ -711,11 +746,11 @@ by = ["test:infrastructure/tests/test_app_profiles.py::TestTheAppActuallySynthes
 
 [[unit]]
 text = "Firehose delivery stream into the data-lake bucket"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_api_task_and_data_resources.py::test_the_analytics_stack_streams_to_s3_and_has_an_opensearch_domain"]
 
 [[unit]]
 text = "OpenSearch Service domain"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_api_task_and_data_resources.py::test_the_analytics_stack_streams_to_s3_and_has_an_opensearch_domain"]
 
 [[unit]]
 text = "experimentation-monitoring-<env>"
@@ -723,7 +758,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "CloudWatch dashboards experimentation-platform-<env> and experimentation-application-metrics-<env> (some of their widgets graph metrics nothing publishes, #424)"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_the_two_dashboards_and_a_widget_nothing_publishes_to"]
 
 [[unit]]
 text = "CloudWatch alarms: AuroraHighCPU-<env> on the Aurora writer, and one RedisHighCPU-00N-<env> per Redis node."
@@ -773,15 +808,21 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "CloudFront."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_api_task_and_data_resources.py::test_no_cloudfront_distribution_and_no_bucket_for_the_dashboard",
+    "test:infrastructure/tests/test_stack_graph.py::test_the_split_url_construct_ships_and_nothing_builds_it",
+]
 
 [[unit]]
 text = "No stack creates a distribution."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_api_task_and_data_resources.py::test_no_cloudfront_distribution_and_no_bucket_for_the_dashboard",
+    "test:infrastructure/tests/test_stack_graph.py::test_the_split_url_construct_ships_and_nothing_builds_it",
+]
 
 [[unit]]
 text = "The split-URL module ships a construct for one (modules/infrastructure/constructs/split_url_distribution.py), but app.py does not use it; see Split URL testing."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_the_split_url_construct_ships_and_nothing_builds_it"]
 
 [[unit]]
 text = "Blue/Green Deployment for Zero-Downtime Updates"
@@ -817,7 +858,7 @@ by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_api_canary_
 
 [[unit]]
 text = "The old tasks are kept for an hour, so Rollback can put them back, and then terminated"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_the_old_tasks_are_kept_for_an_hour_then_terminated"]
 
 [[unit]]
 text = "Alarms watch the API's canary and the hour after it."
@@ -878,15 +919,21 @@ by = ["exempt:intent"]
 
 [[unit]]
 text = "Only prod keeps its data when its stacks are destroyed."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_retention_is_chosen_per_environment",
+    "test:infrastructure/tests/test_backups_per_environment.py::test_only_prod_retains_its_data",
+]
 
 [[unit]]
 text = "Every other environment (dev, staging, demo) is disposable: its database, tables, buckets, stream, search domain, user pool, key and log groups are deleted with it, so the next deploy of the same environment starts clean instead of failing on the names the last one left behind."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_retention_is_chosen_per_environment",
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_a_destroyed_bucket_is_emptied_first",
+]
 
 [[unit]]
 text = "The rule is one line, retains_data(env) == (env == \"prod\"), in infrastructure/cdk/stacks/environments.py."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_only_prod_retains_its_data"]
 
 [[unit]]
 text = "Before you destroy prod, export anything you need that the retained resources below do not already keep: pg_dump the database, export audit logs (GET /api/v1/compliance/export, full profile only), archive CloudWatch logs."
@@ -902,11 +949,11 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "By hand, the same order is: a stack that imports from another, or depends on it, goes first -- so monitoring and the Glue stack go before analytics, and fargate before compute and monitoring."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_what_must_be_destroyed_first"]
 
 [[unit]]
 text = "cdk destroy synthesises the app like any other command, so a staging or prod teardown needs ALARM_EMAIL set too."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_alarm_email.py::test_the_app_refuses_to_synthesise_staging_or_prod_without_it"]
 
 [[unit]]
 text = "The glue, analytics and counters stacks exist only in a full checkout; skip their lines in a core one."
@@ -914,7 +961,10 @@ by = ["test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::tes
 
 [[unit]]
 text = "The buckets outside prod are emptied before they are deleted: auto_delete_objects=True adds a custom resource backed by a CDK-provided Lambda (Custom::S3AutoDeleteObjectsCustomResourceProvider, with its own IAM role) that, when the stack is deleted, denies new writes to the bucket and deletes every object version and delete marker."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_backups_per_environment.py::test_a_bucket_outside_prod_is_emptied_by_the_cdks_provider",
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_a_destroyed_bucket_is_emptied_first",
+]
 
 [[unit]]
 text = "It acts only on a bucket carrying the aws-cdk:auto-delete-objects tag."
@@ -926,11 +976,18 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Everything below survives cdk destroy --all."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_stack_graph.py::test_what_prod_keeps_when_its_stacks_are_destroyed",
+    "test:infrastructure/tests/test_hand_made_resources.py::test_what_a_person_creates_by_hand_no_stack_creates",
+]
 
 [[unit]]
 text = "The first group is kept on purpose, in prod only; the rest is created outside the stacks' templates and is yours to remove."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_retention_is_chosen_per_environment",
+    "test:infrastructure/tests/test_stack_graph.py::test_what_prod_keeps_when_its_stacks_are_destroyed",
+    "test:infrastructure/tests/test_hand_made_resources.py::test_what_a_person_creates_by_hand_no_stack_creates",
+]
 
 [[unit]]
 text = "What | Where it comes from | Environments | Billed while it exists | How to remove it"
@@ -938,47 +995,56 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The final snapshot CloudFormation takes of the Aurora cluster | the cluster's SNAPSHOT policy | prod | snapshot storage | aws rds delete-db-cluster-snapshot"
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_backups_per_environment.py::test_only_prod_takes_a_final_snapshot_of_its_cluster",
+    "test:infrastructure/tests/test_stack_graph.py::test_what_prod_keeps_when_its_stacks_are_destroyed",
+]
 
 [[unit]]
 text = "KMS key (the alias is deleted) | RETAIN; the final snapshot is encrypted with it | prod | per key per month | aws kms schedule-key-deletion -- only after the snapshot is gone"
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_stack_graph.py::test_what_prod_keeps_when_its_stacks_are_destroyed",
+    "test:infrastructure/tests/test_database_wiring.py::test_the_database_key_is_kept_in_prod_only",
+]
 
 [[unit]]
 text = "Cognito user pool experimentation-platform-users-prod | RETAIN | prod | per monthly active user | aws cognito-idp delete-user-pool"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_what_prod_keeps_when_its_stacks_are_destroyed"]
 
 [[unit]]
 text = "DynamoDB tables experimentation-{events,feature-flags,overrides}-prod, experiment-counters-prod | RETAIN | prod | capacity (the core tables are provisioned in prod) and storage | aws dynamodb delete-table"
-by = ["untested:T"]
-
-[[unit]]
-text = "DynamoDB tables experimentation-{assignments,experiments}-prod, from a production deployment made before the stack stopped creating them (#605). Nothing reads them. They are not left by cdk destroy but by the first cdk deploy of experimentation-dynamodb-prod after the upgrade, which removes them from the stack (and their auto-scaling) and keeps the tables | RETAIN | prod | provisioned capacity and storage | aws dynamodb create-backup if you want a copy, then aws dynamodb delete-table"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_what_prod_keeps_when_its_stacks_are_destroyed"]
 
 [[unit]]
 text = "Log groups /ecs/experimentation-{backend,dashboard,migrate}-prod | RETAIN | prod | log storage | aws logs delete-log-group"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_what_prod_keeps_when_its_stacks_are_destroyed"]
 
 [[unit]]
 text = "Data-lake, Athena-results and Glue-scripts buckets | RETAIN | prod (full) | storage, every object version | empty (all versions), then aws s3 rb"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_what_prod_keeps_when_its_stacks_are_destroyed"]
 
 [[unit]]
 text = "Kinesis stream and OpenSearch domain | RETAIN | prod (full) | per shard-hour; per instance-hour | aws kinesis delete-stream; aws opensearch delete-domain"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_what_prod_keeps_when_its_stacks_are_destroyed"]
 
 [[unit]]
 text = "pre-migration- and pre-deploy- Aurora cluster snapshots | taken by the deploy and migrate workflows, not by CloudFormation | every environment they ran against | snapshot storage | aws rds delete-db-cluster-snapshot. Outside prod the KMS key they are encrypted with is deleted with the stack, so they cannot be restored afterwards"
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_preflight_refusals.py::test_the_workflows_take_named_snapshots_and_delete_none",
+    "test:infrastructure/tests/test_database_wiring.py::test_the_database_key_is_kept_in_prod_only",
+    "test:infrastructure/tests/test_hand_made_resources.py::test_no_stack_schedules_a_rotation_or_a_backup",
+]
 
 [[unit]]
 text = "The alias A records for app.<domain> (and api.<domain>) | created by hand after the first deploy (Point the hostname at the load balancer) | every environment | nothing for the records; the hosted zone is billed per month | the same change-resource-record-sets with \"Action\": \"DELETE\", or delete the hosted zone"
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_app_creates_no_dns_record",
+    "test:infrastructure/tests/test_hand_made_resources.py::test_what_a_person_creates_by_hand_no_stack_creates",
+]
 
 [[unit]]
 text = "The secrets under /<env>/experimentation/ | created by hand before the first deploy (Secrets Management) | every environment | per secret per month | aws secretsmanager delete-secret"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_hand_made_resources.py::test_what_a_person_creates_by_hand_no_stack_creates"]
 
 [[unit]]
 text = "ECR repositories experimentation-platform/backend and experimentation-platform/web, and their images | created by hand once per account (Deployment Guide) | shared by all environments | image storage | aws ecr delete-repository --force, once no environment needs them"
@@ -1014,15 +1080,18 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "This version names the ECS cluster from ENVIRONMENT (experimentation-<env>; it was experimentation-dev in every environment, #142) and renames the CodeDeploy application to experimentation-platform-<env> (#139)."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_stack_graph.py::test_the_names_the_environment_gives_the_cluster_and_the_application",
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_the_cluster_is_named_for_its_environment",
+]
 
 [[unit]]
 text = "An environment deployed by an earlier version cannot be updated in place: cdk deploy --all fails on the compute stack."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_only_fargate_imports_the_cluster_and_only_migrations_depends_on_fargate"]
 
 [[unit]]
 text = "The fargate stack is the only importer of that export -- the analytics stack imports nothing from compute and is not touched."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_only_fargate_imports_the_cluster_and_only_migrations_depends_on_fargate"]
 
 [[unit]]
 text = "So, for each environment deployed before this change:"
@@ -1030,7 +1099,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "--exclusively matters: without it the CDK CLI also destroys the stacks that depend on fargate, which is the migrations stack."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_only_fargate_imports_the_cluster_and_only_migrations_depends_on_fargate"]
 
 [[unit]]
 text = "Run the two delete-log-group lines: a recreated fargate stack would otherwise fail on the names."
@@ -1042,4 +1111,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Destroying fargate stops the API and the dashboard until the last step finishes; the database, Redis and the data stores are not touched."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_stack_graph.py::test_the_fargate_stack_holds_the_two_services_and_no_data_store",
+    "test:infrastructure/tests/test_stack_graph.py::test_only_fargate_imports_the_cluster_and_only_migrations_depends_on_fargate",
+]

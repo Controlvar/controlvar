@@ -12,10 +12,8 @@ The platform's AWS infrastructure is defined as code using **AWS CDK v2**, in **
 |------|---------|---------|
 | AWS Account | Any | [Sign up](https://aws.amazon.com/) |
 | Python | 3.11+ | The CDK app is Python |
-| Node.js | 18+ | Only for the CDK CLI: `node --version` |
 | AWS CDK | v2 | `npm install -g aws-cdk` |
 | Docker | | For the bootstrap images the [deployment guide](../deployment/deployment-guide.md) pushes |
-| AWS CLI | v2 | [Install guide](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) |
 
 ---
 
@@ -141,8 +139,6 @@ export AUDIT_HMAC_KEY_SECRET_ARN=$(aws secretsmanager describe-secret \
 - **Recreating a secret changes its ARN.** Update the input and run
   `cdk deploy` again, or the next task start fails. Changing a secret's value
   keeps its ARN.
-- An ARN carries the account ID: keep these out of issues, pull requests and
-  logs.
 
 The application's own secret *values* (database password, JWT secret and the
 rest) are not read from your shell. The task definition takes them from Secrets
@@ -363,7 +359,6 @@ dashboard is still on `:bootstrap`.
 
 - VPC with public and private subnets across 2 availability zones
 - NAT gateways for outbound internet access from private subnets: two in `prod` (one per availability zone), one in every other environment
-- Security groups for ALB, ECS tasks, RDS, and ElastiCache
 
 The VPC is `10.0.0.0/16` across two availability zones, with a public, a
 private and an isolated `/24` in each: `10.0.0.0/24` and `10.0.1.0/24` public,
@@ -561,7 +556,6 @@ is yours to remove.
 | KMS key (the alias is deleted) | RETAIN; the final snapshot is encrypted with it | prod | per key per month | `aws kms schedule-key-deletion` -- only after the snapshot is gone |
 | Cognito user pool `experimentation-platform-users-prod` | RETAIN | prod | per monthly active user | `aws cognito-idp delete-user-pool` |
 | DynamoDB tables `experimentation-{events,feature-flags,overrides}-prod`, `experiment-counters-prod` | RETAIN | prod | capacity (the core tables are provisioned in prod) and storage | `aws dynamodb delete-table` |
-| DynamoDB tables `experimentation-{assignments,experiments}-prod`, from a production deployment made before the stack stopped creating them (#605). Nothing reads them. They are not left by `cdk destroy` but by the first `cdk deploy` of `experimentation-dynamodb-prod` after the upgrade, which removes them from the stack (and their auto-scaling) and keeps the tables | RETAIN | prod | provisioned capacity and storage | `aws dynamodb create-backup` if you want a copy, then `aws dynamodb delete-table` |
 | Log groups `/ecs/experimentation-{backend,dashboard,migrate}-prod` | RETAIN | prod | log storage | `aws logs delete-log-group` |
 | Data-lake, Athena-results and Glue-scripts buckets | RETAIN | prod (full) | storage, every object version | empty (all versions), then `aws s3 rb` |
 | Kinesis stream and OpenSearch domain | RETAIN | prod (full) | per shard-hour; per instance-hour | `aws kinesis delete-stream`; `aws opensearch delete-domain` |
