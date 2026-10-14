@@ -79,6 +79,29 @@ def test_the_operator_page_runs_its_commands_in_the_api_container():
     )
 
 
+#: A command line that runs alembic or the bootstrap, and the API container's
+#: prefix every such line on the operator page carries.
+_RUNS_ALEMBIC = re.compile(r"\bpython -m (?:alembic|backend\.app\.db\.bootstrap)\b")
+_IN_THE_API = re.compile(
+    r"^docker compose exec (?:-e [A-Z_]{1,40}=\S{1,60} ){0,4}api python -m "
+)
+
+
+def test_every_alembic_and_bootstrap_command_runs_in_the_api_container():
+    """Every shell line of the operator page that runs alembic or the bootstrap
+    runs it in the API container (``docker compose exec api``); the AWS block
+    hands the bootstrap to the migration task as JSON, which runs nothing here."""
+    lines = [
+        line.strip()
+        for _, body in shell_blocks(OPERATOR)
+        for line in body.splitlines()
+        if _RUNS_ALEMBIC.search(line)
+    ]
+    assert len(lines) >= 10, lines
+    outside = [line for line in lines if not _IN_THE_API.match(line)]
+    assert outside == [], outside
+
+
 def _migration_command() -> list[str]:
     for node in ast.parse(STACK.read_text(encoding="utf-8")).body:
         if (

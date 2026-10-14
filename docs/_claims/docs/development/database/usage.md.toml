@@ -13,11 +13,11 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "The API keeps its data in PostgreSQL through SQLAlchemy."
-by = ["untested:T"]
+by = ["test:backend/tests/smoke/test_core_model_registry.py::TestCoreModelRegistry::test_every_model_is_a_sqlalchemy_class_under_the_models_packages"]
 
 [[unit]]
 text = "The models are in backend/app/models/, and the optional modules' in modules/backend/app/models/."
-by = ["untested:T"]
+by = ["test:backend/tests/smoke/test_core_model_registry.py::TestCoreModelRegistry::test_every_model_is_a_sqlalchemy_class_under_the_models_packages"]
 
 [[unit]]
 text = "The models' tables are in the schema POSTGRES_SCHEMA names."
