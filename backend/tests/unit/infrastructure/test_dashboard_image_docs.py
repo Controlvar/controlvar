@@ -99,6 +99,19 @@ class TestTheDocumentedDashboardBuild:
             pytest.skip(f"this tree has no {document.name}")
         default = _dockerfile_default_profile()
         other = "full" if default == "core" else "core"
-        text = document.read_text()
+        # Backticks are markup: `EXPERIMENTLY_PROFILE=core` is the default
+        # says the same as the bare words.
+        text = document.read_text().replace("`", "")
         assert f"EXPERIMENTLY_PROFILE={other} is the default" not in text
         assert f"the {other} profile by default" not in text
+
+
+@pytest.mark.regression
+def test_the_modules_page_names_the_dockerfile_default():
+    """The modules page says which profile a plain dashboard build gives."""
+    page = DOCS[0]
+    if not page.is_file():
+        pytest.skip(f"this tree has no {page.name}")
+    text = page.read_text().replace("`", "")
+    default = _dockerfile_default_profile()
+    assert f"For the dashboard, EXPERIMENTLY_PROFILE={default} is the default" in text

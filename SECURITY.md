@@ -55,13 +55,13 @@ reporters in the advisory and the changelog unless you ask us not to.
 
 ## Supported versions
 
-Experimently has not yet cut a `1.0.0` release. The table will be replaced with
-released versions at launch; until then only the tip of `main` is supported.
+Experimently has not yet cut a `1.0.0` release. Until it does, only the latest
+release receives fixes: upgrade to it.
 
 | Version | Supported |
 |---|---|
-| `main` (unreleased) | ✅ Security fixes |
-| Pre-1.0 tags and release candidates | ❌ Upgrade to `main` |
+| The latest release | ✅ Receives fixes |
+| Older releases and release candidates | ❌ Upgrade to the latest release |
 
 Once `1.0.0` ships, the policy is: the current minor release and the one before
 it receive security fixes, for at least 6 months after the newer minor is
@@ -90,7 +90,7 @@ be closed as informational):
   credentials, unless they cross a documented trust boundary;
 - results from a default development configuration — `DEV_AUTH_BYPASS=true`,
   `ENVIRONMENT=development`, the seeded `admin@demo.com` account, the
-  `changeme-*` placeholder secrets in `.env.example` — which are documented as
+  placeholder `SECRET_KEY` and first administrator's password in `.env.example` — which are documented as
   insecure and refuse to start under `ENVIRONMENT=production`;
 - missing hardening headers or rate limits on the demo applications in `demo/`;
 - vulnerabilities in third-party dependencies with no exploitable path in this
