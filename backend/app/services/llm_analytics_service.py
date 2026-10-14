@@ -10,16 +10,17 @@ Also provides:
 - run_llm_as_judge     — use Claude as a judge to score responses
 """
 
+import json
 import logging
 import math
 import statistics
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Tuple
 from uuid import UUID
 
 from scipy import stats
 from sqlalchemy.orm import Session
 
-from backend.app.core.anthropic_compat import first_text
+from backend.app.core.anthropic_compat import first_text_or_empty
 from backend.app.core.config import settings
 from backend.app.models.llm_experiment import (
     LLMEvaluation,
@@ -32,6 +33,17 @@ from backend.app.schemas.llm_experiments import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: ``LLMJudgeResult.reasoning`` when the judge call raised. The exception is
+#: logged, never returned: it can carry the provider's own wording.
+JUDGE_CALL_FAILED_REASONING = "The judge call failed; no score was stored."
+
+#: ``LLMJudgeResult.reasoning`` when the judge answered without a usable
+#: score, followed by the first ``JUDGE_REPLY_PREFIX_CHARS`` of its reply.
+JUDGE_NO_SCORE_REASONING = (
+    "The judge's reply had no score from 0 to 1; no score was stored. Reply: "
+)
+JUDGE_REPLY_PREFIX_CHARS = 200
 
 
 # ---------------------------------------------------------------------------
@@ -87,8 +99,12 @@ def _welch_t_test(a: List[float], b: List[float]) -> Optional[float]:
     The p-value is exact: the two-tailed tail area of Student's t distribution
     at the Welch-Satterthwaite degrees of freedom, at every sample size (#1192).
 
-    Returns None if either sample has fewer than 2 observations, and 1.0 when
-    both samples have zero variance (the standard error is 0).
+    Returns None if either sample has fewer than 2 observations, and None
+    when neither sample varies (both variances are 0, so the standard error is
+    0 and there is no t distribution to read a p-value from). It used to
+    return 1.0 there, "no difference", even for [2, 2, 2] against [5, 5].
+    One sample with variation is enough: [2, 2, 2] against [5, 6] gives
+    0.0903, as scipy does.
     """
     if len(a) < 2 or len(b) < 2:
         return None
@@ -100,7 +116,7 @@ def _welch_t_test(a: List[float], b: List[float]) -> Optional[float]:
     n_b = len(b)
     se = math.sqrt(var_a / n_a + var_b / n_b)
     if se == 0:
-        return 1.0
+        return None
     t_stat = abs(mean_a - mean_b) / se
     # Welch-Satterthwaite degrees of freedom
     num = (var_a / n_a + var_b / n_b) ** 2
@@ -110,7 +126,12 @@ def _welch_t_test(a: List[float], b: List[float]) -> Optional[float]:
 
 
 def _cohens_d(a: List[float], b: List[float]) -> Optional[float]:
-    """Cohen's d effect size (pooled std)."""
+    """Cohen's d effect size (pooled std).
+
+    None if either sample has fewer than 2 observations, or when neither
+    sample varies (the pooled standard deviation is 0, so d is undefined; it
+    used to be 0.0, "no effect", even when every value differed).
+    """
     if len(a) < 2 or len(b) < 2:
         return None
     mean_diff = statistics.mean(b) - statistics.mean(a)
@@ -118,7 +139,7 @@ def _cohens_d(a: List[float], b: List[float]) -> Optional[float]:
         (len(a) - 1) * statistics.variance(a) + (len(b) - 1) * statistics.variance(b)
     ) / (len(a) + len(b) - 2)
     if pooled_var <= 0:
-        return 0.0
+        return None
     return mean_diff / math.sqrt(pooled_var)
 
 
@@ -163,6 +184,9 @@ class LLMEvaluationAnalyticsService:
 
         Includes:
         - n_evaluations per variant
+        - n_auto_eval_unscored per variant: its evaluations with no judge
+          score (never judged, or the judge call failed or gave no score),
+          which every auto-eval statistic leaves out
         - mean/CI for latency, cost, auto_eval_score, business_metric
         - p-value and Cohen's d vs control, on the winner's metric
         - winner determination, on one metric for every variant
@@ -232,6 +256,7 @@ class LLMEvaluationAnalyticsService:
                 e.estimated_cost_usd for e in evals if e.estimated_cost_usd is not None
             ]
             ae_scores = ae_by_variant[vid]
+            n_unscored = len(evals) - len(ae_scores)
             hr_scores = [e.human_rating for e in evals if e.human_rating is not None]
             bm_values = bm_by_variant[vid]
             metric_values = metric_by_variant.get(vid, [])
@@ -263,6 +288,7 @@ class LLMEvaluationAnalyticsService:
                     variant_name=variant.name,
                     is_control=variant.is_control,
                     n_evaluations=len(evals),
+                    n_auto_eval_unscored=n_unscored,
                     mean_latency_ms=_mean([float(l) for l in latencies]),
                     latency_ci_lower=lat_ci[0],
                     latency_ci_upper=lat_ci[1],
@@ -291,6 +317,9 @@ class LLMEvaluationAnalyticsService:
             winner_variant_name=winner_name,
             winner_metric=winner_metric,
             total_evaluations=len(all_evals),
+            total_auto_eval_unscored=sum(
+                1 for e in all_evals if e.auto_eval_score is None
+            ),
         )
 
     def submit_human_rating(
@@ -354,6 +383,12 @@ class LLMEvaluationAnalyticsService:
         response on the given criteria (0–1).  Stores the auto_eval_score on
         each LLMEvaluation record.
 
+        A judge call that fails, or a reply without a usable score, stores
+        ``None``: the evaluation is unscored, replacing any earlier score, and
+        its result carries ``score=None`` and ``error`` (``"call_failed"`` or
+        ``"no_score"``). It used to store 0.5, which the results then counted
+        as a real score (#1192).
+
         If evaluation_ids is None, scores all evaluations for the experiment.
         """
         query = db.query(LLMEvaluation).filter(
@@ -367,12 +402,16 @@ class LLMEvaluationAnalyticsService:
 
         results: List[LLMJudgeResult] = []
         for ev in evaluations:
-            score, reasoning = await self._judge_response(
+            score, reasoning, error = await self._judge_response(
                 response=ev.model_response,
                 prompt=ev.rendered_prompt,
                 criteria=judge_criteria,
                 judge_model=judge_model,
             )
+            # None on a failure, on purpose: the stored value always means the
+            # latest judge run that covered this evaluation, so a run that
+            # fails clears an earlier score instead of leaving it to be read
+            # as this run's.
             ev.auto_eval_score = score
             db.add(ev)
             results.append(
@@ -381,6 +420,7 @@ class LLMEvaluationAnalyticsService:
                     score=score,
                     reasoning=reasoning,
                     judge_model=judge_model,
+                    error=error,
                 )
             )
         db.commit()
@@ -396,11 +436,14 @@ class LLMEvaluationAnalyticsService:
         prompt: str,
         criteria: str,
         judge_model: str,
-    ) -> tuple[float, str]:
+    ) -> Tuple[Optional[float], str, Optional[str]]:
         """
         Ask the judge model to score a response on a criteria.
 
-        Returns (score_0_to_1, reasoning_text).
+        Returns ``(score, reasoning, error)``: a score from 0 to 1 and
+        ``error=None``, or ``score=None`` with ``error`` ``"call_failed"`` (the
+        call raised; the exception is logged, and the reasoning is a fixed
+        text) or ``"no_score"`` (see :meth:`_parse_judge_response`).
         """
         judge_prompt = (
             f"You are an impartial evaluator.  Rate the following AI response on "
@@ -419,34 +462,77 @@ class LLMEvaluationAnalyticsService:
                 # 200 was sized for the answer alone. With adaptive thinking
                 # on -- which `judge_model` may well select, since it is
                 # whatever the user configured -- the budget can be spent
-                # before the verdict starts, and every evaluation then scored
-                # exactly 0.5 and fed the t-tests as if a judge had produced it.
+                # before the verdict starts, and the reply then carries no
+                # text and so no score.
                 max_tokens=4096,
                 messages=[{"role": "user", "content": judge_prompt}],
             )
-            raw = first_text(msg)
-            return self._parse_judge_response(raw)
         except Exception as exc:
-            logger.warning(f"LLM-as-judge call failed: {exc}, using fallback score")
-            return 0.5, "Judge unavailable — fallback score assigned"
+            logger.warning(
+                "LLM-as-judge call failed: %s; the evaluation is left unscored", exc
+            )
+            return None, JUDGE_CALL_FAILED_REASONING, "call_failed"
+        return self._parse_judge_response(first_text_or_empty(msg))
 
     @staticmethod
-    def _parse_judge_response(raw: str) -> tuple[float, str]:
-        """Parse JSON judge response, with graceful fallback."""
-        import json
-        import re
+    def _parse_judge_response(raw: str) -> Tuple[Optional[float], str, Optional[str]]:
+        """
+        Read the judge's score from its reply.
 
-        try:
-            data = json.loads(raw)
-            score = float(data.get("score", 0.5))
-            score = max(0.0, min(1.0, score))
-            reasoning = str(data.get("reasoning", ""))
-            return score, reasoning
-        except Exception:
-            pass
-        # Try to extract a float from the raw text
-        nums = re.findall(r"\b0?\.\d+\b|\b[01]\b", raw)
-        if nums:
-            score = max(0.0, min(1.0, float(nums[0])))
-            return score, raw[:200]
-        return 0.5, raw[:200] if raw else "Parse error"
+        A score is read only from a JSON object: the whole reply, or, when the
+        whole reply is not a JSON object, the span from its first ``{`` to its
+        last ``}`` (which covers a fenced block or a sentence around the
+        object). The object's ``score`` must be a JSON number, or a string
+        holding one, that is finite and from 0 to 1. Then the result is
+        ``(score, reasoning, None)``.
+
+        Anything else is ``(None, <fixed text and the reply's start>,
+        "no_score")``: no object, a missing, null, boolean or non-numeric
+        ``score``, NaN or infinity, or a value outside 0 to 1, which is not
+        clamped. No number is taken from free text: "I give it 1 out of 5" used
+        to score 1.0, and a missing score 0.5 (#1192).
+
+        Linear in the length of the reply: two scans for the braces and at most
+        two JSON parses.
+        """
+        text = raw or ""
+        data = _json_object(text)
+        if data is None:
+            start, end = text.find("{"), text.rfind("}")
+            if 0 <= start < end:
+                data = _json_object(text[start : end + 1])
+        score = _unit_score(data.get("score")) if data is not None else None
+        if score is None:
+            return (
+                None,
+                JUDGE_NO_SCORE_REASONING + text[:JUDGE_REPLY_PREFIX_CHARS],
+                "no_score",
+            )
+        reasoning = data.get("reasoning", "")
+        return score, reasoning if isinstance(reasoning, str) else str(reasoning), None
+
+
+def _json_object(text: str) -> Optional[Dict[str, Any]]:
+    """``text`` parsed as JSON when it is an object, else None."""
+    try:
+        data = json.loads(text)
+    except (ValueError, RecursionError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _unit_score(value: Any) -> Optional[float]:
+    """``value`` as a finite float from 0 to 1, else None.
+
+    A JSON number or a string holding one. A boolean is not a number here,
+    although Python counts it as one.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    try:
+        score = float(value)
+    except (ValueError, OverflowError):
+        return None
+    if not math.isfinite(score) or not 0.0 <= score <= 1.0:
+        return None
+    return score

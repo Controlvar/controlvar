@@ -5,7 +5,10 @@ Tests statistics computation, CI calculation, p-values, winner determination,
 human rating submission, and LLM-as-judge mocking.
 """
 
+import math
+import statistics
 import uuid
+from types import SimpleNamespace
 from typing import List
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -22,6 +25,8 @@ from backend.app.models.llm_experiment import (
 )
 from backend.app.schemas.llm_experiments import LLMExperimentResults, VariantStats
 from backend.app.services.llm_analytics_service import (
+    JUDGE_CALL_FAILED_REASONING,
+    JUDGE_NO_SCORE_REASONING,
     LLMEvaluationAnalyticsService,
     _cohens_d,
     _confidence_interval_95,
@@ -88,12 +93,11 @@ class TestStatisticalHelpers:
         assert p is not None
         assert p < 0.05  # Should be highly significant
 
-    def test_welch_t_test_identical_samples(self):
+    def test_welch_t_test_identical_constants_have_no_p_value(self):
+        # Neither sample varies: no t distribution, so no p-value (#1192)
         a = [1.0, 1.0, 1.0, 1.0]
         b = [1.0, 1.0, 1.0, 1.0]
-        p = _welch_t_test(a, b)
-        assert p is not None
-        assert p == pytest.approx(1.0, abs=0.1)
+        assert _welch_t_test(a, b) is None
 
     def test_welch_t_test_too_few_samples(self):
         assert _welch_t_test([1.0], [2.0]) is None
@@ -180,11 +184,51 @@ class TestWelchPValueIsExact:
     def test_equal_means_is_exactly_one(self):
         assert _welch_t_test([1.0, 2.0, 3.0], [0.0, 2.0, 4.0]) == 1.0
 
-    def test_degenerate_inputs_keep_their_contract(self):
+    def test_too_few_values_or_no_spread_give_no_p_value(self):
         assert _welch_t_test([1.0], [1.0, 2.0]) is None
         assert _welch_t_test([1.0, 2.0], []) is None
-        # Zero variance in both arms: the standard error is 0
-        assert _welch_t_test([2.0, 2.0, 2.0], [5.0, 5.0]) == 1.0
+        # Zero variance in both arms: the standard error is 0, so there is no
+        # p-value. It used to be 1.0, "no difference", for two arms that do
+        # not overlap at all.
+        assert _welch_t_test([2.0, 2.0, 2.0], [5.0, 5.0]) is None
+
+
+# Zero spread (#1192), each case with its p-value and whether Cohen's d is
+# defined: null p and d whenever neither arm varies, whatever the means; one
+# arm with spread is enough for both, and the p-value is then scipy's.
+_ZERO_SPREAD_CASES = {
+    "unequal_constants": ([2.0, 2.0, 2.0], [5.0, 5.0], None, False),
+    "equal_constants": ([2.0, 2.0, 2.0], [2.0, 2.0], None, False),
+    # A coarse judge: scipy answers 6.2e-31 here from float cancellation
+    "coarse_judge": ([0.8, 0.8, 0.8], [0.9, 0.9], None, False),
+    "one_arm_varies": ([2.0, 2.0, 2.0], [5.0, 6.0], "scipy", True),
+}
+
+
+@pytest.mark.regression
+class TestZeroSpread:
+    """#1192: when neither arm varied, the p-value was 1.0 and Cohen's d 0.0,
+    "no difference" and "no effect", even for [2, 2, 2] against [5, 5]. Both
+    are now None ("not computed"), as the warehouse analysis already reports
+    a comparison with no variation."""
+
+    @pytest.mark.parametrize("case", sorted(_ZERO_SPREAD_CASES))
+    def test_p_value_and_effect_size(self, case):
+        from scipy import stats
+
+        a, b, p_expected, d_defined = _ZERO_SPREAD_CASES[case]
+        p = _welch_t_test(a, b)
+        d = _cohens_d(a, b)
+        if p_expected is None:
+            assert p is None, (case, p)
+        else:
+            expected = stats.ttest_ind(a, b, equal_var=False).pvalue
+            assert p is not None and abs(p - expected) <= 1e-9, (case, p, expected)
+            assert round(p, 4) == 0.0903
+        if d_defined:
+            assert d is not None and math.isfinite(d) and d > 0, (case, d)
+        else:
+            assert d is None, (case, d)
 
 
 # Fixed samples for the exact 95 % interval (#1192), by degrees of freedom
@@ -694,13 +738,16 @@ class TestRunLLMAsJudge:
 
         # Mock the anthropic call inside _judge_response
         with patch.object(
-            svc, "_judge_response", new=AsyncMock(return_value=(0.85, "Good response"))
+            svc,
+            "_judge_response",
+            new=AsyncMock(return_value=(0.85, "Good response", None)),
         ):
             results = await svc.run_llm_as_judge(db, exp_id, "helpfulness")
 
         assert len(results) == 1
         assert results[0].score == 0.85
         assert results[0].reasoning == "Good response"
+        assert results[0].error is None
 
     @pytest.mark.asyncio
     async def test_judge_updates_auto_eval_score(self):
@@ -715,56 +762,259 @@ class TestRunLLMAsJudge:
         db.add.return_value = None
 
         with patch.object(
-            svc, "_judge_response", new=AsyncMock(return_value=(0.7, "OK"))
+            svc, "_judge_response", new=AsyncMock(return_value=(0.7, "OK", None))
         ):
             await svc.run_llm_as_judge(db, exp_id, "accuracy")
 
         assert ev.auto_eval_score == 0.7
 
-    @pytest.mark.asyncio
-    async def test_judge_fallback_on_api_error(self):
-        svc = LLMEvaluationAnalyticsService()
-        exp_id = uuid.uuid4()
-        ev = _make_eval(exp_id, uuid.uuid4())
-
-        db = MagicMock()
-        db.query.return_value.filter.return_value.all.return_value = [ev]
-        db.commit.return_value = None
-        db.add.return_value = None
-
-        # _judge_response raises — should catch and use fallback
-        async def fail_judge(*args, **kwargs):
-            raise RuntimeError("API down")
-
-        # Patch at the service level to always fail, then verify the outer
-        # run_llm_as_judge handles it gracefully via the inner try/except
-        with patch.object(
-            svc,
-            "_judge_response",
-            new=AsyncMock(
-                return_value=(0.5, "Judge unavailable — fallback score assigned")
-            ),
-        ):
-            results = await svc.run_llm_as_judge(db, exp_id, "safety")
-
-        assert results[0].score == pytest.approx(0.5, abs=0.1)
-
     def test_parse_judge_response_valid_json(self):
         svc = LLMEvaluationAnalyticsService()
-        score, reasoning = svc._parse_judge_response(
+        score, reasoning, error = svc._parse_judge_response(
             '{"score": 0.75, "reasoning": "Good answer"}'
         )
         assert score == pytest.approx(0.75)
         assert reasoning == "Good answer"
+        assert error is None
 
-    def test_parse_judge_response_invalid_json_extracts_float(self):
+
+def _judge_db(*evaluations: LLMEvaluation) -> MagicMock:
+    db = MagicMock()
+    db.query.return_value.filter.return_value.all.return_value = list(evaluations)
+    db.query.return_value.filter.return_value.filter.return_value.all.return_value = (
+        list(evaluations)
+    )
+    return db
+
+
+def _anthropic_replying(*replies):
+    """``anthropic.AsyncAnthropic`` replaced: each ``messages.create`` call gives
+    the next reply, a text block, or raises it when it is an exception.
+
+    Returns the patch and the ``create`` mock, so a test can show the judge
+    was called rather than skipped.
+    """
+    answers = [
+        r
+        if isinstance(r, BaseException)
+        else SimpleNamespace(content=[SimpleNamespace(type="text", text=r)])
+        for r in replies
+    ]
+    create = AsyncMock(side_effect=answers)
+    client = MagicMock()
+    client.messages.create = create
+    return patch("anthropic.AsyncAnthropic", return_value=client), create
+
+
+@pytest.mark.regression
+class TestTheJudgeStoresNoInventedScore:
+    """#1192: a judge call that raised scored the response 0.5, and a reply
+    without a usable score was read as 0.5, as the first 0 or 1 in its text,
+    or clamped into 0 to 1. Each now stores no score: ``auto_eval_score`` is
+    None, replacing any earlier score, and the result says why in ``error``.
+
+    These replace ``test_judge_fallback_on_api_error``, which patched
+    ``_judge_response`` itself and so never reached the code it named.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_judge_call_that_fails_leaves_the_evaluation_unscored(self):
         svc = LLMEvaluationAnalyticsService()
-        score, reasoning = svc._parse_judge_response(
-            "The score is 0.8 because it was helpful."
+        exp_id = uuid.uuid4()
+        ev = _make_eval(exp_id, uuid.uuid4())
+        # What the Anthropic SDK raises when no key is set (measured, 1.12.1)
+        failure = TypeError("Could not resolve authentication method.")
+        anthropic_patch, create = _anthropic_replying(failure)
+        with anthropic_patch:
+            results = await svc.run_llm_as_judge(_judge_db(ev), exp_id, "safety")
+
+        create.assert_called_once()
+        assert ev.auto_eval_score is None
+        assert results[0].score is None
+        assert results[0].error == "call_failed"
+        # A fixed text: the exception goes to the log, not the response
+        assert results[0].reasoning == JUDGE_CALL_FAILED_REASONING
+        assert "authentication" not in results[0].reasoning
+
+    @pytest.mark.asyncio
+    async def test_with_no_key_the_judge_calls_nothing_and_stores_no_score(
+        self, monkeypatch, tmp_path
+    ):
+        """The real SDK with no key, token or profile set, and its network replaced
+        by a transport that records: nothing is sent, nothing is scored."""
+        import anthropic
+        import httpx2
+
+        for name in (
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_PROFILE",
+            "ANTHROPIC_IDENTITY_TOKEN",
+            "ANTHROPIC_IDENTITY_TOKEN_FILE",
+            "ANTHROPIC_FEDERATION_RULE_ID",
+            "ANTHROPIC_BASE_URL",
+        ):
+            monkeypatch.delenv(name, raising=False)
+        # An empty profile directory, so no profile on this machine is found
+        monkeypatch.setenv("ANTHROPIC_CONFIG_DIR", str(tmp_path))
+        sent = []
+
+        def refuse(request):
+            sent.append(request)
+            return httpx2.Response(401, json={"error": "unexpected request"})
+
+        real = anthropic.AsyncAnthropic
+
+        class Recorded(real):  # type: ignore[misc, valid-type]
+            def __init__(self, *args, **kwargs):
+                kwargs.setdefault(
+                    "http_client",
+                    httpx2.AsyncClient(transport=httpx2.MockTransport(refuse)),
+                )
+                super().__init__(*args, **kwargs)
+
+        monkeypatch.setattr(anthropic, "AsyncAnthropic", Recorded)
+        svc = LLMEvaluationAnalyticsService()
+        exp_id = uuid.uuid4()
+        ev = _make_eval(exp_id, uuid.uuid4(), auto_eval=0.5)
+        results = await svc.run_llm_as_judge(_judge_db(ev), exp_id)
+
+        assert sent == []
+        assert ev.auto_eval_score is None
+        assert (results[0].score, results[0].error) == (None, "call_failed")
+
+    @pytest.mark.asyncio
+    async def test_a_rejudge_replaces_an_earlier_score_or_clears_it(self):
+        svc = LLMEvaluationAnalyticsService()
+        exp_id = uuid.uuid4()
+        # 0.5 is what an earlier version stored for a failed call
+        ev = _make_eval(exp_id, uuid.uuid4(), auto_eval=0.5)
+
+        anthropic_patch, create = _anthropic_replying(
+            '{"score": 0.8, "reasoning": "clear"}'
         )
-        assert score == pytest.approx(0.8)
+        with anthropic_patch:
+            await svc.run_llm_as_judge(_judge_db(ev), exp_id)
+        create.assert_called_once()
+        assert ev.auto_eval_score == 0.8
 
-    def test_parse_judge_response_no_score_returns_half(self):
+        anthropic_patch, create = _anthropic_replying(RuntimeError("API down"))
+        with anthropic_patch:
+            results = await svc.run_llm_as_judge(_judge_db(ev), exp_id)
+        create.assert_called_once()
+        assert ev.auto_eval_score is None
+        assert results[0].error == "call_failed"
+
+    def test_a_score_stored_before_the_upgrade_is_kept_until_the_judge_runs_again(
+        self,
+    ):
+        """Reading the results changes no stored score: an earlier version's
+        0.5 still counts as a score, because nothing tells it from a real 0.5;
+        running the judge again (the test above) is what re-scores it."""
         svc = LLMEvaluationAnalyticsService()
-        score, reasoning = svc._parse_judge_response("no useful content")
-        assert score == 0.5
+        exp, evals = _make_experiment_with_data(
+            control_ae=[0.5, 0.5, 0.5], treatment_ae=[0.7, 0.6]
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = exp
+        db.query.return_value.filter.return_value.all.return_value = evals
+        results = svc.get_experiment_results(db, exp.id)
+        control = next(vs for vs in results.variant_stats if vs.is_control)
+        assert control.mean_auto_eval_score == 0.5
+        assert control.n_auto_eval_unscored == 0
+        assert [e.auto_eval_score for e in evals[:3]] == [0.5, 0.5, 0.5]
+
+
+# Replies with no usable score, each by the way the old parser read it.
+_UNSCORED_REPLIES = {
+    "no_score_key": '{"reasoning": "fine"}',  # was 0.5
+    "null": '{"score": null, "reasoning": "x"}',  # was 0.5
+    "not_a_number": '{"score": "high"}',  # was 0.5
+    "boolean": '{"score": true}',  # was 1.0
+    "nan": '{"score": NaN}',  # was 1.0
+    "infinity": '{"score": Infinity}',  # was 1.0
+    "minus_infinity": '{"score": -Infinity}',  # was 0.0
+    "above_one": '{"score": 1.7}',  # was clamped to 1.0
+    "out_of_five": '{"score": 7}',  # was clamped to 1.0
+    "below_zero": '{"score": -0.2}',  # was clamped to 0.0
+    "nan_string": '{"score": "nan"}',  # was 1.0
+    "a_list": "[0.9]",  # was 0.9, from the text
+    "a_bare_number": "0.8",  # was 0.8
+    "free_text": "The score is 0.8 because it was helpful.",  # was 0.8
+    "out_of_five_in_text": "I give it 1 out of 5.",  # was 1.0
+    "scale_in_text": "On a scale of 0 to 1, I give it 0.9.",  # was 0.0
+    "steps_in_text": "Step 1: read it. Score 0.2",  # was 1.0
+    "no_number": "no useful content",  # was 0.5
+    "empty": "",  # was 0.5
+    "broken_json": '{"score": 0.9, "reasoning": ',  # was 0.9, from the text
+}
+
+# Replies that do carry a score, with the score each must give.
+_SCORED_REPLIES = {
+    "bare_object": ('{"score": 0.75, "reasoning": "Good answer"}', 0.75),
+    "fenced": ('```json\n{"score": 0.8, "reasoning": "x"}\n```', 0.8),
+    "in_prose": ('Here it is: {"score": 0.3, "reasoning": "terse"} Thanks.', 0.3),
+    "numeric_string": ('{"score": "0.85"}', 0.85),
+    "zero": ('{"score": 0}', 0.0),
+    "one": ('{"score": 1}', 1.0),
+}
+
+
+@pytest.mark.regression
+class TestParseJudgeResponse:
+    """#1192: only a JSON object's ``score``, finite and from 0 to 1, is a
+    score. Nothing is read from free text, nothing is clamped, and nothing is
+    assumed for a missing score."""
+
+    @pytest.mark.parametrize("case", sorted(_UNSCORED_REPLIES))
+    def test_a_reply_without_a_usable_score_is_unscored(self, case):
+        raw = _UNSCORED_REPLIES[case]
+        score, reasoning, error = LLMEvaluationAnalyticsService._parse_judge_response(
+            raw
+        )
+        assert score is None, (case, score)
+        assert error == "no_score"
+        assert reasoning == JUDGE_NO_SCORE_REASONING + raw[:200]
+
+    @pytest.mark.parametrize("case", sorted(_SCORED_REPLIES))
+    def test_a_json_score_from_0_to_1_is_read_bare_fenced_or_in_prose(self, case):
+        raw, expected = _SCORED_REPLIES[case]
+        score, _, error = LLMEvaluationAnalyticsService._parse_judge_response(raw)
+        assert (score, error) == (expected, None)
+
+    def test_the_reply_in_the_reasoning_is_cut_at_200_characters(self):
+        raw = "x" * 5000
+        _, reasoning, _ = LLMEvaluationAnalyticsService._parse_judge_response(raw)
+        assert reasoning == JUDGE_NO_SCORE_REASONING + "x" * 200
+
+
+@pytest.mark.regression
+class TestUnscoredCount:
+    """#1192: the results say how many evaluations have no judge score, per
+    variant and for the experiment, and leave them out of the statistics."""
+
+    def test_unscored_evaluations_are_counted_and_left_out(self):
+        svc = LLMEvaluationAnalyticsService()
+        exp, evals = _make_experiment_with_data(
+            control_ae=[0.6, 0.7, 0.65], treatment_ae=[0.8, 0.9, 0.85, 0.7]
+        )
+        control, treatment = exp.variants
+        # Two never judged (or the judge failed) in treatment, one in control
+        evals += [_make_eval(exp.id, treatment.id) for _ in range(2)]
+        evals += [_make_eval(exp.id, control.id)]
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = exp
+        db.query.return_value.filter.return_value.all.return_value = evals
+        results = svc.get_experiment_results(db, exp.id)
+        by_name = {vs.variant_name: vs for vs in results.variant_stats}
+
+        assert by_name["control"].n_auto_eval_unscored == 1
+        assert by_name["treatment"].n_auto_eval_unscored == 2
+        assert results.total_auto_eval_unscored == 3
+        assert results.total_auto_eval_unscored == sum(
+            vs.n_auto_eval_unscored for vs in results.variant_stats
+        )
+        assert by_name["treatment"].n_evaluations == 6
+        assert by_name["treatment"].mean_auto_eval_score == statistics.mean(
+            [0.8, 0.9, 0.85, 0.7]
+        )

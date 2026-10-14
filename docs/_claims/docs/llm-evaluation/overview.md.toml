@@ -40,10 +40,10 @@ text = "OPENAI_API_KEY, which the OpenAI SDK reads, enables OpenAI variants in /
 by = ["untested:T"]
 
 [[unit]]
-text = "With neither set, no provider is called: /complete answers 502 for that variant, the judge records its fallback score of 0.5, and the AI features use their templates."
+text = "With neither set, no provider is called: /complete answers 502 for that variant, the judge stores no score for any response, and the AI features use their templates."
 by = [
     "test:backend/tests/integration/api/test_unexpected_errors_fixed_message.py::test_an_llm_completion_failure_answers_the_fixed_message",
-    "test:backend/tests/unit/services/test_llm_analytics.py::TestRunLLMAsJudge::test_judge_fallback_on_api_error",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheJudgeStoresNoInventedScore::test_with_no_key_the_judge_calls_nothing_and_stores_no_score",
     "test:backend/tests/unit/services/test_ai_design_service.py",
 ]
 
@@ -149,6 +149,29 @@ by = [
 ]
 
 [[unit]]
+text = "A judge call that fails, or a reply without a JSON score from 0 to 1, stores no score: the evaluation's auto_eval_score becomes null, replacing any earlier score, and its entry in the judge's response has \"score\": null and an error, \"call_failed\" or \"no_score\"."
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheJudgeStoresNoInventedScore::test_a_judge_call_that_fails_leaves_the_evaluation_unscored",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheJudgeStoresNoInventedScore::test_a_rejudge_replaces_an_earlier_score_or_clears_it",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestParseJudgeResponse::test_a_reply_without_a_usable_score_is_unscored",
+    "test:backend/tests/integration/api/test_llm_judge_unscored.py::test_the_judge_entry_is_null_with_its_reason_and_the_stored_score_is_null",
+]
+
+[[unit]]
+text = "The results leave such an evaluation out of the auto-eval mean, interval, p-value and effect size, and count it in its variant's n_auto_eval_unscored (total_auto_eval_unscored for the experiment); the count includes evaluations the judge has not been run on."
+by = [
+    "test:backend/tests/integration/api/test_llm_judge_unscored.py::test_unscored_evaluations_are_left_out_of_the_statistics_and_counted",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestUnscoredCount::test_unscored_evaluations_are_counted_and_left_out",
+]
+
+[[unit]]
+text = "Scores stored by an earlier version are kept: there, a failed call was stored as 0.5, which cannot be told from a real 0.5; to re-score such an experiment, run the judge on it again."
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheJudgeStoresNoInventedScore::test_a_score_stored_before_the_upgrade_is_kept_until_the_judge_runs_again",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestTheJudgeStoresNoInventedScore::test_a_rejudge_replaces_an_earlier_score_or_clears_it",
+]
+
+[[unit]]
 text = "Cost Estimation"
 by = ["exempt:baseline"]
 
@@ -181,16 +204,23 @@ by = [
 ]
 
 [[unit]]
-text = "A p-value (treatment vs control) from Welch's t-test: the exact two-tailed value from the t distribution at the Welch-Satterthwaite degrees of freedom, at every sample size"
-by = ["test:backend/tests/unit/services/test_llm_analytics.py::TestWelchPValueIsExact::test_p_value_matches_scipy_welch"]
+text = "A p-value (treatment vs control) from Welch's t-test: the exact two-tailed value from the t distribution at the Welch-Satterthwaite degrees of freedom, at every sample size; null when either variant has fewer than two values, or neither variant's values vary"
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestWelchPValueIsExact::test_p_value_matches_scipy_welch",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestWelchPValueIsExact::test_too_few_values_or_no_spread_give_no_p_value",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestZeroSpread::test_p_value_and_effect_size",
+    "test:backend/tests/integration/api/test_llm_judge_unscored.py::test_zero_spread_gives_a_null_p_value_and_effect_size",
+]
 
 [[unit]]
-text = "Cohen's d effect size (each treatment vs control) on the metric winner_metric names, like the p-value"
+text = "Cohen's d effect size (each treatment vs control) on the metric winner_metric names, like the p-value, and null in the same cases"
 by = [
     "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_every_p_value_and_effect_size_is_on_the_winner_metric",
     "test:backend/tests/unit/services/test_llm_analytics.py::TestTheWinnerIsChosenOnOneMetric::test_the_business_metric_is_used_when_every_variant_has_one",
     "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_effect_size_calculated",
     "test:backend/tests/unit/services/test_llm_analytics.py::TestStatisticalHelpers::test_cohens_d_large_effect",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestZeroSpread::test_p_value_and_effect_size",
+    "test:backend/tests/integration/api/test_llm_judge_unscored.py::test_zero_spread_gives_a_null_p_value_and_effect_size",
 ]
 
 [[unit]]
