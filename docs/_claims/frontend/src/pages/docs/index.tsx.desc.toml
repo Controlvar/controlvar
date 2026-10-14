@@ -41,8 +41,8 @@ text = "Staged rollout schedules"
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Auto-rollback on error spikes"
-by = ["untested:T"]
+text = "Roll a flag back when its error rate or latency breaches a threshold"
+by = ["mechanism:docs-hub"]
 
 [[unit]]
 text = "Create and start experiments, read their results, and the statistics behind them."
@@ -77,7 +77,7 @@ text = "Keep users out of conflicting experiments, and a share of new users out 
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Live experiment results over WebSocket: a snapshot on connect, then a fresh one after 30 seconds (by default) with no message from the client."
+text = "Live experiment results over WebSocket: a snapshot on connect, then a fresh one every 30 seconds (by default), whatever the client sends."
 by = ["mechanism:docs-hub"]
 
 [[unit]]

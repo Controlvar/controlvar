@@ -432,3 +432,16 @@ def test_flipping_the_live_group_changes_no_logical_id(stacks, environment):
     assert len([lid for lid in blue if lid.startswith("Api5xx")]) == 2, sorted(blue)
     for lid in blue:
         assert blue[lid] == green[lid], lid
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("case", CASES, ids=_ids)
+def test_an_unapproved_deployment_is_stopped_after_30_minutes(stacks, case):
+    """The rollback runbook: the group waits 30 minutes for the traffic shift's
+    approval, then stops the deployment, and a stopped deployment rolls back."""
+    group = _group(stacks[case].template["Resources"])
+    ready = group["BlueGreenDeploymentConfiguration"]["DeploymentReadyOption"]
+    assert ready == {"ActionOnTimeout": "STOP_DEPLOYMENT", "WaitTimeInMinutes": 30}, (
+        ready
+    )
+    assert "DEPLOYMENT_STOP_ON_REQUEST" in group["AutoRollbackConfiguration"]["Events"]

@@ -223,6 +223,20 @@ def test_unarchive_is_the_way_back(developer_client, db_session, make_feature_fl
     assert _row(db_session, flag.id).status is ACTIVE
 
 
+@pytest.mark.parametrize("status", [ACTIVE, INACTIVE], ids=["active", "inactive"])
+def test_unarchive_returns_a_flag_that_is_not_archived_unchanged(
+    developer_client, db_session, make_feature_flag, status
+):
+    flag = make_feature_flag(status=status, rollout_percentage=40)
+
+    response = developer_client.post(f"{COLLECTION}/{flag.id}/unarchive")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == status.value.lower()
+    stored = _row(db_session, flag.id)
+    assert (stored.status, stored.rollout_percentage) == (status, 40)
+
+
 @pytest.mark.regression
 @pytest.mark.parametrize(
     "fixture, code",

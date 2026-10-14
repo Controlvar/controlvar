@@ -110,6 +110,10 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         ),
         says("rollout schedule"),
     ),
+    "Roll a flag back when its error rate or latency breaches a threshold": (
+        lede("error rate and latency against thresholds"),
+        lede("it rolls the flag back"),
+    ),
     # A/B Testing & Experiments
     "Create and start experiments, read their results, and the statistics behind them.": (
         lede(
@@ -170,13 +174,14 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
             "A global holdout keeps a percentage of new users out of every experiment"
         ),
     ),
-    "Live experiment results over WebSocket: a snapshot on connect, then a fresh one after 30 seconds (by default) with no message from the client.": (
+    "Live experiment results over WebSocket: a snapshot on connect, then a fresh one every 30 seconds (by default), whatever the client sends.": (
         lede("Live Results over WebSocket"),
         says("streams experiment result snapshots to connected clients"),
         says(
-            "On connect the server sends an initial snapshot. After 30 seconds with no message from the client it sends a fresh one"
+            "On connect the server sends an initial snapshot. Then it sends a fresh one every 30 seconds"
         ),
         says("RESULTS_STREAM_INTERVAL_SECONDS"),
+        says("whatever the client sends in between"),
     ),
     # LLM / AI Model Evaluation
     "Compare model variants on a task; the winner has the best business metric, or the best LLM-judge score without one.": (
@@ -459,8 +464,8 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("The platform uses Alembic for PostgreSQL schema management"),
     ),
     "CloudWatch dashboards, Prometheus metrics": (
-        lede("integrates with AWS CloudWatch, Prometheus"),
-        says("## CloudWatch Dashboards"),
+        lede("adds the CloudWatch dashboards"),
+        lede("exposes Prometheus metrics"),
         says("## Prometheus Metrics"),
     ),
     # Guides & Tutorials

@@ -23,6 +23,13 @@ def scheduler():
     return scheduler
 
 
+def test_the_scheduler_the_api_starts_runs_every_15_minutes():
+    from backend.app.core.metrics_scheduler import metrics_scheduler
+
+    assert metrics_scheduler.interval_minutes == 15
+    assert MetricsScheduler().interval_minutes == 15
+
+
 @pytest.mark.asyncio
 async def test_scheduler_start_stop(scheduler):
     """Test that scheduler can be started and stopped correctly."""

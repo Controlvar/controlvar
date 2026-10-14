@@ -170,7 +170,7 @@ def test_the_old_policies_are_gone():
 def test_the_doc_says_where_the_subject_comes_from():
     text = DOC.read_text()
     assert f"{IMMUTABLE_SUBJECT}:environment:<ENVIRONMENT>" in text
-    assert "gh api repos/<owner>/<repo>/actions/oidc/customization/sub" in text
+    assert "oidc-sub-probe.yml" in text
     assert "decode a real token" in text.lower()
     for identity in ("bootstrap identity", "`cdk deploy` identity", "workflow role"):
         assert identity in text.lower() or identity in text, identity

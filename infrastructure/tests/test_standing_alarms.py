@@ -450,3 +450,23 @@ def test_the_error_filter_is_on_the_api_tasks_log_group(synths, case):
         "At least 10 log lines from the API's tasks in 5 minutes whose "
         'JSON "level" is "error" or "critical"'
     )
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("case", CASES, ids=_ids)
+def test_the_error_log_alarm_fires_on_10_lines_in_5_minutes(synths, case):
+    """The AWS CDK Deployment page: experimentation-api-error-logs-<env> fires on
+    10 or more error or critical lines in 5 minutes, and emails the topic."""
+    env, _, _ = case
+    synth = synths[case]
+    fargate = _stack(synth, "fargate", env)
+    _, alarm = _alarms_by_name(fargate)[f"experimentation-api-error-logs-{env}"]
+    assert alarm["Threshold"] == 10
+    assert alarm["ComparisonOperator"] == "GreaterThanOrEqualToThreshold"
+    assert alarm["EvaluationPeriods"] == 1
+    assert alarm["Period"] == 300
+    assert alarm["Statistic"] == "Sum"
+    assert alarm["MetricName"] == "ApiErrorLogLines"
+    assert alarm["AlarmActions"] == [
+        _topic_action(synth, env, f"experimentation-fargate-{env}")
+    ], alarm["AlarmActions"]

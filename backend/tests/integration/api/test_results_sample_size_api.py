@@ -192,6 +192,17 @@ def test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm(client
     assert data["metric_id"] == str(exp.metric_definitions[0].id)
 
 
+def test_the_days_to_significance_and_the_completion_date_are_always_null(client, seed):
+    """Neither is computed: a plan with traffic and one without both carry null."""
+    planned = seed([("control", True, 50, 40, 7), ("treatment", False, 50, 40, 9)])
+    empty = seed([("control", True, 50, 0, 0), ("treatment", False, 50, 0, 0)])
+    for exp in (planned, empty):
+        data = _get(client, exp.id)
+        assert data["days_to_significance"] is None
+        assert data["projected_completion_date"] is None
+    assert _get(client, planned.id)["required_sample_size_per_variant"] is not None
+
+
 def test_the_observed_rate_is_the_control_rate_the_results_show(client, seed):
     exp = seed([("control", True, 50, 40, 7), ("treatment", False, 50, 40, 9)])
     sample = _get(client, exp.id)
