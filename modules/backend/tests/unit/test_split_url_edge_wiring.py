@@ -13,8 +13,8 @@ to the edge. These hold that:
 * no infrastructure code outside the construct's own file refers to the
   construct, its module or a CloudFront distribution, in any form (an import,
   a name, an attribute, a resource type string);
-* no code outside the router names the header, in any case, so no code path
-  can send it.
+* no code outside the router, in any of the tree's languages, names the header,
+  in any case, so no code path can send it.
 """
 
 from __future__ import annotations
@@ -100,12 +100,15 @@ def _python_files(root: Path):
         yield path
 
 
-#: Every way a file can refer to the construct or to a CloudFront distribution.
+#: Every way a file can refer to the construct or to a CloudFront distribution:
+#: the construct and its module, and each distribution class aws_cloudfront has.
 _NAMES = {
     "SplitUrlDistribution",
     "split_url_distribution",
     "Distribution",
     "CfnDistribution",
+    "CloudFrontWebDistribution",
+    "CfnStreamingDistribution",
 }
 _TYPE = re.compile(r"AWS::CloudFront::(?:Distribution|StreamingDistribution)")
 
@@ -146,16 +149,35 @@ def test_no_stack_creates_the_distribution():
     assert found == {}
 
 
+#: The source files of every language in the tree: the API and the scripts
+#: (Python, shell), the dashboards (TypeScript, JavaScript), each SDK under sdk/
+#: (Go, Java, Kotlin, Swift, C#, PHP, Ruby, Elixir, Dart), and configuration.
 _SOURCE_SUFFIXES = {
     ".py",
+    ".sh",
     ".ts",
     ".tsx",
     ".js",
+    ".jsx",
     ".mjs",
+    ".cjs",
+    ".go",
+    ".java",
+    ".kt",
+    ".kts",
+    ".swift",
+    ".cs",
+    ".php",
+    ".rb",
+    ".ex",
+    ".exs",
+    ".dart",
     ".json",
     ".yml",
     ".yaml",
     ".toml",
+    ".tpl",
+    ".xml",
 }
 #: Everywhere code that could send the header lives: the API and the modules,
 #: the Lambdas, the infrastructure, the dashboards, the SDKs, the demo apps,
