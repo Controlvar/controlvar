@@ -38,7 +38,7 @@ by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the
 
 [[unit]]
 text = "A final snapshot when the prod database stack is deleted"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_only_prod_takes_a_final_snapshot_of_its_cluster"]
 
 [[unit]]
 text = "Backup and Maintenance Windows"
@@ -46,7 +46,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The stack sets no preferred backup window and no preferred maintenance window, so Aurora chooses both for the cluster's region."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_aurora_sets_no_backup_or_maintenance_window"]
 
 [[unit]]
 text = "Retention Policy"
@@ -75,7 +75,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The retention is what the stack sets: aurora_backup_retention_days() in infrastructure/cdk/stacks/environments.py returns it per environment, and infrastructure/cdk/stacks/enhanced_database_stack.py passes it to the cluster as backup=rds.BackupProps(retention=Duration.days(...))."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_aurora_keeps_the_retention_the_environment_function_returns"]
 
 [[unit]]
 text = "35 days is the most Aurora allows."
@@ -87,11 +87,11 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Every DynamoDB table the stacks create has point-in-time recovery on."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_every_dynamodb_table_has_point_in_time_recovery"]
 
 [[unit]]
 text = "No stack schedules an on-demand backup."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_hand_made_resources.py::test_no_stack_schedules_a_rotation_or_a_backup"]
 
 [[unit]]
 text = "ElastiCache Redis"
@@ -103,7 +103,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Automatic Snapshots: Taken daily during the configured backup window"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_redis_snapshots_daily_in_its_window_and_keeps_them_per_environment"]
 
 [[unit]]
 text = "Backup Windows"
@@ -115,15 +115,15 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Development | 02:00-03:00 | Sun 04:00-05:00"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_redis_snapshots_daily_in_its_window_and_keeps_them_per_environment"]
 
 [[unit]]
 text = "Staging | 02:00-03:00 | Sun 04:00-05:00"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_redis_snapshots_daily_in_its_window_and_keeps_them_per_environment"]
 
 [[unit]]
 text = "Production | 02:00-03:00 | Sun 04:00-05:00"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_redis_snapshots_daily_in_its_window_and_keeps_them_per_environment"]
 
 [[unit]]
 text = "Environment | Snapshot Retention"
@@ -131,15 +131,15 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Development | 1 day"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_redis_snapshots_daily_in_its_window_and_keeps_them_per_environment"]
 
 [[unit]]
 text = "Staging | 3 days"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_redis_snapshots_daily_in_its_window_and_keeps_them_per_environment"]
 
 [[unit]]
 text = "Production | 7 days"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_backups_per_environment.py::test_redis_snapshots_daily_in_its_window_and_keeps_them_per_environment"]
 
 [[unit]]
 text = "Failover"
@@ -150,16 +150,12 @@ text = "In prod the replication group has three nodes and fails over automatical
 by = ["test:infrastructure/tests/test_redis_sizing.py::test_replication_group_sizing"]
 
 [[unit]]
-text = "Since Redis is primarily used for caching, some data loss may be acceptable as the data can be rebuilt from primary sources."
-by = ["untested:T"]
-
-[[unit]]
 text = "Encryption"
 by = ["exempt:label"]
 
 [[unit]]
 text = "Aurora PostgreSQL: Backups are encrypted using the same KMS key as the database"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_aurora_storage_is_encrypted_with_the_stacks_kms_key"]
 
 [[unit]]
 text = "ElastiCache Redis: Snapshots are encrypted if the cluster has encryption at rest enabled"

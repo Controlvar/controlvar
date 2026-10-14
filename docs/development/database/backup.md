@@ -65,9 +65,7 @@ ElastiCache Redis uses snapshot-based backups:
 ### Failover
 
 In `prod` the replication group has three nodes and fails over automatically;
-`staging` runs one node, with no failover. Since Redis is primarily used for
-caching, some data loss may be acceptable as the data can be rebuilt from
-primary sources.
+`staging` runs one node, with no failover.
 
 ## Encryption
 

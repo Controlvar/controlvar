@@ -137,16 +137,8 @@ production:
 
 Without `REDIS_REQUIRED=true`, a Redis that does not answer is reported as
 `unhealthy` under `checks` while the response stays `200` and `"healthy"`. Free
-disk space below 1 GB is reported as `"low"` and does not fail the probe.
+disk space of 1 GB or less is reported as `"low"` and does not fail the probe.
 `GET /health/live` is the liveness probe: it answers `200` whenever the process
 is up and checks neither PostgreSQL nor Redis.
 
 The ALB health check targets `GET /health` with a 5-second timeout and a 2/3 healthy/unhealthy threshold. Tasks that fail health checks are automatically replaced by ECS.
-
----
-
-## Key Metrics to Watch
-
-| Metric | Healthy Range | Action if Breached |
-|--------|---------------|-------------------|
-| Safety rollback frequency | < 1/week | Investigate flag quality and error rate thresholds |

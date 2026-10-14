@@ -104,7 +104,7 @@ by = ["test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRateLim
 
 [[unit]]
 text = "Each API process exports its own values: with more than one worker per container, a scrape sees the worker that answered it."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/core/test_readiness_at_its_defaults.py::test_metrics_are_this_processs_own"]
 
 [[unit]]
 text = "While rate_limit_redis_fallback_active is 1, per-IP rate limits are multiplied by the number of API processes; the limiter tries Redis again every 30 s."
@@ -205,8 +205,8 @@ text = "Without REDIS_REQUIRED=true, a Redis that does not answer is reported as
 by = ["test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_redis_down_does_not_fail_readiness_by_default"]
 
 [[unit]]
-text = "Free disk space below 1 GB is reported as \"low\" and does not fail the probe."
-by = ["untested:T"]
+text = "Free disk space of 1 GB or less is reported as \"low\" and does not fail the probe."
+by = ["test:backend/tests/unit/core/test_readiness_at_its_defaults.py::test_free_disk_of_1_gb_or_less_is_low_and_does_not_fail_the_probe"]
 
 [[unit]]
 text = "GET /health/live is the liveness probe: it answers 200 whenever the process is up and checks neither PostgreSQL nor Redis."
@@ -214,20 +214,8 @@ by = ["test:backend/tests/unit/core/test_health_endpoints.py::TestLiveness::test
 
 [[unit]]
 text = "The ALB health check targets GET /health with a 5-second timeout and a 2/3 healthy/unhealthy threshold."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_stack_graph.py::test_the_api_target_groups_check_health_on_slash_health"]
 
 [[unit]]
 text = "Tasks that fail health checks are automatically replaced by ECS."
 by = ["exempt:third-party"]
-
-[[unit]]
-text = "Key Metrics to Watch"
-by = ["exempt:label"]
-
-[[unit]]
-text = "Metric | Healthy Range | Action if Breached"
-by = ["exempt:label"]
-
-[[unit]]
-text = "Safety rollback frequency | < 1/week | Investigate flag quality and error rate thresholds"
-by = ["untested:T"]

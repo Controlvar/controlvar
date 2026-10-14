@@ -10,6 +10,38 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.32.0](https://github.com/getexperimently/experimently/compare/v0.31.1...v0.32.0) (2026-10-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **llm:** LLM evaluation: a `POST /api/v1/llm-experiments/{experiment_id}/judge` entry whose judge call fails, or whose reply has no JSON score from 0 to 1, now has `score: null` and `error` set (`call_failed` or `no_score`) instead of a score of 0.5, and a judge run that fails clears the evaluation's earlier stored score. In `GET /api/v1/llm-experiments/{experiment_id}/results`, `p_value` and `effect_size` are null when neither variant's values vary (they were 1.0 and 0.0). Scores stored before the upgrade are unchanged, and an earlier failed call still reads as 0.5: run the judge again to re-score.
+
+### Upgrade notes
+
+* **safety (#1217):** a rollback no longer creates a safety configuration. A flag that had none stays on the global default thresholds after a rollback, and its row in `safety_rollback_records` has a null `safety_config_id`. Flags that an earlier version moved off the defaults stay off them until a later release repairs them (#1206 stays open for that). While this release deploys, tasks of the previous release keep running their safety monitor through the approval wait, the canary and the bake, and a rollback they run in that time can still move a flag off the defaults.
+
+### Bug Fixes
+
+* **demo:** the demo seed writes safety thresholds the safety check reads ([#1212](https://github.com/getexperimently/experimently/issues/1212)) ([456593d](https://github.com/getexperimently/experimently/commit/456593d6aaf60ab4bb68bdb6b10a4ea61cb24173))
+* **llm:** a judge call that fails or returns no score leaves the evaluation unscored, and the results count them ([#1219](https://github.com/getexperimently/experimently/issues/1219)) ([8b5789a](https://github.com/getexperimently/experimently/commit/8b5789a6fede2fd632cb91980c589e73d8ae45df))
+* **llm:** experiment results compute the exact Welch p-value at every sample size ([#1209](https://github.com/getexperimently/experimently/issues/1209)) ([7b1089c](https://github.com/getexperimently/experimently/commit/7b1089cedf890acd5b17d806dea14885d3a335c2))
+* **llm:** the winner is chosen on one metric for every variant, and the results say which ([#1216](https://github.com/getexperimently/experimently/issues/1216)) ([3fb4768](https://github.com/getexperimently/experimently/commit/3fb476837666021d2048b4ce8b15f8e01b36d520))
+* **metrics:** the metrics summary's error rate counts only the errors safety monitoring counts ([#1215](https://github.com/getexperimently/experimently/issues/1215)) ([68115e4](https://github.com/getexperimently/experimently/commit/68115e44bb6c687e4f21cb1910a54dda060c8078))
+* **results:** the live results stream sends a snapshot every interval, whatever the client sends ([#1211](https://github.com/getexperimently/experimently/issues/1211)) ([89773d1](https://github.com/getexperimently/experimently/commit/89773d1241adc54ec9f89305954a91f165110661))
+* **safety:** a rollback leaves a flag without its own safety configuration on the global defaults ([#1217](https://github.com/getexperimently/experimently/issues/1217)) ([e447b40](https://github.com/getexperimently/experimently/commit/e447b4053f51be26bae9a1f6a9ae56b7abf7802d))
+
+
+### Documentation
+
+* architecture, migrations, logging and load-testing pages, claims registered (D73 G5d) ([#1197](https://github.com/getexperimently/experimently/issues/1197)) ([b165baf](https://github.com/getexperimently/experimently/commit/b165baf0535a727535efdb792ff6e573d9a3d018))
+* **aws:** the deployment and infrastructure pages, shrunk and claims registered (D73 G6) ([#1208](https://github.com/getexperimently/experimently/issues/1208)) ([c846ae6](https://github.com/getexperimently/experimently/commit/c846ae66de7d7c80b3e782c225932ea6da15964e))
+* **demo:** the StreamPulse rollback story walked end to end (D73 DJ2) ([#1203](https://github.com/getexperimently/experimently/issues/1203)) ([4ec9043](https://github.com/getexperimently/experimently/commit/4ec9043e03f6efd87d2774d0ee465ffba520fe09))
+* **development:** the contributor pages, shrunk and claims registered (D73) ([#1199](https://github.com/getexperimently/experimently/issues/1199)) ([36cca24](https://github.com/getexperimently/experimently/commit/36cca2462fb5d66f4653d2180781f9a663f2e2df))
+* flag, rollout, operator reference and segment pages, claims registered (D73 G5a) ([#1200](https://github.com/getexperimently/experimently/issues/1200)) ([6c8228d](https://github.com/getexperimently/experimently/commit/6c8228d566f0278eae16cd72dcd178b942f2f723))
+* register the front door to its tests, with a Limitations page ([#1195](https://github.com/getexperimently/experimently/issues/1195)) ([6894265](https://github.com/getexperimently/experimently/commit/689426518e21b6afcc0b9305410155091b1a1014))
+* safety monitoring, local evaluation, endpoints and technical guide, claims registered (D73 G8) ([#1201](https://github.com/getexperimently/experimently/issues/1201)) ([e745882](https://github.com/getexperimently/experimently/commit/e745882917c880896f58a49c213c5f20e7bd0ae7))
+
 ## [0.31.1](https://github.com/getexperimently/experimently/compare/v0.31.0...v0.31.1) (2026-10-13)
 
 
