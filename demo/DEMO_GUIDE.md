@@ -119,7 +119,7 @@ See `demo/streampulse/README.md`.
 - Navigate to `/feature-flags`
 - Click **new_dashboard_ui** — show it's at 50% rollout with a 3-stage schedule
   - "We started at 10%, expanded to 25%, and now we're at 50%. The schedule automates this — zero manual work."
-  - Point to the safety config: "If the error rate exceeds 5%, it auto-rolls back. We never break production."
+  - An automatic rollback is shown live in Scene 0b's rollout story, on StreamPulse's Player v2.
 - Click **beta_features** — show the targeting rule
   - "This uses our 20+ targeting operators. Users with role 'beta' or 'internal', OR an @acme.com email, match this rule."
     The flag's rollout is 100%, so users the rule does not match get it too.
@@ -256,7 +256,7 @@ See `demo/streampulse/README.md`.
 > Yes. Mutual Exclusion Groups ensure users are never in conflicting experiments. The Global Holdout keeps a percentage of new users out of every experiment, as a baseline to compare with everyone else. Users already assigned keep their assignments, and feature flags ignore it, so shipped features reach the holdout too.
 
 **"What if an experiment goes wrong?"**
-> Safety monitoring watches error rates and latency in real time. If a feature flag causes problems, it auto-rolls back. For experiments, you can pause or stop at any time.
+> Safety monitoring checks error rates and latency every 5 minutes by default. If a feature flag causes problems, it auto-rolls back. For experiments, you can pause or stop at any time.
 
 ---
 

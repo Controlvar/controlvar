@@ -708,9 +708,7 @@ reason = "the StreamPulse app's device targeting, mutual exclusion, holdout and 
 scope = "in"
 class = "journey"
 journey = "demo-streampulse-simulator"
-pending = true
-planned = "D73"
-reason = "the StreamPulse simulator's scripts, run as the page says"
+reason = "the StreamPulse rollout story, run as the page says, with the crash incident and the automatic rollback, on the stack setup-local.sh starts"
 
 # docs/ pages the nav does not list: built on the site and shown on GitHub.
 

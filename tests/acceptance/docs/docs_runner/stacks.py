@@ -249,6 +249,9 @@ class Running:
     #: (demo-local's administrator password and API keys): the runner's
     #: redactor takes them out of what it writes, and the scan looks for them.
     secrets: Tuple[str, ...] = ()
+    #: demo-local only: the checkout the script set up, where a ``run`` step's
+    #: block runs (``commands.py``).
+    checkout: Optional[Path] = None
 
 
 def free_port() -> int:
@@ -1118,6 +1121,7 @@ class DemoLocal:
             published=published,
             up_seconds=took,
             secrets=tuple(self.secrets),
+            checkout=self.repo_root,
         )
         return self.running
 

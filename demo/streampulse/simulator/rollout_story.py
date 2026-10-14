@@ -9,7 +9,8 @@ backend as ``setup-local.sh`` starts it.  ``--token`` uses a bearer token you al
 
   1  Internal + 5%      show the flag at 5% with the ``employee equals true`` rule
   2  25%                advance the rollout schedule to stage 2 → flag at 25%
-  3  Incident           run traffic.py --incident android12 for 90 s, then the safety check
+  3  Incident           run traffic.py --incident android12 for 90 s, then the safety check;
+                        while the check is still healthy, run it again (at most 5 rounds)
   4  Rollback           wait for the safety scheduler to roll back to 5% (or roll back by hand
                         when automatic rollbacks are off); the rollback pauses the schedule
   5  Fix shipped        add ``app_version semver_gte 3.2.1 → 100%`` next to the employee rule
@@ -53,6 +54,9 @@ TRAFFIC_SCRIPT = Path(__file__).resolve().parent / "traffic.py"
 
 INCIDENT_RATE = 6
 INCIDENT_DURATION_S = 90
+# The steady traffic setup-local.sh runs beside the story dilutes the crashes, so one round
+# may leave the flag healthy: step 3 runs the incident again, up to this many rounds in all.
+INCIDENT_ROUNDS = 5
 ROLLBACK_WAIT_S = 6 * 60  # the safety scheduler runs every SAFETY_CHECK_INTERVAL_MINUTES (1 in the demo)
 POLL_INTERVAL_S = 10
 SAFETY_WINDOW_MIN = 15  # error_rate is computed over the last 15 minutes of evaluations
@@ -216,6 +220,7 @@ class Story:
     run_traffic: Callable[[list[str]], int] | None = None
     incident_rate: float = INCIDENT_RATE
     incident_duration: float = INCIDENT_DURATION_S
+    incident_rounds: int = INCIDENT_ROUNDS
     rollback_wait: float = ROLLBACK_WAIT_S
     healthy_wait: float = HEALTHY_WAIT_S
     poll_interval: float = POLL_INTERVAL_S
@@ -433,16 +438,25 @@ class Story:
         self.say("  The simulator reports the crashes the way the StreamPulse server would forward them, with its server-side key.")
         if pct < 25:
             self.say("  (note: below 25% the crash share is too small to cross the 5% critical threshold — run step 2 first)")
-        rc = self.run_incident_traffic()
-        if rc != 0:
-            raise StoryError(
-                f"traffic.py exited with code {rc} (2 = bad API key, or no server key in demo/streampulse/.api_key_server: "
-                "run backend/scripts/seed_streampulse.py; 3 = not seeded, 4 = API unreachable)"
-            )
-        self.say("")
-        check = self.print_safety()
+        check: dict[str, Any] = {}
+        for round_ in range(1, self.incident_rounds + 1):
+            rc = self.run_incident_traffic()
+            if rc != 0:
+                raise StoryError(
+                    f"traffic.py exited with code {rc} (2 = bad API key, or no server key in demo/streampulse/.api_key_server: "
+                    "run backend/scripts/seed_streampulse.py; 3 = not seeded, 4 = API unreachable)"
+                )
+            self.say("")
+            check = self.print_safety()
+            if not check.get("is_healthy"):
+                break
+            if round_ < self.incident_rounds:
+                self.say(
+                    f"  Still healthy: the steady traffic dilutes the crashes. Running the incident again "
+                    f"(round {round_ + 1} of at most {self.incident_rounds}):"
+                )
         if check.get("is_healthy"):
-            self.say("  The check is still healthy — the error window may need another minute of traffic; re-run step 3.")
+            self.say(f"  The check is still healthy after {self.incident_rounds} rounds; re-run step 3.")
         else:
             self.say("  error_rate is above the 5% critical threshold — the flag is now CRITICAL.")
         self.look_at(
