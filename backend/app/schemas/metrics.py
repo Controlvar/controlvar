@@ -189,9 +189,10 @@ class MetricsSummary(BaseModel):
     error_rate: Optional[float] = Field(
         None,
         description=(
-            "Errors that count toward the safety check, as a percentage (0-100) "
-            "of the flag evaluations in the period; null when the period has no "
-            "flag evaluations. Errors are counted by the safety check's rule: "
+            "Errors that count toward the safety check, as a percentage of the "
+            "aggregated flag evaluations in the period (it can exceed 100 when "
+            "errors outnumber them); null when the period has no aggregated flag "
+            "evaluations. Errors are counted by the safety check's rule: "
             "flag evaluations that failed on the server count, and only a report "
             "sent with a server-side key (an API key with the ``sdk:ruleset`` "
             "scope, whose owner can change feature flags) counts; the reports "
@@ -200,7 +201,7 @@ class MetricsSummary(BaseModel):
             "period is ``start_date`` to ``end_date`` (by default the 30 days "
             "before now), not the last 15 minutes; the denominator is the "
             "aggregated flag evaluations of ``period``, not the raw flag "
-            "evaluations; and the unit is a percentage, not a fraction (0-1)."
+            "evaluations; and the unit is a percentage, not a fraction."
         ),
     )
     uncounted_error_count: int = Field(

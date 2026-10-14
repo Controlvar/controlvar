@@ -43,7 +43,7 @@ reports that do not count, and its `uncounted_error_count` is the number of them
 That `error_rate` still differs from the check's in three ways: it covers `start_date` to
 `end_date` (by default the 30 days before now), not the last 15 minutes; it divides by the
 aggregated flag evaluations (of its `period`, by default `day`), not the raw ones; and it is a
-percentage (0–100), not a fraction.
+percentage, not a fraction, which can exceed 100 when errors outnumber those evaluations.
 
 ---
 

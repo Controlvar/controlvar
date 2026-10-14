@@ -219,8 +219,9 @@ def test_the_summary_error_rate_description_names_the_rule_and_three_differences
     assert "the aggregated flag evaluations of ``period``" in error_rate
     assert "not the raw flag evaluations" in error_rate
     # The unit.
-    assert "a percentage (0-100)" in error_rate
-    assert "not a fraction (0-1)" in error_rate
+    assert "a percentage of the aggregated flag evaluations" in error_rate
+    assert "it can exceed 100 when errors outnumber them" in error_rate
+    assert "the unit is a percentage, not a fraction." in error_rate
 
     assert "uncounted_error_count" in schema["required"]
     assert schema["properties"]["uncounted_error_count"]["type"] == "integer"

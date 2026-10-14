@@ -142,7 +142,7 @@ by = [
 ]
 
 [[unit]]
-text = "That error_rate still differs from the check's in three ways: it covers start_date to end_date (by default the 30 days before now), not the last 15 minutes; it divides by the aggregated flag evaluations (of its period, by default day), not the raw ones; and it is a percentage (0–100), not a fraction."
+text = "That error_rate still differs from the check's in three ways: it covers start_date to end_date (by default the 30 days before now), not the last 15 minutes; it divides by the aggregated flag evaluations (of its period, by default day), not the raw ones; and it is a percentage, not a fraction, which can exceed 100 when errors outnumber those evaluations."
 by = [
     "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_counts_errors_by_the_safety_checks_rule",
     "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_still_differs_from_the_check_in_period_and_denominator",

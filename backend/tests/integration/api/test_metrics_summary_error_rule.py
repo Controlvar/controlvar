@@ -165,11 +165,13 @@ def test_the_summary_still_differs_from_the_check_in_period_and_denominator(
     client, db_session, viewer_user, make_feature_flag
 ):
     """The two differences besides the unit that ``error_rate``'s description
-    names.
+    names, and the unit's range.
 
     Period: an error 20 minutes old is in the summary's 30 days and outside the
     check's 15 minutes. Denominator: with raw evaluations and none aggregated,
-    the summary has no rate (``null``) while the check has one.
+    the summary has no rate (``null``) while the check has one. Range: the
+    percentage has no ceiling, so errors that outnumber the aggregated
+    evaluations give more than 100.
     """
     older = _flag(make_feature_flag)
     db_session.add(
@@ -193,6 +195,18 @@ def test_the_summary_still_differs_from_the_check_in_period_and_denominator(
         )
     )
     _evaluations(db_session, unaggregated, raw=4, aggregated=0)
+
+    outnumbered = _flag(make_feature_flag)
+    for i in range(3):
+        db_session.add(
+            ErrorLog(
+                error_type="failed_evaluation",
+                feature_flag_id=outnumbered.id,
+                message=f"now {i}",
+                request_data={"context": {}},
+            )
+        )
+    _evaluations(db_session, outnumbered, raw=2, aggregated=2)
     db_session.commit()
 
     service = SafetyService(db_session)
@@ -210,3 +224,7 @@ def test_the_summary_still_differs_from_the_check_in_period_and_denominator(
     check = service.get_error_metrics(db_session, unaggregated.id)
     assert check["error_count"] == 1
     assert check["error_rate"] == pytest.approx(0.25)
+
+    summary = _summary(client, viewer_user, outnumbered)
+    assert summary["total_evaluations"] == 2
+    assert summary["error_rate"] == pytest.approx(150.0)
