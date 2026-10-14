@@ -118,9 +118,9 @@ locust -f backend/tests/performance/locustfiles/endurance_test.py \
        --host http://localhost:8000
 ```
 
-Then open `http://localhost:8089` in your browser, configure the number of users
-and spawn rate, and click **Start swarming**. Against a development API, the rate
-limits above apply.
+Then open `http://localhost:8089` in your browser, fill in **Number of users** and
+**Ramp up**, and click **Start**. Against a development API, the rate limits above
+apply.
 
 ### Option B: Headless mode (no browser)
 

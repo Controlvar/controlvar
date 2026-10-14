@@ -100,8 +100,8 @@ text = "Endurance test:"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Then open http://localhost:8089 in your browser, configure the number of users and spawn rate, and click Start swarming."
-by = ["untested:S"]
+text = "Then open http://localhost:8089 in your browser, fill in Number of users and Ramp up, and click Start."
+by = ["test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_the_web_ui_is_on_8089_with_number_of_users_ramp_up_and_start"]
 
 [[unit]]
 text = "Against a development API, the rate limits above apply."

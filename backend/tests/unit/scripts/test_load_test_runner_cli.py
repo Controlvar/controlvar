@@ -17,8 +17,12 @@ import importlib.util
 import json
 import os
 import re
+import shutil
+import socket
 import subprocess
 import sys
+import time
+import urllib.request
 from pathlib import Path
 from types import ModuleType
 
@@ -260,6 +264,68 @@ def test_locust_is_pinned_and_the_pinned_version_is_installed():
     text = (REPO_ROOT / "backend" / "requirements.txt").read_text(encoding="utf-8")
     (pinned,) = re.findall(r"^locust==([0-9][0-9.]*)\b", text, re.M)
     assert importlib.metadata.version("locust") == pinned
+
+
+#: Option A's baseline command, as the page gives it: no --headless, so
+#: Locust serves its web UI instead of running.
+WEB_UI_ARGS = (
+    "-f",
+    "backend/tests/performance/locustfiles/api_load_test.py",
+    "--host",
+    "http://localhost:8000",
+)
+WEB_UI = "http://127.0.0.1:8089"
+
+
+def _get(url: str) -> str:
+    with urllib.request.urlopen(url, timeout=5) as response:
+        assert response.status == 200, (url, response.status)
+        return response.read().decode("utf-8")
+
+
+def test_the_web_ui_is_on_8089_with_number_of_users_ramp_up_and_start(tmp_path):
+    """The interactive run serves Locust's web UI on port 8089, and the pinned
+    Locust's form has the Number of users and Ramp up fields and a Start
+    button. The form is never submitted, so nothing is sent to the host."""
+    locust = Path(sys.executable).with_name("locust")
+    command = str(locust) if locust.is_file() else shutil.which("locust")
+    assert command, "the locust command is not installed"
+    with socket.socket() as probe:
+        probe.settimeout(1)
+        assert probe.connect_ex(("127.0.0.1", 8089)) != 0, (
+            "something already listens on 8089; this test must start the UI there"
+        )
+    log = tmp_path / "locust.log"
+    with log.open("w") as output:
+        process = subprocess.Popen(
+            [command, *WEB_UI_ARGS],
+            cwd=REPO_ROOT,
+            stdin=subprocess.DEVNULL,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            page = ""
+            deadline = time.monotonic() + 90
+            while not page and process.poll() is None and time.monotonic() < deadline:
+                try:
+                    page = _get(f"{WEB_UI}/")
+                except OSError:
+                    time.sleep(0.5)
+            assert page, log.read_text()[-3000:]
+            scripts = re.findall(r'<script[^>]* src="\./(assets/[^"]+\.js)"', page)
+            assert len(scripts) == 1, page[:2000]
+            bundle = _get(f"{WEB_UI}/{scripts[0]}")
+        finally:
+            process.terminate()
+            process.wait(timeout=30)
+    assert "Starting web interface at http://0.0.0.0:8089" in log.read_text()
+    assert "label:`Number of users (peak concurrency)`,name:`userCount`" in bundle
+    assert "label:`Ramp up (users started/second)`,name:`spawnRate`" in bundle
+    assert re.search(
+        r"type:`submit`,variant:`contained`,children:[A-Za-z_$]+\?`Update`:`Start`\}",
+        bundle,
+    ), "the swarm form's submit button does not read Start"
 
 
 @pytest.mark.regression
