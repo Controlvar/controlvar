@@ -1074,6 +1074,7 @@ def test_the_new_suites_cover_the_targets_they_were_added_for():
         ("test:sdk/js/__tests__/client.test.ts::x", "sdk-js"),
         ("test:frontend/src/tests/a.test.tsx::x", "frontend"),
         ("test:backend/tests/unit/x/test_a.py::test_x", "unit"),
+        ("test:backend/tests/unit/chart/test_chart_render.py::test_x", "chart"),
     ):
         assert rc.suite_of(target) == suite, target
     # The frontend session's other tree, read from SUITES (a core file does
@@ -1085,6 +1086,20 @@ def test_the_new_suites_cover_the_targets_they_were_added_for():
     assert rc.target_problem(f"test:{module_file}::signs in", cases, "x") is None
     assert rc.suite_of("test:infrastructure/cdk/x.test.ts") is None
     assert rc.suite_of("test:backend/tests/unitx/test_a.py") is None  # a prefix only
+
+
+def test_a_tree_a_session_ignores_is_not_its_own():
+    """unit leaves backend/tests/unit/chart to the chart suite (there it would
+    skip, and a skipped case fails a target whatever another report says)."""
+    unit, chart = rc.SUITES["unit"][0], rc.SUITES["chart"][0]
+    path = "backend/tests/unit/chart/test_chart_render.py"
+    assert not unit.runs(path) and chart.runs(path)
+    assert unit.runs("backend/tests/unit/chartx/test_a.py")  # a prefix only
+    assert rc.session_of(f"test:{path}::test_x") == ("chart", chart)
+    assert rc.session_of("test:backend/tests/unit/x/test_a.py") == ("unit", unit)
+    assert rc.session_of("not a target") is None
+    plain = rc.Invocation("x.xml", ("backend/tests/unit/",))
+    assert plain.ignored == () and plain.runs(path)
 
 
 @pytest.mark.parametrize("outcome", ["skipped", "failed"])
@@ -1471,6 +1486,12 @@ def test_a_suite_runs_every_session_and_fails_if_any_did(tmp_path, monkeypatch):
         for key, value in invocation.env:
             assert env[key] == value
     assert rc.run_suite("smoke", tmp_path, runner=lambda c, **k: Done(0)) == 0
+    # The chart suite: its tree, with the variable its module skips without.
+    calls.clear()
+    assert rc.run_suite("chart", tmp_path, runner=runner) == 0
+    ((command, env),) = calls
+    assert "backend/tests/unit/chart" in command
+    assert env["EXPERIMENTLY_CHART_TESTS"] == "1"
 
 
 def test_the_frontend_suite_runs_jest_and_writes_its_report_as_junit(tmp_path):

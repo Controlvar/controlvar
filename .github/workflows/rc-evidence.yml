@@ -20,15 +20,16 @@ name: RC evidence
 # rather than skips, so the run cannot read as green.
 #
 # The suites run as the pull request jobs run them (pr-qa-gate.yml,
-# integration-tests.yml, infrastructure-tests.yml, sdk-unit-tests.yml), the
-# tag's whole tree, one job each: the pytest ones in the python-suites matrix
-# (with the CDK stack tests, sdk/python's own suite, the SDK contract
-# self-tests and the demo apps' simulators; `deps` is what each installs, as
-# its pull request job does), the jest ones in the jest-suites
-# matrix (the frontend, sdk/js and the two demo apps), whose reports are
-# written as JUnit too. The list is SUITES in scripts/rc_evidence.py. Their
-# JUnit reports and the verifier's record (the run table, the verdicts it
-# read, the reports) are kept 90 days.
+# integration-tests.yml, chart.yml, infrastructure-tests.yml,
+# sdk-unit-tests.yml), the tag's whole tree, one job each: the pytest ones in
+# the python-suites matrix (with the chart's render tests, run as chart.yml
+# runs them: EXPERIMENTLY_CHART_TESTS=1, its pinned helm, no skip; the CDK
+# stack tests, sdk/python's own suite, the SDK contract self-tests and the
+# demo apps' simulators; `deps` is what each installs, as its pull request
+# job does), the jest ones in the jest-suites matrix (the frontend, sdk/js and
+# the two demo apps), whose reports are written as JUnit too. The list is
+# SUITES in scripts/rc_evidence.py. Their JUnit reports and the verifier's
+# record (the run table, the verdicts it read, the reports) are kept 90 days.
 # The table is in the log and the record, not the step summary: it names run
 # ids and test names, which the public QA summaries leave out
 # (.github/qa-templates/).
@@ -62,6 +63,9 @@ jobs:
       matrix:
         include:
           - suite: unit
+            db: experimentation
+            deps: backend
+          - suite: chart
             db: experimentation
             deps: backend
           - suite: smoke
@@ -155,6 +159,28 @@ jobs:
         with:
           node-version: '22'
 
+      # As chart.yml's chart job: the helm it pins (the same version and
+      # sha256), first on PATH and as $HELM, which the render tests run. The
+      # runner image ships its own helm; this one's version is asserted.
+      - name: Install helm (pinned, checksum-verified)
+        if: matrix.suite == 'chart'
+        env:
+          HELM_VERSION: '3.19.0'
+          # sha256 of helm-v3.19.0-linux-amd64.tar.gz (the same pin as chart.yml)
+          HELM_SHA256: 'a7f81ce08007091b86d8bd696eb4d86b8d0f2e1b9f6c714be62f82f96a594496'
+        run: |
+          set -euo pipefail
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          curl -fsSL -o "$RUNNER_TEMP/helm.tgz" \
+            "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz"
+          printf '%s  %s\n' "$HELM_SHA256" "$RUNNER_TEMP/helm.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/helm.tgz" -C "$RUNNER_TEMP" linux-amd64/helm
+          install -m 0755 "$RUNNER_TEMP/linux-amd64/helm" "$bin/helm"
+          test "$("$bin/helm" version --template '{{.Version}}')" = "v${HELM_VERSION}"
+          printf '%s\n' "$bin" >> "$GITHUB_PATH"
+          printf 'HELM=%s\n' "$bin/helm" >> "$GITHUB_ENV"
+
       # The modules' own packages, as module-tests installs them.
       - name: Install the modules' dependencies
         if: matrix.suite == 'modules'
@@ -202,6 +228,12 @@ jobs:
         env:
           SUITE: ${{ matrix.suite }}
         run: python scripts/rc_evidence.py --suite "$SUITE" --junit-dir "$RUNNER_TEMP/junit"
+
+      # As chart.yml: here the variable and helm are both set, so a skipped
+      # chart test means one was lost, and it must not pass for green.
+      - name: No chart test was skipped
+        if: matrix.suite == 'chart'
+        run: python3 scripts/check_junit_skips.py "$RUNNER_TEMP/junit/chart.xml" backend/tests/unit/chart
 
       - name: Upload the JUnit reports
         if: always()

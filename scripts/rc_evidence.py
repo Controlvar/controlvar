@@ -50,8 +50,9 @@ Then:
 * E3 Doc Examples: its run is one of the workflows above (its summary job
   holds every page's expectations).
 * E4 claim tests. Each suite ``rc-evidence.yml`` ran at the tag left its
-  JUnit reports, each with at least one test: the Python suites, the CDK stack
-  tests, the two published SDKs' own suites (``sdk/python``'s pytest,
+  JUnit reports, each with at least one test: the Python suites, the chart's
+  render tests (with the helm chart.yml pins), the CDK stack tests, the two
+  published SDKs' own suites (``sdk/python``'s pytest,
   ``sdk/js``'s jest), the SDK contract self-tests, the demo apps' jest and their
   simulators' tests, and the frontend's jest. Every target must be in a tree
   some suite runs (``suite_of``); one in no suite's tree fails by name. Every
@@ -253,6 +254,22 @@ class Invocation:
             a.rstrip("/") for a in self.args if "/" in a and not a.startswith("-")
         )
 
+    @property
+    def ignored(self) -> Tuple[str, ...]:
+        """The trees under its roots this session leaves out: pytest's
+        ``--ignore=<tree>``."""
+        return tuple(
+            a[len("--ignore=") :].rstrip("/")
+            for a in self.args
+            if a.startswith("--ignore=")
+        )
+
+    def runs(self, path: str) -> bool:
+        """Whether the file *path* is in a tree this session runs."""
+        return any(path.startswith(root + "/") for root in self.roots) and not any(
+            path.startswith(tree + "/") for tree in self.ignored
+        )
+
 
 _INTEGRATION_ENV: Tuple[Tuple[str, str], ...] = (
     ("POSTGRES_SERVER", "localhost"),
@@ -263,7 +280,7 @@ _INTEGRATION_ENV: Tuple[Tuple[str, str], ...] = (
     ),
 )
 #: The suites rc-evidence.yml runs at the tag, one job each, as the pull
-#: request jobs run them (pr-qa-gate.yml, integration-tests.yml,
+#: request jobs run them (pr-qa-gate.yml, integration-tests.yml, chart.yml,
 #: sdk-unit-tests.yml), without -x, a shard or --passWithNoTests: the tag's
 #: whole tree. The pytest ones are the python-suites matrix, the jest ones the
 #: jest-suites matrix. sdk/python has its own rootdir (the pyproject.toml
@@ -275,9 +292,29 @@ SUITES: Dict[str, Tuple[Invocation, ...]] = {
     # registry names them) are a session of their own: collecting
     # test_load_profiles.py imports locust, whose gevent monkey-patching would
     # otherwise apply to every test in unit.xml.
+    # The chart's render tests are not in unit.xml: they skip there, as in the
+    # Unit Tests job, and a skipped case of a target fails it whatever another
+    # report says. They are the chart suite, below.
     "unit": (
-        Invocation("unit.xml", ("backend/tests/unit/", "backend/tests/realistic/")),
+        Invocation(
+            "unit.xml",
+            (
+                "backend/tests/unit/",
+                "backend/tests/realistic/",
+                "--ignore=backend/tests/unit/chart",
+            ),
+        ),
         Invocation("performance.xml", ("backend/tests/performance/",)),
+    ),
+    # As chart.yml's chart job runs them: EXPERIMENTLY_CHART_TESTS=1 and the
+    # helm it pins ($HELM, which rc-evidence.yml's chart leg installs);
+    # without either every case skips.
+    "chart": (
+        Invocation(
+            "chart.xml",
+            ("backend/tests/unit/chart",),
+            (("EXPERIMENTLY_CHART_TESTS", "1"),),
+        ),
     ),
     "smoke": (Invocation("smoke.xml", ("backend/tests/smoke/",)),),
     "lambda": tuple(
@@ -357,18 +394,26 @@ def suite_job(name: str) -> str:
     return (JEST_SUITE_JOB if is_jest(name) else SUITE_JOB).format(name)
 
 
-def suite_of(target: str) -> Optional[str]:
-    """The suite whose sessions run *target*'s file: a path under one of its
-    roots. None when no suite in SUITES runs it."""
+def session_of(target: str) -> Optional[Tuple[str, Invocation]]:
+    """The suite and session that run *target*'s file: a path under one of the
+    session's roots and not under a tree it ignores. None when no session in
+    SUITES runs it."""
     match = TEST_TARGET.fullmatch(target)
     if not match:
         return None
     path = match.group("path")
     for name, invocations in SUITES.items():
         for invocation in invocations:
-            if any(path.startswith(root + "/") for root in invocation.roots):
-                return name
+            if invocation.runs(path):
+                return name, invocation
     return None
+
+
+def suite_of(target: str) -> Optional[str]:
+    """The suite whose sessions run *target*'s file (``session_of``). None
+    when no suite in SUITES runs it."""
+    found = session_of(target)
+    return found[0] if found else None
 
 
 #: The npm projects whose jest the jest suites run; a jest target is a test
