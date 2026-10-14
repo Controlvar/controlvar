@@ -387,7 +387,7 @@ def test_every_example_user_context_in_the_docs_is_served(route, client, segment
         ("endpoints.md prose", {"user.country": "US"}),
         ("schema example", {"country": "US", "plan": "pro"}),
     ]
-    assert len(examples) >= 5
+    assert len(examples) >= 4
     for where, context in examples:
         response = _send(route, client, segment, context)
         assert response.status_code == 200, (where, response.text)

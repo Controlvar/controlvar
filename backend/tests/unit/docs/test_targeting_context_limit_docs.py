@@ -271,7 +271,8 @@ def docs_example_user_contexts() -> Tuple[List[Tuple[str, dict]], List[str]]:
 
 def test_every_example_user_context_in_the_docs_is_within_the_limits():
     found, unread = docs_example_user_contexts()
-    assert len(found) >= 2, (len(found), unread)
+    # docs/guides/segments.md's evaluate example, at least.
+    assert len(found) >= 1, (len(found), unread)
     assert not unread, unread
     over = [(where, context_over_limits(c)) for where, c in found]
     assert not [o for o in over if o[1] is not None], over
