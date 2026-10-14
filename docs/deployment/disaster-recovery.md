@@ -26,8 +26,8 @@ CLUSTER=$(aws cloudformation describe-stacks --stack-name "experimentation-datab
 Aurora backs up continuously. You can restore to any second between the start of the backup
 retention period and the cluster's `LatestRestorableTime`, which AWS documents as typically
 within 5 minutes of the present. The retention
-period is the limit: see the table below. If the API tasks or Redis fail, no data is lost,
-because Redis holds only cache and rate-limit state.
+period is the limit: see the table below. If Redis fails, no data is lost: it holds
+only cache and rate-limit state.
 
 ---
 
@@ -481,7 +481,7 @@ If Redis cannot be recovered within 30 minutes, keep running without it and open
 ## Scenario 6: Full AWS Region Failure
 
 **Detection:** The AWS Health Dashboard shows a disruption in your region, and every health check fails.
-**RTO:** not established. Regional failover is **not built**.
+Regional failover is **not built**.
 
 ### What the CDK does not create
 
