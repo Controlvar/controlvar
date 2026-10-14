@@ -351,8 +351,7 @@ watch -n 5 'aws ecs describe-services \
   --query "services[0].taskSets[?status==\`PRIMARY\`] | [0].{Serving:taskDefinition,Running:runningCount,Desired:computedDesiredCount,Pending:pendingCount}"'
 ```
 
-`Running`, `Desired` and `Pending` are the PRIMARY task set's own counts:
-`Desired` is its `computedDesiredCount`. Do not read the service's
+Do not read the service's
 `runningCount` instead: for the hour after a shift the replaced task set keeps
 running beside the new one, so the service counts both (on staging on
 2026-10-04 (UTC) it counted 4 tasks of 2 desired after a rollback that had worked:
@@ -718,9 +717,7 @@ the database is at the new release's heads. No deployment was created, so the
 revision that served before the run still serves, on the migrated schema. The
 run also ends with the "Migrated, not deployed" warning, which says the same.
 
-**Why.** The newest revision of the family came from a `cdk deploy` of the
-Fargate stack from a checkout that predates the setting (#499, 0.14.0). A
-revision without it runs the database bootstrap each time a task starts, and a
+**Why.** A revision without it runs the database bootstrap each time a task starts, and a
 bootstrap refuses a database a newer release migrated.
 
 **Fix.** Deploy the Fargate stack of this environment,

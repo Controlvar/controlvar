@@ -93,7 +93,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "The workflow role's trust policy pins the OIDC subject exactly."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_workflow_roles_trust_policy_pins_the_oidc_subject_exactly"]
 
 [[unit]]
 text = "Decode a real token's sub first (a throwaway job bound to the staging environment printing only the payload's sub), and write the trust policy from what it printed, not from memory."
@@ -129,7 +129,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Nothing in the CDK creates a DNS record."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_app_creates_no_dns_record"]
 
 [[unit]]
 text = "After the first cdk deploy, add an alias A record for app.<domain> (and api.<domain> if you use it) pointing at the load balancer experimentation-<env>; until then the hostname does not resolve and curl reports 000."
@@ -145,7 +145,10 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Two repositories, created once per account and region; nothing in the CDK creates them (a registry is account-scoped, the stacks are per-environment):"
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_api_runs_from_experimentation_platform_backend_which_no_stack_creates",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_a_cdk_deploy_registers_revisions_naming_the_bootstrap_tag",
+]
 
 [[unit]]
 text = "Then push one image to each, tagged bootstrap, which the stacks' task definitions name until the first deploy."
@@ -164,7 +167,10 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Both repositories survive a teardown (they are not in any stack)."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_api_runs_from_experimentation_platform_backend_which_no_stack_creates",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_nothing_is_built_for_a_second_region",
+]
 
 [[unit]]
 text = "1.4 Secrets"
@@ -201,10 +207,6 @@ by = [
 ]
 
 [[unit]]
-text = "Each check prints the secret's name; nothing prints an ARN."
-by = ["untested:T"]
-
-[[unit]]
 text = "Keep the three exported for every cdk synth, cdk diff, cdk deploy and cdk destroy (section 1.6), and keep them out of issues, pull requests and chat: an ARN carries the account ID."
 by = ["exempt:instruction"]
 
@@ -234,7 +236,10 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Setting them arms the workflows for that environment: gh secret set AWS_ACCOUNT_ID --env <env> (12 digits; it prompts for the value), gh secret set AWS_ROLE_ARN --env <env>, and gh variable set PUBLIC_BASE_URL --env <env> --body https://app.<domain>."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_every_workflow_refuses_an_environment_that_is_not_configured",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_deploy_also_refuses_an_environment_without_its_public_url",
+]
 
 [[unit]]
 text = "The account ID is a secret, not a variable, because workflow logs are public: a step's log header prints its variables before anything can mask them."
@@ -336,7 +341,14 @@ by = [
 
 [[unit]]
 text = "Until the first Deploy (section 2) the API runs against an empty database: /health answers 200 (through the hostname, once its alias record exists; section 1.2) and the load balancer's health checks pass, while real requests answer 500 and the API logs errors."
-by = ["untested:S"]
+by = [
+    "test:backend/tests/unit/core/test_operator_facing_runtime.py::test_health_answers_200_on_a_database_without_the_schema",
+    "test:backend/tests/unit/core/test_operator_facing_runtime.py::test_a_request_that_needs_a_table_answers_500_and_logs_an_error",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_the_load_balancer_probes_the_api_on_health",
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations",
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_seed",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_snapshot_and_the_migration_come_before_the_deployment_and_nothing_undoes_them",
+]
 
 [[unit]]
 text = "Expect that, and run the first Deploy soon after the stacks are up."
@@ -344,7 +356,11 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "If a request in that window has put experimentation-api-5xx-blue-<env> or -green-<env> into ALARM, Deploy refuses to start; the way through is Deploy's break-glass (Rollback Runbook, \"Fix forward while an alarm is firing\"), and a person decides at that moment whether to use it."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_alarm_in_alarm_refuses_naming_it_and_since_when",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_break_glass_is_a_tick_box_and_a_reason_both_off_by_default",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_with_the_break_glass_an_alarm_in_alarm_is_a_warning",
+]
 
 [[unit]]
 text = "Docker Compose and the Helm chart are unchanged: compose runs one API container that migrates on start, and the chart runs the migration in an init container (Database Migrations)."
@@ -435,10 +451,6 @@ by = ["exempt:instruction"]
 [[unit]]
 text = "Replace the three example values with yours before running anything."
 by = ["exempt:instruction"]
-
-[[unit]]
-text = "Each step runs only if the one before it succeeded, so a check that refuses a value stops the diff, and a diff that fails prints no count at all, which is not a 0."
-by = ["untested:T"]
 
 [[unit]]
 text = "Read the whole file, not only the count."
@@ -721,7 +733,10 @@ by = [
 
 [[unit]]
 text = "CodeDeploy does, if one of the deployment group's alarms goes into ALARM: it stops the deployment and rolls the API back by itself, and the step ends \"Rolled back by an alarm\" (result=alarm), naming the alarm."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_alarm_after_the_approval_is_rolled_back_by_an_alarm_naming_it",
+]
 
 [[unit]]
 text = "There is nothing to roll back then; read An alarm rolled the API back."
@@ -853,11 +868,18 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "A live release already answering 5xx at the threshold (its own bug, or a failing dependency) stops every new deploy too, the fix included: see Fix forward while an alarm is firing."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_both_target_groups_and_nothing_else_are_watched",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_alarm_in_alarm_refuses_naming_it_and_since_when",
+]
 
 [[unit]]
 text = "And every 5xx the API answers counts, its deliberate ones included: 501 on a module's route under the core profile, and 503 from /health/ready for a caller other than the load balancer."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_each_alarm_is_exactly_the_specified_one",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_not_ready_when_database_down",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_create_split_url_experiment_returns_501",
+]
 
 [[unit]]
 text = "A rollback in the hour after the shift is not announced in the #deployments channel; the run summary gives the time the alarms stop watching and the command that shows whether one happened."
@@ -872,7 +894,7 @@ by = [
 
 [[unit]]
 text = "For an hour after the shift, CodeDeploy keeps the previous task set, and the deployment stays active that whole time."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_codedeploy_keeps_the_previous_task_set_an_hour_after_the_shift"]
 
 [[unit]]
 text = "It accepts no second deployment meanwhile."
@@ -887,7 +909,7 @@ by = [
 
 [[unit]]
 text = "A deployment that was never approved stays active until its 30-minute approval wait ends."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_an_unapproved_deployment_is_stopped_after_30_minutes"]
 
 [[unit]]
 text = "The deploy never stops a deployment itself."
@@ -922,7 +944,10 @@ by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_deploy_summ
 
 [[unit]]
 text = "Rollback's all-at-once --deployment-config-name changes how traffic moves, not how long the old task set is kept."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_its_deployment_is_all_at_once_names_the_target_and_overrides_the_alarms",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_codedeploy_keeps_the_previous_task_set_an_hour_after_the_shift",
+]
 
 [[unit]]
 text = "On staging on 2026-10-11 (UTC), the Rollback run's deployment stayed active for about an hour after its traffic shift (#295)."
@@ -944,8 +969,8 @@ by = [
 ]
 
 [[unit]]
-text = "Every migration must therefore be one the previous release can run against: add columns and tables (nullable, or with defaults), never drop or rename one the previous release reads in the same release."
-by = ["untested:T"]
+text = "So write every migration so that the previous release can run against it: add columns and tables (nullable, or with defaults), and never drop or rename, in the same release, one the previous release reads."
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Drop in a later release, once nothing running reads it."
@@ -961,7 +986,10 @@ by = ["test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api
 
 [[unit]]
 text = "For one that is not, the order matters: undo the migration while the release that contains it is still serving, and only then roll the API back (Rollback Runbook, Database Rollback Procedure, Step 2)."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_migrate_runs_the_serving_image_and_refuses_when_there_is_none",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_database_migration_takes_no_image_and_runs_the_one_serving",
+]
 
 [[unit]]
 text = "Once the API has been rolled back, the workflow can no longer undo it."
@@ -1031,7 +1059,11 @@ by = [
 
 [[unit]]
 text = "Expected: Running == Desired and Pending 0, and Serving the revision the run summary named."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_no_approval_until_every_target_is_healthy_and_counted",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_a_deploy_is_approved_on_healthy_targets_and_succeeds_when_serving",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_summary_says_until_when_the_alarms_watch_and_how_to_check",
+]
 
 [[unit]]
 text = "These are the API's PRIMARY task set's own counts; the service's runningCount also counts the replaced task set for the hour after a shift, so it reads higher than Desired then."
@@ -1059,11 +1091,14 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The run prints the task's last 100 log lines."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_run_prints_the_migration_tasks_last_100_log_lines"]
 
 [[unit]]
 text = "The full log is CloudWatch log group /ecs/experimentation-migrate-<env>, stream migrate/backend/<task id>."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_the_migration_task_logs_to_its_group_under_migrate_backend",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_run_prints_the_migration_tasks_last_100_log_lines",
+]
 
 [[unit]]
 text = "A migration that failed half-way needs its downgrade before a re-deploy (Rollback Runbook)."
@@ -1117,7 +1152,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "If it says \"Stopped by an alarm\" instead, the alarm was already firing before the traffic shift and nothing shifted: Fix forward while an alarm is firing."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_alarm_before_the_shift_is_stopped_by_an_alarm_and_nothing_shifted"]
 
 [[unit]]
 text = "\"This API revision would run migrations on start\""
@@ -1125,7 +1160,11 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The API revision this run registered, copied from the family's newest one, does not set RUN_MIGRATIONS=false, most likely because the Fargate stack was last deployed from a checkout older than 0.14.0."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_task_definition_scripts.py::test_registers_the_digest_and_changes_nothing_else",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_api_revision_without_run_migrations_exactly_false_is_refused",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_api_tasks_stopped_migrating_on_start_in_0_14_0",
+]
 
 [[unit]]
 text = "No deployment was created and the previous revision keeps serving; the migration has been applied."
@@ -1149,7 +1188,7 @@ by = ["test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::
 
 [[unit]]
 text = "CodeDeploy stops the deployment when its 30-minute approval wait ends."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_an_unapproved_deployment_is_stopped_after_30_minutes"]
 
 [[unit]]
 text = "The migration has been applied."
@@ -1208,7 +1247,10 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "If it is Stopped with ALARM_ACTIVE, this is not that question: an alarm stopped the deployment and CodeDeploy is already rolling the API back, putting the rule back first."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_a_route_on_the_other_group_is_read_again_for_about_a_minute_before_it_is_reported",
+]
 
 [[unit]]
 text = "Do not dispatch Rollback; read An alarm rolled the API back."
@@ -1216,7 +1258,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "The deploy re-reads the deployment for about a minute before it reports this, for that reason."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_a_route_on_the_other_group_is_read_again_for_about_a_minute_before_it_is_reported"]
 
 [[unit]]
 text = "Otherwise:"
@@ -1233,10 +1275,6 @@ by = ["exempt:instruction"]
 [[unit]]
 text = "Before any further deploy, record the observation."
 by = ["exempt:instruction"]
-
-[[unit]]
-text = "Then see the fallbacks named in fargate_service_stack.py (ECS-native blue/green, or separate hosts)."
-by = ["untested:T"]
 
 [[unit]]
 text = "The dashboard did not roll out"
@@ -1314,7 +1352,10 @@ by = ["test:backend/tests/unit/infrastructure/test_ecs_rolling_rollout.py::test_
 
 [[unit]]
 text = "\"Dashboard smoke test failed\" -- ECS reports the new revision serving, but GET / did not answer 200 text/html: check the HTTPS listener's default action in experimentation-fargate-<env>."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_a_dashboard_answering_anything_but_html_200_fails_the_dashboard_smoke",
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_https_default_action_is_the_dashboard",
+]
 
 [[unit]]
 text = "\"API changed after the dashboard rolled out\" -- the last API check failed: the dashboard is new and the API may not be."
@@ -1330,7 +1371,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "An API check failed because an alarm stopped the deployment after its shift, and CodeDeploy is moving the API back by itself."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_api_check_failed_by_an_alarm_after_the_shift_says_codedeploy_moves_it_back"]
 
 [[unit]]
 text = "The deployment is stopped, so a re-run is not refused for the hour, and there is nothing to roll back for the API: do not use the rollback line."
@@ -1361,4 +1402,4 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "The API's log is /ecs/experimentation-backend-<env>."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]

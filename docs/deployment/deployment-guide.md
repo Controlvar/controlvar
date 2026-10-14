@@ -130,7 +130,7 @@ for arn in "$JWT_SECRET_ARN" "$FIRST_SUPERUSER_PASSWORD_SECRET_ARN" ${AUDIT_HMAC
 done
 ```
 
-Each check prints the secret's name; nothing prints an ARN. Keep the three
+Keep the three
 exported for every `cdk synth`, `cdk diff`, `cdk deploy` and `cdk destroy`
 (section 1.6), and keep them out of issues, pull requests and chat: an ARN
 carries the account ID. **Recreating a secret changes its ARN**: update the
@@ -256,9 +256,7 @@ python3 scripts/check_live_target_group.py --env "$ENVIRONMENT" --expect "$API_L
   grep -cE 'AWS::EC2::SecurityGroup(Egress|Ingress)' "cdk-diff-$ENVIRONMENT.txt"
 ```
 
-Replace the three example values with yours before running anything. Each step
-runs only if the one before it succeeded, so a check that refuses a value stops
-the diff, and a diff that fails prints no count at all, which is not a `0`.
+Replace the three example values with yours before running anything.
 Read the whole file, not only the count. Do not pipe the diff into another command: a
 pipe reports the last command's exit status, so a failed diff can look like a
 clean one.
@@ -490,9 +488,9 @@ One deploy or manual migration per environment at a time.
 
 A deploy migrates **before** it shifts traffic, so for a while -- and for as
 long as a failed or stopped deploy leaves it so -- the previous release runs
-against the new schema. Every migration must therefore be one the previous
-release can run against: add columns and tables (nullable, or with defaults),
-never drop or rename one the previous release reads in the same release. Drop
+against the new schema. So write every migration so that the previous release
+can run against it: add columns and tables (nullable, or with defaults), and
+never drop or rename, in the same release, one the previous release reads. Drop
 in a later release, once nothing running reads it.
 
 A rollback relies on the same rule. The API tasks do not migrate on start, so
@@ -672,9 +670,7 @@ for that reason. Otherwise:
 1. Roll back within the hour, with the rollback line in the run summary. Then
    confirm with `python3 scripts/check_live_target_group.py --env <env>` that
    the rule names the group the previous revision runs in.
-2. Before any further deploy, record the observation. Then see the fallbacks
-   named in `fargate_service_stack.py` (ECS-native blue/green, or separate
-   hosts).
+2. Before any further deploy, record the observation.
 
 ### The dashboard did not roll out
 

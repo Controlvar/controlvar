@@ -223,7 +223,11 @@ by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops
 
 [[unit]]
 text = "That can happen after the run has gone green, in the hour CodeDeploy keeps the previous task set, and nothing announces it in #deployments: the run summary says until when, and how to check."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_summary_says_until_when_the_alarms_watch_and_how_to_check",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_codedeploy_keeps_the_previous_task_set_an_hour_after_the_shift",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+]
 
 [[unit]]
 text = "The alarms watch the API's target 5xx only (at least 5 in a minute and at least 5% of that target group's requests, for 2 minutes of 3)."
@@ -249,7 +253,7 @@ by = [
 
 [[unit]]
 text = "After the shift, CodeDeploy keeps the previous task set for an hour, and the deployment stays active that whole time."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_codedeploy_keeps_the_previous_task_set_an_hour_after_the_shift"]
 
 [[unit]]
 text = "CodeDeploy accepts no second deployment meanwhile, so a deploy dispatched within the hour is refused before it changes anything."
@@ -351,11 +355,18 @@ by = [
 
 [[unit]]
 text = "modules.register(hooks) builds the modules' settings as its very first step and their validator rejects the shipped dev default in staging and production, so a full image without it never registers the modules — abort_if_modules_broken() refuses to start the API and require_modules_or_absent() fails every alembic command, including the migration task."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deployment_secrets.py::test_without_the_audit_key_the_modules_refuse_to_register",
+    "test:backend/tests/unit/test_modules_loader.py::TestBrokenModulesAbortStartup::test_a_failure_refuses_to_start_outside_development",
+    "test:backend/tests/unit/test_modules_loader.py::TestNeverRaises::test_schema_builders_refuse_a_half_registered_package",
+]
 
 [[unit]]
 text = "The deploy's \"Every secret the task definitions reference exists\" step checks that both task definitions reference it (and the two every profile needs) by complete ARN, and that each one exists, before it builds anything."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_secrets_check_wants_each_secret_by_complete_arn_and_existing",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_secrets_check_runs_before_anything_is_built",
+]
 
 [[unit]]
 text = "Create it with secrets-management.md."
@@ -379,11 +390,14 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The service has a CODE_DEPLOY deployment controller (fargate_service_stack.py), and ECS rejects a task-definition change through UpdateService on such a service — \"Unable to update task definition on services with a CODE_DEPLOY deployment controller\"."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_api_service_is_under_codedeploy_and_the_dashboard_is_not"]
 
 [[unit]]
 text = "Rolling back means creating a CodeDeploy deployment that names the older revision — and approving it, because the deployment group parks for 30 minutes waiting for ContinueDeployment and then stops, which auto-rollback turns back into the revision you were rolling away from."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_an_unapproved_deployment_is_stopped_after_30_minutes",
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_its_deployment_is_all_at_once_names_the_target_and_overrides_the_alarms",
+]
 
 [[unit]]
 text = "Use Method 1."
@@ -403,10 +417,6 @@ by = [
 [[unit]]
 text = "A revision a deploy registered names its image by digest (…/backend@sha256:…)."
 by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_every_task_definition_registered_names_the_digest"]
-
-[[unit]]
-text = "The block sets ENV=staging; for production, change it to ENV=prod before you run it:"
-by = ["untested:T"]
 
 [[unit]]
 text = "Full rollback procedure: rollback-runbook.md"
@@ -448,7 +458,10 @@ by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_
 
 [[unit]]
 text = "The task's log is printed in the run; it is also CloudWatch log group /ecs/experimentation-migrate-<env>."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_run_prints_the_migration_tasks_last_100_log_lines",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_the_migration_task_logs_to_its_group_under_migrate_backend",
+]
 
 [[unit]]
 text = "Health Checks"
@@ -467,7 +480,11 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "/health is readiness: it runs the database check, and it is what the load balancer probes:"
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_the_load_balancer_probes_the_api_on_health",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_not_ready_when_database_down",
+    "test:backend/tests/unit/core/test_operator_facing_runtime.py::test_the_database_check_runs_select_1_and_nothing_else",
+]
 
 [[unit]]
 text = "It prints:"
@@ -489,7 +506,7 @@ by = ["exempt:instruction"]
 [[unit]]
 text = "The block sets ENV=staging; for production, change it to ENV=prod:"
 by = ["exempt:instruction"]
-count = 2
+count = 3
 
 [[unit]]
 text = "Names"
@@ -501,7 +518,10 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Where the CDK generates a name, the stack publishes it as an output and the workflows read it from there."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_every_generated_name_a_workflow_reads_is_a_stack_output",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_the_aurora_cluster_identifier_is_generated_and_published",
+]
 
 [[unit]]
 text = "infrastructure/tests/test_workflow_names_exist.py checks every row with a resource type against a synth of staging and prod."
@@ -513,75 +533,81 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "ECS cluster | experimentation-<env> | AWS::ECS::Cluster"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
 
 [[unit]]
 text = "API service | experimentation-backend-<env> | AWS::ECS::Service"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
 
 [[unit]]
 text = "API task definition family | experimentation-backend-<env> | AWS::ECS::TaskDefinition"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
 
 [[unit]]
 text = "Migration task definition family | experimentation-migrate-<env> | AWS::ECS::TaskDefinition"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
 
 [[unit]]
 text = "Dashboard service | experimentation-dashboard-<env> | AWS::ECS::Service"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
 
 [[unit]]
 text = "Dashboard task definition family | experimentation-dashboard-<env> | AWS::ECS::TaskDefinition"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
 
 [[unit]]
 text = "API log group | /ecs/experimentation-backend-<env> | AWS::Logs::LogGroup"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
 
 [[unit]]
 text = "Migration log group | /ecs/experimentation-migrate-<env> | AWS::Logs::LogGroup"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
 
 [[unit]]
 text = "Dashboard log group | /ecs/experimentation-dashboard-<env> | AWS::Logs::LogGroup"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
 
 [[unit]]
 text = "CodeDeploy application | experimentation-platform-<env> | AWS::CodeDeploy::Application"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
 
 [[unit]]
 text = "CodeDeploy deployment group | experimentation-<env> | AWS::CodeDeploy::DeploymentGroup"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
 
 [[unit]]
 text = "Redis replication group | experimentation-redis-<env>-redis | AWS::ElastiCache::ReplicationGroup"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
 
 [[unit]]
 text = "Aurora credentials (generated) | experimentation-database-<env>-aurora-credentials | AWS::SecretsManager::Secret"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_each_name_an_operator_types_is_one_resource_of_its_type"]
 
 [[unit]]
 text = "Fargate stack | experimentation-fargate-<env> | stack"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_the_three_stacks_the_workflows_address_exist"]
 
 [[unit]]
 text = "Database stack | experimentation-database-<env> | stack"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_the_three_stacks_the_workflows_address_exist"]
 
 [[unit]]
 text = "Migrations stack | experimentation-migrations-<env> | stack"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_the_three_stacks_the_workflows_address_exist"]
 
 [[unit]]
 text = "Aurora cluster identifier | generated: output ClusterIdentifier of experimentation-database-<env> | —"
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_the_aurora_cluster_identifier_is_generated_and_published",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_every_generated_name_a_workflow_reads_is_a_stack_output",
+]
 
 [[unit]]
 text = "Task subnets and security group | outputs TaskSubnets, TaskSecurityGroup of experimentation-fargate-<env> | —"
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_environments_do_not_collide.py::test_the_stacks_say_what_a_workflow_needs_to_address",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_every_generated_name_a_workflow_reads_is_a_stack_output",
+]
 
 [[unit]]
 text = "Secrets you create | /<env>/experimentation/<name> (Secrets Manager) | —"
@@ -589,7 +615,7 @@ by = ["test:infrastructure/tests/test_secret_arns.py::test_every_hand_made_secre
 
 [[unit]]
 text = "Parameters the stacks write | /experimentation/<env>/... (SSM -- the other order, #67) | —"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_every_parameter_the_stacks_write_is_under_experimentation_env"]
 
 [[unit]]
 text = "API image | experimentation-platform/backend:<tag>-<profile>, run by digest; :bootstrap for cdk deploy | —"
@@ -626,7 +652,10 @@ by = [
 
 [[unit]]
 text = "The dashboard image is built with an empty NEXT_PUBLIC_API_URL, so it calls the API on its own origin and one image serves any environment."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_dashboard_image_is_built_with_an_empty_api_url",
+    "test:frontend/src/tests/services/api.test.ts::defaults to same-origin (empty string)",
+]
 
 [[unit]]
 text = "Required AWS Secrets Manager Secrets"
@@ -686,11 +715,19 @@ by = [
 
 [[unit]]
 text = "Every row is injected by the ECS task definitions (infrastructure/cdk/stacks/fargate_service_stack.py and migration_task_stack.py) and is one the application refuses to start without: the image ships no .env file, so the task definition is the only source."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_both_backend_task_definitions_carry_the_secrets_you_create",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_without_each_secret_the_application_refuses_to_start_in_production",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_image_carries_no_env_file",
+    "test:backend/tests/unit/infrastructure/test_deployment_secrets.py::test_the_task_definition_boots_the_application_in_production",
+]
 
 [[unit]]
 text = "Deploy refuses the run if one is missing, before it builds anything."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_secrets_check_runs_before_anything_is_built",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_secrets_check_wants_each_secret_by_complete_arn_and_existing",
+]
 
 [[unit]]
 text = "Redis is not in this table: the API task takes REDIS_HOST and REDIS_PORT from the Redis stack's primary endpoint and sets REDIS_SSL=true, because the replication group refuses plaintext."
@@ -729,7 +766,7 @@ by = ["test:infrastructure/tests/test_vpc_stack.py::test_vpc_created"]
 
 [[unit]]
 text = "experimentation-dynamodb-<env> — the three DynamoDB tables (events, feature flags, overrides)"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_the_dynamodb_compute_and_migrations_stacks_hold_what_the_list_says"]
 
 [[unit]]
 text = "experimentation-database-<env> — Aurora PostgreSQL cluster"
@@ -741,7 +778,7 @@ by = ["test:infrastructure/tests/test_redis_sizing.py::test_replication_group_si
 
 [[unit]]
 text = "experimentation-compute-<env> — ECS cluster, task security group, database-access Lambda"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_the_dynamodb_compute_and_migrations_stacks_hold_what_the_list_says"]
 
 [[unit]]
 text = "experimentation-monitoring-<env> — CloudWatch dashboards, alarms and the SNS topic they email"
@@ -756,7 +793,10 @@ by = [
 
 [[unit]]
 text = "experimentation-migrations-<env> — ECS task definition for Alembic (plural)"
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_the_dynamodb_compute_and_migrations_stacks_hold_what_the_list_says",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_migration_task_upgrades_and_stamps_every_head",
+]
 
 [[unit]]
 text = "With modules/ present, three more: experimentation-dynamodb-counters-<env>, experimentation-analytics-<env> and experimentation-glue-etl-<env>."
@@ -795,4 +835,4 @@ by = ["test:infrastructure/tests/test_standing_alarms.py::test_the_error_filter_
 
 [[unit]]
 text = "Aurora cluster status (its identifier is generated: read it from the stack):"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_the_aurora_cluster_identifier_is_generated_and_published"]

@@ -96,7 +96,7 @@ by = ["test:backend/tests/unit/infrastructure/test_slack_optional.py::test_each_
 
 [[unit]]
 text = "It does not run smoke tests; Step 5 of Method 2 and the post-rollback checklist are by hand."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_it_sends_no_request_to_the_api_or_the_dashboard"]
 
 [[unit]]
 text = "The deploy that went wrong printed the target for you: its run summary ends with Rollback: Actions → Rollback → environment=<env>, task_definition_arn=experimentation-backend-<env>:<n>, dashboard_task_definition_arn=experimentation-dashboard-<env>:<m>."
@@ -132,11 +132,14 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The API is already on the target and no deployment is in flight: the target is the PRIMARY task set and the /api/ rule forwards to it."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_an_api_already_on_the_target_with_nothing_in_flight_is_refused",
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_an_api_not_serving_the_target_is_not_refused",
+]
 
 [[unit]]
 text = "There is nothing to roll back, so it creates no deployment and stops nothing."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_an_api_already_on_the_target_with_nothing_in_flight_is_refused"]
 
 [[unit]]
 text = "If you gave a dashboard revision, the dashboard half still runs, and the run says what it did."
@@ -144,7 +147,10 @@ by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::t
 
 [[unit]]
 text = "CodeDeploy is already rolling back: an in-flight deployment was created by CodeDeploy itself (creator is codeDeployRollback)."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_codedeploys_own_rollback_in_flight_stops_nothing_and_fails",
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_codedeploys_own_rollback_in_flight_rolls_back_nothing_whole_run",
+]
 
 [[unit]]
 text = "Stopping it would put back the release it is rolling away from, so the run stops nothing and rolls nothing back, not even the dashboard."
@@ -167,11 +173,14 @@ by = ["test:backend/tests/unit/infrastructure/test_rollback_stop_outputs.py::tes
 
 [[unit]]
 text = "It creates its CodeDeploy deployment with the deployment group's alarms overridden (--override-alarm-configuration), always: the release being rolled back is usually what holds a 5xx alarm in ALARM, and CodeDeploy stops every deployment to the group while one is."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_its_deployment_is_all_at_once_names_the_target_and_overrides_the_alarms"]
 
 [[unit]]
 text = "A rollback is reported done only once the run's own deployment has been approved and the target is the PRIMARY task set."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_a_target_primary_without_this_runs_own_approval_is_not_a_rollback",
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_the_rollback_counts_once_approved_by_this_run_and_primary",
+]
 
 [[unit]]
 text = "A deployment the run never saw waiting for approval is not counted, and the run then fails and says so."
@@ -179,7 +188,7 @@ by = ["test:backend/tests/unit/infrastructure/test_rollback_read_retries.py::tes
 
 [[unit]]
 text = "If the API went back and the dashboard did not, the run says so (its verdict is API BACK, DASHBOARD NOT), and the system is in the newer-dashboard, older-API state."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_api_back_dashboard_not_is_an_api_on_the_target_and_a_dashboard_left_behind"]
 
 [[unit]]
 text = "Put the dashboard back with Method 2's dashboard block."
@@ -195,11 +204,14 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "scripts/rollback_verdict.py chooses the run's verdict from a fixed order of rules, the first that matches winning, and the run succeeds only when the verdict is ROLLED BACK."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_the_first_row_that_matches_wins_and_only_rolled_back_succeeds",
+    "test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_the_run_succeeds_only_when_the_verdict_is_rolled_back",
+]
 
 [[unit]]
 text = "When the run's own steps did not finish (its verify step did not succeed), the summary first reads what the API is serving at the end of the run, with scripts/api_serving.py (read-only, the same check the stop step uses), and lists the deployment group's active deployments once; the headline quotes what the read said."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_an_unfinished_run_reads_what_is_serving_and_lists_the_active_deployments_once"]
 
 [[unit]]
 text = "The summary's table also says what the stop step stopped and how its wait ended."
@@ -207,7 +219,11 @@ by = ["test:backend/tests/unit/infrastructure/test_rollback_stop_outputs.py::tes
 
 [[unit]]
 text = "A headline that names a deployment that may still be active ends with \"Do not dispatch Rollback again while deployment <id> is active\": a new Rollback stops any deployment that is not CodeDeploy's own rollback, with auto-rollback, which reverts what it shifted, and it refuses while CodeDeploy's own rollback is active."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_a_headline_naming_a_possibly_active_deployment_ends_with_do_not_dispatch",
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_codedeploys_own_rollback_in_flight_stops_nothing_and_fails",
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_a_deployment_in_flight_is_stopped_with_auto_rollback_before_its_own_is_created",
+]
 
 [[unit]]
 text = "Check one with aws deploy get-deployment --deployment-id <id> --query deploymentInfo.status."
@@ -219,39 +235,52 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "ROLLED BACK | This run's deployment was approved and verified, and the dashboard was rolled back or not asked for. | Nothing more. The deployment the headline names stays active for about an hour while CodeDeploy keeps the replaced task set."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_rolled_back_is_this_runs_own_deployment_approved_and_verified",
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_codedeploy_keeps_the_previous_task_set_an_hour_after_the_shift",
+]
 
 [[unit]]
 text = "API BACK, DASHBOARD NOT | The API is on the target (verified, or read at the end of the run), and the dashboard was asked for and was not rolled back, so the API and dashboard are on different releases. | Put the dashboard back with Method 2's dashboard block. Fix what the failed step names before the next deploy or rollback."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_api_back_dashboard_not_is_an_api_on_the_target_and_a_dashboard_left_behind"]
 
 [[unit]]
 text = "API BACK, RUN FAILED | The API is on the target, read at the end of the run, most often because stopping the bad deployment with auto-rollback put it back, and a later step then failed (the step's error says which). | Nothing more for the API. Fix what the failed step names before the next deploy or rollback."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_api_back_run_failed_is_an_api_read_on_the_target_after_a_later_step_failed"]
 
 [[unit]]
 text = "NOT FINISHED | This run stopped a deployment, and its wait for the deployment group to have no active deployment timed out (about 5 minutes) or could not read the group, so it created no rollback deployment. The headline quotes what the API was serving at the end. | Wait until the deployments it names have finished, then read what is serving: python3 scripts/api_serving.py experimentation-$ENV experimentation-backend-$ENV <target> (exit 0 means on the target)."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_not_finished_is_a_stop_whose_wait_for_an_idle_group_did_not_end",
+    "test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_the_stop_steps_wait_for_an_idle_group_is_about_five_minutes",
+    "test:backend/tests/unit/infrastructure/test_forward_deploy_completes.py::test_the_predicate_is_zero_only_when_serving",
+]
 
 [[unit]]
 text = "STILL MOVING | The API is not yet on the target, and a deployment is active or the /api/ rule still splits traffic between blue and green. | Wait, then read it again with the command above. If the rule still splits traffic and no deployment is active, the listener is stuck and needs a person: call the next person in the table at the end of this page, and do not dispatch anything until they have looked."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_still_moving_is_not_yet_on_the_target_while_something_moves"]
 
 [[unit]]
 text = "NOT ROLLED BACK | The API is not on the target, and no deployment is active. The quoted read says why: NOT YET (another revision is PRIMARY) or WRONG (the target is PRIMARY but the /api/ rule forwards elsewhere). | Act on the quoted read. Nothing is active, so a new Rollback is not stopping anything in flight."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_not_rolled_back_is_not_on_the_target_with_nothing_active",
+    "test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_the_read_the_headline_quotes_says_not_yet_or_wrong",
+]
 
 [[unit]]
 text = "OUTCOME UNKNOWN | This run could not tell: the read failed (UNKNOWN, exit 2), the active deployments could not be listed, the summary got a value it does not recognise, or the verdict script did not run. | Before acting, read what is serving with the command above, and list the deployment group's active deployments: aws deploy list-deployments --application-name experimentation-platform-$ENV --deployment-group-name experimentation-$ENV --include-only-statuses Created Queued InProgress Baking Ready --query deployments --output text."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_outcome_unknown_is_a_run_that_could_not_tell",
+    "test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_outcome_unknown_when_the_verdict_script_did_not_run",
+]
 
 [[unit]]
 text = "REFUSED | The run refused, and says why: the API was already on the target, CodeDeploy's own rollback is active, or an in-flight deployment could not be classified. | Follow the reason in the line."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_refused_says_which_of_the_three_reasons"]
 
 [[unit]]
 text = "NOTHING CHANGED | The run stopped nothing and created no deployment: the target revision was not resolved, or a step failed before anything changed. The API is as it was. | Fix what the failed step names."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_rollback_verdict_rows.py::test_nothing_changed_is_a_run_that_stopped_nothing_and_created_nothing"]
 
 [[unit]]
 text = "The rolled-back API runs against the current schema"
@@ -263,7 +292,10 @@ by = ["test:infrastructure/tests/test_api_task_does_not_migrate.py"]
 
 [[unit]]
 text = "The API tasks do not run migrations when they start (RUN_MIGRATIONS=false in their task definition), so the older release starts against the schema the newer one migrated and serves it."
-by = ["untested:S"]
+by = [
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations",
+    "test:backend/tests/unit/core/test_operator_facing_runtime.py::test_a_task_migrates_on_start_unless_its_revision_sets_run_migrations_false",
+]
 
 [[unit]]
 text = "That is correct only when every migration since the target release is backward-compatible, which is the rule migrations here follow (Deployment Guide)."
@@ -279,7 +311,10 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "It prints false for a revision that does not migrate on start."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations",
+    "test:backend/tests/unit/core/test_operator_facing_runtime.py::test_a_task_migrates_on_start_unless_its_revision_sets_run_migrations_false",
+]
 
 [[unit]]
 text = "One that prints None (no such variable) or prints true runs the older release's migrations on start, and against a newer schema it refuses to start."
@@ -291,11 +326,16 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Revisions the Deploy workflow registers after the Fargate stack has been deployed from a current checkout carry the setting already, and Deploy refuses to create a deployment for one that does not (Deploy refused an API revision that would run migrations on start)."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_task_definition_scripts.py::test_registers_the_digest_and_changes_nothing_else",
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_api_revision_without_run_migrations_exactly_false_is_refused",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_refusal_comes_after_the_migration_and_before_the_deployment",
+]
 
 [[unit]]
 text = "Rollback does not check its target: that is this command."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_it_does_not_check_whether_the_target_runs_migrations_on_start"]
 
 [[unit]]
 text = "Rolling back past segment targeting"
@@ -303,7 +343,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Segment targeting (in_segment and not_in_segment) arrived in v0.22.0."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_segment_targeting_arrived_in_0_22_0"]
 
 [[unit]]
 text = "Before rolling the API back past that release, remove segment conditions from flags and experiments, or disable the flags that use them, and pause the experiments that use them."
@@ -331,7 +371,10 @@ by = ["test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_boots
 
 [[unit]]
 text = "cdk deploy registers revisions too, and those carry the CDK's bootstrap image tag rather than a released build (#82)."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_operator_facing_stacks.py::test_a_cdk_deploy_registers_revisions_naming_the_bootstrap_tag",
+    "test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_deploy_workflow_never_writes_the_bootstrap_tag",
+]
 
 [[unit]]
 text = "Never pick a revision by subtracting 1 — read the image off a candidate before you deploy it."
@@ -445,11 +488,15 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Check the target revision is ACTIVE, in the right family, has a container named backend, and is not a CloudFormation-registered :bootstrap revision"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_the_target_must_be_active_in_the_family_with_a_backend_and_not_bootstrap"]
 
 [[unit]]
 text = "Stop any CodeDeploy deployment still in flight (during an incident the bad deploy usually is, and CodeDeploy refuses a second one), after reading who created each one; if any is CodeDeploy's own rollback, or its creator cannot be read, it stops nothing and fails"
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_a_deployment_in_flight_is_stopped_with_auto_rollback_before_its_own_is_created",
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_codedeploys_own_rollback_in_flight_stops_nothing_and_fails",
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_an_in_flight_deployment_whose_creator_cannot_be_read_stops_nothing",
+]
 
 [[unit]]
 text = "After stopping one, wait up to about 5 minutes until the deployment group has no active deployment."
@@ -465,7 +512,10 @@ by = ["test:backend/tests/unit/infrastructure/test_rollback_read_retries.py::tes
 
 [[unit]]
 text = "Create a CodeDeploy deployment naming that revision, all-at-once rather than the canary the forward path uses"
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_its_deployment_is_all_at_once_names_the_target_and_overrides_the_alarms",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_api_canary_is_fifteen_minutes",
+]
 
 [[unit]]
 text = "Approve the traffic shift (aws deploy continue-deployment) — without this the deployment parks for 30 minutes and is then stopped, which auto-rollback turns back into the revision you were rolling away from"
@@ -473,7 +523,7 @@ by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_an_unapproved_d
 
 [[unit]]
 text = "Wait until the target revision is the PRIMARY task set and every desired task is running"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_it_waits_until_the_primary_task_set_runs_every_desired_task"]
 
 [[unit]]
 text = "If a dashboard revision was given (it was checked before anything changed: ACTIVE, in the dashboard family of this environment, one dashboard container, a digest image): roll the dashboard's service onto it, and refuse, without changing it, if the dashboard's PRIMARY deployment is no longer the revision the check saw (another Deploy, Rollback or cdk deploy changed it)"
@@ -481,7 +531,7 @@ by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::t
 
 [[unit]]
 text = "Notify #deployments with the result, success or failure"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_the_result_is_posted_to_deployments_whether_it_succeeded_or_failed"]
 
 [[unit]]
 text = "It does not run smoke tests; /health is Step 5 below, by hand."
@@ -512,10 +562,6 @@ text = "Watching it during a rollback shows nothing happening and reads as a fai
 by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_api_service_is_under_codedeploy_and_the_dashboard_is_not"]
 
 [[unit]]
-text = "Running, Desired and Pending are the PRIMARY task set's own counts: Desired is its computedDesiredCount."
-by = ["untested:T"]
-
-[[unit]]
 text = "Do not read the service's runningCount instead: for the hour after a shift the replaced task set keeps running beside the new one, so the service counts both (on staging on 2026-10-04 (UTC) it counted 4 tasks of 2 desired after a rollback that had worked: #295)."
 by = ["evidence:https://github.com/getexperimently/experimently/issues/295#issuecomment-5982176639"]
 
@@ -529,7 +575,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The dashboard's service (experimentation-dashboard-$ENV) uses the ECS rolling deployment controller, not CodeDeploy."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_api_service_is_under_codedeploy_and_the_dashboard_is_not"]
 
 [[unit]]
 text = "Everything said above about the API is reversed for it:"
@@ -656,7 +702,10 @@ by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_api_service
 
 [[unit]]
 text = "--deployment-config-name is all-at-once, NOT the deployment group's CANARY_10_PERCENT_15_MINUTES."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_its_deployment_is_all_at_once_names_the_target_and_overrides_the_alarms",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_api_canary_is_fifteen_minutes",
+]
 
 [[unit]]
 text = "Step 3b."
@@ -870,7 +919,10 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "If the alarm fired in the canary, the run stopped before the dashboard and it was not changed."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_dashboard_rolls_out_only_after_the_api_shifted_and_answered",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_alarm_before_the_shift_is_stopped_by_an_alarm_and_nothing_shifted",
+]
 
 [[unit]]
 text = "If it fired in the hour after the shift, the dashboard is on the new release in front of the old API: put it back with Method 2's dashboard block, using the summary's \"Dashboard serving before this run\" value."
@@ -878,7 +930,10 @@ by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_dashboard_h
 
 [[unit]]
 text = "Do not dispatch Rollback while CodeDeploy's rollback is active."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_codedeploys_own_rollback_in_flight_stops_nothing_and_fails",
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_codedeploys_own_rollback_in_flight_rolls_back_nothing_whole_run",
+]
 
 [[unit]]
 text = "Its deployment's creator is codeDeployRollback."
@@ -886,11 +941,15 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "The migration stays applied."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_snapshot_and_the_migration_come_before_the_deployment_and_nothing_undoes_them"]
 
 [[unit]]
 text = "The database is at the new release's heads, with the previous revision serving on it."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_snapshot_and_the_migration_come_before_the_deployment_and_nothing_undoes_them",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_migration_task_upgrades_and_stamps_every_head",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+]
 
 [[unit]]
 text = "That is safe only for a backward-compatible migration; otherwise see the Database Rollback Procedure below."
@@ -934,7 +993,7 @@ by = ["test:infrastructure/tests/test_standing_alarms.py::test_the_deployment_gr
 
 [[unit]]
 text = "That is right when the release being replaced is the one failing, and Rollback (Method 1) handles it: Rollback always overrides the alarms for its own deployment."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_its_deployment_is_all_at_once_names_the_target_and_overrides_the_alarms"]
 
 [[unit]]
 text = "It is wrong in three cases:"
@@ -954,7 +1013,13 @@ by = ["exempt:advice"]
 
 [[unit]]
 text = "cdk deploy does not create it: the first Deploy's migration does, and until then the API answers real requests with 500 (Deployment Guide, section 1.6)."
-by = ["untested:S"]
+by = [
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations",
+    "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_seed",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_snapshot_and_the_migration_come_before_the_deployment_and_nothing_undoes_them",
+    "test:backend/tests/unit/core/test_operator_facing_runtime.py::test_health_answers_200_on_a_database_without_the_schema",
+    "test:backend/tests/unit/core/test_operator_facing_runtime.py::test_a_request_that_needs_a_table_answers_500_and_logs_an_error",
+]
 
 [[unit]]
 text = "Those 500s can put an alarm into ALARM, and Deploy then refuses to start."
@@ -973,23 +1038,23 @@ by = ["exempt:advice"]
 
 [[unit]]
 text = "For those, Deploy has a break-glass: tick override_alarms and give override_alarms_reason."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_break_glass_is_a_tick_box_and_a_reason_both_off_by_default"]
 
 [[unit]]
 text = "The run's name then ends in ALARMS OVERRIDDEN, which is what the environment's reviewer sees when asked to approve it: the reviewer is the check."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_run_name_ends_in_alarms_overridden_only_when_ticked"]
 
 [[unit]]
 text = "Deploy refuses the tick-box without a reason, and a reason without the tick-box."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_deploy_refuses_the_tick_box_without_a_reason_and_a_reason_without_it"]
 
 [[unit]]
 text = "What it gives up: no alarm watches that deployment, in its canary or in the hour after its shift, and nothing rolls it back by itself."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_with_the_break_glass_that_deployment_alone_has_no_alarm"]
 
 [[unit]]
 text = "The run summary and the Slack message say so, with the reason."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_summary_and_slack_say_the_deployment_went_unwatched_with_the_reason"]
 
 [[unit]]
 text = "If the fix is bad, roll back with Method 1 within that hour."
@@ -997,7 +1062,10 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "The override is on that one deployment only, so the next deploy is watched again with no action from anyone."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_with_the_break_glass_that_deployment_alone_has_no_alarm",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+]
 
 [[unit]]
 text = "Deploy checks first."
@@ -1005,23 +1073,29 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Before it builds anything, and again just before the snapshot and the migration, it reads the alarms the deployment group polls and refuses while one of them is in ALARM (\"An alarm is already firing\", naming the alarm and since when)."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_check_runs_before_the_build_and_again_before_the_snapshot",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_alarm_in_alarm_refuses_naming_it_and_since_when",
+]
 
 [[unit]]
 text = "It also refuses, whatever else is set, when the group watches no alarm, has its alarms disabled, or does not watch both of the stack's alarms: deploy the Fargate stack first."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_a_group_not_watching_both_alarms_refuses_whatever_else_is_set"]
 
 [[unit]]
 text = "INSUFFICIENT_DATA does not refuse."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_ok_and_insufficient_data_do_not_refuse"]
 
 [[unit]]
 text = "The check is advisory: an alarm that goes into ALARM after it passes still stops the deployment, after the migration, and the run ends with the \"Migrated, not deployed\" warning."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_alarm_after_the_check_ends_the_run_migrated_not_deployed",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm",
+]
 
 [[unit]]
 text = "With the break-glass ticked, an alarm in ALARM is printed as a warning instead, and the deploy goes on unwatched."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_with_the_break_glass_an_alarm_in_alarm_is_a_warning"]
 
 [[unit]]
 text = "aws cloudwatch disable-alarm-actions and aws cloudwatch set-alarm-state do not unblock a deploy: expected, and not rehearsed on AWS as of v0.31.1."
@@ -1041,7 +1115,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The deploy run ended with \"This API revision would run migrations on start\"."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_api_revision_without_run_migrations_exactly_false_is_refused"]
 
 [[unit]]
 text = "Deploy registers the API's revision by copying the newest revision of the family and replacing its image, then reads back what ECS stored."
@@ -1052,7 +1126,10 @@ by = [
 
 [[unit]]
 text = "It found the backend container without RUN_MIGRATIONS=false -- the variable missing, or set to anything but exactly false -- and stopped before creating the CodeDeploy deployment."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_an_api_revision_without_run_migrations_exactly_false_is_refused",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_refusal_comes_after_the_migration_and_before_the_deployment",
+]
 
 [[unit]]
 text = "What has happened."
@@ -1060,7 +1137,10 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The snapshot was taken and the migration was applied; the database is at the new release's heads."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_snapshot_and_the_migration_come_before_the_deployment_and_nothing_undoes_them",
+    "test:backend/tests/unit/infrastructure/test_deploy_alarm_gate_contract.py::test_the_refusal_comes_after_the_migration_and_before_the_deployment",
+]
 
 [[unit]]
 text = "No deployment was created, so the revision that served before the run still serves, on the migrated schema."
@@ -1073,10 +1153,6 @@ by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the
 [[unit]]
 text = "Why."
 by = ["exempt:label"]
-
-[[unit]]
-text = "The newest revision of the family came from a cdk deploy of the Fargate stack from a checkout that predates the setting (#499, 0.14.0)."
-by = ["untested:T"]
 
 [[unit]]
 text = "A revision without it runs the database bootstrap each time a task starts, and a bootstrap refuses a database a newer release migrated."
@@ -1108,7 +1184,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The revision that is serving was probably registered from the same older base, so it runs migrations on start too."
-by = ["untested:S"]
+by = ["test:backend/tests/unit/core/test_operator_facing_runtime.py::test_a_task_migrates_on_start_unless_its_revision_sets_run_migrations_false"]
 
 [[unit]]
 text = "Its running tasks keep serving, but one that starts now -- a replacement, a scale-out -- meets a schema newer than its release and refuses to start."
@@ -1148,7 +1224,10 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "After an API rollback or an alarm rollback, there is no supported downgrade through the workflow."
-by = ["untested:S"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_migrate_runs_the_serving_image_and_refuses_when_there_is_none",
+    "test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_database_migration_takes_no_image_and_runs_the_one_serving",
+]
 
 [[unit]]
 text = "The image now serving does not contain the migration's file, so alembic cannot locate the database's revision."
@@ -1227,7 +1306,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "To undo the migration a release added, open that migration file (backend/app/db/migrations/versions/ for core, modules/backend/app/db/migrations/versions/ for a module, which exists only in a full-profile image) and use its down_revision, e.g."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_the_module_migrations_ship_in_the_full_image_only"]
 
 [[unit]]
 text = "d29a479daafe to undo 37dcb2969766."
@@ -1276,7 +1355,7 @@ by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_db_
 
 [[unit]]
 text = "Rolling back across d29a479daafe while a global holdout is active invalidates that holdout's measurement: the older release buckets users with the old salt and records nobody."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/infrastructure/test_deploy_inputs_and_images.py::test_a_downgrade_across_the_holdout_migration_drops_the_salt_and_the_population"]
 
 [[unit]]
 text = "After the next upgrade, deactivate that holdout and create a new one (PUT /api/v1/holdout/{id} with is_active: false, then POST /api/v1/holdout)."
@@ -1324,7 +1403,10 @@ by = ["test:infrastructure/tests/test_database_wiring.py::test_postgres_server_i
 
 [[unit]]
 text = "Both backend task definitions take POSTGRES_SERVER from the database STACK's writer endpoint, and POSTGRES_USER and POSTGRES_PASSWORD from the generated secret of the stack, as CloudFormation imports."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_database_wiring.py::test_postgres_server_is_this_environments_writer_endpoint",
+    "test:infrastructure/tests/test_database_wiring.py::test_credentials_are_the_secret_aurora_was_created_with",
+]
 
 [[unit]]
 text = "A cluster restored beside the stack is not that endpoint, so there is no connection string in Secrets Manager to update, and a new deployment would bring the tasks back pointing at the original cluster -- while this runbook reported success."
@@ -1352,7 +1434,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "The cluster's identifier is generated by CloudFormation; the stack publishes it:"
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_the_aurora_cluster_identifier_is_generated_and_published"]
 
 [[unit]]
 text = "Find when the most recent pre-deployment snapshot was taken; the restore time must be before the migration."
@@ -1368,7 +1450,7 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "The stack sets 35 days in prod and staging and 1 day elsewhere."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_operator_facing_stacks.py::test_aurora_keeps_35_days_in_prod_and_staging_and_1_elsewhere"]
 
 [[unit]]
 text = "Check what the cluster keeps:"
@@ -1408,7 +1490,10 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "The preferred way is the Deploy workflow, run with the tag already serving; Secrets Management says what it does and what it asks for."
-by = ["untested:S"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_an_existing_tag_is_reused_not_rebuilt",
+    "test:backend/tests/unit/infrastructure/test_task_definition_scripts.py::test_registers_the_digest_and_changes_nothing_else",
+]
 
 [[unit]]
 text = "The commands below are for when the workflow is not available."
@@ -1420,7 +1505,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "NOT aws ecs update-service --force-new-deployment, the usual way to restart an ECS service."
-by = ["untested:T"]
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_api_service_is_under_codedeploy_and_the_dashboard_is_not"]
 
 [[unit]]
 text = "This service has a CodeDeploy deployment controller, and on such a service UpdateService changes only the desired count, the deployment configuration, the health check grace period, task placement and tag settings: new tasks come from a CodeDeploy deployment."
@@ -1452,7 +1537,10 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "If the restart cannot wait, the one faster way to start new tasks is Method 1 to the previous revision: it stops that deployment and creates its own, whose new tasks read the current values."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_a_deployment_in_flight_is_stopped_with_auto_rollback_before_its_own_is_created",
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_its_deployment_is_all_at_once_names_the_target_and_overrides_the_alarms",
+]
 
 [[unit]]
 text = "That runs the previous release (read The rolled-back API runs against the current schema first), and its own deployment is then active for its hour in turn."
@@ -1556,7 +1644,10 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "[ ] The API's PRIMARY task set runs its desired count (2 in staging, 3 in prod) with 0 pending, on the revision you rolled back to."
-by = ["untested:T"]
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_task_counts_per_environment",
+    "test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_it_waits_until_the_primary_task_set_runs_every_desired_task",
+]
 
 [[unit]]
 text = "Not the service's running count: until the replaced task set is removed, an hour after the shift, that counts both task sets"
