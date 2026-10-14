@@ -526,3 +526,74 @@ def test_api_client_request_shape_and_error_mapping(monkeypatch):
         client.batch([{}] * 101)
     with pytest.raises(ValueError):
         client.report_errors([{}] * 101)
+
+
+def test_rate_and_duration_send_that_many_sessions_a_second_for_that_long(monkeypatch):
+    """--rate 6 --duration 300: 6 sessions a second for five minutes, then it stops
+    (on a clock that the paced sleeps move, so the run takes no real time)."""
+    now = [0.0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    monkeypatch.setattr(traffic.time, "monotonic", lambda: now[0])
+    made = []
+
+    def factory(url, key, **kw):
+        made.append(FakeClient(seed=3))
+        return made[-1]
+
+    out = io.StringIO()
+    rc = traffic.main(
+        ["--api-key", "k", "--rate", "6", "--duration", "300", "--no-probe"],
+        client_factory=factory,
+        sleep=sleep,
+        out=out,
+    )
+    assert rc == 0
+    text = out.getvalue()
+    assert "ticks=1800" in text
+    assert 299.0 < now[0] <= 300.0
+    # stats every 10 s: at 10, 20, ... 290 s, and once more at the end
+    assert text.count("ticks=") == 30
+
+
+def test_the_options_and_their_defaults():
+    defaults = traffic.build_parser().parse_args([])
+    assert defaults.api_url == "http://localhost:8000"
+    assert defaults.api_key is None and defaults.server_api_key is None
+    root = Path(traffic.__file__).resolve().parent.parent
+    assert traffic.DEFAULT_API_KEY_FILE == root / ".api_key"
+    assert traffic.DEFAULT_SERVER_KEY_FILE == root / ".api_key_server"
+    assert defaults.duration == 0.0, "0 runs until stopped"
+    assert defaults.devices == 5000 and defaults.population_seed == devices.DEFAULT_SEED
+    assert defaults.incident == "off" and traffic.INCIDENT_MODES == ("off", "android12")
+    assert defaults.max_ticks == 0 and not defaults.no_probe and not defaults.dry_run
+    given = traffic.build_parser().parse_args(
+        ["--rate", "6", "--duration", "300", "--seed", "1", "--devices", "10",
+         "--population-seed", "7", "--incident", "android12", "--max-ticks", "3",
+         "--no-probe", "--dry-run", "--server-api-key", "s", "--api-key", "a"]
+    )
+    assert (given.rate, given.duration, given.devices) == (6.0, 300.0, 10)
+    with pytest.raises(SystemExit):
+        traffic.build_parser().parse_args(["--incident", "ios18"])
+
+
+@pytest.mark.regression
+def test_the_incident_trips_5_percent_beside_as_much_steady_traffic():
+    """setup-local.sh keeps steady traffic running while the story's incident runs (on
+    the demo stack the two ran at about the same sessions a second), and the safety
+    monitor divides the crash reports by every evaluation of the flag, the steady
+    traffic's too. At 25 % the incident's reports must stay well over 5 % of both
+    together: when half of its sessions were Android 12 devices relaunching twice, they
+    came to 6 % here and 2.6 % on the stack, and the flag never went critical."""
+    # The simulator's README states both numbers.
+    assert traffic.INCIDENT_ANDROID12_SHARE == 1.0
+    assert traffic.INCIDENT_RELAUNCHES == 4
+    incident, _, plans = run_ticks(3000, seed=21, incident="android12", player_percentage=25)
+    steady, _, _ = run_ticks(3000, seed=22, player_percentage=25)
+    assert all(plan.device.is_android_12 for plan in plans), "every incident session is an Android 12 device's"
+    evaluations = sum(
+        1 for call in incident.evaluate_calls + steady.evaluate_calls if call[0] == traffic.PLAYER_FLAG
+    )
+    assert len(incident.error_reports) / evaluations > 0.12

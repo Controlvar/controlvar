@@ -90,6 +90,7 @@ universe = [
     "docs/getting-started/docker-guide.md",
     "docs/getting-started/environment-setup.md",
     "docs/getting-started/faq.md",
+    "docs/getting-started/limitations.md",
     "docs/getting-started/modules.md",
     "docs/getting-started/pre-commit-hooks.md",
     "docs/getting-started/python-virtual-env-setup.md",

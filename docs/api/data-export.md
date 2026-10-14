@@ -213,8 +213,8 @@ Download feature flag usage data.
 | `flag_name`           | string  | Human-readable name                                  |
 | `status`              | string  | INACTIVE, ACTIVE, or ARCHIVED                        |
 | `rollout_percentage`  | integer | Configured rollout percentage (0-100)                |
-| `total_evaluations`   | integer | Total number of times the flag was evaluated         |
-| `enabled_evaluations` | integer | Always `0`: no record says whether an evaluation returned enabled |
+| `total_evaluations`   | integer | The number of metric records stored for the flag, which is not the number of times it was evaluated |
+| `enabled_evaluations` | integer | Always `0` |
 | `enabled_rate`        | float   | Always `0.0`, because `enabled_evaluations` is always `0` |
 | `created_at`          | string  | ISO 8601 creation timestamp                          |
 | `updated_at`          | string  | ISO 8601 last-updated timestamp                      |

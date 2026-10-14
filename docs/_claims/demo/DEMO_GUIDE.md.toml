@@ -282,7 +282,13 @@ by = [
 
 [[unit]]
 text = "A simulator streams thousands of devices through the same API, and a scripted \"rollout story\" walks the platform through a real launch."
-by = ["untested:T"]
+by = [
+    "test:demo/streampulse/simulator/test_traffic.py::test_population_is_deterministic_and_matches_the_spec_mix",
+    "test:demo/streampulse/simulator/test_traffic.py::test_the_options_and_their_defaults",
+    "test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_shoplab_and_streampulse_each_get_a_traffic_simulator_at_3_a_second",
+    "journey:demo-streampulse-simulator#story-ended",
+    "journey:demo-streampulse-simulator#full-rollout",
+]
 
 [[unit]]
 text = "Pick iPhone 15 · iOS 17.4 · US · premium → the Search tab shows AI search ✨."
@@ -352,39 +358,74 @@ by = [
 
 [[unit]]
 text = "The rollout story (drawer in the app, driven by python demo/streampulse/simulator/rollout_story.py --auto):"
-by = ["untested:S"]
+by = [
+    "test:demo/streampulse/src/__tests__/StreamPulseApp.test.tsx::the rollout story drawer lists the 7 steps, the script command and the live Player v2 readout",
+    "journey:demo-streampulse-simulator#drawer",
+    "journey:demo-streampulse-simulator#story",
+    "journey:demo-streampulse-simulator#story-ended",
+]
 
 [[unit]]
 text = "player v2 at 5% + internal rule → 2."
-by = ["untested:S"]
+by = [
+    "journey:demo-streampulse-simulator#story-flag",
+    "journey:demo-streampulse-simulator#employee-by-rule",
+    "journey:demo-streampulse-simulator#others-by-rollout",
+]
 
 [[unit]]
 text = "advance the schedule to 25% → 3."
-by = ["untested:S"]
+by = [
+    "journey:demo-streampulse-simulator#at-25",
+    "journey:demo-streampulse-simulator#stage-2",
+]
 
 [[unit]]
 text = "Android 12 devices start crashing (the simulator reports the crashes through the API with the StreamPulse server key, the way the app's server would forward them) → 4."
-by = ["untested:S"]
+by = [
+    "test:demo/streampulse/simulator/test_traffic.py::test_incident_android12_crashes_only_affected_devices_with_the_flag_on",
+    "test:demo/streampulse/simulator/test_traffic.py::test_the_server_key_is_read_from_its_file_and_passed_to_the_client",
+    "journey:demo-streampulse-simulator#critical",
+]
 
 [[unit]]
 text = "the safety monitor sees the error rate cross 5% and rolls the flag back to 5% automatically → 5."
-by = ["untested:S"]
+by = [
+    "journey:demo-streampulse-simulator#critical",
+    "journey:demo-streampulse-simulator#rolled-back",
+    "journey:demo-streampulse-simulator#by-the-monitor",
+]
 
 [[unit]]
 text = "a fix ships: rule app_version ≥ 3.2.1 → 6."
-by = ["untested:S"]
+by = [
+    "journey:demo-streampulse-simulator#fixed-build-rule",
+    "journey:demo-streampulse-simulator#fixed-build-by-rule",
+]
 
 [[unit]]
 text = "50% → 7."
-by = ["untested:S"]
+by = [
+    "journey:demo-streampulse-simulator#story-ended",
+    "journey:demo-streampulse-simulator#schedule-completed",
+]
 
 [[unit]]
 text = "100%."
-by = ["untested:S"]
+by = [
+    "journey:demo-streampulse-simulator#full-rollout",
+    "journey:demo-streampulse-simulator#everyone",
+]
 
 [[unit]]
 text = "\"Targeting, gradual rollout, safety monitoring, auto-rollback and lifecycle management, in one walkthrough.\""
-by = ["untested:T"]
+by = [
+    "journey:demo-streampulse-simulator#employee-by-rule",
+    "journey:demo-streampulse-simulator#at-25",
+    "journey:demo-streampulse-simulator#critical",
+    "journey:demo-streampulse-simulator#rolled-back",
+    "journey:demo-streampulse-simulator#full-rollout",
+]
 
 [[unit]]
 text = "Server-side targeting with 20+ operators, including semantic versions"
@@ -410,11 +451,20 @@ by = [
 
 [[unit]]
 text = "Run pieces by hand: python backend/scripts/seed_streampulse.py, cd demo/streampulse && npm run dev, python demo/streampulse/simulator/traffic.py --rate 3, python demo/streampulse/simulator/rollout_story.py --auto."
-by = ["untested:S"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_the_first_run_installs_the_python_and_node_dependencies_and_seeds_the_data",
+    "test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_each_process_writes_its_own_log_under_demo_logs",
+    "test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_shoplab_and_streampulse_each_get_a_traffic_simulator_at_3_a_second",
+    "journey:demo-streampulse-simulator#story-ended",
+]
 
 [[unit]]
 text = "For the story to complete on its own, run the backend with SAFETY_CHECK_INTERVAL_MINUTES=1 ROLLOUT_CHECK_INTERVAL_MINUTES=1."
-by = ["untested:S"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_the_safety_and_rollout_schedulers_run_every_minute_unless_already_set",
+    "journey:demo-streampulse-simulator#rolled-back",
+    "journey:demo-streampulse-simulator#story-ended",
+]
 
 [[unit]]
 text = "See demo/streampulse/README.md."
@@ -448,12 +498,11 @@ by = [
 ]
 
 [[unit]]
-text = "Point to the safety config: \"If the error rate exceeds 5%, it auto-rolls back."
-by = ["untested:T"]
-
-[[unit]]
-text = "We never break production.\""
-by = ["untested:T"]
+text = "An automatic rollback is shown live in Scene 0b's rollout story, on StreamPulse's Player v2."
+by = [
+    "journey:demo-streampulse-simulator#rolled-back",
+    "journey:demo-streampulse-simulator#by-the-monitor",
+]
 
 [[unit]]
 text = "Click beta_features — show the targeting rule"
@@ -1040,8 +1089,12 @@ text = "\"What if an experiment goes wrong?\""
 by = ["exempt:label"]
 
 [[unit]]
-text = "Safety monitoring watches error rates and latency in real time."
-by = ["untested:T"]
+text = "Safety monitoring checks error rates and latency every 5 minutes by default."
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetMetricValue::test_error_metric_name_uses_error_metrics",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetMetricValue::test_latency_metric_name_maps_to_avg_latency",
+]
 
 [[unit]]
 text = "If a feature flag causes problems, it auto-rolls back."

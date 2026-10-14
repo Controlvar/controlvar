@@ -1,0 +1,611 @@
+# What verifies each unit of docs/getting-started/architecture.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/getting-started/architecture.md"
+
+[[unit]]
+text = "Architecture Overview"
+by = ["exempt:label"]
+
+[[unit]]
+text = "This document describes the high-level technical architecture of the platform: how the components fit together, how data flows, and how the system is deployed on AWS."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "High-Level Components"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A full-profile deployment also creates a Kinesis stream, Firehose, an S3 data lake, an OpenSearch domain and Glue ETL jobs."
+by = ["test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_full_checkout_builds_the_module_stacks"]
+
+[[unit]]
+text = "The API does not write to them today; see Analytics Pipeline."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_the_api_writes_no_kinesis_stream_firehose_or_opensearch_domain"]
+
+[[unit]]
+text = "API Layer"
+by = ["exempt:label"]
+
+[[unit]]
+text = "FastAPI Application"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The core of the platform is a FastAPI application that exposes a REST API."
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "It is deployed on ECS Fargate and scales horizontally behind an Application Load Balancer."
+by = ["test:infrastructure/tests/test_dashboard_service.py::test_task_counts_per_environment"]
+
+[[unit]]
+text = "The API is organized into resource-specific endpoint groups:"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Endpoint Group | Description"
+by = ["exempt:label"]
+
+[[unit]]
+text = "/api/v1/experiments | Create, update, start, pause, stop, and query experiments"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "/api/v1/feature-flags | Manage feature flags, targeting rules, and rollout percentages"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "/api/v1/results | Read statistical results, with CUPED, Bayesian and sequential analyses, FDR correction, daily series and sample sizes"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "/api/v1/tracking | Ingest assignment and event data from client applications"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "/api/v1/users | User management and authentication"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "/api/v1/compliance | Audit event log and compliance reports"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestComplianceRoutesRefusedWithoutTheModule::test_audit_event_listing_stays_core",
+]
+
+[[unit]]
+text = "/api/v1/integrations | Jira, Salesforce, and GitHub integrations"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "/api/v1/notifications | Slack and email alert preferences"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "/api/v1/rbac | Role management and permission grants"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "/api/v1/bandit | Multi-armed bandit state and weight management"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Interactive API documentation is available at /api/v1/docs (Swagger UI) and /api/v1/redoc (ReDoc)."
+by = [
+    "test:backend/tests/smoke/test_wiring.py::TestAuthWiring::test_docs_endpoint_is_accessible",
+    "journey:quick-start#api-docs-address",
+]
+
+[[unit]]
+text = "Background Schedulers"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Several background tasks run on a configurable cycle alongside the API process:"
+by = ["test:backend/tests/unit/core/test_experiment_scheduler_interval.py::test_lifespan_passes_the_setting_to_the_experiment_scheduler"]
+
+[[unit]]
+text = "Scheduler | Default Cycle | Responsibility"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Experiment scheduler | 15 minutes (EXPERIMENT_SCHEDULER_INTERVAL_MINUTES) | Auto-starts draft experiments at start_date, resumes a paused experiment only at a resume_at scheduled after the pause, auto-stops at end_date"
+by = [
+    "test:backend/tests/unit/core/test_experiment_scheduler_interval.py::test_the_default_is_15_minutes",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p6_due_draft_activates",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p2_scheduled_resume_is_recorded_and_fires",
+]
+
+[[unit]]
+text = "Rollout scheduler | 15 minutes | Advances rollout schedule stages based on time-based triggers"
+by = ["test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults"]
+
+[[unit]]
+text = "Safety monitor | 5 minutes | Checks error rate and latency thresholds; triggers auto-rollback if breached"
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage",
+]
+
+[[unit]]
+text = "Bandit scheduler | 5 minutes (BANDIT_UPDATE_INTERVAL_MINUTES) | Recomputes variant weights for active multi-armed bandit experiments from DynamoDB counters when every variant has at least PostgreSQL's pulls and successes there, otherwise from PostgreSQL assignments + converting users (counted as /results counts them); /tracking/assign routes new users by these weights"
+by = [
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_partial_dynamodb_count_loses_to_larger_postgres_count",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_complete_pulls_but_partial_dynamodb_successes_uses_postgres",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_new_users_follow_bandit_weights",
+]
+
+[[unit]]
+text = "Database Layer"
+by = ["exempt:label"]
+
+[[unit]]
+text = "PostgreSQL (Aurora)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Amazon Aurora PostgreSQL is the primary relational database."
+by = [
+    "test:infrastructure/tests/test_aurora_engine.py::test_the_cluster_uses_an_orderable_engine_version",
+    "test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate",
+]
+
+[[unit]]
+text = "It stores all persistent application data:"
+by = ["test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate"]
+
+[[unit]]
+text = "Experiments, variants, metrics definitions"
+by = ["test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate"]
+
+[[unit]]
+text = "Feature flags, targeting rules, rollout schedules"
+by = ["test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate"]
+
+[[unit]]
+text = "User accounts, roles, permissions"
+by = ["test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate"]
+
+[[unit]]
+text = "Audit events and compliance records"
+by = ["test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate"]
+
+[[unit]]
+text = "Integration configurations"
+by = ["test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate"]
+
+[[unit]]
+text = "Results aggregations"
+by = ["test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate"]
+
+[[unit]]
+text = "All schema changes are managed with Alembic migrations."
+by = ["test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate"]
+
+[[unit]]
+text = "The schema is namespaced under the experimentation PostgreSQL schema."
+by = ["test:backend/tests/integration/database/test_autogenerate_is_empty.py::test_a_fresh_bootstrap_leaves_nothing_to_autogenerate"]
+
+[[unit]]
+text = "The production Aurora cluster is configured with a read replica."
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_only_prod_has_an_aurora_reader"]
+
+[[unit]]
+text = "The API is given the writer endpoint only, so every query goes to the writer."
+by = ["test:infrastructure/tests/test_database_wiring.py::test_postgres_server_is_this_environments_writer_endpoint"]
+
+[[unit]]
+text = "Redis (ElastiCache)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Redis holds the rate limiter's counters and the API's caches:"
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRateLimiter::test_uses_redis_when_available",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_the_experiment_detail_is_cached_and_served_from_the_cache",
+]
+
+[[unit]]
+text = "Rate-limit counters: the request counts the rate limiter keeps per client and route group."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRateLimiter::test_redis_blocks_over_limit",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLimit::test_export_paths_share_one_counter_across_routes_and_ids",
+]
+
+[[unit]]
+text = "Application cache: experiments, for an hour, and results."
+by = [
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_experiments_are_cached_for_an_hour",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_the_experiment_detail_is_cached_and_served_from_the_cache",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_results_are_cached_and_served_from_the_cache",
+]
+
+[[unit]]
+text = "The API does not cache feature flags: it reads them from the database on every request, so a flag change is served on the next one."
+by = ["test:backend/tests/smoke/test_no_flag_cache.py::test_no_source_names_a_flag_cache_key"]
+
+[[unit]]
+text = "Lambda Functions"
+by = ["exempt:label"]
+
+[[unit]]
+text = "No Lambda function serves requests or processes events."
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_no_lambda_serves_requests_and_the_one_fed_events_does_nothing"]
+
+[[unit]]
+text = "SDKs call the API for assignment (POST /api/v1/tracking/assign) and flag evaluation (GET /api/v1/feature-flags/evaluate/{key})."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key",
+    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_every_flag_evaluates_with_a_null_config",
+]
+
+[[unit]]
+text = "The stacks deploy three functions: DatabaseAccessLambda (compute stack) and AnalyticsLambda (analytics stack, full profile) are placeholders whose inline code returns 200 and does nothing, and ETLTriggerLambda (Glue ETL stack, full profile) starts the Glue jobs daily."
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_three_application_functions_and_none_from_an_asset"]
+
+[[unit]]
+text = "The event-processor and flag-evaluation code under backend/lambda/ is not deployed by any stack."
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_three_application_functions_and_none_from_an_asset"]
+
+[[unit]]
+text = "See AWS Integration."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Counters (DynamoDB, counters module)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The counters module keeps assignment and conversion counts in DynamoDB, incremented with atomic ADD operations through its own routes (POST /api/v1/counters/{experiment_id}/increment and POST /api/v1/counters/bulk)."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:modules/backend/tests/integration/api/test_realtime_counters_api.py::TestIncrementCounter::test_increment_counter_returns_200",
+]
+
+[[unit]]
+text = "Assignment and tracking do not write them."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_assignment_and_tracking_write_no_counter"]
+
+[[unit]]
+text = "Counter Schema"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The table is experiment-counters-<env>, keyed by pk and sk, with an experiment-id-index global secondary index (modules/infrastructure/cdk/stacks/dynamodb_counters_stack.py)."
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_the_full_profiles_counters_table"]
+
+[[unit]]
+text = "The bandit scheduler reads these counters first when it updates a bandit's weights, and falls back to PostgreSQL when they are unavailable (backend/app/core/bandit_scheduler.py)."
+by = ["test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_partial_dynamodb_count_loses_to_larger_postgres_count"]
+
+[[unit]]
+text = "Analytics Pipeline"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Tracked events are stored in PostgreSQL: POST /api/v1/tracking/track and /tracking/batch write rows to the events table, and every analysis reads them from there."
+by = [
+    "docex:docs/getting-started/quick-start.md#\"cta_click\"",
+    "docex:docs/getting-started/quick-start.md#\"total_conversions\": 1",
+    "test:backend/tests/integration/services/test_conversion_event_matching.py::TestResultsEngineCountsSdkEvents::test_get_experiment_results_uses_event_name",
+]
+
+[[unit]]
+text = "The full profile's analytics stack creates a pipeline beside that, which the API does not feed today:"
+by = [
+    "test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_api_writes_no_kinesis_stream_firehose_or_opensearch_domain",
+]
+
+[[unit]]
+text = "Split URL Testing (Lambda@Edge)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A split URL experiment gives each variant its own URL."
+by = ["test:modules/backend/tests/integration/api/test_split_url_api.py::TestCreateSplitUrlExperiment::test_admin_can_create_split_url_experiment"]
+
+[[unit]]
+text = "The split-URL module ships a CloudFront construct (modules/infrastructure/constructs/split_url_distribution.py) with a Lambda@Edge viewer-request router."
+by = [
+    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_cloudfront_distribution_created",
+    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_lambda_edge_attached_to_viewer_request",
+]
+
+[[unit]]
+text = "No stack uses it: infrastructure/cdk/app.py creates no CloudFront distribution, so a deployment has it only if you add it to a stack yourself."
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway"]
+
+[[unit]]
+text = "The router (modules/lambda/split_url_router/handler.py):"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The construct does not set X-Split-URL-Config, so how the configuration reaches the router is left to you."
+by = ["test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration"]
+
+[[unit]]
+text = "Lambda@Edge functions must be deployed in us-east-1."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "See Split URL testing."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Authentication"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Sign-in"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Users sign in with a local account by default (AUTH_PROVIDER=local): the API checks the password and issues a JWT access token, valid for 12 hours by default (LOCAL_AUTH_TOKEN_TTL_MINUTES)."
+by = [
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_sign_in_is_local_by_default",
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_a_local_token_lasts_12_hours",
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_success_shape",
+]
+
+[[unit]]
+text = "The token is passed in the Authorization: Bearer <token> header."
+by = ["docex:docs/getting-started/quick-start.md#\"ADMIN\""]
+
+[[unit]]
+text = "Cognito Integration describes the other provider, an AWS Cognito user pool."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "API Key Authentication"
+by = ["exempt:label"]
+
+[[unit]]
+text = "SDK clients and server-to-server integrations use API keys instead of JWT tokens."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_bearer_token_is_not_an_api_key",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key",
+]
+
+[[unit]]
+text = "API keys are:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Created by any signed-in user, for themselves, via POST /api/v1/api-keys; whatever its creator's role, a key writes tracking data (assignments and events)"
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged",
+    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_a_viewers_own_key_assigns_users_and_tracks_events",
+]
+
+[[unit]]
+text = "Passed in the X-API-Key: <key> header"
+by = [
+    "docex:docs/getting-started/quick-start.md#\"assigned\": true",
+    "docex:docs/getting-started/quick-start.md#\"cta_click\"",
+    "docex:docs/getting-started/quick-start.md#\"enabled\": true",
+]
+
+[[unit]]
+text = "Not limited by their scopes, with one exception: any active key authenticates every API-key route as the user who created it, except the server-side SDK routes (GET /api/v1/sdk/ruleset, POST /api/v1/tracking/evaluations, POST /api/v1/tracking/assign/batch), which require the sdk:ruleset scope (see API Key Management)"
+by = [
+    "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
+    "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_every_route_under_the_sdk_prefix_requires_the_scope",
+    "journey:api-key-first-assignment#ruleset-scope",
+]
+
+[[unit]]
+text = "Revocable without affecting user accounts"
+by = [
+    "journey:api-key-first-assignment#confirm-delete",
+    "journey:api-key-first-assignment#refused",
+]
+
+[[unit]]
+text = "Role-Based Access Control"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every user has one of four roles, each with progressively broader permissions:"
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_there_are_four_built_in_roles",
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_viewer_permissions",
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_admin_has_permission",
+]
+
+[[unit]]
+text = "Role | Description"
+by = ["exempt:label"]
+
+[[unit]]
+text = "VIEWER | Reads every experiment, flag and result and changes none; can create an API key, which writes tracking data"
+by = [
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_viewer_permissions",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged",
+    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_a_viewers_own_key_assigns_users_and_tracks_events",
+]
+
+[[unit]]
+text = "ANALYST | View all experiments, results, audit logs, and reports"
+by = ["test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_analyst_permissions"]
+
+[[unit]]
+text = "DEVELOPER | Create and manage experiments and feature flags"
+by = ["test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_developer_permissions"]
+
+[[unit]]
+text = "ADMIN | Full access: user management, global settings, compliance exports"
+by = ["test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_admin_has_permission"]
+
+[[unit]]
+text = "Custom roles and direct permission grants are stored and shown alongside the base role, but no permission check reads them yet: routes check the base role (#891)."
+by = [
+    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_creates_role_with_name",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+]
+
+[[unit]]
+text = "CDK Infrastructure"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The AWS infrastructure is defined as code using AWS CDK v2, in Python (infrastructure/cdk/app.py), which defines the stacks below; cdk deploy --all from infrastructure/cdk deploys them."
+by = [
+    "test:infrastructure/tests/test_app_profiles.py::TestTheAppActuallySynthesises::test_synth_completes",
+    "test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists",
+]
+
+[[unit]]
+text = "The Fargate stack runs the dashboard as its own ECS service behind the API's load balancer: /api/, /health, /health/ and /metrics go to the API, everything else to the dashboard."
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_app_has_exactly_two_ecs_services",
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_api_paths_go_to_the_live_target_group_exactly",
+]
+
+[[unit]]
+text = "cdk deploy starts it on experimentation-platform/web:bootstrap; the Deploy workflow rolls each release onto it by digest, after the API."
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_dashboard_container_never_proxies_the_api",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_dashboard_is_registered_by_digest_with_its_own_container",
+    "test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_r1_through_the_step_the_dashboard_rolls_out_when_the_api_is_serving",
+]
+
+[[unit]]
+text = "No stack creates CloudFront."
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway"]
+
+[[unit]]
+text = "The split-URL module's CloudFront construct exists but app.py does not use it."
+by = [
+    "test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway",
+    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_cloudfront_distribution_created",
+]
+
+[[unit]]
+text = "See AWS CDK Deployment."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Stacks"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Stack (<env> is dev, staging or prod) | Contents"
+by = ["exempt:label"]
+
+[[unit]]
+text = "experimentation-vpc-<env> | VPC, public/private/isolated subnets, NAT, route tables, network ACLs, gateway endpoints, security groups"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists"]
+
+[[unit]]
+text = "experimentation-auth-<env> | Cognito user pool and app client"
+by = [
+    "test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists",
+    "test:infrastructure/tests/test_auth_stack.py::test_the_user_pool_allows_admin_create_user_only",
+]
+
+[[unit]]
+text = "experimentation-database-<env> | Aurora PostgreSQL cluster, parameter group, KMS key, security group"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists"]
+
+[[unit]]
+text = "experimentation-redis-<env> | ElastiCache Redis replication group, subnet group, security group"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists"]
+
+[[unit]]
+text = "experimentation-dynamodb-<env> | Three DynamoDB tables (events, feature flags, overrides)"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists"]
+
+[[unit]]
+text = "experimentation-compute-<env> | ECS cluster, task security group, a placeholder Lambda (DatabaseAccessLambda)"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists"]
+
+[[unit]]
+text = "experimentation-fargate-<env> | ALB, HTTPS + test listeners, blue/green target groups, the API's Fargate service, CodeDeploy application and deployment group, auto-scaling; the dashboard's ECS service and target group"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists"]
+
+[[unit]]
+text = "experimentation-migrations-<env> | One-off ECS task definition that runs the alembic upgrade"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists"]
+
+[[unit]]
+text = "experimentation-monitoring-<env> | CloudWatch dashboards and alarms, and an SNS topic"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists"]
+
+[[unit]]
+text = "experimentation-dynamodb-counters-<env> | Full profile only — the real-time experiment-counters table"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists"]
+
+[[unit]]
+text = "experimentation-analytics-<env> | Full profile only — Kinesis stream, Firehose, S3 data lake, OpenSearch domain, a placeholder consumer Lambda"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists"]
+
+[[unit]]
+text = "experimentation-glue-etl-<env> | Full profile only — Glue database and crawler, two ETL jobs, Athena results bucket, daily trigger"
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists"]
+
+[[unit]]
+text = "A core deployment builds the first nine; a full one builds all twelve."
+by = [
+    "test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_full_checkout_builds_the_module_stacks",
+    "test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_core_checkout_builds_none_of_them",
+]
+
+[[unit]]
+text = "The names are the stack ids cdk deploy takes, not class names -- run cdk list to see them for your environment."
+by = ["test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists"]
+
+[[unit]]
+text = "Deployment Model"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The API service uses blue/green deployment via AWS CodeDeploy:"
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_api_canary_is_fifteen_minutes"]
+
+[[unit]]
+text = "A new task definition is registered (the \"green\" environment)"
+by = ["test:backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py::test_the_dashboard_is_registered_by_digest_with_its_own_container"]
+
+[[unit]]
+text = "CodeDeploy gradually shifts traffic from the old (blue) to the new (green) deployment"
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_api_canary_is_fifteen_minutes"]
+
+[[unit]]
+text = "If health checks fail, traffic is automatically shifted back to blue"
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_group_stops_and_rolls_back_on_an_alarm"]
+
+[[unit]]
+text = "The canary sends 10% of traffic to the new tasks for 15 minutes, then shifts the rest"
+by = ["test:infrastructure/tests/test_codedeploy_alarms.py::test_the_api_canary_is_fifteen_minutes"]
+
+[[unit]]
+text = "Health and Observability"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Endpoint / Resource | Purpose"
+by = ["exempt:label"]
+
+[[unit]]
+text = "GET /health | The same as GET /health/ready: {\"status\": \"healthy\"} with 200 when the API can serve, \"unhealthy\" with 503 when it cannot"
+by = ["test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_health_alias_matches_ready"]
+
+[[unit]]
+text = "GET /metrics | Prometheus-format metrics (request count, latency histograms, error rates)"
+by = [
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestMetricsEndpoint::test_open_in_development_without_token",
+    "test:backend/tests/unit/core/test_metrics.py::test_record_request_observes_histogram",
+]
+
+[[unit]]
+text = "CloudWatch (CDK deployments) | The dashboards and alarms the monitoring and Fargate stacks create; see Monitoring"
+by = [
+    "test:infrastructure/tests/test_standing_alarms.py::test_the_standing_alarms_are_exactly_these",
+    "test:infrastructure/tests/test_front_door_cdk.py::test_each_stack_holds_what_the_overview_lists",
+]
+
+[[unit]]
+text = "Structured JSON logs | Each request's log lines carry its request_id, path and method"
+by = ["test:backend/tests/unit/middleware/test_request_id_middleware.py::test_bind_log_context_called"]

@@ -33,7 +33,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "URL: /api/v1/redoc"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_redoc_is_served_at_api_v1_redoc"]
 
 [[unit]]
 text = "Understanding the API Structure"
@@ -245,7 +245,7 @@ by = [
 
 [[unit]]
 text = "There is no per-user override endpoint."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_no_route_overrides_a_flag_for_one_user"]
 
 [[unit]]
 text = "Target individual users with the flag's targeting_rules instead — see Targeting & Rules."

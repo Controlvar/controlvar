@@ -71,7 +71,11 @@ by = [
 
 [[unit]]
 text = "Experimently writes the SQL itself (there is no field that takes SQL), runs it as the identity you created for it, and computes the results from what comes back."
-by = ["untested:T"]
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_every_request_model_forbids_unknown_fields",
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_every_string_field_is_allowlisted_exactly",
+    "test:modules/backend/tests/unit/warehouse/test_reparse_defence.py::test_generated_sql_is_one_select_over_exactly_the_rendered_tables",
+]
 
 [[unit]]
 text = "A metric is one of two types:"
@@ -79,7 +83,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "a proportion: the share of exposed units that had at least one event in the conversion window, compared with Fisher's exact test, the statistics /results uses;"
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/warehouse/test_runner_units.py::test_the_default_estimator_is_the_one_results_uses"]
 
 [[unit]]
 text = "a mean: the average per exposed unit of the sum of its event values in the conversion window (0 for a unit with no event; a NULL value is ignored and counted), optionally capped per unit with cap_value, and compared with Welch's t-test."
@@ -150,7 +154,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Anyone who can author a source can compute aggregates, and read short text such as variant labels, over anything the connection's role can read."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/warehouse/test_limits_roles_and_counting.py::test_a_source_author_reads_any_table_the_connection_role_can"]
 
 [[unit]]
 text = "Grant that role only the tables and views analysis needs, and read-only access to them."
@@ -177,7 +181,7 @@ by = ["test:modules/backend/tests/unit/warehouse/test_grain_duckdb.py"]
 
 [[unit]]
 text = "/results counts converting users with no bound on the exposure time and no conversion window."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/warehouse/test_limits_roles_and_counting.py::test_results_counts_a_conversion_whatever_its_time"]
 
 [[unit]]
 text = "So the two agree only on data with no event before a unit's exposure, no unit in two variants and no event outside the window; otherwise the warehouse numbers are the stricter ones."
@@ -439,7 +443,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The worst case for a day is max_runs_per_day × 11 × the per-query limit."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/warehouse/test_runner_units.py::test_the_worst_case_is_runs_times_eleven_times_the_cap"]
 
 [[unit]]
 text = "At once: one analysis or preview per connection, and at most WAREHOUSE_MAX_CONCURRENT_RUNS (default 2) across the deployment."
@@ -454,7 +458,7 @@ by = ["test:modules/backend/tests/integration/warehouse/test_admission.py::test_
 
 [[unit]]
 text = "They are ADMIN-only (validation: the source's editors) and each has a 30-second limit."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/warehouse/test_limits_roles_and_counting.py::test_connection_tests_and_validation_have_their_roles_and_thirty_seconds"]
 
 [[unit]]
 text = "When a limit is reached the API answers:"
@@ -497,15 +501,15 @@ by = [
 
 [[unit]]
 text = "WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS | 1800 | The highest query_timeout_seconds a connection may set."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/warehouse/test_limits_roles_and_counting.py::test_the_operator_ceilings_and_their_defaults"]
 
 [[unit]]
 text = "WAREHOUSE_MAX_BYTES_PER_QUERY | 214748364800 (200 GiB) | The highest byte limit a connection may set."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/warehouse/test_limits_roles_and_counting.py::test_the_operator_ceilings_and_their_defaults"]
 
 [[unit]]
 text = "WAREHOUSE_MAX_RUNS_PER_DAY | 200 | The highest max_runs_per_day a connection may set."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/warehouse/test_limits_roles_and_counting.py::test_the_operator_ceilings_and_their_defaults"]
 
 [[unit]]
 text = "WAREHOUSE_MAX_CONCURRENT_JOBS | 4 | Threads per API process for warehouse calls. A call that finds none free is refused at once with 429 warehouse_busy; it never waits."

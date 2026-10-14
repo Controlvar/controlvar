@@ -19,7 +19,8 @@ WebSocket protocol:
     Cognito); the dev-auth bypass applies too.  An invalid/missing token
     closes the socket with code 4401 after the handshake.
   - Server sends an initial snapshot on connection
-  - Server sends periodic updates every RESULTS_STREAM_INTERVAL_SECONDS seconds
+  - Server sends a fresh snapshot every RESULTS_STREAM_INTERVAL_SECONDS seconds
+    (a Settings field, default 30), whatever the client sends in between
   - Client can send {"action": "ping"} -> server replies {"event": "pong"}
   - Client can send {"action": "refresh"} -> server immediately sends fresh snapshot
   - On disconnect: connection is cleaned up automatically
@@ -28,7 +29,6 @@ WebSocket protocol:
 import asyncio
 import json
 import logging
-import os
 from typing import Optional
 
 from fastapi import (
@@ -43,6 +43,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
+from backend.app.core.config import settings
 from backend.app.services.results_streaming_service import ResultsStreamingService
 from backend.app.services.websocket_manager import ConnectionManager
 
@@ -51,12 +52,6 @@ logger = logging.getLogger(__name__)
 # Application-defined close code for a failed WebSocket authentication
 # (4000-4999 is the private-use range of RFC 6455).
 WS_CLOSE_UNAUTHORIZED = 4401
-
-# How often (in seconds) to push periodic updates to connected clients.
-# Configurable via environment variable for testing / tuning.
-RESULTS_STREAM_INTERVAL_SECONDS = int(
-    os.getenv("RESULTS_STREAM_INTERVAL_SECONDS", "30")
-)
 
 router = APIRouter()
 
@@ -146,8 +141,9 @@ async def stream_results(
     Stream live experiment results over WebSocket.
 
     Authenticates via ``?token=`` or a bearer header (close code 4401 when
-    invalid), then sends an initial snapshot, then periodic updates every
-    RESULTS_STREAM_INTERVAL_SECONDS seconds. Also responds to client messages:
+    invalid), then sends an initial snapshot, then a fresh one every
+    ``settings.RESULTS_STREAM_INTERVAL_SECONDS`` seconds on a schedule that
+    client messages do not move. Also responds to client messages:
       {"action": "ping"} -> {"event": "pong"}
       {"action": "refresh"} -> immediate fresh snapshot
     """
@@ -167,41 +163,55 @@ async def stream_results(
 
     await manager.connect(websocket, experiment_id, subprotocol=subprotocol)
     streaming_service = ResultsStreamingService(SessionLocal)
+    # The one outstanding read of the next client message, if any.
+    receive_task: Optional["asyncio.Future[str]"] = None
 
     try:
         # Send initial snapshot immediately on connection
         snapshot = await streaming_service.get_live_snapshot(experiment_id)
         await websocket.send_text(json.dumps(snapshot))
 
-        # Main loop: wait for client messages, send periodic updates on timeout
+        # Main loop: wait for a client message, but only until the next
+        # snapshot is due. The deadline moves only when a periodic snapshot
+        # is sent, so a client message (a ping, say) never postpones one
+        # (#1193). A read that is still waiting when a snapshot is due is
+        # kept, not cancelled, and waited on again: cancelling a read can
+        # drop a message that arrives in the same moment.
+        interval = float(settings.RESULTS_STREAM_INTERVAL_SECONDS)
+        loop = asyncio.get_running_loop()
+        next_snapshot_at = loop.time() + interval
         while True:
-            try:
-                data = await asyncio.wait_for(
-                    websocket.receive_text(),
-                    timeout=float(RESULTS_STREAM_INTERVAL_SECONDS),
-                )
-                try:
-                    msg = json.loads(data)
-                except json.JSONDecodeError:
-                    msg = {}
-
-                action = msg.get("action")
-                if action == "ping":
-                    await websocket.send_text(json.dumps({"event": "pong"}))
-                elif action == "refresh":
-                    snapshot = await streaming_service.get_live_snapshot(experiment_id)
-                    await websocket.send_text(json.dumps(snapshot))
-                else:
-                    logger.debug(
-                        "Unknown WebSocket action '%s' for experiment %s",
-                        action,
-                        experiment_id,
-                    )
-
-            except asyncio.TimeoutError:
-                # Periodic update: interval elapsed without client message
+            remaining = next_snapshot_at - loop.time()
+            if remaining <= 0:
                 snapshot = await streaming_service.get_live_snapshot(experiment_id)
                 await websocket.send_text(json.dumps(snapshot))
+                next_snapshot_at = loop.time() + interval
+                continue
+            if receive_task is None:
+                receive_task = asyncio.ensure_future(websocket.receive_text())
+            done, _ = await asyncio.wait({receive_task}, timeout=remaining)
+            if not done:
+                # The next snapshot is due: the top of the loop sends it.
+                continue
+            finished, receive_task = receive_task, None
+            data = finished.result()  # raises WebSocketDisconnect on close
+            try:
+                msg = json.loads(data)
+            except json.JSONDecodeError:
+                msg = {}
+
+            action = msg.get("action")
+            if action == "ping":
+                await websocket.send_text(json.dumps({"event": "pong"}))
+            elif action == "refresh":
+                snapshot = await streaming_service.get_live_snapshot(experiment_id)
+                await websocket.send_text(json.dumps(snapshot))
+            else:
+                logger.debug(
+                    "Unknown WebSocket action '%s' for experiment %s",
+                    action,
+                    experiment_id,
+                )
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected for experiment %s", experiment_id)
@@ -212,6 +222,12 @@ async def stream_results(
             exc,
         )
     finally:
+        if receive_task is not None:
+            if not receive_task.done():
+                receive_task.cancel()
+            elif not receive_task.cancelled():
+                # Read the outcome, so asyncio does not log it as unretrieved.
+                receive_task.exception()
         await manager.disconnect(websocket, experiment_id)
 
 

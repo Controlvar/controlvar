@@ -34,14 +34,14 @@ without ``pending``)::
             - heading "Quick Start" [level=1]
         fail: the Quick Start link does not lead to the Quick Start page
       - id: deploy-guide
-        doc: deployment-operations
+        doc: self-hosting
         do:
-          goto: /deployment/deployment-guide/
+          goto: /self-hosting/cdk/
         expect:
           status: 200
         snapshot: false                      # no ARIA snapshot: say why
         snapshot_reason: only that the page answers matters here
-        fail: the deployment guide does not answer
+        fail: the AWS CDK deployment page does not answer
         not_run: needs-aws                   # a reason from registry.py; reported NOT RUN
 
 ``do`` is exactly one action. ``expect`` lists what must hold after it. A step
@@ -183,6 +183,18 @@ section's block is the page's ``go mod init`` and ``go get``, run in its order,
 the block is a complete program that prints one ``key=value`` line,
 ``answers`` name the keys of that line (no stubs, no paths), and ``replace``
 must also put ``{{api-url}}`` in place of the API address the program names.
+
+A demo document's command is run as its reader runs it (``commands.py``;
+demo-local only, the checkout ``demo/setup-local.sh`` set up): ``run:
+{command, up_to_seconds}`` runs one shell block of the step's section (its
+``doc``), word for word, from the checkout's root with its venv active, and
+``expect.exit`` (the status it must end with) and ``expect.output`` (lines its
+output must hold) are checked when it ends. With ``background: true`` the
+block is started and the journey goes on, so later steps can watch what it
+does through the API; a later ``finish: <that step's id>`` lets it end within
+its bound and checks ``exit`` and ``output`` there. A block that runs past its
+bound, or is still running when its journey ends, is stopped. What it printed
+is written through the redactor, cut to its end.
 """
 
 from __future__ import annotations
@@ -340,8 +352,13 @@ STRUCTURAL_EXPECTS = tuple(name for name in BROWSER_EXPECTS if name != "aria")
 API_ANSWER_EXPECTS = ("status", "json", "computed")
 API_EXPECTS = (*API_ANSWER_EXPECTS, "after")
 SEARCH_EXPECTS = ("found",)
+#: What a ``run`` or ``finish`` step may expect: how its block ended.
+RUN_EXPECTS = ("exit", "output")
 #: The stacks that serve the documentation site and name its source.
 SITE_STACKS = ("docs-local", "docs-published")
+#: The stacks a ``run`` step's block runs on: a checkout demo/setup-local.sh
+#: set up, whose venv the demo's documents tell their reader to activate.
+RUN_STACKS = ("demo-local",)
 #: What a crawl checks: every nav page's heading, or every link to the site.
 CRAWLS = ("nav", "links")
 #: How far down the search results a ``found`` page may be.
@@ -627,6 +644,20 @@ class Sdk(_Strict):
         return self
 
 
+class Run(_Strict):
+    """One shell block of the step's section (its ``doc``), run as the page
+    writes it from the checkout's root with the venv active (``commands.py``).
+
+    ``command`` is the block's text, word for word; ``up_to_seconds`` bounds it
+    from its start. ``background: true`` starts it and goes on: a later
+    ``finish`` step names this step and checks how it ended.
+    """
+
+    command: StrictStr = Field(min_length=1, max_length=2000)
+    up_to_seconds: StrictInt = Field(ge=5, le=3600)
+    background: StrictBool = False
+
+
 class Do(_Strict):
     """Exactly one action."""
 
@@ -643,6 +674,10 @@ class Do(_Strict):
     ref: Optional[Literal["doc-examples"]] = None
     search: Optional[OneLine] = None
     crawl: Optional[Literal["nav", "links"]] = None
+    run: Optional[Run] = None
+    #: The id of an earlier ``run`` step with ``background: true``: this step
+    #: lets that block end, within its bound, and checks how it ended.
+    finish: Optional[StrictStr] = Field(default=None, pattern=SLUG_PATTERN)
 
     @model_validator(mode="after")
     def _exactly_one(self) -> "Do":
@@ -650,8 +685,8 @@ class Do(_Strict):
         if len(given) != 1:
             raise ValueError(
                 "do must be exactly one of goto, open, click, fill, select, keep,"
-                f" api, traffic, evaluations, sdk, ref, search, crawl; got"
-                f" {given or 'none'}"
+                f" api, traffic, evaluations, sdk, ref, search, crawl, run, finish;"
+                f" got {given or 'none'}"
             )
         return self
 
@@ -753,6 +788,10 @@ class Expect(_Strict):
     cells: Optional[List[Cell]] = Field(default=None, min_length=1)
     found: Optional[StrictStr] = Field(default=None, pattern=r"^/\S*$")
     aria: Optional[StrictStr] = Field(default=None, min_length=1)
+    #: A ``run`` or ``finish`` step: the status its block must end with.
+    exit: Optional[StrictInt] = Field(default=None, ge=0, le=255)
+    #: And lines its output must hold, each word for word.
+    output: Optional[List[OneLine]] = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def _something(self) -> "Expect":

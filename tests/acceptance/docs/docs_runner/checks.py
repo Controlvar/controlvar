@@ -103,6 +103,18 @@ def describe_action(step: Step) -> str:
         return "open every page of the nav on the site"
     if do.crawl == "links":
         return "follow every link to the site from the nav pages and their source"
+    if do.run is not None:
+        first = do.run.command.strip().splitlines()[0]
+        more = (
+            " (and the block's other lines)" if "\n" in do.run.command.strip() else ""
+        )
+        how = "start in the background" if do.run.background else "run"
+        return (
+            f"{how}, from the checkout's root with the venv active, the shell block"
+            f" of #{step.doc}: {first}{more}"
+        )
+    if do.finish is not None:
+        return f"let the block step {do.finish} started end, within its bound"
     return "its shell blocks, run by Doc Examples"
 
 
@@ -150,6 +162,11 @@ def describe_expect(step: Step) -> str:
             f" answers are the variant the documented assignment hash gives"
             f" {plan.user} and the flag answer the documented rollout hash gives at"
             f" {plan.rollout}%"
+        )
+    if step.do.run is not None and step.do.run.background:
+        return (
+            "it starts; a later finish step checks how it ended, within"
+            f" {step.do.run.up_to_seconds} s of its start"
         )
     if step.do.evaluations is not None:
         plan = step.do.evaluations
@@ -202,6 +219,12 @@ def describe_expect(step: Step) -> str:
         parts.append(
             f"the screen matches its ARIA snapshot ({len(expect_.aria.splitlines())} lines)"
         )
+    if expect_.exit is not None:
+        bound = step.do.run.up_to_seconds if step.do.run is not None else None
+        within = f" within {bound} s" if bound is not None else ""
+        parts.append(f"it ends{within} with exit status {expect_.exit}")
+    for line in expect_.output or []:
+        parts.append(f'its output has "{line}"')
     return "; ".join(parts)
 
 

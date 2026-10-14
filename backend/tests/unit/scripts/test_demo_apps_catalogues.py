@@ -251,6 +251,76 @@ def test_the_simulator_needs_only_the_standard_library():
     assert imported - {"__future__"} <= set(sys.stdlib_module_names), imported
 
 
+STREAMPULSE_SIMULATOR = REPO_ROOT / "demo" / "streampulse" / "simulator"
+
+
+@pytest.mark.parametrize("name", ["devices.py", "traffic.py", "rollout_story.py"])
+def test_the_streampulse_simulator_needs_only_the_standard_library(name):
+    """Its three scripts import the standard library and each other, nothing else."""
+    tree = ast.parse((STREAMPULSE_SIMULATOR / name).read_text(encoding="utf-8"))
+    imported = set()
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            imported |= {alias.name.split(".")[0] for alias in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            imported.add(node.module.split(".")[0])
+    ours = {"devices", "traffic"}
+    assert imported - {"__future__"} - ours <= set(sys.stdlib_module_names), imported
+
+
+def _app_presets() -> list:
+    """Each of the app's device presets (demo/streampulse/src/lib/devices.ts)."""
+    source = (
+        REPO_ROOT / "demo" / "streampulse" / "src" / "lib" / "devices.ts"
+    ).read_text(encoding="utf-8")
+    presets = source[source.index("export const DEVICE_PRESETS") :]
+    found = []
+    for block in re.findall(r"device: \{([^}]*)\}", presets):
+        fields = dict(re.findall(r"(\w+): '([^']*)'", block))
+        fields["employee"] = re.search(r"employee: (true|false)", block)[1] == "true"
+        found.append(fields)
+    return found
+
+
+def test_the_streampulse_simulator_has_each_app_preset_with_an_id_of_its_own():
+    """PRESET_DEVICES: one device for each of the app's five presets, with the
+    preset's OS, OS version, region, tier, employee flag and model, under an id
+    of its own (``preset-...``)."""
+    spec = importlib.util.spec_from_file_location(
+        "_catalogue_streampulse_devices", STREAMPULSE_SIMULATOR / "devices.py"
+    )
+    devices = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = devices
+    try:
+        spec.loader.exec_module(devices)
+    finally:
+        sys.modules.pop(spec.name, None)
+    app = _app_presets()
+    assert len(app) == 5, app
+
+    def shape(os, os_version, region, tier, employee, model):
+        return (os, os_version, region, tier, employee, model)
+
+    simulator = sorted(
+        shape(d.os, d.os_version, d.region, d.tier, d.employee, d.device_model)
+        for d in devices.PRESET_DEVICES
+    )
+    assert simulator == sorted(
+        shape(
+            p["os"],
+            p["os_version"],
+            p["region"],
+            p["tier"],
+            p["employee"],
+            p["device_model"],
+        )
+        for p in app
+    )
+    ids = [d.device_id for d in devices.PRESET_DEVICES]
+    assert all(i.startswith("preset-") for i in ids), ids
+    assert not set(ids) & {p["device_id"] for p in app}
+
+
 def test_the_simulator_runs_until_stopped_and_takes_the_documented_options(traffic):
     defaults = traffic.build_parser().parse_args([])
     assert defaults.duration == 0

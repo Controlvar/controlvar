@@ -21,7 +21,7 @@ by = ["docex:docs/api/data-export.md#\"ADMIN\""]
 
 [[unit]]
 text = "Every role (ADMIN, DEVELOPER, ANALYST, VIEWER) may use them."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_every_role_may_use_the_exports"]
 
 [[unit]]
 text = "Without a token they answer 401 Unauthorized."
@@ -32,7 +32,11 @@ by = [
 
 [[unit]]
 text = "The result columns (each variant's assignments, conversions, rate, p-value and significance, and each experiment's winner and recommendation) are the numbers GET /api/v1/results/{experiment_id} reports for the experiment's primary metric with no options: the experiment's stored correction_method and confidence_level (Benjamini-Hochberg at 0.95 unless it was created with others; see How results are judged)."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_variant_columns_are_the_results_numbers_with_the_stored_settings",
+    "test:backend/tests/integration/api/test_export_api.py::TestExportEqualsResults::test_variant_rows_equal_results",
+    "test:backend/tests/integration/api/test_export_api.py::TestExportEqualsResults::test_experiment_row_winner_and_recommendation_equal_results",
+]
 
 [[unit]]
 text = "The export takes no such parameters."
@@ -40,11 +44,14 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Asked with another correction_method or confidence_level, /results can report a different is_significant, winner and recommendation than the export; the counts, rates and unadjusted p-values are the same."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_export_columns_and_rules.py::test_p_value_is_unadjusted_and_significance_is_decided_on_the_corrected_one",
+    "test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_variant_columns_are_the_results_numbers_with_the_stored_settings",
+]
 
 [[unit]]
 text = "p_value is the unadjusted p-value, while is_significant is decided on the corrected one."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_p_value_is_unadjusted_and_significance_is_decided_on_the_corrected_one"]
 
 [[unit]]
 text = "With two or more treatments a row can therefore show p_value 0.035 and is_significant false: under Benjamini-Hochberg that treatment's adjusted p-value can be 0.071."
@@ -56,7 +63,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Empty in this release: experiments_with_winners in the overview is 0 (#244)."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
 
 [[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
@@ -114,7 +121,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The export URLs have no trailing slash: with one, the API answers 307, which curl doesn't follow."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_export_urls_have_no_trailing_slash"]
 
 [[unit]]
 text = "GET /api/v1/export/experiments"
@@ -335,7 +342,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "flag_id | string | UUID of the feature flag"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_feature_flag_columns"]
 
 [[unit]]
 text = "flag_key | string | Machine-readable key (e.g. checkout_v2)"
@@ -343,7 +350,7 @@ by = ["docex:docs/api/data-export.md#beta_features,ACTIVE,100"]
 
 [[unit]]
 text = "flag_name | string | Human-readable name"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_feature_flag_columns"]
 
 [[unit]]
 text = "status | string | INACTIVE, ACTIVE, or ARCHIVED"
@@ -354,24 +361,24 @@ text = "rollout_percentage | integer | Configured rollout percentage (0-100)"
 by = ["docex:docs/api/data-export.md#beta_features,ACTIVE,100"]
 
 [[unit]]
-text = "total_evaluations | integer | Total number of times the flag was evaluated"
-by = ["untested:T"]
+text = "total_evaluations | integer | The number of metric records stored for the flag, which is not the number of times it was evaluated"
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_feature_flag_columns"]
 
 [[unit]]
-text = "enabled_evaluations | integer | Always 0: no record says whether an evaluation returned enabled"
-by = ["untested:T"]
+text = "enabled_evaluations | integer | Always 0"
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_feature_flag_columns"]
 
 [[unit]]
 text = "enabled_rate | float | Always 0.0, because enabled_evaluations is always 0"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_feature_flag_columns"]
 
 [[unit]]
 text = "created_at | string | ISO 8601 creation timestamp"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_feature_flag_columns"]
 
 [[unit]]
 text = "updated_at | string | ISO 8601 last-updated timestamp"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_feature_flag_columns"]
 
 [[unit]]
 text = "It prints each flag's key, status and rollout percentage, among them the demo data's beta_features, ACTIVE at 100."
@@ -427,7 +434,7 @@ by = ["docex:docs/api/data-export.md#\"period_start\": \"2024-01-01T00:00:00+00:
 
 [[unit]]
 text = "period_end | string | Report period end, or null if no filter applied"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
 
 [[unit]]
 text = "total_experiments | integer | Total experiments in the platform (filtered by period)"
@@ -446,27 +453,27 @@ by = ["docex:docs/api/data-export.md#\"total_experiments\": 3"]
 
 [[unit]]
 text = "total_feature_flags | integer | Total feature flags"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
 
 [[unit]]
 text = "active_feature_flags | integer | Feature flags in ACTIVE status"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
 
 [[unit]]
 text = "total_assignments | integer | Total user-experiment assignments"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
 
 [[unit]]
 text = "total_events | integer | Total tracking events"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
 
 [[unit]]
 text = "experiments_with_winners | integer | Counts saved reports that have a summary; nothing saves one in this release, so it is 0"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
 
 [[unit]]
 text = "average_experiment_duration_days | float | Average duration (days) of completed experiments, or null"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
 
 [[unit]]
 text = "On the Quick Start's demo data it prints three experiments, two of them active and one completed."
@@ -556,7 +563,7 @@ by = ["test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLi
 
 [[unit]]
 text = "500 | Internal server error (check application logs)"
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_an_unexpected_failure_is_a_500_and_reaches_the_server_log"]
 
 [[unit]]
 text = "Example 422 Error"
@@ -568,7 +575,7 @@ by = ["docex:docs/api/data-export.md#scope=events is not supported; the export i
 
 [[unit]]
 text = "A value the parameter does not accept, such as format=xml, fails validation instead, and the body lists each invalid parameter."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_an_unaccepted_value_lists_each_invalid_parameter"]
 
 [[unit]]
 text = "It names the parameter and the rule, not the value that was sent:"
@@ -580,15 +587,21 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Times are ISO 8601."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_times_and_ids_in_the_rows"]
 
 [[unit]]
 text = "generated_at, period_start and period_end carry a UTC offset; experiment start_date and end_date, and flag created_at and updated_at, are written as stored, without one."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_export_columns_and_rules.py::test_times_and_ids_in_the_rows",
+    "test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_feature_flag_columns",
+]
 
 [[unit]]
 text = "UUIDs are included in exports as plain strings (not resolved to names where the ID is already paired with a human-readable name in an adjacent column)."
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/services/test_export_columns_and_rules.py::test_times_and_ids_in_the_rows",
+    "test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_feature_flag_columns",
+]
 
 [[unit]]
 text = "Date filtering is inclusive on both ends (created_at >= start_date AND created_at <= end_date)."
@@ -599,7 +612,7 @@ by = [
 
 [[unit]]
 text = "CSV exports use Python's csv.DictWriter with \\r\\n line endings (RFC 4180)."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_csv_is_written_by_dictwriter_with_crlf_line_endings"]
 
 [[unit]]
 text = "CSV cells are written spreadsheet-safe: a text value that begins with =, +, -, @, a tab or a carriage return is written with a single quote (') in front of it, so a spreadsheet shows it as text."

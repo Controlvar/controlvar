@@ -98,8 +98,8 @@ from urllib.parse import quote, urljoin, urlparse
 from playwright.sync_api import Browser, Page, Playwright, expect
 from playwright.sync_api import Error as PlaywrightError
 
+from docs_runner import commands, redaction, registry, sdk, site, values, waiting
 from docs_runner import pacer as pacing
-from docs_runner import redaction, registry, sdk, site, values, waiting
 from docs_runner import traffic as population
 from docs_runner.checks import (
     OBSERVED_CHARS,
@@ -139,7 +139,7 @@ TITLE_CARD_MS = 1500
 #: The longest line a walkthrough's caption bar draws.
 CAPTION_CHARS = 180
 #: The kinds of step that do nothing on the screen: their caption shows their result.
-OFF_SCREEN = ("api", "traffic", "evaluations", "ref")
+OFF_SCREEN = ("api", "traffic", "evaluations", "ref", "run", "finish")
 #: Reads what a page draws: its rendered text, each field's placeholder, the
 #: text of every open shadow root, and each field's type and value (in the
 #: document and in those shadow roots). Same-origin frames, closed shadow
@@ -367,6 +367,9 @@ class JourneyRunner:
         #: the journey, the step, how long it took and how many seconds each
         #: ``after`` time was later. Numbers only; the values are in the files.
         self.polls: List[str] = []
+        #: The current journey's blocks started in the background, by the id
+        #: of the step that started them (``commands.py``).
+        self.background: Dict[str, commands.Started] = {}
         expect.set_options(timeout=settings.timeout_ms)
 
     # -- files -------------------------------------------------------------
@@ -711,6 +714,90 @@ class JourneyRunner:
             for variant, counts in outcome.variants.items()
         )
         return f"{outcome.requests} requests: {sent}", snapshot
+
+    # -- a guide's shell block (commands.py) --------------------------------
+    def _run_step(
+        self, step: Step, running: Running, journey_id: str, number: int
+    ) -> Tuple[str, str]:
+        """Run the step's block, or start it in the background."""
+        plan = step.do.run
+        try:
+            started = commands.start(
+                plan.command, running.checkout, plan.up_to_seconds, os.environ
+            )
+        except commands.CommandError as error:
+            raise StepFailed(str(error)) from None
+        if plan.background:
+            self.background[step.id] = started
+            snapshot = self._write(
+                self._name(journey_id, number, step, ".run.json"),
+                json.dumps(
+                    {
+                        "command": plan.command,
+                        "background": True,
+                        "up_to_seconds": plan.up_to_seconds,
+                    },
+                    indent=2,
+                    ensure_ascii=False,
+                )
+                + "\n",
+            )
+            return "started in the background", snapshot
+        return self._ended(
+            step, plan.command, commands.finish(started), journey_id, number
+        )
+
+    def _finish_step(self, step: Step, journey_id: str, number: int) -> Tuple[str, str]:
+        """Let the background block of an earlier step end, and check how it did."""
+        started = self.background.pop(step.do.finish, None)
+        if started is None:
+            raise StepFailed(
+                f"no block was started in the background by {step.do.finish}"
+            )
+        return self._ended(
+            step, started.command, commands.finish(started), journey_id, number
+        )
+
+    def _ended(
+        self,
+        step: Step,
+        command: str,
+        finished: commands.Finished,
+        journey_id: str,
+        number: int,
+    ) -> Tuple[str, str]:
+        """How the block ended, held to the step's expect; both written."""
+        lines = list(step.expect.output or [])
+        problems = commands.judge(finished, step.expect.exit, lines)
+        self._write(
+            self._name(journey_id, number, step, ".output.txt"), finished.tail()
+        )
+        snapshot = self._write(
+            self._name(journey_id, number, step, ".run.json"),
+            json.dumps(
+                {
+                    "command": command,
+                    "exit": finished.status,
+                    "stopped": finished.stopped,
+                    "seconds": round(finished.seconds, 1),
+                    "expected_exit": step.expect.exit,
+                    "expected_output": lines,
+                    "problems": problems,
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+            + "\n",
+        )
+        if problems:
+            raise _Failed(self._line("; ".join(problems)), snapshot)
+        return (
+            self._line(
+                f"exited {finished.status} after {finished.seconds:.0f} s"
+                + (f"; its output has all {len(lines)} lines" if lines else "")
+            ),
+            snapshot,
+        )
 
     def _evaluations_step(
         self, step: Step, api, journey_id: str, number: int
@@ -1336,6 +1423,7 @@ class JourneyRunner:
         self.walkthrough = None
         self.values = {}
         self.guide = guide
+        self.background = {}
         context = self.browser.new_context(**options)
         context.set_default_timeout(settings.timeout_ms)
         page = context.new_page()
@@ -1400,6 +1488,15 @@ class JourneyRunner:
                 self.log.write(record)
                 records.append(record)
         finally:
+            # A block started in the background whose finish step never ran
+            # (an earlier step failed) does not outlive its journey; what it
+            # printed until then is kept beside the step that started it.
+            for step_id, started in self.background.items():
+                ended = commands.abandon(started)
+                self._write(
+                    f"{journey_id}/{step_id}.abandoned.output.txt", ended.tail()
+                )
+            self.background = {}
             for walkthrough in walkthroughs:
                 walkthrough.stop(page)
                 self.recorded[walkthrough.name] = walkthrough.outcome()
@@ -1631,6 +1728,10 @@ class JourneyRunner:
                 )
             elif step.do.kind == "keep":
                 observed = self._keep_step(step, page)
+            elif step.do.kind == "run":
+                observed, snapshot = self._run_step(step, running, journey_id, number)
+            elif step.do.kind == "finish":
+                observed, snapshot = self._finish_step(step, journey_id, number)
             else:
                 if step.do.kind == "search":
                     observed = self._search_step(step, page, running)
@@ -1654,6 +1755,8 @@ class JourneyRunner:
                     "traffic": ".traffic.json",
                     "evaluations": ".evaluations.json",
                     "sdk": ".sdk.json",
+                    "run": ".run.json",
+                    "finish": ".run.json",
                 }.get(step.do.kind, ".api.json")
                 snapshot = self._write(
                     self._name(journey_id, number, step, suffix),

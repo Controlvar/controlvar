@@ -78,7 +78,7 @@ by = [
 
 [[unit]]
 text = "is_active defaults to false, and only an active integration answers webhook deliveries, so send true."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/api/test_integration_config_rules.py::test_a_new_configuration_is_inactive_and_only_an_active_one_answers"]
 
 [[unit]]
 text = "The examples on this page run against a local full-profile stack (see Modules and profiles); on your own deployment, use its URL instead of localhost:8000."
@@ -145,7 +145,7 @@ by = [
 
 [[unit]]
 text = "access_token | string | No | Not read by the platform; you do not need to supply it."
-by = ["untested:T"]
+by = ["test:modules/backend/tests/unit/api/test_integration_config_rules.py::test_the_salesforce_client_reads_no_stored_access_token"]
 
 [[unit]]
 text = "The Salesforce client in the platform is written for the OAuth 2.0 Client Credentials flow, and nothing calls it yet."
@@ -362,7 +362,10 @@ by = ["exempt:advice"]
 
 [[unit]]
 text = "Check the API's access log: it logs each delivery with its path and status, for example \"POST /api/v1/integrations/webhooks/salesforce HTTP/1.1\" 401"
-by = ["untested:T"]
+by = [
+    "test:backend/tests/unit/core/test_aws_settings_and_clients.py::test_each_request_reaches_the_access_log_with_its_path_and_status",
+    "test:backend/tests/integration/api/test_access_log_query_values.py::test_the_running_api_logs_query_names_not_values",
+]
 
 [[unit]]
 text = "In Salesforce, check the callout's response in the Flow's debug details or the Apex debug log (Setup → Debug Logs): 401 means the secret header is missing or wrong, or the integration is not active; 400 means the body is not a JSON object"

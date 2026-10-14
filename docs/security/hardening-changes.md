@@ -95,11 +95,12 @@ Pydantic validates these limits before any database interaction occurs.
 1. Added `CORS_ORIGINS: List[str]` as an alternative plain-string CORS origins config that can be set via env var as a comma-separated string.
 
 2. Added a `validate_secret_key` field validator that raises a `ValueError` at application startup if:
-   - `ENVIRONMENT == "prod"` **and** `TESTING` env var is not set
+   - `ENVIRONMENT` is `staging` or `production`, **and**
    - `SECRET_KEY` is shorter than 32 characters **or** is one of the well-known weak defaults (`default-secret-key-for-testing`, `secret`, `changeme`, etc.)
 
    This prevents the application from starting in production with a weak key.
 
-   Later, `TESTING` stopped being an exception: the settings now refuse
-   `TESTING` together with `ENVIRONMENT=staging` or `production` outright, so
-   the check applies in every staging and production start.
+   As first added, the check covered only `ENVIRONMENT=prod` and was skipped
+   when `TESTING` was set; today it covers staging and production, and nothing
+   skips it there, because the settings refuse `TESTING` together with
+   `ENVIRONMENT=staging` or `production` outright.
