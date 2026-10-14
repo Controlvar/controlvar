@@ -63,7 +63,8 @@ Every incident session is an Android 12 device's, and a crashed app gets relaunc
 monitoring computes `error_rate = crash reports ÷ flag evaluations` over the last 15 minutes, and every
 evaluation of the flag counts, the steady traffic's too. With the flag at 25%, the incident's reports come to
 well over 5% (the critical threshold) of its own and an equally busy steady traffic's evaluations, so the rate
-climbs past 5% while the incident runs; step 3 of the story runs it until the check is critical.
+climbs past 5% while the incident runs; step 3 of the story runs it until the check is critical, at most
+5 rounds of 90 seconds.
 
 ## Rollout story
 

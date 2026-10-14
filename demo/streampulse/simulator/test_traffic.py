@@ -587,6 +587,9 @@ def test_the_incident_trips_5_percent_beside_as_much_steady_traffic():
     traffic's too. At 25 % the incident's reports must stay well over 5 % of both
     together: when half of its sessions were Android 12 devices relaunching twice, they
     came to 6 % here and 2.6 % on the stack, and the flag never went critical."""
+    # The simulator's README states both numbers.
+    assert traffic.INCIDENT_ANDROID12_SHARE == 1.0
+    assert traffic.INCIDENT_RELAUNCHES == 4
     incident, _, plans = run_ticks(3000, seed=21, incident="android12", player_percentage=25)
     steady, _, _ = run_ticks(3000, seed=22, player_percentage=25)
     assert all(plan.device.is_android_12 for plan in plans), "every incident session is an Android 12 device's"

@@ -163,10 +163,11 @@ by = [
 ]
 
 [[unit]]
-text = "With the flag at 25%, the incident's reports come to well over 5% (the critical threshold) of its own and an equally busy steady traffic's evaluations, so the rate climbs past 5% while the incident runs; step 3 of the story runs it until the check is critical."
+text = "With the flag at 25%, the incident's reports come to well over 5% (the critical threshold) of its own and an equally busy steady traffic's evaluations, so the rate climbs past 5% while the incident runs; step 3 of the story runs it until the check is critical, at most 5 rounds of 90 seconds."
 by = [
     "test:demo/streampulse/simulator/test_traffic.py::test_the_incident_trips_5_percent_beside_as_much_steady_traffic",
     "test:demo/streampulse/simulator/test_story.py::test_step_3_runs_the_incident_again_while_the_check_is_still_healthy",
+    "test:demo/streampulse/simulator/test_story.py::test_step_3_runs_the_incident_traffic_subprocess_and_checks_safety",
     "journey:demo-streampulse-simulator#critical",
 ]
 
