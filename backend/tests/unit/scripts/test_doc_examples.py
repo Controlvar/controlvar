@@ -1199,7 +1199,9 @@ def test_a_timeout_kills_the_group_and_names_the_block(tmp_path):
 def _gone_or_zombie(pid: int) -> bool:
     """True once ``pid`` has exited. A process killed after its parent died is
     a zombie until whoever inherited it reaps it, and ``kill(pid, 0)`` still
-    succeeds on a zombie, so its state is read as well."""
+    succeeds on a zombie, so its state is read as well. Only ``kill`` saying
+    there is no such process, or ``ps`` saying Z, counts: an empty or failed
+    ``ps`` does not, and the caller asks again."""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -1207,7 +1209,7 @@ def _gone_or_zombie(pid: int) -> bool:
     state = subprocess.run(
         ["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True
     ).stdout.strip()
-    return state == "" or state.startswith("Z")
+    return state.startswith("Z")
 
 
 def _dies(pid: int, within: float = 10.0) -> bool:
