@@ -77,7 +77,7 @@ text = "Keep users out of conflicting experiments, and a share of new users out 
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Live experiment results over WebSocket: a snapshot on connect, then a fresh one after 30 seconds (by default) with no message from the client."
+text = "Live experiment results over WebSocket: a snapshot on connect, then a fresh one every 30 seconds (by default), whatever the client sends."
 by = ["mechanism:docs-hub"]
 
 [[unit]]

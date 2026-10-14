@@ -10,12 +10,14 @@ Uses starlette.testclient.TestClient's native WebSocket support (synchronous
 context manager). All DB calls are mocked so no live PostgreSQL is required.
 """
 
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
-from backend.app.core.config import settings
+from backend.app.core.config import Settings, settings
 from backend.app.main import app
 
 
@@ -290,6 +292,75 @@ class TestWebSocketRefresh:
                 refreshed = ws.receive_json()
 
         assert refreshed["experiment_id"] == "exp-refresh"
+
+
+# ---------------------------------------------------------------------------
+# WebSocket — periodic snapshots (#1193)
+# ---------------------------------------------------------------------------
+
+#: A short interval for the schedule test, set through Settings.
+SHORT_INTERVAL_SECONDS = 0.2
+
+
+def _ping_and_collect(ws, pings: int, pause: float) -> list:
+    """Ping ``pings`` times, ``pause`` seconds apart, and return every message
+    received up to the last pong, in order."""
+    received = []
+    for _ in range(pings):
+        ws.send_json({"action": "ping"})
+        while True:
+            message = ws.receive_json()
+            received.append(message)
+            if message.get("event") == "pong":
+                break
+        time.sleep(pause)
+    return received
+
+
+class TestPeriodicSnapshots:
+    """The periodic snapshot keeps its schedule whatever the client sends."""
+
+    @pytest.mark.regression
+    def test_a_client_that_pings_often_still_gets_snapshots_on_schedule(
+        self, monkeypatch
+    ):
+        """Pings a quarter of an interval apart do not postpone the snapshot.
+
+        The old loop waited a whole interval for a client message and sent a
+        snapshot only when none came, so every ping started the wait again
+        and this client got pongs and nothing else. The test counts messages
+        and does not time them: sixteen pings with a quarter-interval pause
+        after each take at least four intervals, so at least two snapshots
+        arrive among the pongs.
+        """
+        monkeypatch.setattr(
+            settings, "RESULTS_STREAM_INTERVAL_SECONDS", SHORT_INTERVAL_SECONDS
+        )
+        with patch(PATCH_SNAPSHOT, return_value=_make_snapshot()):
+            client = TestClient(app)
+            with client.websocket_connect(f"{WS_BASE}/schedule-exp/results") as ws:
+                assert ws.receive_json()["event"] == "results_update"
+                received = _ping_and_collect(
+                    ws, pings=16, pause=SHORT_INTERVAL_SECONDS / 4
+                )
+
+        events = [message["event"] for message in received]
+        assert events.count("pong") == 16
+        assert events.count("results_update") >= 2, events
+
+    def test_the_interval_is_30_seconds_by_default(self):
+        assert Settings.model_fields["RESULTS_STREAM_INTERVAL_SECONDS"].default == 30
+
+    def test_the_interval_is_read_from_the_environment(self, monkeypatch):
+        """The variable deployments already set keeps its name and meaning."""
+        monkeypatch.setenv("RESULTS_STREAM_INTERVAL_SECONDS", "5")
+        assert Settings(_env_file=None).RESULTS_STREAM_INTERVAL_SECONDS == 5
+
+    @pytest.mark.parametrize("value", ["0", "-1"])
+    def test_an_interval_of_zero_or_less_is_refused(self, monkeypatch, value):
+        monkeypatch.setenv("RESULTS_STREAM_INTERVAL_SECONDS", value)
+        with pytest.raises(ValidationError, match="RESULTS_STREAM_INTERVAL_SECONDS"):
+            Settings(_env_file=None)
 
 
 # ---------------------------------------------------------------------------

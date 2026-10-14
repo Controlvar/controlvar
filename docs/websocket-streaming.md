@@ -13,9 +13,9 @@ connected clients.
 ws://localhost:8000/api/v1/ws/experiments/{experiment_id}/results
 ```
 
-On connect the server sends an initial snapshot. After 30 seconds with no message from
-the client it sends a fresh one (`RESULTS_STREAM_INTERVAL_SECONDS`, read when the API
-starts); a ping or a refresh starts that wait again. The socket needs an
+On connect the server sends an initial snapshot. Then it sends a fresh one every 30
+seconds (`RESULTS_STREAM_INTERVAL_SECONDS`, read when the API starts), whatever the client
+sends in between. The socket needs an
 access token; see [Authentication](#authentication) below for the three ways to send it.
 
 Run the commands on this page in one terminal, in order, against the stack from the
