@@ -902,6 +902,67 @@ def test_a_row_whose_excerpt_is_still_there_stops_the_page(
     assert not (root / dc.registry_path("docs/guide.md")).exists()
 
 
+#: A page whose false lines are outside prose: a front-matter key and an HTML
+#: comment. Neither holds a unit, so ``check`` has nothing to report there.
+OLD_HIDDEN = """---
+title: Endpoints
+cache: flags are cached for an hour
+---
+
+# Endpoints
+
+<!-- Reads are answered from the cache in 5 ms. -->
+
+Flags are read from the database.
+"""
+
+#: (id, the page, the line's needle, a paraphrase of it): each false line is
+#: still on the page, and none of the excerpts is on it, then or now.
+UNPLACED_ROWS = [
+    ("in a fence", OLD_GUIDE, "answers in 5 ms", "responds within five milliseconds"),
+    (
+        "in an HTML comment",
+        OLD_HIDDEN,
+        "Reads are answered from the cache",
+        "reads come from the cache in five milliseconds",
+    ),
+    (
+        "in front matter",
+        OLD_HIDDEN,
+        "cache: flags are cached",
+        "the cache keeps a flag for sixty minutes",
+    ),
+]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("tag", ["R", "X"])
+@pytest.mark.parametrize(
+    "page, needle, excerpt",
+    [r[1:] for r in UNPLACED_ROWS],
+    ids=[r[0] for r in UNPLACED_ROWS],
+)
+def test_a_row_neither_its_excerpt_nor_a_unit_places_stops_the_page(
+    tmp_path, capsys, tag, page, needle, excerpt
+):
+    """Fail closed: a paraphrased excerpt on a line that holds no unit.
+
+    The excerpt cannot say whether the false text is gone (it was never on
+    the page), and no unit is held back for ``check`` to report, so counting
+    the row as gone would write a registry that ``check`` passes while the
+    false line stays. The row is printed for hand mapping instead.
+    """
+    root = build(tmp_path, {**FILES, "docs/guide.md": page})
+    audit = [row(needle, tag=tag, text=excerpt, old=page)]
+    assert generate(root, audit, old_text=old_texts(**{"docs/guide.md": page})) == 1
+    out = capsys.readouterr().out
+    assert "R OR X NOT PLACED" in out, out
+    assert f"docs/guide.md:{line_of(page, needle)} " in out, out
+    assert excerpt in out, out
+    assert "R/X on the page 0 (gone 0), R/X not placed 1" in out, out
+    assert not (root / dc.registry_path("docs/guide.md")).exists()
+
+
 @pytest.mark.parametrize(
     "document, refusal",
     [

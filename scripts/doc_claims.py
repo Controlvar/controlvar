@@ -161,10 +161,13 @@ A target that does not resolve in this tree is printed. Uncovered T, S and A
 rows give ``untested:<tag>``; a unit with no row ``exempt:baseline``; both are
 ledgered. A unit new since SHA gets no entry. An R or X row whose own excerpt
 (normalised as a unit is) is still on the page makes the exit status 1 and that
-page is not written; the units it maps to get no entry either way. A row that
-does not map (some excerpts are not verbatim) is printed for the author to map
-by hand, never dropped; the units on its line get no entry. An audit with no
-row is refused: an empty or cut-off file would otherwise read as "nothing
+page is not written. So does one whose excerpt was not on the page at SHA
+either (it is not verbatim) and whose line holds no unit (a fence, a comment,
+front matter): nothing tells whether it is gone, so it is printed for the
+author to map. The units an R or X row maps to get no entry either way. A row
+that does not map (some excerpts are not verbatim) is printed for the author to
+map by hand, never dropped; the units on its line get no entry. An audit with
+no row is refused: an empty or cut-off file would otherwise read as "nothing
 found".
 
 ``sync DOC`` prints each unit that is not in the registry beside the
@@ -3232,6 +3235,7 @@ class Plan:
     entries: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
     ledger: List[Tuple[str, str, str]] = dataclasses.field(default_factory=list)
     present: List[str] = dataclasses.field(default_factory=list)
+    unplaced: List[str] = dataclasses.field(default_factory=list)
     by_hand: List[str] = dataclasses.field(default_factory=list)
     refused: List[str] = dataclasses.field(default_factory=list)
     outside: List[str] = dataclasses.field(default_factory=list)
@@ -3253,6 +3257,10 @@ def plan_document(resolver: Resolver, document: Document, rows: Sequence[Row]) -
 
     * an R or X row whose excerpt is still on the page: listed, and no
       registry is written;
+    * an R or X row whose excerpt was not on the page at the audit commit
+      either (not verbatim) and whose line holds no unit (a fence, a comment,
+      front matter): nothing tells whether it is gone, so it is listed for
+      hand mapping and no registry is written;
     * a T, S or A row: ``untested:<tag>`` (the heaviest of A, S, T), ledgered;
     * covered rows: the targets their ``by`` names that resolve here;
     * no row: ``exempt:baseline``, ledgered;
@@ -3281,6 +3289,7 @@ def plan_document(resolver: Resolver, document: Document, rows: Sequence[Row]) -
     old_visible = visible_lines(old)
     on_now = collections.Counter(u.text for u, _, _ in now_spans)
     flat = normalise(now)
+    old_flat = normalise(old)
     first_line: Dict[str, int] = {}
     for unit, line, _ in now_spans:
         first_line.setdefault(unit.text, line)
@@ -3296,6 +3305,16 @@ def plan_document(resolver: Resolver, document: Document, rows: Sequence[Row]) -
             if on_page(row, flat):
                 counts["R/X on the page"] += 1
                 plan.present.append(row.label())
+            elif not (mapped or on_line) and not on_page(row, old_flat):
+                # The excerpt cannot say it is gone (it was not on the page at
+                # the audit commit either), and no unit is held back for
+                # `check` to report: refused rather than counted as gone.
+                counts["R/X not placed"] += 1
+                plan.unplaced.append(
+                    f"{row.label()}: its excerpt is not on the page at the audit"
+                    " commit and its line holds no unit (a fence, a comment or"
+                    " front matter)"
+                )
             else:
                 counts["R/X gone"] += 1
             held.update(u.text for u in mapped or on_line)
@@ -3472,6 +3491,7 @@ def plan_lines(plan: Plan) -> List[str]:
     ]
     sections = (
         ("R OR X STILL ON THE PAGE (reword, date or cut it first)", plan.present),
+        ("R OR X NOT PLACED (map it by hand, then run again)", plan.unplaced),
         ("MAP BY HAND", plan.by_hand),
         ("REFUSED (never written)", plan.refused),
         (
@@ -3632,8 +3652,9 @@ def run_generate(
     old_text: Any = None,
 ) -> int:
     """``generate``: write the registries and ledger lines of *paths* under
-    *out* (default *root*). Exit 0; 1 when an R or X row is still on a page
-    (that page is not written); 2 when an input is refused."""
+    *out* (default *root*). Exit 0; 1 when an R or X row is still on a page,
+    or cannot be placed (that page is not written); 2 when an input is
+    refused."""
     out = out or root
     try:
         old_text = old_text or git_reader(root, sha)
@@ -3666,9 +3687,10 @@ def run_generate(
         if plan.error:
             status = 2
             continue
-        if plan.present:
+        if plan.present or plan.unplaced:
             print(
-                f"  NOT WRITTEN: {len(plan.present)} R or X rows are still on the page"
+                f"  NOT WRITTEN: {len(plan.present)} R or X rows are still on the"
+                f" page, {len(plan.unplaced)} not placed"
             )
             status = max(status, 1)
             continue
@@ -3689,7 +3711,8 @@ def run_generate(
     print(
         f"rows {totals['rows']}: mapped {totals['mapped']}, by hand"
         f" {totals['by hand']}, refused {totals['refused']}, R/X on the page"
-        f" {totals['R/X on the page']} (gone {totals['R/X gone']}), outside prose"
+        f" {totals['R/X on the page']} (gone {totals['R/X gone']}), R/X not placed"
+        f" {totals['R/X not placed']}, outside prose"
         f" {totals['outside prose, uncovered']} uncovered and"
         f" {totals['outside prose, covered']} covered, unit changed since the"
         f" audit {totals['unit changed since the audit']}"
