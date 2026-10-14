@@ -17,6 +17,10 @@ reason why.
 
 * **llm:** LLM evaluation: a `POST /api/v1/llm-experiments/{experiment_id}/judge` entry whose judge call fails, or whose reply has no JSON score from 0 to 1, now has `score: null` and `error` set (`call_failed` or `no_score`) instead of a score of 0.5, and a judge run that fails clears the evaluation's earlier stored score. In `GET /api/v1/llm-experiments/{experiment_id}/results`, `p_value` and `effect_size` are null when neither variant's values vary (they were 1.0 and 0.0). Scores stored before the upgrade are unchanged, and an earlier failed call still reads as 0.5: run the judge again to re-score.
 
+### Upgrade notes
+
+* **safety (#1217):** a rollback no longer creates a safety configuration. A flag that had none stays on the global default thresholds after a rollback, and its row in `safety_rollback_records` has a null `safety_config_id`. Flags that an earlier version moved off the defaults stay off them until a later release repairs them (#1206 stays open for that). While this release deploys, tasks of the previous release keep running their safety monitor through the approval wait, the canary and the bake, and a rollback they run in that time can still move a flag off the defaults.
+
 ### Bug Fixes
 
 * **demo:** the demo seed writes safety thresholds the safety check reads ([#1212](https://github.com/getexperimently/experimently/issues/1212)) ([456593d](https://github.com/getexperimently/experimently/commit/456593d6aaf60ab4bb68bdb6b10a4ea61cb24173))
