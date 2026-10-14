@@ -212,16 +212,48 @@ def test_a_rerun_replaces_the_thresholds_the_old_seed_wrote():
         assert settings.default_metrics == seed.SAFETY_METRICS
 
 
-def test_a_rerun_leaves_thresholds_set_since_alone():
+def _old_with(**changes: Any) -> Dict[str, Any]:
+    """The old seed's value with some ``error_rate`` keys changed."""
+    value = copy.deepcopy(seed.UNREAD_SAFETY_METRICS)
+    value["error_rate"].update(changes)
+    return value
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(
+            {
+                "error_rate": {
+                    "critical_threshold": 0.1,
+                    "comparison_type": "greater_than",
+                }
+            },
+            id="new-shape",
+        ),
+        pytest.param(_old_with(window_minutes=30), id="old-keys-one-value-changed"),
+        pytest.param(
+            {
+                **copy.deepcopy(seed.UNREAD_SAFETY_METRICS),
+                "latency": {
+                    "critical_threshold": 500,
+                    "comparison_type": "greater_than",
+                },
+            },
+            id="old-value-beside-another-metric",
+        ),
+        pytest.param(None, id="none"),
+    ],
+)
+def test_a_rerun_leaves_thresholds_set_since_alone(value):
     register_core_models()
-    changed = {
-        "error_rate": {"critical_threshold": 0.1, "comparison_type": "greater_than"}
-    }
     flag = FeatureFlag(id=uuid.uuid4(), key="new_dashboard_ui")
     config = FeatureFlagSafetyConfig(
-        feature_flag_id=flag.id, metrics=copy.deepcopy(changed)
+        feature_flag_id=flag.id, metrics=copy.deepcopy(value)
     )
-    settings = SafetySettings(enable_automatic_rollbacks=False, default_metrics=None)
+    settings = SafetySettings(
+        enable_automatic_rollbacks=False, default_metrics=copy.deepcopy(value)
+    )
     session = _Session(
         {FeatureFlag: flag, FeatureFlagSafetyConfig: config, SafetySettings: settings}
     )
@@ -229,6 +261,6 @@ def test_a_rerun_leaves_thresholds_set_since_alone():
     seed.seed_feature_flags(session, SimpleNamespace(id=uuid.uuid4()))
     seed.seed_safety_settings(session)
 
-    assert config.metrics == changed
-    assert settings.default_metrics is None
+    assert config.metrics == value
+    assert settings.default_metrics == value
     assert settings.enable_automatic_rollbacks is False
