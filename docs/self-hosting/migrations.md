@@ -91,8 +91,8 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini history
 Output, for example:
 
 ```text
-d29a479daafe -> 37dcb2969766 (head), Segments: a kind (rules or id_list), and the members of an id list
-806901fb7735 -> d29a479daafe, Global holdouts: who each one covered, its own salt, and at most one active
+37dcb2969766 -> 4c2c09a2b3e8 (head), Safety rollback records: safety_config_id nullable, its foreign key ON DELETE SET NULL
+d29a479daafe -> 37dcb2969766, Segments: a kind (rules or id_list), and the members of an id list
 ...
 <base> -> 84a772608a6e, Initial schema
 ```
@@ -116,7 +116,7 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini current
 Output, for a full install (a core install prints the first line only):
 
 ```text
-37dcb2969766 (head)
+4c2c09a2b3e8 (head)
 modules_0002_warehouse_analysis (head)
 ```
 
@@ -398,6 +398,32 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini -x allow
 The Database Migration workflow does not pass `-x`, so on AWS it stops at this
 revision while any id list has members.
 
+### `4c2c09a2b3e8` keeps rollback records without a safety configuration
+
+This revision makes `safety_rollback_records.safety_config_id` nullable and
+changes its foreign key to `feature_flag_safety_configs` from ON DELETE CASCADE
+to ON DELETE SET NULL. It changes no row.
+
+From this release a rollback of a flag that has no safety configuration of its
+own leaves it with none, so the flag stays on the global default thresholds,
+and the rollback record's `safety_config_id` is null. Earlier releases gave such
+a flag an empty configuration of its own at the rollback, with no thresholds, so
+the monitor stopped checking it against the defaults. Those configurations
+stay: this release does not remove them
+([#1206](https://github.com/getexperimently/experimently/issues/1206)).
+
+Deleting a safety configuration keeps the flag's rollback records: their
+`safety_config_id` becomes null. Before this revision the delete took them with
+it.
+
+**The downgrade changes nothing.** `4c2c09a2b3e8`'s downgrade moves
+`alembic_version` back and leaves the column nullable and the key ON DELETE SET
+NULL. The rollback runbook undoes a migration while the release that contains it
+still serves, before the API is rolled back
+([Database Rollback Procedure](../deployment/rollback-runbook.md#database-rollback-procedure)),
+and this release records a null `safety_config_id` for each rollback of a flag
+on the defaults, which NOT NULL would refuse.
+
 Roll back to a specific revision:
 
 ```{.bash skip reason="fragment: <revision> is a revision ID from history"}
@@ -676,6 +702,8 @@ What this means for you:
   [`37dcb2969766`](#37dcb2969766-adds-segments-made-from-a-list-of-user-ids)
   is backward-compatible for a rollback too, and undoing it drops
   `segment_members` and its rows; it refuses while that table has any.
+  [`4c2c09a2b3e8`](#4c2c09a2b3e8-keeps-rollback-records-without-a-safety-configuration)
+  is backward-compatible for a rollback, and undoing it changes nothing.
 - Compose runs one API container, which is the only writer and keeps `RUN_MIGRATIONS=true`.
   The chart already keeps the bootstrap out of the serving container: it runs
   it in an init container.

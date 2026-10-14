@@ -640,6 +640,62 @@ by = [
 ]
 
 [[unit]]
+text = "4c2c09a2b3e8 keeps rollback records without a safety configuration"
+by = [
+    "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_an_sql_delete_of_a_configuration_took_its_records_and_now_keeps_them",
+    "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_an_orm_delete_of_a_configuration_keeps_its_records",
+]
+
+[[unit]]
+text = "This revision makes safety_rollback_records.safety_config_id nullable and changes its foreign key to feature_flag_safety_configs from ON DELETE CASCADE to ON DELETE SET NULL."
+by = [
+    "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_a_database_at_the_previous_release_upgraded_with_heads",
+    "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_a_bootstrapped_database_and_an_upgraded_one_have_the_same_link",
+]
+
+[[unit]]
+text = "It changes no row."
+by = ["test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_a_database_at_the_previous_release_upgraded_with_heads"]
+
+[[unit]]
+text = "From this release a rollback of a flag that has no safety configuration of its own leaves it with none, so the flag stays on the global default thresholds, and the rollback record's safety_config_id is null."
+by = [
+    "test:backend/tests/integration/api/test_rollback_keeps_the_defaults.py::test_a_manual_rollback_leaves_the_flag_on_the_defaults_and_the_monitor_rolls_it_back_again",
+    "test:backend/tests/integration/api/test_rollback_keeps_the_defaults.py::test_an_automatic_rollback_leaves_the_flag_on_the_defaults_for_the_next_breach",
+]
+
+[[unit]]
+text = "Earlier releases gave such a flag an empty configuration of its own at the rollback, with no thresholds, so the monitor stopped checking it against the defaults."
+by = ["test:backend/tests/integration/api/test_rollback_keeps_the_defaults.py::test_an_empty_configuration_of_its_own_is_checked_against_nothing"]
+
+[[unit]]
+text = "Those configurations stay: this release does not remove them (#1206)."
+by = ["test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_a_database_at_the_previous_release_upgraded_with_heads"]
+
+[[unit]]
+text = "Deleting a safety configuration keeps the flag's rollback records: their safety_config_id becomes null."
+by = [
+    "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_an_sql_delete_of_a_configuration_took_its_records_and_now_keeps_them",
+    "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_an_orm_delete_of_a_configuration_keeps_its_records",
+]
+
+[[unit]]
+text = "Before this revision the delete took them with it."
+by = ["test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_an_sql_delete_of_a_configuration_took_its_records_and_now_keeps_them"]
+
+[[unit]]
+text = "The downgrade changes nothing."
+by = ["test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_the_downgrade_changes_nothing_and_a_rollback_still_succeeds"]
+
+[[unit]]
+text = "4c2c09a2b3e8's downgrade moves alembic_version back and leaves the column nullable and the key ON DELETE SET NULL."
+by = ["test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_the_downgrade_changes_nothing_and_a_rollback_still_succeeds"]
+
+[[unit]]
+text = "The rollback runbook undoes a migration while the release that contains it still serves, before the API is rolled back (Database Rollback Procedure), and this release records a null safety_config_id for each rollback of a flag on the defaults, which NOT NULL would refuse."
+by = ["test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_the_downgrade_changes_nothing_and_a_rollback_still_succeeds"]
+
+[[unit]]
 text = "Roll back to a specific revision:"
 by = ["exempt:baseline"]
 
@@ -1094,6 +1150,13 @@ by = [
 [[unit]]
 text = "37dcb2969766 is backward-compatible for a rollback too, and undoing it drops segment_members and its rows; it refuses while that table has any."
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "4c2c09a2b3e8 is backward-compatible for a rollback, and undoing it changes nothing."
+by = [
+    "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_the_downgrade_changes_nothing_and_a_rollback_still_succeeds",
+    "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_a_database_at_the_previous_release_upgraded_with_heads",
+]
 
 [[unit]]
 text = "Compose runs one API container, which is the only writer and keeps RUN_MIGRATIONS=true."

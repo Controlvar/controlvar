@@ -1076,7 +1076,7 @@ def test_db_migrate_refuses_relative_and_whole_graph_targets(
     assert code == 1, f"{direction} {target!r} was accepted:\n{log}"
     (error,) = [line for line in log.splitlines() if line.startswith("::error")]
     assert "nothing was migrated" in error
-    assert "d29a479daafe" in error, "the refusal does not show an id to name"
+    assert "37dcb2969766" in error, "the refusal does not show an id to name"
     # The target is printed only when it is made of safe characters, so an
     # operator's text cannot write a workflow command of its own.
     assert not any(line.startswith("::warning") for line in log.splitlines())

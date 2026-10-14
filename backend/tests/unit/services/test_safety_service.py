@@ -6,7 +6,6 @@ feature flags for safety issues and rollback functionality.
 """
 
 import unittest
-from datetime import datetime, timedelta
 from unittest.mock import ANY, MagicMock, patch
 from uuid import uuid4
 
@@ -17,7 +16,6 @@ from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.safety import (
     FeatureFlagSafetyConfig,
     RollbackTriggerType,
-    SafetyRollbackRecord,
     SafetySettings,
 )
 from backend.app.schemas.safety import (
@@ -27,7 +25,6 @@ from backend.app.schemas.safety import (
     HealthStatus,
     MetricThreshold,
     RollbackResponse,
-    SafetyRollbackRecordCreate,
     SafetySettingsCreate,
     SafetySettingsResponse,
     SafetySettingsUpdate,
@@ -155,27 +152,6 @@ class TestSafetyService:
             # Just verify we got a result
             assert result is not None
 
-    def test_get_or_create_safety_config_existing(self):
-        """Test getting an existing feature flag safety configuration."""
-        # Mock the database query to return an existing config
-        mock_config = MagicMock(spec=FeatureFlagSafetyConfig)
-        self.db.query.return_value.filter.return_value.first.side_effect = [mock_config]
-
-        # Call the method
-        result = SafetyService.get_or_create_safety_config(
-            self.db, self.feature_flag_id
-        )
-
-        # Assert that the query was called correctly
-        self.db.query.assert_called_once_with(FeatureFlagSafetyConfig)
-        self.db.query.return_value.filter.assert_called_once()
-        assert result == mock_config
-
-        # Assert that no create operations were performed
-        self.db.add.assert_not_called()
-        self.db.commit.assert_not_called()
-        self.db.refresh.assert_not_called()
-
     @pytest.mark.asyncio
     async def test_async_get_feature_flag_safety_config(self):
         """Test getting a feature flag safety configuration using the async method."""
@@ -202,7 +178,7 @@ class TestSafetyService:
             assert result == mock_response
 
     @pytest.mark.asyncio
-    async def test_get_or_create_safety_config_new(self):
+    async def test_create_or_update_feature_flag_safety_config_new(self):
         """Test creating a new feature flag safety configuration."""
         # Mock the feature flag
         mock_feature_flag = MagicMock(spec=FeatureFlag)
@@ -297,52 +273,3 @@ class TestSafetyService:
             assert result.previous_percentage == 50
             assert result.new_percentage == 0
             assert "Test rollback" in str(result.details)
-
-    def test_create_rollback_record(self):
-        """Test creating a rollback record using the static method."""
-        # Create a user ID for executed_by field
-        user_id = uuid4()
-
-        # Mock data for the rollback record
-        data = SafetyRollbackRecordCreate(
-            feature_flag_id=self.feature_flag_id,
-            trigger_type="manual",
-            trigger_reason="Test rollback",
-            previous_percentage=50,
-            target_percentage=0,
-        )
-
-        # Create actual output object (since the real method is being called)
-        expected_record = SafetyRollbackRecord(
-            id=uuid4(),
-            feature_flag_id=self.feature_flag_id,
-            safety_config_id=uuid4(),  # This needs to be a valid UUID
-            trigger_type="manual",
-            trigger_reason="Test rollback",
-            previous_percentage=50,
-            target_percentage=0,
-            success=False,
-            executed_by_user_id=user_id,  # This field exists in the model but not in the schema
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
-        )
-
-        # Patch the SafetyRollbackRecord class
-        with patch(
-            "backend.app.models.safety.SafetyRollbackRecord",
-            return_value=expected_record,
-        ):
-            # Call the method
-            result = SafetyService.create_rollback_record(self.db, data)
-
-            # Assert that the ORM operations were called
-            self.db.add.assert_called_once()
-            self.db.commit.assert_called_once()
-            self.db.refresh.assert_called_once()
-
-            # Compare only specific attributes we care about
-            assert result.feature_flag_id == data.feature_flag_id
-            assert result.trigger_type == data.trigger_type
-            assert result.trigger_reason == data.trigger_reason
-            assert result.previous_percentage == data.previous_percentage
-            assert result.target_percentage == data.target_percentage

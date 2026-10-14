@@ -56,7 +56,6 @@ from backend.app.schemas.safety import (
     MetricThreshold,
     RollbackResponse,
     SafetyCheckResponse,
-    SafetyRollbackRecordCreate,
     SafetySettingsCreate,
     SafetySettingsResponse,
     SafetySettingsUpdate,
@@ -343,73 +342,6 @@ class SafetyService:
         ).items():
             setattr(db_obj, field, value)
 
-        db.add(db_obj)
-        db.commit()
-        db.refresh(db_obj)
-        return db_obj
-
-    @staticmethod
-    def get_or_create_safety_config(
-        db: Session, feature_flag_id: UUID
-    ) -> FeatureFlagSafetyConfig:
-        """Return the flag's config, creating (and committing) a default one if missing."""
-        config = SafetyService.get_feature_flag_safety_config_record(
-            db, feature_flag_id
-        )
-        if config:
-            return config
-
-        if not db.query(FeatureFlag).filter(FeatureFlag.id == feature_flag_id).first():
-            raise ValueError(f"Feature flag {feature_flag_id} does not exist")
-
-        config = FeatureFlagSafetyConfig(feature_flag_id=feature_flag_id, metrics={})
-        db.add(config)
-        db.commit()
-        db.refresh(config)
-        return config
-
-    @staticmethod
-    def _get_or_add_safety_config(
-        db: Session, feature_flag_id: UUID
-    ) -> FeatureFlagSafetyConfig:
-        """The flag's config, adding a default one with ``flush()`` if missing.
-
-        ``execute_rollback`` uses this instead of ``get_or_create_safety_config``:
-        a commit here would release the flag's row lock before the rollback's
-        writes, splitting one rollback into two transactions (#629). The caller
-        has already locked the flag, so it is not looked up again.
-        """
-        config = SafetyService.get_feature_flag_safety_config_record(
-            db, feature_flag_id
-        )
-        if config:
-            return config
-        config = FeatureFlagSafetyConfig(feature_flag_id=feature_flag_id, metrics={})
-        db.add(config)
-        db.flush()
-        return config
-
-    @staticmethod
-    def create_rollback_record(
-        db: Session,
-        data: SafetyRollbackRecordCreate,
-        success: bool = True,
-        executed_by_user_id: Optional[UUID] = None,
-    ) -> SafetyRollbackRecord:
-        """Persist a rollback record (the flag's config is created if needed)."""
-        safety_config = SafetyService.get_or_create_safety_config(
-            db, data.feature_flag_id
-        )
-        db_obj = SafetyRollbackRecord(
-            feature_flag_id=data.feature_flag_id,
-            safety_config_id=safety_config.id,
-            trigger_type=str(getattr(data.trigger_type, "value", data.trigger_type)),
-            trigger_reason=data.trigger_reason,
-            previous_percentage=data.previous_percentage,
-            target_percentage=data.target_percentage,
-            success=success,
-            executed_by_user_id=executed_by_user_id,
-        )
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)
@@ -869,8 +801,13 @@ class SafetyService:
         Both changes pause every ACTIVE rollout schedule of the flag, so a
         stage cannot raise the percentage again; the ids are in
         ``details["paused_schedules"]``. The flag row is locked first and
-        nothing commits until the end -- a missing safety config is added with
-        ``flush()`` -- so the lock is held until the one commit.
+        nothing commits until the end, so the lock is held until the one
+        commit.
+
+        The flag's safety configuration is read, never written: a flag with
+        one keeps it, and a flag without one gets none, so it stays on the
+        global defaults. The record's ``safety_config_id`` is the
+        configuration's id, or NULL for a flag on the defaults (#1206).
 
         The audit entry (``safety_rollback`` on the flag) is written in a
         savepoint of that transaction, by ``actor`` (the calling user) or,
@@ -919,7 +856,12 @@ class SafetyService:
                     new_percentage=previous_percentage,
                 )
 
-            safety_config = self._get_or_add_safety_config(db, feature_flag_id)
+            # The flag's own configuration, if it has one. None is created: a
+            # flag without one stays on the global defaults, and its record's
+            # safety_config_id is NULL (#1206).
+            safety_config = self.get_feature_flag_safety_config_record(
+                db, feature_flag_id
+            )
             # Who the audit entry names, read before anything is changed.
             audit_actor = self._rollback_actor(db, actor, executed_by_user_id)
 
@@ -951,7 +893,7 @@ class SafetyService:
 
             record = SafetyRollbackRecord(
                 feature_flag_id=feature_flag_id,
-                safety_config_id=safety_config.id,
+                safety_config_id=safety_config.id if safety_config else None,
                 trigger_type=trigger_name,
                 trigger_reason=reason,
                 previous_percentage=previous_percentage,

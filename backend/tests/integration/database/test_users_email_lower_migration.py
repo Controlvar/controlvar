@@ -72,7 +72,7 @@ REVISION = "d12cbd384bbe"
 PREVIOUS_CORE_HEAD = "271f03a31742"
 EARLIER_CORE_HEAD = "8fd44fb483a2"
 #: The core head of this tree, which ``upgrade heads`` runs on to.
-CORE_HEAD = "37dcb2969766"
+CORE_HEAD = "4c2c09a2b3e8"
 #: The modules branch's head, in the previous release and in this one alike.
 MODULES_HEAD = "modules_0002_warehouse_analysis"
 

@@ -50,9 +50,10 @@ PREVIOUS_CORE_HEAD = "d12cbd384bbe"
 #: revision, ``1ab99332f0ba`` (``events.created_at`` in UTC), adds no DDL, and
 #: ``806901fb7735`` (the experiments' correction settings) adds only what a
 #: database built by ``create_all`` already has, and ``d29a479daafe`` (holdout
-#: population) and ``37dcb2969766`` (segment kind and members) find their
-#: objects already built by ``create_all`` and add none.
-CORE_HEAD = "37dcb2969766"
+#: population), ``37dcb2969766`` (segment kind and members) and
+#: ``4c2c09a2b3e8`` (rollback records keep without a safety configuration) find
+#: their objects already built by ``create_all`` and add none.
+CORE_HEAD = "4c2c09a2b3e8"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops

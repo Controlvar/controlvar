@@ -27,7 +27,7 @@ on:
         default: upgrade
         options: [upgrade, downgrade]
       target:
-        description: 'Alembic target. upgrade: heads. downgrade: the revision id to end at, e.g. d29a479daafe (the down_revision of the migration you are undoing; that example undoes 37dcb2969766, which drops segment_members and its rows and refuses while it has any; modules_0001_rbac exists only in a full-profile image). Relative steps (-1, modules@-1), head and base are refused: a full image has two heads. A core id at or below a7b8c9d0e1f2 also unapplies the modules branch.'
+        description: 'Alembic target. upgrade: heads. downgrade: the revision id to end at, e.g. 37dcb2969766 (the down_revision of the migration you are undoing; that example undoes 4c2c09a2b3e8, whose downgrade changes no table; one further, d29a479daafe, also undoes 37dcb2969766, which drops segment_members and its rows and refuses while it has any; modules_0001_rbac exists only in a full-profile image). Relative steps (-1, modules@-1), head and base are refused: a full image has two heads. A core id at or below a7b8c9d0e1f2 also unapplies the modules branch.'
         required: true
         type: string
         default: 'heads'
@@ -113,7 +113,7 @@ jobs:
           # measured stepping the modules branch back (#726). Nothing here
           # needs AWS, so a refusal costs no snapshot.
           RUNBOOK="docs/deployment/rollback-runbook.md#step-2-run-migration-downgrade-via-github-actions"
-          NAME_THE_ID="Name the revision id to end at, e.g. d29a479daafe (which undoes 37dcb2969766 and drops segment_members): to undo a release's migration, that is the down_revision line of the migration file it added (modules_0001_rbac exists only in a full-profile image). See ${RUNBOOK}"
+          NAME_THE_ID="Name the revision id to end at, e.g. 37dcb2969766 (which undoes 4c2c09a2b3e8 and changes no table; d29a479daafe also undoes 37dcb2969766 and drops segment_members): to undo a release's migration, that is the down_revision line of the migration file it added (modules_0001_rbac exists only in a full-profile image). See ${RUNBOOK}"
           if ! [[ "$TARGET" =~ ^[A-Za-z0-9_@+~^-]{1,64}$ ]]; then
             # Not printed: it may hold anything, a newline included.
             echo "::error title=Target refused::target must be heads or a revision id; this one has other characters in it, so nothing was migrated. ${NAME_THE_ID}"

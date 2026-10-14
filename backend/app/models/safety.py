@@ -70,10 +70,14 @@ class FeatureFlagSafetyConfig(Base, BaseModel):
 
     # Relationships
     feature_flag = relationship("FeatureFlag", back_populates="safety_config")
+    # No delete cascade: deleting a configuration keeps the flag's rollback
+    # records. The database clears their ``safety_config_id`` (ON DELETE SET
+    # NULL), and ``passive_deletes`` leaves that to it rather than loading the
+    # records first (#1206).
     rollback_records = relationship(
         "SafetyRollbackRecord",
         back_populates="safety_config",
-        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     @declared_attr
@@ -100,12 +104,16 @@ class SafetyRollbackRecord(Base, BaseModel):
         ForeignKey(f"{get_schema_name()}.feature_flags.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # The flag's own safety configuration when the rollback ran, or NULL for a
+    # flag that had none and so was checked against the global defaults. A
+    # rollback never creates a configuration (#1206). Deleting a configuration
+    # keeps its records and sets this to NULL.
     safety_config_id = Column(
         UUID(as_uuid=True),
         ForeignKey(
-            f"{get_schema_name()}.feature_flag_safety_configs.id", ondelete="CASCADE"
+            f"{get_schema_name()}.feature_flag_safety_configs.id", ondelete="SET NULL"
         ),
-        nullable=False,
+        nullable=True,
     )
     trigger_type = Column(
         String, nullable=False
