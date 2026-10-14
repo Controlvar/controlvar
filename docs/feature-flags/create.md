@@ -47,8 +47,8 @@ Click **+ Add Condition** for each condition after the first. A condition has th
 
 | Attribute | Operator | Value |
 |-----------|----------|-------|
-| `user.country` | `in` | `US, CA` |
-| `user.plan` | `equals` | `enterprise` |
+| `user.country` | is one of | `US, CA` |
+| `user.plan` | equals | `enterprise` |
 
 Each group's **AND**/**OR** decides how its conditions combine, and the **AND**/**OR**
 above the groups decides how the groups combine.
@@ -272,7 +272,7 @@ Operators: `equals`, `not_equals`, `contains`, `not_contains`, `starts_with`, `e
 `semver_lte`, `geo_within_radius`, `time_window`, `array_contains`, `array_intersects`,
 `in_segment`, `not_in_segment`.
 Values typed in the dashboard are strings; they are compared leniently against typed
-context values (`"true"` matches `true`, `"17"` matches `17`, `"beta, internal"` is a list
+context values (`"true"` matches `true`, `"17"` matches `17`, `"beta, staff"` is a list
 for `in`/`not_in`, `"17.4"` is padded to `17.4.0` for `semver_*`).
 
 `regex` patterns use [RE2 syntax](https://github.com/google/re2/wiki/Syntax): `\w`, `\d`,
@@ -332,7 +332,8 @@ attributes: `context=<url-encoded JSON>` on `GET /feature-flags/evaluate/{key}`,
 
 So a dashboard rule on `user.country` matches an SDK that sends `{"country": "US"}` without
 any renaming on either side. A condition whose attribute is absent from the context does not
-match (except `is_null`, which does).
+match (except `is_null`, which does). A context larger or more deeply nested than the
+[Targeting Context Limits](../api/endpoints.md#targeting-context-limits) allow answers `422`.
 
 ### Turn the flag on at 10%
 
@@ -390,14 +391,7 @@ KEY=$(curl -s -X POST localhost:8000/api/v1/api-keys \
 ## Flag Key Naming Conventions
 
 A key is lowercase letters, digits, hyphens and underscores, starting with a letter or
-digit. Anything else is refused with `422`. To keep your flag inventory readable:
-
-- Pick hyphens or underscores and stick to one: `new-checkout-flow`, `dark_mode_v2`. The
-  dashboard fills keys in with underscores.
-- Name what the flag controls: `redesigned-header`, `ai-recommendations`.
-- Add a version suffix if you expect more than one iteration: `checkout-flow-v2`.
-- Don't put an environment name in the key. Each deployment has its own flags.
-- Avoid generic names. `experiment-1` and `flag-test` are hard to interpret months later.
+digit. Anything else is refused with `422`.
 
 ---
 
@@ -570,5 +564,6 @@ What is stored for each report, on both endpoints:
 ## Next Steps
 
 - [Gradual Rollouts](rollouts.md) — set up a staged rollout schedule with automatic progression
-- [Safety Monitoring](safety.md) — configure automatic rollback if error rates spike
+- [Safety Monitoring](safety.md) — automatic rollback if error rates spike: off by default, and a
+  superuser turns it on in **Admin → Safety**
 - [SDK Documentation](../sdk/javascript.md) — full SDK integration guide

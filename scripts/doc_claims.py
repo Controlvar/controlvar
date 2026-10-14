@@ -916,7 +916,6 @@ CLAIMS_DEFERRED: Tuple[str, ...] = (
 #: document leaves it in the pull request that registers it.
 CLAIMS_PENDING: Tuple[str, ...] = (
     "demo/streampulse/simulator/README.md",
-    "docs/Enhanced_Rules_Engine_Reference.md",
     "docs/api/endpoints.md",
     "docs/architecture/technical-guide.md",
     "docs/cognito_integration.md",
@@ -927,10 +926,7 @@ CLAIMS_PENDING: Tuple[str, ...] = (
     "docs/deployment/rollback-runbook.md",
     "docs/deployment/secrets-management.md",
     "docs/development/database/backup.md",
-    "docs/feature-flags/create.md",
-    "docs/feature-flags/rollouts.md",
     "docs/feature-flags/safety.md",
-    "docs/guides/segments.md",
     "docs/infrastructure/aws-iam-setup.md",
     "docs/infrastructure/cloudwatch-setup.md",
     "docs/infrastructure/dynamodb-readme.md",
