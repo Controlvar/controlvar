@@ -303,12 +303,21 @@ def _config_options() -> list[str]:
     return found
 
 
+def _words(value: str) -> list[str]:
+    """*value* split as the shell would, or on white space when it does not
+    parse (a value cut from a quoted string in a script)."""
+    try:
+        return shlex.split(value)
+    except ValueError:
+        return value.split()
+
+
 def _narrowing(words: list[str]) -> list[str]:
     """The narrowing options in *words*, an ``-o addopts=...`` override's too."""
     found = [w for w in words if _NARROWING.match(w)]
     for word in words:
         if word.startswith("addopts="):
-            found += _narrowing(shlex.split(word[len("addopts=") :]))
+            found += _narrowing(_words(word[len("addopts=") :]))
     return found
 
 
@@ -329,7 +338,7 @@ def test_the_pull_request_checks_run_unit_integration_and_smoke_with_no_marker_f
     for words in runs:
         assert not _narrowing(words), (suite, words)
     for value in _added_options(workflow, job) + _config_options():
-        assert not _narrowing(shlex.split(value)), (suite, value)
+        assert not _narrowing(_words(value)), (suite, value)
 
 
 @pytest.mark.parametrize(
