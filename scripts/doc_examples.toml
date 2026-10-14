@@ -543,7 +543,7 @@ path = "docs/api/endpoints.md"
 environment = "stack"
 exec = 21
 skip = 3
-expects = 39
+expects = 40
 
 [[document]]
 path = "docs/architecture/technical-guide.md"

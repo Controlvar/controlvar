@@ -623,6 +623,24 @@ class TestParity:
         assert _assignment_rows(session_factory, exp) == rows
 
 
+class TestCounts:
+    def test_counts_has_all_four_keys_when_three_of_them_are_zero(
+        self, client, headers, plain_experiment
+    ):
+        """No holdout, no group and no targeting: every user is assigned, and
+        the three other counts are present at 0, not left out."""
+        resp = client.post(
+            URL, json=_body(plain_experiment, _users(3)), headers=headers
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["counts"] == {
+            "assigned": 3,
+            "holdout": 0,
+            "mutual_exclusion": 0,
+            "targeting": 0,
+        }
+
+
 class TestResend:
     def test_a_resend_returns_the_same_and_adds_no_rows(
         self, client, headers, plain_experiment, session_factory

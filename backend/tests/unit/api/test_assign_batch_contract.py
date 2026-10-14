@@ -73,6 +73,24 @@ def test_the_61st_request_in_a_minute_is_429(path):
     assert refused.headers["Retry-After"] == "60"
 
 
+def test_a_request_over_the_limit_never_reaches_the_route(path):
+    """The 429 is answered before the route runs, so nobody is assigned."""
+    calls = []
+    routes = FastAPI()
+
+    @routes.post(path)
+    async def batch():
+        calls.append(1)
+        return {}
+
+    middleware = RateLimitMiddleware(routes, enabled=True)
+    middleware._limiter = SlidingWindowRateLimiter()
+    client = TestClient(middleware)
+    statuses = [client.post(path).status_code for _ in range(62)]
+    assert statuses == [200] * 60 + [429, 429], statuses
+    assert len(calls) == 60
+
+
 def test_the_missing_scope_text():
     assert sdk_scope.MISSING_SCOPE_DETAIL == (
         "This API key does not have the 'sdk:ruleset' scope. Create a key with "

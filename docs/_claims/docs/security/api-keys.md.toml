@@ -68,7 +68,10 @@ by = ["journey:api-key-first-assignment#management-route"]
 
 [[unit]]
 text = "API keys are not for signing people in: user-facing applications use the login described in Authentication."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_an_api_key_is_accepted_only_by_the_routes_an_sdk_calls",
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key",
+]
 
 [[unit]]
 text = "Creating an API Key"
@@ -84,7 +87,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/security/api-keys.md#\"ADMIN\""]
 
 [[unit]]
 text = "Any role can create keys for itself."
@@ -188,7 +191,10 @@ by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_route
 
 [[unit]]
 text = "Every endpoint that accepts an API key, except the three below, accepts any active key, whatever its scopes."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_the_ruleset_scope_and_its_owner_rule",
+]
 
 [[unit]]
 text = "Names such as read, write or admin on existing keys are labels only; nothing checks them."
@@ -196,7 +202,7 @@ by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScope
 
 [[unit]]
 text = "sdk:ruleset is for a server: one that evaluates flags locally, or one that assigns lists of users to an experiment."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these"]
 
 [[unit]]
 text = "These routes answer 403 to a key that does not carry it:"
@@ -232,7 +238,7 @@ by = [
 
 [[unit]]
 text = "Create a key with the 'sdk:ruleset' scope for server-side SDK use."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_the_scope_refusal_says_what_to_create_and_the_key_header_is_x_api_key"]
 
 [[unit]]
 text = "A key with sdk:ruleset can therefore download every feature flag's targeting rules, including the values in them, so keep such a key on a server and never ship it to a browser or a mobile app."
@@ -240,7 +246,11 @@ by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py"]
 
 [[unit]]
 text = "In the dashboard (Admin → API Keys → Create API Key), tick Server-side local evaluation (sdk:ruleset); the same checkbox is the one for assigning lists of users."
-by = ["untested:T"]
+by = [
+    "test:frontend/src/tests/admin/CreateApiKeyModal.test.tsx::offers one unchecked checkbox for the sdk:ruleset scope, described by its warning before submit",
+    "test:frontend/src/tests/admin/CreateApiKeyModal.test.tsx::sends scopes [\"sdk:ruleset\"] when the checkbox is ticked",
+    "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
+]
 
 [[unit]]
 text = "Leave it unticked for any other key; the key is then created with no scopes."
@@ -406,7 +416,7 @@ by = [
 
 [[unit]]
 text = "From then on, requests with the key are refused:"
-by = ["exempt:baseline"]
+by = ["docex:docs/security/api-keys.md#{\"detail\":\"Invalid API Key\"}"]
 
 [[unit]]
 text = "It prints {\"detail\":\"Invalid API Key\"}, with status 401 Unauthorized."
@@ -454,7 +464,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Create a new API key with the same name and scopes as the old key."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_a_new_key_may_repeat_the_old_ones_name_and_scopes_and_leaves_it_working"]
 
 [[unit]]
 text = "Update your service's secrets (Secrets Manager, environment variables, and so on) to the new key."
@@ -474,7 +484,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The service always has a valid key during the rotation."
-by = ["untested:T"]
+by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_a_new_key_may_repeat_the_old_ones_name_and_scopes_and_leaves_it_working"]
 
 [[unit]]
 text = "Security Best Practices"
@@ -546,7 +556,7 @@ by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_route
 
 [[unit]]
 text = "Remember that a key acts as its owner"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_the_ruleset_scope_and_its_owner_rule"]
 
 [[unit]]
 text = "A key authenticates as the user who created it."

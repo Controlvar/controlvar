@@ -207,7 +207,8 @@ superuser.
 
 The four roles are Admin, Developer, Analyst and Viewer. A legacy account with no
 role shows "No role" in the table; pick one in the Edit dialog. Custom roles in
-the full edition are assigned on the **Roles** page, not here.
+the full edition are assigned through the RBAC API (`POST /api/v1/rbac/roles/assign`), not
+here.
 
 Rules the page and the API both apply:
 

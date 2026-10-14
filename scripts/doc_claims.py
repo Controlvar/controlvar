@@ -914,12 +914,7 @@ CLAIMS_DEFERRED: Tuple[str, ...] = (
 
 #: In-scope documents not registered yet. The rollout: it only shrinks, and a
 #: document leaves it in the pull request that registers it.
-CLAIMS_PENDING: Tuple[str, ...] = (
-    "docs/api/endpoints.md",
-    "docs/architecture/technical-guide.md",
-    "docs/feature-flags/safety.md",
-    "docs/sdk/local-evaluation.md",
-)
+CLAIMS_PENDING: Tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------------------

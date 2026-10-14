@@ -23,7 +23,7 @@ const sections = [
       { label: 'Creating Feature Flags', href: docsUrl('feature-flags/create'), desc: 'Set up your first flag' },
       { label: 'Targeting & Rules', href: docsUrl('Enhanced_Rules_Engine_Reference'), desc: 'The operators a targeting rule can use, with examples' },
       { label: 'Gradual Rollouts', href: docsUrl('feature-flags/rollouts'), desc: 'Staged rollout schedules' },
-      { label: 'Safety Monitoring', href: docsUrl('feature-flags/safety'), desc: 'Auto-rollback on error spikes' },
+      { label: 'Safety Monitoring', href: docsUrl('feature-flags/safety'), desc: 'Roll a flag back when its error rate or latency breaches a threshold' },
     ],
   },
   {
@@ -38,7 +38,7 @@ const sections = [
       { label: 'Multi-Armed Bandits', href: docsUrl('api/multi-armed-bandit'), desc: 'Thompson Sampling, UCB1, Epsilon-Greedy (create a bandit through the API)' },
       { label: 'Split URL Testing', href: docsUrl('api/split-url'), desc: 'Full profile: store split URL experiments and preview the URL a user id hashes to. The edge router does not split traffic yet.' },
       { label: 'Mutual Exclusion Groups', href: docsUrl('api/mutual-exclusion-groups'), desc: 'Keep users out of conflicting experiments, and a share of new users out of every experiment' },
-      { label: 'Live Results Streaming', href: docsUrl('websocket-streaming'), desc: 'Live experiment results over WebSocket: a snapshot on connect, then a fresh one after 30 seconds (by default) with no message from the client.' },
+      { label: 'Live Results Streaming', href: docsUrl('websocket-streaming'), desc: 'Live experiment results over WebSocket: a snapshot on connect, then a fresh one every 30 seconds (by default), whatever the client sends.' },
     ],
   },
   {

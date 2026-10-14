@@ -389,9 +389,11 @@ To disable a flag, turn it off with the switch at the top of its page; it then
 shows **Not serving**. Setting the rollout percentage to 0 is not the same: users matched by a
 targeting rule keep the flag.
 
-If you have safety monitoring configured, the platform can roll the flag back automatically if
-error rates spike. A rollback to 0% turns the flag off for every user and pauses its rollout
-schedule (see [Safety Monitoring](../feature-flags/safety.md#what-a-rollback-changes)).
+If you have safety monitoring configured, the platform can roll the flag back automatically when
+its error rate or latency breaches a threshold. Automatic rollback is off by default: a superuser
+turns it on with **Enable automatic rollbacks** in **Admin → Safety**. A rollback to 0% turns the
+flag off for every user and pauses its rollout schedule (see
+[Safety Monitoring](../feature-flags/safety.md#what-a-rollback-changes)).
 
 ### Archived Flags
 
