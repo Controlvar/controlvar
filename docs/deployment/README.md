@@ -181,8 +181,7 @@ How to find the previous task definition, **with its image** — the revision
 list alone is not enough, because CloudFormation also registers into this
 family with a `bootstrap` image that may not exist in ECR (#82). A revision a
 deploy registered names its image by digest (`…/backend@sha256:…`). The
-block sets `ENV=staging`; for production, change it to `ENV=prod` before you
-run it:
+block sets `ENV=staging`; for production, change it to `ENV=prod`:
 
 ```bash
 ENV=staging
