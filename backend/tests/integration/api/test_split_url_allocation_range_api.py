@@ -12,7 +12,9 @@ These tests send real requests and read what was stored:
   (the rule for every stored value a schema later refuses): the client must
   correct it, not resubmit it;
 * the split URL preview of such a stored configuration answers 409, with a
-  fixed ``detail`` and none of the stored values, where it answered 500.
+  fixed ``detail`` and none of the stored values. Before the range was
+  checked it answered 200 and served the stored allocations as they were
+  (``traffic_allocation`` 150.0), and a create of -50 and 150 answered 201.
 """
 
 from __future__ import annotations

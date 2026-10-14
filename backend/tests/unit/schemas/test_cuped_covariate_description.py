@@ -3,7 +3,7 @@
 ``VarianceReductionConfig.covariate_metric_id`` used to be described as
 "Required when method is 'cuped' or 'cuped_plus'" (and its class docstring as
 "required for CUPED and CUPED_PLUS methods"). It is not: without it, each
-metric's own event before the user's exposure is the history
+metric's own event before the user's assignment is the history
 (``get_cuped_results_data`` in ``api/v1/endpoints/results.py``, and
 ``test_cuped_without_a_covariate_metric_reads_each_metrics_own_event``).
 
@@ -38,8 +38,13 @@ OLD_SENTENCES = (
 #: with white space collapsed).
 NEW_FIELD_SENTENCE = (
     "Not required: without it, each metric's own event before the user's "
-    "exposure is the history."
+    "assignment is the history."
 )
+
+#: The history is read before the user's ASSIGNMENT (``Assignment.created_at``,
+#: ``event_matching.covariate_user_ids``), the word cuped.md and endpoints.md
+#: use. The platform also records separate exposure events, which this is not.
+ASSIGNMENT_WORDING = "before the user's assignment is the history"
 
 #: The code to search, relative to the repository root. ``modules/`` is absent
 #: from a core tree, so a missing root is skipped, never an error.
@@ -131,3 +136,24 @@ def test_the_schema_says_the_covariate_is_not_required():
     # What the description claims is what the model does: it validates without.
     assert VarianceReductionConfig(method="cuped").covariate_metric_id is None
     assert VarianceReductionConfig(method="cuped_plus").covariate_metric_id is None
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("copy", OPENAPI_COPIES, ids=lambda p: p.name)
+def test_the_history_is_said_to_be_read_before_assignment_in_every_copy(copy):
+    schema = _schema(copy)
+    field = schema["properties"]["covariate_metric_id"]["description"]
+
+    for text in (field, " ".join(schema["description"].split())):
+        assert ASSIGNMENT_WORDING in text
+        assert "exposure" not in text
+
+
+@pytest.mark.regression
+def test_the_history_is_said_to_be_read_before_assignment_in_the_code():
+    field = VarianceReductionConfig.model_fields["covariate_metric_id"].description
+    docstring = " ".join(VarianceReductionConfig.__doc__.split())
+
+    for text in (field, docstring):
+        assert ASSIGNMENT_WORDING in text
+        assert "exposure" not in text

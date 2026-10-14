@@ -16567,7 +16567,7 @@
         "type": "object"
       },
       "VarianceReductionConfig": {
-        "description": "Configuration for variance reduction on an experiment.\n\nThis config is stored as JSONB in the experiments table and controls\nwhich variance-reduction method is applied when computing results.\n\nAttributes:\n    method: Which variance-reduction method to use.\n    covariate_metric_id: ID of one of the experiment's metrics whose event is\n        the history read as the covariate (CUPED and CUPED_PLUS only). Not\n        required: without it, each metric's own event before the user's\n        exposure is the history.\n    covariate_lookback_days: Number of days of pre-experiment data to use\n        when building the covariate (1–90, default 7).\n    winsorization_percentile: Upper percentile for Winsorization clipping\n        (50–100, default 99.0).",
+        "description": "Configuration for variance reduction on an experiment.\n\nThis config is stored as JSONB in the experiments table and controls\nwhich variance-reduction method is applied when computing results.\n\nAttributes:\n    method: Which variance-reduction method to use.\n    covariate_metric_id: ID of one of the experiment's metrics whose event is\n        the history read as the covariate (CUPED and CUPED_PLUS only). Not\n        required: without it, each metric's own event before the user's\n        assignment is the history.\n    covariate_lookback_days: Number of days of pre-experiment data to use\n        when building the covariate (1–90, default 7).\n    winsorization_percentile: Upper percentile for Winsorization clipping\n        (50–100, default 99.0).",
         "properties": {
           "covariate_lookback_days": {
             "default": 7,
@@ -16586,7 +16586,7 @@
                 "type": "null"
               }
             ],
-            "description": "ID of one of the experiment's metrics whose event is the history read as the CUPED covariate: whether the user sent it in the covariate_lookback_days before their exposure. Used by 'cuped' and 'cuped_plus'. Not required: without it, each metric's own event before the user's exposure is the history.",
+            "description": "ID of one of the experiment's metrics whose event is the history read as the CUPED covariate: whether the user sent it in the covariate_lookback_days before their assignment. Used by 'cuped' and 'cuped_plus'. Not required: without it, each metric's own event before the user's assignment is the history.",
             "title": "Covariate Metric Id"
           },
           "method": {

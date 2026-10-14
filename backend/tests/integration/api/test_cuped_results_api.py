@@ -596,7 +596,7 @@ def test_cuped_without_a_covariate_metric_reads_each_metrics_own_event(
     admin_client, built
 ):
     """#1194: ``covariate_metric_id`` is optional, and absent it each metric's
-    own event before the user's exposure is the history (the schema's
+    own event before the user's assignment is the history (the schema's
     description says so).
 
     Both metrics here have no covariate configured. Only ``purchase`` has

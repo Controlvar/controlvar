@@ -44,7 +44,7 @@ class VarianceReductionConfig(BaseModel):
         covariate_metric_id: ID of one of the experiment's metrics whose event is
             the history read as the covariate (CUPED and CUPED_PLUS only). Not
             required: without it, each metric's own event before the user's
-            exposure is the history.
+            assignment is the history.
         covariate_lookback_days: Number of days of pre-experiment data to use
             when building the covariate (1–90, default 7).
         winsorization_percentile: Upper percentile for Winsorization clipping
@@ -62,9 +62,9 @@ class VarianceReductionConfig(BaseModel):
         description=(
             "ID of one of the experiment's metrics whose event is the history "
             "read as the CUPED covariate: whether the user sent it in the "
-            "covariate_lookback_days before their exposure. Used by 'cuped' "
+            "covariate_lookback_days before their assignment. Used by 'cuped' "
             "and 'cuped_plus'. Not required: without it, each metric's own "
-            "event before the user's exposure is the history."
+            "event before the user's assignment is the history."
         ),
     )
     covariate_lookback_days: int = Field(
