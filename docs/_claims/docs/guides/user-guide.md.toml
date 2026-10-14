@@ -1017,10 +1017,21 @@ text = "Setting the rollout percentage to 0 is not the same: users matched by a 
 by = ["test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestDashboardRules::test_matched_rule_uses_rule_percentage_unmatched_uses_global"]
 
 [[unit]]
-text = "If you have safety monitoring configured, the platform can roll the flag back automatically if error rates spike."
+text = "If you have safety monitoring configured, the platform can roll the flag back automatically when its error rate or latency breaches a threshold."
 by = [
-    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
     "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestShouldRollback::test_unhealthy_latency_maps_to_latency_trigger",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage",
+]
+
+[[unit]]
+text = "Automatic rollback is off by default: a superuser turns it on with Enable automatic rollbacks in Admin → Safety."
+by = [
+    "test:backend/tests/unit/services/test_automatic_rollbacks_default_off.py::test_the_first_read_creates_the_settings_switched_off",
+    "test:backend/tests/unit/services/test_automatic_rollbacks_default_off.py::test_the_column_defaults_to_off",
+    "test:backend/tests/unit/services/test_automatic_rollbacks_default_off.py::test_the_request_schema_defaults_to_off",
+    "test:backend/tests/integration/api/test_safety_api.py::TestSafetySettings::test_non_superuser_cannot_update_settings",
+    "test:frontend/src/tests/admin/SafetySettingsForm.test.tsx::save calls AdminService.updateSafetySettings with the backend shape",
 ]
 
 [[unit]]

@@ -1,20 +1,16 @@
 # Safety Monitoring
 
-Safety monitoring watches feature flags for signs of trouble — elevated error rates, increased latency — and
-rolls a flag back when a configured threshold is breached. It is a safety net for risky rollouts that does not
-depend on an engineer watching dashboards.
-
-Implementation: `backend/app/services/safety_service.py` (checks and rollbacks),
-`backend/app/core/safety_scheduler.py` (background loop), endpoints under `/api/v1/safety`.
+Safety monitoring checks each active feature flag's error rate and latency against thresholds you
+set. When a flag breaches one and automatic rollbacks are turned on, it rolls the flag back. Its
+endpoints are under `/api/v1/safety`.
 
 ---
 
 ## What Safety Monitoring Does
 
-The safety monitor runs every 5 minutes (`SAFETY_CHECK_INTERVAL_MINUTES`; the rollout scheduler's cadence is
-`ROLLOUT_CHECK_INTERVAL_MINUTES`, default 15 — demos set both to 1). For every `ACTIVE` flag,
-whatever its `rollout_percentage` (a flag at 0% still serves the users its targeting rules match),
-it:
+The safety monitor runs every 5 minutes by default (`SAFETY_CHECK_INTERVAL_MINUTES`). For every
+`ACTIVE` flag, whatever its `rollout_percentage` (a flag at 0% still serves the users its targeting
+rules match), it:
 
 1. Loads the flag's safety configuration (or the platform default when the flag has none) and skips the flag
    if monitoring is not `enabled`.
@@ -26,7 +22,7 @@ it:
    to the configuration's `rollback_percentage`. A target of `0` (the default) turns the flag off
    (`status: inactive`) and sets its percentage to 0; any other target lowers only the global percentage
    (see [What a rollback changes](#what-a-rollback-changes)). It also pauses the flag's active rollout
-   schedule, records a `SafetyRollbackRecord`, and sends the Slack alert and webhook event.
+   schedules, records a `SafetyRollbackRecord`, and sends the Slack alert and webhook event.
 
 You can run the same check on demand with `GET /api/v1/safety/feature-flags/{flag_id}/check`.
 
@@ -82,11 +78,11 @@ TOKEN=$(curl -s -X POST localhost:8000/api/v1/auth/login \
   -H 'content-type: application/json' \
   -d '{"email":"admin@demo.com","password":"Demo1234!"}' | jq -r .access_token)
 
-curl -s localhost:8000/api/v1/auth/me -H "Authorization: Bearer $TOKEN" | jq .is_superuser
+curl -s localhost:8000/api/v1/auth/me -H "Authorization: Bearer $TOKEN" | jq '{is_superuser}'
 ```
-<!-- expect: true -->
+<!-- expect: "is_superuser": true -->
 
-It prints `true`.
+It prints `"is_superuser": true`.
 
 The examples watch a flag that is on for half of all users. This creates it and saves its id
 in `$FLAG_ID` (see [Creating Feature Flags](create.md)):
@@ -207,16 +203,17 @@ Any logged-in user can read them:
 
 ```{.bash exec}
 curl -s localhost:8000/api/v1/safety/settings \
-  -H "Authorization: Bearer $TOKEN" | jq .enable_automatic_rollbacks
+  -H "Authorization: Bearer $TOKEN" | jq '{enable_automatic_rollbacks}'
 ```
-<!-- expect: true -->
+<!-- expect: "enable_automatic_rollbacks": true -->
 
-It prints `true`: the Quick Start's demo data turns automatic rollbacks on. The response also
+It prints `"enable_automatic_rollbacks": true`: the Quick Start's demo data turns automatic
+rollbacks on. The response also
 carries `default_metrics`, `id`, `created_at` and `updated_at`.
 
 On a database where no settings have been stored, the first read creates them with
 `enable_automatic_rollbacks: false` and no defaults. **Automatic rollbacks are then off until
-an administrator turns them on.**
+a superuser turns them on.**
 
 ### Update Global Settings
 
@@ -241,7 +238,8 @@ It prints the stored defaults:
 {"error_rate":{"warning_threshold":0.05,"critical_threshold":0.1,"comparison_type":"greater_than"}}
 ```
 
-Per-flag configurations always take precedence over the defaults.
+A flag with a configuration of its own is checked against its own thresholds only; the
+defaults apply to a flag that has none.
 
 ---
 
@@ -277,8 +275,9 @@ The new flag has no traffic, so every value is `0.0` and the flag is healthy:
 }
 ```
 
-Each metric's `details` holds its `warning_threshold`, `critical_threshold`, `comparison_type`
-and `warning` (whether the warning threshold is breached). The response also carries
+Each metric's `details` holds its `warning_threshold`, `critical_threshold`, `comparison_type`,
+`warning` (whether the warning threshold is breached) and `measured` (`false` for a metric name
+with no data source). The response also carries
 `feature_flag_id`, `last_checked` and `details`, with the window's `error_count`,
 `total_evaluations` and `uncounted_error_count`: the error reports that were stored but do not
 count (see [Which errors count](#which-errors-count)). When a metric breaches its critical
@@ -298,7 +297,7 @@ superusers) lists the first 100 flags under **Flag Safety Status** as *healthy*,
 When the monitor finds a flag unhealthy and `enable_automatic_rollbacks` is on, it:
 
 1. Locks the flag row and rolls the flag back to its configured `rollback_percentage` (default `0`, which
-   turns the flag off), pausing the flag's active rollout schedule in the same transaction
+   turns the flag off), pausing the flag's active rollout schedules in the same transaction
 2. Records a `SafetyRollbackRecord` with trigger type `automatic`, the previous and target
    percentages, and the reason (`trigger_reason`, the same text as the audit entry's `reason`
    below: the record has no columns of its own for the metric value or the threshold)
@@ -348,14 +347,7 @@ percentage.
 
 A partial rollback does not help when the harm is only among users matched by a targeting rule,
 and a flag that serves only rule-matched users (global `0%`) is never rolled back to a partial
-target; use a target of `0` for such a flag
-([#718](https://github.com/getexperimently/experimently/issues/718)).
-
-Error metrics count both server-side evaluation failures and the error reports sent through
-`POST /api/v1/tracking/errors` with a server-side key (see
-[Which errors count](#which-errors-count) and
-[Creating Feature Flags](create.md#reporting-client-side-errors)), so a crash behind a flag in a
-mobile app triggers the same rollback once your server forwards the app's report.
+target; use a target of `0` for such a flag.
 
 ### What Triggers a Rollback
 
@@ -365,9 +357,6 @@ mobile app triggers the same rollback once your server forwards the app's report
 | Only `warning_threshold`s are breached | Reported in the check; no rollback |
 | `enable_automatic_rollbacks` is off | Check reports unhealthy; no rollback |
 
-Values are computed over a 15-minute window, so a short spike that resolves quickly is unlikely to trigger a
-rollback while sustained elevated metrics will.
-
 ---
 
 ## Rollback History
@@ -375,8 +364,7 @@ rollback while sustained elevated metrics will.
 Every rollback (automatic or manual) is stored in the `safety_rollback_records` table
 (`feature_flag_id`, `safety_config_id`, `trigger_type`, `trigger_reason`, `previous_percentage`,
 `target_percentage`, `success`, `executed_by_user_id`, `created_at`). The rollback response includes the
-record's id as `rollback_record_id`. There is no list endpoint yet
-([#719](https://github.com/getexperimently/experimently/issues/719)), and the dashboard lists only the
+record's id as `rollback_record_id`. No endpoint lists the records, and the dashboard lists only the
 manual rollbacks made in the current browser session, so query the table for automatic ones.
 
 ---
@@ -434,8 +422,7 @@ The percentage the flag had before the rollback is the rollback response's `prev
 (50 above). For an automatic rollback, read it from the flag's latest `safety_rollback` audit
 entry (`GET /api/v1/audit-logs/entity/feature_flag/{flag_id}`, for superusers, ADMIN and
 ANALYST): that entry's `new_value` is a JSON string holding `previous_percentage`. The flag's
-latest row in the `safety_rollback_records` table holds it too; rollback records cannot be
-listed through the API yet ([#719](https://github.com/getexperimently/experimently/issues/719)).
+latest row in the `safety_rollback_records` table holds it too.
 
 **After a rollback to `0%`, turn the flag on first.** It comes back at 0%, so at first only users
 matched by a targeting rule are served:
@@ -468,8 +455,14 @@ stays paused until you resume it explicitly with `POST /api/v1/rollout-schedules
 (see [Rollout Schedules](rollouts.md#pausing-a-schedule)). The ids are in the rollback response's
 `details.paused_schedules`.
 
-Watch the safety check for at least one full 15-minute window before expanding further. If the root cause was
-not fixed, the monitor will roll the flag back again on its next pass.
+**Check the flag's thresholds.** A rollback leaves the flag with a safety configuration of its
+own: a flag that had none gets one with no thresholds, so from then on it is not checked against
+the global defaults. If it should stay monitored, `POST` its thresholds (see
+[Create or Update a Flag's Configuration](#create-or-update-a-flags-configuration)).
+
+Watch the safety check for at least one full 15-minute window before expanding further. With
+automatic rollbacks on, the monitor rolls the flag back again on its next pass while one of its
+critical thresholds is still breached.
 
 ---
 
@@ -496,7 +489,14 @@ For features that touch payments, authentication or core user flows: `error_rate
 Safety monitoring is most effective with gradual rollouts. A problem affecting 5% of users is much easier to
 contain than one affecting 100%. See [Rollout Schedules](rollouts.md).
 
+### Flags with large targeting rules
+
+For a flag with large targeting rules, either set no threshold on `latency`, `avg_latency`,
+`p95_latency` or `max_latency`, or leave automatic rollback off. A flag without a safety
+configuration of its own uses the global default thresholds, so to take a latency threshold off one
+flag, give that flag its own configuration without one.
+
 ### Test the rollback path
 
-Before a major launch, trigger a manual rollback in staging to confirm that notifications are delivered and
-the flag turns off as expected.
+Before a major launch, trigger a manual rollback in staging to confirm that the flag turns off as
+expected. A manual rollback sends no Slack alert or webhook event; only an automatic rollback does.

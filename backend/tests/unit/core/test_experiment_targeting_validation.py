@@ -179,6 +179,10 @@ REFUSED = {
         {"groups": [{"conditions": [US], "negate": True}]},
         "groups[0]: unknown key",
     ),
+    "a group nested in a group": (
+        {"groups": [{"conditions": [US], "groups": [{"conditions": [US]}]}]},
+        "groups[0]: unknown key",
+    ),
     "unknown condition key": (
         dash([{**US, "values": ["US"]}]),
         "groups[0].conditions[0]: unknown key",
