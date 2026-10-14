@@ -14,7 +14,7 @@
   features (`POST /ai/design` and `POST /ai/interpret/{id}`).
 - `OPENAI_API_KEY`, which the OpenAI SDK reads, enables OpenAI variants in `/complete`.
 - With neither set, no provider is called: `/complete` answers 502 for that variant,
-  the judge records its fallback score of 0.5, and the AI features use their templates.
+  the judge stores no score for any response, and the AI features use their templates.
 
 `ANTHROPIC_BASE_URL` and `OPENAI_BASE_URL` point the SDKs at a proxy or gateway.
 
@@ -65,6 +65,15 @@ Reply with ONLY a JSON object: {"score": <float 0-1>, "reasoning": "<one sentenc
 
 Judge scores are stored as `auto_eval_score` on each evaluation record and included in the results analytics.
 
+A judge call that fails, or a reply without a JSON `score` from 0 to 1, stores no score: the
+evaluation's `auto_eval_score` becomes `null`, replacing any earlier score, and its entry in
+the judge's response has `"score": null` and an `error`, `"call_failed"` or `"no_score"`.
+The results leave such an evaluation out of the auto-eval mean, interval, p-value and effect
+size, and count it in its variant's `n_auto_eval_unscored` (`total_auto_eval_unscored` for
+the experiment); the count includes evaluations the judge has not been run on. Scores stored
+by an earlier version are kept: there, a failed call was stored as 0.5, which cannot be told
+from a real 0.5; to re-score such an experiment, run the judge on it again.
+
 ---
 
 ## Cost Estimation
@@ -90,6 +99,7 @@ Results include:
 - **Mean and 95% confidence interval** for latency, cost, auto-eval score, and business metric;
   the interval uses the exact t critical value at n - 1 degrees of freedom
 - **A p-value** (treatment vs control) from Welch's t-test: the exact two-tailed value from
-  the t distribution at the Welch-Satterthwaite degrees of freedom, at every sample size
-- **Cohen's d effect size** for business metric and auto-eval score
+  the t distribution at the Welch-Satterthwaite degrees of freedom, at every sample size;
+  `null` when either variant has fewer than two values, or neither variant's values vary
+- **Cohen's d effect size** for business metric and auto-eval score (`null` in the same cases)
 - **Winner determination** based on the highest mean business metric (falls back to auto-eval score)

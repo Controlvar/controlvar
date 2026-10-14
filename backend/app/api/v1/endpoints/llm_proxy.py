@@ -233,10 +233,13 @@ async def run_judge(
     current_user: User = Depends(deps.get_current_active_user),
 ):
     """
-    Use a judge LLM (default: Claude 3.5 Sonnet) to score all responses in
+    Use a judge LLM (default: LLM_DEFAULT_JUDGE_MODEL) to score all responses in
     this experiment on the specified criteria (e.g. 'helpfulness', 'accuracy').
 
-    Returns a list of LLMJudgeResult objects with scores 0–1.
+    Returns one result per evaluation: its score from 0 to 1, stored as the
+    evaluation's auto_eval_score. When the judge call fails or the reply has no
+    usable score, no score is stored: the result's score is null, error is
+    "call_failed" or "no_score", and an earlier score is replaced by null.
     """
     if not check_permission(current_user, ResourceType.EXPERIMENT, Action.UPDATE):
         raise HTTPException(

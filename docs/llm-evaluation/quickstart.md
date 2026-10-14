@@ -135,8 +135,9 @@ goes in the same request.
 `POST /api/v1/llm-experiments/{id}/judge` scores the responses on a quality dimension with
 LLM-as-judge. It takes a `criteria` (default `helpfulness`) and a
 `judge_model` (default `LLM_DEFAULT_JUDGE_MODEL`). The judge is called through the
-Anthropic SDK, so `judge_model` names a Claude model. A judge call that fails scores the
-response 0.5.
+Anthropic SDK, so `judge_model` names a Claude model. A judge call that fails, or a reply
+without a usable score, leaves that response unscored: `score` is `null` in the judge's
+response, and the results count it in the variant's `n_auto_eval_unscored`.
 
 ---
 

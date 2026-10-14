@@ -3,7 +3,7 @@ Pydantic v2 schemas for LLM Experiment API endpoints (EP-046).
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -308,6 +308,14 @@ class VariantStats(BaseModel):
     variant_name: str
     is_control: bool
     n_evaluations: int
+    n_auto_eval_unscored: int = Field(
+        ...,
+        ge=0,
+        description=(
+            "Evaluations with no judge score: not judged yet, or the call failed "
+            "or gave no usable score; left out of the auto-eval statistics."
+        ),
+    )
     mean_latency_ms: Optional[float]
     latency_ci_lower: Optional[float]
     latency_ci_upper: Optional[float]
@@ -321,8 +329,10 @@ class VariantStats(BaseModel):
     mean_business_metric: Optional[float]
     business_metric_ci_lower: Optional[float]
     business_metric_ci_upper: Optional[float]
-    p_value: Optional[float]  # vs control
-    effect_size: Optional[float]  # Cohen's d vs control
+    # vs control; None when either variant has fewer than two values, or
+    # neither variant's values vary
+    p_value: Optional[float]
+    effect_size: Optional[float]  # Cohen's d vs control; None in the same cases
 
 
 class LLMExperimentResults(BaseModel):
@@ -336,6 +346,14 @@ class LLMExperimentResults(BaseModel):
     winner_variant_id: Optional[str]
     winner_variant_name: Optional[str]
     total_evaluations: int
+    total_auto_eval_unscored: int = Field(
+        ...,
+        ge=0,
+        description=(
+            "Evaluations in the experiment with no judge score: not judged yet, "
+            "or the call failed or gave no usable score."
+        ),
+    )
 
 
 class LLMJudgeRequest(BaseModel):
@@ -350,9 +368,15 @@ class LLMJudgeRequest(BaseModel):
 
 
 class LLMJudgeResult(BaseModel):
-    """Result from LLM-as-judge scoring for a single evaluation."""
+    """Result from LLM-as-judge scoring for a single evaluation.
+
+    ``score`` is from 0 to 1, or None when no score was stored: then ``error``
+    says why, ``"call_failed"`` (the judge call failed) or ``"no_score"`` (the
+    reply had no JSON ``score`` from 0 to 1).
+    """
 
     evaluation_id: str
-    score: float  # 0–1
+    score: Optional[float]  # 0–1, or None when no score was stored
     reasoning: str
     judge_model: str
+    error: Optional[Literal["call_failed", "no_score"]] = None

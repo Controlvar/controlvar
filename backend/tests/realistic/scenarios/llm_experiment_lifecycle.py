@@ -245,12 +245,13 @@ class TestEvaluationStatistics:
     def test_cohens_d_large_effect(self):
         from backend.app.services.llm_analytics_service import _cohens_d
 
-        a = [1.0] * 100
-        b = [3.0] * 100
+        a = [0.9, 1.0, 1.1] * 33
+        b = [2.9, 3.0, 3.1] * 33
         d = _cohens_d(a, b)
         assert d is not None
-        # Effect size should be very large (infinite with zero variance, but
-        # our implementation uses pooled std which will handle edge cases)
+        # A two-unit difference with a spread of about 0.08: a very large effect.
+        # (With no spread at all d is undefined, and None: TestZeroSpread.)
+        assert d > 2.0
 
     def test_confidence_interval_contains_mean(self):
         from backend.app.services.llm_analytics_service import (
