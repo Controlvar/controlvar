@@ -12,8 +12,8 @@ metrics can tell different stories.
 * an experiment that changes who enters the other can make the test report an
   interaction that no user has: A lifts each kind of user by the same amount
   whatever B shows them, but B's treatment sends A a different mix of users;
-* with few users the test has little power: the page's constant-relative-lift
-  table, an interaction at 2,000 users per group, is not significant at 200.
+* with few users the test has little power: the page's 50% lift example, an
+  interaction found at 2,000 users per group, is not significant at 200.
 """
 
 from __future__ import annotations
@@ -213,7 +213,8 @@ def _relative_lift_table(n: int):
 @pytest.mark.regression
 def test_the_relative_lift_example_is_not_significant_at_200_users_per_group():
     n, x = _relative_lift_table(2000)
-    assert interaction_test(n, x).p_value < 0.05
+    large = interaction_test(n, x)
+    assert (round(large.statistic, 2), round(large.p_value, 4)) == (8.46, 0.0036)
     n, x = _relative_lift_table(200)
     assert floor_reason(n, x) is None
     small = interaction_test(n, x)

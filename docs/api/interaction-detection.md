@@ -311,9 +311,9 @@ interaction.
   was tested and none is, and `null` otherwise.
 
 **"No interaction" with few users is weak evidence.** The test has little power when the
-groups are small: the constant-relative-lift table above, an interaction with 2,000 users
-in each group, gives X² = 0.85 and p = 0.36 with 200 users in each group, which is not
-significant.
+groups are small. The 50% lift example above (10% → 15% and 20% → 30%) is found with 2,000
+users in each group (X² = 8.46, p = 0.0036). With 200 users in each group, the same rates
+give X² = 0.85 and p = 0.36: not significant, although the interaction is there.
 
 ### Rows that are not tested
 
