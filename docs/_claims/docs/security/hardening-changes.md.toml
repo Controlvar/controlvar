@@ -322,11 +322,8 @@ text = "Added a validate_secret_key field validator that raises a ValueError at 
 by = ["test:backend/tests/unit/security/test_security_hardening.py::TestConfigSecurity::test_secret_key_validated_in_production"]
 
 [[unit]]
-text = "ENVIRONMENT is staging or production (TESTING never relaxes this), and"
-by = [
-    "test:backend/tests/unit/middleware/test_hardening_in_place.py::test_a_short_or_placeholder_secret_key_stops_staging_and_production",
-    "test:backend/tests/unit/core/test_config_environment.py::TestModuleImportSelection::test_testing_with_production_refuses_to_import",
-]
+text = "ENVIRONMENT is staging or production, and"
+by = ["test:backend/tests/unit/middleware/test_hardening_in_place.py::test_a_short_or_placeholder_secret_key_stops_staging_and_production"]
 
 [[unit]]
 text = "SECRET_KEY is shorter than 32 characters or is one of the well-known weak defaults (default-secret-key-for-testing, secret, changeme, etc.)"
@@ -343,8 +340,9 @@ by = [
 ]
 
 [[unit]]
-text = "Later, TESTING stopped being an exception: the settings now refuse TESTING together with ENVIRONMENT=staging or production outright, so the check applies in every staging and production start."
+text = "As first added, the check covered only ENVIRONMENT=prod and was skipped when TESTING was set; today it covers staging and production, and nothing skips it there, because the settings refuse TESTING together with ENVIRONMENT=staging or production outright."
 by = [
+    "test:backend/tests/unit/middleware/test_hardening_in_place.py::test_a_short_or_placeholder_secret_key_stops_staging_and_production",
     "test:backend/tests/unit/core/test_config_environment.py::TestModuleImportSelection::test_testing_with_production_refuses_to_import",
     "test:backend/tests/unit/core/test_settings_rules_testing_flag.py",
 ]
