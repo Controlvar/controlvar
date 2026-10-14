@@ -1,9 +1,10 @@
 # Rollback Runbook — Experimently
 
-**Version:** 1.0
-**Date:** March 2026
 **Audience:** On-call Engineers
-**Time Target:** < 5 minutes from decision to rollback complete
+**Measured:** on 2026-10-11 (UTC), on a staging account, the Rollback job took 5 min
+56 s once approved: the API was verified on the previous revision after 3 min
+27 s, and the dashboard 2 min 27 s later
+([run](https://github.com/getexperimently/experimently/actions/runs/38098724258)).
 
 Every command below is written for either environment. Set this first, in the
 shell you will paste into. The line names `prod`; to rehearse, or to roll back
@@ -21,7 +22,7 @@ deploys of two tags, then roll back to the first
 
 ## Decision Tree: When to Rollback
 
-Use this tree to decide your response within the first 2 minutes of an issue. When in doubt, roll back. Hotfixes are only appropriate for simple one-line changes that can be safely deployed without a full deployment cycle.
+Use this tree to decide your response within the first 2 minutes of an issue. When in doubt, roll back.
 
 ```
 Post-deployment issue detected
@@ -90,7 +91,7 @@ back. The rest of the table, and everything after that hour, is yours.
 
 ---
 
-## Method 1: GitHub Actions Manual Rollback (Preferred — ~3 minutes)
+## Method 1: GitHub Actions Manual Rollback (Preferred)
 
 This is the preferred method. It is audited and sends Slack notifications when `SLACK_BOT_TOKEN` is set. It does **not** run smoke tests; Step 5 of Method 2 and the post-rollback checklist are by hand.
 
@@ -125,17 +126,11 @@ It refuses the API half, fails, and says why, in two cases:
 It creates its CodeDeploy deployment with the deployment group's alarms
 overridden (`--override-alarm-configuration`), always: the
 release being rolled back is usually what holds a 5xx alarm in ALARM, and
-CodeDeploy stops every deployment to the group while one is. The override is
-for that one deployment; the alarms watch the next deploy as before. It needs
-`codedeploy:UpdateDeploymentGroup` on the workflow role
-([IAM permissions](iam-permissions.md)); a role without it fails the rollback
-with `AccessDenied`.
+CodeDeploy stops every deployment to the group while one is.
 
 A rollback is reported done only once the run's own deployment has been
-approved and the target is the PRIMARY task set. The run approves it itself;
-an approval from the console also counts, as long as the run saw the
-deployment waiting for approval first. A deployment the run never saw waiting
-for approval is not counted, and the run then fails and says so.
+approved and the target is the PRIMARY task set. A deployment the run never
+saw waiting for approval is not counted, and the run then fails and says so.
 
 **If the API went back and the dashboard did not**, the run says so (its
 verdict is `API BACK, DASHBOARD NOT`), and the system is in the
@@ -147,9 +142,7 @@ release you rolled back from.
 
 ### Reading the result
 
-The run ends with one verdict. It starts the run's headline, which is also the
-first line of its Slack message: `<environment>: <VERDICT>: <what happened>`.
-`scripts/rollback_verdict.py` chooses it from a fixed order of rules, the first
+`scripts/rollback_verdict.py` chooses the run's verdict from a fixed order of rules, the first
 that matches winning, and the run succeeds only when the verdict is
 `ROLLED BACK`. When the run's own steps did not finish (its verify step did not
 succeed), the summary first reads what the API is serving at the end of the
@@ -198,10 +191,8 @@ aws ecs describe-task-definition --task-definition "$TARGET_TD" \
   --output text
 ```
 
-It prints `false` for a revision that does not migrate on start. A revision
-registered before the Fargate stack carried the setting prints `None` (the
-variable is absent, and `--output text` prints a missing value as `None`); one
-that prints `true` sets it explicitly. Either way, that revision runs the older
+It prints `false` for a revision that does not migrate on start. One that
+prints `None` (no such variable) or prints `true` runs the older
 release's migrations on start, and against a newer schema it refuses to
 start. Register a copy of it with
 `RUN_MIGRATIONS=false` added to the `backend` container's environment, and roll
@@ -213,15 +204,7 @@ Rollback does not check its target: that is this command.
 
 ### Rolling back past segment targeting
 
-Releases before segment targeting (#440) cannot read a targeting rule that
-uses `in_segment` or `not_in_segment`: to them, the rules of a flag or an
-experiment that uses one are rules the server cannot read, so they apply no
-rules at all. On such a release a segment-targeted flag is served at its
-global rollout percentage, a segment-targeted experiment admits every user,
-and `GET /api/v1/sdk/ruleset` lists the flag as `"evaluation": "local"` with
-no rules, so SDKs that evaluate locally serve the global rollout too -- and
-keep doing so from the ruleset they cached, until they refresh it from a
-release that has segment targeting.
+Segment targeting (`in_segment` and `not_in_segment`) arrived in v0.22.0.
 
 - **Before rolling the API back past that release**, remove segment
   conditions from flags and experiments, or disable the flags that use them,
@@ -240,8 +223,7 @@ experiments whose rules mention a segment.
 
 > **Two producers write to this family, and only one of them is runnable.**
 > `cdk deploy` registers revisions too, and those carry the CDK's `bootstrap`
-> image tag rather than a released build (#82). Rolling onto one starts tasks
-> that cannot pull an image. **Never pick a revision by subtracting 1** —
+> image tag rather than a released build (#82). **Never pick a revision by subtracting 1** —
 > read the image off a candidate before you deploy it.
 
 Option A: List recent task definitions for the family (newest first) WITH the image each one carries, so a CloudFormation-registered revision is visible rather than a number in a list:
@@ -328,8 +310,6 @@ aws ecs describe-services \
 The workflow will:
 - Check the target revision is ACTIVE, in the right family, has a container
   named `backend`, and is not a CloudFormation-registered `:bootstrap` revision
-- Refuse, creating nothing, if the API is already on that revision with no
-  deployment in flight (the dashboard half, if given, still runs)
 - Stop any CodeDeploy deployment still in flight (during an incident the bad
   deploy usually is, and CodeDeploy refuses a second one), after reading who
   created each one; if any is CodeDeploy's own rollback, or its creator cannot
@@ -374,8 +354,9 @@ watch -n 5 'aws ecs describe-services \
 `Running`, `Desired` and `Pending` are the PRIMARY task set's own counts:
 `Desired` is its `computedDesiredCount`. Do not read the service's
 `runningCount` instead: for the hour after a shift the replaced task set keeps
-running beside the new one, so the service counts both (staging showed 4
-running of 2 desired after a rollback that had worked). This is a
+running beside the new one, so the service counts both (on staging on
+2026-10-04 (UTC) it counted 4 tasks of 2 desired after a rollback that had worked:
+[#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5982176639)). This is a
 **blue/green** deployment, not a rolling update: a second (green) task set is
 provisioned alongside the current one and traffic moves to it in one shift, so
 `Serving` changes from the old revision to the new one at once rather than
@@ -400,7 +381,7 @@ the API is reversed for it:
 
 ---
 
-## Method 2: AWS CLI Direct Rollback (Emergency — ~2 minutes)
+## Method 2: AWS CLI Direct Rollback (Emergency)
 
 Use this method when GitHub Actions is unavailable or you need to act faster than the workflow allows. This method is faster but does not automatically run smoke tests — you must run them manually after.
 
@@ -429,6 +410,38 @@ registers into this family too, and its revisions carry the `bootstrap` image
 tag; pick the target with Method 1 Step 1's listing, which prints the image
 beside each revision.
 
+**Step 2b. Stop the deployment in flight first.** CodeDeploy accepts one
+deployment per deployment group at a time, so Step 3 is refused while the bad
+deploy's deployment is still active. List what is active:
+
+```bash
+aws deploy list-deployments \
+  --application-name experimentation-platform-$ENV \
+  --deployment-group-name "experimentation-$ENV" \
+  --include-only-statuses Created Queued InProgress Baking Ready \
+  --query deployments --output text
+```
+
+For each id it prints, read who created it:
+
+```bash
+aws deploy get-deployment --deployment-id d-XXXXXXXXX \
+  --query 'deploymentInfo.{status:status,creator:creator}'
+```
+
+If the creator is `codeDeployRollback`, do not stop it: CodeDeploy is already
+putting the API back ([An alarm rolled the API back](#an-alarm-rolled-the-api-back)).
+Otherwise stop it, with auto-rollback:
+
+```bash
+aws deploy stop-deployment --deployment-id d-XXXXXXXXX --auto-rollback-enabled
+```
+
+On a staging account on 2026-10-03 (UTC), stopping the in-flight deployment
+returned the API both times it was tried
+([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5971647359)).
+Run the list again until it prints nothing, then go on.
+
 **Step 3.** Deploy the previous task definition through CodeDeploy.
 
 NOT `aws ecs update-service --task-definition`. This service has a CodeDeploy
@@ -451,10 +464,7 @@ APPSPEC=$(jq -cn --arg td "$PREV_TASK_DEF" '{
 ```
 
 `--deployment-config-name` is all-at-once, NOT the deployment group's
-CANARY_10_PERCENT_15_MINUTES. The canary is right going forward, on a revision
-nobody has run. Rolling back, the target was serving production minutes ago
-and the revision being replaced is the one hurting users -- a canary would
-leave 90% of traffic on it for another fifteen minutes.
+CANARY_10_PERCENT_15_MINUTES.
 
 ```bash
 DEPLOYMENT_ID=$(aws deploy create-deployment \
@@ -473,8 +483,7 @@ The deployment group sets `deployment_approval_wait_time` = 30 minutes. When
 the green task set is provisioned CodeDeploy goes to status `Ready` and WAITS.
 If ContinueDeployment is not called it stops the deployment, and the group's
 `auto_rollback(stopped_deployment=True)` then puts back the revision you are
-rolling away from. A rollback that is never approved is a rollback that
-silently undoes itself half an hour later.
+rolling away from.
 
 ```bash
 while [ "$(aws deploy get-deployment --deployment-id "$DEPLOYMENT_ID" \
@@ -490,9 +499,7 @@ aws deploy continue-deployment --deployment-id "$DEPLOYMENT_ID" \
 `aws ecs wait services-stable` returns almost immediately here: during a
 blue/green deployment the old task set is serving the whole time, so the
 service is stable and the waiter says nothing about whether the rollback took.
-That is why the old form, `aws ecs wait services-stable --cluster
-"experimentation-$ENV" --services experimentation-backend-$ENV`, is misleading
-and is not used. Watch the PRIMARY task set instead: that is what moves, and it
+Watch the PRIMARY task set instead: that is what moves, and it
 tells you traffic has shifted without waiting for CodeDeploy to terminate the
 old task set (the group keeps it for an hour).
 
@@ -542,8 +549,6 @@ done
 curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' "https://app.<domain>/"
 ```
 
-After using Method 2, post an incident note in `#deployments` and open a follow-up task to capture it in the GitHub Actions audit log.
-
 ---
 
 ## Method 3: What CodeDeploy rolls back by itself, and when
@@ -558,8 +563,11 @@ previous revision by itself: see
 [An alarm rolled the API back](#an-alarm-rolled-the-api-back). A minute counts
 against the API when its target group answers at least 5 target 5xx and at
 least 5% of its requests with a 5xx; two such minutes of three fire the alarm.
-This is expected behaviour, not yet observed in a real account; the first
-staging deploy's forced alarm is where it is first seen.
+On a staging account on 2026-10-03 (UTC), CodeDeploy stopped and reverted an API deployment
+when an alarm went into ALARM
+([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5971647359)),
+and on 2026-10-11 (UTC) an alarm did the same in the hour after the traffic shift
+([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)).
 
 What the alarms do not cover, so **Method 1 is the response**:
 
@@ -574,11 +582,11 @@ What the alarms do not cover, so **Method 1 is the response**:
 shift, the deploy workflow refuses a new release while that deployment is
 active. To ship a fix, run Rollback first (Method 1), then deploy the fix.
 Rollback's own deployment is then the active one, and the next forward deploy
-is refused until it is no longer active. That is expected to be about an hour,
-because the deployment group's 60-minute termination wait applies to every
-deployment in the group, Rollback's included. This is expected behaviour, to be
-observed on the first staging deploy
-([deployment guide, section 3](deployment-guide.md#3-every-deploy)).
+is refused until it is no longer active: about an hour, because the deployment
+group's 60-minute termination wait applies to every deployment in the group,
+Rollback's included. On a staging account on 2026-10-11 (UTC), the Rollback run's
+deployment stayed active for about an hour after its traffic shift
+([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)).
 
 **When CodeDeploy does roll back by itself:**
 - one of the two 5xx alarms is in ALARM while the deployment is active (above);
@@ -587,37 +595,6 @@ observed on the first staging deploy
   shift until every target is healthy);
 - the deployment is never approved, so CodeDeploy stops it when its 30-minute
   approval wait ends. Nothing had shifted.
-
-**To stop an in-progress deployment and force immediate rollback:**
-
-Step 1: Get the active deployment ID:
-
-```bash
-aws deploy list-deployments \
-  --application-name experimentation-platform-$ENV \
-  --deployment-group-name "experimentation-$ENV" \
-  --include-only-statuses InProgress \
-  --query 'deployments[0]' \
-  --output text
-```
-
-Step 2: Stop the deployment and trigger automatic rollback to blue environment:
-
-```bash
-aws deploy stop-deployment \
-  --deployment-id d-XXXXXXXXX \
-  --auto-rollback-enabled
-```
-
-Step 3: Confirm rollback status:
-
-```bash
-aws deploy get-deployment \
-  --deployment-id d-XXXXXXXXX \
-  --query 'deploymentInfo.{Status:status,RollbackInfo:rollbackInfo}'
-```
-
-This immediately reverts traffic to the previous (blue) target group. The green tasks are terminated and the old task definition remains active.
 
 ---
 
@@ -656,9 +633,7 @@ revision that served before it. There is nothing to roll back for the API.
    back with Method 2's dashboard block, using the summary's "Dashboard serving
    before this run" value.
 5. **Do not dispatch Rollback while CodeDeploy's rollback is active.** Its
-   deployment's `creator` is `codeDeployRollback`. Rollback refuses while it is
-   active, which can be up to an hour, and would have nothing to do for the API
-   anyway.
+   deployment's `creator` is `codeDeployRollback`.
 6. **The migration stays applied.** The database is at the new release's
    heads, with the previous revision serving on it. That is safe only for a
    [backward-compatible migration](deployment-guide.md#backward-compatible-migrations);
@@ -690,9 +665,8 @@ alarms for its own deployment. It is wrong in three cases:
 - the environment has no schema yet. `cdk deploy` does not create it: the
   first Deploy's migration does, and until then the API answers real requests
   with 500 ([Deployment Guide, section 1.6](deployment-guide.md#16-the-stacks)).
-  Requests in that window, from scanners as much as from people, can put an
-  alarm into ALARM, and the Deploy that would create the schema is then
-  refused. Rollback has nothing to go back to. Whether to deploy unwatched is
+  Those 500s can put an alarm into ALARM, and Deploy then refuses to start.
+  Rollback has nothing to go back to. Whether to deploy unwatched is
   decided by a person at that moment.
 
 For those, Deploy has a break-glass: tick **`override_alarms`** and give
@@ -719,9 +693,10 @@ still stops the deployment, after the migration, and the run ends with the
 ALARM is printed as a warning instead, and the deploy goes on unwatched.
 
 `aws cloudwatch disable-alarm-actions` and `aws cloudwatch set-alarm-state` do
-not unblock a deploy. CodeDeploy reads the alarms' state, not their actions,
-and a state set by hand lasts only until the next evaluation, about a minute.
-This is expected, not yet verified: the first staging rehearsal checks it.
+not unblock a deploy: expected, and not rehearsed on AWS as of v0.31.1. CodeDeploy reads the alarms' state, not their actions,
+and a state set by hand lasts only until the next evaluation: on staging on
+2026-10-11 (UTC) the alarm was back to OK within two minutes
+([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)).
 
 To see which alarm is firing, and since when:
 
@@ -781,8 +756,7 @@ through the workflow.** The image now serving does not contain the migration's
 file, so `alembic` cannot locate the database's revision. The workflow fails at
 "Show the current revision", after it has already taken a snapshot, and changes
 nothing. Do not dispatch it to try. The documented recovery from that state is
-the point-in-time restore in Step 3, and the tasks cannot pick up a restored
-cluster today. Call the Engineering Lead now.
+the point-in-time restore in Step 3. Call the Engineering Lead now.
 
 ### Step 1: Confirm Migration is the Root Cause
 
@@ -837,8 +811,9 @@ decided way to point the application at it is `scripts/restore_repoint.sh`: it
 renames the restored cluster onto the stack's identifier and the original out
 of it, so the endpoint the tasks carry reaches the restored database with
 nothing redeployed, and it checks the password and the endpoint before the API
-starts. That path is **decided, not yet rehearsed**: it has run only against a
-fake AWS in the test suite. [Restore from PITR](disaster-recovery.md#restore-from-pitr-preferred)
+starts. It was rehearsed on a staging account on 2026-10-11 (UTC): a restore, a
+cutover, and a cutover undone ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)).
+[Restore from PITR](disaster-recovery.md#restore-from-pitr-preferred)
 in the Disaster Recovery Plan gives it step by step, with what it cannot do.
 
 The cluster's identifier is generated by CloudFormation; the stack publishes it:
@@ -861,9 +836,8 @@ aws rds describe-db-cluster-snapshots \
 
 Aurora restores to any second within the cluster's backup retention period,
 up to its `LatestRestorableTime` (usually within 5 minutes of the present).
-The stack sets 35 days in prod and staging and 1 day elsewhere. A cluster deployed from an earlier version of the
-CDK app keeps its old value (1 day) until its database stack is redeployed, so
-check what it actually keeps:
+The stack sets 35 days in prod and staging and 1 day elsewhere. Check what the
+cluster keeps:
 
 ```bash
 aws rds describe-db-clusters --db-cluster-identifier "$CLUSTER" \
@@ -878,7 +852,7 @@ revision it already serves, with the task count and scaling it had. Before the
 next deploy, change the release: a deploy of the release that contains the
 migration runs it again.
 
-**RTO: not measured. The restore is targeted at about 30 minutes, and the cutover takes the API down for an estimated 15 to 40 minutes. RPO: the time you restore to.**
+**RTO: on 2026-10-11 (UTC), on a staging database holding little data, the restore took 11 min 41 s and the cutover took the API down for 12 min 45 s ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)); a larger database restores more slowly. The recovery point is the time you restore to.**
 
 ---
 
@@ -918,7 +892,7 @@ If a deployment is listed, wait for it to end (`aws deploy get-deployment --depl
 shows its status), then start again here. Do not stop it by hand to make room: stopping it with
 auto-rollback moves traffic back to the task set kept from before that deploy, whose tasks
 started before the change and still hold the old value. If the restart cannot wait, the one
-faster way to start new tasks is [Method 1](#method-1-github-actions-manual-rollback-preferred-3-minutes)
+faster way to start new tasks is [Method 1](#method-1-github-actions-manual-rollback-preferred)
 to the previous revision: it stops that deployment and creates its own, whose new tasks read the
 current values. That runs the previous release (read
 [The rolled-back API runs against the current schema](#the-rolled-back-api-runs-against-the-current-schema)
@@ -1061,19 +1035,8 @@ aws ecs describe-services \
 curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' "https://app.<domain>/"
 ```
 
-### Smoke Tests (within 10 minutes of rollback)
-
-- [ ] Experiments list endpoint returning 200
-- [ ] Tracking assignment endpoint operational
-- [ ] Feature flag evaluation endpoint operational
-- [ ] Authentication endpoint accepting valid tokens
-
 ### Incident Documentation (within 30 minutes of rollback)
 
-- [ ] Incident posted in `#incidents` Slack channel with:
-  - Timeline: when issue started, when detected, when rollback triggered, when resolved
-  - Impact: which endpoints were affected, estimated user impact
-  - Root cause hypothesis (preliminary is fine)
 - [ ] Bad image tagged so nobody mistakes it for a good one (the deploy pushes
       `:<tag>-<profile>`):
 
@@ -1087,25 +1050,6 @@ aws ecr put-image \
     --query 'images[0].imageManifest' --output text)"
 ```
 
-- [ ] The release notes of the bad release say so. **Do not delete the git
-      tag**: it is a published release, other environments and people may be
-      on it, and a deleted tag the next deploy cannot even refuse by name.
+- [ ] The release notes of the bad release say so, and its git tag stays.
 
-- [ ] Postmortem scheduled within 5 business days
-- [ ] Investigation ticket opened in GitHub Issues with `P1` label and link to failed deployment
-
----
-
-## Escalation Path
-
-If rollback does not resolve the issue within 15 minutes, escalate immediately — do not wait.
-
-| Time Since Issue | Action | Who |
-|-----------------|--------|-----|
-| T+0 | Detect issue, start rollback | On-call engineer |
-| T+5 | Rollback not complete or not resolving | Page Engineering Lead |
-| T+15 | Service not restored | Activate Incident Commander, open P0 bridge |
-| T+30 | Data loss confirmed or outage continuing | Page VP Engineering |
-| T+60 | Full region or account-level issue | Initiate disaster recovery plan |
-
-Contacts: your own team's escalation policy and after-hours contacts. See also [Responding to an incident on your deployment](../security/incident-response.md).
+See also [Responding to an incident on your deployment](../security/incident-response.md).

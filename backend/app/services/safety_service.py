@@ -34,10 +34,11 @@ from backend.app.models.feature_flag import (
     flag_status_name,
 )
 from backend.app.models.metrics.metric import (
-    REPORT_SOURCE_CLIENT,
     ErrorLog,
     MetricType,
     RawMetric,
+    counted_error_filter,
+    uncounted_error_filter,
 )
 from backend.app.models.rollout_schedule import RolloutSchedule, RolloutScheduleStatus
 from backend.app.models.safety import (
@@ -429,12 +430,13 @@ class SafetyService:
         Which rows count: every ``error_logs`` row of the flag in the window
         except error reports sent with a key that is not a server-side key,
         i.e. rows whose ``request_data->>'source'`` is ``'client'``
-        (``REPORT_SOURCE_CLIENT``). The test is ``IS DISTINCT FROM``, so rows
+        (``REPORT_SOURCE_CLIENT``). The rule is ``counted_error_filter()``,
+        which the metrics summary uses too; it is ``IS DISTINCT FROM``, so rows
         with no ``source`` count: flag evaluations that failed on the server
-        (``{"context": ...}``) and rows with no ``request_data``. A plain
-        ``!=`` would drop those, because it is NULL, not true, for them.
-        ``uncounted_error_count`` is the number of ``'client'`` rows: stored,
-        and shown on the check, but not counted.
+        (``{"context": ...}``) and rows with no ``request_data``.
+        ``uncounted_error_count`` is the number of ``'client'`` rows
+        (``uncounted_error_filter()``): stored, and shown on the check, but
+        not counted.
 
         ``error_count``, ``error_rate`` and ``error_types`` cover the counted
         rows; ``total_evaluations`` is unchanged.
@@ -456,9 +458,8 @@ class SafetyService:
             ErrorLog.feature_flag_id == feature_flag_id,
             ErrorLog.timestamp.between(start_time, end_time),
         )
-        report_source = ErrorLog.request_data["source"].astext
-        counted = report_source.is_distinct_from(REPORT_SOURCE_CLIENT)
-        uncounted = report_source == REPORT_SOURCE_CLIENT
+        counted = counted_error_filter()
+        uncounted = uncounted_error_filter()
         error_count, uncounted_error_count = (
             int(n or 0)
             for n in db.query(

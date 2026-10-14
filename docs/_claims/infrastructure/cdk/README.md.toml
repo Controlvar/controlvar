@@ -1,0 +1,16 @@
+# What verifies each unit of infrastructure/cdk/README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "infrastructure/cdk/README.md"
+
+[[unit]]
+text = "Experimently Infrastructure"
+by = ["exempt:label"]
+
+[[unit]]
+text = "This directory contains AWS CDK code for deploying the experimentation platform infrastructure."
+by = ["test:infrastructure/tests/test_app_profiles.py::TestTheAppActuallySynthesises::test_synth_completes"]
+
+[[unit]]
+text = "To deploy it, follow AWS CDK Deployment, which lists the prerequisites and the environment variables app.py reads."
+by = ["exempt:navigation"]

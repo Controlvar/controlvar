@@ -6,7 +6,9 @@ Pinned without a database or the app (this runs on a docs-only pull request):
   anchor, says in its first line that it is Cognito onboarding by an
   administrator, names ``COGNITO_SELF_SIGNUP_ENABLED``, and holds exactly the
   four ``aws cognito-idp`` commands of the procedure -- ``--permanent``
-  included.  :func:`onboarding_commands` turns them into boto3 calls, and
+  included -- and the one ``read`` that prompts for the password the third
+  command takes from ``$PASSWORD``.  :func:`onboarding_commands` turns the
+  four into boto3 calls, and
   ``backend/tests/integration/auth/test_cognito_onboarding.py`` runs those
   calls against moto and signs the user in, so the procedure as written is
   executed, not only read;
@@ -49,6 +51,10 @@ AUTH_SERVICE = "backend/app/services/auth_service.py"
 SETTING = "COGNITO_SELF_SIGNUP_ENABLED"
 ADDING = "Adding a user"
 POOL_PLACEHOLDER = "$COGNITO_USER_POOL_ID"
+#: The password step takes the password from this variable, which the line
+#: before it reads from a prompt that does not show it.
+PASSWORD_PLACEHOLDER = "$PASSWORD"
+PASSWORD_PROMPT = "printf 'Password: '; read -rs PASSWORD; printf '\\n'"
 
 # ---------------------------------------------------------------------------
 # The onboarding procedure
@@ -105,7 +111,12 @@ def to_boto_call(command: str) -> Tuple[str, Dict[str, Any]]:
 
 
 def onboarding_commands(text: Optional[str] = None) -> List[Tuple[str, Dict[str, Any]]]:
-    """The commands of "Adding a user", in order, as boto3 calls."""
+    """The commands of "Adding a user", in order, as boto3 calls.
+
+    The one line that is not an ``aws cognito-idp`` command is
+    :data:`PASSWORD_PROMPT`, exactly, and it must come straight before the
+    command that reads ``$PASSWORD``.
+    """
     commands: List[str] = []
     inside = False
     for line in section(ADDING, text).splitlines():
@@ -116,7 +127,19 @@ def onboarding_commands(text: Optional[str] = None) -> List[Tuple[str, Dict[str,
         elif inside and line.strip():
             commands.append(line.strip())
     assert not inside, "an unclosed fence in Adding a user"
-    return [to_boto_call(c) for c in commands]
+    calls: List[Tuple[str, Dict[str, Any]]] = []
+    prompted = False
+    for command in commands:
+        if command == PASSWORD_PROMPT:
+            assert not prompted, "the password prompt is given twice"
+            prompted = True
+            continue
+        operation, params = to_boto_call(command)
+        if PASSWORD_PLACEHOLDER in params.values():
+            assert prompted, f"{command!r} reads $PASSWORD that no prompt set"
+        prompted = False
+        calls.append((operation, params))
+    return calls
 
 
 #: The procedure, as the boto3 calls the documented commands make.
@@ -141,7 +164,7 @@ EXPECTED_PROCEDURE = [
         {
             "UserPoolId": POOL_PLACEHOLDER,
             "Username": "jdoe",
-            "Password": "Choose-A-Password-1",
+            "Password": PASSWORD_PLACEHOLDER,
             "Permanent": True,
         },
     ),
@@ -185,7 +208,6 @@ def test_the_section_explains_the_setting_and_the_temporary_password():
     assert f"`{SETTING}=true`" in text
     assert "`--permanent` is required." in text
     assert "A temporary password cannot sign in through the API:" in text
-    assert "issues/699" in text
 
 
 def test_the_section_quotes_the_401_a_temporary_password_gets():

@@ -20,9 +20,8 @@ with IAM rights in the account, before the first deploy
 CloudFormation stack: an S3 bucket and an ECR repository for assets, SSM
 parameter `/cdk-bootstrap/hnb659fds/version`, and the IAM roles
 `cdk-hnb659fds-{deploy,cfn-exec,file-publishing,image-publishing,lookup}-role-<account>-<region>`.
-So it needs to create CloudFormation stacks, IAM roles and policies, an S3
-bucket, an ECR repository and an SSM parameter. In practice that is an
-administrator, once. Nothing afterwards should use it.
+It creates them with its caller's own permissions, IAM roles included, so run
+it once, as an administrator of the account. Nothing afterwards should use it.
 
 ## 2. The `cdk deploy` identity
 
@@ -63,29 +62,17 @@ exactly -- `StringEquals`, no wildcard:
 repo:getexperimently@328439352/experimently@1367480368:environment:<ENVIRONMENT>
 ```
 
-That is GitHub's **immutable subject**: the owner and repository by name *and*
-numeric id, so a repository deleted and recreated under the same name (or a
-transferred one) cannot assume the role. This repository uses it; the prefix
-comes from
-
-```bash
-gh api repos/<owner>/<repo>/actions/oidc/customization/sub
-```
-
-It prints:
-
-```text
-{"use_default":true,"use_immutable_subject":true,
- "sub_claim_prefix":"repo:getexperimently@328439352/experimently@1367480368"}
-```
-
-and a fork or a copy of this repository has a different one: read yours with
-the same call. The `:environment:<name>` suffix is what a job that declares
+That is GitHub's **immutable subject**: the owner and the repository by name
+*and* numeric id. On 2026-10-02 (UTC) a job of this repository bound to the
+`staging` environment received
+`repo:getexperimently@328439352/experimently@1367480368:environment:staging`
+([run](https://github.com/getexperimently/experimently/actions/runs/36972395116)).
+A fork or a copy of this repository has another prefix: the OIDC subject probe
+below prints yours. The `:environment:<name>` suffix is what a job that declares
 `environment:` receives, which is the only kind of job in these workflows that
 assumes the role.
 
-**Before writing the policy, decode a real token.** The prefix above was read
-from the API, not from a token. Before the first staging deploy, run a
+**Before writing the policy, decode a real token.** Before the first staging deploy, run a
 throwaway job bound to the `staging` environment that prints only the
 *payload* of its OIDC token's `sub` claim, and the trust policy is written
 from what it printed. The **OIDC subject probe** workflow
@@ -127,9 +114,7 @@ list cannot fall behind the workflows. `iam:PassRole` is granted only for
 passing roles to ECS tasks.
 
 Resources are `*`, except `rds:AddTagsToResource`, which is granted only on
-cluster snapshots (below). Narrowing them to one environment's ARNs is worth doing;
-it is not done here, because the names mix generated identifiers (the Aurora
-cluster, the task roles) that are only known after `cdk deploy`.
+cluster snapshots (below).
 
 `ecs:UpdateService` is on `*` too, and that is a deliberate choice, not an
 oversight. It is there for `scripts/ecs_rolling_rollout.sh`, which rolls the
@@ -138,8 +123,7 @@ service's desired count, load balancers and deployment controller, the API's
 included. It adds no reach the role lacks: the role already holds
 `ecs:RunTask`, `ecs:RegisterTaskDefinition` and `iam:PassRole` to ECS tasks on
 `*`, which together run any image with any task role in the account, so that
-grant dominates it. Each environment is its own AWS account (D7), so the account
-is the boundary, not the resource list.
+grant dominates it.
 
 Six of the actions are not visible in the workflow text and come from AWS's
 documentation of what the call needs: `iam:PassRole` (registering and running
@@ -161,16 +145,11 @@ being rolled back is usually what holds it there, so Rollback creates its
 deployment with the group's alarms overridden (`--override-alarm-configuration`),
 always, and Deploy does the same only under its break-glass input
 ([Fix forward while an alarm is firing](rollback-runbook.md#fix-forward-while-an-alarm-is-firing)).
-AWS documents that overriding alarms on `CreateDeployment` needs the
-`UpdateDeploymentGroup` permission; there is no narrower action. It is a real
-widening: with it the role could also change the group itself, for example
-remove its alarms, which the next `cdk deploy` would put back. What it adds is
-small: the role can already create a deployment of any AppSpec, and it cannot
-change the group's service role, because `iam:PassRole` is granted only to ECS
-tasks. The only narrowing available is the resource, the environment's
-deployment-group ARN; like everything here it is `*`. Whether AWS accepts the
-override without it is not yet checked in a real account; the expected result
-is `AccessDenied` on the create-deployment.
+Overriding alarms on `CreateDeployment` needs the `UpdateDeploymentGroup`
+permission, which `scripts/iam_actions.py` grants for that flag; there is no
+narrower action. The role can already create a deployment of any AppSpec, and
+it cannot change the group's service role, because `iam:PassRole` is granted
+only to ECS tasks.
 
 **A role created before an update to this policy must have it re-applied.** The
 policy is applied by hand, so a role keeps whatever it was given. The
@@ -199,10 +178,10 @@ until that CodeDeploy deployment is no longer active (about an hour).
 The API's alarms (#148) add `codedeploy:UpdateDeploymentGroup` and a
 `codedeploy:GetDeployment` read in Deploy. Roles created from a policy before
 the alarms lack `codedeploy:UpdateDeploymentGroup`; re-apply this policy in
-every account before the first `cdk deploy` that adds the alarms. The failure
-without it is the dangerous kind: Rollback's `create-deployment` is refused
-with `AccessDenied` in the middle of an incident, and so is a Deploy with the
-alarm override. The deployment group's own read of its alarms
+every account before the first `cdk deploy` that adds the alarms. Without it,
+Rollback's `create-deployment` is expected to be refused with `AccessDenied` in
+the middle of an incident, and so is a Deploy with the alarm override; that has
+not been rehearsed on AWS as of v0.31.1. The deployment group's own read of its alarms
 (`cloudwatch:DescribeAlarms`) is on CodeDeploy's service role, which the CDK
 creates; the workflow role's grant of the same action, below, is a separate
 one.
@@ -226,16 +205,11 @@ account before the next deploy. The failure without it is loud and safe:
 Deploy's "Snapshot the database before migrating" step (and Database
 Migration's "Take a snapshot first") stops with "not authorized to perform:
 rds:AddTagsToResource on resource: arn:aws:rds:...:cluster-snapshot:...",
-and nothing is snapshotted, migrated or shifted. This is how the first
-staging deploy stopped.
+and nothing is snapshotted, migrated or shifted.
 
 `codedeploy:GetApplicationRevision` (#754) was added after the staging
-rollback rehearsal. AWS's CodeDeploy guide asks for it *or*
-`codedeploy:RegisterApplicationRevision` alongside `CreateDeployment`, and
-only the second was granted. Deploy's `create-deployment`, with an AppSpec for
-a new revision, passed. Rollback's, with an AppSpec for a revision deployed
-before (the previous task definition), was refused for
-`codedeploy:GetApplicationRevision`. Both are now granted. Roles created from a
+rollback rehearsal on 2026-10-03 (UTC), where its absence stopped Rollback
+([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5963917501)). Roles created from a
 policy before #754 lack it; re-apply this policy in every account before the
 next rollback. The failure without it comes after the in-flight deployment has
 been stopped: Rollback's "Roll back via CodeDeploy" step stops with "not
@@ -289,19 +263,8 @@ deployment is created.
 
 ### GitHub side
 
-Per environment (`staging`, `prod`): Settings → Environments → *env*:
-
-- **required reviewer**, and **deployment branches: `main` only** -- set these
-  first, before any variable or secret (a dispatch that names an environment
-  that does not exist creates it, unprotected);
-- secret `AWS_ACCOUNT_ID` -- that environment's account, 12 digits
-  (`gh secret set AWS_ACCOUNT_ID --env <env>`). A secret, not a variable: the
-  workflow logs are public, and a step's log header prints a variable's value
-  before anything can mask it. An `AWS_ACCOUNT_ID` *variable* is not read;
-  move it to a secret, then `gh variable delete AWS_ACCOUNT_ID --env <env>`;
-- secret `AWS_ROLE_ARN` -- that environment's role
-  (`gh secret set AWS_ROLE_ARN --env <env>`);
-- variable `PUBLIC_BASE_URL` -- the origin the stacks were deployed with
-  (`gh variable set PUBLIC_BASE_URL --env <env> --body https://app.<domain>`).
+Each environment's protection, its `AWS_ACCOUNT_ID` and `AWS_ROLE_ARN`
+secrets and its `PUBLIC_BASE_URL` variable are
+[section 1.5 of the deployment guide](deployment-guide.md#15-github-repository-administrator).
 
 `SLACK_BOT_TOKEN` may be a repository secret; it is optional.

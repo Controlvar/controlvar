@@ -102,11 +102,6 @@ universe = [
     "docs/guides/segments.md",
     "docs/guides/user-guide.md",
     "docs/hipaa/overview.md",
-    "docs/infrastructure/aws-iam-setup.md",
-    "docs/infrastructure/cloudwatch-setup.md",
-    "docs/infrastructure/dynamodb-readme.md",
-    "docs/infrastructure/network-security-readme.md",
-    "docs/infrastructure/vpc-stack-implementation.md",
     "docs/integrations/aws.md",
     "docs/integrations/github.md",
     "docs/integrations/salesforce.md",
@@ -473,10 +468,6 @@ reason = "starts the production stack on a Docker host: the compose-production w
 "docs/getting-started/pre-commit-hooks.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/getting-started/python-virtual-env-setup.md" = { comments = 0, unlabelled = 1, syntax = 0 }
 "docs/getting-started/vscode-settings.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"docs/infrastructure/aws-iam-setup.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"docs/infrastructure/cloudwatch-setup.md" = { comments = 0, unlabelled = 4, syntax = 0 }
-"docs/infrastructure/dynamodb-readme.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"docs/infrastructure/vpc-stack-implementation.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/integrations/aws.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/sdk-guide.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/sdk/android.md" = { comments = 0, unlabelled = 0, syntax = 0 }
