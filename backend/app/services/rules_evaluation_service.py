@@ -57,6 +57,11 @@ logger = logging.getLogger(__name__)
 _SEMVER_PATTERN = r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$"
 
 
+# The longest user value, in characters, that a json_path condition parses as
+# JSON (64 KiB). A longer one does not match, and is not parsed.
+JSON_PATH_MAX_VALUE_LENGTH = 64 * 1024
+
+
 @dataclass
 class RuleEvaluationMetrics:
     """Metrics for rule evaluation performance."""
@@ -578,13 +583,28 @@ class RulesEvaluationService:
     def _evaluate_json_path(
         self, json_data: Any, json_path: str, expected_value: Any
     ) -> bool:
-        """Evaluate JSONPath expression."""
+        """Evaluate JSONPath expression.
+
+        A string value is parsed as JSON first. One that cannot be parsed does
+        not match: it is longer than ``JSON_PATH_MAX_VALUE_LENGTH``, is not JSON,
+        or is nested too deeply for the parser. That is the user's value, not a
+        fault in the rule, so it is logged at DEBUG with the exception's type
+        only.
+        """
         try:
             # Parse JSON string if needed
             if isinstance(json_data, str):
+                if len(json_data) > JSON_PATH_MAX_VALUE_LENGTH:
+                    logger.debug("JSON path value is over the length limit")
+                    return False
                 try:
                     json_data = json.loads(json_data)
-                except json.JSONDecodeError:
+                except (ValueError, RecursionError) as exc:
+                    # ValueError includes json.JSONDecodeError and a number too
+                    # long to convert; RecursionError is a deeply nested value.
+                    logger.debug(
+                        "JSON path value cannot be parsed (%s)", type(exc).__name__
+                    )
                     return False
 
             # Ensure we have a dict or list to work with
