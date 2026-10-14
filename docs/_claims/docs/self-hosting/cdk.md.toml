@@ -1016,6 +1016,10 @@ text = "DynamoDB tables experimentation-{events,feature-flags,overrides}-prod, e
 by = ["test:infrastructure/tests/test_stack_graph.py::test_what_prod_keeps_when_its_stacks_are_destroyed"]
 
 [[unit]]
+text = "DynamoDB tables experimentation-{assignments,experiments}-prod, in a production environment deployed before #605 | no stack creates them any more, and nothing reads them | prod | provisioned capacity and storage | aws dynamodb create-backup if you want a copy, then aws dynamodb delete-table"
+by = ["test:infrastructure/tests/test_hand_made_resources.py::test_no_stack_creates_the_tables_605_removed_and_nothing_reads_them"]
+
+[[unit]]
 text = "Log groups /ecs/experimentation-{backend,dashboard,migrate}-prod | RETAIN | prod | log storage | aws logs delete-log-group"
 by = ["test:infrastructure/tests/test_stack_graph.py::test_what_prod_keeps_when_its_stacks_are_destroyed"]
 

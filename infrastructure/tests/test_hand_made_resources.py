@@ -11,13 +11,16 @@ Asserted on a real synth of every environment, in both profiles:
   person creates them before the first deploy;
 * each environment reads its own secrets, ``/<env>/experimentation/<name>``,
   the same three names in each;
-* no stack schedules a secret's rotation or a backup.
+* no stack schedules a secret's rotation or a backup;
+* no stack creates the two DynamoDB tables #605 removed, and no code names
+  them: a production environment deployed before it keeps them, unread.
 """
 
 from __future__ import annotations
 
 import json
 import runpy
+from pathlib import Path
 
 import pytest
 
@@ -25,6 +28,7 @@ from .test_app_profiles import (
     CDK_DIR,
     FAKE_ACCOUNT,
     FAKE_REGION,
+    REPO_ROOT,
     SECRET_ARN_INPUTS,
     _app_environment,
     fake_secret_arn,
@@ -184,3 +188,49 @@ def test_no_stack_schedules_a_rotation_or_a_backup(synths):
                 assert word not in text, (stack, lid, word)
     # Not vacuous: the secrets and tables these would schedule are there.
     assert {"AWS::SecretsManager::Secret", "AWS::DynamoDB::Table"} <= seen
+
+
+#: The two tables #605 took out of the DynamoDB stack. A production
+#: environment deployed before that still has them (they were RETAIN in prod),
+#: billed until someone deletes them.
+REMOVED_TABLES = ("experimentation-assignments-", "experimentation-experiments-")
+
+
+def _code(path: Path) -> str:
+    return "\n".join(
+        line
+        for line in path.read_text().splitlines()
+        if not line.lstrip().startswith("#")
+    )
+
+
+@pytest.mark.regression
+def test_no_stack_creates_the_tables_605_removed_and_nothing_reads_them(synths):
+    tables = [
+        str(r["Properties"].get("TableName"))
+        for templates in synths.values()
+        for _, _, r in _resources(templates)
+        if r["Type"] == "AWS::DynamoDB::Table"
+    ]
+    assert len(tables) == 4 * (3 + 4), tables  # core 3, full 4, four environments
+    assert not [t for t in tables if t.startswith(REMOVED_TABLES)], tables
+    for templates in synths.values():
+        text = json.dumps(templates)
+        for name in REMOVED_TABLES:
+            assert name not in text, name
+    # No code the stacks or the application run names either table.
+    roots = [
+        "backend/app",
+        "backend/lambda",
+        "modules/backend/app",
+        "infrastructure/cdk",
+        "modules/infrastructure",
+    ]
+    scanned = 0
+    for root in roots:
+        for path in sorted((REPO_ROOT / root).rglob("*.py")):
+            scanned += 1
+            code = _code(path)
+            for name in REMOVED_TABLES:
+                assert name not in code, (path, name)
+    assert scanned > 100, scanned

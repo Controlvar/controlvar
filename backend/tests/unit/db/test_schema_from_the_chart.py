@@ -31,3 +31,11 @@ def test_the_chart_sets_the_schema_from_postgresql_schema():
     assert refs == ["{{ $fullname }}-config", "{{ $fullname }}-config"], refs
     assert '$fullname := include "experimently.fullname" .' in deployment
     assert 'name: {{ include "experimently.fullname" . }}-config' in template
+    # Nothing else in the chart names the variable, so no container's own
+    # `env:` overrides what the configuration map gives it.
+    named = sorted(
+        str(path.relative_to(CHART))
+        for path in (CHART / "templates").rglob("*")
+        if path.is_file() and "POSTGRES_SCHEMA" in path.read_text()
+    )
+    assert named == ["templates/config.yaml"], named

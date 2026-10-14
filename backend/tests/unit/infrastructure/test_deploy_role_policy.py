@@ -242,6 +242,31 @@ def test_deploy_rollback_and_database_migration_assume_the_role_and_nothing_else
     # The generator reads exactly these three: the role's permissions are
     # derived from the workflows that use it.
     assert sorted(p.name for p in iam.WORKFLOWS) == sorted(found)
+    # Nothing else assumes a role: no local action uses the AWS sign-in
+    # action, no workflow, action or script calls STS's AssumeRole in any
+    # spelling, and the role's ARN is handed to nothing but the action.
+    actions = sorted(
+        [*(GITHUB / "actions").rglob("*.yml"), *(GITHUB / "actions").rglob("*.yaml")]
+    )
+    for path in actions:
+        steps = ((_workflow(path).get("runs") or {}).get("steps")) or []
+        assert not [s for s in steps if _assumes_the_role(s)], path
+    sources = [
+        *WORKFLOWS.glob("*.yml"),
+        *WORKFLOWS.glob("*.yaml"),
+        *actions,
+        *(p for p in (REPO_ROOT / "scripts").rglob("*") if p.is_file()),
+    ]
+    handed = 0
+    for path in sources:
+        text = path.read_text(errors="replace")
+        assert not re.search(r"assume[-_]?role", text, re.I), path
+        uses = re.findall(
+            r"^\s*([\w-]+):\s*\$\{\{\s*secrets\.AWS_ROLE_ARN\s*\}\}", text, re.M
+        )
+        assert set(uses) <= {"role-to-assume"}, (path, uses)
+        handed += len(uses)
+    assert handed == 3, handed  # one per workflow above: the scan reads them
 
 
 @pytest.mark.regression

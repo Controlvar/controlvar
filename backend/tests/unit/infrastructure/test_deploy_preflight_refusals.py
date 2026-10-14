@@ -623,8 +623,19 @@ def test_the_workflows_take_named_snapshots_and_delete_none():
         names[name] = made
         assert made == prefix
     assert names == {"deploy.yml": "pre-deploy-", "db-migrate.yml": "pre-migration-"}
-    for path in [*workflows.glob("*.yml"), *(REPO_ROOT / "scripts").glob("*")]:
-        if path.is_file():
-            text = path.read_text(errors="replace")
-            assert "delete-db-cluster-snapshot" not in text, path
-            assert "delete_db_cluster_snapshot" not in text, path
+    github = REPO_ROOT / ".github"
+    scanned = [
+        *workflows.glob("*.yml"),
+        *workflows.glob("*.yaml"),
+        *(github / "actions").rglob("*.yml"),
+        *(github / "actions").rglob("*.yaml"),
+        *(REPO_ROOT / "scripts").rglob("*"),
+    ]
+    files = [p for p in scanned if p.is_file()]
+    assert github / "actions" / "stack-outputs" / "action.yml" in files
+    for path in files:
+        text = path.read_text(errors="replace")
+        for call in ("delete-db-cluster-snapshot", "delete_db_cluster_snapshot"):
+            assert call not in text, (path, call)
+        # The API's name for the call, in any spelling a script could use.
+        assert "deletedbclustersnapshot" not in text.lower().replace("_", ""), path

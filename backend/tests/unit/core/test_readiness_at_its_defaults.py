@@ -8,7 +8,8 @@ fails here:
 
 * a Redis that does not answer leaves ``/health`` at 200, reported
   ``unhealthy`` under ``checks``: it does not fail a deployment by itself;
-* free disk below 1 GB is ``low`` and does not fail the probe either.
+* free disk of 1 GB or less (as reported, to 0.01 GB) is ``low``, more is
+  ``healthy``, and ``low`` does not fail the probe either.
 
 And ``/metrics`` exports what this process's default registry holds: no
 multiprocess collector merges the workers of a container.
@@ -64,9 +65,10 @@ def test_a_redis_that_does_not_answer_leaves_health_at_200_by_default(
 
 
 @pytest.mark.parametrize(
-    ("free_gb", "status"), [(0.5, "low"), (0.99, "low"), (1.5, "healthy")]
+    ("free_gb", "status"),
+    [(0.5, "low"), (0.99, "low"), (1.0, "low"), (1.01, "healthy"), (40.0, "healthy")],
 )
-def test_free_disk_below_1_gb_is_low_and_does_not_fail_the_probe(
+def test_free_disk_of_1_gb_or_less_is_low_and_does_not_fail_the_probe(
     deployed, monkeypatch, free_gb, status
 ):
     monkeypatch.setattr(

@@ -17,12 +17,14 @@ from __future__ import annotations
 import ast
 import re
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 import botocore.session
 import jwt
 import pytest
+from botocore import xform_name
 from botocore.exceptions import ClientError
 from fastapi.testclient import TestClient
 
@@ -30,6 +32,7 @@ from backend.app.api import deps
 from backend.app.core.config import settings
 from backend.app.core.security import create_local_access_token
 from backend.app.main import app
+from backend.app.models.user import User, UserRole
 from backend.app.services import auth_service as auth_module
 from backend.app.services.auth_service import CognitoAuthService
 
@@ -40,10 +43,6 @@ POOL = "us-west-2_AbC123xyZ"
 CLIENT = "3n4b5urk1ft4fl3mg5e62d9ado"
 ISSUER = f"https://cognito-idp.us-west-2.amazonaws.com/{POOL}"
 SIGN_IN_FORM = REPO_ROOT / "frontend" / "src" / "contexts" / "AuthContext.tsx"
-
-
-def _operation(python_name: str) -> str:
-    return "".join(part.capitalize() for part in python_name.split("_"))
 
 
 class _Cognito:
@@ -84,19 +83,25 @@ def _token(**claims) -> str:
 
 
 def test_every_cognito_call_the_platform_makes_needs_no_iam_permission():
+    """Every name in the auth service that is a Cognito operation -- called as
+    a method on anything (the client, or a name it was assigned to), or given
+    as a string (``getattr``) -- is one AWS authorises without IAM."""
+    model = botocore.session.get_session().get_service_model("cognito-idp")
+    operations = {xform_name(name): name for name in model.operation_names}
     tree = ast.parse(Path(auth_module.__file__).read_text())
-    called = {
+    named = {
         node.func.attr
         for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and isinstance(node.func.value, ast.Attribute)
-        and node.func.value.attr == "client"
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    } | {
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
     }
-    assert {"get_user", "initiate_auth"} <= called, called
-    model = botocore.session.get_session().get_service_model("cognito-idp")
-    for name in sorted(called):
-        operation = model.operation_model(_operation(name))
+    called = sorted(named & set(operations))
+    assert {"get_user", "initiate_auth"} <= set(called), called
+    for name in called:
+        operation = model.operation_model(operations[name])
         assert operation.auth_type == "none", (name, operation.auth_type)
     # No other module talks to Cognito.
     for root in ("backend/app", "modules/backend/app"):
@@ -134,8 +139,41 @@ def test_under_cognito_the_dashboards_sign_in_endpoint_is_not_available(monkeypa
     )
 
 
+class _OneUser:
+    """A session whose every user lookup finds ``user``: the account the token
+    names exists, so only the provider can refuse the token."""
+
+    def __init__(self, user):
+        self.user = user
+
+    def query(self, *args, **kwargs):
+        return self
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def first(self):
+        return self.user
+
+    def rollback(self):
+        pass
+
+    def close(self):
+        pass
+
+
 def test_under_cognito_a_token_the_platform_issued_signs_nobody_in(monkeypatch):
-    user = SimpleNamespace(id=uuid.uuid4(), email="sso@example.com", role="DEVELOPER")
+    user = User(
+        id=uuid.uuid4(),
+        username="sso-user",
+        email="sso@example.com",
+        hashed_password="x",
+        is_active=True,
+        is_superuser=False,
+        role=UserRole.DEVELOPER,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
     token = create_local_access_token(user)
     sent: list[str] = []
 
@@ -151,15 +189,23 @@ def test_under_cognito_a_token_the_platform_issued_signs_nobody_in(monkeypatch):
             "GetUser",
         )
 
-    monkeypatch.setattr(settings, "AUTH_PROVIDER", "cognito")
     monkeypatch.setattr(settings, "DEV_AUTH_BYPASS", False)
     service, _ = _service()
     service.client = SimpleNamespace(get_user=cognito_get_user)
     monkeypatch.setattr(deps, "auth_service", service)
-    with TestClient(app, raise_server_exceptions=False) as client:
-        response = client.get(
-            "/api/v1/users/me", headers={"Authorization": f"Bearer {token}"}
-        )
+    app.dependency_overrides[deps.get_db] = lambda: _OneUser(user)
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            # Control: under local the token signs this account in.
+            monkeypatch.setattr(settings, "AUTH_PROVIDER", "local")
+            local = client.get("/api/v1/users/me", headers=headers)
+            monkeypatch.setattr(settings, "AUTH_PROVIDER", "cognito")
+            response = client.get("/api/v1/users/me", headers=headers)
+    finally:
+        app.dependency_overrides.pop(deps.get_db, None)
+    assert local.status_code == 200, local.text
+    assert local.json()["email"] == "sso@example.com"
     assert response.status_code == 401
     assert response.json() == {"detail": deps._credentials_exception().detail}
     # It was Cognito that was asked, and it was asked about this token.
