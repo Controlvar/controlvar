@@ -31,7 +31,12 @@ router = APIRouter()
     "/summary",
     response_model=MetricsSummary,
     summary="Get metrics summary",
-    description="Get summary statistics for feature flag metrics.",
+    description=(
+        "Get summary statistics for feature flag metrics over ``start_date`` to "
+        "``end_date``, by default the 30 days before now. ``error_rate`` counts "
+        "errors by the safety check's rule, and ``uncounted_error_count`` is the "
+        "error reports that do not count."
+    ),
 )
 def get_metrics_summary(
     feature_flag_id: Optional[UUID] = Query(

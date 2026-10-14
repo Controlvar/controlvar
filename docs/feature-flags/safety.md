@@ -38,6 +38,13 @@ goes for an `sdk:ruleset` key whose owner has since lost the role. To have app e
 them to your server and forward them from there with a server-side key; see
 [Reporting client-side errors](create.md#reporting-client-side-errors).
 
+`GET /api/v1/metrics/summary` counts errors by the same rule: its `error_rate` leaves out the
+reports that do not count, and its `uncounted_error_count` is the number of them in its period.
+That `error_rate` still differs from the check's in three ways: it covers `start_date` to
+`end_date` (by default the 30 days before now), not the last 15 minutes; it divides by the
+aggregated flag evaluations (of its `period`, by default `day`), not the raw ones; and it is a
+percentage, not a fraction, which can exceed 100 when errors outnumber those evaluations.
+
 ---
 
 ## Metrics You Can Monitor

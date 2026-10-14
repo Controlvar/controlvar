@@ -19,6 +19,8 @@ from backend.app.models.metrics.metric import (
     ErrorLog,
     MetricType,
     RawMetric,
+    counted_error_filter,
+    uncounted_error_filter,
 )
 from backend.app.schemas.metrics import (
     ErrorLogCreate,
@@ -314,6 +316,15 @@ class MetricsService:
         """
         Get summary statistics for metrics.
 
+        Errors are counted by the safety check's rule
+        (``counted_error_filter()``): an error report the check does not count
+        is left out of ``error_rate`` and counted in ``uncounted_error_count``
+        instead. ``error_rate`` still differs from the check's in its period
+        (``start_date`` to ``end_date`` here, the last 15 minutes there), its
+        denominator (the aggregated flag evaluations of ``period`` here, the
+        raw evaluations there) and its unit (a percentage here, a fraction
+        there).
+
         Args:
             db: Database session
             feature_flag_id: Optional filter by feature flag ID
@@ -379,17 +390,18 @@ class MetricsService:
         if total_evaluations > 0:
             rule_match_rate = (rule_match_count / total_evaluations) * 100
 
-        # Get error rate
-        error_count = db.query(func.count(ErrorLog.id)).filter(
-            ErrorLog.timestamp >= start_date, ErrorLog.timestamp <= end_date
-        )
+        # Get error rate: the errors the safety check counts, by its rule
+        error_counts = db.query(
+            func.count(ErrorLog.id).filter(counted_error_filter()),
+            func.count(ErrorLog.id).filter(uncounted_error_filter()),
+        ).filter(ErrorLog.timestamp >= start_date, ErrorLog.timestamp <= end_date)
 
         if feature_flag_id:
-            error_count = error_count.filter(
+            error_counts = error_counts.filter(
                 ErrorLog.feature_flag_id == feature_flag_id
             )
 
-        error_count = error_count.scalar() or 0
+        error_count, uncounted_error_count = (int(n or 0) for n in error_counts.one())
 
         error_rate = None
         if total_evaluations > 0:
@@ -402,6 +414,7 @@ class MetricsService:
             avg_latency=avg_latency,
             rule_match_rate=rule_match_rate,
             error_rate=error_rate,
+            uncounted_error_count=uncounted_error_count,
         )
 
     @staticmethod

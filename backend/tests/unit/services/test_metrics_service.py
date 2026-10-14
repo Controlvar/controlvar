@@ -340,20 +340,22 @@ def test_get_metrics_summary(mock_db_session, sample_feature_flag_id):
 
     # Mock the query for distinct users count
     mock_user_query = MagicMock()
+    mock_user_query.filter.return_value = mock_user_query
     mock_user_query.scalar.return_value = 75
 
-    # Mock the query for error count
+    # Mock the query for the counted and uncounted error counts
     mock_error_query = MagicMock()
-    mock_error_query.scalar.return_value = 5
+    mock_error_query.filter.return_value = mock_error_query
+    mock_error_query.one.return_value = (5, 2)
 
     with patch.object(mock_db_session, "query") as mock_query:
-        # Configure the side effects to return different query objects
+        # The service calls db.query three times: the aggregated metrics
+        # (every per-type query filters that one), the unique users, and the
+        # error counts.
         mock_query.side_effect = [
-            mock_eval_query,  # For evaluations query
+            mock_eval_query,  # For the aggregated metrics query
             mock_user_query,  # For unique users query
-            mock_latency_query,  # For latency query
-            mock_rule_query,  # For rule match query
-            mock_error_query,  # For error count query
+            mock_error_query,  # For the error count query
         ]
 
         # Call the service method
@@ -368,13 +370,13 @@ def test_get_metrics_summary(mock_db_session, sample_feature_flag_id):
         # Verify the result is a MetricsSummary with expected data
         assert isinstance(result, MetricsSummary)
         assert result.total_evaluations == 100
-        # The service calculates unique users based on the raw metric data
-        # which is mocked differently than expected
-        assert isinstance(result.unique_users, int)
+        assert result.unique_users == 75
         # The avg latency calculation may differ in the test environment
         assert isinstance(result.avg_latency, float)
         assert isinstance(result.rule_match_rate, float)
         assert isinstance(result.error_rate, float)
+        assert result.error_rate == pytest.approx(5.0)
+        assert result.uncounted_error_count == 2
 
 
 def test_get_aggregated_metrics(mock_db_session, sample_feature_flag_id):
