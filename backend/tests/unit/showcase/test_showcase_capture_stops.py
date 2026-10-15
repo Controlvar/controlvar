@@ -263,6 +263,8 @@ def test_capture_video_drops_the_frames_when_gate_6_refuses(tmp_path, monkeypatc
         ports=Ports(28400, 28401, 28402),
         out=tmp_path / "videos",
         floor=0,
+        # FakeStack stands in for the uvicorn stack's Stack.
+        stack="uvicorn",
     )
     with pytest.raises(director.CaptureFailed, match="recording dropped"):
         run.capture_video(

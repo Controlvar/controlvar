@@ -70,6 +70,25 @@ def default_cues() -> List[Dict[str, Any]]:
     return cues
 
 
+def quickstart_stack(commit: str, profile: str = "core") -> Dict[str, Any]:
+    """A manifest's ``stack`` as a Quick Start capture writes it (EM C5 of T166)."""
+    tag = f"showcase-{profile}-{commit[:12]}"
+    return {
+        "name": "quickstart",
+        "project": "showcase-20261015120000-abc123",
+        "image_tag": tag,
+        "images": {
+            "tag": tag,
+            "commit": commit,
+            "api": {"image": f"experimently-api:{tag}", "id": "sha256:" + "a" * 64},
+            "frontend": {
+                "image": f"experimently-web:{tag}",
+                "id": "sha256:" + "b" * 64,
+            },
+        },
+    }
+
+
 def default_manifest() -> Dict[str, Any]:
     return {
         "ref": "v0.26.3",
@@ -90,6 +109,7 @@ def default_manifest() -> Dict[str, Any]:
             name: {"ok": True, "numbers": {"checks": 1}}
             for name in contract.REQUIRED_CAPTURE_GATES
         },
+        "stack": quickstart_stack("0123456789abcdef0123456789abcdef01234567"),
     }
 
 

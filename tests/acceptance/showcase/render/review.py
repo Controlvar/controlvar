@@ -23,7 +23,7 @@ from __future__ import annotations
 import html
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from showcase import contract
 from showcase.render import templates
@@ -193,6 +193,22 @@ def _script_html(rows: List[ScriptRow], voice: str) -> str:
     )
 
 
+def stack_facts(stack: Any) -> List[Tuple[str, str]]:
+    """The approval record's stack lines: the stack, its project and its images."""
+    if not isinstance(stack, dict):
+        return [("Stack", "not named")]
+    images = stack.get("images") if isinstance(stack.get("images"), dict) else {}
+    rows = [
+        ("Stack", str(stack.get("name"))),
+        ("Compose project", str(stack.get("project"))),
+        ("Image tag", str(stack.get("image_tag"))),
+    ]
+    for service, label in (("api", "API image"), ("frontend", "Dashboard image")):
+        entry = images.get(service) if isinstance(images.get(service), dict) else {}
+        rows.append((label, f"{entry.get('image')} {entry.get('id')}"))
+    return rows
+
+
 def review_html(
     *,
     sheet: contract.CueSheet,
@@ -233,6 +249,7 @@ def review_html(
         ("Ref", manifest.ref),
         ("Commit", manifest.commit),
         ("Profile", manifest.profile),
+        *stack_facts(manifest.raw.get("stack")),
         (
             "next (installed / lockfile)",
             f"{manifest.next_version} / {manifest.lock_next_version}",

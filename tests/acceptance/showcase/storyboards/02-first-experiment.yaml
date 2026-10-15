@@ -9,6 +9,9 @@
 # * Shoppers arriving are filmed on the Live tab with Refresh, the one way new
 #   users show at once (the server pushes only every 30 s). The rest arrive off
 #   camera, behind the card that says so.
+# * The card after the traffic says how long it took, as measured on this run
+#   ({traffic_minutes}): on the Quick Start stack the users are paced under the
+#   API's default SDK limit, about 12 minutes for 63,000 (EM C8 of T166).
 # * The traffic: 63,000 shoppers from the data generator (#1064) at seed 40,
 #   converting at 5.0% in Control and 5.6% with the sticky bar. At that seed the
 #   server's assignment hash puts 31,309 users in Control (1,569 buy, 5.01%) and
@@ -220,7 +223,7 @@ scenes:
       headline: 63,000 shoppers later
       note: >-
         About 2 weeks of traffic at 10,000 visitors a day with half of them in
-        the test, sent by the tool in minutes.
+        the test, sent by the tool in {traffic_minutes} (measured).
     beats:
       - cue: About two weeks of shoppers, simulated in minutes.
         focus: {css: "#headline"}

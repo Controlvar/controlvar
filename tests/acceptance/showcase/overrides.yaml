@@ -1,0 +1,26 @@
+# The API settings each video's Quick Start stack runs with beyond the Quick
+# Start's own (`docker compose up -d --wait`, docs/getting-started/quick-start.md).
+# showcase/capture/overrides.py reads and checks this file; every video and probe
+# has an entry, `{}` for none.
+#
+# Each setting has a `value` and exactly one of:
+#   why:        it changes nothing a viewer sees; the reason, in writing
+#   statement:  the words a scene of the storyboard states on screen (D84)
+# {dashboard}, {shoplab} and {streampulse} in a value are the tool's own origins.
+#
+# The four *_HOST_PORT settings, the project name and the image tag are the
+# tool's own and are never listed here; neither is the SDK rate limit (the
+# default stays) nor WAREHOUSE_CREDENTIALS_KEYS.
+
+01-getting-started: {}
+02-first-experiment: {}
+03-flag-rollout: {}
+
+90-app-probe:
+  CORS_ORIGINS:
+    value: "{dashboard},{shoplab},{streampulse}"
+    why: >-
+      The Quick Start's default allows the demo apps at localhost:3200 and
+      localhost:3300. The tool serves them on its own ports instead, so their
+      origins are named here; the apps' calls to the API then succeed as they
+      do on the default ports. Nothing on screen changes.

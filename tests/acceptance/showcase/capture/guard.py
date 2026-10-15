@@ -147,6 +147,18 @@ DOCKER_PASSED: Tuple[str, ...] = (
     "DOCKER_CERT_PATH",
     "DOCKER_TLS_VERIFY",
 )
+#: What the tool gives ``docker compose`` for the Quick Start stack, and only
+#: these (``showcase.capture.compose.compose_settings``): the project, the
+#: profile, the image tag and the four published ports.
+COMPOSE_KEYS: Tuple[str, ...] = (
+    "COMPOSE_PROJECT_NAME",
+    "EXPERIMENTLY_PROFILE",
+    "EXPERIMENTLY_IMAGE_TAG",
+    "POSTGRES_HOST_PORT",
+    "REDIS_HOST_PORT",
+    "API_HOST_PORT",
+    "FRONTEND_HOST_PORT",
+)
 #: Every child: no AWS configuration from the caller, and a closed endpoint.
 NO_AWS: Dict[str, str] = {
     "AWS_ACCESS_KEY_ID": "showcase",
@@ -258,6 +270,7 @@ def app_settings(*, app: str, api_port: int, dashboard_port: int) -> Dict[str, s
 #: The kinds of child the tool starts, each with its own allow-list.
 KINDS: Tuple[str, ...] = (
     "docker",
+    "compose",
     "api",
     "seed-shoplab",
     "seed-streampulse",
@@ -274,6 +287,9 @@ def allowed_env_keys(kind: str) -> frozenset:
     )
     if kind == "docker":
         keys = passed | set(DOCKER_PASSED)
+    elif kind == "compose":
+        # The Quick Start stack's compose and docker calls (showcase.capture.compose).
+        keys = passed | set(DOCKER_PASSED) | set(COMPOSE_KEYS)
     elif kind == "api":
         keys = passed | set(api)
     elif kind.startswith("seed-") and kind[len("seed-") :] in config.APPS:

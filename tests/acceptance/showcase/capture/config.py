@@ -26,6 +26,21 @@ DEFAULT_DASHBOARD_PORT = 28401
 DEFAULT_POSTGRES_PORT = 28402
 DEFAULT_SHOPLAB_PORT = 28403
 DEFAULT_STREAMPULSE_PORT = 28404
+#: The Quick Start stack's Redis (``--stack quickstart``): the fourth published
+#: port, apart from the apps' 28403-28404.
+DEFAULT_REDIS_PORT = 28405
+
+# ---------------------------------------------------------------------------
+# The stack a video is recorded on
+# ---------------------------------------------------------------------------
+
+#: ``quickstart``: the Quick Start's own ``docker compose up -d --wait`` in the
+#: recorded tree (``showcase.capture.compose``), what a new user runs.
+#: ``uvicorn``: the API under uvicorn and the static export, from the same tree
+#: (``showcase.capture.stack``); kept for development, never rendered.
+STACKS: Tuple[str, ...] = ("quickstart", "uvicorn")
+#: The only stack a video is rendered from (EM C5 of T166).
+FINAL_STACK = "quickstart"
 
 # ---------------------------------------------------------------------------
 # The demo apps (demo/<app>), built from the recorded ref like the dashboard
@@ -72,6 +87,10 @@ MACHINE_LOCK = ("Library", "Caches", "experimently-showcase", "showcase.lock")
 
 #: The label on every container the tool starts; it removes no other.
 CONTAINER_LABEL = "com.experimently.showcase"
+#: Compose's own label on what a project made: containers, volumes, networks.
+COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
+#: The images' own label (backend/Dockerfile, frontend/Dockerfile): core or full.
+IMAGE_PROFILE_LABEL = "io.experimently.profile"
 POSTGRES_IMAGE = "postgres:16-alpine"
 #: The Playwright the tool was written against (tests/acceptance/requirements.txt).
 PLAYWRIGHT_VERSION = "1.63.0"
@@ -182,10 +201,18 @@ APP_STATIC_KEY: Dict[str, str] = {
 #: The demo seed's administrator, whom every video signs in as.
 DEMO_ADMIN = ("admin@demo.com", "Demo1234!")
 
-#: The SDK paths' rate limit on the tool's API. Video 2's traffic sends about
-#: 180 users a second through them (measured on a local stack), and the
-#: default 6,000 a minute would answer 429 from the 101st in a second.
+#: The SDK paths' rate limit on the uvicorn stack's API. Video 2's traffic sends
+#: about 180 users a second through them unpaced (measured on a local stack),
+#: and the default 6,000 a minute would answer 429 from the 101st in a second.
+#: The Quick Start stack keeps the default (EM C8 of T166): its traffic is
+#: paced under it instead (``TRAFFIC_REQUESTS_PER_SECOND``).
 SDK_RATE_LIMIT_PER_MINUTE = 60_000
+#: The API's default SDK limit (``SDK_RATE_LIMIT_PER_MINUTE`` in the backend's
+#: settings), which the Quick Start stack runs with.
+DEFAULT_SDK_RATE_LIMIT_PER_MINUTE = 6_000
+#: The Quick Start stack's traffic pace: SDK requests a second, every worker
+#: together, under the default limit's 100 a second.
+TRAFFIC_REQUESTS_PER_SECOND = 90.0
 
 #: The videos, by slug, in the order ``all`` records them.
 VIDEOS: Dict[str, str] = {

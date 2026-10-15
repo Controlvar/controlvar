@@ -117,6 +117,25 @@ def page_html(
     )
 
 
+def quickstart_stack(commit: str, profile: str = "core") -> Dict[str, object]:
+    """A manifest's ``stack`` as a Quick Start capture writes it (EM C5 of T166)."""
+    tag = f"showcase-{profile}-{commit[:12]}"
+    return {
+        "name": "quickstart",
+        "project": "showcase-20261015120000-abc123",
+        "image_tag": tag,
+        "images": {
+            "tag": tag,
+            "commit": commit,
+            "api": {"image": f"experimently-api:{tag}", "id": "sha256:" + "a" * 64},
+            "frontend": {
+                "image": f"experimently-web:{tag}",
+                "id": "sha256:" + "b" * 64,
+            },
+        },
+    }
+
+
 def manifest() -> Dict[str, object]:
     return {
         "ref": "v0.26.3",
@@ -134,6 +153,7 @@ def manifest() -> Dict[str, object]:
             for name in contract.REQUIRED_CAPTURE_GATES
         },
         "synthetic": True,
+        "stack": quickstart_stack("0" * 40),
     }
 
 

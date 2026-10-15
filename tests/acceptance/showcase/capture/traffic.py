@@ -16,6 +16,13 @@ The report counts what the server answered, never what was sent: users the
 server assigned, and those of them who converted, per variant. Gate 10 then
 holds the plan, the report and the results API to the same numbers.
 
+On the Quick Start stack the API keeps its default SDK limit (6,000 requests a
+minute), so the sender is paced (``rate``: requests a second, every worker
+together; EM C8 of T166). A 429 is honoured: the request waits for its
+``Retry-After`` and is sent again, and every 429 is counted. The report says
+how long the users took (``wall_seconds``) and how many 429s came back, and
+any 429 refuses the video: the pace is set so that none does.
+
 The generator is imported from this checkout, the tool's own, never from an
 editable install of another one (``generator``).
 """
@@ -105,6 +112,12 @@ class Report:
     """What the server answered, per arm (``control`` and ``treatment``)."""
 
     sent: int = 0
+    #: Requests sent, and 429 answers (each honoured, then sent again).
+    requests: int = 0
+    rate_limited: int = 0
+    #: From the first request to the last answer, and the pace asked for.
+    wall_seconds: float = 0.0
+    rate: Optional[float] = None
     not_assigned: int = 0
     #: The server's variant differed from the plan's (0 on a clean run).
     mismatches: int = 0
@@ -116,6 +129,10 @@ class Report:
     def as_numbers(self) -> Dict[str, Any]:
         return {
             "sent": self.sent,
+            "requests": self.requests,
+            "rate_limited": self.rate_limited,
+            "wall_seconds": round(self.wall_seconds, 1),
+            "requests_per_second": self.rate,
             "not_assigned": self.not_assigned,
             "mismatches": self.mismatches,
             "events": self.events,
@@ -137,6 +154,44 @@ def direct_session() -> Any:
     return session
 
 
+class Pacer:
+    """At most *rate* requests a second, every thread together: each takes the
+    next slot, ``1 / rate`` s after the one before."""
+
+    def __init__(self, rate: Optional[float], clock=time.monotonic, sleep=time.sleep):
+        if rate is not None and not rate > 0:
+            raise ValueError(f"a pace of {rate!r} requests a second")
+        self.rate = rate
+        self._clock = clock
+        self._sleep = sleep
+        self._lock = threading.Lock()
+        self._next = 0.0
+
+    def wait(self) -> None:
+        if self.rate is None:
+            return
+        with self._lock:
+            now = self._clock()
+            slot = max(now, self._next)
+            self._next = slot + 1.0 / self.rate
+        if slot > now:
+            self._sleep(slot - now)
+
+
+#: How often one request is sent again after a 429, and the longest wait.
+RETRIES_429 = 5
+RETRY_AFTER_MAX_S = 60.0
+
+
+def retry_after(headers: Any) -> float:
+    """``Retry-After`` in seconds (1 when absent or not a number), at most a minute."""
+    try:
+        value = float((headers or {}).get("Retry-After", 1))
+    except (TypeError, ValueError):
+        value = 1.0
+    return min(max(value, 0.0), RETRY_AFTER_MAX_S)
+
+
 class Sender:
     """Sends a plan's users from ``workers`` threads; ``finish`` waits for the last.
 
@@ -152,13 +207,20 @@ class Sender:
         api_key: str,
         workers: int,
         session: Optional[Callable[[], Any]] = None,
+        rate: Optional[float] = None,
+        sleep: Callable[[float], None] = time.sleep,
+        clock: Callable[[], float] = time.monotonic,
     ):
         self.plan = made
+        self.pacer = Pacer(rate, clock=clock, sleep=sleep)
+        self._clock = clock
+        self._sleep = sleep
+        self._began: Optional[float] = None
         self.api_url = api_url.rstrip("/")
         self.api_key = api_key
         self.workers = workers
         self._session = session if session is not None else direct_session
-        self.report = Report()
+        self.report = Report(rate=rate)
         self.failure: Optional[str] = None
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -167,12 +229,23 @@ class Sender:
     # -- sending ---------------------------------------------------------------
 
     def _post(self, client: Any, what: str, path: str, body: Dict[str, Any]) -> Any:
-        answer = client.post(
-            self.api_url + path,
-            json=body,
-            headers={"X-API-Key": self.api_key},
-            timeout=60,
-        )
+        for _attempt in range(RETRIES_429 + 1):
+            self.pacer.wait()
+            answer = client.post(
+                self.api_url + path,
+                json=body,
+                headers={"X-API-Key": self.api_key},
+                timeout=60,
+            )
+            with self._lock:
+                self.report.requests += 1
+                if answer.status_code == 429:
+                    self.report.rate_limited += 1
+            # Unpaced (the uvicorn stack's raised limit), a 429 stops the
+            # traffic at once, like any other refusal.
+            if answer.status_code != 429 or self.pacer.rate is None:
+                break
+            self._sleep(retry_after(getattr(answer, "headers", None)))
         if not 200 <= answer.status_code < 300:
             raise TrafficFailed(f"{what}: POST {path} answered {answer.status_code}")
         return answer.json()
@@ -235,6 +308,7 @@ class Sender:
             self._stop.set()
 
     def start(self) -> None:
+        self._began = self._clock()
         for index in range(self.workers):
             thread = threading.Thread(
                 target=self._work, args=(index,), daemon=True, name=f"traffic-{index}"
@@ -282,10 +356,18 @@ class Sender:
                 if progress is not None and time.monotonic() - last >= 10:
                     progress(self.sent())
                     last = time.monotonic()
+        if self._began is not None:
+            self.report.wall_seconds = self._clock() - self._began
         self._raise_failure()
         if self.report.sent != len(self.plan.users):
             raise TrafficFailed(
                 f"{self.report.sent} of {len(self.plan.users)} users were sent"
+            )
+        if self.report.rate_limited:
+            raise TrafficFailed(
+                f"EM C8: the API answered 429 {self.report.rate_limited} times;"
+                f" the traffic is paced at {self.report.rate} requests a second"
+                " so that it never does"
             )
         return self.report
 

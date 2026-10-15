@@ -10,7 +10,11 @@ Order, and what must be true before each step:
    work root and ports. Then whatever a killed run left: its child processes
    (``procs.Children.stop_leftovers``) and its labelled containers.
 3. The tree, once per invocation (``build``), and a tree of each demo app the
-   videos record (``build.build_app``).
+   videos record (``build.build_app``). On the Quick Start stack (``--stack
+   quickstart``, the default) the tree is not built here: compose builds its
+   images (``showcase.capture.compose``), and a killed run's compose project
+   is removed first (``compose.recover``). Only a Quick Start capture is ever
+   rendered.
 4. Per video, the disk floor first; below it the video is refused and no work
    directory is made. Then the stack, gate 14 (the seed's counts), the
    storyboard's ``setup`` made through the API off camera, the
@@ -42,7 +46,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from showcase import contract
-from showcase.capture import build, config, guard, storyboard, traffic
+from showcase.capture import build, compose, config, guard, storyboard, traffic
+from showcase.capture import overrides as override_lists
 from showcase.capture.procs import Children
 from showcase.capture.stack import (
     Ports,
@@ -66,6 +71,8 @@ class Options:
     out: Path
     render: bool = True
     floor: int = contract.DISK_FLOOR_BYTES
+    #: ``quickstart`` (the Quick Start's compose stack) or ``uvicorn``.
+    stack: str = config.FINAL_STACK
 
 
 class DiskSampler:
@@ -112,7 +119,9 @@ def forbidden_text(board: storyboard.Storyboard, ports: Ports) -> Tuple[str, ...
     return (
         config.FORBIDDEN_TEXT
         + tuple(board.never_show)
-        + tuple(str(p) for p in (ports.api, ports.dashboard, ports.postgres))
+        + tuple(
+            str(p) for p in (ports.api, ports.dashboard, ports.postgres, ports.redis)
+        )
     )
 
 
@@ -313,7 +322,23 @@ def preflight(options: Options, environ: Mapping[str, str]) -> None:
         )
     if options.profile not in ("core", "full"):
         raise guard.Refused(f"--profile {options.profile!r} is core or full")
+    if options.stack not in config.STACKS:
+        raise guard.Refused(
+            f"--stack {options.stack!r} is one of {', '.join(config.STACKS)}"
+        )
+    if options.render and options.stack != config.FINAL_STACK:
+        raise guard.Refused(
+            f"--stack {options.stack}: a video is rendered only from the"
+            f" {config.FINAL_STACK} stack, what a new user starts; give"
+            " --capture-only to capture from it"
+        )
     guard.refuse_ports(options.ports.as_dict(), in_use=lambda _port: False)
+    if options.stack == "quickstart":
+        listed = override_lists.load()
+        for slug in options.videos:
+            override_lists.override_list(
+                storyboard.load(board_path(slug)), options.ports, listed
+            )
     for board in options.videos:
         problems = storyboard.departure_problems(storyboard.load(board_path(board)))
         if problems:
@@ -395,14 +420,15 @@ def capture_video(
     frames_dir.mkdir(parents=True)
     logs = video_dir / "logs"
     run_id = f"{time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(3)}"
-    stack = Stack(
+    stack = make_stack(
+        options,
+        board=board,
+        source=source,
         tree=tree,
-        ports=options.ports,
-        profile=options.profile,
         run_id=run_id,
         children=children,
         logs=logs,
-        parent=environ,
+        environ=environ,
         apps={app: built[app] for app in board.apps},
     )
     TEARDOWN.append(stack.down)
@@ -410,16 +436,31 @@ def capture_video(
         try:
             log(f"{slug}: stack up")
             stack.up()
-            gates["15b"] = gate(
-                True,
-                published=stack.facts["docker_port"],
-                wanted=[str(options.ports.postgres)],
-            )
-            gates["C3"] = gate(
-                True,
-                **{k: v for k, v in stack.facts.items() if k.endswith("_launcher")},
-                served_profile=stack.facts["served_profile"],
-            )
+            if options.stack == "quickstart":
+                gates["15b"] = gate(
+                    True,
+                    published=stack.facts["published"],
+                    wanted={
+                        k: [list(p) for p in v]
+                        for k, v in compose.wanted_ports(options.ports).items()
+                    },
+                )
+                gates["C3"] = gate(
+                    True,
+                    images=stack.facts["images"],
+                    served_profile=stack.facts["served_profile"],
+                )
+            else:
+                gates["15b"] = gate(
+                    True,
+                    published=stack.facts["docker_port"],
+                    wanted=[str(options.ports.postgres)],
+                )
+                gates["C3"] = gate(
+                    True,
+                    **{k: v for k, v in stack.facts.items() if k.endswith("_launcher")},
+                    served_profile=stack.facts["served_profile"],
+                )
             # Gate 14: a fresh stack, the seed's counts exactly.
             login = _api(
                 f"{stack.api_url}/api/v1/auth/login",
@@ -463,7 +504,16 @@ def capture_video(
             stack.down()
             TEARDOWN.remove(stack.down)
         left = labelled_containers(children, stack.docker_env, work.path)
-        gates["teardown"] = gate(not left, labelled_containers_left=left)
+        project_left = stack.facts.get("left") or {}
+        gates["teardown"] = gate(
+            not left and not any(project_left.values()),
+            labelled_containers_left=left,
+            **(
+                {"project": stack.project, "project_left": project_left}
+                if options.stack == "quickstart"
+                else {}
+            ),
+        )
         if left:
             raise StackError(f"labelled containers left after teardown: {left}")
     after = guard.free_bytes(work.path)
@@ -484,8 +534,49 @@ def capture_video(
         gates=gates,
         children=children,
         wall_seconds=time.monotonic() - started,
+        stack=stack.manifest(),
     )
     return capture
+
+
+def make_stack(
+    options: Options,
+    *,
+    board: storyboard.Storyboard,
+    source: build.Source,
+    tree: Path,
+    run_id: str,
+    children: Children,
+    logs: Path,
+    environ: Mapping[str, str],
+    apps: Mapping[str, Path],
+) -> Any:
+    """The video's stack: the Quick Start's compose stack, or the uvicorn one."""
+    if options.stack == "quickstart":
+        return compose.QuickstartStack(
+            tree=tree,
+            ports=options.ports,
+            profile=options.profile,
+            commit=source.commit,
+            run_id=run_id,
+            children=children,
+            logs=logs,
+            parent=environ,
+            apps=apps,
+            overrides=override_lists.override_list(
+                board, options.ports, override_lists.load()
+            ),
+        )
+    return Stack(
+        tree=tree,
+        ports=options.ports,
+        profile=options.profile,
+        run_id=run_id,
+        children=children,
+        logs=logs,
+        parent=environ,
+        apps=dict(apps),
+    )
 
 
 #: Gate 10/1's question to the API, asked from the page with the page's own token.
@@ -498,7 +589,7 @@ WHO_JS = """async () => {
 
 def record(
     board: storyboard.Storyboard,
-    stack: Stack,
+    stack: Any,
     options: Options,
     token: str,
     frames_dir: Path,
@@ -570,7 +661,18 @@ def record(
             )
             log("overlay self-test passed")
             refuse_unquoted_code(board, stack.tree)
-            users = Users(board.traffic, stack.api_url, token, redactor, log)
+            users = Users(
+                board.traffic,
+                stack.api_url,
+                token,
+                redactor,
+                log,
+                rate=(
+                    config.TRAFFIC_REQUESTS_PER_SECOND
+                    if options.stack == "quickstart"
+                    else None
+                ),
+            )
             TEARDOWN.append(users.stop)
             try:
                 for scene in board.scenes:
@@ -586,7 +688,7 @@ def record(
                         if server is not None:
                             keep_private(server, redactor, stack.children, read_keys)
                     log(f"scene {scene.id}")
-                    director.scene(scene)
+                    director.scene(with_traffic_minutes(scene, users.report))
             finally:
                 users.stop()
                 TEARDOWN.remove(users.stop)
@@ -683,6 +785,12 @@ def record(
             judge.black(entries, lumas, duration, still),
         ),
         "15c": (not tally.refused, {"refused": tally.refused}, "a refused request"),
+        # EM C8 of T166: a 429 on any page request refuses the take.
+        "C8": (
+            not tally.rate_limited,
+            {"rate_limited": tally.rate_limited},
+            "a page request was answered 429",
+        ),
         # P2 (PE 6): the whole context's listeners; per app, armed and counted.
         "P2": _merge(
             judge.app_answers(tally.apps),
@@ -803,8 +911,42 @@ def refuse_unquoted_code(board: storyboard.Storyboard, tree: Path) -> None:
 
 
 #: The longest the storyboard's traffic may take (video 2's card says "minutes";
-#: 63,000 users took 6 minutes on a local stack).
+#: 63,000 users took 6 minutes unpaced on a local stack, and need about 12 at
+#: the Quick Start's default SDK limit).
 TRAFFIC_MAX_S = 1200.0
+#: In a card's headline or note: the measured time the traffic took (EM C8).
+TRAFFIC_MINUTES = "{traffic_minutes}"
+
+
+def minutes_text(seconds: float) -> str:
+    """``12 minutes``: the measured time, to the nearest minute (at least 1)."""
+    minutes = max(1, int(round(seconds / 60)))
+    return f"{minutes} minute{'' if minutes == 1 else 's'}"
+
+
+def with_traffic_minutes(
+    scene: storyboard.Scene, report: Optional[traffic.Report]
+) -> storyboard.Scene:
+    """*scene*, its card saying how long the traffic took, as measured.
+
+    Only a scene that finishes the traffic may name it; refused elsewhere.
+    """
+    card = scene.card
+    if card is None or not any(
+        TRAFFIC_MINUTES in (text or "") for text in (card.headline, card.note)
+    ):
+        return scene
+    if scene.traffic != "finish" or report is None:
+        raise StackError(
+            f"scene {scene.id} names {TRAFFIC_MINUTES} before the traffic finished"
+        )
+    said = minutes_text(report.wall_seconds)
+    update = {
+        name: getattr(card, name).replace(TRAFFIC_MINUTES, said)
+        for name in ("headline", "note")
+        if getattr(card, name)
+    }
+    return scene.model_copy(update={"card": card.model_copy(update=update)})
 
 
 class Users:
@@ -823,8 +965,11 @@ class Users:
         token: str,
         redactor: Any,
         log: Callable[[str], None],
+        rate: Optional[float] = None,
     ):
         self.traffic = plan
+        #: Requests a second (EM C8 of T166), or None: unpaced.
+        self.rate = rate
         self.api_url = api_url
         self.token = token
         self.redactor = redactor
@@ -847,7 +992,11 @@ class Users:
         )["key"]
         self.redactor.add(key)
         self.sender = traffic.Sender(
-            made, api_url=self.api_url, api_key=key, workers=self.traffic.workers
+            made,
+            api_url=self.api_url,
+            api_key=key,
+            workers=self.traffic.workers,
+            rate=self.rate,
         )
         self.log(f"traffic: {len(made.users)} users for {made.key}, off camera")
         self.sender.start()
@@ -922,6 +1071,7 @@ def write_capture(
     gates: Dict[str, Dict[str, Any]],
     children: Children,
     wall_seconds: float,
+    stack: Optional[Mapping[str, Any]] = None,
 ) -> None:
     from showcase.capture import gates as judge
 
@@ -966,6 +1116,9 @@ def write_capture(
         # Narrated captures come with the paced capture (voice PR C2).
         "voice": contract.SILENT,
         "gates": gates,
+        # What the approval record names: the stack, its project and images
+        # (EM C1, C5 of T166). The render refuses any stack but quickstart.
+        "stack": dict(stack or {"name": "uvicorn"}),
     }
     (capture / "manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
@@ -991,6 +1144,12 @@ def parse_args(argv: List[str], environ: Mapping[str, str]) -> Options:
     )
     parser.add_argument("--profile", default="core")
     parser.add_argument(
+        "--stack",
+        default=config.FINAL_STACK,
+        help="quickstart (the Quick Start's docker compose stack; the only one"
+        " rendered) or uvicorn (development, with --capture-only)",
+    )
+    parser.add_argument(
         "--work-dir",
         default=str(Path(environ.get("TMPDIR", "/tmp")) / "experimently-showcase-work"),
         help="where trees, frames and logs go (outside any git checkout)",
@@ -1006,6 +1165,7 @@ def parse_args(argv: List[str], environ: Mapping[str, str]) -> Options:
     parser.add_argument(
         "--streampulse-port", type=int, default=config.DEFAULT_STREAMPULSE_PORT
     )
+    parser.add_argument("--redis-port", type=int, default=config.DEFAULT_REDIS_PORT)
     parser.add_argument(
         "--out",
         default=str(
@@ -1037,9 +1197,11 @@ def parse_args(argv: List[str], environ: Mapping[str, str]) -> Options:
             args.postgres_port,
             args.shoplab_port,
             args.streampulse_port,
+            args.redis_port,
         ),
         out=Path(args.out).expanduser(),
         render=not args.capture_only,
+        stack=args.stack,
     )
 
 
@@ -1063,6 +1225,13 @@ def run(
         )
         if removed:
             log(f"removed {len(removed)} labelled containers a killed run left")
+        if options.stack == "quickstart":
+            # EM C4: a killed run's compose project, from this work root only.
+            compose.recover(
+                compose.Docker(children, docker_env, work.path / "leftovers"),
+                work,
+                log,
+            )
         # Only now: a killed run's API and dashboard held these ports until
         # the lines above stopped them.
         guard.refuse_ports(options.ports.as_dict())
@@ -1074,28 +1243,13 @@ def run(
         build.archive(options.repo, commit, tree)
         version = (tree / "VERSION").read_text(encoding="utf-8").strip()
         source = build.Source(ref=options.ref, commit=commit, version=version)
-        build.strip_modules(tree, options.profile, work)
-        build.clone_node_modules(options.repo / "frontend" / "node_modules", tree)
-        web_env = guard.child_env(
-            guard.dashboard_settings(
-                api_port=options.ports.api, profile=options.profile
-            ),
-            parent=environ,
-        )
-        build.build_dashboard(
-            tree,
-            web_env,
-            work.path / "build.log",
-            spawn=lambda argv, cwd, env, log: children.run(
-                "npm-build", argv, cwd=cwd, env=env, log=log, kind="dashboard"
-            ),
-        )
-        log(
-            build.bundle_check(
-                tree / "frontend" / "out" / "_next" / "static", options.profile
-            )
-        )
-        versions = build.next_versions(tree)
+        if options.stack == "quickstart":
+            # The tree as a new user's clone has it: compose builds the images
+            # (`npm ci` from the lockfile in frontend/Dockerfile).
+            versions = build.next_versions(tree)
+            versions["next_used"] = versions["next_lockfile"]
+        else:
+            versions = build_uvicorn_tree(options, tree, work, children, environ, log)
         app_trees: Dict[str, Path] = {}
         for app in apps_recorded(options.videos):
             app_tree = work.path / f"app-{app}"
@@ -1143,6 +1297,37 @@ def run(
     finally:
         children.stop_all()
     return results
+
+
+def build_uvicorn_tree(
+    options: Options,
+    tree: Path,
+    work: guard.WorkRoot,
+    children: Children,
+    environ: Mapping[str, str],
+    log: Callable[[str], None],
+) -> Dict[str, Optional[str]]:
+    """The uvicorn stack's tree: modules stripped for core, the static export built."""
+    build.strip_modules(tree, options.profile, work)
+    build.clone_node_modules(options.repo / "frontend" / "node_modules", tree)
+    web_env = guard.child_env(
+        guard.dashboard_settings(api_port=options.ports.api, profile=options.profile),
+        parent=environ,
+    )
+    build.build_dashboard(
+        tree,
+        web_env,
+        work.path / "build.log",
+        spawn=lambda argv, cwd, env, log: children.run(
+            "npm-build", argv, cwd=cwd, env=env, log=log, kind="dashboard"
+        ),
+    )
+    log(
+        build.bundle_check(
+            tree / "frontend" / "out" / "_next" / "static", options.profile
+        )
+    )
+    return build.next_versions(tree)
 
 
 def apps_recorded(videos: List[str]) -> List[str]:

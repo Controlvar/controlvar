@@ -48,6 +48,8 @@ class Ports:
     postgres: int
     shoplab: int = config.DEFAULT_SHOPLAB_PORT
     streampulse: int = config.DEFAULT_STREAMPULSE_PORT
+    #: The Quick Start stack's Redis; the uvicorn stack runs without one.
+    redis: int = config.DEFAULT_REDIS_PORT
 
     def as_dict(self) -> Dict[str, int]:
         return {
@@ -56,6 +58,7 @@ class Ports:
             "Postgres": self.postgres,
             "ShopLab": self.shoplab,
             "StreamPulse": self.streampulse,
+            "Redis": self.redis,
         }
 
     def app(self, name: str) -> int:
@@ -131,6 +134,10 @@ def remove_labelled(
 
 
 class Stack:
+    """The uvicorn stack (``--stack uvicorn``): development only, never rendered."""
+
+    name = "uvicorn"
+
     def __init__(
         self,
         *,
@@ -440,6 +447,10 @@ class Stack:
         self.children.stop("dashboard")
         self.children.stop("api")
         self.stop_postgres()
+
+    def manifest(self) -> Dict[str, object]:
+        """The manifest's ``stack``: this one is never rendered (EM C5 of T166)."""
+        return {"name": self.name, "postgres_published": self.facts.get("docker_port")}
 
 
 def read_key(path: Path) -> str:
