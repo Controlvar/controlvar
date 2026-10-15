@@ -40,8 +40,10 @@ export class ResultsService {
 
   /**
    * The planned sample size. Send only what the user changed: anything left
-   * out is decided by the server (the observed control rate, a 5% relative
-   * MDE, 80% power, and the experiment's own confidence level and correction).
+   * out is decided by the server (the observed control rate, the effect saved
+   * with the experiment as its primary metric's `expected_effect`, or a 5%
+   * relative MDE when none is saved, 80% power, and the experiment's own
+   * confidence level and correction).
    */
   static async getSampleSize(
     experimentId: string,

@@ -115,6 +115,8 @@ by = [
     "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::typed without an estimate: saved on the primary metric only, and Review says so",
     "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::left blank: nothing is saved, and Review says the results page plans for 5%",
     "journey:experiment-wizard#effect",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_the_planned_sample_uses_the_primary_metrics_planned_effect",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_with_no_saved_effect_the_plan_is_for_the_default_and_says_so",
 ]
 
 [[unit]]
@@ -510,6 +512,7 @@ by = [
     "docex:docs/guides/experiment-wizard.md#\"expected_effect\": 0.05",
     "test:backend/tests/integration/api/test_wizard_submit_builds.py::test_a_submitted_draft_creates_the_documented_experiment",
     "test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardExperimentCreation::test_payload_saves_the_planned_effect_on_the_primary_metric_only",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_the_planned_sample_uses_the_primary_metrics_planned_effect",
 ]
 
 [[unit]]
@@ -533,6 +536,7 @@ text = "Submitting saves mde as the primary metric's expected_effect, and the re
 by = [
     "test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardExperimentCreation::test_payload_saves_the_planned_effect_on_the_primary_metric_only",
     "test:backend/tests/integration/api/test_wizard_submit_builds.py::test_a_submitted_draft_creates_the_documented_experiment",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_the_planned_sample_uses_the_primary_metrics_planned_effect",
 ]
 
 [[unit]]

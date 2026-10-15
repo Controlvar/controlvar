@@ -350,6 +350,8 @@ text = "The smallest change worth detecting (the minimum detectable effect) is s
 by = [
     "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::typed without an estimate: saved on the primary metric only, and Review says so",
     "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::left blank: nothing is saved, and Review says the results page plans for 5%",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_the_planned_sample_uses_the_primary_metrics_planned_effect",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_with_no_saved_effect_the_plan_is_for_the_default_and_says_so",
 ]
 
 [[unit]]

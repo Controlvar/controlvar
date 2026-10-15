@@ -143,8 +143,8 @@ def test_documented_case_on_both_routes(client):
 @pytest.mark.unit
 @pytest.mark.regression
 def test_an_mde_above_one_is_still_answered(client):
-    """A 10% baseline and a +200% effect (10% -> 30%) is a valid guided-setup
-    input. The service's ``compute_sample_size`` refuses an MDE of 1 or more;
+    """A 10% baseline and a +200% effect (10% -> 30%) is a valid API input;
+    guided setup refuses an effect of 100% or more since #1257. The service's ``compute_sample_size`` refuses an MDE of 1 or more;
     these routes do not go through that check."""
     wizard = ask_wizard(client, baseline_rate=0.10, minimum_detectable_effect=2.0)
     utils = ask_utils(client, baseline_rate=0.10, minimum_detectable_effect=2.0)

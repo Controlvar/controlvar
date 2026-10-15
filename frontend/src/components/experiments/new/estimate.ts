@@ -80,8 +80,15 @@ export function plannedEffectProblem(mdePct: string): string | null {
   if (mdePct.trim() === '') return null;
   const value = readNumber(mdePct);
   if (value === null || value < 0.1) return ESTIMATE_PROBLEMS.mde;
-  if (value >= 100) return ESTIMATE_PROBLEMS.mdeHigh;
+  // Checked on the fraction as it is saved, after rounding: 99.99999999995
+  // rounds to 1, which the results page would not plan for.
+  if (savedFraction(value) >= 1) return ESTIMATE_PROBLEMS.mdeHigh;
   return null;
+}
+
+/** A percentage as the fraction saved, rounded to 12 significant digits (28.6 -> 0.286, not 0.28600000000000003). */
+function savedFraction(percent: number): number {
+  return Number((percent / 100).toPrecision(12));
 }
 
 /**
@@ -90,8 +97,7 @@ export function plannedEffectProblem(mdePct: string): string | null {
  */
 export function plannedEffectFraction(mdePct: string): number | undefined {
   if (mdePct.trim() === '' || plannedEffectProblem(mdePct) !== null) return undefined;
-  // Rounded to 12 significant digits, so 28.6 is saved as 0.286, not 0.28600000000000003.
-  return Number((Number(mdePct.trim()) / 100).toPrecision(12));
+  return savedFraction(Number(mdePct.trim()));
 }
 
 /** A saved effect as a percentage, without float noise: 0.07 -> "7%", 0.001 -> "0.1%". */
@@ -118,7 +124,9 @@ export function buildEstimateQuery(
   }
   const mdePct = readNumber(inputs.mdePct);
   if (mdePct === null || mdePct < 0.1) return { ok: false, problem: ESTIMATE_PROBLEMS.mde };
-  if (mdePct >= 100) return { ok: false, problem: ESTIMATE_PROBLEMS.mdeHigh };
+  // The same upper bound as the effect saved with the experiment.
+  const tooHigh = plannedEffectProblem(inputs.mdePct);
+  if (tooHigh !== null) return { ok: false, problem: tooHigh };
 
   const baseline = baselinePct / 100;
   const mde = mdePct / 100;

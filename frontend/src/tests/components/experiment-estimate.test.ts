@@ -134,6 +134,9 @@ describe('the planned effect saved with the experiment (#1257)', () => {
     ['-5', ESTIMATE_PROBLEMS.mde, undefined],
     ['100', ESTIMATE_PROBLEMS.mdeHigh, undefined],
     ['150', ESTIMATE_PROBLEMS.mdeHigh, undefined],
+    // Rounds to 1 when saved: refused, never saved as 1.
+    ['99.99999999995', ESTIMATE_PROBLEMS.mdeHigh, undefined],
+    ['99.9999999', null, 0.999999999],
   ])('%j: problem %j, saved as %j', (typed, problem, fraction) => {
     expect(plannedEffectProblem(typed)).toBe(problem);
     expect(plannedEffectFraction(typed)).toBe(fraction);
