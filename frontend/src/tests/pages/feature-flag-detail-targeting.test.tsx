@@ -388,6 +388,33 @@ describe('a save the rules stop', () => {
     expect(screen.queryByTestId('save-error')).toBeNull();
   });
 
+  it('shows the size limit refusal (#828) as the API words it, under the same heading', async () => {
+    install(BUILDER_IDS_NO_OPERATOR, () => {
+      throw new ApiError({
+        status: 422,
+        detail: [
+          {
+            loc: ['body', 'targeting_rules'],
+            msg: 'Value error, targeting rules: at most 1000 groups and conditions are allowed',
+            type: 'value_error',
+          },
+        ],
+      });
+    });
+    render(<FeatureFlagDetailPage />);
+    const s = await section();
+    fireEvent.change(within(s).getByLabelText('Group 1, condition 1 value'), { target: { value: 'team' } });
+    fireEvent.click(screen.getByTestId('save-flag'));
+
+    const alert = await within(s).findByRole('alert');
+    expect(alert).toHaveTextContent('The rules were not accepted:');
+    expect(within(alert).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'targeting rules: at most 1000 groups and conditions are allowed',
+    ]);
+    await waitFor(() => expect(alert).toHaveFocus());
+    expect(screen.queryByTestId('save-error')).toBeNull();
+  });
+
   it('any other failure goes to the save-error alert, which takes focus', async () => {
     install(null, () => {
       throw apiError(500, 'Failed to update feature flag');

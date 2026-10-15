@@ -396,6 +396,21 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id} | #828 | Dashboard-shaped targeting_rules (logical_operator and groups) with more than 1,000 groups and conditions in all answer 422, where they used to be accepted. Each group and each condition counts as one, and the number is the one native rules already had for rules, groups and conditions. The refusal is at [\"body\", \"targeting_rules\"], its msg is Value error, targeting rules: at most 1000 groups and conditions are allowed, and nothing is written. A PUT that does not send targeting_rules is unaffected, but one that sends back stored rules over the limit answers 422 until they are reduced. Stored rules over the limit are still read and evaluated as before, and python -m backend.scripts.check_targeting_rules lists them. Experiment targeting rules are unchanged. The OpenAPI document does not change. See Creating Feature Flags."
+by = [
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_a_wide_dashboard_value_is_refused_at_the_condition_cap",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_the_dashboard_cap_is_the_native_one",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_experiment_dashboard_rules_are_not_capped",
+    "test:backend/tests/integration/api/test_flag_targeting_validated.py::test_post_refuses_rules_the_evaluator_would_not_apply",
+    "test:backend/tests/integration/api/test_flag_targeting_validated.py::test_put_refuses_rules_the_evaluator_would_not_apply",
+    "test:backend/tests/integration/api/test_flag_targeting_validated.py::test_d41_stored_rules_the_api_refuses_cannot_be_sent_back",
+    "test:backend/tests/integration/api/test_flag_targeting_validated.py::test_stored_rules_the_api_refuses_are_still_read_and_evaluated",
+    "test:backend/tests/integration/api/test_flag_targeting_validated.py::test_the_check_script_lists_stored_rules_and_writes_nothing",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
 text = "Deprecated operations"
 by = ["exempt:baseline"]
 

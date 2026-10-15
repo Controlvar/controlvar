@@ -107,6 +107,18 @@ STORED_INVALID = {
             }
         ],
     },
+    # #828: 1 group and 1,000 conditions, one over the cap.
+    "over the condition cap": {
+        "logical_operator": "AND",
+        "groups": [
+            {
+                "conditions": [
+                    {"attribute": "country", "operator": "equals", "value": "DE"}
+                ]
+                * 1000
+            }
+        ],
+    },
 }
 
 
@@ -317,6 +329,8 @@ def test_d41_a_valid_stored_value_still_round_trips(admin_client, make_feature_f
         # still matches the DE user, as it did before.
         (STORED_INVALID["XOR"], "targeting_rule"),
         (STORED_INVALID["unknown operator"], "rollout"),
+        # Over the cap, still evaluated in full: every condition matches DE.
+        (STORED_INVALID["over the condition cap"], "targeting_rule"),
         ([{"type": "user_id", "user_ids": ["someone-else"]}], "rollout"),
         ({"country": ["DE"]}, "rollout"),
     ],
@@ -396,6 +410,9 @@ def test_the_check_script_lists_stored_rules_and_writes_nothing(
             ]
         ),
         "scalar": make_feature_flag(targeting_rules=42),
+        "wide": make_feature_flag(
+            targeting_rules=STORED_INVALID["over the condition cap"]
+        ),
         "clean": make_feature_flag(targeting_rules=RULES),
     }
     before = _all_flag_rows(db_session)
@@ -424,6 +441,9 @@ def test_the_check_script_lists_stored_rules_and_writes_nothing(
             check_targeting_rules.LEGACY_MATCHES_NO_USER,
         ),
         line("scalar", "targeting_rules", "must be an object"),
+        line(
+            "wide", "targeting_rules", "at most 1000 groups and conditions are allowed"
+        ),
     ):
         assert expected in out
     assert not [o for o in out if f"\t{planted['clean'].id}\t" in o]

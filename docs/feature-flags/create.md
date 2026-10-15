@@ -213,6 +213,8 @@ update, and nothing is saved. That is:
   rule, a group at any depth, a condition or the `default_rule`;
 - native groups nested more than 10 levels deep, and native rules with more than 1,000
   rules, groups and conditions in all;
+- dashboard rules with more than 1,000 groups and conditions in all, each group and each
+  condition counting as one;
 - a group with no conditions, a condition with no attribute, and an attribute with
   anything other than letters, digits, `_` and `.`;
 - an unknown operator or logical operator (`and`, `or` or `not`, in any case);
