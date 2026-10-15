@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import SQLAlchemyError
 
 from backend.app.api import deps
 from backend.app.api.v1.endpoints.segments import SEGMENT_RULES_NOT_VALID
@@ -525,6 +526,27 @@ class TestGetSegmentExperiments:
             response = client.get(f"/api/v1/segments/{uuid.uuid4()}/experiments")
 
         assert response.status_code == 404
+
+    @pytest.mark.regression
+    def test_usage_query_failure_answers_500_not_empty_lists(self):
+        """#888: a failed usage query is an error, not 200 with empty lists."""
+        mock_user = _make_user()
+        mock_db = MagicMock()
+        mock_db.query.side_effect = SQLAlchemyError("planted")
+        seg = _make_segment()
+
+        app.dependency_overrides[deps.get_current_active_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_db] = lambda: mock_db
+
+        with patch(
+            "backend.app.services.audience_service.AudienceService.get_segment",
+            return_value=seg,
+        ):
+            client = TestClient(app, raise_server_exceptions=False)
+            response = client.get(f"/api/v1/segments/{seg.id}/experiments")
+
+        assert response.status_code == 500
+        assert "experiments" not in response.text
 
 
 class TestPreviewAudienceSize:
