@@ -47,6 +47,11 @@ scenes:
           - "With demo data: 3 experiments and 2 flags."
 
   - id: dashboard
+    # D84: the results are asked for off camera before the scene (so no
+    # skeleton is filmed); the results beat's headline says so.
+    departures:
+      - kind: off-camera setup
+        says: computed off camera first
     open: /
     warm_results: [Homepage Hero Copy Test]
     beats:
@@ -109,7 +114,7 @@ scenes:
 
       - before:
           - wait_for: {text: Winner, exact: true}
-        cue: Results give the lift, the p-value and a recommended winner.
+        cue: "Its results, computed off camera first: lift, p-value, winner."
         focus: {text: Winner, exact: true}
         payoff: true
         say:

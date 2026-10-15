@@ -1064,8 +1064,12 @@ def test_the_voice_step_starts_programs_in_exactly_two_places():
 
 
 def test_capture_and_render_never_reach_the_voice_step_or_aws():
-    for path in sorted(SHOWCASE.glob("capture/*.py")) + sorted(
-        SHOWCASE.glob("render/*.py")
+    # The contract and the package's own __init__ too: the capture and the
+    # render import both, so either importing the voice step would reach it.
+    for path in (
+        sorted(SHOWCASE.glob("capture/*.py"))
+        + sorted(SHOWCASE.glob("render/*.py"))
+        + [SHOWCASE / "contract.py", SHOWCASE / "__init__.py"]
     ):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):

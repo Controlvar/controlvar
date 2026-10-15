@@ -335,6 +335,7 @@ def preflight(options: Options, environ: Mapping[str, str]) -> None:
         checkout = guard.inside_git_checkout(path)
         if checkout is not None:
             raise guard.Refused(f"{name} {path} is inside the git checkout {checkout}")
+    refuse_voice_cache_inside(options)
     if options.render:
         guard.refuse_out_beside_work(options.out, options.work_dir)
     guard.refuse_lock_inside(
@@ -355,6 +356,22 @@ def preflight(options: Options, environ: Mapping[str, str]) -> None:
     for slug in options.videos:
         board = storyboard.load(board_path(slug))
         narration_clips(board, options)
+
+
+def refuse_voice_cache_inside(options: Options) -> None:
+    """The voice cache is read in place and never written, so it may not sit
+    inside the work root or the output directory, which the tool writes and
+    deletes in (as it may not sit inside a git checkout: ``voiced.find_clips``)."""
+    if options.voice_cache is None or options.voice == contract.SILENT:
+        return
+    cache = Path(os.path.realpath(options.voice_cache))
+    for name, path in (("--work-dir", options.work_dir), ("--out", options.out)):
+        root = Path(os.path.realpath(path))
+        if cache == root or root in cache.parents:
+            raise guard.Refused(
+                f"--voice-cache {options.voice_cache} is inside {name} {path}: the"
+                " tool writes and deletes there; give a cache outside both"
+            )
 
 
 def narration_clips(

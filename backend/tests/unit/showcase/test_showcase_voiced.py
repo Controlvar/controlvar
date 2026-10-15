@@ -34,7 +34,7 @@ V1 = "01-getting-started"
 
 
 def board(slug: str = V1) -> storyboard.Storyboard:
-    return storyboard.load(SHOWCASE / config.VIDEOS[slug])
+    return storyboard.load(run.board_path(slug))
 
 
 # --- A voice cache, written as the voice step writes it -------------------------------
@@ -194,7 +194,33 @@ def test_the_preflight_runs_the_clip_check_before_any_stack(tmp_path, monkeypatc
         importlib.metadata, "version", lambda name: config.PLAYWRIGHT_VERSION
     )
     with pytest.raises(guard.Refused, match="make showcase-voice VIDEO=01-getting"):
-        run.preflight(options(tmp_path, render=False), {})
+        run.preflight(options(tmp_path, render=False), {"HOME": str(tmp_path / "h")})
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("inside", ["work", "videos"])
+def test_a_voice_cache_inside_the_work_root_or_the_output_is_refused(tmp_path, inside):
+    """The work root and the output are where the tool writes and deletes."""
+    made = options(tmp_path, voice_cache=tmp_path / inside / "voice-cache")
+    flag = "--work-dir" if inside == "work" else "--out"
+    with pytest.raises(guard.Refused, match=f"--voice-cache .* is inside {flag}"):
+        run.refuse_voice_cache_inside(made)
+    run.refuse_voice_cache_inside(options(tmp_path))
+    # A silent capture reads no cache, wherever it is.
+    run.refuse_voice_cache_inside(
+        options(tmp_path, voice="none", voice_cache=tmp_path / inside / "c")
+    )
+
+
+def test_the_preflight_refuses_a_voice_cache_inside_the_work_root(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(guard, "inside_git_checkout", lambda path: None)
+    with pytest.raises(guard.Refused, match="is inside --work-dir"):
+        run.preflight(
+            options(tmp_path, render=False, voice_cache=tmp_path / "work" / "c"),
+            {"HOME": str(tmp_path / "h")},
+        )
 
 
 def test_the_voice_is_ruth_unless_the_caller_says_none(tmp_path):
@@ -485,6 +511,8 @@ def capture_from(made, tmp_path, clips, *, voice="Ruth") -> Path:
 def test_video_1_paced_by_its_clips_validates_with_every_sentence_tiled(
     stage, cache, tmp_path
 ):
+    # The real video 1, as E0's D84 preflight passes it: every departure stated.
+    assert storyboard.departure_problems(board()) == []
     clips = voiced.find_clips(board(), "Ruth", cache)
     made = record_v1(stage, clips)
     assert made.tally.narration_checks == 16
