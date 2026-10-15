@@ -307,10 +307,18 @@ class TestSaltIndependence:
     same users again."""
 
     def test_two_holdouts_overlap_as_independent_draws(self):
-        from backend.app.models.global_holdout import new_holdout_salt
+        """Two FIXED salts, so the overlap is one number and the test cannot
+        fail by chance (#1025).
+
+        With random salts the overlap is a random draw: over 600 random pairs
+        it had mean 0.04002 and sd 0.00143 (binomial: 0.00139), so the
+        0.034-0.046 bound was about 4.2 sd and a run failed about once in
+        37,000. These two give 801 of 20,000 users, 0.04005. A holdout that
+        ignored its salt would give 0.20, so the bound still bites.
+        """
         from backend.app.services.global_holdout_service import holdout_bucket
 
-        first, second = new_holdout_salt(), new_holdout_salt()
+        first, second = "holdout:" + "1" * 32, "holdout:" + "2" * 32
         users = [f"independence_{i}" for i in range(20000)]
         in_first = {u for u in users if holdout_bucket(u, first) < 20}
         in_second = {u for u in users if holdout_bucket(u, second) < 20}
