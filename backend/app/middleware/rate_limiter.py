@@ -40,11 +40,36 @@ class SlidingWindowRateLimiter:
     Each (key, route) pair gets an independent deque of timestamps for
     requests in the current window.  Requests older than ``window_seconds``
     are evicted on each check.
+
+    A key whose window has emptied is forgotten, so the dictionary does not
+    grow for as long as the process stays in fallback (#809). Each call
+    looks at no more than ``SWEEP_PER_CALL`` other keys, oldest-checked
+    first, so a key that is never seen again is still dropped and the work
+    per request stays bounded.
     """
+
+    #: How many other keys one call may check for expiry.
+    SWEEP_PER_CALL = 8
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._windows: Dict[str, deque] = defaultdict(deque)
+        # key -> monotonic time at which its newest request leaves the window.
+        self._expires: Dict[str, float] = {}
+
+    def _sweep(self, now: float) -> None:
+        """Forget up to ``SWEEP_PER_CALL`` keys whose window has emptied.
+
+        The caller holds the lock. A key still in its window moves to the
+        back of the order, so the next call checks different keys.
+        """
+        for _ in range(min(self.SWEEP_PER_CALL, len(self._expires))):
+            key = next(iter(self._expires))
+            expires = self._expires.pop(key)
+            if expires <= now:
+                self._windows.pop(key, None)
+            else:
+                self._expires[key] = expires
 
     def is_allowed(self, key: str, limit: int, window_seconds: int) -> Tuple[bool, int]:
         """
@@ -58,6 +83,7 @@ class SlidingWindowRateLimiter:
         cutoff = now - window_seconds
 
         with self._lock:
+            self._sweep(now)
             window = self._windows[key]
 
             # Evict timestamps outside the current window
@@ -66,9 +92,14 @@ class SlidingWindowRateLimiter:
 
             count = len(window)
             if count >= limit:
+                if not window:
+                    # A limit of 0 never appends; do not keep the empty deque.
+                    del self._windows[key]
                 return False, 0
 
             window.append(now)
+            self._expires.pop(key, None)
+            self._expires[key] = now + window_seconds
             return True, limit - count - 1
 
 

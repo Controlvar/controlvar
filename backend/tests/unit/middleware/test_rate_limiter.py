@@ -84,6 +84,49 @@ class TestSlidingWindowRateLimiter:
         assert allowed is True
         assert remaining == 2
 
+    @pytest.mark.regression
+    def test_keys_whose_window_emptied_are_forgotten(self, monkeypatch):
+        """#809: the key count falls back once the windows have passed.
+
+        Fake clock, no sleep. 200 keys are seen once and never again; later
+        calls from one other key drop them a few at a time.
+        """
+        from types import SimpleNamespace
+
+        clock = FakeClock(100.0)
+        monkeypatch.setattr(
+            "backend.app.middleware.rate_limiter.time",
+            SimpleNamespace(monotonic=clock),
+        )
+        limiter = SlidingWindowRateLimiter()
+        for i in range(200):
+            assert limiter.is_allowed(f"ip-{i}", limit=5, window_seconds=60)[0]
+        assert len(limiter._windows) == 200
+
+        clock.now += 61  # every window has emptied
+        for _ in range(40):
+            limiter.is_allowed("live", limit=5, window_seconds=60)
+
+        assert set(limiter._windows) == {"live"}
+        assert len(limiter._expires) == 1
+
+    def test_sweep_keeps_keys_still_in_their_window(self, monkeypatch):
+        from types import SimpleNamespace
+
+        clock = FakeClock(100.0)
+        monkeypatch.setattr(
+            "backend.app.middleware.rate_limiter.time",
+            SimpleNamespace(monotonic=clock),
+        )
+        limiter = SlidingWindowRateLimiter()
+        for _ in range(3):
+            limiter.is_allowed("busy", limit=3, window_seconds=60)
+        clock.now += 59
+        for i in range(50):
+            limiter.is_allowed(f"other-{i}", limit=3, window_seconds=60)
+        # "busy" is still in its window, so it is still limited.
+        assert limiter.is_allowed("busy", limit=3, window_seconds=60) == (False, 0)
+
 
 # ---------------------------------------------------------------------------
 # RedisRateLimiter tests
