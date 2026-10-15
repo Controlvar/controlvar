@@ -28,4 +28,4 @@ requests==2.34.2       # sso_service.py:600,662 -- the OIDC token/userinfo fallb
 # generates again before it is sent (modules/backend/app/services/
 # warehouse_query_builder.py, verify_generated_sql). The import is guarded and
 # fails closed, so without this pin every warehouse query is refused.
-sqlglot==30.21.0
+sqlglot==30.22.0
