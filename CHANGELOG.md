@@ -10,6 +10,13 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.34.1](https://github.com/getexperimently/experimently/compare/v0.34.0...v0.34.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **dashboard:** the results page says the planned sample is reached only when it is met ([#1245](https://github.com/getexperimently/experimently/issues/1245)) ([3ef693d](https://github.com/getexperimently/experimently/commit/3ef693d01ce2adc36c2479f7ddea6e4351fedb5d))
+
 ## [0.34.0](https://github.com/getexperimently/experimently/compare/v0.33.0...v0.34.0) (2026-10-15)
 
 
