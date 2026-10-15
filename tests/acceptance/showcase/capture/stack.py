@@ -12,6 +12,13 @@
   static export, every address given as a flag (its defaults are a developer's
   3100 and localhost:8000).
 
+* The demo apps the video records: ``next start`` of each app's built tree
+  (``build.build_app``) on 127.0.0.1:<its port>. An app's seed runs off camera
+  when the storyboard says (``seed_app``), its key files written to the tool's
+  own directory: the compose key it registers is checked, and the StreamPulse
+  server key is read from ``.api_key_server`` and stripped, for the caller to
+  keep as a needle. It is never put on an argv or in an environment.
+
 Every Python child starts through ``procs.LAUNCHER`` from the copy. After the
 API answers, ``/api/v1/modules`` must report the profile asked for.
 """
@@ -26,7 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Mapping, Optional
 
-from showcase.capture import config, guard
+from showcase.capture import build, config, guard
 from showcase.capture.procs import Children
 
 
@@ -39,9 +46,22 @@ class Ports:
     api: int
     dashboard: int
     postgres: int
+    shoplab: int = config.DEFAULT_SHOPLAB_PORT
+    streampulse: int = config.DEFAULT_STREAMPULSE_PORT
 
     def as_dict(self) -> Dict[str, int]:
-        return {"API": self.api, "dashboard": self.dashboard, "Postgres": self.postgres}
+        return {
+            "API": self.api,
+            "dashboard": self.dashboard,
+            "Postgres": self.postgres,
+            "ShopLab": self.shoplab,
+            "StreamPulse": self.streampulse,
+        }
+
+    def app(self, name: str) -> int:
+        if name not in config.APPS:
+            raise ValueError(f"no app {name!r}")
+        return int(getattr(self, name))
 
 
 def _get(url: str, timeout: float = 10) -> bytes:
@@ -95,12 +115,17 @@ def remove_labelled(
 ) -> List[str]:
     """Remove the containers with this work root's label (a killed run's), and no other.
 
-    The run lock is per work root, so a run from another work root is never
-    touched."""
+    The label's value is the work root, so a run from another work root's
+    containers are never touched."""
     names = labelled_containers(children, env, root)
     for name in names:
         children.run(
-            "docker-rm", ["docker", "rm", "-f", name], cwd=Path.cwd(), env=env, log=log
+            "docker-rm",
+            ["docker", "rm", "-f", name],
+            cwd=Path.cwd(),
+            env=env,
+            log=log,
+            kind="docker",
         )
     return names
 
@@ -116,6 +141,7 @@ class Stack:
         children: Children,
         logs: Path,
         parent: Mapping[str, str],
+        apps: Optional[Mapping[str, Path]] = None,
     ):
         self.tree = tree
         self.ports = ports
@@ -123,19 +149,30 @@ class Stack:
         self.container = f"showcase-pg-{run_id}"
         self.children = children
         self.logs = logs
+        self.parent = dict(parent)
+        #: The apps this video records, and each one's built tree.
+        self.apps: Dict[str, Path] = dict(apps or {})
         self.docker_env = guard.child_env({}, parent=parent, docker=True)
-        self.api_env = guard.child_env(
-            guard.api_settings(
-                api_port=ports.api,
-                dashboard_port=ports.dashboard,
-                postgres_port=ports.postgres,
-                profile=profile,
-            ),
-            parent=parent,
+        self.api_settings = guard.api_settings(
+            api_port=ports.api,
+            dashboard_port=ports.dashboard,
+            postgres_port=ports.postgres,
+            profile=profile,
+            app_ports=[ports.app(app) for app in self.apps],
         )
+        self.api_env = guard.child_env(self.api_settings, parent=parent)
         self.web_env = guard.child_env(
             guard.dashboard_settings(api_port=ports.api, profile=profile), parent=parent
         )
+        self.app_envs = {
+            app: guard.child_env(
+                guard.app_settings(
+                    app=app, api_port=ports.api, dashboard_port=ports.dashboard
+                ),
+                parent=parent,
+            )
+            for app in self.apps
+        }
         self.facts: Dict[str, object] = {}
 
     @property
@@ -155,6 +192,7 @@ class Stack:
             cwd=self.tree,
             env=self.docker_env,
             log=self.logs / log,
+            kind="docker",
             timeout=timeout,
         )
 
@@ -265,6 +303,7 @@ class Stack:
                 cwd=self.tree,
                 env=self.api_env,
                 log=self.logs / f"{name}.log",
+                kind="api",
                 timeout=600,
             )
             if status != 0:
@@ -293,6 +332,7 @@ class Stack:
             cwd=self.tree,
             env=self.api_env,
             log=self.logs / "api.log",
+            kind="api",
         )
         wait_until(f"{self.api_url}/health", 180)
         self.facts["api_launcher"] = launcher_line(self.logs / "api.log")
@@ -325,8 +365,64 @@ class Stack:
             cwd=frontend,
             env=self.web_env,
             log=self.logs / "dashboard.log",
+            kind="dashboard",
         )
         wait_until(f"{self.dashboard_url}/", 60)
+
+    # -- the demo apps ---------------------------------------------------------
+
+    def app_url(self, app: str) -> str:
+        return guard.origin(self.ports.app(app))
+
+    def key_dir(self, app: str) -> Path:
+        """Where an app's seed writes its key files: the tool's, not ``demo/<app>``."""
+        return self.logs.parent / f"keys-{app}"
+
+    def seed_app(self, app: str, *, history: bool) -> Optional[str]:
+        """Off camera: the app's seed. Its compose key is checked; for StreamPulse
+        the server key it made is read, stripped, and returned (else None)."""
+        module, _variable = config.APP_SEED[app]
+        keys = self.key_dir(app)
+        keys.mkdir(mode=0o700, parents=True, exist_ok=True)
+        env = guard.child_env(
+            guard.seed_settings(app, self.api_settings, keys), parent=self.parent
+        )
+        name = f"seed-{app}"
+        status = self.children.python(
+            name,
+            module,
+            [] if history else ["--no-history"],
+            cwd=self.tree,
+            env=env,
+            log=self.logs / f"{name}.log",
+            kind=name,
+            timeout=1200,
+        )
+        if status != 0:
+            raise StackError(f"{module} exited {status}; see {self.logs / name}.log")
+        registered = read_key(keys / ".api_key")
+        if registered != config.APP_STATIC_KEY[app]:
+            raise StackError(
+                f"seed {app}: the key it registered is not the compose key the"
+                " app was built with"
+            )
+        if app != "streampulse":
+            return None
+        return read_key(keys / config.SERVER_KEY_FILE)
+
+    def start_app(self, app: str) -> None:
+        tree = self.apps[app]
+        argv = build.app_start_argv(tree, app, self.ports.app(app))
+        build.refuse_app_argv(argv, tree, app, self.ports.app(app))
+        self.children.start(
+            f"app-{app}",
+            argv,
+            cwd=build.app_dir(tree, app),
+            env=self.app_envs[app],
+            log=self.logs / f"app-{app}.log",
+            kind="app",
+        )
+        wait_until(f"{self.app_url(app)}/", 60)
 
     # -- the whole thing -----------------------------------------------------
 
@@ -335,11 +431,29 @@ class Stack:
         self.seed()
         self.start_api()
         self.start_dashboard()
+        for app in self.apps:
+            self.start_app(app)
 
     def down(self) -> None:
+        for app in self.apps:
+            self.children.stop(f"app-{app}")
         self.children.stop("dashboard")
         self.children.stop("api")
         self.stop_postgres()
+
+
+def read_key(path: Path) -> str:
+    """A key file a seed wrote, stripped (it ends in a newline, PE 5).
+
+    Refused when it is missing or empty, or holds whitespace inside: a value a
+    header could not carry as read.
+    """
+    if not path.is_file():
+        raise StackError(f"{path.name} was not written by the seed")
+    value = path.read_text(encoding="utf-8").strip()
+    if not value or any(ch.isspace() for ch in value):
+        raise StackError(f"{path.name} does not hold one key")
+    return value
 
 
 def launcher_line(log: Path) -> Optional[str]:
