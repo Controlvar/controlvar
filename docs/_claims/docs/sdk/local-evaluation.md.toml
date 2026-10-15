@@ -462,7 +462,7 @@ by = [
 [[unit]]
 text = "Set maxStaleMs / max_stale_seconds if you prefer evaluations to go to the server once the ruleset is that old."
 by = [
-    "test:sdk/js/__tests__/local.test.ts::maxStaleMs",
+    "test:sdk/js/__tests__/local.test.ts::maxStaleMs: a ruleset older than that is not used",
     "test:sdk/python/tests/test_local.py::test_max_stale_seconds",
 ]
 
