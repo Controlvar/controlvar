@@ -384,6 +384,10 @@ def validate_flag_targeting(value: Any) -> Optional[TargetingRules]:
       (``<path>.groups: nested too deeply``), and native values with more
       than 1000 rules, groups and conditions together, are refused before
       the walk goes further;
+    * dashboard rules with more than 1000 groups and conditions in all
+      (each group is one, and each of its conditions one) are refused
+      before any group is checked or converted: ``targeting rules: at most
+      1000 groups and conditions are allowed``;
     * ``rollout_percentage``, on dashboard rules and on a native rule, must be
       an integer from 0 to 100. A float with no fractional part (``100.0``)
       is accepted, as the native model accepts it; ``33.5``, ``true`` and
@@ -592,6 +596,8 @@ def _validated_dashboard(raw: Dict[str, Any], kind: str) -> TargetingRules:
     groups = raw["groups"]
     if not isinstance(groups, list):
         raise TargetingRulesError("groups", "must be a list")
+    if kind == _FLAG:
+        _check_dashboard_flag_size(groups)
     for gi, group in enumerate(groups):
         gpath = f"groups[{gi}]"
         if not isinstance(group, dict):
@@ -645,6 +651,27 @@ def _validated_dashboard(raw: Dict[str, Any], kind: str) -> TargetingRules:
                     f"{cpath}.value", "value is not valid for the operator"
                 ) from None
     raise TargetingRulesError("", "rules could not be converted")
+
+
+def _check_dashboard_flag_size(groups: List[Any]) -> None:
+    """Refuse dashboard flag rules with more than :data:`MAX_NATIVE_NODES`
+    groups and conditions in all, before any group is checked or converted.
+
+    Counted in the builder's units: each item of ``groups`` is one, and each
+    item of a group's ``conditions`` list is one. A group that is not an
+    object, or whose ``conditions`` is not a list, adds only itself; the
+    checks after this one refuse it.
+    """
+    count = len(groups)
+    for group in groups:
+        if isinstance(group, dict):
+            conditions = group.get("conditions")
+            if isinstance(conditions, list):
+                count += len(conditions)
+    if count > MAX_NATIVE_NODES:
+        raise TargetingRulesError(
+            "", f"at most {MAX_NATIVE_NODES} groups and conditions are allowed"
+        )
 
 
 def _validated_native(raw: Dict[str, Any], kind: str) -> TargetingRules:
@@ -713,7 +740,8 @@ def _check_flag_percentage(value: Any, path: str) -> None:
 #: level 0. The same limit as ``RuleValidator.max_rule_depth``.
 MAX_NATIVE_GROUP_DEPTH = 10
 #: Most rules, groups and conditions one native value may carry, counted
-#: together.
+#: together; also the most groups and conditions dashboard flag rules may
+#: carry (:func:`_check_dashboard_flag_size`).
 MAX_NATIVE_NODES = 1000
 
 

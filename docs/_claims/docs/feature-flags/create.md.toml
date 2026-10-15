@@ -477,6 +477,15 @@ by = [
 ]
 
 [[unit]]
+text = "dashboard rules with more than 1,000 groups and conditions in all, each group and each condition counting as one;"
+by = [
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_accepted",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_a_wide_dashboard_value_is_refused_at_the_condition_cap",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_the_dashboard_cap_is_the_native_one",
+]
+
+[[unit]]
 text = "a group with no conditions, a condition with no attribute, and an attribute with anything other than letters, digits, _ and .;"
 by = ["test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused"]
 

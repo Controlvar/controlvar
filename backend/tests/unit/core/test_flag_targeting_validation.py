@@ -18,6 +18,8 @@ Pinned here, without a database:
   ``reason`` and ``rule_id``, over a grid of users and contexts (V6);
 * nothing accepted is dropped: an accepted non-empty value is never read as
   "no rules" by ``normalise_targeting_rules`` (V7);
+* dashboard rules hold at most 1,000 groups and conditions in all, counted
+  before any condition is converted (#828); experiments are not capped;
 * the SDK ruleset vectors split exactly 143 accepted / 4 refused / 2 legacy
   rows the API now refuses (V12);
 * native rules: a key outside the schema is refused at every level -- the
@@ -41,6 +43,7 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import ValidationError
 
+from backend.app.core import targeting_adapter
 from backend.app.core.rules_engine import SEGMENT_MEMBERSHIP_KEY
 from backend.app.core.targeting_adapter import (
     MAX_LIST_ITEMS,
@@ -54,6 +57,7 @@ from backend.app.core.targeting_adapter import (
 )
 from backend.app.core.validation_errors import render_validation_errors
 from backend.app.models.feature_flag import FeatureFlagStatus
+from backend.app.schemas.experiment import ExperimentUpdate
 from backend.app.schemas.feature_flag import FeatureFlagCreate, FeatureFlagUpdate
 from backend.app.services import feature_flag_service as ffs
 from backend.scripts import generate_ruleset_vectors as ruleset_vectors
@@ -133,6 +137,9 @@ ACCEPTED: Dict[str, Any] = {
     "native, 1000 rules, groups and conditions": native(
         group=group(*[NATIVE_EQ] * 998)
     ),
+    # #828: the same total, 1,000 groups and conditions, in two shapes.
+    "dashboard, 1 group and 999 conditions": dash([US] * 999),
+    "dashboard, 500 groups of 1 condition": dash(*[[US]] * 500, top="OR"),
     "native, every schema key at every level": {
         "version": "1.0",
         "rules": [
@@ -190,6 +197,8 @@ DEFAULT_RULE = {
 
 _INTEGER = "must be an integer from 0 to 100"
 _NODES = "at most 1000 rules, groups and conditions are allowed"
+#: The dashboard shape's cap (#828), in the builder's units.
+_DASHBOARD_NODES = "at most 1000 groups and conditions are allowed"
 
 #: Native rules with a key outside the schema, or a rollout percentage that is
 #: not an integer, at every level (V6/V7). The model ignores an unknown nested
@@ -393,6 +402,24 @@ REFUSED: Dict[str, Tuple[Any, str]] = {
         "groups[1].conditions[0].value: value is not valid for the operator",
     ),
     **NATIVE_REFUSED,
+    # #828: one more than the cap, in the same two shapes as the accepted rows.
+    "dashboard, 1 group and 1000 conditions": (
+        dash([US] * 1000),
+        f"targeting rules: {_DASHBOARD_NODES}",
+    ),
+    "dashboard, 500 groups and 501 conditions": (
+        dash([US, US], *[[US]] * 499, top="OR"),
+        f"targeting rules: {_DASHBOARD_NODES}",
+    ),
+    "dashboard, 100 groups of 50 conditions": (
+        dash(*[[US] * 50] * 100, top="OR"),
+        f"targeting rules: {_DASHBOARD_NODES}",
+    ),
+    # The size is checked before the groups are: the bad operator is not named.
+    "dashboard over the cap with an unknown operator": (
+        dash([cond("country", "equal", "US")] * 1000),
+        f"targeting rules: {_DASHBOARD_NODES}",
+    ),
 }
 
 
@@ -445,6 +472,46 @@ def test_a_very_wide_value_is_refused_at_the_node_bound(value):
     with pytest.raises(TargetingRulesError) as caught:
         validate_flag_targeting(value)
     assert str(caught.value) == f"targeting rules: {_NODES}"
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "value",
+    [dash([US] * 100_000), dash(*[[US] * 50] * 100, top="OR")],
+    ids=["1 group of 100000 conditions", "100 groups of 50 conditions"],
+)
+def test_a_wide_dashboard_value_is_refused_at_the_condition_cap(monkeypatch, value):
+    """#828: refused by counting, before a single condition is converted."""
+    calls = 0
+    convert = targeting_adapter.convert_dashboard_condition
+
+    def counted(condition):
+        nonlocal calls
+        calls += 1
+        return convert(condition)
+
+    monkeypatch.setattr(targeting_adapter, "convert_dashboard_condition", counted)
+    with pytest.raises(TargetingRulesError) as caught:
+        validate_flag_targeting(value)
+    assert str(caught.value) == f"targeting rules: {_DASHBOARD_NODES}"
+    assert calls == 0
+    # The counter is wired: a value under the cap does reach the converter.
+    validate_flag_targeting(dash([US] * 3))
+    assert calls == 3
+
+
+def test_the_dashboard_cap_is_the_native_one():
+    assert targeting_adapter.MAX_NATIVE_NODES == 1000
+    assert _DASHBOARD_NODES == (
+        f"at most {targeting_adapter.MAX_NATIVE_NODES} groups and conditions are allowed"
+    )
+
+
+def test_experiment_dashboard_rules_are_not_capped():
+    """#828 caps flags only; experiments are unchanged (#734)."""
+    over = dash([US] * 1001)
+    assert validate_experiment_targeting(copy.deepcopy(over)) is not None
+    assert ExperimentUpdate(targeting_rules=copy.deepcopy(over)).targeting_rules == over
 
 
 def test_the_depth_cap_is_the_rule_validators():
