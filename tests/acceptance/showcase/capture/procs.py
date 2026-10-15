@@ -1,10 +1,11 @@
 """Every program the tool starts goes through ``Children``.
 
 Before it starts, its argv and environment are checked for a reserved port
-(``guard.refuse_reserved_in``), and what it was started with is recorded: the
-argv and the names of its environment variables (never their values), which
-the manifest carries and ``gates.child_environments`` checks against the
-allow-list.
+(``guard.refuse_reserved_in``) and for a value the run keeps to itself
+(``Children.private``: the StreamPulse server key), and what it was started
+with is recorded: its kind, the argv and the names of its environment
+variables (never their values), which the manifest carries and
+``gates.child_environments`` checks against its kind's allow-list.
 
 The long-running ones (the API, the static server) are written to
 ``<work root>/children.json`` while they run. A run that is killed leaves them
@@ -77,21 +78,36 @@ class Children:
         #: The run-to-completion child in progress (a build, a seed), if any.
         self.current: Optional[subprocess.Popen] = None
         self.registry = work.path / "children.json"
+        #: Values no child is given, on its argv or in its environment (PE 5).
+        self.private: List[str] = []
 
     # -- recording -----------------------------------------------------------
 
-    def _record(self, name: str, argv: Sequence[str], env: Mapping[str, str]) -> None:
-        """Refused before it starts: a reserved port, or a variable off the allow-list."""
+    def _record(
+        self, name: str, argv: Sequence[str], env: Mapping[str, str], kind: str
+    ) -> None:
+        """Refused before it starts: a reserved port, a private value, or a
+        variable off its kind's allow-list."""
         from showcase.capture import gates
 
         guard.refuse_reserved_in(argv, env, what=name)
+        for value in self.private:
+            if any(value in str(arg) for arg in argv):
+                raise guard.Refused(f"{name}: a private key is on its argv")
+            if any(value in str(v) for v in env.values()):
+                raise guard.Refused(f"{name}: a private key is in its environment")
         ok, _numbers, why = gates.child_environments(
-            [{"name": name, "env_keys": sorted(env)}], gates.allowed_env_keys()
+            [{"name": name, "kind": kind, "env_keys": sorted(env)}]
         )
         if not ok:
             raise guard.Refused(f"EM condition 10: {why}")
         self.started.append(
-            {"name": name, "argv": [str(a) for a in argv], "env_keys": sorted(env)}
+            {
+                "name": name,
+                "kind": kind,
+                "argv": [str(a) for a in argv],
+                "env_keys": sorted(env),
+            }
         )
 
     # -- starting ------------------------------------------------------------
@@ -104,6 +120,7 @@ class Children:
         cwd: Path,
         env: Mapping[str, str],
         log: Path,
+        kind: str,
         timeout: float = 900,
     ) -> int:
         """Run to completion, output to *log*; the exit status.
@@ -111,7 +128,7 @@ class Children:
         In a process group of its own, which is stopped whole if the run ends
         first (``npm run build`` starts the Next.js build as a grandchild).
         """
-        self._record(name, argv, env)
+        self._record(name, argv, env, kind)
         log.parent.mkdir(parents=True, exist_ok=True)
         with log.open("a", encoding="utf-8") as handle:
             handle.write(f"$ {' '.join(str(a) for a in argv)}\n")
@@ -148,9 +165,10 @@ class Children:
         cwd: Path,
         env: Mapping[str, str],
         log: Path,
+        kind: str,
     ) -> subprocess.Popen:
         """Start a long-running child, output to *log*."""
-        self._record(name, argv, env)
+        self._record(name, argv, env, kind)
         log.parent.mkdir(parents=True, exist_ok=True)
         handle = log.open("a", encoding="utf-8")
         process = subprocess.Popen(

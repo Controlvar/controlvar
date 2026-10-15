@@ -1,0 +1,132 @@
+# A probe, not a video (config.PROBES): it proves the demo apps' path through
+# the tool (E0). Each app is seeded off camera, armed (its experiments and
+# flags asserted ACTIVE through the API, then its first load, its zoom and its
+# overlay self-test), and worked for a few beats, so that the app's own calls
+# to the API are counted on camera; then the dashboard lists every experiment
+# the seeds made. It is captured with --capture-only and never rendered, but
+# its capture directory is held to a video's rules (55-90 s included).
+slug: 90-app-probe
+title: App probe
+seed: demo
+seed_counts: {experiments: 3, feature_flags: 2, users: 4}
+end_state:
+  signed_in_as: admin@demo.com
+  experiments_listed: 12
+
+scenes:
+  - id: storefront
+    app: shoplab
+    off_camera:
+      - seed: shoplab
+    departures:
+      - kind: off-camera setup
+        says: seeded off camera
+    open: /
+    beats:
+      - cue: The storefront's experiments were seeded off camera.
+        focus: {role: button, name: Powered by Experimently, exact: true}
+        steps:
+          - move: {role: button, name: Powered by Experimently, exact: true}
+        exit:
+          - click: {role: button, name: Powered by Experimently, exact: true}
+
+      - before:
+          - wait_for: {role: heading, name: Experiments, exact: true}
+        cue: The panel shows the variant this visitor was given.
+        focus: {role: heading, name: Experiments, exact: true}
+        steps:
+          - look: {role: heading, name: Experiments, exact: true}
+            ms: 2500
+          - look: {role: heading, name: Visitor, exact: true}
+            ms: 2000
+          - move: {role: link, name: Products, exact: true}
+        exit:
+          - click: {role: link, name: Products, exact: true}
+
+      - before:
+          - url: "**/products"
+          - wait_for: {role: link, name: Products, exact: true}
+        cue: Every page asks the platform as the visitor moves on.
+        focus: {role: link, name: Products, exact: true}
+        steps:
+          - look: {role: link, name: Products, exact: true}
+            ms: 2500
+          - look: {role: link, name: Search, exact: true}
+            ms: 2000
+
+      - cue: The shipping banner at the top is a feature flag.
+        focus: {text: Free shipping on every order, exact: false}
+        steps:
+          - look: {text: Free shipping on every order, exact: false}
+            ms: 2500
+          - look: {role: link, name: Home, exact: true}
+            ms: 2500
+
+  - id: player
+    app: streampulse
+    off_camera:
+      - seed: streampulse
+    departures:
+      - kind: off-camera setup
+        says: seeded off camera
+    open: /
+    beats:
+      - cue: The streaming app's flags were seeded off camera.
+        focus: {role: heading, name: Powered by Experimently, exact: true}
+        steps:
+          - look: {role: heading, name: Powered by Experimently, exact: true}
+            ms: 2500
+          - look: {text: Feature flags, exact: true}
+            ms: 2000
+
+      - cue: Pick another device to see what it is given.
+        focus: {text: Galaxy S10, exact: false}
+        steps:
+          - move: {text: Galaxy S10, exact: false}
+          - click: {text: Galaxy S10, exact: false}
+          - look: {text: Experiments, exact: true}
+            ms: 2500
+
+      - cue: Each device's answers come from the same flags.
+        focus: {text: Pixel 7, exact: false}
+        steps:
+          - move: {text: Pixel 7, exact: false}
+          - click: {text: Pixel 7, exact: false}
+          - look: {text: Feature flags, exact: true}
+            ms: 2500
+          - look: {text: Experiments, exact: true}
+            ms: 2500
+
+      - cue: Refresh asks the platform again for this device.
+        focus: {role: button, name: Refresh now, exact: true}
+        steps:
+          - move: {role: button, name: Refresh now, exact: true}
+          - click: {role: button, name: Refresh now, exact: true}
+          - look: {text: Feature flags, exact: true}
+            ms: 2500
+
+  - id: experiments
+    open: /experiments
+    signed_in: true
+    departures:
+      - kind: off-camera setup
+        says: Signed in off camera
+    beats:
+      - before:
+          - wait_for: {css: table}
+        cue: "Signed in off camera: every experiment the apps run, listed."
+        focus: {css: table thead}
+        steps:
+          - look: {css: table thead}
+            ms: 2500
+          - look: {css: table thead}
+            ms: 2500
+
+      - cue: Each one is an ordinary experiment, made by its app's seed.
+        focus: {css: table tbody tr:last-child}
+        payoff: true
+        steps:
+          - look: {css: table tbody tr:last-child}
+            ms: 2500
+          - look: {css: table tbody tr:last-child}
+            ms: 2500

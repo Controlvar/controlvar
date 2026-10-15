@@ -11,13 +11,18 @@ and none of it needs a browser, so all of it is unit tested
   address is caught before it runs, not after.
 * ``child_env``: a child's environment is built from an allow-list, never
   copied from the caller's. ``AWS_PROFILE``, a developer's ``POSTGRES_PORT``
-  and anything else the caller has set do not reach it.
+  and anything else the caller has set do not reach it. Each kind of child
+  has its own list (``allowed_env_keys``): the dashboard's build is never
+  given an app's key, and only an app's seed is given that app's key.
 * ``strip_environment``: the process's own environment is cut to the same list
   when it starts, as the render does, so the Playwright driver (which
   ``sync_playwright()`` starts from it) gets what the other children get.
 * ``WorkRoot``: every deletion goes through ``WorkRoot.remove``, which refuses
   a path outside the work root, and a work root inside a git checkout.
-* ``RunLock``: one run per work root. A second refuses before it touches Docker.
+* ``RunLock``: one holder of a lock file at a time; ``machine_lock`` is the
+  capture's, one per machine, at a path outside every work root and git
+  checkout, held from before the capture until the render ends. A second run
+  refuses before it touches Docker.
 * ``free_bytes`` / ``refuse_low_disk``: the 4 GiB floor.
 * ``http_opener``: the tool's own HTTP calls take no proxy settings from the
   environment, as its child processes take none (``PASSED``).
@@ -156,11 +161,26 @@ NO_AWS: Dict[str, str] = {
 }
 
 
+def origin(port: int) -> str:
+    """The address the browser reaches one of the tool's servers at."""
+    return f"http://127.0.0.1:{port}"
+
+
 def api_settings(
-    *, api_port: int, dashboard_port: int, postgres_port: int, profile: str
+    *,
+    api_port: int,
+    dashboard_port: int,
+    postgres_port: int,
+    profile: str,
+    app_ports: Sequence[int] = (),
 ) -> Dict[str, str]:
-    """What the API, the bootstrap and the seeds run with: compose's demo settings,
-    pointed at the tool's Postgres, with Redis off."""
+    """What the API, the bootstrap and the demo seed run with: compose's demo
+    settings, pointed at the tool's Postgres, with Redis off.
+
+    CORS allows the dashboard and the apps this video records (*app_ports*),
+    exactly: the apps call the API from their own origin.
+    """
+    cors = [origin(dashboard_port)] + [origin(port) for port in app_ports]
     return {
         "ENVIRONMENT": "development",
         "LOG_LEVEL": "INFO",
@@ -181,9 +201,7 @@ def api_settings(
         "REDIS_URL": "redis://127.0.0.1:1",
         "REDIS_REQUIRED": "false",
         "SDK_RATE_LIMIT_PER_MINUTE": str(config.SDK_RATE_LIMIT_PER_MINUTE),
-        "CORS_ORIGINS": f"http://127.0.0.1:{dashboard_port}",
-        "SHOPLAB_API_KEY": config.STATIC_NEEDLES[1],
-        "STREAMPULSE_API_KEY": config.STATIC_NEEDLES[2],
+        "CORS_ORIGINS": ",".join(cors),
         "EXPERIMENTLY_PROFILE": profile,
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTHONUNBUFFERED": "1",
@@ -203,6 +221,72 @@ def dashboard_settings(*, api_port: int, profile: str) -> Dict[str, str]:
         "NODE_ENV": "production",
         **NO_AWS,
     }
+
+
+#: The variable each app's seed reads its key from, and where it writes its key files.
+APP_KEY_VARIABLE: Dict[str, str] = {
+    "shoplab": "SHOPLAB_API_KEY",
+    "streampulse": "STREAMPULSE_API_KEY",
+}
+
+
+def seed_settings(app: str, api: Mapping[str, str], key_dir: Path) -> Dict[str, str]:
+    """An app's seed: the API's settings, plus that app's compose key (which it
+    registers) and the directory it writes its key files to (the tool's own,
+    never the checkout's ``demo/<app>``)."""
+    _module, dir_variable = config.APP_SEED[app]
+    return {
+        **api,
+        APP_KEY_VARIABLE[app]: config.APP_STATIC_KEY[app],
+        dir_variable: str(key_dir),
+    }
+
+
+def app_settings(*, app: str, api_port: int, dashboard_port: int) -> Dict[str, str]:
+    """What an app's ``next build`` and ``next start`` run with: the three
+    addresses and the key its bundle is built with (compose's demo key)."""
+    return {
+        "NEXT_PUBLIC_EXPERIMENTLY_API_URL": origin(api_port),
+        "NEXT_PUBLIC_EXPERIMENTLY_API_KEY": config.APP_STATIC_KEY[app],
+        "NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL": origin(dashboard_port),
+        "NEXT_TELEMETRY_DISABLED": "1",
+        "NODE_ENV": "production",
+        **NO_AWS,
+    }
+
+
+#: The kinds of child the tool starts, each with its own allow-list.
+KINDS: Tuple[str, ...] = (
+    "docker",
+    "api",
+    "seed-shoplab",
+    "seed-streampulse",
+    "dashboard",
+    "app",
+)
+
+
+def allowed_env_keys(kind: str) -> frozenset:
+    """Every key a child of *kind* may be given: exactly, not the union of all kinds."""
+    passed = set(PASSED)
+    api = api_settings(
+        api_port=1, dashboard_port=1, postgres_port=1, profile="core", app_ports=(1,)
+    )
+    if kind == "docker":
+        keys = passed | set(DOCKER_PASSED)
+    elif kind == "api":
+        keys = passed | set(api)
+    elif kind.startswith("seed-") and kind[len("seed-") :] in config.APPS:
+        keys = passed | set(seed_settings(kind[len("seed-") :], api, Path("/")))
+    elif kind == "dashboard":
+        keys = passed | set(dashboard_settings(api_port=1, profile="core"))
+    elif kind == "app":
+        keys = passed | set(
+            app_settings(app=config.APPS[0], api_port=1, dashboard_port=1)
+        )
+    else:
+        raise Refused(f"no child kind {kind!r}; one of {', '.join(KINDS)}")
+    return frozenset(keys)
 
 
 def child_env(
@@ -342,7 +426,7 @@ def refuse_out_beside_work(out: Path, work_root: Path) -> None:
 
 
 class RunLock:
-    """An exclusive lock on ``<work root>/showcase.lock``, held for the run.
+    """An exclusive lock on ``<root>/showcase.lock`` (or on *file*), held for the run.
 
     The kernel releases it when the process ends, killed or not, so a stale
     lock file never blocks the next run; a second run while one is going
@@ -350,8 +434,10 @@ class RunLock:
     container as a leftover).
     """
 
-    def __init__(self, root: Path):
-        self.file = root / "showcase.lock"
+    def __init__(self, root: Optional[Path] = None, *, file: Optional[Path] = None):
+        if (root is None) == (file is None):
+            raise ValueError("a lock is on a root's showcase.lock or on a file")
+        self.file = file if file is not None else root / "showcase.lock"  # type: ignore[operator]
         self.handle = None
 
     def acquire(self) -> None:
@@ -377,6 +463,41 @@ class RunLock:
             fcntl.flock(self.handle, fcntl.LOCK_UN)
             self.handle.close()
             self.handle = None
+
+
+def machine_lock_path(environ: Mapping[str, str]) -> Path:
+    """``$HOME/Library/Caches/experimently-showcase/showcase.lock``.
+
+    Refused when ``HOME`` is unset, or when the path is inside a git checkout
+    (a checkout's clean-up must never be able to delete it).
+    """
+    home = environ.get("HOME")
+    if not home:
+        raise Refused("HOME is not set; the machine lock is kept under it")
+    path = Path(os.path.realpath(home)).joinpath(*config.MACHINE_LOCK)
+    checkout = inside_git_checkout(path.parent)
+    if checkout is not None:
+        raise Refused(
+            f"the machine lock {path} would be inside the git checkout {checkout}"
+        )
+    return path
+
+
+def machine_lock(environ: Mapping[str, str]) -> RunLock:
+    """The capture's lock: one run per machine, whatever its work root and ports."""
+    return RunLock(file=machine_lock_path(environ))
+
+
+def refuse_lock_inside(lock: Path, *roots: Path) -> None:
+    """Refused when the machine lock is under one of *roots* (a work root, --out)."""
+    real = Path(os.path.realpath(lock))
+    for root in roots:
+        where = Path(os.path.realpath(root))
+        if real == where or where in real.parents:
+            raise Refused(
+                f"the machine lock {real} is inside {where}; the tool deletes"
+                " under its work root, so keep them apart"
+            )
 
 
 # ---------------------------------------------------------------------------
