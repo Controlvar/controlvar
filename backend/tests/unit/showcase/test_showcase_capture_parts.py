@@ -291,7 +291,7 @@ def test_a_payoff_that_moves_or_is_short_is_refused():
 
 def test_the_needle_count_adds_up_and_is_never_empty():
     ok, numbers, _ = gates.needle_count(config.STATIC_NEEDLES, ["a-token-value-123"])
-    assert ok and numbers == {"static": 4, "kept": 1, "total": 5}
+    assert ok and numbers == {"static": 4, "kept": 1, "total": 5, "required": 0}
     ok, _, why = gates.needle_count([], [])
     assert not ok and why == "0 needles: refusing to scan"
     assert not gates.needle_count(config.STATIC_NEEDLES[:3], [])[0]

@@ -15,14 +15,56 @@ from showcase import contract
 # Ports
 # ---------------------------------------------------------------------------
 
-#: A developer's own stack: the dashboard (3000, 3100), the API (8000), Postgres
-#: (5432, 5433) and Redis (6379). Nothing the tool starts, and nothing the
-#: browser it drives asks for, may use one of these.
-RESERVED_PORTS: Tuple[int, ...] = (3000, 3100, 8000, 5432, 5433, 6379)
+#: A developer's own stack: the dashboard (3000, 3100), the demo apps ShopLab
+#: (3200) and StreamPulse (3300), the API (8000), Postgres (5432, 5433) and
+#: Redis (6379). Nothing the tool starts, and nothing the browser it drives
+#: asks for, may use one of these.
+RESERVED_PORTS: Tuple[int, ...] = (3000, 3100, 3200, 3300, 8000, 5432, 5433, 6379)
 #: The tool's own defaults, apart from the docs journeys' 28000/23000/25432/26379.
 DEFAULT_API_PORT = 28400
 DEFAULT_DASHBOARD_PORT = 28401
 DEFAULT_POSTGRES_PORT = 28402
+DEFAULT_SHOPLAB_PORT = 28403
+DEFAULT_STREAMPULSE_PORT = 28404
+
+# ---------------------------------------------------------------------------
+# The demo apps (demo/<app>), built from the recorded ref like the dashboard
+# ---------------------------------------------------------------------------
+
+#: The apps a scene may be recorded in (``Scene.app``); "dashboard" is the default.
+APPS: Tuple[str, ...] = ("shoplab", "streampulse")
+#: Each app's experiment and flag keys start with this (the seeds' own keys).
+APP_KEY_PREFIX: Dict[str, str] = {
+    "shoplab": "shoplab_",
+    "streampulse": "streampulse_",
+}
+#: The seed that makes each app's experiments and flags, and the variable that
+#: points its key files at the tool's own directory (never the checkout's demo/).
+APP_SEED: Dict[str, Tuple[str, str]] = {
+    "shoplab": ("backend.scripts.seed_shoplab", "SHOPLAB_DEMO_DIR"),
+    "streampulse": ("backend.scripts.seed_streampulse", "STREAMPULSE_DEMO_DIR"),
+}
+#: The StreamPulse seed's server key file (``sdk:ruleset``): read, stripped,
+#: kept as a needle; never put on an argv or in an environment.
+SERVER_KEY_FILE = ".api_key_server"
+#: An element each app always draws, for its origin's overlay self-test (C1).
+APP_SELF_TEST: Dict[str, Dict[str, object]] = {
+    "shoplab": {"role": "button", "name": "Powered by Experimently", "exact": True},
+    "streampulse": {
+        "role": "heading",
+        "name": "Powered by Experimently",
+        "exact": True,
+    },
+}
+
+# ---------------------------------------------------------------------------
+# One run per machine
+# ---------------------------------------------------------------------------
+
+#: Under ``HOME``: outside every work directory and every git checkout (the
+#: tool refuses a lock path inside one). Held from before the capture until
+#: the render ends.
+MACHINE_LOCK = ("Library", "Caches", "experimently-showcase", "showcase.lock")
 
 # ---------------------------------------------------------------------------
 # The machine
@@ -49,6 +91,13 @@ VIEWPORT = {"width": contract.PAGE_W, "height": contract.PAGE_H}
 #: <html>, so a zoom there would scale the cursor and ring a second time). The
 #: layout is 1440 CSS px wide, readable on a phone.
 ZOOM = 4 / 3
+#: The zoom on each origin's <body>. StreamPulse draws a 390 x 780 phone; at 4/3
+#: it is taller than the page area, so it gets its own.
+ORIGIN_ZOOM: Dict[str, float] = {
+    "dashboard": ZOOM,
+    "shoplab": ZOOM,
+    "streampulse": 1.07,
+}
 #: The overlay alignment self-test: the ring must land within this many pixels
 #: of where the element is in the frame.
 OVERLAY_TOLERANCE_PX = 2
@@ -125,6 +174,11 @@ STATIC_NEEDLES: Tuple[str, ...] = (
     "eptk_demo_streampulse_0123456789abcdef0123456789ab",
     "dev-only-change-me-9f1c7b2e4a6d8e0f1a2b3c4d5e6f7a8b",
 )
+#: The compose demo key each app's bundle is built with, and its seed registers.
+APP_STATIC_KEY: Dict[str, str] = {
+    "shoplab": STATIC_NEEDLES[1],
+    "streampulse": STATIC_NEEDLES[2],
+}
 #: The demo seed's administrator, whom every video signs in as.
 DEMO_ADMIN = ("admin@demo.com", "Demo1234!")
 
@@ -138,4 +192,9 @@ VIDEOS: Dict[str, str] = {
     "01-getting-started": "storyboards/01-getting-started.yaml",
     "02-first-experiment": "storyboards/02-first-experiment.yaml",
     "03-flag-rollout": "storyboards/03-flag-rollout.yaml",
+}
+#: Storyboards that prove the tool and are never a video: capture only, never
+#: rendered, and not part of ``all``.
+PROBES: Dict[str, str] = {
+    "90-app-probe": "storyboards/90-app-probe.yaml",
 }

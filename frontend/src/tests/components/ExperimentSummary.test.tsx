@@ -248,7 +248,7 @@ describe('ExperimentSummary', () => {
         <ExperimentSummary experiment={baseExperiment} onOpenSampleSize={onOpen} />
       );
       const link = screen.getByRole('button', {
-        name: 'See the Sample Size tab for the planned sample.',
+        name: 'See the Sample Size tab for how the plan is calculated, or to try another effect.',
       });
       await userEvent.click(link);
       expect(onOpen).toHaveBeenCalledTimes(1);
@@ -257,6 +257,112 @@ describe('ExperimentSummary', () => {
     it('shows no link when there is no tab to open', () => {
       render(<ExperimentSummary experiment={baseExperiment} />);
       expect(screen.queryByTestId('open-sample-size-tab')).not.toBeInTheDocument();
+    });
+
+    // #1257: the card says which effect the plan is for, and the baseline.
+    describe('the effect line', () => {
+      const effectLine = () => screen.getByTestId('planned-sample-effect');
+
+      it('names the effect saved with the experiment and the control rate (V2)', () => {
+        render(
+          <ExperimentSummary
+            experiment={baseExperiment}
+            plannedSample={plan({
+              required_sample_size_per_variant: 31159,
+              current_sample_size_per_variant: 31309,
+              is_adequate: true,
+              mde: 0.1,
+              mde_source: 'experiment',
+              baseline_rate: 1569 / 31309,
+              baseline_users: 31309,
+            })}
+          />
+        );
+        expect(screen.getByTestId('planned-sample')).toHaveTextContent(
+          /^Planned sampleReached31,309 of 31,159 per variant$/
+        );
+        expect(effectLine()).toHaveTextContent(
+          /^To detect a 10% lift on the control's 5\.01%\. The 10% was set when the experiment was created\.$/
+        );
+      });
+
+      it('says no effect was saved when the plan is for the default', () => {
+        render(
+          <ExperimentSummary
+            experiment={baseExperiment}
+            plannedSample={plan({ mde_source: 'default', baseline_rate: 0.1 })}
+          />
+        );
+        expect(effectLine()).toHaveTextContent(
+          /^To detect a 5% lift \(the default: no effect was saved with this experiment\) on the control's 10%\.$/
+        );
+      });
+
+      it('reads an answer with no mde_source (an older API) as the default', () => {
+        const older = plan({ baseline_rate: 0.12 });
+        delete (older as Partial<SampleSizeResult>).mde_source;
+        expect('mde_source' in older).toBe(false);
+        render(<ExperimentSummary experiment={baseExperiment} plannedSample={older} />);
+        expect(effectLine()).toHaveTextContent(
+          /^To detect a 5% lift \(the default: no effect was saved with this experiment\) on the control's 12%\.$/
+        );
+      });
+
+      it('names no baseline when there is no plan yet', () => {
+        render(
+          <ExperimentSummary
+            experiment={baseExperiment}
+            plannedSample={plan({
+              required_sample_size_per_variant: null,
+              current_sample_size_per_variant: 0,
+              is_adequate: false,
+              achieved_power: null,
+              baseline_rate: null,
+              baseline_source: null,
+              unavailable_reason: 'no_control_data',
+              mde: 0.1,
+              mde_source: 'experiment',
+            })}
+          />
+        );
+        expect(effectLine()).toHaveTextContent(
+          /^To detect a 10% lift\. The 10% was set when the experiment was created\.$/
+        );
+      });
+
+      it('names a requested effect and baseline without a source sentence', () => {
+        render(
+          <ExperimentSummary
+            experiment={baseExperiment}
+            plannedSample={plan({ mde: 0.2, mde_source: 'request', baseline_source: 'request', baseline_rate: 0.05 })}
+          />
+        );
+        expect(effectLine()).toHaveTextContent(/^To detect a 20% lift on a 5% baseline\.$/);
+      });
+
+      it.each([
+        [0.07, '7%'],
+        [0.001, '0.1%'],
+        [0.286, '28.6%'],
+      ])('formats an effect of %p as %p, with no float noise', (mde, shown) => {
+        render(
+          <ExperimentSummary
+            experiment={baseExperiment}
+            plannedSample={plan({ mde, mde_source: 'experiment', baseline_rate: 0.12 })}
+          />
+        );
+        expect(effectLine()).toHaveTextContent(
+          `To detect a ${shown} lift on the control's 12%. The ${shown} was set when the experiment was created.`
+        );
+        expect(effectLine().textContent).not.toMatch(/0000|9999/);
+      });
+
+      it('is absent while the plan loads and when it could not be loaded', () => {
+        const { rerender } = render(<ExperimentSummary experiment={baseExperiment} />);
+        expect(screen.queryByTestId('planned-sample-effect')).not.toBeInTheDocument();
+        rerender(<ExperimentSummary experiment={baseExperiment} plannedSample={null} />);
+        expect(screen.queryByTestId('planned-sample-effect')).not.toBeInTheDocument();
+      });
     });
   });
 });

@@ -7714,7 +7714,7 @@
                 "type": "null"
               }
             ],
-            "description": "Expected effect size for power calculations",
+            "description": "The minimum detectable effect the results page plans the sample for, when this is the primary metric: a relative change as a fraction (0.10 means 5% -> 5.5%). Used only when above 0 and below 1; otherwise the plan uses 0.05.",
             "title": "Expected Effect"
           },
           "is_primary": {
@@ -10204,7 +10204,7 @@
         "type": "object"
       },
       "SampleSizeResult": {
-        "description": "The planned sample size for an experiment, and how far it has got.\n\nPlans a two-sided two-proportion test on the primary metric: the users\neach variant needs to detect a relative lift of ``mde`` over the baseline\nrate.  The baseline is the request's ``baseline_conversion_rate`` or,\nwithout one, the rate observed in the control variant so far.  Every input\nused is returned with where it came from.\n\nWhen there is nothing to plan from yet (no metric, no control users, no\ncontrol conversions) the answer is still 200: the required size and the\nachieved power are ``null`` and ``unavailable_reason`` says why.",
+        "description": "The planned sample size for an experiment, and how far it has got.\n\nPlans a two-sided two-proportion test on the primary metric: the users\neach variant needs to detect a relative lift of ``mde`` over the baseline\nrate.  The MDE is the request's ``mde`` or, without one, the effect saved\nwith the experiment (the primary metric's ``expected_effect``), or 0.05\nwhen none was saved.  The baseline is the request's\n``baseline_conversion_rate`` or, without one, the rate observed in the\ncontrol variant so far.  Every input used is returned with where it came\nfrom.\n\nWhen there is nothing to plan from yet (no metric, no control users, no\ncontrol conversions) the answer is still 200: the required size and the\nachieved power are ``null`` and ``unavailable_reason`` says why.",
         "properties": {
           "achieved_power": {
             "anyOf": [
@@ -10329,7 +10329,7 @@
             "type": "boolean"
           },
           "mde": {
-            "description": "Minimum detectable effect, relative to the baseline rate: 0.05 means 12% -> 12.6%.",
+            "description": "Minimum detectable effect planned for, relative to the baseline rate: 0.05 means 12% -> 12.6%. mde_source says where it came from.",
             "title": "Mde",
             "type": "number"
           },
@@ -10344,6 +10344,17 @@
             ],
             "description": "baseline_rate * mde, in rate units. null when there is no baseline.",
             "title": "Mde Absolute"
+          },
+          "mde_source": {
+            "default": "default",
+            "description": "Where mde came from: 'request' (mde was sent), 'experiment' (the primary metric's expected_effect, saved with the experiment and above 0 and below 1) or 'default' (0.05: no usable effect was saved).",
+            "enum": [
+              "request",
+              "experiment",
+              "default"
+            ],
+            "title": "Mde Source",
+            "type": "string"
           },
           "metric_id": {
             "anyOf": [
@@ -23819,7 +23830,7 @@
     },
     "/api/v1/results/{experiment_id}/sample-size": {
       "get": {
-        "description": "The planned sample size for an experiment, and how far it has got.\n\nPlans a two-sided two-proportion test on the primary metric: the users\neach variant needs to detect a relative lift of ``mde`` over the baseline\nat ``confidence_level`` with ``power_target`` power.  The baseline is\n``baseline_conversion_rate`` when sent, otherwise the control variant's\nconversion rate so far -- counted the way the results count it, but not\nread from the results cache, so for up to its five minutes it can be\nnewer than the rate the results show.\n\nProgress is the smallest variant's assignments.  Nothing is saved.\nWith no data to plan from the answer is 200 with\n``required_sample_size_per_variant: null`` and ``unavailable_reason``.\nA sent baseline that the MDE raises to 100% or more answers 422, and so\ndoes one too close to its treatment rate for the size to be a finite\nnumber; an observed rate in that position gives ``effect_too_small``.",
+        "description": "The planned sample size for an experiment, and how far it has got.\n\nPlans a two-sided two-proportion test on the primary metric: the users\neach variant needs to detect a relative lift of ``mde`` over the baseline\nat ``confidence_level`` with ``power_target`` power.  The MDE is ``mde``\nwhen sent, otherwise the primary metric's saved ``expected_effect`` when\nit is above 0 and below 1, otherwise 0.05 (``mde_source`` says which).\nThe baseline is ``baseline_conversion_rate`` when sent, otherwise the\ncontrol variant's conversion rate so far -- counted the way the results\ncount it, but not read from the results cache, so for up to its five\nminutes it can be newer than the rate the results show.\n\nProgress is the smallest variant's assignments.  Nothing is saved.\nWith no data to plan from the answer is 200 with\n``required_sample_size_per_variant: null`` and ``unavailable_reason``.\nA sent baseline that the MDE raises to 100% or more answers 422, and so\ndoes one too close to its treatment rate for the size to be a finite\nnumber; an observed rate in that position gives ``effect_too_small``.",
         "operationId": "get_sample_size_status_api_v1_results__experiment_id__sample_size_get",
         "parameters": [
           {
@@ -23853,17 +23864,23 @@
             }
           },
           {
-            "description": "Minimum detectable effect, relative to the baseline: 0.05 means 12% -> 12.6%. Default 0.05.",
+            "description": "Minimum detectable effect, relative to the baseline: 0.05 means 12% -> 12.6%. Omit it to use the effect saved with the experiment (the primary metric's expected_effect, when it is above 0 and below 1), or 0.05 when none was saved. mde_source says which.",
             "in": "query",
             "name": "mde",
             "required": false,
             "schema": {
-              "default": 0.05,
-              "description": "Minimum detectable effect, relative to the baseline: 0.05 means 12% -> 12.6%. Default 0.05.",
-              "exclusiveMaximum": 1,
-              "exclusiveMinimum": 0,
-              "title": "Mde",
-              "type": "number"
+              "anyOf": [
+                {
+                  "exclusiveMaximum": 1,
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Minimum detectable effect, relative to the baseline: 0.05 means 12% -> 12.6%. Omit it to use the effect saved with the experiment (the primary metric's expected_effect, when it is above 0 and below 1), or 0.05 when none was saved. mde_source says which.",
+              "title": "Mde"
             }
           },
           {

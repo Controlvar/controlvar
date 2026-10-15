@@ -56,7 +56,7 @@ const GUIDE_ONLY_TEXT: Record<SampleSizeGuideOnlyReason, string> = {
 const MDE_PROBLEM_HIGH = 'Enter a minimum detectable effect below 100%.';
 
 /** 0.1234 -> "12.34%", trailing zeros dropped. */
-function pct(value: number, digits = 2): string {
+export function pct(value: number, digits = 2): string {
   return `${Number((value * 100).toFixed(digits))}%`;
 }
 
@@ -203,10 +203,16 @@ export function SampleSizeMeter({
   // settings unless the user changed them here (#580).
   const fromExperiment = (key: 'confidence_level' | 'correction_method') =>
     overrides[key] !== undefined ? 'Entered by you.' : "From the experiment's settings.";
+  // Where the effect came from: the server says (#1257); an older API that
+  // does not send mde_source planned for the default.
   const mdeSource =
     overrides.mde !== undefined
       ? 'Entered by you.'
-      : 'Default — this experiment has no planned effect. Change it to the smallest lift worth shipping.';
+      : data.mde_source === 'experiment'
+        ? 'Set when this experiment was created.'
+        : data.mde_source === 'request'
+          ? 'Entered by you.'
+          : 'Default — no effect was saved with this experiment. Change it to the smallest lift worth shipping.';
 
   const percentDone = required ? Math.round((current / required) * 100) : 0;
   const clamped = Math.max(0, Math.min(percentDone, 100));

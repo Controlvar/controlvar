@@ -208,7 +208,13 @@ class MetricBase(BaseModel):
         description="Minimum sample size for statistical significance",
     )
     expected_effect: Optional[float] = Field(
-        None, description="Expected effect size for power calculations"
+        None,
+        description=(
+            "The minimum detectable effect the results page plans the sample "
+            "for, when this is the primary metric: a relative change as a "
+            "fraction (0.10 means 5% -> 5.5%). Used only when above 0 and "
+            "below 1; otherwise the plan uses 0.05."
+        ),
     )
     event_value_path: Optional[str] = Field(
         None,

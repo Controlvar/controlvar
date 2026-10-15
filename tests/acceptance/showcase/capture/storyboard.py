@@ -33,6 +33,12 @@ finishes the storyboard's simulated users off camera before the scene.
 ``setup`` makes what the video uses but does not film being made (a segment),
 through the API, off camera, after gate 14 and before the first scene.
 
+A scene is recorded in the dashboard or in a demo app (``app``: ``shoplab``,
+``streampulse``); ``open`` is a path on that app's origin. ``off_camera`` is a
+closed list of what runs before the scene is opened: today one kind, ``seed``,
+an app's own seed (``history`` off unless asked for). An app's scenes come
+after its seed, which runs once.
+
 Two steps work a form control the way a person would be seen to: ``choose``
 changes a native <select> to one of its options without opening it (a
 screencast never draws a native list, so an open one would film a select
@@ -233,21 +239,77 @@ class Card(_Strict):
     quoted lines of code, or a headline, and one sentence."""
 
     label: str
-    command: Optional[str] = None
+    command: Optional[str] = Field(default=None, min_length=1)
     code: Optional[Code] = None
-    headline: Optional[str] = Field(default=None, max_length=40)
+    headline: Optional[str] = Field(default=None, min_length=1, max_length=40)
     note: str
 
     @model_validator(mode="after")
     def _one_body(self) -> "Card":
-        bodies = [b for b in (self.command, self.code, self.headline) if b]
+        # Counted as ``card_html`` chooses what to draw: by presence, not by
+        # truthiness. A second layer: ``min_length=1`` on command and headline
+        # already refuses an empty one, so this alone cannot be seen failing.
+        bodies = [b for b in (self.command, self.code, self.headline) if b is not None]
         if len(bodies) != 1:
             raise ValueError("a card shows exactly one of command, code or headline")
         return self
 
+    def drawn_text(self) -> List[str]:
+        """What ``card_html`` draws: the label, the one body, and the note."""
+        if self.command is not None:
+            body = [self.command]
+        elif self.code is not None:
+            body = list(self.code.lines)
+        else:
+            body = [self.headline or ""]
+        return [self.label, *body, self.note]
+
+
+App = Literal["dashboard", "shoplab", "streampulse"]
+
+
+class SeedApp(_Strict):
+    """Off camera: a demo app's seed (``backend.scripts.seed_<app>``)."""
+
+    seed: Literal["shoplab", "streampulse"]
+    #: The seed's days of history (its default); off is ``--no-history``.
+    history: bool = False
+
+
+#: What may run off camera before a scene: a closed list.
+OffCamera = SeedApp
+
+#: A departure from a new user's path (D84), each stated on screen where it
+#: happens: users the tool simulates, a scheduler interval shortened, a time
+#: skip, something made off camera, a value masked by the tool.
+DepartureKind = Literal[
+    "simulated traffic",
+    "shortened interval",
+    "time skip",
+    "off-camera setup",
+    "masked value",
+]
+
+
+class Departure(_Strict):
+    """A departure, and the words on screen that state it (D84).
+
+    ``says`` must be drawn in the scene: in one of its captions, or in its
+    card's label, headline, note or command (``departure_problems``).
+    """
+
+    kind: DepartureKind
+    says: str = Field(min_length=8, max_length=200)
+
 
 class Scene(_Strict):
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,40}$")
+    #: The origin the scene is recorded on: the dashboard, or a demo app.
+    app: App = "dashboard"
+    #: Run, in order, before the scene is opened.
+    off_camera: List[OffCamera] = Field(default_factory=list)
+    #: Every departure from a new user's path in this scene, stated on screen (D84).
+    departures: List[Departure] = Field(default_factory=list)
     open: Optional[str] = Field(default=None, pattern=r"^/[A-Za-z0-9/_?=&.-]*$")
     #: Open this experiment's results page; the id is looked up off camera.
     results_of: Optional[str] = None
@@ -267,6 +329,13 @@ class Scene(_Strict):
             raise ValueError(
                 "a scene opens a page, opens an experiment's results or draws a card:"
                 " exactly one, not both"
+            )
+        if self.app != "dashboard" and (
+            self.open is None or self.signed_in or self.warm_results
+        ):
+            raise ValueError(
+                f"a {self.app} scene opens a page of the app; results, cards,"
+                " signing in and warm results are the dashboard's"
             )
         return self
 
@@ -394,6 +463,17 @@ class Storyboard(_Strict):
             raise ValueError(
                 f"traffic is started once and then finished once, not {moves}"
             )
+        seeded: List[str] = []
+        for scene in self.scenes:
+            for item in scene.off_camera:
+                if item.seed in seeded:
+                    raise ValueError(f"the {item.seed} seed runs twice")
+                seeded.append(item.seed)
+            if scene.app != "dashboard" and scene.app not in seeded:
+                raise ValueError(
+                    f"scene {scene.id} is recorded in {scene.app} before its seed"
+                    " ran (off_camera: seed)"
+                )
         if self.end_state.experiment is not None and self.traffic is None:
             raise ValueError("an experiment's end state needs the storyboard's traffic")
         flag = self.end_state.flag
@@ -409,6 +489,15 @@ class Storyboard(_Strict):
                     f"the flag's end state compares {flag.shown!r}, which no beat records"
                 )
         return self
+
+    @property
+    def apps(self) -> List[str]:
+        """The demo apps the video records, in the order it first opens them."""
+        found: List[str] = []
+        for scene in self.scenes:
+            if scene.app != "dashboard" and scene.app not in found:
+                found.append(scene.app)
+        return found
 
 
 # ---------------------------------------------------------------------------
@@ -579,6 +668,68 @@ def quoted_lines(page: str, code: Code) -> List[str]:
             problems.append(
                 f"{code.doc} ({code.section}) has no line {line!r} after the one before it"
             )
+    return problems
+
+
+def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
+    """``(scene id, kind)`` for every departure the tool itself makes, which
+    the scene must state on screen (D84):
+
+    * ``off-camera setup``: a scene with ``off_camera`` work before it; the
+      first scene of a storyboard with a ``setup``; the scene the director
+      signs in before, off camera (the first ``signed_in`` one); a scene
+      whose results are loaded off camera first (``warm_results``);
+    * ``simulated traffic``: every scene from the one that starts the
+      simulated users to the one that finishes them, both included.
+    """
+    needed: List[Tuple[str, str]] = []
+    running = False
+    signed_in = False
+    for index, scene in enumerate(board.scenes):
+        signs_in = scene.signed_in and not signed_in
+        signed_in = signed_in or scene.signed_in
+        if (
+            scene.off_camera
+            or (index == 0 and board.setup is not None)
+            or signs_in
+            or scene.warm_results
+        ):
+            needed.append((scene.id, "off-camera setup"))
+        if scene.traffic == "start":
+            running = True
+        if running:
+            needed.append((scene.id, "simulated traffic"))
+        if scene.traffic == "finish":
+            running = False
+    return needed
+
+
+def scene_screen_text(scene: Scene) -> List[str]:
+    """What a scene draws that a storyboard controls: its captions and its card."""
+    texts = [beat.cue for beat in scene.beats]
+    if scene.card is not None:
+        texts += [t for t in scene.card.drawn_text() if t]
+    return texts
+
+
+def departure_problems(board: Storyboard) -> List[str]:
+    """D84: each departure the tool makes is declared on its scene, and every
+    declared departure's words are on screen in that scene. Empty when none."""
+    problems: List[str] = []
+    by_id = {scene.id: scene for scene in board.scenes}
+    for scene_id, kind in required_departures(board):
+        if not any(d.kind == kind for d in by_id[scene_id].departures):
+            problems.append(
+                f"scene {scene_id}: {kind} is not stated on screen (departures)"
+            )
+    for scene in board.scenes:
+        shown = scene_screen_text(scene)
+        for departure in scene.departures:
+            if not any(departure.says in text for text in shown):
+                problems.append(
+                    f"scene {scene.id}: the {departure.kind} statement"
+                    f" {departure.says!r} is not in a caption or the card"
+                )
     return problems
 
 

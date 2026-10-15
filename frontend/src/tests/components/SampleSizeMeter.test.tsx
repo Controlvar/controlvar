@@ -81,7 +81,7 @@ describe('SampleSizeMeter', () => {
       );
       expect(screen.getByLabelText('Minimum detectable effect, relative (%)')).toHaveValue('13.7');
       expect(screen.getByTestId('sample-size-mde-source')).toHaveTextContent(
-        'Default — this experiment has no planned effect. Change it to the smallest lift worth shipping.'
+        'Default — no effect was saved with this experiment. Change it to the smallest lift worth shipping.'
       );
       expect(screen.getByLabelText('Power')).toHaveDisplayValue('95%');
       expect(screen.getByLabelText('Significance (two-sided)')).toHaveDisplayValue('10%');
@@ -89,6 +89,26 @@ describe('SampleSizeMeter', () => {
         'Planned for Checkout, analysed as a conversion rate (a two-proportion test). Variants: 2 (from this experiment).'
       );
       expect(screen.getByText('These inputs are not saved with the experiment. Change them to see a different plan.')).toBeInTheDocument();
+    });
+
+    // #1257: the effect saved with the experiment is named as such; an
+    // answer with no mde_source (an API older than 0.34.3) is the default.
+    it.each([
+      ['experiment', 'Set when this experiment was created. 5% means 12% → 12.6%, not 17%.'],
+      [
+        'default',
+        'Default — no effect was saved with this experiment. Change it to the smallest lift worth shipping. 5% means 12% → 12.6%, not 17%.',
+      ],
+      [
+        undefined,
+        'Default — no effect was saved with this experiment. Change it to the smallest lift worth shipping. 5% means 12% → 12.6%, not 17%.',
+      ],
+    ] as const)('says where the effect came from (mde_source %p)', (source, text) => {
+      const data: SampleSizeResult = { ...observed, mde: 0.1, mde_source: source };
+      if (source === undefined) delete data.mde_source;
+      render(<SampleSizeMeter data={data} onRecalculate={jest.fn()} />);
+      expect(screen.getByLabelText('Minimum detectable effect, relative (%)')).toHaveValue('10');
+      expect(screen.getByTestId('sample-size-mde-source').textContent).toBe(text);
     });
 
     it('says which inputs the user entered', () => {

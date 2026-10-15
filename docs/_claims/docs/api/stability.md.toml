@@ -411,6 +411,24 @@ by = [
 ]
 
 [[unit]]
+text = "GET /api/v1/results/{experiment_id}/sample-size | #1257 | With no mde sent, the plan is for the effect saved with the experiment, its primary metric's expected_effect, when that is above 0 and below 1; otherwise for 0.05 as before. The response carries mde_source: request, experiment or default. An unknown experiment answers 404 whatever the other parameters, where one with a baseline_conversion_rate that mde raised to 100% or more answered 422. The OpenAPI document changes in the mde parameter (it has no default), the new property and the descriptions. See The planned effect."
+by = [
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_the_planned_sample_uses_the_primary_metrics_planned_effect",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_with_no_saved_effect_the_plan_is_for_the_default_and_says_so",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_an_unknown_experiment_with_a_bad_baseline_is_404",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id}, POST /api/v1/experiments/{experiment_id}/clone | #1257 | A primary metric's expected_effect is read: it is the relative effect the sample-size plan is for (0.10 means 5% → 5.5%). Values are accepted and stored as before, and one that is not above 0 and below 1 is not used. An experiment stored before the change with an expected_effect on its primary metric now plans from it. The OpenAPI document changes only in the field's description."
+by = [
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_an_effect_sent_at_create_and_kept_by_clone_drives_the_plan",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_an_unusable_saved_effect_falls_back_to_the_default",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_a_put_that_resends_metrics_without_the_effect_clears_it",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
 text = "Deprecated operations"
 by = ["exempt:baseline"]
 
