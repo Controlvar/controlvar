@@ -108,10 +108,13 @@ scenes:
   - id: experiments
     open: /experiments
     signed_in: true
+    departures:
+      - kind: off-camera setup
+        says: Signed in off camera
     beats:
       - before:
           - wait_for: {css: table}
-        cue: Every experiment the apps run is listed in the dashboard.
+        cue: "Signed in off camera: every experiment the apps run, listed."
         focus: {css: table thead}
         steps:
           - look: {css: table thead}

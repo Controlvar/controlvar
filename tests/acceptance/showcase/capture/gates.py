@@ -188,10 +188,7 @@ def needle_count(
     return True, numbers, ""
 
 
-def child_environments(
-    started: Sequence[Mapping[str, Any]],
-    allowed: Optional[Mapping[str, Iterable[str]]] = None,
-) -> Verdict:
+def child_environments(started: Sequence[Mapping[str, Any]]) -> Verdict:
     """EM condition 10: every child's environment names only its kind's keys.
 
     Each child is judged against the allow-list of its own kind
@@ -200,13 +197,10 @@ def child_environments(
     extra: Dict[str, List[str]] = {}
     for child in started:
         kind = str(child.get("kind"))
-        if allowed is not None:
-            keys = set(allowed.get(kind, ()))
-        else:
-            try:
-                keys = set(guard.allowed_env_keys(kind))
-            except guard.Refused:
-                keys = set()
+        try:
+            keys = set(guard.allowed_env_keys(kind))
+        except guard.Refused:  # an unknown kind may be given nothing at all
+            keys = set()
         unexpected = sorted(set(child["env_keys"]) - keys)
         if unexpected:
             extra[f"{child['name']} ({kind})"] = unexpected

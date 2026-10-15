@@ -239,17 +239,29 @@ class Card(_Strict):
     quoted lines of code, or a headline, and one sentence."""
 
     label: str
-    command: Optional[str] = None
+    command: Optional[str] = Field(default=None, min_length=1)
     code: Optional[Code] = None
-    headline: Optional[str] = Field(default=None, max_length=40)
+    headline: Optional[str] = Field(default=None, min_length=1, max_length=40)
     note: str
 
     @model_validator(mode="after")
     def _one_body(self) -> "Card":
-        bodies = [b for b in (self.command, self.code, self.headline) if b]
+        # Counted as ``card_html`` chooses what to draw: by presence, not by
+        # truthiness, so a body given but empty is never a card's "one".
+        bodies = [b for b in (self.command, self.code, self.headline) if b is not None]
         if len(bodies) != 1:
             raise ValueError("a card shows exactly one of command, code or headline")
         return self
+
+    def drawn_text(self) -> List[str]:
+        """What ``card_html`` draws: the label, the one body, and the note."""
+        if self.command is not None:
+            body = [self.command]
+        elif self.code is not None:
+            body = list(self.code.lines)
+        else:
+            body = [self.headline or ""]
+        return [self.label, *body, self.note]
 
 
 App = Literal["dashboard", "shoplab", "streampulse"]
@@ -662,15 +674,25 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
     """``(scene id, kind)`` for every departure the tool itself makes, which
     the scene must state on screen (D84):
 
-    * ``off-camera setup``: a scene with ``off_camera`` work before it, and
-      the first scene of a storyboard with a ``setup``;
+    * ``off-camera setup``: a scene with ``off_camera`` work before it; the
+      first scene of a storyboard with a ``setup``; the scene the director
+      signs in before, off camera (the first ``signed_in`` one); a scene
+      whose results are loaded off camera first (``warm_results``);
     * ``simulated traffic``: every scene from the one that starts the
       simulated users to the one that finishes them, both included.
     """
     needed: List[Tuple[str, str]] = []
     running = False
+    signed_in = False
     for index, scene in enumerate(board.scenes):
-        if scene.off_camera or (index == 0 and board.setup is not None):
+        signs_in = scene.signed_in and not signed_in
+        signed_in = signed_in or scene.signed_in
+        if (
+            scene.off_camera
+            or (index == 0 and board.setup is not None)
+            or signs_in
+            or scene.warm_results
+        ):
             needed.append((scene.id, "off-camera setup"))
         if scene.traffic == "start":
             running = True
@@ -685,16 +707,7 @@ def scene_screen_text(scene: Scene) -> List[str]:
     """What a scene draws that a storyboard controls: its captions and its card."""
     texts = [beat.cue for beat in scene.beats]
     if scene.card is not None:
-        texts += [
-            t
-            for t in (
-                scene.card.label,
-                scene.card.headline,
-                scene.card.note,
-                scene.card.command,
-            )
-            if t
-        ]
+        texts += [t for t in scene.card.drawn_text() if t]
     return texts
 
 

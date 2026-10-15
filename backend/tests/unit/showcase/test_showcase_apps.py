@@ -231,15 +231,47 @@ class Request:
 
 
 class Response:
-    def __init__(self, url, status):
+    def __init__(self, url, status, request=None):
         self.url = url
         self.status = status
+        self.request = request
         self.headers = {"content-type": "text/html"}
+
+
+class Clock:
+    ms = 0.0
+
+
+@pytest.fixture(autouse=True)
+def _stand_in_clock(monkeypatch):
+    """The director's clock advances only when a page waits (no real sleeping)."""
+    Clock.ms = 0.0
+    monkeypatch.setattr(director, "_now_ms", lambda: Clock.ms)
+
+
+def answer(page, url, status):
+    """A request from the page, and its response."""
+    request = Request(url)
+    page.fire("request", request)
+    page.fire("response", Response(url, status, request))
+    page.fire("requestfinished", request)
+    return request
 
 
 class Page:
     def __init__(self):
         self.handlers = {}
+        self.visits = []
+        #: Run when the page opens a URL: the requests a page load makes.
+        self.on_goto = None
+
+    def goto(self, url):
+        self.visits.append(url)
+        if self.on_goto is not None:
+            self.on_goto(url)
+
+    def wait_for_timeout(self, ms):
+        Clock.ms += ms
 
     def on(self, event, handler):
         self.handlers.setdefault(event, []).append(handler)
@@ -317,7 +349,7 @@ def test_a_page_opened_outside_the_storyboard_fails_the_video(tmp_path):
 def test_an_armed_app_scene_counts_answers_failures_and_unanswered(tmp_path):
     made, page, _ = make(tmp_path)
     made.counting = "streampulse"
-    page.fire("response", Response(f"{API}/api/v1/tracking/assign", 404))
+    answer(page, f"{API}/api/v1/tracking/assign", 404)
     with pytest.raises(
         director.CaptureFailed,
         match="P2: streampulse: answers 400: 404 from /api/v1/tracking/assign",
@@ -358,7 +390,7 @@ def test_a_dashboard_scene_fails_on_a_4xx_or_a_request_with_no_answer(tmp_path):
     made, page, _ = make(tmp_path)
     made.tally.apps["dashboard"] = {"answers_400": [], "failed": [], "unanswered": []}
     made.counting = "dashboard"
-    page.fire("response", Response(f"{DASH}/api/v1/experiments/", 403))
+    answer(page, f"{DASH}/api/v1/experiments/", 403)
     with pytest.raises(
         director.CaptureFailed,
         match="P2: dashboard: answers 400: 403 from /api/v1/experiments/",
@@ -377,14 +409,164 @@ def test_a_dashboard_scene_fails_on_a_4xx_or_a_request_with_no_answer(tmp_path):
         made.check_events()
 
 
+def test_a_request_is_judged_by_the_scene_it_started_in(tmp_path):
+    """Started while nothing was counted, answered 404 inside a counted scene:
+    not that scene's. Started in a counted scene, answered after it ended:
+    still that scene's."""
+    made, page, _ = make(tmp_path)
+    early = Request(f"{API}/api/v1/feature-flags/evaluate/x")
+    page.fire("request", early)
+    made.counting = "streampulse"
+    page.fire("response", Response(early.url, 404, early))
+    made.check_events()
+    late = Request(f"{API}/api/v1/tracking/assign")
+    page.fire("request", late)
+    made.counting = None
+    made.where = "scene experiments beat 1"
+    page.fire("response", Response(late.url, 404, late))
+    with pytest.raises(
+        director.CaptureFailed,
+        match=r"streampulse: answers 400: 404 from /api/v1/tracking/assign"
+        r" \(started scene player beat 1\)",
+    ):
+        made.check_events()
+
+
+def test_the_drain_waits_for_a_late_answer_and_reports_what_is_left(tmp_path):
+    made, page, _ = make(tmp_path)
+    made.counting = "streampulse"
+    slow = Request(f"{API}/api/v1/feature-flags/evaluate/slow")
+    page.fire("request", slow)
+    stuck = Request(f"{API}/api/v1/feature-flags/evaluate/stuck")
+    page.fire("request", stuck)
+    page.fire("response", Response(stuck.url, 200, stuck))
+    waited = page.wait_for_timeout
+
+    def answer_slow_after_3_s(ms):
+        waited(ms)
+        if Clock.ms >= 3000:
+            page.fire("requestfinished", slow)
+
+    page.wait_for_timeout = answer_slow_after_3_s
+    made.drain("streampulse")
+    assert Clock.ms >= director.DRAIN_MS
+    assert made.tally.apps["streampulse"]["unanswered"] == [
+        "/api/v1/feature-flags/evaluate/stuck: answered 200, body unfinished"
+        " after 10.0 s (started scene player beat 1)"
+    ]
+
+
+# --- #1251 through Director.scene() -------------------------------------------------------
+
+
+def scene(**fields):
+    data = {
+        "id": "list",
+        "open": "/experiments",
+        "beats": [{"cue": "Your experiments.", "focus": {"css": "table"}}],
+    }
+    data.update(fields)
+    return storyboard.Scene.model_validate(data, strict=False)
+
+
+def stage(tmp_path, on_goto=None, on_beat=None):
+    """A director whose scene() runs for real; only the browser's drawing and
+    the needle reads are stood in for."""
+    made, page, context = make(tmp_path)
+    made.tally.apps.clear()
+    made.app_ready = lambda app: {"experiments": 1, "feature_flags": 1}
+    made.check_needles = lambda: None
+    made.draw_cursor = lambda: None
+    made.ring = lambda box: None
+    made.recorder.start = lambda: None
+    made.recorder.stop = lambda: None
+    made.measure_zoom = lambda wanted=None: {"body": wanted}
+    made.self_test_overlay = lambda spec: {"offset_px": 0}
+    made.beat = lambda sc, index, beat: on_beat(page) if on_beat else None
+    page.on_goto = (lambda url: on_goto(page, url)) if on_goto else None
+    armed = []
+    real_arm = made.arm
+    made.arm = lambda app: armed.append(app) or real_arm(app)
+    return made, page, armed
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("status", [403, 404])
+def test_a_dashboard_scenes_4xx_fails_it_through_scene(tmp_path, status):
+    made, _, _ = stage(
+        tmp_path,
+        on_beat=lambda page: answer(page, f"{DASH}/api/v1/experiments/", status),
+    )
+    with pytest.raises(
+        director.CaptureFailed, match=f"P2: dashboard: answers 400: {status} from"
+    ):
+        made.scene(scene())
+
+
+@pytest.mark.regression
+def test_a_dashboard_scenes_unanswered_request_fails_it_through_scene(tmp_path):
+    made, _, _ = stage(
+        tmp_path,
+        on_goto=lambda page, url: page.fire(
+            "request", Request(f"{DASH}/api/v1/experiments/")
+        ),
+    )
+    with pytest.raises(
+        director.CaptureFailed,
+        match="P2: dashboard: unanswered: /api/v1/experiments/: no response",
+    ):
+        made.scene(scene())
+
+
+def test_an_app_is_armed_once_and_its_scene_fails_on_a_4xx(tmp_path):
+    made, page, armed = stage(tmp_path)
+    app_scene = scene(id="player", app="streampulse", open="/")
+    made.scene(app_scene)
+    made.scene(app_scene)
+    assert armed == ["streampulse"]
+    assert page.visits == [f"{PULSE}/", f"{PULSE}/", f"{PULSE}/"]
+    made.beat = lambda sc, index, beat: answer(
+        page, f"{API}/api/v1/feature-flags/evaluate/x", 404
+    )
+    with pytest.raises(
+        director.CaptureFailed, match="P2: streampulse: answers 400: 404"
+    ):
+        made.scene(app_scene)
+
+
+def test_an_app_scenes_unanswered_request_fails_it_through_scene(tmp_path):
+    made, page, _ = stage(tmp_path)
+    made.beat = lambda sc, index, beat: page.fire(
+        "request", Request(f"{API}/api/v1/tracking/assign")
+    )
+    with pytest.raises(
+        director.CaptureFailed,
+        match="P2: streampulse: unanswered: /api/v1/tracking/assign",
+    ):
+        made.scene(scene(id="player", app="streampulse", open="/"))
+
+
+def test_a_clean_dashboard_scene_passes_through_scene(tmp_path):
+    made, _, _ = stage(
+        tmp_path,
+        on_beat=lambda page: answer(page, f"{DASH}/api/v1/experiments/", 200),
+    )
+    made.scene(scene())
+    assert made.tally.apps["dashboard"] == {
+        "answers_400": [],
+        "failed": [],
+        "unanswered": [],
+    }
+
+
 def test_outside_an_armed_app_scene_a_4xx_and_a_failure_are_only_recorded(tmp_path):
     made, page, _ = make(tmp_path)
-    page.fire("response", Response(f"{DASH}/api/v1/auth/me", 401))
+    answer(page, f"{DASH}/api/v1/auth/me", 401)
     failed = Request(f"{DASH}/_next/data/x.json", failure="net::ERR_ABORTED")
     page.fire("requestfailed", failed)
     made.check_events()
     assert made.tally.failed_events == [
-        "/_next/data/x.json: net::ERR_ABORTED (scene player beat 1)"
+        "/_next/data/x.json: net::ERR_ABORTED (started scene player beat 1)"
     ]
 
 
@@ -787,17 +969,29 @@ def test_a_statement_that_is_not_drawn_is_refused():
 
 
 def test_simulated_traffic_is_stated_in_every_scene_it_runs_through():
-    """V2: from the scene that starts the users to the one that finishes them."""
+    """V2: from the scene that starts the users to the one that finishes them;
+    and V2's off-camera sign-in and warmed results."""
     v2 = storyboard.load(run.board_path("02-first-experiment"))
     assert storyboard.required_departures(v2) == [
+        ("setup", "off-camera setup"),
         ("sdk", "simulated traffic"),
         ("arriving", "simulated traffic"),
         ("later", "simulated traffic"),
+        ("result", "off-camera setup"),
     ]
-    # The finishing card already says it; the other two do not yet.
+    # The finishing card already says it; the others do not yet.
     assert storyboard.departure_problems(v2) == [
+        "scene setup: off-camera setup is not stated on screen (departures)",
         "scene sdk: simulated traffic is not stated on screen (departures)",
         "scene arriving: simulated traffic is not stated on screen (departures)",
+        "scene result: off-camera setup is not stated on screen (departures)",
+    ]
+
+
+def test_v1s_warmed_results_are_a_departure_to_state():
+    v1 = storyboard.load(run.board_path("01-getting-started"))
+    assert storyboard.departure_problems(v1) == [
+        "scene dashboard: off-camera setup is not stated on screen (departures)"
     ]
 
 
@@ -808,7 +1002,9 @@ def test_setup_made_before_the_first_scene_is_stated_there():
     ]
 
 
-@pytest.mark.parametrize("slug", ["02-first-experiment", "03-flag-rollout"])
+@pytest.mark.parametrize(
+    "slug", ["01-getting-started", "02-first-experiment", "03-flag-rollout"]
+)
 def test_a_video_whose_departure_is_not_stated_is_refused_before_it_starts(
     tmp_path, slug
 ):
@@ -825,3 +1021,82 @@ def test_a_video_whose_departure_is_not_stated_is_refused_before_it_starts(
         guard.Refused, match=f"{slug}: D84, a departure from a new user"
     ):
         run.preflight(options, {"PATH": "/usr/bin", "HOME": str(tmp_path / "home")})
+
+
+def test_a_card_body_given_empty_is_refused_and_only_the_drawn_body_counts():
+    """``card_html`` draws by presence: ``command=""`` drew an empty terminal and
+    no headline, while the D84 screen text read the headline."""
+    card = {"label": "Off camera", "note": "Sent by the tool."}
+    with pytest.raises(Exception, match="at least 1 character"):
+        storyboard.Card.model_validate(
+            {**card, "command": "", "headline": "simulated in minutes"}, strict=False
+        )
+    drawn = storyboard.Card.model_validate(
+        {**card, "headline": "simulated in minutes"}, strict=False
+    )
+    assert drawn.drawn_text() == [
+        "Off camera",
+        "simulated in minutes",
+        "Sent by the tool.",
+    ]
+    assert "simulated in minutes" in director.card_html(drawn)
+
+
+@pytest.mark.parametrize(
+    "change, needed",
+    [
+        (
+            {
+                "signed_in": True,
+                "off_camera": [],
+                "app": "dashboard",
+                "open": "/experiments",
+            },
+            True,
+        ),
+        (
+            {
+                "warm_results": ["Some experiment"],
+                "off_camera": [],
+                "app": "dashboard",
+                "open": "/experiments",
+            },
+            True,
+        ),
+        ({"off_camera": [], "app": "dashboard", "open": "/experiments"}, False),
+    ],
+)
+def test_an_off_camera_sign_in_or_warm_results_must_be_stated(change, needed):
+    data = board(**change, departures=[])
+    found = storyboard.departure_problems(storyboard.parse(data))
+    assert found == (
+        ["scene player: off-camera setup is not stated on screen (departures)"]
+        if needed
+        else []
+    )
+
+
+def test_only_the_scene_that_signs_in_must_say_so():
+    data = board(signed_in=True, off_camera=[], app="dashboard", open="/experiments")
+    second = dict(data["scenes"][0], id="again", departures=[])
+    data["scenes"].append(second)
+    assert storyboard.required_departures(storyboard.parse(data)) == [
+        ("player", "off-camera setup")
+    ]
+
+
+def test_the_browser_context_blocks_service_workers():
+    """A worker's request is the worker's: no page listener would see it."""
+    import ast
+
+    tree = ast.parse((ACCEPTANCE / "showcase" / "capture" / "run.py").read_text())
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "new_context"
+    ]
+    assert len(calls) == 1
+    given = {k.arg: getattr(k.value, "value", None) for k in calls[0].keywords}
+    assert given.get("service_workers") == "block"

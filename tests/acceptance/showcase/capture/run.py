@@ -306,13 +306,6 @@ def preflight(options: Options, environ: Mapping[str, str]) -> None:
         raise guard.Refused(
             f"unknown video {unknown[0]!r}; one of: {', '.join(config.VIDEOS)}, all"
         )
-    for board in options.videos:
-        problems = storyboard.departure_problems(storyboard.load(board_path(board)))
-        if problems:
-            raise guard.Refused(
-                f"{board}: D84, a departure from a new user's path is not stated"
-                f" on screen: {'; '.join(problems)}"
-            )
     probes = [v for v in options.videos if v in config.PROBES]
     if probes and options.render:
         raise guard.Refused(
@@ -321,6 +314,13 @@ def preflight(options: Options, environ: Mapping[str, str]) -> None:
     if options.profile not in ("core", "full"):
         raise guard.Refused(f"--profile {options.profile!r} is core or full")
     guard.refuse_ports(options.ports.as_dict(), in_use=lambda _port: False)
+    for board in options.videos:
+        problems = storyboard.departure_problems(storyboard.load(board_path(board)))
+        if problems:
+            raise guard.Refused(
+                f"{board}: D84, a departure from a new user's path is not stated"
+                f" on screen: {'; '.join(problems)}"
+            )
     for name, path in (("--out", options.out), ("--work-dir", options.work_dir)):
         checkout = guard.inside_git_checkout(path)
         if checkout is not None:
@@ -523,8 +523,12 @@ def record(
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(env=guard.tool_env())
         try:
+            # Service workers blocked: a request a worker made would be the
+            # worker's, not a page's, and no page listener would see it.
             context = browser.new_context(
-                viewport=dict(config.VIEWPORT), device_scale_factor=1
+                viewport=dict(config.VIEWPORT),
+                device_scale_factor=1,
+                service_workers="block",
             )
             page = context.new_page()
             director = directing.Director(

@@ -240,6 +240,11 @@ CURSOR_OUTLINE = (
 )
 
 
+#: How long a counted scene's end waits for its requests, and how often it looks.
+DRAIN_MS = 10_000
+DRAIN_POLL_MS = 100
+
+
 def _now_ms() -> float:
     return time.time() * 1000.0
 
@@ -447,6 +452,8 @@ class Director:
         self.pending: Dict[str, set] = {}
         #: A pending request's status when its response came (for the report).
         self.answered: Dict[int, int] = {}
+        #: Each request's counted origin (or None), the beat it started in, and when.
+        self.charged: Dict[int, Tuple[Optional[str], str, float]] = {}
         self.armed: Dict[str, Dict[str, Any]] = {}
         self.redactor = redactor
         self.forbidden = forbidden
@@ -567,10 +574,11 @@ class Director:
             self.tally.server_errors.append(
                 f"{response.status} from {path} ({self.where})"
             )
-        app = self._counted(response.url)
+        # Judged against the scene the request started in, not the one now.
+        app, began, _t = self.charged.get(id(request), (None, self.where, 0.0))
         if app is not None and response.status >= 400:
             self.tally.apps[app]["answers_400"].append(
-                f"{response.status} from {path} ({self.where})"
+                f"{response.status} from {path} (started {began})"
             )
         kind = (response.headers or {}).get("content-type", "")
         if "json" not in kind:
@@ -589,6 +597,9 @@ class Director:
 
     def _on_request(self, request: Any) -> None:
         app = self._counted(request.url)
+        # Every request is tagged with the scene it starts in (or none).
+        self.charged[id(request)] = (app, self.where, _now_ms())
+        self.answered.pop(id(request), None)
         if app is not None:
             self.pending.setdefault(app, set()).add(request)
         self.check_key_header(request)
@@ -623,9 +634,9 @@ class Director:
             return
         failure = request.failure
         error = failure if isinstance(failure, str) else str(failure)
-        line = f"{urlparse(request.url).path}: {error} ({self.where})"
+        app, began, _t = self.charged.get(id(request), (None, self.where, 0.0))
+        line = f"{urlparse(request.url).path}: {error} (started {began})"
         self.tally.failed_events.append(line)
-        app = self._counted(request.url)
         if app is not None:
             self.tally.apps[app]["failed"].append(line)
 
@@ -664,23 +675,33 @@ class Director:
         }
         return self.armed[app]
 
-    def drain(self, app: str, timeout_ms: int = 5000) -> None:
-        """At a counted scene's end: what is still unanswered after the network
-        has had *timeout_ms* to go quiet is counted."""
-        try:
-            self.page.wait_for_load_state("networkidle", timeout=timeout_ms)
-        except PlaywrightError:
-            pass
+    def drain(self, app: str, timeout_ms: int = DRAIN_MS) -> None:
+        """At a counted scene's end, off camera: wait until every request the
+        scene started has finished or failed, for at most *timeout_ms*; then
+        each one left is counted, with the beat it started in, its age and
+        whether it had no response or a response whose body never finished.
+
+        ``networkidle`` is not used: in a client-side app it is reached at once.
+        """
+        waiting = self.pending.setdefault(app, set())
+        deadline = _now_ms() + timeout_ms
+        while waiting and _now_ms() < deadline:
+            self.page.wait_for_timeout(DRAIN_POLL_MS)
         left = self.pending.pop(app, set())
         counts = self.tally.apps.setdefault(
             app, {"answers_400": [], "failed": [], "unanswered": []}
         )
-        for request in left:
+        now = _now_ms()
+        for request in sorted(left, key=lambda r: r.url):
             where = urlparse(request.url)
             query = f"?{where.query}" if where.query else ""
             said = self.answered.get(id(request))
             state = f"answered {said}, body unfinished" if said else "no response"
-            counts["unanswered"].append(f"{where.path}{query}: {state} ({self.where})")
+            _app, began, t = self.charged.get(id(request), (app, "?", now))
+            counts["unanswered"].append(
+                f"{where.path}{query}: {state} after {(now - t) / 1000:.1f} s"
+                f" (started {began})"
+            )
 
     # -- locators and boxes -----------------------------------------------------
 
