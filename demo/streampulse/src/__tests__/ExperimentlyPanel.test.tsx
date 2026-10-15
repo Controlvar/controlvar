@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import { STORY_STEPS } from '@/components/RolloutStoryDrawer';
 import ExperimentlyPanel, { PANEL_EVENT_LIMIT } from '@/components/ExperimentlyPanel';
 import { DASHBOARD_URL, EXPERIMENT_KEYS, FLAG_KEYS } from '@/lib/env';
 import { EventLogProvider, useTrack } from '@/lib/eventLog';
@@ -68,6 +69,15 @@ describe('ExperimentlyPanel', () => {
     expect(screen.getByTestId(`panel-exp-${EXPERIMENT_KEYS.profileBadges}`)).toHaveTextContent('badges');
     expect(screen.getByTestId(`panel-exp-reason-${EXPERIMENT_KEYS.onboardingSteps}`)).toHaveTextContent('in global holdout streampulse-holdout (control shown)');
     expect(screen.getByTestId(`panel-exp-reason-${EXPERIMENT_KEYS.upsellModal}`)).toHaveTextContent('excluded: targeting rules (control shown)');
+  });
+
+  it('says when decisions are fetched (device pick or Refresh now), never a 5 s timer', () => {
+    renderPanel();
+    expect(screen.getByText(/fetched when you pick a device or press Refresh now/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/every 5 s/);
+    const story = STORY_STEPS.map((s) => `${s.action} ${s.lookAt}`).join(' ');
+    expect(story).not.toMatch(/Within 5 s/);
+    expect(story).toMatch(/Refresh now/);
   });
 
   it('shows loading and error states', () => {

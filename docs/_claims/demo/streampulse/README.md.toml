@@ -614,7 +614,7 @@ by = [
 ]
 
 [[unit]]
-text = "Player v2 does not change after the story rolls back / advances | The SDK caches for 5 s — wait or press Refresh now. If the schedulers are involved (auto-rollback, time-based stages), they run every SAFETY_CHECK_INTERVAL_MINUTES / ROLLOUT_CHECK_INTERVAL_MINUTES (default 5 / 15) — set both to 1 in the backend .env for the demo (setup-local.sh sets both to 1 unless they are already set)."
+text = "Player v2 does not change after the story rolls back / advances | The app does not poll: it asks for the decisions when you pick a device or press Refresh now, so press Refresh now. If the schedulers are involved (auto-rollback, time-based stages), they run every SAFETY_CHECK_INTERVAL_MINUTES / ROLLOUT_CHECK_INTERVAL_MINUTES (default 5 / 15) — set both to 1 in the backend .env for the demo (setup-local.sh sets both to 1 unless they are already set)."
 by = [
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_streampulse_keeps_each_flag_answer_for_5_seconds",
     "journey:demo-streampulse#refresh-now",

@@ -70,7 +70,7 @@ export default function ExperimentlyPanel({ onRefresh }: Props) {
       </div>
 
       <p className="mb-3 text-xs text-neutral-500">
-        Decisions for <code className="rounded bg-neutral-100 px-1 font-mono" data-testid="panel-user-id">{user.userId}</code>, re-fetched every 5 s.
+        Decisions for <code className="rounded bg-neutral-100 px-1 font-mono" data-testid="panel-user-id">{user.userId}</code>, fetched when you pick a device or press Refresh now.
       </p>
 
       <section className="mb-4" aria-labelledby="panel-flags-title">

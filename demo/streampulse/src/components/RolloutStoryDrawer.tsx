@@ -39,7 +39,7 @@ export const STORY_STEPS: StoryStep[] = [
   {
     title: 'Safety monitor rolls back to 5 %',
     action: 'Automatic rollback (rollback_percentage 5) — or the script calls POST /safety/feature-flags/{id}/rollback?percentage=5 — takes the flag back to 5 % and pauses its rollout schedule, so no stage can raise it again. Employees keep Player v2 through their targeting rule. A rollback record is written.',
-    lookAt: 'Flag rollout is 5 % again and its rollout schedule shows Paused. Within 5 s the app\'s Player v2 readout below flips for most devices.',
+    lookAt: 'Flag rollout is 5 % again and its rollout schedule shows Paused. Press Refresh now in the app (or pick a device) and its Player v2 readout below flips for most devices.',
   },
   {
     title: 'Fix shipped in v3.2.1, resume rollout',
