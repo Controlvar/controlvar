@@ -15,7 +15,7 @@ reason why.
 
 ### ⚠ BREAKING CHANGES
 
-* **api:** dashboard-shaped flag targeting rules hold at most 1,000 groups and conditions ([#1243](https://github.com/getexperimently/experimently/issues/1243))
+* **api:** a feature flag's dashboard-shaped `targeting_rules` with more than 1,000 groups and conditions in all are refused with 422 on `POST /api/v1/feature-flags/` and `PUT /api/v1/feature-flags/{flag_id}` (`targeting rules: at most 1000 groups and conditions are allowed`), where any size was accepted. Flags already stored above the limit are read and evaluated as before, and a `PUT` that leaves `targeting_rules` out still succeeds; a `PUT` that sends such rules back answers 422 until they are cut down. To list stored flags above the limit, run `python -m backend.scripts.check_targeting_rules` with the API's database settings. Experiment and segment targeting are unchanged. ([#1243](https://github.com/getexperimently/experimently/issues/1243))
 
 ### Bug Fixes
 
