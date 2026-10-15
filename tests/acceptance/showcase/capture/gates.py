@@ -134,30 +134,44 @@ def payoff_still(
 ZOOM_TOLERANCE = 1e-4
 
 
-def zoom(measured: Mapping[str, Any]) -> Verdict:
-    """C1: <body> has ``config.ZOOM`` as Chromium computed it, and <html> has none."""
+def zoom(measured: Mapping[str, Any], wanted: float = config.ZOOM) -> Verdict:
+    """C1: <body> has *wanted* (the origin's zoom) as Chromium computed it, and
+    <html> has none."""
     body, html = measured.get("body"), measured.get("html")
-    numbers = {"body": body, "html": html, "wanted_body": round(config.ZOOM, 6)}
+    numbers = {"body": body, "html": html, "wanted_body": round(wanted, 6)}
     if not all(isinstance(v, (int, float)) for v in (body, html)):
         return False, numbers, f"the page's zoom could not be read ({dict(measured)})"
     if abs(html - 1) > ZOOM_TOLERANCE:
         return False, numbers, f"<html> is zoomed {html:g}; the zoom belongs on <body>"
-    if abs(body - config.ZOOM) > ZOOM_TOLERANCE:
+    if abs(body - wanted) > ZOOM_TOLERANCE:
         return (
             False,
             numbers,
-            f"<body> is zoomed {body:g}, not {config.ZOOM:.6f}: the frames would not"
+            f"<body> is zoomed {body:g}, not {wanted:.6f}: the frames would not"
             " be the layout the storyboard was written for",
         )
     return True, numbers, ""
 
 
-def needle_count(static: Sequence[str], kept: Iterable[str]) -> Verdict:
-    """Gate 6's count: every static needle, plus each kept value, exactly."""
+def needle_count(
+    static: Sequence[str], kept: Iterable[str], required: Iterable[str] = ()
+) -> Verdict:
+    """Gate 6's count: every static needle, plus each kept value, exactly.
+
+    *required* are values the run read itself and must be looking for (the
+    StreamPulse server key, read from its file): each must be a kept value, as
+    read, with nothing around it.
+    """
     static_set = set(static)
     kept_set = set(kept) - static_set
     total = len(static_set | kept_set)
-    numbers = {"static": len(static_set), "kept": len(kept_set), "total": total}
+    wanted = list(required)
+    numbers = {
+        "static": len(static_set),
+        "kept": len(kept_set),
+        "total": total,
+        "required": len(wanted),
+    }
     if total == 0:
         return False, numbers, "0 needles: refusing to scan"
     if len(static_set) != len(config.STATIC_NEEDLES) or not static_set <= set(
@@ -166,18 +180,30 @@ def needle_count(static: Sequence[str], kept: Iterable[str]) -> Verdict:
         return False, numbers, "the static needles are not the four the tool carries"
     if total != len(static_set) + len(kept_set):
         return False, numbers, "needle count does not add up"
+    for value in wanted:
+        if value != value.strip() or not value:
+            return False, numbers, "a key read from a file was kept with whitespace"
+        if value not in kept_set:
+            return False, numbers, "a key read from a file is not a needle"
     return True, numbers, ""
 
 
-def child_environments(
-    started: Sequence[Mapping[str, Any]], allowed: Set[str]
-) -> Verdict:
-    """EM condition 10: every child's environment names only allow-listed keys."""
+def child_environments(started: Sequence[Mapping[str, Any]]) -> Verdict:
+    """EM condition 10: every child's environment names only its kind's keys.
+
+    Each child is judged against the allow-list of its own kind
+    (``guard.allowed_env_keys``), not the union of every kind's.
+    """
     extra: Dict[str, List[str]] = {}
     for child in started:
-        unexpected = sorted(set(child["env_keys"]) - allowed)
+        kind = str(child.get("kind"))
+        try:
+            keys = set(guard.allowed_env_keys(kind))
+        except guard.Refused:  # an unknown kind may be given nothing at all
+            keys = set()
+        unexpected = sorted(set(child["env_keys"]) - keys)
         if unexpected:
-            extra[str(child["name"])] = unexpected
+            extra[f"{child['name']} ({kind})"] = unexpected
     numbers = {"children": len(started), "unexpected": extra}
     if extra:
         name, keys = next(iter(extra.items()))
@@ -185,16 +211,21 @@ def child_environments(
     return True, numbers, ""
 
 
-def allowed_env_keys() -> Set[str]:
-    """Every key a child may be given: the passed ones and the tool's settings."""
-    keys = set(guard.PASSED) | set(guard.DOCKER_PASSED)
-    keys |= set(
-        guard.api_settings(
-            api_port=1, dashboard_port=1, postgres_port=1, profile="core"
-        )
-    )
-    keys |= set(guard.dashboard_settings(api_port=1, profile="core"))
-    return keys
+def allowed_by_kind() -> Dict[str, Set[str]]:
+    """Each kind of child's allow-list, for the manifest and the tests."""
+    return {kind: set(guard.allowed_env_keys(kind)) for kind in guard.KINDS}
+
+
+def app_answers(app: Mapping[str, Mapping[str, Any]]) -> Verdict:
+    """P2 for the app scenes: per app, after it was armed, no answer >= 400 from
+    the stack, no failed request, and no request left unanswered at a scene's end."""
+    numbers = {name: dict(counts) for name, counts in app.items()}
+    for name, counts in app.items():
+        for what in ("answers_400", "failed", "unanswered"):
+            found = counts.get(what) or []
+            if found:
+                return False, numbers, f"{name}: {what.replace('_', ' ')}: {found[0]}"
+    return True, numbers, ""
 
 
 def caption_numbers(caption: str, shown: str) -> Verdict:

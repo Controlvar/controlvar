@@ -212,6 +212,9 @@ scenes:
 
   - id: later
     traffic: finish
+    departures:
+      - kind: simulated traffic
+        says: simulated in minutes
     card:
       label: Off camera
       headline: 63,000 shoppers later
