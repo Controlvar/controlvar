@@ -11,7 +11,12 @@
 # `say` is the narration (#1066 voiceover): the UX draft's spoken script, with
 # every number in digits as the page prints it, and every number on the page
 # while it is said (the card's note says "3 experiments, 2 flags" to match).
-# `python -m showcase.voice` makes its clips; the capture does not use it yet.
+# `python -m showcase.voice` (make showcase-voice) makes its clips, and the
+# capture holds each beat for them (showcase.capture.voiced).
+#
+# D84: the card says what the Quick Start's command starts, and what this
+# recording runs instead, on screen: the tool's own stack (no Redis), results
+# computed before they are opened, and the waits for a page cut.
 slug: 01-getting-started
 title: Get started
 seed: demo
@@ -23,11 +28,13 @@ end_state:
 scenes:
   - id: stack-card
     card:
-      label: "From the Quick Start: shown here, not recorded"
+      label: "The Quick Start's command: shown here, not run"
       command: "docker compose up -d --wait"
       note: >-
-        The first start builds two images, starts Postgres 16 and Redis 7, and
-        applies the demo seed: 3 experiments, 2 flags.
+        It starts Postgres 16, Redis 7, the API and the dashboard, with the demo
+        seed: 3 experiments, 2 flags. This recording runs the same release on
+        the showcase tool's own stack instead, without Redis; results are
+        computed before they are opened, and waits for a page are cut.
     beats:
       - cue: One command starts the whole stack on your machine.
         focus: {css: "#command"}

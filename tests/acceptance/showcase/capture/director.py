@@ -42,6 +42,12 @@ stand-in pages where Playwright is not installed. What it does, in order:
   text for ``config.SETTLE_MS``; a ``click`` on a select is refused. A
   ``slide`` step glides the cursor along a range input's track while the value
   follows it to the storyboard's number.
+* A narrated capture (``voiced.Pacing``) holds each beat until its
+  sentences' slots fit its cue (the TILE rule), less what its exit takes at
+  the least, so the narration may run over the exit; a cue that still ends
+  before its slots is refused after the exit (G20), never topped up. Before
+  the exit, every number a sentence says must be on the page then or at the
+  cue's start (G2).
 * While recording: any response >= 500 from the stack, any page error and any
   request the guard refused fails the video (gate 11, gate 15c).
 
@@ -64,6 +70,7 @@ import numpy as np
 
 from showcase.capture import config, guard, storyboard
 from showcase.capture import gates as judge
+from showcase.capture.voiced import Pacing, exit_floor_ms
 
 if TYPE_CHECKING:
     from playwright.sync_api import (
@@ -281,6 +288,11 @@ class Tally:
     holds_ms: List[int] = field(default_factory=list)
     #: C9: each ``choose`` step, the text its closed select showed and how long.
     choices: List[Dict[str, Any]] = field(default_factory=list)
+    #: G2: one number check a narration sentence, and what each found.
+    narration_checks: int = 0
+    spoken: List[Dict[str, Any]] = field(default_factory=list)
+    #: G20: each narrated beat's slots, its recorded cue and its exit's floor.
+    voiced_beats: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def decode_rgb(jpeg: bytes, width: int, height: int) -> np.ndarray:
@@ -405,6 +417,7 @@ class Director:
         forbidden: Tuple[str, ...],
         work: guard.WorkRoot,
         resolve: Optional[Callable[[str], str]] = None,
+        pacing: Optional[Pacing] = None,
     ):
         self.context = context
         self.page = page
@@ -432,6 +445,10 @@ class Director:
         #: Texts a beat's ``record`` kept at its cue's start, by name (gate 10).
         self.readings: Dict[str, str] = {}
         self.signed_in = False
+        #: A narrated capture's slots per beat (voice PR C2); empty when silent.
+        self.pacing = pacing or Pacing()
+        #: U4's reading of the viewport's text at the last cue start (G2).
+        self.start_text = ""
 
     # -- the guard and the listeners ------------------------------------------
 
@@ -727,6 +744,7 @@ class Director:
             )
         self.tally.forbidden_checks += 1
         drawn = self.page.evaluate(VIEWPORT_TEXT_JS)
+        self.start_text = drawn
         for text in self.forbidden:
             if text in drawn:
                 raise CaptureFailed("U4", f"{self.where}: the page shows {text!r}")
@@ -755,6 +773,18 @@ class Director:
         ok, _numbers, why = judge.caption_numbers(cue, found.inner_text())
         if not ok:
             raise CaptureFailed("U2", f"{self.where}: {why}")
+
+    def check_spoken(self, sentences: Tuple[str, ...], start_text: str) -> None:
+        """G2: each number a sentence says is on the page at the cue's start or
+        now, its end before the exit (the viewport's text, as U4 reads it)."""
+        before_exit = self.page.evaluate(VIEWPORT_TEXT_JS)
+        for sentence in sentences:
+            self.tally.narration_checks += 1
+            ok, numbers, why = judge.spoken_numbers(sentence, start_text, before_exit)
+            if numbers["said"]:
+                self.tally.spoken.append({"where": self.where, **numbers})
+            if not ok:
+                raise CaptureFailed("G2", f"{self.where}: {why}")
 
     def check_focus(self, focus: Box, found: Locator, when: str) -> Box:
         self.tally.focus_checks += 1
@@ -991,11 +1021,14 @@ class Director:
             self.listed_rows = self.page.evaluate(
                 "() => document.querySelectorAll('table tbody tr').length"
             )
+        voice = self.pacing.beat(scene.id, index)
+        start_text = self.start_text
         start = self.recorder.now()
-        minimum = storyboard.min_cue_ms(beat.cue)
+        # Silent: the headline's reading time. Narrated: the sentences' slots too.
+        hold = Pacing.hold_ms(beat, voice)
         for step in beat.steps:
             self.step(step)
-        remaining = minimum - (self.recorder.now() - start)
+        remaining = hold - (self.recorder.now() - start)
         if remaining > 0:
             self.page.wait_for_timeout(remaining)
         if beat.payoff:
@@ -1012,10 +1045,32 @@ class Director:
         self.check_needles()
         end_box = self.check_focus(focus, found, "end")
         self.check_events()
+        if voice is not None:
+            self.check_spoken(voice.sentences, start_text)
         # The click that leaves the page, with the caption still up.
         for step in beat.exit:
             self.step(step)
         end = self.recorder.now()
+        if voice is not None:
+            # G20: the narration may run over the exit, never past it. Refused,
+            # never topped up: the page has already moved on.
+            short = Pacing.outlasts(start, end, voice)
+            self.tally.voiced_beats.append(
+                {
+                    "where": self.where,
+                    "slots_ms": voice.ms,
+                    "held_ms": end - start,
+                    "exit_floor_ms": exit_floor_ms(beat.exit),
+                    "payoff": beat.payoff,
+                }
+            )
+            if short:
+                raise CaptureFailed(
+                    "G20",
+                    f"beat {index} of {scene.id}: the narration outlasts the beat's"
+                    f" exit by {short} ms; lengthen the beat's hold or shorten the"
+                    " narration",
+                )
         self.tally.holds_ms.append(end - start)
         self.cues.append(
             {

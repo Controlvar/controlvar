@@ -36,33 +36,15 @@ from typing import Any, Dict, List, Mapping, Optional
 
 from showcase import contract
 from showcase.capture import guard
-from showcase.voice import audio
 
-#: Under ``$HOME``.
-DEFAULT_ROOT = (".cache", "experimently-showcase", "voice")
+#: Under ``$HOME``. The layout is the contract's, which the capture reads too.
+DEFAULT_ROOT = contract.VOICE_CACHE_HOME
 ROOT_MODE = 0o700
 UNFINISHED = ".unfinished-"
-SOURCE = "source.mp3"
-CLIP = "clip.wav"
-ENTRY = "entry.json"
-ENTRY_KEYS = frozenset(
-    {
-        "key",
-        "recipe",
-        "engine",
-        "voice",
-        "format",
-        "polly_rate",
-        "tempo",
-        "rate",
-        "text",
-        "request_characters",
-        "source_sha256",
-        "raw_samples",
-        "clip_sha256",
-        "samples",
-    }
-)
+SOURCE = contract.CACHE_SOURCE
+CLIP = contract.CACHE_CLIP
+ENTRY = contract.CACHE_ENTRY
+ENTRY_KEYS = contract.CACHE_ENTRY_KEYS
 
 
 class CacheRefused(Exception):
@@ -223,51 +205,5 @@ def entry_record(
     return record
 
 
-def _is_count(value: Any) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool) and value > 0
-
-
-def entry_problems(path: Path, key: str, voice: str, text: str) -> List[str]:
-    """Why the directory at *path* is not the entry for *key*, or nothing."""
-    if path.is_symlink() or not path.is_dir():
-        return ["it is not a directory"]
-    for name in (SOURCE, CLIP, ENTRY):
-        member = path / name
-        if member.is_symlink() or not member.is_file():
-            return [f"{name} is missing or not a plain file"]
-    try:
-        data = json.loads((path / ENTRY).read_text(encoding="utf-8"))
-    except (UnicodeDecodeError, ValueError):
-        return [f"{ENTRY} is not JSON"]
-    if not isinstance(data, dict) or set(data) != ENTRY_KEYS:
-        found = set(data) if isinstance(data, dict) else set()
-        return [
-            f"{ENTRY} has keys missing {sorted(ENTRY_KEYS - found)} and unexpected"
-            f" {sorted(found - ENTRY_KEYS)}"
-        ]
-    problems: List[str] = []
-    if contract.clip_key(voice, text) != key or data["key"] != key:
-        problems.append("its key is not the key of the text it is filed under")
-    expected = contract.clip_key_fields(voice, text)
-    differ = sorted(k for k, v in expected.items() if data[k] != v)
-    if differ:
-        problems.append(f"{ENTRY} says other {', '.join(differ)} than the key")
-    if not all(
-        _is_count(data[k]) for k in ("request_characters", "raw_samples", "samples")
-    ):
-        problems.append(f"{ENTRY} has a count that is not a positive whole number")
-    elif data["request_characters"] != len(text):
-        problems.append(
-            f"Polly billed {data['request_characters']} characters for {len(text)}"
-        )
-    if sha256_of(path / SOURCE) != data["source_sha256"]:
-        problems.append(f"{SOURCE} is not the file Polly answered with")
-    if sha256_of(path / CLIP) != data["clip_sha256"]:
-        problems.append(f"{CLIP} is not the clip made from it")
-    else:
-        try:
-            if audio.wav_samples(path / CLIP) != data["samples"]:
-                problems.append(f"{CLIP} does not hold {data['samples']} samples")
-        except audio.AudioFailed as error:
-            problems.append(str(error))
-    return problems
+#: Why a directory is not the entry for a key (shared with the capture).
+entry_problems = contract.cache_entry_problems
