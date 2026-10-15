@@ -9,9 +9,12 @@ Order, and what must be true before each step:
    read only: ``make showcase-voice`` makes them) or clips that project the
    video past the length cap. ``--voice none`` (``make showcase VOICE=none``)
    records a narrated storyboard silent, as before narration existed.
-2. The lock (``guard.RunLock``); then whatever a killed run left: its child
-   processes (``procs.Children.stop_leftovers``) and its labelled containers.
-3. The tree, once per invocation (``build``).
+2. The machine lock (``guard.machine_lock``), which ``main`` takes before
+   ``run`` and releases after the render: one run per machine, whatever its
+   work root and ports. Then whatever a killed run left: its child processes
+   (``procs.Children.stop_leftovers``) and its labelled containers.
+3. The tree, once per invocation (``build``), and a tree of each demo app the
+   videos record (``build.build_app``).
 4. Per video, the disk floor first; below it the video is refused and no work
    directory is made. Then the stack, gate 14 (the seed's counts), the
    storyboard's ``setup`` made through the API off camera, the
@@ -291,6 +294,11 @@ def refuse_missing_ffmpeg(*, run: Callable[..., Any] = subprocess.run) -> None:
 PLAYWRIGHT_LOCATIONS = ("PLAYWRIGHT_BROWSERS_PATH", "PLAYWRIGHT_NODEJS_PATH")
 
 
+def board_path(slug: str) -> Path:
+    """A video's storyboard, or a probe's (``config.PROBES``)."""
+    return HERE / (config.VIDEOS.get(slug) or config.PROBES[slug])
+
+
 def preflight(options: Options, environ: Mapping[str, str]) -> None:
     """Every refusal that needs no Docker, npm or uvicorn."""
     for name in PLAYWRIGHT_LOCATIONS:
@@ -301,20 +309,37 @@ def preflight(options: Options, environ: Mapping[str, str]) -> None:
                 " browser where Playwright looks by default"
                 " (python -m playwright install chromium)"
             )
-    unknown = [v for v in options.videos if v not in config.VIDEOS]
+    unknown = [
+        v for v in options.videos if v not in config.VIDEOS and v not in config.PROBES
+    ]
     if unknown:
         raise guard.Refused(
             f"unknown video {unknown[0]!r}; one of: {', '.join(config.VIDEOS)}, all"
         )
+    probes = [v for v in options.videos if v in config.PROBES]
+    if probes and options.render:
+        raise guard.Refused(
+            f"{probes[0]} proves the tool and is never a video: give --capture-only"
+        )
     if options.profile not in ("core", "full"):
         raise guard.Refused(f"--profile {options.profile!r} is core or full")
     guard.refuse_ports(options.ports.as_dict(), in_use=lambda _port: False)
+    for board in options.videos:
+        problems = storyboard.departure_problems(storyboard.load(board_path(board)))
+        if problems:
+            raise guard.Refused(
+                f"{board}: D84, a departure from a new user's path is not stated"
+                f" on screen: {'; '.join(problems)}"
+            )
     for name, path in (("--out", options.out), ("--work-dir", options.work_dir)):
         checkout = guard.inside_git_checkout(path)
         if checkout is not None:
             raise guard.Refused(f"{name} {path} is inside the git checkout {checkout}")
     if options.render:
         guard.refuse_out_beside_work(options.out, options.work_dir)
+    guard.refuse_lock_inside(
+        guard.machine_lock_path(environ), options.work_dir, options.out
+    )
     try:
         from importlib.metadata import version
 
@@ -328,7 +353,7 @@ def preflight(options: Options, environ: Mapping[str, str]) -> None:
         )
     refuse_missing_ffmpeg()
     for slug in options.videos:
-        board = storyboard.load(HERE / config.VIDEOS[slug])
+        board = storyboard.load(board_path(slug))
         narration_clips(board, options)
 
 
@@ -380,13 +405,18 @@ def capture_video(
     versions: Mapping[str, Optional[str]],
     environ: Mapping[str, str],
     log: Callable[[str], None],
+    app_trees: Optional[Mapping[str, Path]] = None,
 ) -> Path:
     """Record one video into ``<work root>/<slug>/capture``; its path, or raises."""
     from showcase.capture import director as directing  # Playwright, only here
 
-    board = storyboard.load(HERE / config.VIDEOS[slug])
+    board = storyboard.load(board_path(slug))
     # Again, as the preflight did: the cache is read as the video starts.
     voice, clips = narration_clips(board, options)
+    built = dict(app_trees or {})
+    missing = [app for app in board.apps if app not in built]
+    if missing:
+        raise StackError(f"{slug} records {missing[0]}, which was not built")
     gates: Dict[str, Dict[str, Any]] = {}
     started = time.monotonic()
     readings = guard.refuse_low_disk(
@@ -408,6 +438,7 @@ def capture_video(
         children=children,
         logs=logs,
         parent=environ,
+        apps={app: built[app] for app in board.apps},
     )
     TEARDOWN.append(stack.down)
     with DiskSampler(work.path) as disk:
@@ -433,6 +464,16 @@ def capture_video(
             counts = seed_counts(stack.api_url, token)
             wanted = board.seed_counts.model_dump()
             gates["14"] = gate(counts == wanted, counted=counts, seed=wanted)
+            # D84: refused in preflight when one is missing; recorded here.
+            gates["D84"] = gate(
+                not storyboard.departure_problems(board),
+                required=[list(r) for r in storyboard.required_departures(board)],
+                stated=[
+                    {"scene": s.id, "kind": d.kind, "says": d.says}
+                    for s in board.scenes
+                    for d in s.departures
+                ],
+            )
             if counts != wanted:
                 raise directing.CaptureFailed(
                     "gate 14",
@@ -521,11 +562,18 @@ def record(
     redactor.add(token)
     ports = options.ports
     forbidden = forbidden_text(board, ports)
+    #: Keys the run read from a file (the StreamPulse server key): gate 6 must
+    #: be looking for each, as read (PE 5).
+    read_keys: List[str] = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(env=guard.tool_env())
         try:
+            # Service workers blocked: a request a worker made would be the
+            # worker's, not a page's, and no page listener would see it.
             context = browser.new_context(
-                viewport=dict(config.VIEWPORT), device_scale_factor=1
+                viewport=dict(config.VIEWPORT),
+                device_scale_factor=1,
+                service_workers="block",
             )
             page = context.new_page()
             director = directing.Director(
@@ -540,6 +588,8 @@ def record(
                 work=work,
                 resolve=lambda name: experiment_id(stack.api_url, token, name),
                 pacing=pacing,
+                apps={app: ports.app(app) for app in board.apps},
+                app_ready=lambda app: app_ready(stack.api_url, token, app),
             )
             director.install()
             # Gate 3: the page is the frame's size at scale 1, before anything is recorded.
@@ -576,6 +626,11 @@ def record(
                         users.finish()
                     for name in scene.warm_results:
                         warm_results(stack.api_url, token, name)
+                    for item in scene.off_camera:
+                        log(f"seed {item.seed}, off camera")
+                        server = stack.seed_app(item.seed, history=item.history)
+                        if server is not None:
+                            keep_private(server, redactor, stack.children, read_keys)
                     log(f"scene {scene.id}")
                     director.scene(scene)
             finally:
@@ -644,7 +699,7 @@ def record(
             "frames off the viewport size",
         ),
         "6": _merge(
-            judge.needle_count(config.STATIC_NEEDLES, redactor.values),
+            judge.needle_count(config.STATIC_NEEDLES, redactor.values, read_keys),
             {
                 "page_checks": tally.needle_checks,
                 "hits": 0,
@@ -674,6 +729,22 @@ def record(
             judge.black(entries, lumas, duration, still),
         ),
         "15c": (not tally.refused, {"refused": tally.refused}, "a refused request"),
+        # P2 (PE 6): the whole context's listeners; per app, armed and counted.
+        "P2": _merge(
+            judge.app_answers(tally.apps),
+            {
+                "armed": director.armed,
+                "new_pages": tally.new_pages,
+                "unknown_keys": tally.unknown_keys,
+                "failed_requests": tally.failed_events,
+            },
+        )
+        if not (tally.new_pages or tally.unknown_keys)
+        else (
+            False,
+            {"new_pages": tally.new_pages, "unknown_keys": tally.unknown_keys},
+            "a page outside the storyboard, or a key that is not a needle",
+        ),
         # C9: a click on a select and a choice not held are refused at the
         # step; this is their count, and the choices as held.
         "C9": (
@@ -725,6 +796,44 @@ def voiced_checks(director: Any, board: storyboard.Storyboard) -> Dict[str, Any]
             f"{len(tally.voiced_beats)} narrated beats paced of {beats}",
         ),
     }
+
+
+def keep_private(
+    value: str, redactor: Any, children: Children, read_keys: List[str]
+) -> None:
+    """A key the run read from a file: a needle from now on, and never given to
+    a child (argv or environment). It is held in this process only."""
+    redactor.add(value)
+    if value not in children.private:
+        children.private.append(value)
+    if value not in read_keys:
+        read_keys.append(value)
+
+
+def app_ready(api_url: str, token: str, app: str) -> Dict[str, Any]:
+    """Off camera, before an app is first loaded: every experiment and flag the
+    app's seed (or the video) made is ACTIVE, through the API; the numbers.
+
+    Refused (``StackError``) when there are none, or when one is not active.
+    """
+    prefix = config.APP_KEY_PREFIX[app]
+    found: Dict[str, Any] = {}
+    for kind, path in (
+        ("experiments", "/api/v1/experiments/?limit=100"),
+        ("feature_flags", "/api/v1/feature-flags/?limit=100"),
+    ):
+        answer = _api(api_url + path, token)
+        items = answer.get("items") or []
+        if int(answer.get("total", len(items))) > len(items):
+            raise StackError(f"{app}: more {kind} than one page holds")
+        mine = [i for i in items if str(i.get("key") or "").startswith(prefix)]
+        idle = [i.get("key") for i in mine if str(i.get("status")).lower() != "active"]
+        if not mine:
+            raise StackError(f"{app}: no {kind} keyed {prefix}*; did its seed run?")
+        if idle:
+            raise StackError(f"{app}: {kind} not active before its first load: {idle}")
+        found[kind] = len(mine)
+    return found
 
 
 def eleven(broken, frozen, dark):
@@ -883,9 +992,8 @@ def write_capture(
 ) -> None:
     from showcase.capture import gates as judge
 
-    ok, numbers, why = judge.child_environments(
-        children.started, judge.allowed_env_keys()
-    )
+    ok, numbers, why = judge.child_environments(children.started)
+    numbers["kinds"] = sorted({str(c.get("kind")) for c in children.started})
     gates["env"] = gate(ok, **numbers)
     gates["15a"] = gate(
         True,
@@ -968,6 +1076,10 @@ def parse_args(argv: List[str], environ: Mapping[str, str]) -> Options:
     parser.add_argument(
         "--postgres-port", type=int, default=config.DEFAULT_POSTGRES_PORT
     )
+    parser.add_argument("--shoplab-port", type=int, default=config.DEFAULT_SHOPLAB_PORT)
+    parser.add_argument(
+        "--streampulse-port", type=int, default=config.DEFAULT_STREAMPULSE_PORT
+    )
     parser.add_argument(
         "--out",
         default=str(
@@ -1016,7 +1128,13 @@ def parse_args(argv: List[str], environ: Mapping[str, str]) -> Options:
         repo=HERE.parents[2],
         work_dir=Path(args.work_dir).expanduser(),
         profile=args.profile,
-        ports=Ports(args.api_port, args.dashboard_port, args.postgres_port),
+        ports=Ports(
+            args.api_port,
+            args.dashboard_port,
+            args.postgres_port,
+            args.shoplab_port,
+            args.streampulse_port,
+        ),
         out=Path(args.out).expanduser(),
         render=not args.capture_only,
         voice=args.voice,
@@ -1031,8 +1149,6 @@ def run(
     preflight(options, environ)
     work = guard.WorkRoot(options.work_dir)
     commit = build.resolve_ref(options.repo, options.ref)
-    lock = guard.RunLock(work.path)
-    lock.acquire()
     results: Dict[str, Any] = {}
     children = Children(work, environ)
     TEARDOWN.append(children.stop_all)
@@ -1070,7 +1186,7 @@ def run(
             web_env,
             work.path / "build.log",
             spawn=lambda argv, cwd, env, log: children.run(
-                "npm-build", argv, cwd=cwd, env=env, log=log
+                "npm-build", argv, cwd=cwd, env=env, log=log, kind="dashboard"
             ),
         )
         log(
@@ -1079,6 +1195,33 @@ def run(
             )
         )
         versions = build.next_versions(tree)
+        app_trees: Dict[str, Path] = {}
+        for app in apps_recorded(options.videos):
+            app_tree = work.path / f"app-{app}"
+            if app_tree.exists():
+                work.remove(app_tree)
+            log(f"building {app} from {options.ref}")
+            log(
+                build.build_app(
+                    options.repo,
+                    commit,
+                    app_tree,
+                    app,
+                    guard.child_env(
+                        guard.app_settings(
+                            app=app,
+                            api_port=options.ports.api,
+                            dashboard_port=options.ports.dashboard,
+                        ),
+                        parent=environ,
+                    ),
+                    work.path / f"build-{app}.log",
+                    spawn=lambda argv, cwd, env, log, app=app: children.run(
+                        f"next-build-{app}", argv, cwd=cwd, env=env, log=log, kind="app"
+                    ),
+                )
+            )
+            app_trees[app] = app_tree
         for slug in options.videos:
             try:
                 results[slug] = capture_video(
@@ -1091,14 +1234,24 @@ def run(
                     versions=versions,
                     environ=environ,
                     log=log,
+                    app_trees=app_trees,
                 )
             except Exception as error:  # one video's failure, reported
                 results[slug] = error
                 log(f"{slug}: REFUSED: {error}")
     finally:
         children.stop_all()
-        lock.release()
     return results
+
+
+def apps_recorded(videos: List[str]) -> List[str]:
+    """The demo apps any of *videos* records, each once."""
+    found: List[str] = []
+    for slug in videos:
+        for app in storyboard.load(board_path(slug)).apps:
+            if app not in found:
+                found.append(app)
+    return found
 
 
 #: What a stopping signal must undo before the process ends, newest first.
@@ -1151,19 +1304,32 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     try:
         options = parse_args(sys.argv[1:] if argv is None else argv, environ)
-        results = run(options, environ, log)
+        # One run per machine (PE 7), held from before the capture until the
+        # render ends: a second run refuses here, before any docker call.
+        lock = guard.machine_lock(environ)
+        lock.acquire()
     except guard.Refused as error:
         log(f"refused: {error}")
         return 2
-    failed = [slug for slug, value in results.items() if not isinstance(value, Path)]
-    for slug, value in results.items():
-        if not isinstance(value, Path):
-            log(f"{slug}: FAILED")
-            continue
-        log(f"{slug}: capture {value}")
-        if options.render and render(value, options.out, environ, log) != 0:
-            failed.append(slug)
-    return 1 if failed else 0
+    try:
+        try:
+            results = run(options, environ, log)
+        except guard.Refused as error:
+            log(f"refused: {error}")
+            return 2
+        failed = [
+            slug for slug, value in results.items() if not isinstance(value, Path)
+        ]
+        for slug, value in results.items():
+            if not isinstance(value, Path):
+                log(f"{slug}: FAILED")
+                continue
+            log(f"{slug}: capture {value}")
+            if options.render and render(value, options.out, environ, log) != 0:
+                failed.append(slug)
+        return 1 if failed else 0
+    finally:
+        lock.release()
 
 
 def render(

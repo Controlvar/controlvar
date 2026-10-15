@@ -152,7 +152,7 @@ API_KEYS = {
     "POSTGRES_SERVER", "POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_USER",
     "POSTGRES_PASSWORD", "POSTGRES_DB", "POSTGRES_SCHEMA",
     "REDIS_HOST", "REDIS_PORT", "REDIS_URL", "REDIS_REQUIRED", "CORS_ORIGINS",
-    "SDK_RATE_LIMIT_PER_MINUTE", "SHOPLAB_API_KEY", "STREAMPULSE_API_KEY", "EXPERIMENTLY_PROFILE",
+    "SDK_RATE_LIMIT_PER_MINUTE", "EXPERIMENTLY_PROFILE",
     "PYTHONDONTWRITEBYTECODE", "PYTHONUNBUFFERED",
     "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_CONFIG_FILE",
     "AWS_SHARED_CREDENTIALS_FILE", "AWS_EC2_METADATA_DISABLED", "AWS_ENDPOINT_URL",
@@ -172,11 +172,16 @@ def test_the_api_childs_environment_is_exactly_the_allow_list():
 
 
 def test_a_child_started_with_the_callers_environment_is_refused(tmp_path):
-    allowed = gates.allowed_env_keys()
-    clean = [{"name": "api", "env_keys": sorted(guard.child_env({}, parent=PARENT))}]
-    assert gates.child_environments(clean, allowed)[0]
-    passed_through = [{"name": "api", "env_keys": sorted(PARENT)}]
-    ok, numbers, why = gates.child_environments(passed_through, allowed)
+    clean = [
+        {
+            "name": "api",
+            "kind": "api",
+            "env_keys": sorted(guard.child_env({}, parent=PARENT)),
+        }
+    ]
+    assert gates.child_environments(clean)[0]
+    passed_through = [{"name": "api", "kind": "api", "env_keys": sorted(PARENT)}]
+    ok, numbers, why = gates.child_environments(passed_through)
     assert not ok
     assert "AWS_PROFILE" in why and "SHOWCASE_PARENT_SENTINEL" in why
 

@@ -48,8 +48,18 @@ stand-in pages where Playwright is not installed. What it does, in order:
   before its slots is refused after the exit (G20), never topped up. Before
   the exit, every number a sentence says must be on the page then or at the
   cue's start (G2).
-* While recording: any response >= 500 from the stack, any page error and any
-  request the guard refused fails the video (gate 11, gate 15c).
+* While recording: any response >= 500 from the stack (any of its origins),
+  any page error and any request the guard refused fails the video (gate 11,
+  gate 15c).
+* The listeners are the whole context's (P2, PE 6): every page gets them,
+  the first included, and a page the storyboard did not open fails the video.
+  Any request carrying an ``X-API-Key`` that is not a needle fails it (PE 5).
+* A demo app is armed before its first scene, off camera: its experiments and
+  flags are asserted ACTIVE through the API (``app_ready``), then its first
+  load, its zoom and its overlay self-test. From then on, in its scenes, an
+  answer >= 400 from the API or the app, a failed request, or a request still
+  unanswered when the scene ends fails the video. A dashboard scene is counted
+  the same way (#1251), from its page load (after any off-camera sign-in).
 
 A failure raises ``CaptureFailed`` naming the scene, the beat and the gate.
 """
@@ -102,10 +112,13 @@ class CaptureFailed(RuntimeError):
         self.gate = gate
 
 
-#: The zoom, on <body>, as soon as <head> exists. ``{target}`` is ``body``;
-#: the overlay self-test's tamper puts it on ``html``.
+#: The zoom, on <body>, as soon as <head> exists: the origin's own
+#: (``config.ORIGIN_ZOOM``), else ``%(zoom)``. ``{target}`` is ``body``; the
+#: overlay self-test's tamper puts it on ``html``.
 ZOOM_INIT = """(() => {
-  const css = '%(target)s{zoom:%(zoom).7f}';
+  const zooms = %(zooms)s;
+  const zoom = zooms[location.origin] === undefined ? %(zoom).7f : zooms[location.origin];
+  const css = '%(target)s{zoom:' + zoom.toFixed(7) + '}';
   const add = () => {
     if (document.getElementById('showcase-zoom')) return true;
     if (!document.head) return false;
@@ -234,6 +247,11 @@ CURSOR_OUTLINE = (
 )
 
 
+#: How long a counted scene's end waits for its requests, and how often it looks.
+DRAIN_MS = 10_000
+DRAIN_POLL_MS = 100
+
+
 def _now_ms() -> float:
     return time.time() * 1000.0
 
@@ -282,6 +300,13 @@ class Tally:
     #: JSON answers from the stack whose body could not be read (gate 6).
     unread: List[str] = field(default_factory=list)
     frames_bad_size: int = 0
+    #: P2: pages the storyboard did not open; X-API-Key headers not a needle.
+    new_pages: List[str] = field(default_factory=list)
+    unknown_keys: List[str] = field(default_factory=list)
+    #: P2, per armed app: answers >= 400, failed requests, unanswered requests.
+    apps: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    #: Every failed request to a stack origin, armed or not: (where, url, error).
+    failed_events: List[str] = field(default_factory=list)
     payoffs: List[Dict[str, Any]] = field(default_factory=list)
     scenes_run: List[str] = field(default_factory=list)
     focus_boxes: List[Dict[str, Any]] = field(default_factory=list)
@@ -418,11 +443,31 @@ class Director:
         work: guard.WorkRoot,
         resolve: Optional[Callable[[str], str]] = None,
         pacing: Optional[Pacing] = None,
+        apps: Optional[Dict[str, int]] = None,
+        app_ready: Optional[Callable[[str], Dict[str, Any]]] = None,
     ):
         self.context = context
         self.page = page
         self.dashboard = dashboard.rstrip("/")
-        self.allowed_ports = {api_port, dashboard_port}
+        #: The video's apps and their ports; their origins are the stack's too.
+        self.app_ports: Dict[str, int] = dict(apps or {})
+        self.allowed_ports = {api_port, dashboard_port, *self.app_ports.values()}
+        self.origins: Dict[str, str] = {
+            "dashboard": self.dashboard,
+            **{app: guard.origin(port) for app, port in self.app_ports.items()},
+        }
+        self.api = guard.origin(api_port)
+        #: Off camera, before an app's first scene: its experiments and flags
+        #: are ACTIVE, asserted through the API (the numbers, or raises).
+        self.app_ready = app_ready
+        #: The app whose requests are being counted (armed, in its scene).
+        self.counting: Optional[str] = None
+        self.pending: Dict[str, set] = {}
+        #: A pending request's status when its response came (for the report).
+        self.answered: Dict[int, int] = {}
+        #: Each request's counted origin (or None), the beat it started in, and when.
+        self.charged: Dict[int, Tuple[Optional[str], str, float]] = {}
+        self.armed: Dict[str, Dict[str, Any]] = {}
         self.redactor = redactor
         self.forbidden = forbidden
         self.tally = Tally()
@@ -493,24 +538,64 @@ class Director:
 
         self.context.route("**/*", http)
         self.context.route_web_socket(re.compile(".*"), socket)
-        self.context.add_init_script(
-            ZOOM_INIT % {"target": ZOOM_TARGET, "zoom": config.ZOOM}
-        )
-        self.page.on("response", self._on_response)
-        self.page.on("request", self._on_request)
-        self.page.on(
+        self.context.add_init_script(zoom_init(self.origins))
+        # The whole context's (P2): the first page now, every later one as it opens.
+        self.listen(self.page)
+        self.context.on("page", self._on_page)
+
+    def listen(self, page: Any) -> None:
+        page.on("response", self._on_response)
+        page.on("request", self._on_request)
+        page.on("requestfinished", self._on_finished)
+        page.on("requestfailed", self._on_failed)
+        page.on(
             "pageerror",
             lambda error: self.tally.page_errors.append(
                 f"{self.where}: {str(error)[:200]}"
             ),
         )
 
+    def _on_page(self, page: Any) -> None:
+        """A page the storyboard did not open (a popup, a link to a new tab)."""
+        self.listen(page)
+        if page is not self.page:
+            self.tally.new_pages.append(f"{self.where}")
+
+    def stack_origin(self, url: str) -> Optional[str]:
+        """Which of the stack's origins *url* is on ("api", an app, "dashboard"), or None."""
+        parsed = urlparse(url)
+        here = f"{parsed.scheme}://{parsed.netloc}"
+        if here == self.api:
+            return "api"
+        for name, there in self.origins.items():
+            if here == there:
+                return name
+        return None
+
+    def _counted(self, url: str) -> Optional[str]:
+        """The origin ("dashboard" or an armed app) whose scene this request is
+        counted for, or None. A scene counts its own origin's requests and the
+        API's (the dashboard reaches the API through its own origin)."""
+        app = self.counting
+        if app is None:
+            return None
+        return app if self.stack_origin(url) in ("api", app) else None
+
     def _on_response(self, response: Any) -> None:
         self.tally.responses += 1
-        if response.url.startswith(self.dashboard) and response.status >= 500:
-            path = urlparse(response.url).path
+        request = getattr(response, "request", None)
+        if request is not None:
+            self.answered[id(request)] = response.status
+        path = urlparse(response.url).path
+        if self.stack_origin(response.url) is not None and response.status >= 500:
             self.tally.server_errors.append(
                 f"{response.status} from {path} ({self.where})"
+            )
+        # Judged against the scene the request started in, not the one now.
+        app, began, _t = self.charged.get(id(request), (None, self.where, 0.0))
+        if app is not None and response.status >= 400:
+            self.tally.apps[app]["answers_400"].append(
+                f"{response.status} from {path} (started {began})"
             )
         kind = (response.headers or {}).get("content-type", "")
         if "json" not in kind:
@@ -528,12 +613,114 @@ class Director:
         redaction.register_credentials(body, self.redactor)
 
     def _on_request(self, request: Any) -> None:
+        app = self._counted(request.url)
+        # Every request is tagged with the scene it starts in (or none).
+        self.charged[id(request)] = (app, self.where, _now_ms())
+        self.answered.pop(id(request), None)
+        if app is not None:
+            self.pending.setdefault(app, set()).add(request)
+        self.check_key_header(request)
         try:
             body = request.post_data_json
         except Exception:  # a body that is not JSON: the dashboard sends none
             return
         if body is not None:
             redaction.register_credentials(body, self.redactor)
+
+    def check_key_header(self, request: Any) -> None:
+        """PE 5: an ``X-API-Key`` the page sends must already be a needle."""
+        headers = getattr(request, "headers", None) or {}
+        key = next(
+            (v for k, v in headers.items() if str(k).lower() == "x-api-key"), None
+        )
+        if key is None:
+            return
+        if key not in set(config.STATIC_NEEDLES) | set(self.redactor.values):
+            self.tally.unknown_keys.append(
+                f"{urlparse(request.url).path} ({self.where})"
+            )
+
+    def _on_finished(self, request: Any) -> None:
+        for waiting in self.pending.values():
+            waiting.discard(request)
+
+    def _on_failed(self, request: Any) -> None:
+        for waiting in self.pending.values():
+            waiting.discard(request)
+        if self.stack_origin(request.url) is None:
+            return
+        failure = request.failure
+        error = failure if isinstance(failure, str) else str(failure)
+        app, began, _t = self.charged.get(id(request), (None, self.where, 0.0))
+        line = f"{urlparse(request.url).path}: {error} (started {began})"
+        self.tally.failed_events.append(line)
+        if app is not None:
+            self.tally.apps[app]["failed"].append(line)
+
+    # -- the demo apps ----------------------------------------------------------
+
+    def arm(self, app: str) -> Dict[str, Any]:
+        """Off camera, before *app*'s first scene: ready through the API, then the
+        first load (counted), its zoom and its overlay self-test."""
+        if app not in self.app_ports:
+            raise CaptureFailed(
+                "P2", f"{self.where}: {app} is not one of the video's apps"
+            )
+        if self.app_ready is None:
+            raise CaptureFailed("P2", f"{self.where}: nothing asserts {app} is ready")
+        ready = self.app_ready(app)
+        self.tally.apps[app] = {"answers_400": [], "failed": [], "unanswered": []}
+        self.where = f"{app} first load"
+        self.counting = app
+        try:
+            self.page.goto(self.origins[app] + "/")
+            self.settle()
+            zoom = self.measure_zoom(config.ORIGIN_ZOOM[app])
+            overlay = self.self_test_overlay(
+                storyboard.Locator(**config.APP_SELF_TEST[app])  # type: ignore[arg-type]
+            )
+            self.drain(app)
+        finally:
+            self.counting = None
+        first_load = {k: len(v) for k, v in self.tally.apps[app].items()}
+        self.check_events()
+        self.armed[app] = {
+            "ready": ready,
+            "first_load": first_load,
+            "zoom": zoom,
+            "overlay": overlay,
+        }
+        return self.armed[app]
+
+    def drain(self, app: str, timeout_ms: int = DRAIN_MS) -> None:
+        """At a counted scene's end, off camera: wait until every request the
+        scene started has finished or failed, for at most *timeout_ms*; then
+        each one left is counted, with the beat it started in, its age and
+        whether it had no response or a response whose body never finished.
+
+        ``networkidle`` is not used: in a client-side app it is reached at once.
+        """
+        # The scene's requests as the drain starts: one born while it waits
+        # (a poll, a prefetch) is not waited for, nor counted unanswered.
+        started = set(self.pending.setdefault(app, set()))
+        deadline = _now_ms() + timeout_ms
+        while started & self.pending[app] and _now_ms() < deadline:
+            self.page.wait_for_timeout(DRAIN_POLL_MS)
+        left = started & self.pending.pop(app, set())
+        counts = self.tally.apps.setdefault(
+            app, {"answers_400": [], "failed": [], "unanswered": []}
+        )
+        now = _now_ms()
+        for request in sorted(left, key=lambda r: r.url):
+            where = urlparse(request.url)
+            query = f"?{where.query}" if where.query else ""
+            said = self.answered.get(id(request))
+            state = f"answered {said}, body unfinished" if said else "no response"
+            _app, began, t = self.charged.get(id(request), (app, "?", now))
+            counts["unanswered"].append(
+                f"{where.path}{query}: {state} after {(now - t) / 1000:.1f} s"
+                f" (started {began})"
+            )
 
     # -- locators and boxes -----------------------------------------------------
 
@@ -641,10 +828,11 @@ class Director:
 
     # -- C1: the zoom, and the overlay alignment self-test ---------------------------
 
-    def measure_zoom(self) -> Dict[str, Any]:
-        """The zoom the page has, as Chromium computes it; refused unless it is ``config.ZOOM`` on <body>."""
+    def measure_zoom(self, wanted: float = config.ZOOM) -> Dict[str, Any]:
+        """The zoom the page has, as Chromium computes it; refused unless it is
+        *wanted* (the origin's) on <body>."""
         measured = self.page.evaluate(ZOOM_JS)
-        ok, numbers, why = judge.zoom(measured)
+        ok, numbers, why = judge.zoom(measured, wanted)
         if not ok:
             raise CaptureFailed("C1 zoom", why)
         return numbers
@@ -736,6 +924,10 @@ class Director:
         """Every check a cue start makes, after the needles."""
         self.tally.header_checks += 1
         header = self.page.evaluate(HEADER_JS)
+        if self.counting not in (None, "dashboard") and not header["links"]:
+            raise CaptureFailed(
+                "U1", f"{self.where}: the app's frame has no header links"
+            )
         if header["wrapped"] or header["cut"]:
             raise CaptureFailed(
                 "U1",
@@ -812,6 +1004,20 @@ class Director:
         return box
 
     def check_events(self) -> None:
+        if self.tally.new_pages:
+            raise CaptureFailed(
+                "P2",
+                f"a page opened outside the storyboard ({self.tally.new_pages[0]})",
+            )
+        if self.tally.unknown_keys:
+            raise CaptureFailed(
+                "gate 6",
+                "an app request carried an X-API-Key that is not a needle"
+                f" ({self.tally.unknown_keys[0]})",
+            )
+        ok, _numbers, why = judge.app_answers(self.tally.apps)
+        if not ok:
+            raise CaptureFailed("P2", why)
         if self.tally.unread:
             raise CaptureFailed(
                 "gate 6",
@@ -1106,8 +1312,25 @@ class Director:
 
     def scene(self, scene: Scene) -> None:
         self.where = f"scene {scene.id}"
+        if scene.app != "dashboard" and scene.app not in self.armed:
+            self.arm(scene.app)
+            self.where = f"scene {scene.id}"
+        try:
+            self._scene(scene)
+            self.drain(scene.app)
+        finally:
+            self.counting = None
+        self.check_events()
+
+    def _scene(self, scene: Scene) -> None:
         if scene.signed_in and not self.signed_in:
             self.sign_in()
+        # Counted from here (#1251): the scene's own page load and everything
+        # it does on camera. The off-camera sign-in above is not a scene's.
+        self.tally.apps.setdefault(
+            scene.app, {"answers_400": [], "failed": [], "unanswered": []}
+        )
+        self.counting = scene.app
         if scene.card is not None:
             self.card(scene.card)
         elif scene.results_of is not None:
@@ -1117,7 +1340,7 @@ class Director:
             self.settle()
         else:
             assert scene.open is not None
-            self.page.goto(self.dashboard + scene.open)
+            self.page.goto(self.origins[scene.app] + scene.open)
             self.settle()
         self.check_needles()
         self.check_events()
@@ -1136,6 +1359,18 @@ class Director:
         if scene.card is not None:
             self.still_spans.append((began, self.recorder.now()))
         self.tally.scenes_run.append(scene.id)
+
+
+def zoom_init(origins: Dict[str, str], target: str = ZOOM_TARGET) -> str:
+    """The init script: each origin's zoom on <body>, the dashboard's elsewhere."""
+    import json
+
+    zooms = {url: config.ORIGIN_ZOOM[name] for name, url in origins.items()}
+    return ZOOM_INIT % {
+        "target": target,
+        "zoom": config.ZOOM,
+        "zooms": json.dumps(zooms, sort_keys=True),
+    }
 
 
 def card_html(card: storyboard.Card) -> str:

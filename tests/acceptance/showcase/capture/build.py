@@ -17,6 +17,16 @@ The manifest records the Next.js version actually built with beside the one
 the ref's lockfile pins: a checkout's ``node_modules`` can be older than the
 ref being recorded.
 
+A demo app a video records (``config.APPS``) gets a tree of its own:
+``git archive <commit> -- sdk/react demo/<app>`` into ``<work root>/app-<app>``
+(the app consumes the React SDK from source), its ``node_modules`` cloned
+from the checkout's ``demo/<app>``, plus a link ``node_modules`` at the tree's
+root to it, so the SDK's sources find React. Then ``next build`` (the copy's
+own ``next``, never an npm script) with ``guard.app_settings``, and a check
+that the bundle names the tool's API and no developer address. It is served
+by ``next start -p <port> -H 127.0.0.1`` (``app_start_argv``); ``next dev``
+and ``npm start`` are refused (``refuse_app_argv``).
+
 Nothing here needs ``.git`` in the tree it builds: ``backend/tests/unit/showcase``
 builds a tree from a plain tar stream in a directory with none.
 """
@@ -29,7 +39,7 @@ import subprocess
 import tarfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Callable, Dict, List, Mapping, Optional
+from typing import IO, Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from showcase.capture import guard
 
@@ -93,10 +103,11 @@ def extract(stream: IO[bytes], tree: Path) -> None:
         archive.extractall(tree, filter="data")
 
 
-def archive(repo: Path, commit: str, tree: Path) -> None:
-    """``git archive <commit>`` of *repo*, unpacked into *tree*."""
+def archive(repo: Path, commit: str, tree: Path, paths: Sequence[str] = ()) -> None:
+    """``git archive <commit> [-- paths]`` of *repo*, unpacked into *tree*."""
     process = subprocess.Popen(
-        ["git", "-C", str(repo), "archive", "--format=tar", commit],
+        ["git", "-C", str(repo), "archive", "--format=tar", commit]
+        + (["--", *paths] if paths else []),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=guard.tool_env(),
@@ -124,8 +135,34 @@ def strip_modules(tree: Path, profile: str, work: guard.WorkRoot) -> None:
         work.remove(modules)
 
 
+#: What ``cp`` says when it has no ``-c`` (GNU: "invalid option -- 'c'"; a BSD
+#: without clonefile: "illegal option -- c").
+_NO_CLONE_FLAG = re.compile(r"(?:invalid|illegal|unrecognized) option.*\bc\b")
+
+
+def copy_tree(source: Path, target: Path, *, run=subprocess.run) -> Any:
+    """``cp -cR`` (copy-on-write on APFS: no space, and a build that wrote into
+    the copy could not change the checkout's file); where ``cp`` has no ``-c``
+    (Linux), ``cp -R``. Any other failure is returned as it is, never retried.
+    """
+    done = run(
+        ["cp", "-cR", str(source), str(target)],
+        capture_output=True,
+        text=True,
+        env=guard.tool_env(),
+    )
+    if done.returncode != 0 and _NO_CLONE_FLAG.search(done.stderr or ""):
+        done = run(
+            ["cp", "-R", str(source), str(target)],
+            capture_output=True,
+            text=True,
+            env=guard.tool_env(),
+        )
+    return done
+
+
 def clone_node_modules(source: Path, tree: Path, *, run=subprocess.run) -> None:
-    """``cp -cR`` *source* to ``tree/frontend/node_modules`` (copy-on-write)."""
+    """*source* to ``tree/frontend/node_modules`` (``copy_tree``)."""
     if not (source / "next" / "package.json").is_file():
         raise BuildError(
             f"{source} has no Next.js; run `npm ci` in frontend/ of the checkout"
@@ -134,14 +171,9 @@ def clone_node_modules(source: Path, tree: Path, *, run=subprocess.run) -> None:
     target = tree / "frontend" / "node_modules"
     if target.exists():
         raise BuildError(f"{target} exists already")
-    done = run(
-        ["cp", "-cR", str(source), str(target)],
-        capture_output=True,
-        text=True,
-        env=guard.tool_env(),
-    )
+    done = copy_tree(source, target, run=run)
     if done.returncode != 0:
-        raise BuildError(f"cp -cR node_modules failed: {done.stderr.strip()}")
+        raise BuildError(f"copying node_modules failed: {done.stderr.strip()}")
 
 
 def bundle_check(static: Path, profile: str) -> str:
@@ -199,3 +231,140 @@ def build_dashboard(
     status = spawn(["npm", "run", "build"], cwd=tree / "frontend", env=env, log=log)
     if status != 0:
         raise BuildError(f"npm run build exited {status}; see {log}")
+
+
+# ---------------------------------------------------------------------------
+# The demo apps
+# ---------------------------------------------------------------------------
+
+
+def app_paths(app: str) -> List[str]:
+    """What an app's tree holds: the app, and the SDK it builds from source."""
+    return ["sdk/react", f"demo/{app}"]
+
+
+def app_dir(tree: Path, app: str) -> Path:
+    return tree / "demo" / app
+
+
+def next_bin(tree: Path, app: str) -> Path:
+    """The copy's own Next.js command line (``node <this> build``)."""
+    return app_dir(tree, app) / "node_modules" / "next" / "dist" / "bin" / "next"
+
+
+def clone_app_node_modules(
+    repo: Path, tree: Path, app: str, *, run=subprocess.run
+) -> None:
+    """``demo/<app>/node_modules`` from the checkout (``copy_tree``), and the root link.
+
+    The link is ``<tree>/node_modules -> demo/<app>/node_modules``: the SDK's
+    sources under ``sdk/react`` resolve ``react`` from the nearest
+    ``node_modules`` above them, and without it ``next build`` fails its type
+    check (TS2307, measured).
+    """
+    source = repo / "demo" / app / "node_modules"
+    if not (source / "next" / "package.json").is_file():
+        raise guard.Refused(
+            f"{source} has no Next.js; run `npm ci` in demo/{app} of the checkout"
+            " the tool runs from"
+        )
+    target = app_dir(tree, app) / "node_modules"
+    if target.exists() or (tree / "node_modules").exists():
+        raise BuildError(f"{target} or the root node_modules exists already")
+    done = copy_tree(source, target, run=run)
+    if done.returncode != 0:
+        raise BuildError(
+            f"copying demo/{app}/node_modules failed: {done.stderr.strip()}"
+        )
+    (tree / "node_modules").symlink_to(Path("demo") / app / "node_modules")
+
+
+#: Files that would put a developer's settings into an app's build.
+ENV_FILES = (".env", ".env.local", ".env.production", ".env.production.local")
+
+
+def refuse_env_files(tree: Path, app: str) -> None:
+    """An app's build reads ``.env*`` beside it; the tool gives it its settings."""
+    found = [name for name in ENV_FILES if (app_dir(tree, app) / name).exists()]
+    if found:
+        raise BuildError(
+            f"demo/{app}/{found[0]} is in the build tree; the app is built with"
+            " the tool's settings only"
+        )
+
+
+def app_build_argv(tree: Path, app: str) -> List[str]:
+    return ["node", str(next_bin(tree, app)), "build"]
+
+
+def app_start_argv(tree: Path, app: str, port: int) -> List[str]:
+    return [
+        "node",
+        str(next_bin(tree, app)),
+        "start",
+        "-p",
+        str(port),
+        "-H",
+        "127.0.0.1",
+    ]
+
+
+def refuse_app_argv(argv: List[str], tree: Path, app: str, port: int) -> None:
+    """Only ``next start`` of the built copy, on its port, on loopback.
+
+    ``next dev`` serves a different bundle (and #1172's dev-only failure);
+    ``npm start`` runs the script with its developer port (3200, 3300).
+    """
+    wanted = app_start_argv(tree, app, port)
+    if [str(a) for a in argv] != wanted:
+        raise guard.Refused(
+            f"{app} is served by {' '.join(wanted[2:])} of the built copy, not"
+            f" {' '.join(str(a) for a in argv)}"
+        )
+
+
+#: A developer's addresses, which a bundle built for the tool never names.
+DEVELOPER_ADDRESSES = re.compile(rb"localhost:(?:3000|3100|3200|3300|8000)")
+
+
+def app_bundle_check(tree: Path, app: str, api_url: str) -> str:
+    """The app's client bundle names the tool's API and no developer address."""
+    static = app_dir(tree, app) / ".next" / "static"
+    if not static.is_dir():
+        raise BuildError(f"next build of {app} produced no .next/static")
+    named = False
+    for path in sorted(static.rglob("*.js")):
+        data = path.read_bytes()
+        if api_url.encode() in data:
+            named = True
+        found = DEVELOPER_ADDRESSES.search(data)
+        if found:
+            raise BuildError(
+                f"{app}'s bundle names {found.group().decode()}"
+                f" ({path.relative_to(static).as_posix()})"
+            )
+    if not named:
+        raise BuildError(f"{app}'s bundle does not name the tool's API {api_url}")
+    return f"{app} bundle: names {api_url}, no developer address"
+
+
+def build_app(
+    repo: Path,
+    commit: str,
+    tree: Path,
+    app: str,
+    env: Mapping[str, str],
+    log: Path,
+    *,
+    spawn: Callable[..., int],
+) -> str:
+    """One app's tree, built; the bundle check's line."""
+    archive(repo, commit, tree, app_paths(app))
+    if not (app_dir(tree, app) / "package.json").is_file():
+        raise BuildError(f"the ref has no demo/{app}")
+    refuse_env_files(tree, app)
+    clone_app_node_modules(repo, tree, app)
+    status = spawn(app_build_argv(tree, app), cwd=app_dir(tree, app), env=env, log=log)
+    if status != 0:
+        raise BuildError(f"next build of {app} exited {status}; see {log}")
+    return app_bundle_check(tree, app, env["NEXT_PUBLIC_EXPERIMENTLY_API_URL"])
