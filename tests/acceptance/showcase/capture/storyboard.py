@@ -247,7 +247,8 @@ class Card(_Strict):
     @model_validator(mode="after")
     def _one_body(self) -> "Card":
         # Counted as ``card_html`` chooses what to draw: by presence, not by
-        # truthiness, so a body given but empty is never a card's "one".
+        # truthiness. A second layer: ``min_length=1`` on command and headline
+        # already refuses an empty one, so this alone cannot be seen failing.
         bodies = [b for b in (self.command, self.code, self.headline) if b is not None]
         if len(bodies) != 1:
             raise ValueError("a card shows exactly one of command, code or headline")

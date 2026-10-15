@@ -1100,3 +1100,138 @@ def test_the_browser_context_blocks_service_workers():
     assert len(calls) == 1
     given = {k.arg: getattr(k.value, "value", None) for k in calls[0].keywords}
     assert given.get("service_workers") == "block"
+
+
+# --- Portable copies: cp -c is macOS's -------------------------------------------------------
+
+#: A ``cp`` that has no ``-c``, as GNU coreutils' (the Linux CI runners'), and
+#: otherwise the system's own; every call is logged.
+NO_CLONE_CP = """#!/bin/sh
+echo "$@" >> "{log}"
+case "$1" in
+  -cR) echo "cp: invalid option -- 'c'" >&2; exit 1 ;;
+esac
+exec /bin/cp "$@"
+"""
+
+
+def _stand_in_cp(tmp_path, monkeypatch, script=NO_CLONE_CP):
+    log = tmp_path / "cp-calls.log"
+    bin_dir = tmp_path / "cp-bin"
+    bin_dir.mkdir()
+    cp = bin_dir / "cp"
+    cp.write_text(script.format(log=log), encoding="utf-8")
+    cp.chmod(cp.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", f"{bin_dir}:/usr/bin:/bin")
+    return log
+
+
+def _checkout_with_next(tmp_path, app):
+    checkout = tmp_path / "checkout"
+    modules = checkout / "demo" / app / "node_modules" / "next"
+    modules.mkdir(parents=True)
+    (modules / "package.json").write_text("{}")
+    return checkout
+
+
+@pytest.mark.regression
+def test_a_cp_without_clone_falls_back_to_a_plain_copy(tmp_path, monkeypatch):
+    """CI (Linux): ``cp: invalid option -- 'c'`` failed the app tree's build."""
+    log = _stand_in_cp(tmp_path, monkeypatch)
+    checkout = _checkout_with_next(tmp_path, "shoplab")
+    tree = tmp_path / "tree"
+    build.app_dir(tree, "shoplab").mkdir(parents=True)
+    build.clone_app_node_modules(checkout, tree, "shoplab")
+    assert (tree / "node_modules" / "next" / "package.json").is_file()
+    calls = log.read_text().splitlines()
+    assert [c.split()[0] for c in calls] == ["-cR", "-R"]
+
+
+def test_the_dashboards_modules_fall_back_the_same_way(tmp_path, monkeypatch):
+    log = _stand_in_cp(tmp_path, monkeypatch)
+    source = tmp_path / "frontend-modules"
+    (source / "next").mkdir(parents=True)
+    (source / "next" / "package.json").write_text("{}")
+    tree = tmp_path / "tree"
+    (tree / "frontend").mkdir(parents=True)
+    build.clone_node_modules(source, tree)
+    assert (tree / "frontend" / "node_modules" / "next" / "package.json").is_file()
+    assert [c.split()[0] for c in log.read_text().splitlines()] == ["-cR", "-R"]
+
+
+def test_any_other_cp_failure_is_not_retried(tmp_path, monkeypatch):
+    failing = """#!/bin/sh
+echo "$@" >> "{log}"
+echo "cp: cannot create directory: Permission denied" >&2
+exit 1
+"""
+    log = _stand_in_cp(tmp_path, monkeypatch, failing)
+    checkout = _checkout_with_next(tmp_path, "shoplab")
+    tree = tmp_path / "tree"
+    build.app_dir(tree, "shoplab").mkdir(parents=True)
+    with pytest.raises(build.BuildError, match="Permission denied"):
+        build.clone_app_node_modules(checkout, tree, "shoplab")
+    assert len(log.read_text().splitlines()) == 1
+
+
+# --- E0 follow-ups -----------------------------------------------------------------------------
+
+
+def test_a_failure_is_charged_to_the_scene_the_request_started_in(tmp_path):
+    """Started while nothing was counted, failed inside a counted scene: not counted."""
+    made, page, _ = make(tmp_path)
+    made.tally.apps["dashboard"] = {"answers_400": [], "failed": [], "unanswered": []}
+    early = Request(f"{DASH}/api/v1/experiments/", failure="net::ERR_FAILED")
+    page.fire("request", early)
+    made.counting = "dashboard"
+    page.fire("requestfailed", early)
+    made.check_events()
+    assert made.tally.failed_events == [
+        "/api/v1/experiments/: net::ERR_FAILED (started scene player beat 1)"
+    ]
+    late = Request(f"{DASH}/api/v1/results/x", failure="net::ERR_FAILED")
+    page.fire("request", late)
+    made.counting = None
+    page.fire("requestfailed", late)
+    with pytest.raises(
+        director.CaptureFailed, match="P2: dashboard: failed: /api/v1/results/x"
+    ):
+        made.check_events()
+
+
+def test_a_request_born_while_the_scene_drains_is_not_counted_unanswered(tmp_path):
+    made, page, _ = make(tmp_path)
+    made.counting = "streampulse"
+    first = Request(f"{API}/api/v1/feature-flags/evaluate/a")
+    page.fire("request", first)
+    waited = page.wait_for_timeout
+    born = []
+
+    def poll_then_answer(ms):
+        waited(ms)
+        if not born:
+            born.append(Request(f"{API}/api/v1/feature-flags/evaluate/poll"))
+            page.fire("request", born[0])
+        else:
+            page.fire("requestfinished", first)
+
+    page.wait_for_timeout = poll_then_answer
+    made.drain("streampulse")
+    assert made.tally.apps["streampulse"]["unanswered"] == []
+    assert Clock.ms < director.DRAIN_MS
+
+
+def test_a_departure_stated_in_a_code_card_line_counts():
+    code = storyboard.Card.model_validate(
+        {
+            "label": "From the quick start",
+            "note": "As the docs give it.",
+            "code": {
+                "doc": "docs/sdk/javascript.md",
+                "section": "Quick start",
+                "lines": ["// the shoppers here are simulated"],
+            },
+        },
+        strict=False,
+    )
+    assert "// the shoppers here are simulated" in code.drawn_text()

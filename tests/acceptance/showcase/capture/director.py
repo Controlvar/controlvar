@@ -683,11 +683,13 @@ class Director:
 
         ``networkidle`` is not used: in a client-side app it is reached at once.
         """
-        waiting = self.pending.setdefault(app, set())
+        # The scene's requests as the drain starts: one born while it waits
+        # (a poll, a prefetch) is not waited for, nor counted unanswered.
+        started = set(self.pending.setdefault(app, set()))
         deadline = _now_ms() + timeout_ms
-        while waiting and _now_ms() < deadline:
+        while started & self.pending[app] and _now_ms() < deadline:
             self.page.wait_for_timeout(DRAIN_POLL_MS)
-        left = self.pending.pop(app, set())
+        left = started & self.pending.pop(app, set())
         counts = self.tally.apps.setdefault(
             app, {"answers_400": [], "failed": [], "unanswered": []}
         )

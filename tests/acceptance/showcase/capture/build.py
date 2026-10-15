@@ -39,7 +39,7 @@ import subprocess
 import tarfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Callable, Dict, List, Mapping, Optional, Sequence
+from typing import IO, Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from showcase.capture import guard
 
@@ -135,8 +135,34 @@ def strip_modules(tree: Path, profile: str, work: guard.WorkRoot) -> None:
         work.remove(modules)
 
 
+#: What ``cp`` says when it has no ``-c`` (GNU: "invalid option -- 'c'"; a BSD
+#: without clonefile: "illegal option -- c").
+_NO_CLONE_FLAG = re.compile(r"(?:invalid|illegal|unrecognized) option.*\bc\b")
+
+
+def copy_tree(source: Path, target: Path, *, run=subprocess.run) -> Any:
+    """``cp -cR`` (copy-on-write on APFS: no space, and a build that wrote into
+    the copy could not change the checkout's file); where ``cp`` has no ``-c``
+    (Linux), ``cp -R``. Any other failure is returned as it is, never retried.
+    """
+    done = run(
+        ["cp", "-cR", str(source), str(target)],
+        capture_output=True,
+        text=True,
+        env=guard.tool_env(),
+    )
+    if done.returncode != 0 and _NO_CLONE_FLAG.search(done.stderr or ""):
+        done = run(
+            ["cp", "-R", str(source), str(target)],
+            capture_output=True,
+            text=True,
+            env=guard.tool_env(),
+        )
+    return done
+
+
 def clone_node_modules(source: Path, tree: Path, *, run=subprocess.run) -> None:
-    """``cp -cR`` *source* to ``tree/frontend/node_modules`` (copy-on-write)."""
+    """*source* to ``tree/frontend/node_modules`` (``copy_tree``)."""
     if not (source / "next" / "package.json").is_file():
         raise BuildError(
             f"{source} has no Next.js; run `npm ci` in frontend/ of the checkout"
@@ -145,14 +171,9 @@ def clone_node_modules(source: Path, tree: Path, *, run=subprocess.run) -> None:
     target = tree / "frontend" / "node_modules"
     if target.exists():
         raise BuildError(f"{target} exists already")
-    done = run(
-        ["cp", "-cR", str(source), str(target)],
-        capture_output=True,
-        text=True,
-        env=guard.tool_env(),
-    )
+    done = copy_tree(source, target, run=run)
     if done.returncode != 0:
-        raise BuildError(f"cp -cR node_modules failed: {done.stderr.strip()}")
+        raise BuildError(f"copying node_modules failed: {done.stderr.strip()}")
 
 
 def bundle_check(static: Path, profile: str) -> str:
@@ -234,7 +255,7 @@ def next_bin(tree: Path, app: str) -> Path:
 def clone_app_node_modules(
     repo: Path, tree: Path, app: str, *, run=subprocess.run
 ) -> None:
-    """``demo/<app>/node_modules`` from the checkout (``cp -cR``), and the root link.
+    """``demo/<app>/node_modules`` from the checkout (``copy_tree``), and the root link.
 
     The link is ``<tree>/node_modules -> demo/<app>/node_modules``: the SDK's
     sources under ``sdk/react`` resolve ``react`` from the nearest
@@ -250,15 +271,10 @@ def clone_app_node_modules(
     target = app_dir(tree, app) / "node_modules"
     if target.exists() or (tree / "node_modules").exists():
         raise BuildError(f"{target} or the root node_modules exists already")
-    done = run(
-        ["cp", "-cR", str(source), str(target)],
-        capture_output=True,
-        text=True,
-        env=guard.tool_env(),
-    )
+    done = copy_tree(source, target, run=run)
     if done.returncode != 0:
         raise BuildError(
-            f"cp -cR demo/{app}/node_modules failed: {done.stderr.strip()}"
+            f"copying demo/{app}/node_modules failed: {done.stderr.strip()}"
         )
     (tree / "node_modules").symlink_to(Path("demo") / app / "node_modules")
 
