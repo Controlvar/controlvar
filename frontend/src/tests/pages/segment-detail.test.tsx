@@ -489,4 +489,23 @@ describe('the usage list', () => {
     expect(within(list).getByRole('link', { name: 'Checkout v2' })).toHaveAttribute('href', '/feature-flags/f1');
     expect(list).toHaveTextContent('Experiment Pricing (active)');
   });
+
+  it('a failed usage lookup shows an error, never "none" (#888)', async () => {
+    mocked.mockImplementation(
+      routedApi([
+        { path: BASE, handler: () => idList() },
+        {
+          path: `${BASE}/experiments`,
+          handler: () => {
+            throw new ApiError({ status: 500, detail: PLANTED });
+          },
+        },
+      ]) as unknown as typeof apiFetch,
+    );
+    render(<SegmentDetailPage />);
+    const failed = await screen.findByTestId('segment-usage-error');
+    expect(failed).toHaveAttribute('role', 'alert');
+    expect(screen.queryByTestId('segment-usage-none')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('PLANTED');
+  });
 });

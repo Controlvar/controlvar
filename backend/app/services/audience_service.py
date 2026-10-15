@@ -643,6 +643,7 @@ class AudienceService:
 
         Raises:
             ValueError: If the segment does not exist.
+            sqlalchemy.exc.SQLAlchemyError: If a query fails (the route answers 500).
         """
         # Verify segment exists first
         segment_id = str(AudienceService.get_segment(db, segment_id).id)
@@ -650,53 +651,29 @@ class AudienceService:
         experiments_data: List[Dict[str, Any]] = []
         feature_flags_data: List[Dict[str, Any]] = []
 
-        try:
-            # Search Experiment targeting_rules JSONB for segment_id references
-            experiments = (
-                db.query(Experiment)
-                .filter(
-                    Experiment.targeting_rules.cast(
-                        db.bind.dialect.colspecs.get(type(None), type(None))
-                        if False
-                        else __import__("sqlalchemy").Text
-                    ).contains(segment_id)
-                )
-                .all()
-            )
-            for exp in experiments:
-                experiments_data.append(
-                    {
-                        "id": str(exp.id),
-                        "name": exp.name,
-                        "status": exp.status.value if exp.status else None,
-                    }
-                )
-        except Exception as exc:
-            logger.warning(
-                "Could not query experiments for segment %s: %s", segment_id, exc
+        # Query errors propagate: the route answers its fixed 500, never an
+        # empty list that reads as "no one uses this segment" (#888).
+        experiments = (
+            db.query(Experiment)
+            .filter(Experiment.targeting_rules.cast(sa.Text).contains(segment_id))
+            .all()
+        )
+        for exp in experiments:
+            experiments_data.append(
+                {
+                    "id": str(exp.id),
+                    "name": exp.name,
+                    "status": exp.status.value if exp.status else None,
+                }
             )
 
-        try:
-            feature_flags = (
-                db.query(FeatureFlag)
-                .filter(
-                    FeatureFlag.targeting_rules.cast(
-                        __import__("sqlalchemy").Text
-                    ).contains(segment_id)
-                )
-                .all()
-            )
-            for flag in feature_flags:
-                feature_flags_data.append(
-                    {
-                        "id": str(flag.id),
-                        "name": flag.name,
-                    }
-                )
-        except Exception as exc:
-            logger.warning(
-                "Could not query feature flags for segment %s: %s", segment_id, exc
-            )
+        feature_flags = (
+            db.query(FeatureFlag)
+            .filter(FeatureFlag.targeting_rules.cast(sa.Text).contains(segment_id))
+            .all()
+        )
+        for flag in feature_flags:
+            feature_flags_data.append({"id": str(flag.id), "name": flag.name})
 
         return SegmentExperimentResponse(
             segment_id=segment_id,
