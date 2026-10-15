@@ -100,7 +100,9 @@ plans again from the experiment's own data, with the same formula as above:
   far, counted the way the results count it (users with a conversion, over users assigned).
   You can type a different rate instead. The results page is cached for up to five minutes and
   the tab is not, so for that long the tab's rate can be newer than the one on the Overview.
-- **MDE**: 5% relative unless you change it. Experiments do not store a planned effect.
+- **MDE**: the effect saved with the experiment, its primary metric's `expected_effect`, when
+  it is above 0 and below 1; otherwise 5% relative. You can type another. The response's
+  `mde_source` says which: `experiment`, `default` or `request`.
 - **Power** 80%, two-sided, unless you change it. Two-sided is what the results test.
 - **Significance**: one minus the experiment's stored confidence level (5% for the default
   0.95) unless you change it, the same as the results.

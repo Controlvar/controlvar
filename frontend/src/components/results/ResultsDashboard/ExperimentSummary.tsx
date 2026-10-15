@@ -7,6 +7,7 @@ import {
 } from '@/types/results';
 import { WinnerIndicator } from '@/components/results/shared/WinnerIndicator';
 import { SRM_QUALIFIER } from './SrmNotice';
+import { pct } from './SampleSizeMeter';
 import {
   correctionName,
   describeSettings,
@@ -29,6 +30,34 @@ interface ExperimentSummaryProps {
    * while it loads, null when it could not be loaded.
    */
   plannedSample?: SampleSizeResult | null;
+}
+
+/**
+ * The effect the Planned sample is planned for, and the baseline it starts
+ * from (#1257): the effect saved with the experiment, or the 5% default when
+ * none was. An API older than 0.34.3 sends no mde_source and planned for the
+ * default. null while the plan loads or when it could not be loaded.
+ */
+export function plannedEffectSentence(
+  plannedSample: SampleSizeResult | null | undefined
+): string | null {
+  if (!plannedSample) return null;
+  const source = plannedSample.mde_source ?? 'default';
+  const effect = pct(plannedSample.mde);
+  const baseline =
+    plannedSample.required_sample_size_per_variant !== null &&
+    plannedSample.baseline_rate !== null
+      ? plannedSample.baseline_source === 'observed'
+        ? ` on the control's ${pct(plannedSample.baseline_rate)}`
+        : ` on a ${pct(plannedSample.baseline_rate)} baseline`
+      : '';
+  if (source === 'experiment') {
+    return `To detect a ${effect} lift${baseline}. The ${effect} was set when the experiment was created.`;
+  }
+  if (source === 'request') {
+    return `To detect a ${effect} lift${baseline}.`;
+  }
+  return `To detect a ${effect} lift (the default: no effect was saved with this experiment)${baseline}.`;
 }
 
 /**
@@ -129,6 +158,7 @@ export function ExperimentSummary({
 }: ExperimentSummaryProps) {
   const { summary } = experiment;
   const planned = plannedSampleStatus(plannedSample);
+  const plannedEffect = plannedEffectSentence(plannedSample);
   const rec = RECOMMENDATION_CONFIG[summary.recommendation];
 
   // Find the winning variant name if there is one
@@ -192,6 +222,14 @@ export function ExperimentSummary({
         />
       </div>
 
+      {/* Which effect the Planned sample is for (#1257), full width: the
+          card's cell is a quarter of the row. */}
+      {plannedEffect && (
+        <p className="text-sm text-slate-700" data-testid="planned-sample-effect">
+          {plannedEffect}
+        </p>
+      )}
+
       <div className="text-sm text-slate-700" data-testid="analysis-summary">
         <p>
           <span className="font-medium text-slate-900">Analysis:</span>{' '}
@@ -216,7 +254,7 @@ export function ExperimentSummary({
           className="text-sm text-blue-700 underline hover:text-blue-800"
           data-testid="open-sample-size-tab"
         >
-          See the Sample Size tab for the planned sample.
+          See the Sample Size tab for how the plan is calculated, or to try another effect.
         </button>
       )}
 

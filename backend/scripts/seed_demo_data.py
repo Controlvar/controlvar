@@ -263,7 +263,9 @@ def seed_homepage_hero_experiment(db, admin_user) -> Experiment:
     db.add_all([control, treatment])
     db.flush()
 
-    # Primary metric
+    # Primary metric. expected_effect is the RELATIVE lift the results page
+    # plans the sample for (0.10 means 7.5% -> 8.25%); each seed's plan is
+    # pinned by backend/tests/unit/scripts/test_seed_planned_effects.py.
     metric = Metric(
         experiment_id=exp.id,
         name="Signup Conversion",
@@ -476,7 +478,7 @@ def seed_checkout_button_experiment(db, admin_user) -> Experiment:
         metric_type=MetricType.CONVERSION,
         is_primary=True,
         minimum_sample_size=5000,
-        expected_effect=0.05,
+        expected_effect=0.10,
     )
     db.add(metric)
     db.flush()
@@ -664,7 +666,7 @@ def seed_recommendation_mab_experiment(db, admin_user) -> Experiment:
         metric_type=MetricType.CONVERSION,
         is_primary=True,
         minimum_sample_size=2000,
-        expected_effect=0.02,
+        expected_effect=0.40,
     )
     db.add(metric)
     db.flush()

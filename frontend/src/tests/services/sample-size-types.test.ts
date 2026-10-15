@@ -35,6 +35,7 @@ const EVERY_KEY: { [K in keyof SampleSizeResult]-?: true } = {
   projected_completion_date: true,
   baseline_rate: true,
   mde: true,
+  mde_source: true,
   confidence_level: true,
   power_target: true,
   baseline_source: true,

@@ -207,8 +207,12 @@ Shows at a glance:
   that the **Sample Size** tab calculates from its default inputs, for example "4,000 of 3,000
   per variant"; otherwise *Not yet*, with the progress, for example "203 of 69,410 per
   variant". With no rate to plan from yet it reads *Not yet* with "0 per variant, no plan yet".
-  Changing the inputs on the tab does not change the card, and the card's "See the Sample Size
-  tab for the planned sample." link opens the tab.
+  The line under the cards names the effect the plan is for and the control rate it starts
+  from: "To detect a 10% lift on the control's 5.01%. The 10% was set when the experiment was
+  created." for an effect saved with the experiment, or "To detect a 5% lift (the default: no
+  effect was saved with this experiment) on the control's 10%." when none was. Changing the
+  inputs on the tab does not change the card, and the card's "See the Sample Size tab for how
+  the plan is calculated, or to try another effect." link opens the tab.
 - **Shipping floor**: a variant is recommended for shipping only once every variant has at
   least the primary metric's minimum sample size (100 users unless the metric sets another):
   until then a significantly better variant is shown as *Leading*, and the recommendation is
@@ -293,8 +297,11 @@ detect the smallest lift you care about, and how far the experiment has got.
 - **Baseline conversion rate**: the rate observed in the control variant on the primary metric
   so far ("Observed in control so far: 11.8% (2,140 users)"), or the rate you typed ("Entered by
   you").
-- **Minimum detectable effect**: 5% relative unless you change it. Relative means 12% → 12.6%,
-  not 17%. Experiments do not store a planned effect.
+- **Minimum detectable effect**: the effect saved with the experiment ("Set when this experiment
+  was created"), or 5% relative when none was saved ("Default — no effect was saved with this
+  experiment"), unless you change it. Relative means 12% → 12.6%, not 17%. The saved effect is
+  the primary metric's `expected_effect` (see
+  [The planned effect](../api/endpoints.md#the-planned-effect)).
 - **Power** (80%, 90% or 95%) and **significance** (always two-sided, which is what the
   results test): 1 − the experiment's confidence level unless you choose 5%, 1% or 10%. A level
   set through the API, such as 92%, shows as "8% (this experiment's setting)".

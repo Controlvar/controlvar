@@ -815,6 +815,18 @@ response.
   correction over segments, and sequential testing uses its own `alpha`.
   CUPED follows the stored level and applies the stored correction.
 
+### The planned effect
+
+A metric's `expected_effect` is the minimum detectable effect to plan the
+sample for, as a relative change: `0.10` means 5% → 5.5%. The primary
+metric's is what `GET /api/v1/results/{experiment_id}/sample-size` and the
+results page's Planned sample plan for when the request sends no `mde`; the
+response's `mde_source` is then `experiment`. A value that is not above 0 and
+below 1 (`0`, `1.5`, a negative number) is stored as sent but not used: the
+plan is for `0.05` and `mde_source` is `default`. A secondary metric's
+`expected_effect` is not read. A clone keeps it. A `PUT` that sends `metrics`
+replaces them, so a metric resent without `expected_effect` no longer has one.
+
 ## Feature Flag Endpoints
 
 ### List Feature Flags
@@ -1637,14 +1649,15 @@ they give at that MDE, and every input used with where it came from.
 | Parameter | Default | Range |
 |---|---|---|
 | `baseline_conversion_rate` | the control variant's observed rate so far | above 0, below 1 |
-| `mde` | `0.05` (relative: 12% → 12.6%) | above 0, below 1 |
+| `mde` | the primary metric's `expected_effect` when it is above 0 and below 1, else `0.05` (relative: 12% → 12.6%) | above 0, below 1 |
 | `confidence_level` | the experiment's stored `confidence_level` | 0.80 to 0.99 |
 | `power_target` | `0.80` | 0.50 to 0.99 |
 | `correction_method` | the experiment's stored `correction_method` | `none`, `bonferroni`, `benjamini_hochberg`; the last two plan each comparison at `alpha / (variants - 1)` |
 
 **Response** (`SampleSizeResult`): `required_sample_size_per_variant`, `current_sample_size_per_variant`
 (the smallest variant), `is_adequate`, `achieved_power`, `baseline_rate`, `baseline_source`
-(`observed` or `request`), `baseline_users`, `mde`, `mde_absolute`, `confidence_level`, `alpha`
+(`observed` or `request`), `baseline_users`, `mde`, `mde_source` (`request`, `experiment` or
+`default`), `mde_absolute`, `confidence_level`, `alpha`
 (per comparison), `comparisons`, `correction_method`, `power_target`, `metric_id`, `metric_name`,
 `metric_type`, `analysed_as` (always `conversion` today), `guide_only_reasons` (why a fixed sample
 size is only a guide here: `adaptive_allocation`, `unequal_allocation`, `sequential_testing`,
@@ -1657,7 +1670,7 @@ converted), `effect_out_of_range` (the observed rate raised by `mde` reaches 100
 `effect_too_small` (the observed rate raised by `mde` changes too little for the size to be a
 finite number). A `baseline_conversion_rate` that `mde` raises to 100% or more answers **422**,
 and so does one that `mde` changes too little for the size to be a finite number; an unknown
-experiment answers **404**.
+experiment answers **404**, whatever the other parameters.
 
 ---
 
