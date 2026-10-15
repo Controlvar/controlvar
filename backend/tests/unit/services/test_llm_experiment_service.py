@@ -510,23 +510,41 @@ class TestVariantAssignment:
             )
 
     def test_three_way_split_at_scale(self):
-        """33/33/34 split should distribute roughly equally over 900 users."""
+        """33/33/34 split over 900 users stays inside a binomial band.
+
+        Deterministic (#831): the experiment and variant ids were random per
+        run, so the buckets, and the counts, changed every run. They are
+        fixed here. The band is the 99.9% interval of Binomial(900, 1/3):
+        300 +/- 3.29 * sqrt(900 * 1/3 * 2/3) = 300 +/- 46, so a correct split
+        cannot fall outside it by chance, while 0 or 50% of the users on one
+        variant always does.
+        """
         svc = LLMExperimentService()
         exp = _make_mock_experiment(status=LLMExperimentStatus.ACTIVE, num_variants=3)
-        # Adjust splits for 3 variants
+        exp.id = uuid.UUID("00000000-0000-4000-8000-0000000000e1")
         for i, v in enumerate(exp.variants):
+            v.id = uuid.UUID(f"00000000-0000-4000-8000-0000000000a{i}")
+            v.llm_experiment_id = exp.id
             v.traffic_split = 1.0 / 3
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = exp
 
-        variant_ids = [v.id for v in exp.variants]
-        counts = {str(vid): 0 for vid in variant_ids}
-        for i in range(900):
+        n, p = 900, 1 / 3
+        mean = n * p
+        half_width = 3.29 * (n * p * (1 - p)) ** 0.5
+        low, high = mean - half_width, mean + half_width
+
+        counts = {str(v.id): 0 for v in exp.variants}
+        for i in range(n):
             v = svc.assign_variant(db, exp.id, f"u-{i}")
             counts[str(v.id)] += 1
 
+        assert sum(counts.values()) == n
         for vid, count in counts.items():
-            assert 250 <= count <= 400, f"Variant {vid} got {count} (expected ~300)"
+            assert low <= count <= high, (
+                f"Variant {vid} got {count} of {n} "
+                f"(expected {mean:.0f}, band {low:.0f}..{high:.0f}); all: {counts}"
+            )
 
     def test_assign_variant_inactive_experiment_raises(self):
         svc = LLMExperimentService()
