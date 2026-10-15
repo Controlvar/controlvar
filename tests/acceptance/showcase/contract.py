@@ -29,10 +29,16 @@ A capture directory ``<work>/<slug>/capture/`` holds:
     never copied, printed or written anywhere else.
 ``manifest.json``
     ``{"ref", "commit", "next_version", "lock_next_version", "profile",
-    "viewport", "zoom", "page_h", "band_h", "gates"}``. ``gates`` maps each
-    capture gate to ``{"ok": bool, "numbers": {...}}``; the render refuses a
-    capture with a gate that is not ok, or without one of
+    "viewport", "zoom", "page_h", "band_h", "voice", "gates"}``. ``voice`` is
+    ``"none"`` for a silent capture or the narrating voice (``VOICES``).
+    ``gates`` maps each capture gate to ``{"ok": bool, "numbers": {...}}``;
+    the render refuses a capture with a gate that is not ok, or without one of
     ``REQUIRED_CAPTURE_GATES``, and copies the numbers onto the review page.
+``voice.json`` and ``voice/NNN.wav``
+    Exactly when ``voice`` is not ``"none"``: the narration, frozen at capture,
+    one entry and one clip a sentence (see ``read_voice``). The band keeps the
+    short headline of each cue; the sentences are the WebVTT cues, the SRT
+    cues, the transcript and the sound.
 
 Every check reports all the problems it finds, in one ``CaptureRefused``.
 This module uses the standard library only, so the unit tests that pin it run
@@ -46,6 +52,7 @@ import json
 import math
 import re
 import stat
+import wave
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
@@ -239,6 +246,7 @@ MANIFEST_KEYS = frozenset(
         "zoom",
         "page_h",
         "band_h",
+        "voice",
         "gates",
     }
 )
@@ -315,6 +323,7 @@ class Manifest:
     zoom: float
     page_h: int
     band_h: int
+    voice: str
     gates: Dict[str, Dict[str, Any]]
     raw: Dict[str, Any]
 
@@ -326,6 +335,8 @@ class Capture:
     sheet: CueSheet
     manifest: Manifest
     needle_count: int
+    #: The narration, or None for a silent capture.
+    narration: Optional["Narration"] = None
 
     @property
     def frames_dir(self) -> Path:
@@ -612,6 +623,12 @@ VOICE_GAIN_DB = 4.5
 PRECHECK_PEAK_DBTP = -1.3
 LOUDNESS_TARGET_LUFS = -19.0
 PRECHECK_LOUDNESS_LU = 0.7
+#: G17: what the render requires of the finished file: integrated loudness
+#: within -19 +-1 LUFS, true peak at most -1.0 dBTP, and every sentence within
+#: +-2 LU of the sentences' median.
+FINAL_LOUDNESS_LU = 1.0
+FINAL_PEAK_DBTP = -1.0
+SENTENCE_SPREAD_LU = 2.0
 
 #: G18: the billable characters one run may send to Polly. Above it nothing is sent.
 VOICE_CHARACTER_CAP = 10_000
@@ -742,6 +759,349 @@ def loudness_problems(
     return problems
 
 
+# --- voice.json: a narrated capture's sentences ------------------------------
+#
+# A narrated capture keeps the band's short headline per cue (``cues.json``)
+# and adds, in ``voice.json``, the sentences spoken over each cue: their text
+# as frozen at capture, their clips (copied from the voice cache into
+# ``voice/``) and their times. ``read_voice`` is the one reading of it.
+#
+# The TILE rule: a cue's sentences tile its band cue exactly, in whole frames.
+# The first starts on the band cue's start frame; each but the last lasts its
+# slot (``slot_frames``: the longer of its clip and its reading time, plus
+# ``VOICE_GUARD_MS``, rounded up to a frame); the last ends on the band cue's
+# end frame and lasts at least its slot. So every sentence is on screen (as a
+# WebVTT cue) for at least its reading time, every clip fits inside its own
+# sentence, and the WebVTT file has the band's gaps and no others.
+
+#: A silent capture's ``manifest.voice``.
+SILENT = "none"
+VOICE_FILE = "voice.json"
+VOICE_DIR = "voice"
+VOICE_KEYS = frozenset({"voice", "engine", "tempo", "recipe", "rate", "sentences"})
+SENTENCE_KEYS = frozenset(
+    {"cue", "line", "text", "key", "file", "samples", "sha256", "start_ms", "end_ms"}
+)
+CLIP_NAME = re.compile(r"^[0-9]{3}\.wav$")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+@dataclass(frozen=True)
+class Sentence:
+    """One spoken sentence: its band cue (from 1), its line in that cue (from 1),
+    its text, its clip and its time in the recording."""
+
+    number: int
+    cue: int
+    line: int
+    text: str
+    key: str
+    file: str
+    samples: int
+    sha256: str
+    start_ms: int
+    end_ms: int
+
+    @property
+    def start_frame(self) -> int:
+        return frames_for_ms(self.start_ms)
+
+    @property
+    def end_frame(self) -> int:
+        return frames_for_ms(self.end_ms)
+
+    @property
+    def lines(self) -> Tuple[str, ...]:
+        return wrap_caption(self.text)
+
+
+@dataclass(frozen=True)
+class Narration:
+    voice: str
+    sentences: Tuple[Sentence, ...]
+    #: Where the clips are: ``<capture>/voice``.
+    clips_dir: Path
+
+    def clip(self, sentence: Sentence) -> Path:
+        return self.clips_dir / sentence.file
+
+    def for_cue(self, cue: int) -> Tuple[Sentence, ...]:
+        return tuple(s for s in self.sentences if s.cue == cue)
+
+
+def slot_frames(text: str, samples: int) -> int:
+    """A sentence's slot in whole frames, rounded up (``sentence_slot_ms``)."""
+    return -(-sentence_slot_ms(text, samples) * FPS // 1000)
+
+
+def tile_frames(
+    start_frame: int, end_frame: int, parts: Sequence[Tuple[str, int]]
+) -> Optional[List[Tuple[int, int]]]:
+    """The TILE rule: each ``(text, samples)``'s ``(start, end)`` frames inside a
+    band cue, or None when the cue is too short to hold their slots."""
+    tiles: List[Tuple[int, int]] = []
+    at = start_frame
+    for number, (text, samples) in enumerate(parts, start=1):
+        slot = slot_frames(text, samples)
+        end = end_frame if number == len(parts) else at + slot
+        if end - at < slot:
+            return None
+        tiles.append((at, end))
+        at = end
+    return tiles if parts else None
+
+
+def _clip_shape(path: Path) -> Tuple[Tuple[int, int, int], int]:
+    with wave.open(str(path), "rb") as clip:
+        return (
+            clip.getframerate(),
+            clip.getnchannels(),
+            clip.getsampwidth(),
+        ), clip.getnframes()
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _read_sentence(
+    number: int,
+    raw: Any,
+    voice: str,
+    clips_dir: Path,
+    cue_count: int,
+    problems: List[str],
+) -> Optional[Sentence]:
+    where = f"voice.json sentence {number}"
+    bad = _keys_problem(where, raw, SENTENCE_KEYS)
+    if bad:
+        problems.append(bad)
+        return None
+    before = len(problems)
+    for key in ("cue", "line", "samples", "start_ms", "end_ms"):
+        if not _is_int(raw[key]) or raw[key] < (1 if key != "start_ms" else 0):
+            problems.append(
+                f"{where}: {key} {raw[key]!r} is not a whole number in range"
+            )
+    if len(problems) > before:
+        return None
+    if not 1 <= raw["cue"] <= cue_count:
+        problems.append(f"{where}: cue {raw['cue']} is not one of the {cue_count} cues")
+    text = raw["text"]
+    if not isinstance(text, str):
+        problems.append(f"{where}: its text is not a string")
+        return None
+    for problem in caption_problems(text):
+        problems.append(f"{where}: the sentence {problem}")
+    key = raw["key"]
+    if not isinstance(key, str) or key != clip_key(voice, polly_text(text)):
+        problems.append(
+            f"{where}: its key is not the key of its text spoken by {voice}"
+            " (a clip for other words, or another voice)"
+        )
+    name, digest = raw["file"], raw["sha256"]
+    if name != f"{number:03d}.wav" or not CLIP_NAME.match(str(name)):
+        problems.append(f"{where}: file {name!r} is not {number:03d}.wav")
+        return None
+    if not isinstance(digest, str) or not SHA256.match(digest):
+        problems.append(f"{where}: sha256 {digest!r} is not a sha256")
+        return None
+    path = clips_dir / name
+    if path.is_symlink() or not path.is_file():
+        problems.append(f"{where}: voice/{name} is missing (or is not a plain file)")
+        return None
+    try:
+        shape, frames = _clip_shape(path)
+    except (OSError, EOFError, wave.Error):
+        problems.append(f"{where}: voice/{name} is not a WAV file")
+        return None
+    if shape != (VOICE_RATE, 1, 2):
+        problems.append(
+            f"{where}: voice/{name} is {shape[0]} Hz, {shape[1]} channel(s),"
+            f" {8 * shape[2]}-bit; a clip is {VOICE_RATE} Hz, mono, 16-bit"
+        )
+    if frames != raw["samples"]:
+        problems.append(
+            f"{where}: voice/{name} holds {frames} samples, not {raw['samples']}"
+        )
+    if file_sha256(path) != digest:
+        problems.append(f"{where}: voice/{name} is not the clip voice.json names")
+    return Sentence(
+        number=number,
+        cue=raw["cue"],
+        line=raw["line"],
+        text=text,
+        key=key,
+        file=name,
+        samples=raw["samples"],
+        sha256=digest,
+        start_ms=raw["start_ms"],
+        end_ms=raw["end_ms"],
+    )
+
+
+def tile_problems(cues: Sequence[Cue], sentences: Sequence[Sentence]) -> List[str]:
+    """The TILE rule, the clip fit and the per-cue sentence count, in frames."""
+    problems: List[str] = []
+    expected_cue, expected_line = 1, 1
+    for sentence in sentences:
+        if (sentence.cue, sentence.line) == (expected_cue, expected_line):
+            expected_line += 1
+        elif (sentence.cue, sentence.line) == (
+            expected_cue + 1,
+            1,
+        ) and expected_line > 1:
+            expected_cue, expected_line = expected_cue + 1, 2
+        else:
+            problems.append(
+                f"voice.json sentence {sentence.number} is cue {sentence.cue} line"
+                f" {sentence.line}; expected cue {expected_cue} line {expected_line}"
+                f" or cue {expected_cue + 1} line 1 (in order, every cue narrated)"
+            )
+            return problems
+    if expected_cue != len(cues):
+        problems.append(
+            f"voice.json narrates cues 1-{expected_cue} of {len(cues)}; a narrated"
+            " capture narrates every cue"
+        )
+        return problems
+    for number, cue in enumerate(cues, start=1):
+        group = [s for s in sentences if s.cue == number]
+        if len(group) > MAX_SAY_SENTENCES:
+            problems.append(
+                f"cue {number} has {len(group)} sentences; at most {MAX_SAY_SENTENCES}"
+            )
+        tiles = tile_frames(
+            cue.start_frame, cue.end_frame, [(s.text, s.samples) for s in group]
+        )
+        if tiles is None:
+            need = sum(slot_frames(s.text, s.samples) for s in group)
+            problems.append(
+                f"cue {number} is {cue.end_frame - cue.start_frame} frames; its"
+                f" {len(group)} sentences' slots need {need}"
+            )
+            continue
+        for sentence, (start, end) in zip(group, tiles):
+            got = (sentence.start_frame, sentence.end_frame)
+            if got != (start, end):
+                problems.append(
+                    f"sentence {sentence.number} (cue {number} line {sentence.line})"
+                    f" is frames {got[0]}-{got[1]}; the TILE rule puts it at"
+                    f" {start}-{end}"
+                )
+            elif sentence.samples > (end - start) * SAMPLES_PER_FRAME:
+                problems.append(
+                    f"sentence {sentence.number}'s clip is {sentence.samples} samples;"
+                    f" its {end - start} frames hold {(end - start) * SAMPLES_PER_FRAME}"
+                )
+    return problems
+
+
+def read_voice(
+    root: Path, sheet: CueSheet, voice: str, problems: List[str]
+) -> Optional[Narration]:
+    """``voice.json`` and ``voice/`` checked against the manifest's ``voice`` and
+    the cue sheet; None for a silent capture. Problems go into *problems*."""
+    path, clips_dir = root / VOICE_FILE, root / VOICE_DIR
+    present = path.exists() or path.is_symlink()
+    if voice == SILENT:
+        if present or clips_dir.exists() or clips_dir.is_symlink():
+            problems.append(
+                "the manifest says voice none, but voice.json or voice/ is there:"
+                " a silent capture has no narration"
+            )
+        return None
+    if not present:
+        problems.append(
+            f"the manifest says voice {voice}, but voice.json is missing:"
+            " a narrated capture lost its narration"
+        )
+        return None
+    if path.is_symlink() or clips_dir.is_symlink() or not clips_dir.is_dir():
+        problems.append("voice.json or voice/ is a link, or voice/ is missing")
+        return None
+    data = _load_json(path, problems)
+    if data is None:
+        return None
+    bad = _keys_problem("voice.json", data, VOICE_KEYS)
+    if bad:
+        problems.append(bad)
+        return None
+    before = len(problems)
+    fixed = {
+        "voice": voice,
+        "engine": VOICE_ENGINE,
+        "tempo": TEMPO,
+        "recipe": VOICE_RECIPE,
+        "rate": VOICE_RATE,
+    }
+    for key, want in fixed.items():
+        if data[key] != want or type(data[key]) is not type(want):
+            problems.append(f"voice.json {key} {data[key]!r} is not {want!r}")
+    raw = data["sentences"]
+    if not isinstance(raw, list) or not raw:
+        problems.append("voice.json has no sentences")
+    if len(problems) > before:
+        return None
+    sentences = [
+        _read_sentence(number, entry, voice, clips_dir, len(sheet.cues), problems)
+        for number, entry in enumerate(raw, start=1)
+    ]
+    listed = {f"{n:03d}.wav" for n in range(1, len(raw) + 1)}
+    extra = sorted(p.name for p in clips_dir.iterdir() if p.name not in listed)
+    if extra:
+        problems.append(f"voice/ holds files voice.json does not list: {extra}")
+    if len(problems) > before or any(s is None for s in sentences):
+        return None
+    found = tuple(s for s in sentences if s is not None)
+    problems.extend(tile_problems(sheet.cues, found))
+    if len(problems) > before:
+        return None
+    return Narration(voice=voice, sentences=found, clips_dir=clips_dir)
+
+
+# --- ffmpeg's loudness summary (G10 and G17) --------------------------------
+
+_LEVEL = r"(-?(?:inf|[0-9]{1,3}(?:\.[0-9]{1,2})?))"
+_INTEGRATED = re.compile(
+    r"Integrated loudness:\s{0,8}\n\s{0,12}I:\s{0,12}" + _LEVEL + r" LUFS"
+)
+_TRUE_PEAK = re.compile(r"True peak:\s{0,8}\n\s{0,12}Peak:\s{0,12}" + _LEVEL + r" dBFS")
+
+
+def parse_ebur128(text: str) -> Tuple[float, float]:
+    """``(integrated loudness LUFS, true peak dBTP)`` from ffmpeg's ebur128 log
+    (``-af ebur128=peak=true``); ValueError without a usable summary.
+
+    The voice step's loudness pre-check (G10) and the render's loudness gate
+    (G17) both read it here.
+
+    Read from the last ``Summary:`` block. ffmpeg prints the true peak as
+    ``dBFS``; it is a true peak because the filter runs with ``peak=true``.
+    """
+    at = text.rfind("Summary:")
+    if at < 0:
+        raise ValueError(
+            "ffmpeg printed no loudness summary (ebur128 logs it at the info level,"
+            " so it is empty when ffmpeg runs below that)"
+        )
+    summary = text[at : at + 2000]
+    integrated = _INTEGRATED.search(summary)
+    peak = _TRUE_PEAK.search(summary)
+    if integrated is None:
+        raise ValueError("ffmpeg's loudness summary has no integrated loudness")
+    if peak is None:
+        raise ValueError("ffmpeg's loudness summary has no true peak in dBFS")
+    values = (float(integrated.group(1)), float(peak.group(1)))
+    if not all(math.isfinite(v) for v in values):
+        raise ValueError("the clip is silent: ffmpeg measured no loudness")
+    return values
+
+
 # --- Output names ------------------------------------------------------------
 
 
@@ -749,10 +1109,18 @@ def output_names(slug: str, mp4_sha256: str) -> Dict[str, str]:
     """The finished files' names. Each carries the MP4's short sha256.
 
     The render never overwrites a file, so the video someone approved by its
-    sha256 is the one on disk under that name.
+    sha256 is the one on disk under that name. A narrated video also has an
+    SRT file and a plain-text transcript (``srt`` and ``transcript``); a
+    silent one has neither.
     """
     stem = f"{slug}-{mp4_sha256[:12]}"
-    return {"mp4": f"{stem}.mp4", "vtt": f"{stem}.vtt", "review": f"{stem}-review"}
+    return {
+        "mp4": f"{stem}.mp4",
+        "vtt": f"{stem}.vtt",
+        "srt": f"{stem}.srt",
+        "transcript": f"{stem}.txt",
+        "review": f"{stem}-review",
+    }
 
 
 # --- Reading a capture directory ---------------------------------------------
@@ -967,6 +1335,10 @@ def _read_manifest(root: Path, problems: List[str]) -> Optional[Manifest]:
         problems.append(f"manifest page_h {data['page_h']!r} is not {PAGE_H}")
     if data["band_h"] != BAND_H:
         problems.append(f"manifest band_h {data['band_h']!r} is not {BAND_H}")
+    if not isinstance(data["voice"], str) or data["voice"] not in (SILENT, *VOICES):
+        problems.append(
+            f"manifest voice {data['voice']!r} is not one of {[SILENT, *VOICES]}"
+        )
     gates = data["gates"]
     if not isinstance(gates, dict):
         problems.append("manifest gates is not an object")
@@ -994,6 +1366,7 @@ def _read_manifest(root: Path, problems: List[str]) -> Optional[Manifest]:
         zoom=data["zoom"],
         page_h=data["page_h"],
         band_h=data["band_h"],
+        voice=data["voice"],
         gates=gates,
         raw=data,
     )
@@ -1016,6 +1389,9 @@ def validate_capture_dir(root: Path) -> Capture:
     needle_problems, needle_count = needles_problems(root / "needles.txt")
     problems.extend(needle_problems)
     manifest = _read_manifest(root, problems)
+    narration = None
+    if sheet is not None and manifest is not None and not problems:
+        narration = read_voice(root, sheet, manifest.voice, problems)
     if problems or sheet is None or manifest is None:
         raise CaptureRefused(root, problems or ["it could not be read"])
     return Capture(
@@ -1024,4 +1400,5 @@ def validate_capture_dir(root: Path) -> Capture:
         sheet=sheet,
         manifest=manifest,
         needle_count=needle_count,
+        narration=narration,
     )

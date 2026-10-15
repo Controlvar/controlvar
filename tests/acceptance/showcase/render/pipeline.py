@@ -16,7 +16,17 @@ The order matters, and each step is a gate that refuses rather than warns:
    the cards. ``4``: the WebVTT file, parsed back strictly, matches the cue
    sheet. ``5``: every burned-in caption is read back from the frames.
    ``7`` and ``U4``: OCR of every distinct frame of the finished video.
-8. The review page, the sha256-named files, and only then the renames.
+8. A narrated capture (``voice.json``): the WebVTT file holds the sentences,
+   not the band's headlines (``4`` checks them and the TILE rule), with an
+   SRT file and a transcript beside it (``G6``); ``7`` reads all three files
+   as written. Then the narration track (``G15``: every clip at its place),
+   the mux onto the gated silent encode (``G16``: one AAC stream as long as
+   the video, the video stream's packets unchanged), the speech heard where
+   the WebVTT cues say (``G13``) and the loudness (``G17``). A silent capture
+   skips all of this and ``G16`` expects no sound at all.
+9. The review page, the sha256-named files (``G19``: named from the file
+   that is published, the narrated one when there is narration), and only
+   then the renames.
 
 needles.txt is deleted on every path out of ``render``, pass or refuse, once
 the render has started; its values live only in memory, and only until the
@@ -44,7 +54,17 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from showcase import contract
-from showcase.render import encode, ocr, probe, review, templates, timeline, vtt
+from showcase.render import (
+    encode,
+    narration,
+    ocr,
+    probe,
+    review,
+    sound,
+    templates,
+    timeline,
+    vtt,
+)
 from showcase.render.chromium import Chromium, caption_problems
 from showcase.render.gates import GateLog, Refused
 from showcase.render.workdir import WorkDir, git_checkout_above
@@ -65,6 +85,34 @@ class RenderResult:
     mp4_sha256: str
     vtt_sha256: str
     gates: Dict[str, Dict[str, Any]]
+    #: A narrated video's SRT file and transcript; None for a silent one.
+    srt: Optional[Path] = None
+    transcript: Optional[Path] = None
+    srt_sha256: Optional[str] = None
+    transcript_sha256: Optional[str] = None
+
+
+def published_text_hits(files: Dict[str, Path], needles: List[str]) -> List[str]:
+    """Gate 7 on the published text files (the WebVTT file, and for a narrated
+    video the SRT file and the transcript), read as written, before any is placed."""
+    return [
+        f"the {label} holds needle {n} of {len(needles)}"
+        for label, path in files.items()
+        for n in review.holds_needle(path.read_text(encoding="utf-8"), needles)
+    ]
+
+
+def identity_problems(mp4: Path, names: Dict[str, str], page: str) -> List[str]:
+    """G19: the file on disk, its name and the review page name one sha256."""
+    digest = sha256(mp4)
+    problems = []
+    if not names["mp4"].endswith(f"-{digest[:12]}.mp4"):
+        problems.append(
+            f"the video is named {names['mp4']}, but its sha256 starts {digest[:12]}"
+        )
+    if digest not in page:
+        problems.append(f"the review page does not give the video's sha256 {digest}")
+    return problems
 
 
 def _existing(path: Path) -> Path:
@@ -175,6 +223,69 @@ def _place(partial: Path, final: Path) -> None:
     os.link(partial, final)
 
 
+def _narrate(
+    expected: int,
+    spoken: contract.Narration,
+    silent: Path,
+    voiced: Path,
+    parsed: List[vtt.VttCue],
+    total_frames: int,
+    work: WorkDir,
+    log: GateLog,
+) -> Path:
+    """The narration track onto the gated silent encode, and the sound's gates.
+
+    Returns the narrated file, which is the one published and named.
+    """
+    track = work.path / "narration.wav"
+    narration.build_wav(spoken, total_frames, track)
+    problems, numbers = narration.placement_problems(track, spoken, total_frames)
+    log.require("G15", problems, numbers)
+    try:
+        encode.encode(sound.mux_argv(silent, track, voiced), work.path / "mux.log")
+    except RuntimeError as exc:
+        raise Refused("G16", str(exc)) from exc
+    work.remove(track)
+
+    try:
+        info = probe.ffprobe(voiced)
+        silent_md5, voiced_md5 = sound.video_md5(silent), sound.video_md5(voiced)
+    except (RuntimeError, ValueError) as exc:
+        raise Refused("G16", f"the narrated file could not be read ({exc})") from exc
+    problems, numbers = probe.format_problems(
+        info, total_frames, audio_streams=expected
+    )
+    problems += probe.faststart_problems(probe.top_level_boxes(voiced))
+    if voiced_md5 != silent_md5:
+        problems.append(
+            f"the narrated file's video stream (md5 {voiced_md5}) is not the gated"
+            f" silent encode's ({silent_md5})"
+        )
+    numbers.update(video_md5=voiced_md5, silent_video_md5=silent_md5)
+    log.require("G16", problems, numbers)
+
+    try:
+        values = narration.samples_from_s16le(sound.decode(voiced))
+        windows = narration.windows_from(parsed)
+        expected = []
+        for sentence, (start, _end) in zip(spoken.sentences, windows):
+            first, last = narration.clip_speech(spoken.clip(sentence))
+            expected.append((start + first, start + last))
+    except (RuntimeError, ValueError) as exc:
+        raise Refused("G13", str(exc)) from exc
+    problems, numbers = narration.speech_problems(values, windows, expected)
+    numbers["decoded_samples"] = len(values)
+    log.require("G13", problems, numbers)
+
+    try:
+        integrated, peak = sound.loudness(voiced)
+        levels = [sound.loudness(voiced, window)[0] for window in windows]
+    except (RuntimeError, ValueError) as exc:
+        raise Refused("G17", str(exc)) from exc
+    log.require("G17", *narration.loudness_problems(integrated, peak, levels))
+    return voiced
+
+
 def render(
     capture_dir: Path,
     out_dir: Path,
@@ -211,6 +322,7 @@ def render(
         except contract.CaptureRefused as exc:
             raise Refused("capture", exc.problems) from exc
         sheet = capture.sheet
+        spoken = capture.narration
         log.passed(
             "3",
             {
@@ -224,6 +336,8 @@ def render(
                 "cues": len(sheet.cues),
                 "capture_gates": len(capture.manifest.gates),
                 "needles": capture.needle_count,
+                "voice": capture.manifest.voice,
+                "sentences": len(spoken.sentences) if spoken else 0,
             },
         )
         needles = contract.read_needles(needles_path)
@@ -243,20 +357,31 @@ def render(
         partial_mp4 = work.path / f"{sheet.slug}.mp4.partial"
         partial_vtt = work.path / f"{sheet.slug}.vtt.partial"
         partial_review = work.path / f"{sheet.slug}-review.partial"
+        partial_srt = work.path / f"{sheet.slug}.srt.partial"
+        partial_txt = work.path / f"{sheet.slug}.txt.partial"
+        partial_voiced = work.path / f"{sheet.slug}.voiced.mp4.partial"
 
         out_cues = timeline.output_cues(sheet)
         recording_frames = sheet.capture_frames
         total_frames = contract.video_frames(sheet.duration_ms)
 
-        text_hits = [
-            f"cue {cue.number}'s caption holds needle {n} of {len(needles)}"
-            for cue in out_cues
-            for n in review.holds_needle(cue.text, needles)
-        ] + [
-            f"a card's text holds needle {n} of {len(needles)}"
-            for text in templates.card_texts(sheet.title, sheet.version)
-            for n in review.holds_needle(text, needles)
-        ]
+        text_hits = (
+            [
+                f"cue {cue.number}'s caption holds needle {n} of {len(needles)}"
+                for cue in out_cues
+                for n in review.holds_needle(cue.text, needles)
+            ]
+            + [
+                f"a card's text holds needle {n} of {len(needles)}"
+                for text in templates.card_texts(sheet.title, sheet.version)
+                for n in review.holds_needle(text, needles)
+            ]
+            + [
+                f"sentence {s.number} holds needle {n} of {len(needles)}"
+                for s in (spoken.sentences if spoken else ())
+                for n in review.holds_needle(s.text, needles)
+            ]
+        )
         if text_hits:
             raise Refused("7", text_hits)
 
@@ -330,14 +455,53 @@ def render(
             "11", probe.black_problems(black, total_frames), {"black_intervals": black}
         )
 
-        vtt_text = vtt.write_vtt(out_cues)
-        partial_vtt.write_text(vtt_text, encoding="utf-8")
+        # Gate 4: the WebVTT file holds the band's headlines, or, for a
+        # narrated video, the sentences, tiling the band cues (TILE). Every
+        # check_vtt rule is the same for both.
+        caption_cues = narration.sentence_cues(spoken) if spoken else out_cues
+        partial_vtt.write_text(vtt.write_vtt(caption_cues), encoding="utf-8")
         try:
             parsed = vtt.parse_vtt(partial_vtt.read_text(encoding="utf-8"))
-            problems = vtt.check_vtt(parsed, out_cues, total_frames)
+            problems = vtt.check_vtt(parsed, caption_cues, total_frames)
+            if spoken:
+                problems += narration.tile_problems(parsed, out_cues, spoken)
         except vtt.VttError as exc:
             parsed, problems = [], [str(exc)]
-        log.require("4", problems, {"cues": len(parsed), "cue_sheet": len(out_cues)})
+        log.require(
+            "4",
+            problems,
+            {
+                "cues": len(parsed),
+                "cue_sheet": len(caption_cues),
+                "band_cues": len(out_cues),
+                "text": "narration" if spoken else "headlines",
+            },
+        )
+        written = {"WebVTT file": partial_vtt}
+        if spoken:
+            partial_srt.write_text(narration.write_srt(caption_cues), encoding="utf-8")
+            partial_txt.write_text(narration.transcript_text(spoken), encoding="utf-8")
+            try:
+                srt_cues = narration.parse_srt(partial_srt.read_text(encoding="utf-8"))
+                problems = narration.srt_problems(srt_cues, parsed)
+            except vtt.VttError as exc:
+                srt_cues, problems = [], [str(exc)]
+            transcript = partial_txt.read_text(encoding="utf-8")
+            problems += narration.transcript_problems(transcript, parsed, spoken)
+            log.require(
+                "G6",
+                problems,
+                {
+                    "srt_cues": len(srt_cues),
+                    "transcript_paragraphs": len(transcript[:-1].split("\n\n")),
+                    "transcript_words": len(transcript.split()),
+                },
+            )
+            written["SRT file"] = partial_srt
+            written["transcript"] = partial_txt
+        file_hits = published_text_hits(written, needles)
+        if file_hits:
+            raise Refused("7", file_hits)
 
         log.passed("5", ocr.check_captions(partial_mp4, out_cues, found, work))
         scan_numbers, u4_numbers = ocr.scan(
@@ -356,12 +520,37 @@ def render(
         )
         scan_numbers["engines"] = [engine.name for engine in found]
         scan_numbers["canary_similarity"] = canary
+        scan_numbers["files_scanned"] = list(written)
         log.passed("7", scan_numbers)
         log.passed("U4", u4_numbers)
 
-        mp4_sha, vtt_sha = sha256(partial_mp4), sha256(partial_vtt)
+        final_mp4 = partial_mp4
+        if spoken:
+            final_mp4 = _narrate(
+                probe.expected_audio_streams(capture),
+                spoken,
+                partial_mp4,
+                partial_voiced,
+                parsed,
+                total_frames,
+                work,
+                log,
+            )
+        else:
+            # G16, silent: the data says no narration, so no sound at all.
+            problems, numbers = probe.format_problems(
+                info, total_frames, audio_streams=probe.expected_audio_streams(capture)
+            )
+            log.require(
+                "G16", problems, {"audio_streams": numbers.get("audio_streams")}
+            )
+
+        mp4_sha, vtt_sha = sha256(final_mp4), sha256(partial_vtt)
+        srt_sha = sha256(partial_srt) if spoken else None
+        txt_sha = sha256(partial_txt) if spoken else None
         names = contract.output_names(sheet.slug, mp4_sha)
-        finals = {key: out_dir / name for key, name in names.items()}
+        made = ("mp4", "vtt", "review") + (("srt", "transcript") if spoken else ())
+        finals = {key: out_dir / names[key] for key in made}
         existing = [str(p) for p in finals.values() if p.exists() or p.is_symlink()]
         if existing:
             raise Refused(
@@ -373,7 +562,7 @@ def render(
         focus = {number: cue.focus for number, cue in enumerate(sheet.cues, start=1)}
         wanted = review.contact_frames(out_cues, focus)
         images = encode.extract_frames(
-            partial_mp4,
+            final_mp4,
             [w["frame"] for w in wanted],
             work.path / "contact",
             scale="960:540",
@@ -401,10 +590,18 @@ def render(
             vtt_sha256=vtt_sha,
             contact=contact,
             render_gates=log.gates,
+            narration=review.narration_rows(spoken, out_cues) if spoken else None,
+            srt_sha256=srt_sha,
+            transcript_sha256=txt_sha,
         )
         hits = review.holds_needle(page, needles)
         if hits:
             raise Refused("7", f"the review page would hold needles {hits}")
+        log.require(
+            "G19",
+            identity_problems(final_mp4, names, page),
+            {"mp4_sha256": mp4_sha, "narrated": spoken is not None},
+        )
         (partial_review / "index.html").write_text(page, encoding="utf-8")
         (partial_review / "gates.json").write_text(
             json.dumps(
@@ -416,7 +613,10 @@ def render(
 
         out_dir.mkdir(parents=True, exist_ok=True)
         _place(partial_vtt, finals["vtt"])
-        _place(partial_mp4, finals["mp4"])
+        if spoken:
+            _place(partial_srt, finals["srt"])
+            _place(partial_txt, finals["transcript"])
+        _place(final_mp4, finals["mp4"])
         partial_review.rename(finals["review"])
         return RenderResult(
             mp4=finals["mp4"],
@@ -425,6 +625,10 @@ def render(
             mp4_sha256=mp4_sha,
             vtt_sha256=vtt_sha,
             gates=log.gates,
+            srt=finals.get("srt"),
+            transcript=finals.get("transcript"),
+            srt_sha256=srt_sha,
+            transcript_sha256=txt_sha,
         )
     except Refused as exc:
         raise Refused(exc.gate, [*exc.problems, RECAPTURE]) from exc
