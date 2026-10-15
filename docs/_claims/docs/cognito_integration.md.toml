@@ -706,7 +706,6 @@ by = ["exempt:third-party"]
 [[unit]]
 text = "If the user belongs to any group listed in COGNITO_ADMIN_GROUPS, they are:"
 by = [
-    "test:backend/tests/unit/api/test_deps.py",
     "test:backend/tests/unit/core/test_cognito_integration.py::TestCognitoIntegration::test_superuser_always_gets_admin_role",
     "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_pool_user_in_the_admin_group_gets_an_administrator_account",
 ]
@@ -774,6 +773,5 @@ by = ["test:backend/tests/unit/core/test_cognito_integration.py::TestCognitoInte
 [[unit]]
 text = "A user who belongs to the \"SuperUsers\" group (which is in COGNITO_ADMIN_GROUPS) will automatically be assigned the ADMIN role and given superuser status, even if \"SuperUsers\" is mapped to a different role in COGNITO_GROUP_ROLE_MAPPING."
 by = [
-    "test:backend/tests/unit/api/test_deps.py",
     "test:backend/tests/unit/core/test_cognito_integration.py::TestCognitoIntegration::test_superuser_always_gets_admin_role",
 ]

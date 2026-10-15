@@ -575,7 +575,6 @@ by = ["docex:docs/api/auth.md#{\"detail\":\"Not authenticated\"}"]
 [[unit]]
 text = "An expired or malformed bearer token answers {\"detail\":\"Could not validate credentials\"}, a missing API key {\"detail\":\"API key missing\"} and an unknown or deleted one {\"detail\":\"Invalid API Key\"}."
 by = [
-    "test:backend/tests/unit/api/test_deps.py",
     "test:backend/tests/unit/api/test_local_auth.py::TestGetCurrentUserLocal::test_expired_token_is_401",
     "test:backend/tests/integration/api/test_tracking_assign_batch.py",
     "test:backend/tests/unit/api/test_dependency_injection.py",

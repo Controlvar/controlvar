@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 from backend.app.main import app
 from backend.app.models.user import User
 from backend.tests.integration.conftest import make_client_for_user
+from modules.backend.app.models.custom_role import CustomRole
 
 # ---------------------------------------------------------------------------
 # Helper utilities
@@ -53,6 +54,31 @@ def _valid_role_payload(name: str = None) -> dict:
             {"resource": "feature_flag", "actions": ["read"]},
         ],
     }
+
+
+@pytest.fixture
+def system_role(db_session: Session):
+    """A role marked is_system_role, written straight to the table.
+
+    Nothing in the product creates one (``test_rbac_layers_are_display_only``
+    pins that), so a test of the refusal has to make its own rather than look
+    for one and skip when there is none. Removed afterwards, so the listing
+    tests that follow see only custom roles.
+    """
+    role = CustomRole(
+        name=f"sysrole-{uuid.uuid4().hex[:8]}",
+        description="Seeded system role",
+        is_system_role=True,
+        permissions=[{"resource": "experiment", "actions": ["read"]}],
+    )
+    db_session.add(role)
+    db_session.commit()
+    try:
+        yield role.name
+    finally:
+        db_session.rollback()
+        db_session.query(CustomRole).filter(CustomRole.name == role.name).delete()
+        db_session.commit()
 
 
 def _create_role(client: TestClient, name: str = None) -> dict:
@@ -459,21 +485,25 @@ class TestUpdateRole:
         )
         assert resp.status_code == 404, resp.text
 
-    def test_cannot_update_system_role(self, admin_client):
-        """Attempting to update a system role returns 400 (immutable)."""
-        # List roles and find a system role
-        list_resp = admin_client.get("/api/v1/rbac/roles?include_system=true")
-        assert list_resp.status_code == 200, list_resp.text
-        system_roles = [r for r in list_resp.json() if r.get("is_system_role")]
-        if not system_roles:
-            pytest.skip("No system roles in the database to test against")
-
-        system_role_name = system_roles[0]["name"]
+    def test_cannot_update_system_role(self, admin_client, system_role):
+        """Updating a system role answers 400 and leaves it as it was."""
         resp = admin_client.put(
-            f"/api/v1/rbac/roles/{system_role_name}",
-            json={"description": "Trying to modify system role"},
+            f"/api/v1/rbac/roles/{system_role}",
+            json={
+                "description": "Trying to modify system role",
+                "permissions": [{"resource": "experiment", "actions": ["delete"]}],
+            },
         )
-        assert resp.status_code in (400, 403), resp.text
+        assert resp.status_code == 400, resp.text
+        assert resp.json()["detail"] == "Cannot modify system roles"
+
+        after = admin_client.get(f"/api/v1/rbac/roles/{system_role}")
+        assert after.status_code == 200, after.text
+        assert after.json()["is_system_role"] is True
+        assert after.json()["description"] == "Seeded system role"
+        assert after.json()["permissions"] == [
+            {"resource": "experiment", "actions": ["read"]}
+        ]
 
     def test_update_role_empty_payload_is_no_op(self, admin_client):
         """PUT with an empty body leaves the role name unchanged."""
@@ -537,17 +567,15 @@ class TestDeleteRole:
         finally:
             app.dependency_overrides.clear()
 
-    def test_cannot_delete_system_role(self, admin_client):
-        """Attempting to delete a system role returns 400."""
-        list_resp = admin_client.get("/api/v1/rbac/roles?include_system=true")
-        assert list_resp.status_code == 200, list_resp.text
-        system_roles = [r for r in list_resp.json() if r.get("is_system_role")]
-        if not system_roles:
-            pytest.skip("No system roles in the database to test against")
+    def test_cannot_delete_system_role(self, admin_client, system_role):
+        """Deleting a system role answers 400 and the role is still there."""
+        resp = admin_client.delete(f"/api/v1/rbac/roles/{system_role}")
+        assert resp.status_code == 400, resp.text
+        assert resp.json()["detail"] == "Cannot delete system roles"
 
-        system_role_name = system_roles[0]["name"]
-        resp = admin_client.delete(f"/api/v1/rbac/roles/{system_role_name}")
-        assert resp.status_code in (400, 403), resp.text
+        after = admin_client.get(f"/api/v1/rbac/roles/{system_role}")
+        assert after.status_code == 200, after.text
+        assert after.json()["is_system_role"] is True
 
     def test_deleted_role_not_in_list(self, admin_client):
         """After deletion, role does not appear in list response."""
