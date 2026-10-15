@@ -1,4 +1,5 @@
-"""The showcase render: a capture directory in; a captioned MP4, its WebVTT file and a review page out.
+"""The showcase render: a capture directory in; a captioned MP4, its WebVTT file and a review page out
+(and, for a narrated capture, the MP4 with its narration, an SRT file and a transcript).
 
 ``python -m showcase.render <capture dir> --out <dir>`` (with ``tests/acceptance``
 on ``sys.path``) runs ``pipeline.render``. Each module is one part:
@@ -11,6 +12,8 @@ on ``sys.path``) runs ``pipeline.render``. Each module is one part:
 * ``vtt``: the WebVTT file and its strict parser;
 * ``ocr``: the burned-in captions read back, and every distinct frame read for
   credentials and forbidden text;
+* ``narration`` and ``sound``: a narrated video's sentence captions (WebVTT
+  and SRT), transcript, narration track, mux and sound gates;
 * ``review``: the review page;
 * ``synthetic``: made-up capture directories, with planted defects, to prove
   each gate refuses what it should.

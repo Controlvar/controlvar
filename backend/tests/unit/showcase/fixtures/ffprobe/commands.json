@@ -1,0 +1,6 @@
+{
+  "_about": "Captured from the real ffprobe 8.0.1 on 2026-10-15 by the commands below (stdout, with format.filename shortened to the file's name and the keys sorted). narrated.mp4 is a narrated synthetic render of video 1 (python -m showcase.render.synthetic --voice-cache, then python -m showcase.render); silent.mp4 is its video stream alone. Neither file is kept.",
+  "silent.mp4": "ffmpeg -hide_banner -nostdin -v error -i narrated.mp4 -map 0:v:0 -c copy -an -movflags +faststart silent.mp4",
+  "narrated.json": "ffprobe -v error -count_frames -show_streams -show_format -of json narrated.mp4",
+  "silent.json": "ffprobe -v error -count_frames -show_streams -show_format -of json silent.mp4"
+}

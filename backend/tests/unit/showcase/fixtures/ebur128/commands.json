@@ -23,5 +23,12 @@
     "signal": "typical.wav, as above",
     "measure": "ffmpeg -nostdin -hide_banner -nostats -v error -i typical.wav -af ebur128=peak=true -f null -",
     "note": "empty: ebur128 logs its summary at the info level"
+  },
+  "narrated-mp4.txt": {
+    "signal": "a narrated synthetic render of video 1 (16 of Ruth's cached clips, 79.667 s), made by python -m showcase.render.synthetic --voice-cache and python -m showcase.render on 2026-10-15; the file itself is not kept",
+    "measure": "ffmpeg -nostdin -hide_banner -nostats -i narrated.mp4 -map 0:a:0 -af ebur128=peak=true -f null -",
+    "kept": "the last 65,536 characters of stderr (what showcase.render.sound.loudness reads), from the first whole line",
+    "integrated_lufs": -19.4,
+    "true_peak_dbtp": -1.5
   }
 }

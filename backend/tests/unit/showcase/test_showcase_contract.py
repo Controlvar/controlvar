@@ -329,6 +329,8 @@ def test_output_names_carry_the_short_sha256():
     assert names == {
         "mp4": "01-getting-started-abababababab.mp4",
         "vtt": "01-getting-started-abababababab.vtt",
+        "srt": "01-getting-started-abababababab.srt",
+        "transcript": "01-getting-started-abababababab.txt",
         "review": "01-getting-started-abababababab-review",
     }
 
@@ -352,6 +354,7 @@ def test_the_contract_module_needs_only_the_standard_library():
         "stat",
         "dataclasses",
         "pathlib",
+        "wave",
         "typing",
     }, imported
 

@@ -65,8 +65,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     sys.stdout.write(
         f"OK {result.mp4}\n   sha256 {result.mp4_sha256}\n"
         f"OK {result.vtt}\n   sha256 {result.vtt_sha256}\n"
-        f"OK {result.review / 'index.html'}\n"
     )
+    if result.srt is not None and result.transcript is not None:
+        sys.stdout.write(
+            f"OK {result.srt}\n   sha256 {result.srt_sha256}\n"
+            f"OK {result.transcript}\n   sha256 {result.transcript_sha256}\n"
+        )
+    sys.stdout.write(f"OK {result.review / 'index.html'}\n")
     return 0
 
 
