@@ -136,7 +136,7 @@ describe('ExperimentSummary', () => {
   // planned sample per variant, the Sample Size tab's figure. The server's
   // sample_size_adequate (the floor the recommendation needs, 100 users
   // unless the metric sets another) does not decide it.
-  describe('Minimum sample card', () => {
+  describe('Planned sample card', () => {
     const plan = (over: Partial<SampleSizeResult>): SampleSizeResult => ({
       required_sample_size_per_variant: 3000,
       current_sample_size_per_variant: 4000,
@@ -165,10 +165,10 @@ describe('ExperimentSummary', () => {
 
     it('reads "Reached" when the smallest variant has the planned sample', () => {
       render(<ExperimentSummary experiment={baseExperiment} plannedSample={plan({})} />);
-      const card = screen.getByTestId('minimum-sample');
-      expect(within(card).getByText('Minimum sample')).toBeInTheDocument();
+      const card = screen.getByTestId('planned-sample');
+      expect(within(card).getByText('Planned sample')).toBeInTheDocument();
       expect(within(card).getByText('Reached')).toHaveClass('text-green-700');
-      expect(card).toHaveTextContent(/^Minimum sampleReached4,000 of 3,000 per variant$/);
+      expect(card).toHaveTextContent(/^Planned sampleReached4,000 of 3,000 per variant$/);
     });
 
     it('reads "Not yet" with the progress when the plan is not met (432 users, power 0.34)', () => {
@@ -186,10 +186,10 @@ describe('ExperimentSummary', () => {
           })}
         />
       );
-      const card = screen.getByTestId('minimum-sample');
+      const card = screen.getByTestId('planned-sample');
       expect(card).not.toHaveTextContent('Reached');
       expect(within(card).getByText('Not yet')).toHaveClass('text-amber-700');
-      expect(card).toHaveTextContent(/^Minimum sampleNot yet203 of 69,410 per variant$/);
+      expect(card).toHaveTextContent(/^Planned sampleNot yet203 of 69,410 per variant$/);
     });
 
     it('never reads "Reached" at 0 events, when there is no plan yet', () => {
@@ -211,16 +211,16 @@ describe('ExperimentSummary', () => {
           })}
         />
       );
-      const card = screen.getByTestId('minimum-sample');
-      expect(card).toHaveTextContent(/^Minimum sampleNot yet0 per variant, no plan yet$/);
+      const card = screen.getByTestId('planned-sample');
+      expect(card).toHaveTextContent(/^Planned sampleNot yet0 per variant, no plan yet$/);
     });
 
     it('never reads "Reached" while the plan loads or when it could not be loaded', () => {
       const { rerender } = render(<ExperimentSummary experiment={baseExperiment} />);
-      expect(screen.getByTestId('minimum-sample')).toHaveTextContent(/^Minimum sampleLoading$/);
+      expect(screen.getByTestId('planned-sample')).toHaveTextContent(/^Planned sampleLoading$/);
       rerender(<ExperimentSummary experiment={baseExperiment} plannedSample={null} />);
-      expect(screen.getByTestId('minimum-sample')).toHaveTextContent(
-        /^Minimum sampleNot known$/
+      expect(screen.getByTestId('planned-sample')).toHaveTextContent(
+        /^Planned sampleNot known$/
       );
     });
 

@@ -396,7 +396,7 @@ describe('ResultsDashboard', () => {
 
     // #1244: the Overview card reads the plan with the server's inputs, and
     // what the user tries on the tab does not move it.
-    it('feeds the Minimum sample card the plan, and keeps it when the user recalculates', async () => {
+    it('feeds the Planned sample card the plan, and keeps it when the user recalculates', async () => {
       mockGetResults.mockResolvedValue({ ...mockResults, sample_size_adequate: true });
       mockGetDailyResults.mockResolvedValue(mockDaily);
       mockGetSampleSize
@@ -410,9 +410,9 @@ describe('ResultsDashboard', () => {
         .mockResolvedValue({ ...mockSampleSize, mde: 0.9, baseline_source: 'request' });
 
       render(<ResultsDashboard experimentId="exp-1" />);
-      const card = await screen.findByTestId('minimum-sample');
+      const card = await screen.findByTestId('planned-sample');
       await waitFor(() =>
-        expect(card).toHaveTextContent(/^Minimum sampleNot yet203 of 69,410 per variant$/)
+        expect(card).toHaveTextContent(/^Planned sampleNot yet203 of 69,410 per variant$/)
       );
 
       await userEvent.click(screen.getByRole('tab', { name: /sample size/i }));
@@ -423,8 +423,8 @@ describe('ResultsDashboard', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Recalculate' }));
       await waitFor(() => expect(mockGetSampleSize).toHaveBeenCalledTimes(2));
       await screen.findByTestId('sample-size-meter');
-      expect(screen.getByTestId('minimum-sample')).toHaveTextContent(
-        /^Minimum sampleNot yet203 of 69,410 per variant$/
+      expect(screen.getByTestId('planned-sample')).toHaveTextContent(
+        /^Planned sampleNot yet203 of 69,410 per variant$/
       );
     });
 

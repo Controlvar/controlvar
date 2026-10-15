@@ -25,18 +25,18 @@ interface ExperimentSummaryProps {
   onOpenSampleSize?: () => void;
   /**
    * The Sample Size tab's plan with the server's own inputs (none of the
-   * user's changes on the tab). The Minimum sample card reads it. Undefined
+   * user's changes on the tab). The Planned sample card reads it. Undefined
    * while it loads, null when it could not be loaded.
    */
   plannedSample?: SampleSizeResult | null;
 }
 
 /**
- * The Minimum sample card: Reached only when the smallest variant has the
+ * The Planned sample card: Reached only when the smallest variant has the
  * planned sample per variant (#1244). It never reads Reached without a plan,
  * so at no events, or while the plan loads, it cannot say so.
  */
-export function minimumSampleStatus(plannedSample: SampleSizeResult | null | undefined): {
+export function plannedSampleStatus(plannedSample: SampleSizeResult | null | undefined): {
   value: string;
   detail: string | null;
   valueClass: string;
@@ -128,7 +128,7 @@ export function ExperimentSummary({
   plannedSample,
 }: ExperimentSummaryProps) {
   const { summary } = experiment;
-  const minimum = minimumSampleStatus(plannedSample);
+  const planned = plannedSampleStatus(plannedSample);
   const rec = RECOMMENDATION_CONFIG[summary.recommendation];
 
   // Find the winning variant name if there is one
@@ -184,11 +184,11 @@ export function ExperimentSummary({
         {/* The planned sample per variant, as on the Sample Size tab (#1244).
             The smaller floor the recommendation needs is in its reason. */}
         <Stat
-          label="Minimum sample"
-          value={minimum.value}
-          valueClass={minimum.valueClass}
-          detail={minimum.detail}
-          testId="minimum-sample"
+          label="Planned sample"
+          value={planned.value}
+          valueClass={planned.valueClass}
+          detail={planned.detail}
+          testId="planned-sample"
         />
       </div>
 

@@ -162,7 +162,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
   // the URL (#666): without overrides the server decides every input.
   const [sampleSizeOverrides, setSampleSizeOverrides] = useState<SampleSizeOverrides>({});
   const sampleSizeRequest = useRef(0);
-  // The plan with the server's own inputs, for the Minimum sample card
+  // The plan with the server's own inputs, for the Planned sample card
   // (#1244): what the user tries on the tab never changes the card. Undefined
   // while it loads, null when it could not be loaded.
   const [plannedSample, setPlannedSample] = useState<SampleSizeResult | null | undefined>(
