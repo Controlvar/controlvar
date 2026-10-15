@@ -209,6 +209,9 @@ SAFETY_METRICS = {
 # Catalogue (spec §2)
 # ---------------------------------------------------------------------------
 
+# A metric's expected_effect is a RELATIVE lift: 0.25 means 12% -> 15%. The
+# primary metric's is the effect the results page plans the sample for, so
+# backend/tests/unit/scripts/test_seed_planned_effects.py pins each plan.
 EXPERIMENTS: List[Dict[str, Any]] = [
     {
         "key": PUSH_KEY,
@@ -241,7 +244,7 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 "metric_type": MetricType.CONVERSION,
                 "is_primary": True,
                 "minimum_sample_size": 2000,
-                "expected_effect": 0.05,
+                "expected_effect": 0.23,
             },
             {
                 "name": "App uninstall (guardrail)",
@@ -249,7 +252,7 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 "metric_type": MetricType.CONVERSION,
                 "is_primary": False,
                 "minimum_sample_size": 2000,
-                "expected_effect": -0.005,
+                "expected_effect": None,
                 "lower_is_better": True,
             },
         ],
@@ -293,7 +296,7 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 "metric_type": MetricType.CONVERSION,
                 "is_primary": False,
                 "minimum_sample_size": 1000,
-                "expected_effect": 0.02,
+                "expected_effect": 0.33,
             },
         ],
     },
@@ -328,7 +331,7 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 "metric_type": MetricType.CONVERSION,
                 "is_primary": True,
                 "minimum_sample_size": 1000,
-                "expected_effect": 0.05,
+                "expected_effect": 0.50,
             },
         ],
     },
@@ -363,7 +366,7 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 "metric_type": MetricType.CONVERSION,
                 "is_primary": True,
                 "minimum_sample_size": 1500,
-                "expected_effect": 0.05,
+                "expected_effect": 0.09,
             },
             {
                 "name": "First play",
@@ -371,7 +374,7 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 "metric_type": MetricType.CONVERSION,
                 "is_primary": False,
                 "minimum_sample_size": 1500,
-                "expected_effect": 0.05,
+                "expected_effect": 0.11,
             },
         ],
     },
@@ -406,7 +409,7 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 "metric_type": MetricType.CONVERSION,
                 "is_primary": True,
                 "minimum_sample_size": 5000,
-                "expected_effect": 0.005,
+                "expected_effect": 0.25,
             },
         ],
     },

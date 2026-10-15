@@ -236,12 +236,24 @@ text = "The results page is cached for up to five minutes and the tab is not, so
 by = ["test:backend/tests/integration/api/test_sample_size_tab_route.py::test_the_tab_is_not_cached_and_the_results_are"]
 
 [[unit]]
-text = "MDE: 5% relative unless you change it."
-by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm"]
+text = "MDE: the effect saved with the experiment, its primary metric's expected_effect, when it is above 0 and below 1; otherwise 5% relative."
+by = [
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_the_planned_sample_uses_the_primary_metrics_planned_effect",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_with_no_saved_effect_the_plan_is_for_the_default_and_says_so",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_an_unusable_saved_effect_falls_back_to_the_default",
+]
 
 [[unit]]
-text = "Experiments do not store a planned effect."
-by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm"]
+text = "You can type another."
+by = ["test:backend/tests/integration/api/test_planned_sample_effect.py::test_a_requested_mde_wins_over_the_saved_one"]
+
+[[unit]]
+text = "The response's mde_source says which: experiment, default or request."
+by = [
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_the_planned_sample_uses_the_primary_metrics_planned_effect",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_with_no_saved_effect_the_plan_is_for_the_default_and_says_so",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_a_requested_mde_wins_over_the_saved_one",
+]
 
 [[unit]]
 text = "Power 80%, two-sided, unless you change it."

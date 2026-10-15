@@ -1142,6 +1142,40 @@ by = [
 ]
 
 [[unit]]
+text = "The planned effect"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A metric's expected_effect is the minimum detectable effect to plan the sample for, as a relative change: 0.10 means 5% → 5.5%."
+by = ["test:backend/tests/integration/api/test_planned_sample_effect.py::test_an_effect_sent_at_create_and_kept_by_clone_drives_the_plan"]
+
+[[unit]]
+text = "The primary metric's is what GET /api/v1/results/{experiment_id}/sample-size and the results page's Planned sample plan for when the request sends no mde; the response's mde_source is then experiment."
+by = [
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_the_planned_sample_uses_the_primary_metrics_planned_effect",
+    "test:frontend/src/tests/components/ExperimentSummary.test.tsx",
+]
+
+[[unit]]
+text = "A value that is not above 0 and below 1 (0, 1.5, a negative number) is stored as sent but not used: the plan is for 0.05 and mde_source is default."
+by = ["test:backend/tests/integration/api/test_planned_sample_effect.py::test_an_unusable_saved_effect_falls_back_to_the_default"]
+
+[[unit]]
+text = "A secondary metric's expected_effect is not read."
+by = [
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_only_the_primary_metrics_effect_is_a_plan",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_with_no_primary_metric_the_effect_of_the_metric_planned_on_is_not_used",
+]
+
+[[unit]]
+text = "A clone keeps it."
+by = ["test:backend/tests/integration/api/test_planned_sample_effect.py::test_an_effect_sent_at_create_and_kept_by_clone_drives_the_plan"]
+
+[[unit]]
+text = "A PUT that sends metrics replaces them, so a metric resent without expected_effect no longer has one."
+by = ["test:backend/tests/integration/api/test_planned_sample_effect.py::test_a_put_that_resends_metrics_without_the_effect_clears_it"]
+
+[[unit]]
 text = "Feature Flag Endpoints"
 by = ["exempt:label"]
 
@@ -2461,8 +2495,12 @@ text = "baseline_conversion_rate | the control variant's observed rate so far | 
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "mde | 0.05 (relative: 12% → 12.6%) | above 0, below 1"
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+text = "mde | the primary metric's expected_effect when it is above 0 and below 1, else 0.05 (relative: 12% → 12.6%) | above 0, below 1"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_the_planned_sample_uses_the_primary_metrics_planned_effect",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_with_no_saved_effect_the_plan_is_for_the_default_and_says_so",
+]
 
 [[unit]]
 text = "confidence_level | the experiment's stored confidence_level | 0.80 to 0.99"
@@ -2477,7 +2515,7 @@ text = "correction_method | the experiment's stored correction_method | none, bo
 by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_a_correction_plans_each_comparison_at_alpha_over_k_minus_1"]
 
 [[unit]]
-text = "Response (SampleSizeResult): required_sample_size_per_variant, current_sample_size_per_variant (the smallest variant), is_adequate, achieved_power, baseline_rate, baseline_source (observed or request), baseline_users, mde, mde_absolute, confidence_level, alpha (per comparison), comparisons, correction_method, power_target, metric_id, metric_name, metric_type, analysed_as (always conversion today), guide_only_reasons (why a fixed sample size is only a guide here: adaptive_allocation, unequal_allocation, sequential_testing, bayesian) and unavailable_reason."
+text = "Response (SampleSizeResult): required_sample_size_per_variant, current_sample_size_per_variant (the smallest variant), is_adequate, achieved_power, baseline_rate, baseline_source (observed or request), baseline_users, mde, mde_source (request, experiment or default), mde_absolute, confidence_level, alpha (per comparison), comparisons, correction_method, power_target, metric_id, metric_name, metric_type, analysed_as (always conversion today), guide_only_reasons (why a fixed sample size is only a guide here: adaptive_allocation, unequal_allocation, sequential_testing, bayesian) and unavailable_reason."
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
@@ -2489,8 +2527,11 @@ text = "With nothing to plan from, the answer is still 200: required_sample_size
 by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_no_assignments_answers_200_with_nulls"]
 
 [[unit]]
-text = "A baseline_conversion_rate that mde raises to 100% or more answers 422, and so does one that mde changes too little for the size to be a finite number; an unknown experiment answers 404."
-by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_a_requested_baseline_the_effect_raises_past_100_percent_is_refused"]
+text = "A baseline_conversion_rate that mde raises to 100% or more answers 422, and so does one that mde changes too little for the size to be a finite number; an unknown experiment answers 404, whatever the other parameters."
+by = [
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_a_requested_baseline_the_effect_raises_past_100_percent_is_refused",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_an_unknown_experiment_with_a_bad_baseline_is_404",
+]
 
 [[unit]]
 text = "CUPED Variance Reduction"

@@ -247,6 +247,10 @@ by = [
 ]
 
 [[unit]]
+text = "A run on a database seeded before 0.34.3 leaves the experiments it finds as they are, so their results pages plan the sample from the old expected_effect values until you re-seed with --reset."
+by = ["test:backend/tests/unit/scripts/test_seed_planned_effects.py::test_a_seed_run_on_a_seeded_database_leaves_its_metrics_as_they_are"]
+
+[[unit]]
 text = "2."
 by = ["exempt:label"]
 
