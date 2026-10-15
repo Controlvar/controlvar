@@ -1222,16 +1222,16 @@ def test_a_request_born_while_the_scene_drains_is_not_counted_unanswered(tmp_pat
 
 
 def test_a_departure_stated_in_a_code_card_line_counts():
-    code = storyboard.Card.model_validate(
-        {
-            "label": "From the quick start",
-            "note": "As the docs give it.",
-            "code": {
-                "doc": "docs/sdk/javascript.md",
-                "section": "Quick start",
-                "lines": ["// the shoppers here are simulated"],
-            },
-        },
-        strict=False,
+    """A code card draws its quoted lines: they are its screen text (V2's SDK card)."""
+    v2 = storyboard.load(run.board_path("02-first-experiment"))
+    card = next(s.card for s in v2.scenes if s.id == "sdk")
+    assert card is not None and card.code is not None
+    drawn = card.drawn_text()
+    assert drawn[0] == card.label and drawn[-1] == card.note
+    assert drawn[1:-1] == list(card.code.lines)
+    assert all(
+        line
+        in storyboard.scene_screen_text(next(s for s in v2.scenes if s.id == "sdk"))
+        for line in card.code.lines
+        if line
     )
-    assert "// the shoppers here are simulated" in code.drawn_text()
