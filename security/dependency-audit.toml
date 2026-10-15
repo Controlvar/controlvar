@@ -30,7 +30,7 @@
 # `python-jose[cryptography]`. moto 5.x replaced it with joserfc, so dropping
 # the pin is a moto major bump, its own change.
 [[ignore]]
-id = "CVE-2026-85394"
+id = "PYSEC-2026-4298"  # aliases CVE-2026-85394, CVE-2024-33663, GHSA-6c5p-j8vq-pqhj
 package = "python-jose"
 reason = "python-jose is installed only because moto's cognitoidp mock imports it; the application authenticates with PyJWT and does not import jose (grep backend/app modules/backend/app for 'jose' gives no hit). It appears in no shipped closure, which the script checks. No fixed release exists yet; re-check for one by the review date."
 review_by = 2026-11-05
