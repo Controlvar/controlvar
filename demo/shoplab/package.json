@@ -5,7 +5,7 @@
   "private": true,
   "description": "ShopLab \u2014 a demo storefront running live experiments on the Experimently platform",
   "scripts": {
-    "dev": "next dev -p 3200 -H 127.0.0.1",
+    "dev": "next dev --webpack -p 3200 -H 127.0.0.1",
     "build": "next build",
     "start": "next start -p 3200",
     "lint": "eslint .",

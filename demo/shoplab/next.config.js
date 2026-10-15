@@ -10,7 +10,14 @@ const REPO_ROOT = path.resolve(__dirname, '../..');
 // config with no `turbopack` config is a hard error there ("This build is
 // using Turbopack, with a `webpack` config and no `turbopack` config"), not a
 // warning -- which is what broke this build on the Next 14 -> 16 bump. The
-// webpack block is kept because `next build --webpack` still uses it.
+// webpack block is kept because `next build --webpack` still uses it, and
+// because `npm run dev` runs `next dev --webpack` (#1172): on Next 16.4.0 the
+// Turbopack dev server fails /products on a direct visit (the address typed,
+// or the page reloaded) with "the module factory is not available", because
+// src/data/products.ts is in none of the page's chunks. The page loads when
+// it is reached from another page, and every other page loads either way.
+// Moving one import above another hid it, which is not something to rely on.
+// `build` and `start` are unchanged.
 // One rule, two spellings. webpack takes absolute paths; Turbopack's
 // `resolveAlias` takes paths RELATIVE TO THIS PACKAGE and prefixes anything
 // else with `./` -- an absolute path there became

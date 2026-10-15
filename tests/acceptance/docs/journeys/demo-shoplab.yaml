@@ -15,7 +15,9 @@
 #
 # Expectations written on 2026-10-11 from the README, the seed
 # (backend/scripts/seed_shoplab.py) and the storefront's source, before the
-# first run.
+# first run. products-direct (#1172) was added on 2026-10-14: it opens /products
+# as the first page of a load, as an address typed or a reload does, and its
+# expectation is the products step's.
 guide: demo/shoplab/README.md
 stack: demo-local
 profile: full
@@ -91,6 +93,17 @@ steps:
           - heading "All products" [level=1]
           - paragraph: 12 items
     fail: the product list does not open from the header, or is not sorted by the bandit's ml_personalized algorithm, the arm its seeded history favours
+  - id: products-direct
+    doc: what-each-page-demonstrates
+    do:
+      open: http://localhost:3200/products
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - heading "All products" [level=1]
+          - paragraph: 12 items
+    fail: the product list does not load when its address is opened directly (#1172), as it does from the header
   - id: search
     doc: what-each-page-demonstrates
     do:
