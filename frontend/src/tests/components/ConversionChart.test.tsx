@@ -72,4 +72,30 @@ describe('ConversionChart', () => {
     render(<ConversionChart variants={mockVariants} />);
     expect(screen.getByTestId('responsive-container')).toBeInTheDocument();
   });
+
+  // #1244: with no conversions there is nothing to plot; an empty bar chart
+  // drew a 0-400% axis of its own.
+  it('shows "No conversions yet" instead of a chart when nothing has converted', () => {
+    const none = mockVariants.map((v) => ({
+      ...v,
+      sample_size: 0,
+      conversions: 0,
+      mean: 0,
+      confidence_interval: null,
+      p_value: null,
+      adjusted_p_value: null,
+      is_significant: false,
+      relative_improvement_pct: null,
+    }));
+    render(<ConversionChart variants={none} />);
+    expect(screen.getByTestId('conversion-chart-empty')).toHaveTextContent('No conversions yet');
+    expect(screen.queryByTestId('conversion-chart')).not.toBeInTheDocument();
+  });
+
+  it('draws the chart when one variant has converted', () => {
+    const one = mockVariants.map((v) => (v.is_control ? { ...v, conversions: 0, mean: 0 } : v));
+    render(<ConversionChart variants={one} />);
+    expect(screen.getByTestId('conversion-chart')).toBeInTheDocument();
+    expect(screen.queryByTestId('conversion-chart-empty')).not.toBeInTheDocument();
+  });
 });

@@ -203,13 +203,19 @@ Shows at a glance:
 - **Status**: Active / Completed
 - **Duration**: Days running
 - **Total Users**: Participants across all variants
-- **Minimum sample**: *Reached* when every variant has at least the primary metric's
-  minimum sample size (100 users unless the metric sets another), otherwise *Not reached*.
-  A variant is recommended for shipping only once this is reached: until then a significantly
-  better variant is shown as *Leading*, and the recommendation is CONTINUE TESTING, with the
-  reason "Not every variant has reached the minimum sample size yet". It is a floor, not the
-  planned sample size: the **Sample Size** tab shows that, and the card's "See the Sample
-  Size tab for the planned sample." link opens it.
+- **Planned sample**: *Reached* when the smallest variant has the planned sample per variant
+  that the **Sample Size** tab calculates from its default inputs, for example "4,000 of 3,000
+  per variant"; otherwise *Not yet*, with the progress, for example "203 of 69,410 per
+  variant". With no rate to plan from yet it reads *Not yet* with "0 per variant, no plan yet".
+  Changing the inputs on the tab does not change the card, and the card's "See the Sample Size
+  tab for the planned sample." link opens the tab.
+- **Shipping floor**: a variant is recommended for shipping only once every variant has at
+  least the primary metric's minimum sample size (100 users unless the metric sets another):
+  until then a significantly better variant is shown as *Leading*, and the recommendation is
+  CONTINUE TESTING, with the reason "Not every variant has reached the minimum sample size
+  yet". *Planned sample* is the sample the Sample Size tab's default plan needs, while the
+  recommendation uses its own minimum of 100 users per variant, so SHIP VARIANT beside a
+  *Planned sample* of *Not yet* is not a contradiction.
 - **Recommendation**: SHIP VARIANT / KEEP CONTROL / CONTINUE TESTING / INCONCLUSIVE
 - **Analysis**: the confidence level and correction the results use, which are the
   experiment's own settings. For example "95% confidence · Benjamini-Hochberg correction for
@@ -312,8 +318,7 @@ The tab also says when:
 - **a fixed sample size is a guide only**: a bandit, an uneven split, sequential testing or
   Bayesian analysis.
 
-This is not the same check as **Minimum sample** on the Overview card, which is the floor the
-recommendation needs.
+The **Planned sample** card on the Overview shows the same progress, from the default inputs.
 
 The tab loads its numbers separately from the rest of the page. If they cannot be loaded,
 the tab says so and offers **Try again**; the Overview and the other tabs still work.

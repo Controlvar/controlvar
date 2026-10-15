@@ -10,6 +10,7 @@ import {
   Legend,
 } from 'recharts';
 import { VariantResult } from '@/types/results';
+import { isFiniteNumber } from '@/components/results/shared/resultFormat';
 
 interface ConversionChartProps {
   variants: VariantResult[];
@@ -23,6 +24,19 @@ export function ConversionChart({ variants }: ConversionChartProps) {
     return (
       <div className="flex items-center justify-center h-48 text-slate-500">
         No variant data available
+      </div>
+    );
+  }
+
+  // With nothing to plot, an empty chart would draw an axis of its own
+  // choosing (0-400%), so say so instead (#1244).
+  if (variants.every((v) => !isFiniteNumber(v.mean) || v.mean === 0)) {
+    return (
+      <div
+        className="flex items-center justify-center h-48 text-slate-500"
+        data-testid="conversion-chart-empty"
+      >
+        No conversions yet
       </div>
     );
   }

@@ -120,4 +120,28 @@ describe('LiveResultsPanel', () => {
     render(<LiveResultsPanel experimentId="exp-1" />);
     expect(screen.getByTestId('refresh-button')).toBeDisabled();
   });
+
+  // #1244: a lift is coloured as a win only below the live threshold, as the
+  // Overview table colours only a significant result.
+  it('shows a lift that is not below the threshold in a neutral colour', () => {
+    const snapshot = {
+      ...sampleSnapshot,
+      isSignificant: false,
+      variants: sampleSnapshot.variants.map((v) =>
+        v.isControl ? v : { ...v, relativeLift: 0.527, pValue: 0.132 }
+      ),
+    };
+    mockStream({ status: 'connected', snapshot });
+    render(<LiveResultsPanel experimentId="exp-1" />);
+    const lift = screen.getByTestId('lift-variant_a');
+    expect(lift).toHaveTextContent('+52.7%');
+    expect(lift).toHaveClass('text-slate-600');
+    expect(lift).not.toHaveClass('text-green-700');
+  });
+
+  it('colours a lift below the threshold green', () => {
+    mockStream({ status: 'connected', snapshot: sampleSnapshot });
+    render(<LiveResultsPanel experimentId="exp-1" />);
+    expect(screen.getByTestId('lift-variant_a')).toHaveClass('text-green-700');
+  });
 });

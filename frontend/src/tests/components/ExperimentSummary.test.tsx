@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ExperimentSummary } from '@/components/results/ResultsDashboard/ExperimentSummary';
-import { ExperimentResultsResponse } from '@/types/results';
+import { ExperimentResultsResponse, SampleSizeResult } from '@/types/results';
 
 const baseExperiment: ExperimentResultsResponse = {
   experiment_id: 'exp-1',
@@ -132,36 +132,109 @@ describe('ExperimentSummary', () => {
     expect(screen.getByTestId('experiment-summary')).toBeInTheDocument();
   });
 
-  // #666: the card reports the minimum the recommendation requires, not the
-  // planned sample size the Sample Size tab shows, so it must not share the
-  // tab's label or its "Adequate / Insufficient" verdict.
-  describe('Minimum sample card', () => {
-    it('reads "Minimum sample: Reached" when every variant has the minimum', () => {
-      render(<ExperimentSummary experiment={baseExperiment} />);
-      const card = screen.getByTestId('minimum-sample');
-      expect(within(card).getByText('Minimum sample')).toBeInTheDocument();
-      expect(within(card).getByText('Reached')).toBeInTheDocument();
-      expect(card).toHaveTextContent(/^Minimum sampleReached$/);
+  // #1244: the card reads Reached only when the smallest variant has the
+  // planned sample per variant, the Sample Size tab's figure. The server's
+  // sample_size_adequate (the floor the recommendation needs, 100 users
+  // unless the metric sets another) does not decide it.
+  describe('Planned sample card', () => {
+    const plan = (over: Partial<SampleSizeResult>): SampleSizeResult => ({
+      required_sample_size_per_variant: 3000,
+      current_sample_size_per_variant: 4000,
+      is_adequate: true,
+      achieved_power: 0.9,
+      days_to_significance: null,
+      projected_completion_date: null,
+      baseline_rate: 0.12,
+      mde: 0.05,
+      confidence_level: 0.95,
+      power_target: 0.8,
+      baseline_source: 'observed',
+      baseline_users: 4000,
+      metric_id: 'm1',
+      metric_name: 'Conversion Rate',
+      metric_type: 'conversion',
+      analysed_as: 'conversion',
+      alpha: 0.05,
+      comparisons: 1,
+      correction_method: 'none',
+      mde_absolute: 0.006,
+      unavailable_reason: null,
+      guide_only_reasons: [],
+      ...over,
     });
 
-    it('reads "Minimum sample: Not reached" otherwise', () => {
+    it('reads "Reached" when the smallest variant has the planned sample', () => {
+      render(<ExperimentSummary experiment={baseExperiment} plannedSample={plan({})} />);
+      const card = screen.getByTestId('planned-sample');
+      expect(within(card).getByText('Planned sample')).toBeInTheDocument();
+      expect(within(card).getByText('Reached')).toHaveClass('text-green-700');
+      expect(card).toHaveTextContent(/^Planned sampleReached4,000 of 3,000 per variant$/);
+    });
+
+    it('reads "Not yet" with the progress when the plan is not met (432 users, power 0.34)', () => {
+      // The issue's experiment: Control 18/203, Treatment 31/229. The floor is
+      // met (sample_size_adequate true), the plan is not.
       render(
         <ExperimentSummary
-          experiment={{ ...baseExperiment, sample_size_adequate: false }}
+          experiment={{ ...baseExperiment, sample_size_adequate: true }}
+          plannedSample={plan({
+            required_sample_size_per_variant: 69410,
+            current_sample_size_per_variant: 203,
+            is_adequate: false,
+            achieved_power: 0.34,
+            baseline_rate: 0.0887,
+          })}
         />
       );
-      const card = screen.getByTestId('minimum-sample');
-      expect(card).toHaveTextContent(/^Minimum sampleNot reached$/);
+      const card = screen.getByTestId('planned-sample');
+      expect(card).not.toHaveTextContent('Reached');
+      expect(within(card).getByText('Not yet')).toHaveClass('text-amber-700');
+      expect(card).toHaveTextContent(/^Planned sampleNot yet203 of 69,410 per variant$/);
+    });
+
+    it('never reads "Reached" at 0 events, when there is no plan yet', () => {
+      render(
+        <ExperimentSummary
+          experiment={{
+            ...baseExperiment,
+            sample_size_adequate: true,
+            summary: { ...baseExperiment.summary, total_events: 0, duration_days: 0 },
+          }}
+          plannedSample={plan({
+            required_sample_size_per_variant: null,
+            current_sample_size_per_variant: 0,
+            is_adequate: false,
+            achieved_power: null,
+            baseline_rate: null,
+            baseline_source: null,
+            unavailable_reason: 'no_control_conversions',
+          })}
+        />
+      );
+      const card = screen.getByTestId('planned-sample');
+      expect(card).toHaveTextContent(/^Planned sampleNot yet0 per variant, no plan yet$/);
+    });
+
+    it('never reads "Reached" while the plan loads or when it could not be loaded', () => {
+      const { rerender } = render(<ExperimentSummary experiment={baseExperiment} />);
+      expect(screen.getByTestId('planned-sample')).toHaveTextContent(/^Planned sampleLoading$/);
+      rerender(<ExperimentSummary experiment={baseExperiment} plannedSample={null} />);
+      expect(screen.getByTestId('planned-sample')).toHaveTextContent(
+        /^Planned sampleNot known$/
+      );
     });
 
     it('no longer uses the old "Sample Size: Adequate / Insufficient" wording', () => {
-      const { rerender } = render(<ExperimentSummary experiment={baseExperiment} />);
+      const { rerender } = render(
+        <ExperimentSummary experiment={baseExperiment} plannedSample={plan({})} />
+      );
       const summary = screen.getByTestId('experiment-summary');
       expect(summary).not.toHaveTextContent(/Adequate|Insufficient/);
       expect(within(summary).queryByText('Sample Size')).not.toBeInTheDocument();
       rerender(
         <ExperimentSummary
-          experiment={{ ...baseExperiment, sample_size_adequate: false }}
+          experiment={baseExperiment}
+          plannedSample={plan({ is_adequate: false, current_sample_size_per_variant: 10 })}
         />
       );
       expect(screen.getByTestId('experiment-summary')).not.toHaveTextContent(

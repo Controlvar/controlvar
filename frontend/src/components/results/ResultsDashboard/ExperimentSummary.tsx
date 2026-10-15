@@ -3,6 +3,7 @@ import {
   CorrectionMethod,
   ExperimentResultsResponse,
   RecommendationAction,
+  SampleSizeResult,
 } from '@/types/results';
 import { WinnerIndicator } from '@/components/results/shared/WinnerIndicator';
 import { SRM_QUALIFIER } from './SrmNotice';
@@ -22,6 +23,43 @@ interface ExperimentSummaryProps {
   stored?: { correction_method: CorrectionMethod; confidence_level: number } | null;
   /** Opens the Sample Size tab; the link to it is shown only when given. */
   onOpenSampleSize?: () => void;
+  /**
+   * The Sample Size tab's plan with the server's own inputs (none of the
+   * user's changes on the tab). The Planned sample card reads it. Undefined
+   * while it loads, null when it could not be loaded.
+   */
+  plannedSample?: SampleSizeResult | null;
+}
+
+/**
+ * The Planned sample card: Reached only when the smallest variant has the
+ * planned sample per variant (#1244). It never reads Reached without a plan,
+ * so at no events, or while the plan loads, it cannot say so.
+ */
+export function plannedSampleStatus(plannedSample: SampleSizeResult | null | undefined): {
+  value: string;
+  detail: string | null;
+  valueClass: string;
+} {
+  if (plannedSample === undefined) {
+    return { value: 'Loading', detail: null, valueClass: 'text-slate-600' };
+  }
+  if (plannedSample === null) {
+    return { value: 'Not known', detail: null, valueClass: 'text-slate-600' };
+  }
+  const current = plannedSample.current_sample_size_per_variant;
+  const required = plannedSample.required_sample_size_per_variant;
+  if (required === null) {
+    return {
+      value: 'Not yet',
+      detail: `${current.toLocaleString()} per variant, no plan yet`,
+      valueClass: 'text-amber-700',
+    };
+  }
+  const detail = `${current.toLocaleString()} of ${required.toLocaleString()} per variant`;
+  return plannedSample.is_adequate && current >= required
+    ? { value: 'Reached', detail, valueClass: 'text-green-700' }
+    : { value: 'Not yet', detail, valueClass: 'text-amber-700' };
 }
 
 const RECOMMENDATION_CONFIG: Record<
@@ -83,8 +121,14 @@ export function analysisSentence(experiment: ExperimentResultsResponse): string 
     : `${level} confidence · ${correctionName(method)} correction`;
 }
 
-export function ExperimentSummary({ experiment, stored, onOpenSampleSize }: ExperimentSummaryProps) {
+export function ExperimentSummary({
+  experiment,
+  stored,
+  onOpenSampleSize,
+  plannedSample,
+}: ExperimentSummaryProps) {
   const { summary } = experiment;
+  const planned = plannedSampleStatus(plannedSample);
   const rec = RECOMMENDATION_CONFIG[summary.recommendation];
 
   // Find the winning variant name if there is one
@@ -137,15 +181,14 @@ export function ExperimentSummary({ experiment, stored, onOpenSampleSize }: Expe
         <Stat label="Total Users" value={summary.total_users.toLocaleString()} />
         <Stat label="Total Events" value={summary.total_events.toLocaleString()} />
         <Stat label="Duration" value={`${summary.duration_days}d`} />
-        {/* The minimum per variant that the recommendation requires, not the
-            planned sample size: that one is on the Sample Size tab (#666). */}
+        {/* The planned sample per variant, as on the Sample Size tab (#1244).
+            The smaller floor the recommendation needs is in its reason. */}
         <Stat
-          label="Minimum sample"
-          value={experiment.sample_size_adequate ? 'Reached' : 'Not reached'}
-          valueClass={
-            experiment.sample_size_adequate ? 'text-green-700' : 'text-amber-700'
-          }
-          testId="minimum-sample"
+          label="Planned sample"
+          value={planned.value}
+          valueClass={planned.valueClass}
+          detail={planned.detail}
+          testId="planned-sample"
         />
       </div>
 
@@ -216,17 +259,20 @@ function Stat({
   label,
   value,
   valueClass = 'text-slate-800',
+  detail,
   testId,
 }: {
   label: string;
   value: string;
   valueClass?: string;
+  detail?: string | null;
   testId?: string;
 }) {
   return (
     <div data-testid={testId}>
       <p className="text-xs text-slate-500 uppercase tracking-wide">{label}</p>
       <p className={`text-lg font-semibold ${valueClass}`}>{value}</p>
+      {detail && <p className="text-xs text-slate-600">{detail}</p>}
     </div>
   );
 }

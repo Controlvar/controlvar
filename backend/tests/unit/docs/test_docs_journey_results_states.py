@@ -332,7 +332,8 @@ def test_each_refusal_body_is_the_guides(journey, step_id, guide):
 
 def test_the_minimum_sample_reason_the_page_shows_is_the_guides():
     page = _step(_steps("experiment-results"), "floor-results-page")["expect"]["aria"]
-    reason = re.search(r"paragraph: /([^/]+)/", page)
+    # The recommendation reason, not the Planned sample card's progress line.
+    reason = re.search(r"paragraph: /(Not every [^/]+)/", page)
     assert reason is not None
     text = " ".join(
         (REPO_ROOT / "docs" / "guides" / "user-guide.md").read_text("utf-8").split()

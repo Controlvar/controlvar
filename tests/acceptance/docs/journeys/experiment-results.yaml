@@ -36,8 +36,10 @@
 # * Minimum sample: Control 60 users (6 convert), Treatment 60 (24), under the
 #   floor of 100 the metric gets when it names none. Treatment is significant
 #   (Fisher's p 0.000250, held to 1e-9 relative), so the recommendation is
-#   withheld for the floor and not for the p-value: CONTINUE TESTING, and the
-#   page reads "Minimum sample: Not reached".
+#   withheld for the floor and not for the p-value: CONTINUE TESTING, with the
+#   floor's reason. The page's "Planned sample" card reads "Not yet" here, as
+#   it does on the other two: at a 10% control rate the Sample Size tab's
+#   default plan (5% relative effect) is far above 400 per variant (#1244).
 #
 # The results are cached for up to five minutes, so each experiment's
 # population is complete before its results are first read, on the page or
@@ -359,8 +361,9 @@ steps:
           - text: /Ship Variant/
           - paragraph: Total Users
           - paragraph: "800"
-          - paragraph: Minimum sample
-          - paragraph: Reached
+          - paragraph: Planned sample
+          - paragraph: Not yet
+          - paragraph: /^400 of [\d,]+ per variant$/
           - paragraph: "Analysis: 95% confidence · one comparison with the control on each metric, so no correction is needed"
           - paragraph: "Sample ratio check passed: the traffic split matches the allocation (p = 1)."
           - tabpanel:
@@ -524,8 +527,9 @@ steps:
           - text: /Inconclusive/
           - paragraph: Total Users
           - paragraph: "500"
-          - paragraph: Minimum sample
-          - paragraph: Reached
+          - paragraph: Planned sample
+          - paragraph: Not yet
+          - paragraph: /^200 of [\d,]+ per variant$/
           - paragraph: /^Leading. Treatment.*The traffic split does not match the allocation, so treat this with caution\.$/
           - region "The traffic split does not match the allocation.":
             - heading "The traffic split does not match the allocation." [level=3]
@@ -649,8 +653,9 @@ steps:
           - text: /Continue Testing/
           - paragraph: Total Users
           - paragraph: "120"
-          - paragraph: Minimum sample
-          - paragraph: Not reached
+          - paragraph: Planned sample
+          - paragraph: Not yet
+          - paragraph: /^60 of [\d,]+ per variant$/
           - paragraph: /Not every variant has reached the minimum sample size yet/
           - paragraph: "Sample ratio check passed: the traffic split matches the allocation (p = 1)."
           - tabpanel:
@@ -661,4 +666,4 @@ steps:
                 - rowgroup:
                   - row /Control\(control\) 60 10\.00%/
                   - row /Treatment 60 40\.00% \+300\.0%/
-    fail: the results page does not read "Minimum sample Not reached", or recommends shipping a variant before every variant has 100 users
+    fail: the results page reads "Planned sample Reached" before the planned sample is met, or recommends shipping a variant before every variant has 100 users
