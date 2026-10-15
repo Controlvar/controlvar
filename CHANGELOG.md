@@ -10,6 +10,13 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.34.2](https://github.com/getexperimently/experimently/compare/v0.34.1...v0.34.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **demo:** StreamPulse says when its flag decisions are fetched, not "every 5 s" ([#1250](https://github.com/getexperimently/experimently/issues/1250)) ([7b59d5a](https://github.com/getexperimently/experimently/commit/7b59d5a04ba39eb1374f6dcc416b41c7132792e2))
+
 ## [0.34.1](https://github.com/getexperimently/experimently/compare/v0.34.0...v0.34.1) (2026-10-15)
 
 
