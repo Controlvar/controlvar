@@ -545,7 +545,7 @@ by = [
 ]
 
 [[unit]]
-text = "Planned sample: Reached when the smallest variant has the planned sample per variant that the Sample Size tab calculates from its default inputs, for example \"4,000 of 3,000 per variant\"; otherwise Not yet, with the progress, for example \"203 of 69,410 per variant\"."
+text = "Planned sample: Reached when the smallest variant has the planned sample per variant in the plan the Sample Size tab shows before you change anything, for example \"4,000 of 3,000 per variant\"; otherwise Not yet, with the progress, for example \"203 of 69,410 per variant\"."
 by = [
     "test:frontend/src/tests/components/ExperimentSummary.test.tsx",
     "journey:experiment-results#results-page",
@@ -584,7 +584,7 @@ by = [
 ]
 
 [[unit]]
-text = "Planned sample is the sample the Sample Size tab's default plan needs, while the recommendation uses its own minimum of 100 users per variant, so SHIP VARIANT beside a Planned sample of Not yet is not a contradiction."
+text = "Planned sample is the sample in the plan the Sample Size tab shows before you change anything, while the recommendation uses its own minimum of 100 users per variant, so SHIP VARIANT beside a Planned sample of Not yet is not a contradiction."
 by = ["journey:experiment-results#results-page"]
 
 [[unit]]
@@ -860,7 +860,7 @@ text = "a fixed sample size is a guide only: a bandit, an uneven split, sequenti
 by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
 
 [[unit]]
-text = "The Planned sample card on the Overview shows the same progress, from the default inputs."
+text = "The Planned sample card on the Overview shows the same progress, for the plan the tab shows before you change anything."
 by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx"]
 
 [[unit]]

@@ -932,29 +932,29 @@ def get_sample_size_status(
     if experiment is None:
         raise HTTPException(status_code=404, detail="Experiment not found")
 
-    metrics = AnalysisService._ordered_metrics(experiment)
-    metric = metrics[0] if metrics else None
-
-    # The MDE: the request's, else the one saved with the experiment on the
-    # metric planned on, else the default.
-    mde_source: str
-    if mde is not None:
-        mde_source = "request"
-    else:
-        mde = _planned_effect(metric)
-        if mde is not None:
-            mde_source = "experiment"
-        else:
-            mde = DEFAULT_SAMPLE_SIZE_MDE
-            mde_source = "default"
-
-    if (
-        baseline_conversion_rate is not None
-        and baseline_conversion_rate * (1.0 + mde) >= 1.0
-    ):
-        raise HTTPException(status_code=422, detail=TREATMENT_RATE_CEILING_MESSAGE)
-
     try:
+        metrics = AnalysisService._ordered_metrics(experiment)
+        metric = metrics[0] if metrics else None
+
+        # The MDE: the request's, else the one saved with the experiment on the
+        # metric planned on, else the default.
+        mde_source: str
+        if mde is not None:
+            mde_source = "request"
+        else:
+            mde = _planned_effect(metric)
+            if mde is not None:
+                mde_source = "experiment"
+            else:
+                mde = DEFAULT_SAMPLE_SIZE_MDE
+                mde_source = "default"
+
+        if (
+            baseline_conversion_rate is not None
+            and baseline_conversion_rate * (1.0 + mde) >= 1.0
+        ):
+            raise HTTPException(status_code=422, detail=TREATMENT_RATE_CEILING_MESSAGE)
+
         confidence_level, correction_method = resolve_analysis_settings(
             experiment, confidence_level, correction_method
         )
