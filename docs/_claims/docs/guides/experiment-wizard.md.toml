@@ -47,10 +47,11 @@ by = [
 ]
 
 [[unit]]
-text = "4. Estimate | How results will be judged (the confidence level and the correction, saved with the experiment), then, optionally, how many users each variant needs and roughly how many days that takes"
+text = "4. Estimate | How results will be judged (the confidence level and the correction, saved with the experiment), then, optionally, the minimum detectable effect (saved with the experiment), how many users each variant needs and roughly how many days that takes"
 by = [
     "journey:experiment-wizard#variants-next",
     "journey:experiment-wizard#calculate",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::typed without an estimate: saved on the primary metric only, and Review says so",
 ]
 
 [[unit]]
@@ -105,11 +106,39 @@ text = "The Review step shows them in its Analysis row."
 by = ["journey:experiment-wizard#estimate-next"]
 
 [[unit]]
-text = "The rest of the step, the estimate, is advisory and is not saved."
-by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+text = "The rest of the step is the estimate."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx::says on the Estimate step what is saved and what is not"]
 
 [[unit]]
-text = "It calls the sample-size endpoint shown below at a significance of 1 − the confidence level, treats the minimum detectable effect as a relative change (5% of a 12% baseline is 12.6%, not 17%), and assumes users are split evenly between the variants."
+text = "Its minimum detectable effect is saved with the experiment, as the primary metric's expected_effect (10% is saved as 0.1), and the results page's Planned sample plans the sample for it; leave it blank and the results page plans for 5%."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::typed without an estimate: saved on the primary metric only, and Review says so",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::left blank: nothing is saved, and Review says the results page plans for 5%",
+    "journey:experiment-wizard#effect",
+]
+
+[[unit]]
+text = "An effect below 0.1%, or of 100% or more, cannot be saved: Next says so and stays on the step."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx::an effect %s refuses Next with the step error, and is never dropped silently"]
+
+[[unit]]
+text = "Nothing else in the estimate is saved: the results page plans from the control variant's own conversion rate, at 80% power."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::keeps the estimate across Back and Next, and puts only its effect in the create request",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::says on the Estimate step what is saved and what is not",
+]
+
+[[unit]]
+text = "The Review step's Sample size row says what is saved, and the single-page form shows a saved effect read-only under the metrics."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::typed without an estimate: saved on the primary metric only, and Review says so",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::an estimate made for other inputs is not shown on Review; the effect still is",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::carries over to the single-page form, read-only, follows the primary metric, and comes back",
+    "journey:experiment-wizard#estimate-next",
+]
+
+[[unit]]
+text = "The estimate calls the sample-size endpoint shown below at a significance of 1 − the confidence level, treats the minimum detectable effect as a relative change (5% of a 12% baseline is 12.6%, not 17%), and assumes users are split evenly between the variants."
 by = [
     "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::asks the sample-size endpoint only when the button is pressed, in fractions, without a login redirect",
     "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::sends each power option, and 1 minus each confidence level as the significance",
@@ -475,8 +504,13 @@ text = "The experiment is an ordinary one."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "An ab draft gets two variants, Control and Variant A, at 50% each; its primary metric counts checkout_completed:"
-by = ["docex:docs/guides/experiment-wizard.md#\"name\": \"Checkout CTA Button Color\""]
+text = "An ab draft gets two variants, Control and Variant A, at 50% each; its primary metric counts checkout_completed, and carries the draft's mde as its expected_effect, which the results page plans the sample for:"
+by = [
+    "docex:docs/guides/experiment-wizard.md#\"name\": \"Checkout CTA Button Color\"",
+    "docex:docs/guides/experiment-wizard.md#\"expected_effect\": 0.05",
+    "test:backend/tests/integration/api/test_wizard_submit_builds.py::test_a_submitted_draft_creates_the_documented_experiment",
+    "test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardExperimentCreation::test_payload_saves_the_planned_effect_on_the_primary_metric_only",
+]
 
 [[unit]]
 text = "A multivariate draft gets three variants (33/33/34), and a feature_flag_rollout draft gets a held-back control with {\"enabled\": false} and a treatment with {\"enabled\": true}, at 50% each."
@@ -491,7 +525,18 @@ text = "Sample Size Guidance"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The draft stores baseline_rate and mde, but the wizard doesn't compute a sample size from them."
+text = "The draft stores baseline_rate and mde."
+by = ["test:backend/tests/integration/api/test_wizard_submit_builds.py::test_a_submitted_draft_creates_the_documented_experiment"]
+
+[[unit]]
+text = "Submitting saves mde as the primary metric's expected_effect, and the results page plans the sample for it; baseline_rate is not saved, because the results page plans from the control variant's own conversion rate."
+by = [
+    "test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardExperimentCreation::test_payload_saves_the_planned_effect_on_the_primary_metric_only",
+    "test:backend/tests/integration/api/test_wizard_submit_builds.py::test_a_submitted_draft_creates_the_documented_experiment",
+]
+
+[[unit]]
+text = "The wizard doesn't compute a sample size itself."
 by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
 
 [[unit]]

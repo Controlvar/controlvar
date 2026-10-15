@@ -289,7 +289,7 @@ path = "docs/guides/experiment-wizard.md"
 environment = "stack"
 exec = 11
 skip = 0
-expects = 18
+expects = 19
 
 [[document]]
 path = "docs/llm-evaluation/quickstart.md"

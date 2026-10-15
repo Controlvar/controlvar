@@ -10,6 +10,9 @@ import {
   isEvenSplit,
   POWER_OPTIONS,
   estimateSignificance,
+  formatEffect,
+  plannedEffectFraction,
+  plannedEffectProblem,
 } from '@/components/experiments/new/estimate';
 import { CONFIDENCE_OPTIONS } from '@/components/results/shared/analysisSettings';
 
@@ -99,7 +102,9 @@ describe('buildEstimateQuery', () => {
     ['a blank effect', inputs({ mdePct: '' }), 2, ESTIMATE_PROBLEMS.mde],
     ['an effect below 0.1%', inputs({ mdePct: '0.0000001' }), 2, ESTIMATE_PROBLEMS.mde],
     ['a negative effect', inputs({ mdePct: '-5' }), 2, ESTIMATE_PROBLEMS.mde],
-    ['a baseline and effect reaching 100%', inputs({ baselinePct: '50', mdePct: '100' }), 2, ESTIMATE_PROBLEMS.ceiling],
+    ['a baseline and effect reaching 100%', inputs({ baselinePct: '60', mdePct: '80' }), 2, ESTIMATE_PROBLEMS.ceiling],
+    ['an effect of 100%', inputs({ baselinePct: '1', mdePct: '100' }), 2, ESTIMATE_PROBLEMS.mdeHigh],
+    ['an effect above 100%', inputs({ baselinePct: '1', mdePct: '150' }), 2, ESTIMATE_PROBLEMS.mdeHigh],
     ['fractional daily users', inputs({ dailyUsers: '10.5' }), 2, ESTIMATE_PROBLEMS.dailyUsers],
     ['zero daily users', inputs({ dailyUsers: '0' }), 2, ESTIMATE_PROBLEMS.dailyUsers],
     ['a share of 0%', inputs({ dailyUsers: '100', sharePct: '0' }), 2, ESTIMATE_PROBLEMS.share],
@@ -113,6 +118,33 @@ describe('buildEstimateQuery', () => {
     expect(buildEstimateQuery(inputs({ baselinePct: '0.01' }), 2).ok).toBe(true);
     expect(buildEstimateQuery(inputs({ baselinePct: '90', mdePct: '0.1' }), 2).ok).toBe(true);
     expect(buildEstimateQuery(inputs({ dailyUsers: '1', sharePct: '100' }), 2).ok).toBe(true);
+  });
+});
+
+describe('the planned effect saved with the experiment (#1257)', () => {
+  it.each([
+    ['', null, undefined],
+    ['10', null, 0.1],
+    [' 7 ', null, 0.07],
+    ['0.1', null, 0.001],
+    ['99.99', null, 0.9999],
+    ['28.6', null, 0.286],
+    ['abc', ESTIMATE_PROBLEMS.mde, undefined],
+    ['0.09', ESTIMATE_PROBLEMS.mde, undefined],
+    ['-5', ESTIMATE_PROBLEMS.mde, undefined],
+    ['100', ESTIMATE_PROBLEMS.mdeHigh, undefined],
+    ['150', ESTIMATE_PROBLEMS.mdeHigh, undefined],
+  ])('%j: problem %j, saved as %j', (typed, problem, fraction) => {
+    expect(plannedEffectProblem(typed)).toBe(problem);
+    expect(plannedEffectFraction(typed)).toBe(fraction);
+  });
+
+  it('formats a saved effect without float noise', () => {
+    expect(formatEffect(0.07)).toBe('7%');
+    expect(formatEffect(0.001)).toBe('0.1%');
+    expect(formatEffect(0.1)).toBe('10%');
+    expect(formatEffect(28.6 / 100)).toBe('28.6%');
+    expect(formatEffect(0.0015)).toBe('0.15%');
   });
 });
 

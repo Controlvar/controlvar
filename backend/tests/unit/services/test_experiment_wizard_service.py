@@ -9,6 +9,7 @@ import uuid
 
 import pytest
 
+from backend.app.schemas.experiment import ExperimentCreate
 from backend.app.services.experiment_wizard_service import (
     EXPERIMENT_TYPES,
     WIZARD_STEPS,
@@ -453,6 +454,43 @@ class TestWizardExperimentCreation:
         draft.name = "My Custom Experiment"
         payload = ExperimentWizardService.build_experiment_payload(draft)
         assert payload["name"] == "My Custom Experiment"
+
+    @pytest.mark.regression
+    def test_payload_saves_the_planned_effect_on_the_primary_metric_only(self):
+        """#1257: the sample_size step's mde is the primary metric's expected_effect.
+
+        The results page's Planned sample plans the primary metric for it; the
+        guardrails carry none. Before the fix the draft's mde was dropped.
+        """
+        draft = ExperimentWizardService.create_draft(
+            user_id="user-1", experiment_type="ab"
+        )
+        draft.primary_metric_id = "purchase"
+        draft.guardrail_metric_ids = ["refund"]
+        draft.baseline_rate = 0.05
+        draft.mde = 0.1
+        payload = ExperimentWizardService.build_experiment_payload(draft)
+        assert [
+            (m["name"], m["is_primary"], m.get("expected_effect"))
+            for m in payload["metrics"]
+        ] == [
+            ("purchase", True, 0.1),
+            ("refund", False, None),
+        ]
+        assert "expected_effect" not in payload["metrics"][1]
+
+        # The submit endpoint feeds it to ExperimentCreate, which keeps it.
+        created = ExperimentCreate(**payload)
+        assert [m.expected_effect for m in created.metrics] == [0.1, None]
+
+    def test_payload_without_a_sample_size_step_plans_nothing(self):
+        """No mde in the draft: the primary metric's expected_effect is None (the default plan)."""
+        draft = ExperimentWizardService.create_draft(
+            user_id="user-1", experiment_type="ab"
+        )
+        payload = ExperimentWizardService.build_experiment_payload(draft)
+        assert payload["metrics"][0]["expected_effect"] is None
+        assert ExperimentCreate(**payload).metrics[0].expected_effect is None
 
     def test_payload_wraps_targeting_rules_in_the_dashboard_shape(self):
         """The wizard's flat condition list becomes the grouped shape ExperimentCreate takes."""

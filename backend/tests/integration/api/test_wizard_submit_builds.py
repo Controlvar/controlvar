@@ -103,6 +103,13 @@ def test_a_submitted_draft_creates_the_documented_experiment(
             "page_error": False,
             "refund_requested": False,
         }
+        # The sample_size step's mde is the primary metric's planned effect (#1257).
+        effects = {m["event_name"]: m["expected_effect"] for m in experiment["metrics"]}
+        assert effects == {
+            "checkout_completed": 0.05,
+            "page_error": None,
+            "refund_requested": None,
+        }
         variants = sorted(
             (
                 v["name"],

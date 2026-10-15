@@ -5,7 +5,12 @@
  * Pure TypeScript. The inputs are percentages as typed (strings, so a half-typed
  * number stays on screen); `buildEstimateQuery` checks them and converts them to
  * the fractions `GET /api/v1/experiments/analysis/sample-size` takes, or says
- * what is wrong. Nothing here ever enters the create request.
+ * what is wrong.
+ *
+ * One input is saved: the minimum detectable effect, when it is usable
+ * (`plannedEffectFraction`), goes in the create request as the primary
+ * metric's `expected_effect`, and the results page plans the sample for it
+ * (#1257). The rest of the estimate is never sent with the experiment.
  */
 import { SampleSizeQuery } from '@/services/experiments';
 import { DEFAULT_CONFIDENCE_LEVEL } from '@/components/results/shared/analysisSettings';
@@ -49,6 +54,7 @@ export const ESTIMATE_PROBLEMS = {
   variants: 'The estimate needs at least two variants. Add one on the Variants step.',
   baseline: 'Enter a baseline conversion rate between 0.01% and 99.99%.',
   mde: 'Enter a minimum detectable effect of at least 0.1%.',
+  mdeHigh: 'Enter a minimum detectable effect below 100%.',
   ceiling:
     'This baseline raised by this effect reaches 100% or more. Lower the baseline rate or the effect.',
   dailyUsers: 'Daily users must be a whole number of at least 1.',
@@ -62,6 +68,35 @@ function readNumber(text: string): number | null {
   if (trimmed === '') return null;
   const value = Number(trimmed);
   return Number.isFinite(value) ? value : null;
+}
+
+/**
+ * What is wrong with a typed minimum detectable effect, or null when it can be
+ * saved. Blank is fine: nothing is saved and the results page plans for its
+ * default. A usable effect is at least 0.1% and below 100%; the results page's
+ * plan takes nothing at or above 100%.
+ */
+export function plannedEffectProblem(mdePct: string): string | null {
+  if (mdePct.trim() === '') return null;
+  const value = readNumber(mdePct);
+  if (value === null || value < 0.1) return ESTIMATE_PROBLEMS.mde;
+  if (value >= 100) return ESTIMATE_PROBLEMS.mdeHigh;
+  return null;
+}
+
+/**
+ * The typed minimum detectable effect as the fraction saved with the
+ * experiment (10 -> 0.1), or undefined when it is blank or not usable.
+ */
+export function plannedEffectFraction(mdePct: string): number | undefined {
+  if (mdePct.trim() === '' || plannedEffectProblem(mdePct) !== null) return undefined;
+  // Rounded to 12 significant digits, so 28.6 is saved as 0.286, not 0.28600000000000003.
+  return Number((Number(mdePct.trim()) / 100).toPrecision(12));
+}
+
+/** A saved effect as a percentage, without float noise: 0.07 -> "7%", 0.001 -> "0.1%". */
+export function formatEffect(fraction: number): string {
+  return `${Number((fraction * 100).toFixed(4))}%`;
 }
 
 /**
@@ -83,6 +118,7 @@ export function buildEstimateQuery(
   }
   const mdePct = readNumber(inputs.mdePct);
   if (mdePct === null || mdePct < 0.1) return { ok: false, problem: ESTIMATE_PROBLEMS.mde };
+  if (mdePct >= 100) return { ok: false, problem: ESTIMATE_PROBLEMS.mdeHigh };
 
   const baseline = baselinePct / 100;
   const mde = mdePct / 100;

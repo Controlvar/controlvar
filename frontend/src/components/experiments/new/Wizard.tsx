@@ -20,7 +20,13 @@ import {
 import { BasicInfoFields } from './BasicInfoFields';
 import { VariantsEditor } from './VariantsEditor';
 import { MetricsEditor } from './MetricsEditor';
-import { EstimatePanelState, INITIAL_ESTIMATE_PANEL, SampleSizeEstimate } from './SampleSizeEstimate';
+import {
+  currentEstimate,
+  EstimatePanelState,
+  INITIAL_ESTIMATE_PANEL,
+  SampleSizeEstimate,
+} from './SampleSizeEstimate';
+import { formatEffect, plannedEffectFraction } from './estimate';
 import { AnalysisSettingsFields } from './AnalysisSettingsFields';
 import { describeSettings } from '@/components/results/shared/analysisSettings';
 import { CreateError, footMessage } from './createErrors';
@@ -233,6 +239,7 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
   };
 
   const payload = step === 'review' ? buildCreatePayload(state) : null;
+  const plannedEffect = plannedEffectFraction(state.plannedEffectPct);
   // A targeting problem is shown beside the targeting summary; anything else the error says goes below.
   const foot = footMessage(error);
 
@@ -410,17 +417,19 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                 variantCount={state.variants.length}
                 bayesianEnabled={state.bayesianEnabled}
               />
-              {/* Saved settings above; the advisory, unsaved estimate below. */}
+              {/* Saved settings above; the estimate below, whose effect is saved. */}
               <section
                 aria-labelledby="wizard-estimate-heading"
                 className="border-t border-slate-200 pt-4 space-y-3"
               >
                 <h3 id="wizard-estimate-heading" className="text-base font-semibold text-slate-900">
-                  Sample size estimate (optional, not saved)
+                  Sample size estimate (optional)
                 </h3>
                 <SampleSizeEstimate
                   value={estimate}
                   onChange={setEstimate}
+                  mdePct={state.plannedEffectPct}
+                  onMdePctChange={(plannedEffectPct) => dispatch({ type: 'setPlannedEffect', plannedEffectPct })}
                   allocations={state.variants.map((v) => Number(v.traffic_allocation) || 0)}
                   confidenceLevel={state.confidenceLevel}
                   correctionMethod={state.correctionMethod}
@@ -509,13 +518,17 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                   {payload.bayesian_enabled ? ' · Bayesian analysis on' : ''}
                 </p>
               </ReviewRow>
-              <ReviewRow title="Estimate" onEdit={() => goTo(3)} editLabel="Edit estimate">
+              <ReviewRow title="Sample size" onEdit={() => goTo(3)} editLabel="Edit sample size">
                 <p data-testid="review-estimate">
-                  {estimate.result
-                    ? `${estimate.result.estimate.samples_per_variant.toLocaleString(
-                        'en-US',
-                      )} users per variant (advisory; not saved)`
-                    : 'Not calculated (optional; not saved)'}
+                  {reviewSampleSize(
+                    plannedEffect,
+                    currentEstimate(
+                      estimate,
+                      state.plannedEffectPct,
+                      state.variants.length,
+                      state.confidenceLevel,
+                    )?.samples_per_variant ?? null,
+                  )}
                 </p>
               </ReviewRow>
             </dl>
@@ -593,6 +606,25 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
   );
 }
 
+/**
+ * The Review step's sample-size line: exactly what will be saved. Only the
+ * effect is; an estimate number is shown only when it answers the inputs as
+ * they stand.
+ */
+export function reviewSampleSize(plannedEffect: number | undefined, perVariant: number | null): string {
+  if (plannedEffect === undefined) {
+    return 'No minimum detectable effect set; the results page will plan for 5%.';
+  }
+  const effect = formatEffect(plannedEffect);
+  if (perVariant === null) {
+    return `Minimum detectable effect: ${effect} (saved). No estimate calculated for these inputs.`;
+  }
+  return (
+    `${perVariant.toLocaleString('en-US')} users per variant to detect a ${effect} lift. ` +
+    `The ${effect} is saved; the rest of the estimate is not.`
+  );
+}
+
 function ReviewRow({
   title,
   onEdit,
@@ -613,7 +645,7 @@ function ReviewRow({
           type="button"
           onClick={onEdit}
           className={editButton}
-          data-testid={`review-edit-${title.toLowerCase()}`}
+          data-testid={`review-edit-${title.toLowerCase().replace(/\s+/g, '-')}`}
         >
           {editLabel}
         </button>
