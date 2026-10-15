@@ -10,6 +10,20 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.34.0](https://github.com/getexperimently/experimently/compare/v0.33.0...v0.34.0) (2026-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** dashboard-shaped flag targeting rules hold at most 1,000 groups and conditions ([#1243](https://github.com/getexperimently/experimently/issues/1243))
+
+### Bug Fixes
+
+* **api:** dashboard-shaped flag targeting rules hold at most 1,000 groups and conditions ([#1243](https://github.com/getexperimently/experimently/issues/1243)) ([e3b9514](https://github.com/getexperimently/experimently/commit/e3b9514df714b559fcaac7f1a0c6f7e42be6ac51))
+* **api:** the per-process rate-limit fallback forgets keys whose window has emptied ([#1241](https://github.com/getexperimently/experimently/issues/1241)) ([01eae34](https://github.com/getexperimently/experimently/commit/01eae34d677d25926073aafde99858c9d6e1c36c))
+* **demo:** ShopLab's products page loads on a direct visit ([#1237](https://github.com/getexperimently/experimently/issues/1237)) ([89fb7c0](https://github.com/getexperimently/experimently/commit/89fb7c095399fe090a4c6024f81b3ce670d11c89))
+* **segments:** the segment-usage lookup answers an error when its query fails, not an empty list ([#1240](https://github.com/getexperimently/experimently/issues/1240)) ([cfec004](https://github.com/getexperimently/experimently/commit/cfec004c0ae9f1e8d7f7cf9cdb04225565f70793))
+
 ## [0.33.0](https://github.com/getexperimently/experimently/compare/v0.32.0...v0.33.0) (2026-10-14)
 
 
