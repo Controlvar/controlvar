@@ -394,6 +394,40 @@ describe('ResultsDashboard', () => {
       expect(mockGetResults).toHaveBeenCalledTimes(1);
     });
 
+    // #1244: the Overview card reads the plan with the server's inputs, and
+    // what the user tries on the tab does not move it.
+    it('feeds the Minimum sample card the plan, and keeps it when the user recalculates', async () => {
+      mockGetResults.mockResolvedValue({ ...mockResults, sample_size_adequate: true });
+      mockGetDailyResults.mockResolvedValue(mockDaily);
+      mockGetSampleSize
+        .mockResolvedValueOnce({
+          ...mockSampleSize,
+          required_sample_size_per_variant: 69410,
+          current_sample_size_per_variant: 203,
+          is_adequate: false,
+          achieved_power: 0.34,
+        })
+        .mockResolvedValue({ ...mockSampleSize, mde: 0.9, baseline_source: 'request' });
+
+      render(<ResultsDashboard experimentId="exp-1" />);
+      const card = await screen.findByTestId('minimum-sample');
+      await waitFor(() =>
+        expect(card).toHaveTextContent(/^Minimum sampleNot yet203 of 69,410 per variant$/)
+      );
+
+      await userEvent.click(screen.getByRole('tab', { name: /sample size/i }));
+      await screen.findByTestId('sample-size-meter');
+      const mde = screen.getByLabelText('Minimum detectable effect, relative (%)');
+      await userEvent.clear(mde);
+      await userEvent.type(mde, '90');
+      await userEvent.click(screen.getByRole('button', { name: 'Recalculate' }));
+      await waitFor(() => expect(mockGetSampleSize).toHaveBeenCalledTimes(2));
+      await screen.findByTestId('sample-size-meter');
+      expect(screen.getByTestId('minimum-sample')).toHaveTextContent(
+        /^Minimum sampleNot yet203 of 69,410 per variant$/
+      );
+    });
+
     it('renders the meter for an experiment with no traffic yet', async () => {
       mockGetResults.mockResolvedValue(mockResults);
       mockGetDailyResults.mockResolvedValue(mockDaily);

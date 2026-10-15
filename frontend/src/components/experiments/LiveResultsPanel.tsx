@@ -129,13 +129,19 @@ function VariantsTable({ variants }: { variants: VariantResult[] }) {
                     <span className="text-slate-600">—</span>
                   ) : hasLift ? (
                     <span
+                      // Coloured only below the live threshold, as the
+                      // Overview table colours only a significant result:
+                      // otherwise a lift is not a win (#1244).
                       className={
-                        variant.relativeLift > 0
+                        !belowLiveThreshold
+                          ? 'text-slate-600'
+                          : variant.relativeLift > 0
                           ? 'text-green-700'
                           : variant.relativeLift < 0
                           ? 'text-red-700'
                           : 'text-slate-600'
                       }
+                      data-testid={`lift-${variant.key}`}
                     >
                       {formatSignedPct(variant.relativeLift * 100)}
                     </span>

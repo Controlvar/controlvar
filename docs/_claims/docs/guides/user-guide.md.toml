@@ -545,25 +545,34 @@ by = [
 ]
 
 [[unit]]
-text = "Minimum sample: Reached when every variant has at least the primary metric's minimum sample size (100 users unless the metric sets another), otherwise Not reached."
+text = "Minimum sample: Reached when the smallest variant has the planned sample per variant that the Sample Size tab calculates from its default inputs, for example \"4,000 of 3,000 per variant\"; otherwise Not yet, with the progress, for example \"203 of 69,410 per variant\"."
 by = [
-    "journey:experiment-results#floor-results-api",
+    "test:frontend/src/tests/components/ExperimentSummary.test.tsx",
+    "journey:experiment-results#results-page",
     "journey:experiment-results#floor-results-page",
 ]
 
 [[unit]]
-text = "A variant is recommended for shipping only once this is reached: until then a significantly better variant is shown as Leading, and the recommendation is CONTINUE TESTING, with the reason \"Not every variant has reached the minimum sample size yet\"."
-by = [
-    "journey:experiment-results#floor-results-api",
-    "journey:experiment-results#floor-results-page",
-]
+text = "With no rate to plan from yet it reads Not yet with \"0 per variant, no plan yet\"."
+by = ["test:frontend/src/tests/components/ExperimentSummary.test.tsx"]
 
 [[unit]]
-text = "It is a floor, not the planned sample size: the Sample Size tab shows that, and the card's \"See the Sample Size tab for the planned sample.\" link opens it."
+text = "Changing the inputs on the tab does not change the card, and the card's \"See the Sample Size tab for the planned sample.\" link opens the tab."
 by = [
     "test:frontend/src/tests/components/ExperimentSummary.test.tsx",
     "test:frontend/src/tests/components/ResultsDashboard.test.tsx",
 ]
+
+[[unit]]
+text = "Shipping floor: a variant is recommended for shipping only once every variant has at least the primary metric's minimum sample size (100 users unless the metric sets another): until then a significantly better variant is shown as Leading, and the recommendation is CONTINUE TESTING, with the reason \"Not every variant has reached the minimum sample size yet\"."
+by = [
+    "journey:experiment-results#floor-results-api",
+    "journey:experiment-results#floor-results-page",
+]
+
+[[unit]]
+text = "The floor is usually smaller than the planned sample, so the recommendation can be SHIP VARIANT while the card still reads Not yet."
+by = ["journey:experiment-results#results-page"]
 
 [[unit]]
 text = "Recommendation: SHIP VARIANT / KEEP CONTROL / CONTINUE TESTING / INCONCLUSIVE"
@@ -838,8 +847,8 @@ text = "a fixed sample size is a guide only: a bandit, an uneven split, sequenti
 by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
 
 [[unit]]
-text = "This is not the same check as Minimum sample on the Overview card, which is the floor the recommendation needs."
-by = ["exempt:baseline"]
+text = "The Minimum sample card on the Overview shows the same progress, from the default inputs."
+by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx"]
 
 [[unit]]
 text = "The tab loads its numbers separately from the rest of the page."

@@ -162,6 +162,13 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
   // the URL (#666): without overrides the server decides every input.
   const [sampleSizeOverrides, setSampleSizeOverrides] = useState<SampleSizeOverrides>({});
   const sampleSizeRequest = useRef(0);
+  // The plan with the server's own inputs, for the Minimum sample card
+  // (#1244): what the user tries on the tab never changes the card. Undefined
+  // while it loads, null when it could not be loaded.
+  const [plannedSample, setPlannedSample] = useState<SampleSizeResult | null | undefined>(
+    undefined,
+  );
+  const plannedSampleRequest = useRef(0);
   const [sequential, setSequential] = useState<SequentialTestingResponse | null>(null);
   const [lowerIsBetter, setLowerIsBetter] = useState<boolean | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -179,18 +186,21 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
     // Only the latest request may write state, so a slow answer for an
     // earlier experiment never lands on this one.
     const request = ++sampleSizeRequest.current;
+    const planned = Object.keys(overrides).length === 0;
+    const plannedRequest = planned ? ++plannedSampleRequest.current : 0;
     setSampleSizeOverrides(overrides);
     setSampleSizeLoading(true);
     setSampleSizeError(null);
     try {
       // Only what the user changed is sent; with nothing changed, nothing is.
-      const s =
-        Object.keys(overrides).length > 0
-          ? await ResultsService.getSampleSize(experimentId, overrides)
-          : await ResultsService.getSampleSize(experimentId);
+      const s = planned
+        ? await ResultsService.getSampleSize(experimentId)
+        : await ResultsService.getSampleSize(experimentId, overrides);
+      if (planned && plannedRequest === plannedSampleRequest.current) setPlannedSample(s);
       if (request !== sampleSizeRequest.current) return;
       setSampleSize(s);
     } catch (e) {
+      if (planned && plannedRequest === plannedSampleRequest.current) setPlannedSample(null);
       if (request !== sampleSizeRequest.current) return;
       setSampleSize(null);
       setSampleSizeError(e instanceof Error ? e.message : 'Request failed');
@@ -205,6 +215,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
     // Started alongside the results, but never awaited with them. A reload
     // starts from the server's inputs again: nothing typed on the tab is kept.
     setSampleSize(null);
+    setPlannedSample(undefined);
     void fetchSampleSize();
     try {
       // The dashboard sends the experiment's stored correction and confidence
@@ -319,6 +330,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
         experiment={results}
         stored={stored}
         onOpenSampleSize={() => setActiveTab('sample-size')}
+        plannedSample={plannedSample}
       />
       <SrmNotice srm={results.srm} metrics={results.metrics} />
 
