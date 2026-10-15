@@ -1,4 +1,4 @@
-"""Gates on the encoded file itself: length (1), format (2), and black stretches (11).
+"""Gates on the encoded file itself: length (1), format (2 and G16), and black stretches (11).
 
 Every decision is a pure function of what ffprobe or ffmpeg printed, so the
 unit tests feed them saved output with each defect planted. ffmpeg and
@@ -69,18 +69,91 @@ def length_problems(
     return problems, numbers
 
 
-def format_problems(
-    info: Dict[str, Any], expected_frames: int
+def expected_audio_streams(capture: contract.Capture) -> int:
+    """G16: how many sound streams the finished file has, read from the capture's
+    data (a narration, or none), never from a flag."""
+    return 0 if capture.narration is None else 1
+
+
+#: G16: the narration's AAC frame, the most the sound and the video may differ by.
+AAC_FRAME_S = 1024 / contract.VOICE_RATE
+
+
+def audio_problems(
+    audio: Dict[str, Any], video: Dict[str, Any], expected_frames: int
 ) -> Tuple[List[str], Dict[str, Any]]:
-    """Gate 2: one H.264 1920x1080 yuv420p constant-30-fps video stream and nothing else."""
+    """G16: the one sound stream is AAC LC, 48 kHz, mono, starts at 0 and is as
+    long as the video, within one AAC frame."""
+    numbers = {
+        "codec": audio.get("codec_name"),
+        "profile": audio.get("profile"),
+        "sample_rate": audio.get("sample_rate"),
+        "channels": audio.get("channels"),
+        "start_time": audio.get("start_time"),
+        "duration": audio.get("duration"),
+        "video_duration": video.get("duration"),
+    }
+    problems: List[str] = []
+    if audio.get("codec_name") != "aac" or audio.get("profile") != "LC":
+        problems.append(
+            f"sound {audio.get('codec_name')} {audio.get('profile')}, expected aac LC"
+        )
+    if str(audio.get("sample_rate")) != str(contract.VOICE_RATE):
+        problems.append(
+            f"sound at {audio.get('sample_rate')} Hz, expected {contract.VOICE_RATE}"
+        )
+    if audio.get("channels") != 1:
+        problems.append(f"sound in {audio.get('channels')} channels, expected 1 (mono)")
+    start = _seconds(audio.get("start_time"))
+    if start is None or abs(start) > 1e-6:
+        problems.append(f"sound starts at {audio.get('start_time')} s, expected 0")
+    expected_s = expected_frames / contract.FPS
+    a_len, v_len = _seconds(audio.get("duration")), _seconds(video.get("duration"))
+    if v_len is None or abs(v_len - expected_s) >= 0.5 / contract.FPS:
+        problems.append(
+            f"the video stream is {video.get('duration')} s; its {expected_frames}"
+            f" frames make {expected_s:.3f} s"
+        )
+    if a_len is None or abs(a_len - expected_s) > AAC_FRAME_S:
+        problems.append(
+            f"the sound is {audio.get('duration')} s; the video is {expected_s:.3f} s"
+            f" (they may differ by at most one AAC frame, {AAC_FRAME_S:.6f} s)"
+        )
+    return problems, numbers
+
+
+def _seconds(value: Any) -> Any:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number == number else None
+
+
+def format_problems(
+    info: Dict[str, Any], expected_frames: int, *, audio_streams: int = 0
+) -> Tuple[List[str], Dict[str, Any]]:
+    """Gate 2: one H.264 1920x1080 yuv420p constant-30-fps video stream, and
+    exactly *audio_streams* sound streams (G16: 1 for a narrated video, read
+    from the capture's data; 0 for a silent one), and nothing else."""
     streams = info.get("streams", [])
     video = [s for s in streams if s.get("codec_type") == "video"]
-    others = [s.get("codec_type") for s in streams if s.get("codec_type") != "video"]
+    audio = [s for s in streams if s.get("codec_type") == "audio"]
+    others = [
+        s.get("codec_type")
+        for s in streams
+        if s.get("codec_type") not in ("video", "audio")
+    ]
     problems: List[str] = []
     if len(video) != 1:
         problems.append(f"{len(video)} video streams; expected exactly 1")
+    if len(audio) != audio_streams:
+        problems.append(
+            f"{len(audio)} audio streams; expected {audio_streams}"
+            + (" (no audio)" if audio_streams == 0 else " (the narration)")
+        )
     if others:
-        problems.append(f"streams other than video: {others}; expected none (no audio)")
+        problems.append(f"streams other than video and audio: {others}; expected none")
     if not video:
         return problems, {"streams": len(streams)}
     v = video[0]
@@ -125,6 +198,10 @@ def format_problems(
         problems.append(f"color range {v.get('color_range')}, expected tv")
     if v.get("color_space") != "bt709":
         problems.append(f"color space {v.get('color_space')}, expected bt709")
+    numbers["audio_streams"] = len(audio)
+    if audio_streams == 1 and len(audio) == 1:
+        more, numbers["audio"] = audio_problems(audio[0], v, expected_frames)
+        problems += more
     return problems, numbers
 
 
@@ -289,5 +366,8 @@ def missing_filters() -> List[str]:
         "crop",
         "select",
         "blackdetect",
+        "volume",
+        "atrim",
+        "ebur128",
     }
     return sorted(needed - names)

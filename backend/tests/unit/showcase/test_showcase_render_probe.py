@@ -96,7 +96,7 @@ def test_the_good_answer_passes():
         ),
         (
             lambda i: i["streams"].append({"codec_type": "audio"}),
-            "streams other than video: ['audio']",
+            "1 audio streams; expected 0 (no audio)",
         ),
         (
             lambda i: i["streams"].append(dict(i["streams"][0])),

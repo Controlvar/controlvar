@@ -85,6 +85,7 @@ def default_manifest() -> Dict[str, Any]:
         "zoom": 4 / 3,
         "page_h": contract.PAGE_H,
         "band_h": contract.BAND_H,
+        "voice": contract.SILENT,
         "gates": {
             name: {"ok": True, "numbers": {"checks": 1}}
             for name in contract.REQUIRED_CAPTURE_GATES
@@ -138,3 +139,116 @@ def edit_json(path: Path, change) -> None:
     data = json.loads(path.read_text(encoding="utf-8"))
     change(data)
     path.write_text(json.dumps(data), encoding="utf-8")
+
+
+# --- Narrated capture directories (voice PR C1) ------------------------------
+
+#: Two sentences over the even cues, one over the odd ones.
+VOICED_SAY = [
+    ["One command starts it.", "It runs on your machine."],
+    ["Open the dashboard."],
+    ["Sign in as admin.", "The Quick Start says how."],
+    ["Every experiment has a status."],
+    ["Results show the lift.", "The p-value is beside it."],
+    ["The page recommends a winner."],
+    ["Flags roll out in stages.", "Each waits for the last."],
+    ["A safety check runs alongside."],
+    ["Every change is logged.", "With who made it."],
+    ["That is the whole loop."],
+]
+#: A clip: 55 ms of silence, a 0.4 s tone, 0.1 s of silence (0.555 s).
+CLIP_LEAD = 2640
+CLIP_TONE = 19200
+CLIP_TAIL = 4800
+CLIP_SAMPLES = CLIP_LEAD + CLIP_TONE + CLIP_TAIL
+
+
+def clip_bytes(seed: int, *, rate: int = contract.VOICE_RATE) -> bytes:
+    """A mono 16-bit clip: silence, a tone that differs per *seed*, silence."""
+    import math
+
+    out = bytearray(CLIP_LEAD * 2)
+    step = 2 * math.pi * (300 + 20 * seed) / rate
+    for i in range(CLIP_TONE):
+        out += int(8000 * math.sin(step * i)).to_bytes(2, "little", signed=True)
+    out += bytes(CLIP_TAIL * 2)
+    return bytes(out)
+
+
+def write_clip(
+    path: Path, data: bytes, *, rate: int = contract.VOICE_RATE, channels: int = 1
+) -> None:
+    import wave
+
+    with wave.open(str(path), "wb") as clip:
+        clip.setnchannels(channels)
+        clip.setsampwidth(2)
+        clip.setframerate(rate)
+        clip.writeframes(data)
+
+
+def voiced_sentences(
+    cues: List[Dict[str, Any]], say: List[List[str]]
+) -> List[Dict[str, Any]]:
+    """voice.json's sentences for *cues*, laid out by the TILE rule."""
+    sentences = []
+    number = 0
+    for index, (cue, said) in enumerate(zip(cues, say), start=1):
+        start = contract.frames_for_ms(cue["start_ms"])
+        end = contract.frames_for_ms(cue["end_ms"])
+        tiles = contract.tile_frames(start, end, [(t, CLIP_SAMPLES) for t in said])
+        assert tiles is not None, f"cue {index} is too short for its sentences"
+        for line, (text, (s, e)) in enumerate(zip(said, tiles), start=1):
+            number += 1
+            sentences.append(
+                {
+                    "cue": index,
+                    "line": line,
+                    "text": text,
+                    "key": contract.clip_key("Ruth", contract.polly_text(text)),
+                    "file": f"{number:03d}.wav",
+                    "samples": CLIP_SAMPLES,
+                    "sha256": "",
+                    "start_ms": contract.ms_for_frames(s),
+                    "end_ms": contract.ms_for_frames(e),
+                }
+            )
+    return sentences
+
+
+def make_voiced_capture(
+    root: Path,
+    *,
+    say: Optional[List[List[str]]] = None,
+    sentences: Optional[List[Dict[str, Any]]] = None,
+    voice: Optional[Dict[str, Any]] = None,
+    **kwargs: Any,
+) -> Path:
+    """A narrated capture directory that validates: ``make_capture``'s, with
+    ``voice.json`` and a stdlib-written clip per sentence."""
+    manifest = default_manifest()
+    manifest["voice"] = "Ruth"
+    make_capture(root, manifest=manifest, **kwargs)
+    cues = json.loads((root / "cues.json").read_text(encoding="utf-8"))["cues"]
+    listed = (
+        sentences
+        if sentences is not None
+        else voiced_sentences(cues, say or VOICED_SAY)
+    )
+    clips = root / "voice"
+    clips.mkdir()
+    for number, sentence in enumerate(listed, start=1):
+        path = clips / sentence["file"]
+        write_clip(path, clip_bytes(number))
+        sentence["sha256"] = contract.file_sha256(path)
+    data = {
+        "voice": "Ruth",
+        "engine": contract.VOICE_ENGINE,
+        "tempo": contract.TEMPO,
+        "recipe": contract.VOICE_RECIPE,
+        "rate": contract.VOICE_RATE,
+        "sentences": listed,
+    }
+    data.update(voice or {})
+    (root / "voice.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return root

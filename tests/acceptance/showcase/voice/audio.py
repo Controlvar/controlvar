@@ -13,8 +13,6 @@ Every ffmpeg runs through ``_ffmpeg`` with the tool's allow-listed environment
 
 from __future__ import annotations
 
-import math
-import re
 import subprocess
 import wave
 from pathlib import Path
@@ -143,36 +141,12 @@ def loudness_args(clip: Path) -> List[str]:
     ]
 
 
-_LEVEL = r"(-?(?:inf|[0-9]{1,3}(?:\.[0-9]{1,2})?))"
-_INTEGRATED = re.compile(
-    r"Integrated loudness:\s{0,8}\n\s{0,12}I:\s{0,12}" + _LEVEL + r" LUFS"
-)
-_TRUE_PEAK = re.compile(r"True peak:\s{0,8}\n\s{0,12}Peak:\s{0,12}" + _LEVEL + r" dBFS")
-
-
 def parse_ebur128(text: str) -> Tuple[float, float]:
-    """``(integrated loudness LUFS, true peak dBTP)`` from ffmpeg's ebur128 log.
-
-    Read from the last ``Summary:`` block. ffmpeg prints the true peak as
-    ``dBFS``; it is a true peak because the filter runs with ``peak=true``.
-    """
-    at = text.rfind("Summary:")
-    if at < 0:
-        raise AudioFailed(
-            "ffmpeg printed no loudness summary (ebur128 logs it at the info level,"
-            " so it is empty when ffmpeg runs below that)"
-        )
-    summary = text[at : at + 2000]
-    integrated = _INTEGRATED.search(summary)
-    peak = _TRUE_PEAK.search(summary)
-    if integrated is None:
-        raise AudioFailed("ffmpeg's loudness summary has no integrated loudness")
-    if peak is None:
-        raise AudioFailed("ffmpeg's loudness summary has no true peak in dBFS")
-    values = (float(integrated.group(1)), float(peak.group(1)))
-    if not all(math.isfinite(v) for v in values):
-        raise AudioFailed("the clip is silent: ffmpeg measured no loudness")
-    return values
+    """``contract.parse_ebur128``, with its refusal as an ``AudioFailed``."""
+    try:
+        return contract.parse_ebur128(text)
+    except ValueError as error:
+        raise AudioFailed(str(error)) from None
 
 
 def loudness(clip: Path) -> Tuple[float, float]:

@@ -855,6 +855,8 @@ def write_capture(
         "zoom": round(facts["zoom"], 6),
         "page_h": contract.PAGE_H,
         "band_h": contract.BAND_H,
+        # Narrated captures come with the paced capture (voice PR C2).
+        "voice": contract.SILENT,
         "gates": gates,
     }
     (capture / "manifest.json").write_text(
