@@ -1,6 +1,6 @@
-# Experimently Ruby SDK
+# Controlvar Ruby SDK
 
-Native Ruby client for the Experimently A/B testing and feature flag platform. Stdlib only
+Native Ruby client for the Controlvar A/B testing and feature flag platform. Stdlib only
 (`Net::HTTP`, `JSON`, `Digest`, `Mutex`), thread-safe, no runtime gem dependencies.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
@@ -11,12 +11,12 @@ Full reference: [`docs/sdk/ruby.md`](../../docs/sdk/ruby.md).
 
 ## Installation
 
-**Not yet published.** The `experimently` gem is not on RubyGems, so build it from source: this
+**Not yet published.** The `controlvar` gem is not on RubyGems, so build it from source: this
 Gemfile line takes `sdk/ruby` from this repository.
 
 ```ruby
 # Gemfile
-gem "experimently", git: "https://github.com/getexperimently/experimently.git", branch: "main", glob: "sdk/ruby/*.gemspec"
+gem "controlvar", git: "https://github.com/Controlvar/controlvar.git", branch: "main", glob: "sdk/ruby/*.gemspec"
 ```
 
 The gemspec requires **Ruby >= 2.6.0** (`required_ruby_version`); CI runs the specs
@@ -26,9 +26,9 @@ is needed: `ruby -Isdk/ruby/lib your_script.rb`.
 ## Quick Start
 
 ```ruby
-require 'experimently'
+require 'controlvar'
 
-client = Experimently::Client.new(
+client = Controlvar::Client.new(
   base_url: ENV.fetch("EXPERIMENTLY_API_URL", "http://localhost:8000"),  # origin only
   api_key:  ENV.fetch("EXPERIMENTLY_API_KEY")                             # sent as X-API-Key
 )
@@ -57,7 +57,7 @@ client.track("page_view", "user-123", properties: { page: "/" })
 
 ## Configuration
 
-`Client.new(**options)` or `Client.new(Experimently::SdkConfig.new(**options))`.
+`Client.new(**options)` or `Client.new(Controlvar::SdkConfig.new(**options))`.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
@@ -80,7 +80,7 @@ Missing `base_url`/`api_key` raise `ArgumentError` from `Client.new`.
 | `track_batch(events)` | `BatchResult` (`success_count`, `failure_count`, `errors`, `ok?`) | failures counted; never raises |
 | `assignments(user_id)` / `evaluated_flags(user_id)` | `Array<Assignment>` / `Array<String>` | cached, unexpired entries only |
 | `clear_cache` / `close` | `{}` (an empty Hash) | drop every cached entry (`close` for shutdown hooks) |
-| `Experimently::FeatureFlagEvaluator.hash_user(user_id, key)` | `Float` in `[0, 1)` | pure (parity utility) |
+| `Controlvar::FeatureFlagEvaluator.hash_user(user_id, key)` | `Float` in `[0, 1)` | pure (parity utility) |
 
 `attributes` on `get_assignment` are sent as the assignment `context` (targeting rules); on
 `evaluate_flag` they are accepted for symmetry only and not sent: the request carries the user id
@@ -99,7 +99,7 @@ experiment's results; tag outcome events.
   (rate limited), 5xx: `evaluate_flag` returns a **disabled** evaluation, `get_assignment` returns
   **`nil`**, `track` returns **`false`**, `track_batch` counts the chunk as failed. Each logs one
   line via `Kernel#warn`. There is no stale fallback beyond the TTL.
-- Only the low-level `Experimently::HttpClient` raises: `AuthenticationError` (401,
+- Only the low-level `Controlvar::HttpClient` raises: `AuthenticationError` (401,
   `< APIError`), `APIError` (`#status_code`; other 4xx/5xx), `NetworkError`.
 - One `Client` may be shared between threads: the cache is `Mutex`-protected and each request
   opens its own `Net::HTTP` connection.
@@ -150,7 +150,7 @@ Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API
 `python tests/sdk-contract/live/run_live_contract.py --sdk ruby --strict`.
 
 CI runs this SDK's contract smoke against a real API: `ruby` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ## Tests
 

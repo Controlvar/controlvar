@@ -35,7 +35,7 @@ from typing import List, NoReturn
 # Make ``experimentation`` importable straight from the source tree.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from experimentation import ExperimentationClient  # noqa: E402
+from controlvar import ExperimentationClient  # noqa: E402
 
 
 def fail(message: str) -> NoReturn:

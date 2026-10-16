@@ -1,7 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useFeatureFlag } from '@getexperimently/react-sdk';
+import { useFeatureFlag } from '@controlvar/react-sdk';
 import { FLAG_KEYS } from '@/lib/env';
 import { useCart } from '@/lib/useCart';
 

@@ -1,7 +1,7 @@
 # JavaScript SDK
 
-`@getexperimently/js-sdk` (v0.1.0) is the JavaScript/TypeScript client for the
-Experimently public API: experiment assignment, feature flag evaluation and event
+`@controlvar/js-sdk` (v0.1.0) is the JavaScript/TypeScript client for the
+Controlvar public API: experiment assignment, feature flag evaluation and event
 tracking for Node >= 18 and browsers. Zero runtime dependencies — it uses the global `fetch`.
 
 By default, flag evaluation and experiment assignment are decided **by the server**: every call
@@ -16,32 +16,32 @@ Source: `sdk/js`. For React apps use the [React SDK](react.md); for edge runtime
 delegates to this package.
 
 CI runs this SDK's contract smoke against a real API: `js` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ---
 
 ## Installation
 
-The `@getexperimently/js-sdk` package is on [npm](https://www.npmjs.com/package/@getexperimently/js-sdk).
+The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk).
 0.1.0 is a beta release.
 
 ```bash
-npm install @getexperimently/js-sdk@0.1.0
+npm install @controlvar/js-sdk@0.1.0
 ```
 
 To work on the SDK itself, build it from a clone of this repository instead. `npm pack` writes
-`getexperimently-js-sdk-0.1.0.tgz`:
+`controlvar-js-sdk-0.1.0.tgz`:
 
 ```bash
-git clone https://github.com/getexperimently/experimently.git
-cd experimently/sdk/js
+git clone https://github.com/Controlvar/controlvar.git
+cd controlvar/sdk/js
 npm ci && npm run build && npm pack
 ```
 
 Then, in your app, install the packed tarball:
 
 ```bash
-npm install /path/to/experimently/sdk/js/getexperimently-js-sdk-0.1.0.tgz
+npm install /path/to/controlvar/sdk/js/controlvar-js-sdk-0.1.0.tgz
 ```
 
 CommonJS build (`dist/index.js`) with type declarations; `import`/`require` both work.
@@ -51,7 +51,7 @@ CommonJS build (`dist/index.js`) with type declarations; `import`/`require` both
 ## Quick start
 
 ```typescript
-import { ExperimentationClient } from '@getexperimently/js-sdk';
+import { ExperimentationClient } from '@controlvar/js-sdk';
 
 const client = new ExperimentationClient({
   apiUrl: 'http://localhost:8000',   // origin only; the SDK appends /api/v1/...
@@ -216,7 +216,7 @@ Conversions are matched to metrics by **event name**.
 | `INVALID_RESPONSE` | 2xx but the body is not what the SDK expects (or `userId` missing) | HTTP status or `undefined` |
 
 ```typescript
-import { ExperimentationClient, ExperimentationError } from '@getexperimently/js-sdk';
+import { ExperimentationClient, ExperimentationError } from '@controlvar/js-sdk';
 
 try {
   const a = await client.getAssignment('checkout_flow', user);
@@ -256,7 +256,7 @@ rate limited (`Retry-After` header, retried once).
 import type {
   ClientConfig, UserContext, Assignment, FlagEvaluation,
   TrackOptions, TrackEvent, BatchResult, AssignmentRecord,
-} from '@getexperimently/js-sdk';
+} from '@controlvar/js-sdk';
 
 interface Assignment {
   experimentKey: string;
@@ -311,7 +311,7 @@ With `evaluation: 'local'` the client downloads the flag ruleset (`GET /api/v1/s
 refreshes it every `refreshIntervalMs` (30 s by default, 5 s minimum), and answers `evaluateFlag`,
 `isFeatureEnabled` and `getAllFlags` in-process whenever it can give exactly the server's answer;
 otherwise it makes the usual request. Experiments are always assigned by the server. It needs an
-Experimently server at 0.11.0 or later and a key with the `sdk:ruleset` scope, and it is for
+Controlvar server at 0.11.0 or later and a key with the `sdk:ruleset` scope, and it is for
 server-side code only: the constructor throws in a browser.
 
 ```typescript

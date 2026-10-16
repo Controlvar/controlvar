@@ -1,6 +1,6 @@
 # Ruby SDK
 
-`experimently` (v0.1.0) provides feature flag evaluation, experiment assignment and
+`controlvar` (v0.1.0) provides feature flag evaluation, experiment assignment and
 event tracking for Ruby applications. It has zero runtime gem dependencies (`Net::HTTP`, `JSON`,
 `Digest`, `Mutex` from the standard library) and is safe to share between threads.
 
@@ -14,12 +14,12 @@ Source: `sdk/ruby`.
 
 ## Installation
 
-**Not yet published.** The `experimently` gem is not on RubyGems, so build it from source: this
+**Not yet published.** The `controlvar` gem is not on RubyGems, so build it from source: this
 Gemfile line takes `sdk/ruby` from this repository.
 
 ```ruby
 # Gemfile
-gem 'experimently', git: 'https://github.com/getexperimently/experimently.git', branch: 'main', glob: 'sdk/ruby/*.gemspec'
+gem 'controlvar', git: 'https://github.com/Controlvar/controlvar.git', branch: 'main', glob: 'sdk/ruby/*.gemspec'
 ```
 
 The gemspec declares `required_ruby_version = ">= 2.6.0"`; CI runs the spec suite
@@ -31,9 +31,9 @@ with `ruby -Isdk/ruby/lib ...` (no install).
 ## Quick Start
 
 ```ruby
-require 'experimently'
+require 'controlvar'
 
-client = Experimently::Client.new(
+client = Controlvar::Client.new(
   base_url: ENV.fetch('EXPERIMENTLY_API_URL', 'http://localhost:8000'),  # origin only
   api_key:  ENV.fetch('EXPERIMENTLY_API_KEY')                             # sent as X-API-Key
 )
@@ -58,14 +58,14 @@ client.track('page_view', 'user-123', properties: { page: '/products' })
 ## Configuration
 
 ```ruby
-client = Experimently::Client.new(
+client = Controlvar::Client.new(
   base_url:       'http://localhost:8000',
   api_key:        'your-api-key',
   cache_ttl:      300,
   timeout:        10,
   max_cache_size: 1000
 )
-# or: Client.new(Experimently::SdkConfig.new(base_url: ..., api_key: ...))
+# or: Client.new(Controlvar::SdkConfig.new(base_url: ..., api_key: ...))
 ```
 
 | Option | Type | Default | Description |
@@ -129,14 +129,14 @@ result.ok?   # => true when failure_count == 0
 - Network error / timeout, `401` (bad key), `404` (an experiment unknown or not ACTIVE, or an unknown flag key), `422`,
   `429` (rate limited), `5xx`: `evaluate_flag` returns a disabled evaluation, `get_assignment`
   returns `nil`, `track` returns `false`, `track_batch` counts the chunk as failed. Each failure
-  is logged once with `Kernel#warn` (`[Experimently] ... error: ...`).
-- Only `Experimently::HttpClient` raises:
+  is logged once with `Kernel#warn` (`[Controlvar] ... error: ...`).
+- Only `Controlvar::HttpClient` raises:
 
 | Error | Extends | When |
 |---|---|---|
-| `Experimently::AuthenticationError` | `APIError` | HTTP 401 — invalid API key |
-| `Experimently::APIError` (`#status_code`) | `Error` | Other 4xx/5xx (404 not ACTIVE, 422 validation, 429 rate limited) |
-| `Experimently::NetworkError` | `Error` | Timeout, DNS failure, connection refused |
+| `Controlvar::AuthenticationError` | `APIError` | HTTP 401 — invalid API key |
+| `Controlvar::APIError` (`#status_code`) | `Error` | Other 4xx/5xx (404 not ACTIVE, 422 validation, 429 rate limited) |
+| `Controlvar::NetworkError` | `Error` | Timeout, DNS failure, connection refused |
 
 - Thread safety: a single client can be shared across threads. The cache `Mutex` is held only for
   a cache read/write — never during the HTTP request — and every request opens its own
@@ -161,8 +161,8 @@ Conversions are matched to metrics by **event name**: a metric on `purchase` cou
 ## Rails integration
 
 ```ruby
-# config/initializers/experimently.rb
-EXPERIMENTLY = Experimently::Client.new(
+# config/initializers/controlvar.rb
+EXPERIMENTLY = Controlvar::Client.new(
   base_url: ENV.fetch('EXPERIMENTLY_API_URL'), api_key: ENV.fetch('EXPERIMENTLY_API_KEY'), cache_ttl: 60
 )
 at_exit { EXPERIMENTLY.close }
@@ -173,16 +173,16 @@ class ApplicationController < ActionController::Base
 
   private
 
-  def experimently_user_id
+  def controlvar_user_id
     current_user&.id&.to_s || cookies[:visitor_id]
   end
 
   def feature_enabled?(flag_key)
-    EXPERIMENTLY.feature_enabled?(flag_key, experimently_user_id)
+    EXPERIMENTLY.feature_enabled?(flag_key, controlvar_user_id)
   end
 
   def experiment_variant(experiment_key)
-    EXPERIMENTLY.get_assignment(experiment_key, experimently_user_id, { plan: current_user&.plan })
+    EXPERIMENTLY.get_assignment(experiment_key, controlvar_user_id, { plan: current_user&.plan })
                 &.variant_name || 'control'
   end
 end
@@ -195,7 +195,7 @@ In your own specs stub HTTP with WebMock (as `sdk/ruby/spec` does) or double the
 
 ## Consistent hash (compatibility utility)
 
-`Experimently::FeatureFlagEvaluator.hash_user(user_id, key)` = `MD5("{user_id}:{key}")`,
+`Controlvar::FeatureFlagEvaluator.hash_user(user_id, key)` = `MD5("{user_id}:{key}")`,
 first 4 bytes as little-endian uint32, divided by 2^32 (`0.6927449859213084` for `'user-123'`,
 `'my-flag'`). It is a compatibility utility: the SDK's own specs pin that one vector, and the
 cross-SDK golden vectors in `tests/sdk-contract/` are not run against this SDK. **Nothing in the
@@ -241,7 +241,7 @@ the experiment key, tracks `page_view` without a key and sends a 2-event `track_
 `python tests/sdk-contract/live/run_live_contract.py --sdk ruby --strict`.
 
 CI runs this SDK's contract smoke against a real API: `ruby` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ---
 

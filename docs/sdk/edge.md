@@ -1,6 +1,6 @@
 # Edge SDK
 
-`@getexperimently/edge-sdk` (v0.2) is written for edge runtimes, with adapters for Cloudflare
+`@controlvar/edge-sdk` (v0.2) is written for edge runtimes, with adapters for Cloudflare
 Workers, Vercel Edge Middleware and Deno Deploy, and declares Node >= 18. It has zero runtime
 dependencies and uses no Node.js built-ins — only Web-standard `fetch`, `AbortController` and
 `Headers`. Its unit tests and its contract smoke run it under Node; the adapters are tested there
@@ -14,25 +14,25 @@ isolates can reuse it. Nothing is bucketed locally.
 Source: `sdk/edge`.
 
 CI runs this SDK's contract smoke against a real API: `edge` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ---
 
 ## Installation
 
-**Not yet published.** `@getexperimently/edge-sdk` is not on npm, so build it from source in a
-clone of this repository. `npm pack` writes `getexperimently-edge-sdk-0.2.0.tgz`:
+**Not yet published.** `@controlvar/edge-sdk` is not on npm, so build it from source in a
+clone of this repository. `npm pack` writes `controlvar-edge-sdk-0.2.0.tgz`:
 
 ```bash
-git clone https://github.com/getexperimently/experimently.git
-cd experimently/sdk/edge
+git clone https://github.com/Controlvar/controlvar.git
+cd controlvar/sdk/edge
 npm ci && npm run build && npm pack
 ```
 
 Then, in your app, install the packed tarball:
 
 ```bash
-npm install /path/to/experimently/sdk/edge/getexperimently-edge-sdk-0.2.0.tgz
+npm install /path/to/controlvar/sdk/edge/controlvar-edge-sdk-0.2.0.tgz
 ```
 
 Entry points: the package root (`EdgeExperimentationClient`), `/cloudflare`, `/vercel` and `/deno`.
@@ -43,7 +43,7 @@ The build (`npm run build`) emits ESM to `dist/` with type declarations.
 ## Quick start
 
 ```typescript
-import { EdgeExperimentationClient } from '@getexperimently/edge-sdk';
+import { EdgeExperimentationClient } from '@controlvar/edge-sdk';
 
 const client = new EdgeExperimentationClient({
   apiKey: env.EP_API_KEY,
@@ -93,7 +93,7 @@ A Worker's secrets and bindings arrive in `env` with each request, so build the 
 fetch handler:
 
 ```typescript
-import { CloudflareExperimentationClient } from '@getexperimently/edge-sdk/cloudflare';
+import { CloudflareExperimentationClient } from '@controlvar/edge-sdk/cloudflare';
 
 export default {
   async fetch(request, env, ctx) {
@@ -144,7 +144,7 @@ the in-memory TTL (default 60 s), both in the client's options.
 ## Vercel Edge Middleware
 
 `createEdgeMiddleware({ apiKey, baseUrl, flagKeys?, userIdHeaderName?, userIdCookieName? })` from
-`@getexperimently/edge-sdk/vercel` returns a `(request: Request) => Promise<Response>` that builds
+`@controlvar/edge-sdk/vercel` returns a `(request: Request) => Promise<Response>` that builds
 one client and, on each request:
 
 1. Resolves the user id from the `X-User-Id` header (`userIdHeaderName`) or the `ep_user_id`
@@ -163,7 +163,7 @@ In a Next.js project the adapter's own note says to pass the same headers with
 
 ## Deno Deploy
 
-`createDenoHandler(handler, config)` from `@getexperimently/edge-sdk/deno` returns a
+`createDenoHandler(handler, config)` from `@controlvar/edge-sdk/deno` returns a
 `(request: Request) => Promise<Response>` for `Deno.serve`, and calls `handler(request, client)`.
 `config` takes the client options plus `kv` (a Deno KV instance, optional: share cached results
 across isolates) and `kvTtlMs` (default `cacheTtlMs`).
@@ -211,7 +211,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 ```typescript
 interface EdgeSdkConfig {
   apiKey: string;        // Required. Sent as X-API-Key.
-  baseUrl?: string;      // Backend origin. Set it: the default, https://api.getexperimently.com, serves no API.
+  baseUrl?: string;      // Backend origin. Set it: the default, https://api.controlvar.example.com, serves no API.
   cacheTtlMs?: number;   // Per user + key cache TTL (default: 60_000 ms).
   timeout?: number;      // Per-request timeout (default: 500 ms).
   store?: EdgeStore;     // Optional shared KV store ({ get(key), put(key, value, ttlMs) }).

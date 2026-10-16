@@ -331,7 +331,7 @@ class TestFirstPartyPackagesAreNotThirdParties:
     @pytest.mark.regression
     def test_every_published_package_name_is_excluded(self, script):
         own = script._own_package_names()
-        assert "@getexperimently/js-sdk" in own, sorted(own)
+        assert "@controlvar/js-sdk" in own, sorted(own)
         assert len(own) >= 5, (
             f"only {len(own)} first-party names found; the document listed "
             "five of its own SDKs as third-party software before this"

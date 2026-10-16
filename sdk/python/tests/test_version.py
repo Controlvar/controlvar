@@ -3,15 +3,15 @@
 ``pyproject.toml`` is what the build stamps on the wheel and what
 ``scripts/check_sdk_version.py`` compares a release tag against.
 ``experimentation/version.py`` is what the client sends in its User-Agent and
-what ``experimentation.__version__`` returns. Nothing derives one from the
+what ``controlvar.__version__`` returns. Nothing derives one from the
 other, so this test is what keeps them equal.
 """
 
 import re
 from pathlib import Path
 
-from experimentation import __version__
-from experimentation.client import _USER_AGENT
+from controlvar import __version__
+from controlvar.client import _USER_AGENT
 
 PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
 
@@ -35,4 +35,4 @@ def test_version_py_matches_pyproject() -> None:
 
 
 def test_user_agent_carries_the_published_version() -> None:
-    assert _USER_AGENT == f"experimently-python/{_pyproject_version()}"
+    assert _USER_AGENT == f"controlvar-python/{_pyproject_version()}"

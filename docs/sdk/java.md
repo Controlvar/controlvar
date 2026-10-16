@@ -1,8 +1,8 @@
 # Java SDK
 
-`com.getexperimently:experimently-sdk` (v1.0.0) is a Java 11+ client for feature
+`com.controlvar:controlvar-sdk` (v1.0.0) is a Java 11+ client for feature
 flags, experiment assignment and event tracking, built on OkHttp 4 and Jackson.
-`experimently-spring-boot-starter` adds Spring Boot auto-configuration (built and tested
+`controlvar-spring-boot-starter` adds Spring Boot auto-configuration (built and tested
 against Spring Boot 3.5.16, which needs Java 17+ at runtime).
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
@@ -15,7 +15,7 @@ Source: `sdk/java` (`core/`, `spring-boot-starter/`).
 
 ## Installation
 
-**Not yet published.** `com.getexperimently:experimently-sdk` and the Spring Boot starter are not
+**Not yet published.** `com.controlvar:controlvar-sdk` and the Spring Boot starter are not
 on Maven Central, so build them from source: in a clone of this repository,
 `cd sdk/java && ./mvnw install` installs both into your local `~/.m2`, and the dependencies
 below then resolve from there.
@@ -23,34 +23,34 @@ below then resolve from there.
 ```xml
 <!-- core client -->
 <dependency>
-    <groupId>com.getexperimently</groupId>
-    <artifactId>experimently-sdk</artifactId>
+    <groupId>com.controlvar</groupId>
+    <artifactId>controlvar-sdk</artifactId>
     <version>1.0.0</version>
 </dependency>
 
 <!-- Spring Boot: the starter depends on the core, so add only this -->
 <dependency>
-    <groupId>com.getexperimently</groupId>
-    <artifactId>experimently-spring-boot-starter</artifactId>
+    <groupId>com.controlvar</groupId>
+    <artifactId>controlvar-spring-boot-starter</artifactId>
     <version>1.0.0</version>
 </dependency>
 ```
 
 Gradle reads `~/.m2` only through `mavenLocal()`: add it to `repositories`, then
-`implementation 'com.getexperimently:experimently-sdk:1.0.0'` (or the starter).
+`implementation 'com.controlvar:controlvar-sdk:1.0.0'` (or the starter).
 
 ---
 
 ## Quick Start
 
 ```java
-import com.getexperimently.sdk.ExperimentationClient;
-import com.getexperimently.sdk.config.SdkConfig;
-import com.getexperimently.sdk.exception.ExperimentationException;
-import com.getexperimently.sdk.model.ExperimentAssignment;
-import com.getexperimently.sdk.model.FlagEvaluation;
-import com.getexperimently.sdk.model.TrackEvent;
-import com.getexperimently.sdk.model.User;
+import com.controlvar.sdk.ExperimentationClient;
+import com.controlvar.sdk.config.SdkConfig;
+import com.controlvar.sdk.exception.ExperimentationException;
+import com.controlvar.sdk.model.ExperimentAssignment;
+import com.controlvar.sdk.model.FlagEvaluation;
+import com.controlvar.sdk.model.TrackEvent;
+import com.controlvar.sdk.model.User;
 import java.util.Map;
 
 SdkConfig config = SdkConfig.builder(System.getenv("EXPERIMENTLY_API_KEY"), "http://localhost:8000")
@@ -184,7 +184,7 @@ experimentation:
 | Property | Type | Default | Maps to |
 |---|---|---|---|
 | `experimentation.api-key` | `String` | — (required) | `SdkConfig.apiKey` |
-| `experimentation.base-url` | `String` | `https://api.experimently.example.com` | `SdkConfig.baseUrl` — set it to your backend origin |
+| `experimentation.base-url` | `String` | `https://api.controlvar.example.com` | `SdkConfig.baseUrl` — set it to your backend origin |
 | `experimentation.timeout-ms` | `int` | `5000` | `timeoutMs` |
 | `experimentation.cache-ttl-seconds` | `int` | `300` | `cacheTtlMs` (× 1000) |
 | `experimentation.cache-size` | `int` | `1000` | `cacheSize` |
@@ -242,7 +242,7 @@ It prints:
 
 The script builds when needed (`./mvnw -q -B -pl core -am package -DskipTests`, Maven output on stderr;
 `FORCE_BUILD=1` forces it) and runs
-`java -cp "core/target/classes:core/target/lib/*" com.getexperimently.sdk.examples.ContractSmoke`.
+`java -cp "core/target/classes:core/target/lib/*" com.controlvar.sdk.examples.ContractSmoke`.
 Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). The smoke assigns on one
@@ -252,7 +252,7 @@ with the experiment key via `trackEventSync`, tracks `page_view` without a key a
 `python tests/sdk-contract/live/run_live_contract.py --sdk java --strict`.
 
 CI runs this SDK's contract smoke against a real API: `java` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ---
 

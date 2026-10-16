@@ -1,36 +1,36 @@
-# @getexperimently/openfeature-provider
+# @controlvar/openfeature-provider
 
 **Beta.** This is a 0.x release: pin the exact version you test against.
 
-[OpenFeature](https://openfeature.dev) provider for Experimently
+[OpenFeature](https://openfeature.dev) provider for Controlvar
 (`@openfeature/server-sdk`, Node >= 18). Every evaluation is delegated to
-[`@getexperimently/js-sdk`](https://github.com/getexperimently/experimently/blob/main/sdk/js/README.md) and **decided by the server**; successful
+[`@controlvar/js-sdk`](https://github.com/Controlvar/controlvar/blob/main/sdk/js/README.md) and **decided by the server**; successful
 answers are cached per user + flag. Nothing is bucketed locally and no flag definitions are downloaded.
 
-Full documentation: [`docs/sdk/openfeature.md`](https://github.com/getexperimently/experimently/blob/main/docs/sdk/openfeature.md).
+Full documentation: [`docs/sdk/openfeature.md`](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/openfeature.md).
 
 ## Install
 
-**Not yet published.** `@getexperimently/openfeature-provider` is not on npm, so build it from
+**Not yet published.** `@controlvar/openfeature-provider` is not on npm, so build it from
 source in a clone of this repository (the provider's build also builds `sdk/js`):
 
 ```bash
-git clone https://github.com/getexperimently/experimently.git
-npm --prefix experimently/sdk/js ci
-npm --prefix experimently/sdk/openfeature ci
-npm --prefix experimently/sdk/openfeature run build
+git clone https://github.com/Controlvar/controlvar.git
+npm --prefix controlvar/sdk/js ci
+npm --prefix controlvar/sdk/openfeature ci
+npm --prefix controlvar/sdk/openfeature run build
 ```
 
 Then, in your app, install both directories:
-`npm install @openfeature/server-sdk /path/to/experimently/sdk/js /path/to/experimently/sdk/openfeature`.
-From source the provider's manifest names `@getexperimently/js-sdk` as `file:../js`, so install
+`npm install @openfeature/server-sdk /path/to/controlvar/sdk/js /path/to/controlvar/sdk/openfeature`.
+From source the provider's manifest names `@controlvar/js-sdk` as `file:../js`, so install
 that directory too; `@openfeature/server-sdk` is a peer dependency your app provides.
 
 ## Quick start
 
 ```ts
 import { OpenFeature } from '@openfeature/server-sdk';
-import { ExperimentationProvider } from '@getexperimently/openfeature-provider';
+import { ExperimentationProvider } from '@controlvar/openfeature-provider';
 
 const provider = new ExperimentationProvider({ apiKey: 'eptk_...', baseUrl: 'http://localhost:8000' });
 await OpenFeature.setProviderAndWait(provider);
@@ -89,7 +89,7 @@ Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API
 `CONTRACT_EXPERIMENT_KEY` (`sdk_contract_ab`), `CONTRACT_FLAG_KEY` (`sdk_contract_flag`), `CONTRACT_USER_ID`.
 
 CI runs this SDK's contract smoke against a real API: `openfeature` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ## Development
 

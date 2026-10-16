@@ -1,6 +1,6 @@
-# Experimently PHP SDK
+# Controlvar PHP SDK
 
-PHP 8.1+ SDK for the Experimently A/B testing and feature flag platform.
+PHP 8.1+ SDK for the Controlvar A/B testing and feature flag platform.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
@@ -15,19 +15,19 @@ locally.
 
 ## Installation
 
-**Not yet published.** `experimently/sdk` is not on Packagist, so build it from source: point
+**Not yet published.** `controlvar/sdk` is not on Packagist, so build it from source: point
 Composer at `sdk/php` in a clone of this repository with a path repository (this has not been
 tested here).
 
 ```bash
-git clone https://github.com/getexperimently/experimently.git
+git clone https://github.com/Controlvar/controlvar.git
 ```
 
 Then, in your project, add the path repository and require the package from it:
 
 ```bash
-composer config repositories.experimently path /path/to/experimently/sdk/php
-composer require experimently/sdk:@dev
+composer config repositories.controlvar path /path/to/controlvar/sdk/php
+composer require controlvar/sdk:@dev
 ```
 
 Without composer, `require` the files under `src/` directly (see `examples/contract_smoke.php`).
@@ -35,8 +35,8 @@ Without composer, `require` the files under `src/` directly (see `examples/contr
 ## Quick Start
 
 ```php
-use Experimently\ExperimentationClient;
-use Experimently\SdkConfig;
+use Controlvar\ExperimentationClient;
+use Controlvar\SdkConfig;
 
 $client = new ExperimentationClient(new SdkConfig(
     baseUrl: getenv('EXPERIMENTLY_API_URL') ?: 'http://localhost:8000',  // origin only
@@ -176,7 +176,7 @@ Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API
 `composer install` (it `require`s `src/` directly when `vendor/` is absent).
 
 CI runs this SDK's contract smoke against a real API: `php` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml). Run it
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml). Run it
 yourself with `python tests/sdk-contract/live/run_live_contract.py --sdk php --strict` on a machine
 with PHP 8.1+.
 

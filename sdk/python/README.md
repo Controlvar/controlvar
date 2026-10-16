@@ -1,24 +1,24 @@
-# experimently (Python)
+# controlvar (Python)
 
 **Beta.** This is a 0.x release: pin the exact version you test against.
 
-Synchronous, dependency-free Python client for the Experimently public API.
+Synchronous, dependency-free Python client for the Controlvar public API.
 Experiment assignment and feature-flag evaluation are decided **by the server** by default (sticky
 per user + experiment); the SDK caches the answers per user + key. Server-side code can opt in to
 **local evaluation** (`evaluation="local"`, beta): flags are answered in-process from the server's
 ruleset, with the server's answers, and anything that cannot be answered exactly goes to the
-server. See [`docs/sdk/local-evaluation.md`](https://github.com/getexperimently/experimently/blob/main/docs/sdk/local-evaluation.md).
+server. See [`docs/sdk/local-evaluation.md`](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/local-evaluation.md).
 
 Requires Python 3.9+. HTTP goes through the standard library (`urllib`), so there is nothing
 else to install.
 
 ## Install
 
-The `experimently` package is on [PyPI](https://pypi.org/project/experimently/). 0.1.0 is a
-beta release. It installs as `experimently` and imports as `experimentation`.
+The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/). 0.1.0 is a
+beta release. It installs as `controlvar` and imports as `experimentation`.
 
 ```bash
-pip install experimently==0.1.0
+pip install controlvar==0.1.0
 ```
 
 To work on the SDK itself, install it from the root of a clone of this repository instead:
@@ -34,7 +34,7 @@ stand for your own code.
 
 ```python
 import os
-from experimentation import ExperimentationClient, ExperimentationError
+from controlvar import ExperimentationClient, ExperimentationError
 
 client = ExperimentationClient(
     api_url=os.environ.get("EXPERIMENTLY_API_URL", "http://localhost:8000"),  # origin only
@@ -142,17 +142,17 @@ Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API
 `CONTRACT_USER_ID` (default random `smoke-<uuid>`).
 
 CI runs this SDK's contract smoke against a real API: `python` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml). Its fixtures,
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml). Its fixtures,
 `sdk_contract_ab` and `sdk_contract_flag`, are seeded with `backend/scripts/seed_sdk_contract.py`;
 run it with `python tests/sdk-contract/live/run_live_contract.py --sdk python --strict`.
 
 ## Testing your own code
 
-`experimentation.testing.FakeTransport` records requests and serves canned responses:
+`controlvar.testing.FakeTransport` records requests and serves canned responses:
 
 ```python
-from experimentation import ExperimentationClient
-from experimentation.testing import FakeTransport
+from controlvar import ExperimentationClient
+from controlvar.testing import FakeTransport
 
 transport = FakeTransport().route("GET", "/api/v1/feature-flags/evaluate/new_search",
                                   json={"key": "new_search", "enabled": True, "config": None})

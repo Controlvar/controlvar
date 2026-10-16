@@ -13,7 +13,7 @@ the MD5 digest where the SDK exports one, the rollout inclusions, and exactly 9 
 
 | SDK | What runs | Needs |
 | --- | --- | --- |
-| `python` | `experimentation.consistent_hash` / `md5_hex` from `sdk/python` | python |
+| `python` | `controlvar.consistent_hash` / `md5_hex` from `sdk/python` | python |
 | `js` | `consistentHash` / `md5Hex` from the built package (`npm ci && npm run build` in `sdk/js`) | node |
 | `edge` | `hashUser` / `md5Hex` from the built package (`sdk/edge`) | node |
 | `react-native` | `hashUser` from `src/hash.ts`, loaded with node's type stripping (the package ships source) | node 22 |

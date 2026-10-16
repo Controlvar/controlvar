@@ -1,25 +1,25 @@
-# @getexperimently/js-sdk
+# @controlvar/js-sdk
 
 **Beta.** This is a 0.x release: pin the exact version you test against.
 
-JavaScript/TypeScript client for the Experimently public API. Node >= 18 and browsers,
+JavaScript/TypeScript client for the Controlvar public API. Node >= 18 and browsers,
 zero runtime dependencies (global `fetch`), CommonJS build with type declarations.
 
 Flag evaluation and experiment assignment are **decided by the server** by default; results are
 cached per user + key in memory. Server-side code can opt in to **local evaluation**
 (`evaluation: 'local'`, beta): flags are answered in-process from the server's ruleset, with the
 server's answers, and anything that cannot be answered exactly goes to the server. See
-[`docs/sdk/local-evaluation.md`](https://github.com/getexperimently/experimently/blob/main/docs/sdk/local-evaluation.md).
+[`docs/sdk/local-evaluation.md`](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/local-evaluation.md).
 
-Full documentation: [`docs/sdk/javascript.md`](https://github.com/getexperimently/experimently/blob/main/docs/sdk/javascript.md).
+Full documentation: [`docs/sdk/javascript.md`](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/javascript.md).
 
 ## Install
 
-The `@getexperimently/js-sdk` package is on [npm](https://www.npmjs.com/package/@getexperimently/js-sdk). 0.1.0 is a
+The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk). 0.1.0 is a
 beta release.
 
 ```bash
-npm install @getexperimently/js-sdk@0.1.0
+npm install @controlvar/js-sdk@0.1.0
 ```
 
 To work on the SDK itself, see Development below.
@@ -27,7 +27,7 @@ To work on the SDK itself, see Development below.
 ## Quick start
 
 ```ts
-import { ExperimentationClient } from '@getexperimently/js-sdk';
+import { ExperimentationClient } from '@controlvar/js-sdk';
 
 const client = new ExperimentationClient({ apiUrl: 'http://localhost:8000', apiKey: 'eptk_...' });
 const user = { userId: 'user-123', attributes: { plan: 'pro' } };
@@ -104,11 +104,11 @@ Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API
 `CONTRACT_EXPERIMENT_KEY` (`sdk_contract_ab`), `CONTRACT_FLAG_KEY` (`sdk_contract_flag`), `CONTRACT_USER_ID`.
 
 CI runs this SDK's contract smoke against a real API: `js` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ## Development
 
-From `sdk/js` in a clone of [this repository](https://github.com/getexperimently/experimently):
+From `sdk/js` in a clone of [this repository](https://github.com/Controlvar/controlvar):
 
 ```bash
 npm install

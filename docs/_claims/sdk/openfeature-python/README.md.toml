@@ -4,7 +4,7 @@
 document = "sdk/openfeature-python/README.md"
 
 [[unit]]
-text = "experimently-openfeature (Python)"
+text = "controlvar-openfeature (Python)"
 by = ["exempt:label"]
 
 [[unit]]
@@ -16,7 +16,7 @@ text = "This is a 0.x release: pin the exact version you test against."
 by = ["test:sdk/openfeature-python/tests/test_package.py::test_the_package_is_a_0_x_beta"]
 
 [[unit]]
-text = "OpenFeature provider for Experimently."
+text = "OpenFeature provider for Controlvar."
 by = ["test:sdk/openfeature-python/tests/test_provider.py::TestOpenFeatureIntegration::test_provider_can_be_registered_with_api_set_provider"]
 
 [[unit]]
@@ -42,7 +42,7 @@ text = "Requires Python 3.9+ and openfeature-sdk 0.10.0 or later."
 by = ["test:sdk/openfeature-python/tests/test_package.py::test_it_needs_python_3_9_and_openfeature_sdk_0_10"]
 
 [[unit]]
-text = "The only other dependency is experimently, which itself has none."
+text = "The only other dependency is controlvar, which itself has none."
 by = ["test:sdk/openfeature-python/tests/test_package.py::test_its_only_other_dependency_is_the_python_sdk_which_has_none"]
 
 [[unit]]
@@ -58,7 +58,7 @@ by = [
 ]
 
 [[unit]]
-text = "Pass client= to share one experimentation.ExperimentationClient (and its cache) with the rest of your application."
+text = "Pass client= to share one controlvar.ExperimentationClient (and its cache) with the rest of your application."
 by = ["test:sdk/openfeature-python/tests/test_provider.py::TestConstruction::test_accepts_prebuilt_client"]
 
 [[unit]]

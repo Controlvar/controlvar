@@ -17,28 +17,28 @@ This means you can:
 
 ## TypeScript / Node.js Provider
 
-`@getexperimently/openfeature-provider` (v0.1.0 beta, source `sdk/openfeature`) implements the
+`@controlvar/openfeature-provider` (v0.1.0 beta, source `sdk/openfeature`) implements the
 `@openfeature/server-sdk` `Provider` interface by delegating every evaluation to the
-[JavaScript SDK](javascript.md) (`@getexperimently/js-sdk`), which calls
+[JavaScript SDK](javascript.md) (`@controlvar/js-sdk`), which calls
 `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targetingKey>` and caches the answer per
 user + flag. Flags are decided **by the server**; nothing is bucketed locally and no flag
 definitions are downloaded. Requires Node >= 18 and `@openfeature/server-sdk >= 1.7`.
 
 CI runs this SDK's contract smoke against a real API: `openfeature` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 The live runner:
 `python tests/sdk-contract/live/run_live_contract.py --sdk openfeature --strict`.
 
 ### Installation
 
-**Not yet published.** `@getexperimently/openfeature-provider` is not on npm, so build it from
+**Not yet published.** `@controlvar/openfeature-provider` is not on npm, so build it from
 source: build both from a clone of this repository (the provider's build also builds `sdk/js`):
 
 ```bash
-git clone https://github.com/getexperimently/experimently.git
-npm --prefix experimently/sdk/js ci
-npm --prefix experimently/sdk/openfeature ci
-npm --prefix experimently/sdk/openfeature run build
+git clone https://github.com/Controlvar/controlvar.git
+npm --prefix controlvar/sdk/js ci
+npm --prefix controlvar/sdk/openfeature ci
+npm --prefix controlvar/sdk/openfeature run build
 ```
 
 `@openfeature/server-sdk` is a **peer dependency** of the provider (`^1.7.0`), so your app installs
@@ -49,14 +49,14 @@ so the provider resolves the copy in `sdk/openfeature/node_modules` instead.
 Then, in your app, install the two directories (`@openfeature/server-sdk` itself is on npm):
 
 ```bash
-npm install @openfeature/server-sdk /path/to/experimently/sdk/js /path/to/experimently/sdk/openfeature
+npm install @openfeature/server-sdk /path/to/controlvar/sdk/js /path/to/controlvar/sdk/openfeature
 ```
 
 ### Quick start
 
 ```typescript
 import { OpenFeature } from '@openfeature/server-sdk';
-import { ExperimentationProvider } from '@getexperimently/openfeature-provider';
+import { ExperimentationProvider } from '@controlvar/openfeature-provider';
 
 // 1. Register the provider (once, at app start-up).
 const provider = new ExperimentationProvider({
@@ -132,7 +132,7 @@ new ExperimentationProvider({
 
 | Member | Signature | Description |
 |---|---|---|
-| `metadata` | `{ name: 'experimently-provider' }` | OpenFeature provider metadata |
+| `metadata` | `{ name: 'controlvar-provider' }` | OpenFeature provider metadata |
 | `client` | `ExperimentationClient` | The underlying JS SDK client (`getAssignment`, `getVariant`, `track`, `trackBatch`, `getAssignments`, …) |
 | `initialize` | `(context?) => Promise<void>` | No-op: nothing is pre-fetched, flags are evaluated per user on demand |
 | `onClose` | `() => Promise<void>` | Clears the evaluation cache |
@@ -187,7 +187,7 @@ npm run build
 
 ## Python Provider
 
-`experimently-openfeature` (v0.1.0 beta, source `sdk/openfeature-python`) delegates every
+`controlvar-openfeature` (v0.1.0 beta, source `sdk/openfeature-python`) delegates every
 evaluation to the [`experimentation` Python SDK](python.md), which calls
 `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>` and caches the answer per
 user + flag. Flags are decided **by the server**; nothing is bucketed locally and no flag
@@ -195,7 +195,7 @@ definitions are downloaded. Requires Python 3.9+ and `openfeature-sdk >= 0.10.0`
 
 ### Installation
 
-**Not yet published.** This package is not on PyPI: the `experimently-openfeature` name there
+**Not yet published.** This package is not on PyPI: the `controlvar-openfeature` name there
 holds a 0.0.0 placeholder, which installs but cannot be imported. Build it from source: install
 both from the root of a clone of this repository (`openfeature-sdk` is installed as a
 dependency):
@@ -210,7 +210,7 @@ pip install -e sdk/python -e sdk/openfeature-python
 import os
 from openfeature import api
 from openfeature.evaluation_context import EvaluationContext
-from experimentation_openfeature import ExperimentationProvider
+from controlvar_openfeature import ExperimentationProvider
 
 # 1. Register the provider (once, at startup).
 provider = ExperimentationProvider(
@@ -279,11 +279,11 @@ ExperimentationProvider(
     timeout: float = 10,                      # seconds
     *,
     client: ExperimentationClient | None = None,  # share one SDK client (and its cache) with your app
-    transport: Transport | None = None,           # custom HTTP layer (tests use experimentation.testing.FakeTransport)
+    transport: Transport | None = None,           # custom HTTP layer (tests use controlvar.testing.FakeTransport)
 )
 ```
 
-`provider.client` exposes the underlying `experimentation.ExperimentationClient`; `shutdown()`
+`provider.client` exposes the underlying `controlvar.ExperimentationClient`; `shutdown()`
 clears its cache.
 
 ### Backend endpoints used (Python)
@@ -314,7 +314,7 @@ Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API
 through the OpenFeature API; assignment and tracking go through `provider.client`.
 
 CI runs this SDK's contract smoke against a real API: `openfeature-python` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 The live runner:
 `python tests/sdk-contract/live/run_live_contract.py --sdk openfeature-python --strict`.
 
@@ -395,7 +395,7 @@ With OpenFeature and this provider, a boolean flag reads:
 
 ```typescript
 import { OpenFeature } from '@openfeature/server-sdk';
-import { ExperimentationProvider } from '@getexperimently/openfeature-provider';
+import { ExperimentationProvider } from '@controlvar/openfeature-provider';
 await OpenFeature.setProviderAndWait(new ExperimentationProvider({ apiKey: 'api-key' }));
 const client = OpenFeature.getClient();
 const value = await client.getBooleanValue('my-flag', false, { targetingKey: userId });
@@ -413,7 +413,7 @@ With OpenFeature and this provider:
 ```python
 from openfeature import api
 from openfeature.evaluation_context import EvaluationContext
-from experimentation_openfeature import ExperimentationProvider
+from controlvar_openfeature import ExperimentationProvider
 api.set_provider(ExperimentationProvider(api_key='api-key'))
 client = api.get_client()
 # A Split treatment becomes a boolean flag: only boolean flags carry a value here.

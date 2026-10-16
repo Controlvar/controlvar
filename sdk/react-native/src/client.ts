@@ -1,5 +1,5 @@
 /**
- * React Native Experimently client.
+ * React Native Controlvar client.
  *
  * Flag evaluation and experiment assignment are decided **by the server**
  * (`GET /api/v1/feature-flags/evaluate/{key}?user_id=…`,
@@ -17,7 +17,7 @@
  * ```typescript
  * const client = new ExperimentationClient({
  *   apiKey: 'your-api-key',
- *   baseUrl: 'https://api.getexperimently.com',
+ *   baseUrl: 'https://api.controlvar.example.com',
  * });
  *
  * const { enabled, config } = await client.evaluateFlag('dark-mode', 'user-123');

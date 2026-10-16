@@ -3,7 +3,7 @@
 #
 # Builds the core SDK (core/target/classes) plus its runtime dependencies
 # (core/target/lib) when they are missing or older than the sources, then runs
-# com.getexperimently.sdk.examples.ContractSmoke. Only the smoke's JSON line is
+# com.controlvar.sdk.examples.ContractSmoke. Only the smoke's JSON line is
 # written to stdout; Maven output goes to stderr. Environment variables
 # (EXPERIMENTLY_API_URL, EXPERIMENTLY_API_KEY, CONTRACT_*) are passed through and the
 # exit status is the smoke's (non-zero on failure).
@@ -15,7 +15,7 @@ set -euo pipefail
 SDK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$SDK_DIR"
 
-SMOKE_CLASS="core/target/classes/com/getexperimently/sdk/examples/ContractSmoke.class"
+SMOKE_CLASS="core/target/classes/com/controlvar/sdk/examples/ContractSmoke.class"
 
 needs_build() {
     [[ "${FORCE_BUILD:-0}" == "1" ]] && return 0
@@ -29,4 +29,4 @@ if needs_build; then
 fi
 
 exec java -cp "core/target/classes:core/target/lib/*" \
-    com.getexperimently.sdk.examples.ContractSmoke "$@"
+    com.controlvar.sdk.examples.ContractSmoke "$@"

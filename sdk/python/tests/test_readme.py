@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-import experimentation.client as client_module
-from experimentation.testing import FakeTransport
+import controlvar.client as client_module
+from controlvar.testing import FakeTransport
 
 README = Path(__file__).resolve().parents[1] / "README.md"
 

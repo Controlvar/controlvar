@@ -1,6 +1,6 @@
 # PHP SDK
 
-`experimently/sdk` provides feature flag evaluation, experiment
+`controlvar/sdk` provides feature flag evaluation, experiment
 assignment and event tracking for PHP 8.1+ applications. It depends only on `ext-curl` and
 `ext-json`.
 
@@ -22,19 +22,19 @@ Source: `sdk/php`.
 
 ## Installation
 
-**Not yet published.** `experimently/sdk` is not on Packagist, so build it from source: point
+**Not yet published.** `controlvar/sdk` is not on Packagist, so build it from source: point
 Composer at `sdk/php` in a clone of this repository with a path repository (this has not been
 tested here).
 
 ```bash
-git clone https://github.com/getexperimently/experimently.git
+git clone https://github.com/Controlvar/controlvar.git
 ```
 
 Then, in your project, add the path repository and require the package from it:
 
 ```bash
-composer config repositories.experimently path /path/to/experimently/sdk/php
-composer require experimently/sdk:@dev
+composer config repositories.controlvar path /path/to/controlvar/sdk/php
+composer require controlvar/sdk:@dev
 ```
 
 Without composer, `require` the files under `sdk/php/src/` directly (`examples/contract_smoke.php`
@@ -47,8 +47,8 @@ shows the order).
 ```php
 <?php
 
-use Experimently\ExperimentationClient;
-use Experimently\SdkConfig;
+use Controlvar\ExperimentationClient;
+use Controlvar\SdkConfig;
 
 $client = new ExperimentationClient(new SdkConfig(
     baseUrl: getenv('EXPERIMENTLY_API_URL') ?: 'http://localhost:8000',
@@ -238,10 +238,10 @@ The public methods never throw on network or HTTP errors. Only `HttpClient` thro
 
 | Exception | Extends | When |
 |-----------|---------|------|
-| `Experimently\Errors\ExperimentationException` | `\RuntimeException` | Base class |
-| `Experimently\Errors\NetworkException` | `ExperimentationException` | cURL transport errors, timeouts |
-| `Experimently\Errors\ApiException` (`getStatusCode()`) | `ExperimentationException` | Other 4xx/5xx (404: an experiment unknown or not ACTIVE, or an unknown flag key; 422 validation; 429 rate limited) |
-| `Experimently\Errors\AuthException` | `ApiException` | HTTP 401 — invalid API key |
+| `Controlvar\Errors\ExperimentationException` | `\RuntimeException` | Base class |
+| `Controlvar\Errors\NetworkException` | `ExperimentationException` | cURL transport errors, timeouts |
+| `Controlvar\Errors\ApiException` (`getStatusCode()`) | `ExperimentationException` | Other 4xx/5xx (404: an experiment unknown or not ACTIVE, or an unknown flag key; 422 validation; 429 rate limited) |
+| `Controlvar\Errors\AuthException` | `ApiException` | HTTP 401 — invalid API key |
 
 ---
 
@@ -264,15 +264,15 @@ to decide a variant.
 ## Laravel Integration
 
 ```php
-// app/Providers/ExperimentlyServiceProvider.php
-use Experimently\ExperimentationClient;
-use Experimently\SdkConfig;
+// app/Providers/ControlvarServiceProvider.php
+use Controlvar\ExperimentationClient;
+use Controlvar\SdkConfig;
 
 public function register(): void
 {
     $this->app->singleton(ExperimentationClient::class, fn () => new ExperimentationClient(new SdkConfig(
-        baseUrl: config('services.experimently.url'),
-        apiKey: config('services.experimently.key'),
+        baseUrl: config('services.controlvar.url'),
+        apiKey: config('services.controlvar.key'),
         cacheTtl: 60,
     )));
 }
@@ -330,7 +330,7 @@ Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API
 is needed — the script `require`s `src/` directly when `vendor/` is absent.
 
 CI runs this SDK's contract smoke against a real API: `php` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ---
 
@@ -348,5 +348,5 @@ php test_standalone.php
 ```
 
 CI runs `composer install` and `vendor/bin/phpunit` on PHP 8.2 in the SDK Unit Tests
-workflow ([sdk-unit-tests.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/sdk-unit-tests.yml)), daily and on a pull request that changes `sdk/php/`. No workflow runs
+workflow ([sdk-unit-tests.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/sdk-unit-tests.yml)), daily and on a pull request that changes `sdk/php/`. No workflow runs
 `php test_standalone.php`.

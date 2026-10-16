@@ -327,7 +327,7 @@ export class LocalEvaluation {
         return this.refused(
           '404',
           new ExperimentationError(
-            `The server has no ${RULESET_PATH} (404). Local evaluation needs Experimently ` +
+            `The server has no ${RULESET_PATH} (404). Local evaluation needs Controlvar ` +
               `${MIN_SERVER_RELEASE} or later: upgrade the server, or leave evaluation at 'server'. ` +
               'Until then every flag is evaluated by the server.',
             { code: 'HTTP_ERROR', status }
@@ -367,7 +367,7 @@ export class LocalEvaluation {
         new ExperimentationError(
           `The server sent a flag ruleset in a format this SDK does not understand (schema ` +
             `${JSON.stringify(doc.schema)}, bucketing ${JSON.stringify(doc.bucketing)}). Every flag ` +
-            'is evaluated by the server; upgrade @getexperimently/js-sdk to evaluate locally.',
+            'is evaluated by the server; upgrade @controlvar/js-sdk to evaluate locally.',
           { code: 'INVALID_RESPONSE', status: response.status }
         )
       );

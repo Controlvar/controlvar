@@ -3,7 +3,7 @@ import { fireEvent, screen } from '@testing-library/react';
 import ProductDetailPage from '@/pages/products/[id]';
 import { findProduct } from '@/data/products';
 import { readCart } from '@/lib/cart';
-import { __setExperiment } from '@/__mocks__/experimently-sdk';
+import { __setExperiment } from '@/__mocks__/controlvar-sdk';
 import { mockRouter } from '@/__mocks__/next-router';
 import { callsFor, renderPage, resetTestState } from '@/test-utils';
 

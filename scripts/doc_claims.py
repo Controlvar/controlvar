@@ -755,7 +755,7 @@ MECHANISMS: Dict[str, Mechanism] = {
         holds=(
             (
                 "docs/sdk/*.md",
-                r"(?:@getexperimently/[A-Za-z0-9_-]{1,60}|experimently-openfeature) "
+                r"(?:@controlvar/[A-Za-z0-9_-]{1,60}|controlvar-openfeature) "
                 + _VERSION,
             ),
             ("docs/sdk/*.md", _TARBALL),
@@ -772,7 +772,7 @@ MECHANISMS: Dict[str, Mechanism] = {
             ),
             (
                 "docs/getting-started/faq.md",
-                r"\((?:npm|pip) install (?:@getexperimently/[A-Za-z0-9_-]{1,60}"
+                r"\((?:npm|pip) install (?:@controlvar/[A-Za-z0-9_-]{1,60}"
                 r"|experimently), [0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}, beta\)",
             ),
         ),

@@ -8,7 +8,7 @@ text = "Go SDK"
 by = ["exempt:label"]
 
 [[unit]]
-text = "github.com/getexperimently/experimently/sdk/go (package experimentation) provides feature flag evaluation, experiment assignment and event tracking for Go services."
+text = "github.com/controlvar/controlvar/sdk/go (package experimentation) provides feature flag evaluation, experiment assignment and event tracking for Go services."
 by = [
     "test:sdk/go/module_test.go::TestModule_StandardLibraryOnly",
     "journey:sdk-go#quick-start-user-on",
@@ -98,7 +98,7 @@ text = "Your builds stay on that version until you run go get again."
 by = ["exempt:third-party"]
 
 [[unit]]
-text = "To pin a particular commit, name it: go get github.com/getexperimently/experimently/sdk/go@<commit>, where <commit> is a commit hash from this repository."
+text = "To pin a particular commit, name it: go get github.com/controlvar/controlvar/sdk/go@<commit>, where <commit> is a commit hash from this repository."
 by = ["exempt:third-party"]
 
 [[unit]]

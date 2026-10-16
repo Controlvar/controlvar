@@ -385,21 +385,21 @@ text = "SDK | Install"
 by = ["exempt:label"]
 
 [[unit]]
-text = "JavaScript | npm install @getexperimently/js-sdk"
+text = "JavaScript | npm install @controlvar/js-sdk"
 by = [
     "journey:sdk-javascript#quick-start-user-on",
     "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names",
 ]
 
 [[unit]]
-text = "Python | pip install experimently (it imports as experimentation)"
+text = "Python | pip install controlvar (it imports as experimentation)"
 by = [
     "journey:sdk-python#quick-start-user-on",
     "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names",
 ]
 
 [[unit]]
-text = "Go | go get github.com/getexperimently/experimently/sdk/go"
+text = "Go | go get github.com/controlvar/controlvar/sdk/go"
 by = ["journey:sdk-go#quick-start-user-on"]
 
 [[unit]]

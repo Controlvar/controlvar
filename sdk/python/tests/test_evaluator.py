@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from experimentation import consistent_hash
-from experimentation.evaluator import (
+from controlvar import consistent_hash
+from controlvar.evaluator import (
     BUCKETING,
     DEFER,
     LOCAL_OPERATORS,

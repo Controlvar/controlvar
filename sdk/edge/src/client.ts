@@ -36,7 +36,7 @@ import type {
   TrackOptions,
 } from './types.js';
 
-const DEFAULT_BASE_URL = 'https://api.getexperimently.com';
+const DEFAULT_BASE_URL = 'https://api.controlvar.example.com';
 const DEFAULT_CACHE_TTL_MS = 60_000; // 1 minute
 const DEFAULT_TIMEOUT_MS = 500;      // 500ms — edge functions must be fast
 /** Maximum events per `POST /api/v1/tracking/batch` request. */

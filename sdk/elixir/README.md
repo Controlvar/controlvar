@@ -1,6 +1,6 @@
-# Experimently Elixir SDK
+# Controlvar Elixir SDK
 
-Elixir SDK for Experimently — A/B testing and feature flags.
+Elixir SDK for Controlvar — A/B testing and feature flags.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
@@ -15,19 +15,19 @@ the SDK caches the answer per user + key. Nothing is bucketed locally.
 - OTP-native HTTP via `:httpc` (zero external runtime deps beyond Jason)
 - GenServer-based client for supervised process lifecycle
 - Behaviour-based HTTP client for easy testing with mock modules
-- Cross-SDK MD5 hash utility (`Experimently.Evaluator.hash_user/2`)
+- Cross-SDK MD5 hash utility (`Controlvar.Evaluator.hash_user/2`)
 
 ## Installation
 
 Add to your `mix.exs`.
 
-**Not yet published.** The `experimently` package is not on Hex, so build it from source: this
+**Not yet published.** The `controlvar` package is not on Hex, so build it from source: this
 dependency takes `sdk/elixir` from this repository.
 
 ```elixir
 defp deps do
   [
-    {:experimently, git: "https://github.com/getexperimently/experimently.git", sparse: "sdk/elixir"}
+    {:controlvar, git: "https://github.com/Controlvar/controlvar.git", sparse: "sdk/elixir"}
   ]
 end
 ```
@@ -36,30 +36,30 @@ end
 
 ```elixir
 {:ok, client} =
-  Experimently.start(
+  Controlvar.start(
     base_url: System.get_env("EXPERIMENTLY_API_URL", "http://localhost:8000"),
     api_key: System.fetch_env!("EXPERIMENTLY_API_KEY")
   )
 
 # Feature flag — GET /api/v1/feature-flags/evaluate/{key}?user_id=...
-case Experimently.evaluate_flag(client, "dark-mode", "user-123") do
-  {:ok, %Experimently.FlagEvaluation{enabled: true}} -> render_dark_mode()
+case Controlvar.evaluate_flag(client, "dark-mode", "user-123") do
+  {:ok, %Controlvar.FlagEvaluation{enabled: true}} -> render_dark_mode()
   {:ok, _disabled} -> render_default()    # off, or not ACTIVE
   {:error, _reason} -> render_default()   # network/HTTP failure, unknown flag key
 end
 
-Experimently.feature_enabled?(client, "dark-mode", "user-123")   # => true | false
+Controlvar.feature_enabled?(client, "dark-mode", "user-123")   # => true | false
 
 # Experiment — POST /api/v1/tracking/assign (sticky on the server, records the exposure)
-{:ok, %Experimently.Assignment{variant_name: variant, configuration: config}} =
-  Experimently.get_assignment(client, "checkout-exp", "user-123", %{plan: "pro"})
+{:ok, %Controlvar.Assignment{variant_name: variant, configuration: config}} =
+  Controlvar.get_assignment(client, "checkout-exp", "user-123", %{plan: "pro"})
 
 # Events (fire-and-forget, always :ok)
-Experimently.track(client, "purchase", "user-123", %{sku: "pro"},
+Controlvar.track(client, "purchase", "user-123", %{sku: "pro"},
   experiment_key: "checkout-exp", value: 49.99)
-Experimently.track(client, "page_view", "user-123", %{page: "/"})   # no key: fanned out
+Controlvar.track(client, "page_view", "user-123", %{page: "/"})   # no key: fanned out
 
-Experimently.stop(client)
+Controlvar.stop(client)
 ```
 
 ## Configuration
@@ -111,13 +111,13 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 ## Architecture
 
 ```
-Experimently            <- Public facade
+Controlvar            <- Public facade
   └── Client (GenServer)           <- Config, in-flight track requests
         └── Cache (GenServer)      <- ETS-backed TTL cache, per client, keyed {type, user_id, key}
               └── :ets table       <- Actual storage
 
-Experimently.Evaluator  <- Cross-SDK hash utility (not used to decide variants)
-Experimently.HttpClient <- :httpc-based HTTP (implements HttpBehaviour)
+Controlvar.Evaluator  <- Cross-SDK hash utility (not used to decide variants)
+Controlvar.HttpClient <- :httpc-based HTTP (implements HttpBehaviour)
 ```
 
 Evaluations, assignments and `track_batch/2` run in the **calling** process; `track/5` is a cast
@@ -125,13 +125,13 @@ that spawns one process per request, and `stop/1` waits (up to `timeout`) for th
 
 ## Hash Compatibility
 
-`Experimently.Evaluator.hash_user/2` implements the cross-SDK formula
+`Controlvar.Evaluator.hash_user/2` implements the cross-SDK formula
 `MD5("{user_id}:{flag_key}") -> first 4 bytes as little-endian uint32 / 2^32`. The SDK's own
 `hash_compatibility_test.exs` pins one vector; the cross-SDK golden vectors in `tests/sdk-contract/`
 are not run against this SDK:
 
 ```elixir
-Experimently.Evaluator.hash_user("user-123", "my-flag")
+Controlvar.Evaluator.hash_user("user-123", "my-flag")
 # => 0.6927449859213084
 ```
 
@@ -163,7 +163,7 @@ Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API
 Mix's compile messages off stdout.
 
 CI does not run this SDK's contract smoke against a real API: `elixir` is not in the
-`sdks:` list of the SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+`sdks:` list of the SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ## Testing
 
@@ -184,7 +184,7 @@ Inject a mock HTTP client via the `:http_client` config option:
 
 ```elixir
 defmodule MyMockHttp do
-  @behaviour Experimently.HttpBehaviour
+  @behaviour Controlvar.HttpBehaviour
 
   @impl true
   def get(_config, "/api/v1/feature-flags/evaluate/my-flag?user_id=" <> _user_id) do
@@ -202,7 +202,7 @@ end
 
 # In your test:
 {:ok, client} =
-  Experimently.start(base_url: "http://localhost", api_key: "test", http_client: MyMockHttp)
+  Controlvar.start(base_url: "http://localhost", api_key: "test", http_client: MyMockHttp)
 ```
 
 ## License

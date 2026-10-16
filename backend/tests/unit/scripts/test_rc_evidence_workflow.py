@@ -596,8 +596,8 @@ def test_what_the_pypi_build_job_records_is_what_the_verifier_reads(tmp_path):
     dist = tmp_path / "dist"
     dist.mkdir()
     files = {
-        "experimently-9.9.9-py3-none-any.whl": b"made-up wheel",
-        "experimently-9.9.9.tar.gz": b"made-up sdist",
+        "controlvar-9.9.9-py3-none-any.whl": b"made-up wheel",
+        "controlvar-9.9.9.tar.gz": b"made-up sdist",
     }
     for name, data in files.items():
         (dist / name).write_bytes(data)
@@ -617,7 +617,7 @@ def test_what_the_pypi_build_job_records_is_what_the_verifier_reads(tmp_path):
 
 
 def test_what_the_npm_build_job_records_is_what_the_verifier_reads(tmp_path):
-    tgz = tmp_path / "getexperimently-js-sdk-9.9.9.tgz"
+    tgz = tmp_path / "controlvar-js-sdk-9.9.9.tgz"
     tgz.write_bytes(b"made-up tarball")
     out = tmp_path / "github_output"
     done = subprocess.run(

@@ -1,5 +1,5 @@
 require 'webmock/rspec'
-require_relative '../lib/experimently'
+require_relative '../lib/controlvar'
 
 RSpec.configure do |config|
   # Enable focused specs (fit/fdescribe)

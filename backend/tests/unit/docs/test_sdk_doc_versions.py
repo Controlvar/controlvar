@@ -5,11 +5,11 @@ and Python SDKs were "1.1" while both manifests said 0.1.0 (#784). This reads
 every place a page quotes a package with a version and compares it with the
 manifest:
 
-* `` `@getexperimently/js-sdk` (v0.1.0) `` and `` `experimently` 0.1.0 ``;
-* a tarball name such as ``getexperimently-js-sdk-0.1.0.tgz``;
+* `` `@controlvar/js-sdk` (v0.1.0) `` and `` `experimently` 0.1.0 ``;
+* a tarball name such as ``controlvar-js-sdk-0.1.0.tgz``;
 * an install command pinned to a version, ``npm install
-  @getexperimently/js-sdk@0.1.0`` or ``pip install experimently==0.1.0``;
-* an install command followed by the version, `` (`pip install experimently`,
+  @controlvar/js-sdk@0.1.0`` or ``pip install controlvar==0.1.0``;
+* an install command followed by the version, `` (`pip install controlvar`,
   0.1.0, beta) ``;
 * the sentence naming the registry, `` The `experimently` package is on
   [PyPI](...). 0.1.0 is a beta release `` or `` ... on [npm](...) (0.1.0,
@@ -79,13 +79,13 @@ PYTHON_PAGES = {
 }
 
 VERSION = r"v?(\d+(?:\.\d+){1,2})"
-PACKAGE = r"@getexperimently/[A-Za-z0-9_-]+|experimently(?:-openfeature)?"
+PACKAGE = r"@controlvar/[A-Za-z0-9_-]+|experimently(?:-openfeature)?"
 #: (form, pattern): group 1 the package, group 2 the version. Whitespace is
 #: folded before matching, so a line break may fall anywhere.
 FORMS: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
     ("quoted", re.compile(r"`(" + PACKAGE + r")` \(?" + VERSION)),
     ("tarball", re.compile(r"getexperimently-([A-Za-z0-9-]+?)-(\d+\.\d+\.\d+)\.tgz")),
-    ("npm pin", re.compile(r"(@getexperimently/[A-Za-z0-9_-]+)@" + VERSION)),
+    ("npm pin", re.compile(r"(@controlvar/[A-Za-z0-9_-]+)@" + VERSION)),
     ("pip pin", re.compile(r"(?<![\w-])(experimently(?:-openfeature)?)==" + VERSION)),
     (
         "install, then version",
@@ -144,7 +144,7 @@ def quotes(rel: str, text: str) -> List[Tuple[str, str, Tuple[int, int]]]:
         for match in pattern.finditer(text):
             package = match.group(1)
             if form == "tarball":
-                package = f"@getexperimently/{package}"
+                package = f"@controlvar/{package}"
             if (
                 form == "quoted"
                 and package == "experimently"
@@ -261,19 +261,19 @@ def test_the_scan_finds_the_quotes_it_exists_for():
         (rel(p), q[0]) for p in PAGES for q in quotes(rel(p), p.read_text("utf-8"))
     }
     assert {
-        ("docs/sdk/javascript.md", "@getexperimently/js-sdk"),
-        ("docs/sdk/react.md", "@getexperimently/react-sdk"),
+        ("docs/sdk/javascript.md", "@controlvar/js-sdk"),
+        ("docs/sdk/react.md", "@controlvar/react-sdk"),
         ("docs/sdk/python.md", "experimently"),
-        ("docs/sdk/local-evaluation.md", "@getexperimently/js-sdk"),
+        ("docs/sdk/local-evaluation.md", "@controlvar/js-sdk"),
         ("docs/sdk/local-evaluation.md", "experimently"),
         ("docs/getting-started/faq.md", "experimently"),
-        ("docs/getting-started/faq.md", "@getexperimently/js-sdk"),
+        ("docs/getting-started/faq.md", "@controlvar/js-sdk"),
         ("sdk/python/README.md", "experimently"),
-        ("sdk/js/README.md", "@getexperimently/js-sdk"),
+        ("sdk/js/README.md", "@controlvar/js-sdk"),
         ("tests/acceptance/docs/journeys/sdk-python.yaml", "experimently"),
         (
             "tests/acceptance/docs/journeys/sdk-javascript.yaml",
-            "@getexperimently/js-sdk",
+            "@controlvar/js-sdk",
         ),
     } <= found
     forms = {
@@ -336,25 +336,25 @@ def test_a_page_left_behind_at_a_version_bump_is_refused(part):
         assert strict_problems(rel(page), text, bumped), (
             f"{rel(page)} at the old version passed"
         )
-    js = versions["@getexperimently/js-sdk"]
+    js = versions["@controlvar/js-sdk"]
     py = versions["experimently"]
     for sentence, package in (
-        (f"npm install @getexperimently/js-sdk@{js}", "@getexperimently/js-sdk"),
-        (f"pip install experimently=={py}", "experimently"),
+        (f"npm install @controlvar/js-sdk@{js}", "@controlvar/js-sdk"),
+        (f"pip install controlvar=={py}", "experimently"),
         (
-            f"(`npm install @getexperimently/js-sdk`, {js}, beta)",
-            "@getexperimently/js-sdk",
+            f"(`npm install @controlvar/js-sdk`, {js}, beta)",
+            "@controlvar/js-sdk",
         ),
-        (f"(`pip install experimently`, {py}, beta)", "experimently"),
+        (f"(`pip install controlvar`, {py}, beta)", "experimently"),
         (
-            "The `experimently` package is on [PyPI](https://pypi.org/project/experimently/)."
+            "The `experimently` package is on [PyPI](https://pypi.org/project/controlvar/)."
             f" {py} is a beta release.",
             "experimently",
         ),
         (
-            "The `@getexperimently/js-sdk` package is on [npm](https://www.npmjs.com/x)"
+            "The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/x)"
             f" ({js}, beta):",
-            "@getexperimently/js-sdk",
+            "@controlvar/js-sdk",
         ),
     ):
         assert mismatches("docs/x.md", sentence, bumped) == [
@@ -372,15 +372,15 @@ def test_a_page_left_behind_at_a_version_bump_is_refused(part):
 STALE = {
     "compatible release": 'pip install "experimently~={old}"',
     "at least": 'pip install "experimently>={old}"',
-    "arbitrary equality": "pip install experimently==={old}",
-    "caret": "npm install @getexperimently/js-sdk@^{old}",
-    "tilde": "npm install @getexperimently/js-sdk@~{old}",
-    "yarn": "yarn add @getexperimently/js-sdk@{old}",
-    "package.json": '"dependencies": {{"@getexperimently/js-sdk": "{old}"}}',
+    "arbitrary equality": "pip install controlvar==={old}",
+    "caret": "npm install @controlvar/js-sdk@^{old}",
+    "tilde": "npm install @controlvar/js-sdk@~{old}",
+    "yarn": "yarn add @controlvar/js-sdk@{old}",
+    "package.json": '"dependencies": {{"@controlvar/js-sdk": "{old}"}}',
     "prose": "Version {old} is the first beta.",
     "bare v-name": "The current release is v{old}.",
-    "url": "See https://pypi.org/project/experimently/{old}/ for the files.",
-    "release candidate": "pip install experimently=={new}rc1",
+    "url": "See https://pypi.org/project/controlvar/{old}/ for the files.",
+    "release candidate": "pip install controlvar=={new}rc1",
     "fenced block": "```bash\npip install experimently~={old}\n```",
 }
 

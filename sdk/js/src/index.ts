@@ -1,12 +1,12 @@
 /**
- * @getexperimently/js-sdk
+ * @controlvar/js-sdk
  *
- * JavaScript/TypeScript client for the Experimently public API.
+ * JavaScript/TypeScript client for the Controlvar public API.
  * Works in Node >= 18 and browsers; zero runtime dependencies (uses global `fetch`).
  *
  * @example
  * ```ts
- * import { ExperimentationClient } from '@getexperimently/js-sdk';
+ * import { ExperimentationClient } from '@controlvar/js-sdk';
  *
  * const client = new ExperimentationClient({ apiUrl: 'http://localhost:8000', apiKey: '...' });
  * const variant = await client.getVariant('checkout_flow', { userId: 'user-123' });

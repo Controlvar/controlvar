@@ -1,4 +1,4 @@
-// Package main demonstrates the Experimently Go SDK against a
+// Package main demonstrates the Controlvar Go SDK against a
 // running backend (defaults: http://localhost:8000, key from EXPERIMENTLY_API_KEY).
 package main
 
@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	exp "github.com/getexperimently/experimently/sdk/go"
+	exp "github.com/controlvar/controlvar/sdk/go"
 )
 
 func main() {

@@ -1,9 +1,9 @@
-# experimently-openfeature (Python)
+# controlvar-openfeature (Python)
 
 **Beta.** This is a 0.x release: pin the exact version you test against.
 
-[OpenFeature](https://openfeature.dev) provider for Experimently. Flags are
-evaluated **by the server** through the [`experimentation`](https://github.com/getexperimently/experimently/tree/main/sdk/python) Python SDK
+[OpenFeature](https://openfeature.dev) provider for Controlvar. Flags are
+evaluated **by the server** through the [`experimentation`](https://github.com/Controlvar/controlvar/tree/main/sdk/python) Python SDK
 (`GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>`) and cached per
 user + flag; nothing is bucketed locally.
 
@@ -17,7 +17,7 @@ pip install -e sdk/python -e sdk/openfeature-python
 ```
 
 Requires Python 3.9+ and `openfeature-sdk` 0.10.0 or later.
-The only other dependency is [`experimently`](https://github.com/getexperimently/experimently/tree/main/sdk/python), which itself has none.
+The only other dependency is [`controlvar`](https://github.com/Controlvar/controlvar/tree/main/sdk/python), which itself has none.
 
 ## Quick start
 
@@ -25,7 +25,7 @@ The only other dependency is [`experimently`](https://github.com/getexperimently
 import os
 from openfeature import api
 from openfeature.evaluation_context import EvaluationContext
-from experimentation_openfeature import ExperimentationProvider
+from controlvar_openfeature import ExperimentationProvider
 
 provider = ExperimentationProvider(
     api_key=os.environ["EXPERIMENTLY_API_KEY"],
@@ -47,7 +47,7 @@ provider.client.track("user-12345", "purchase", event_value=49.99, experiment_ke
 
 Constructor: `ExperimentationProvider(api_key, base_url="http://localhost:8000", cache_ttl=300,
 timeout=10, *, client=None, transport=None)`. Pass `client=` to share one
-`experimentation.ExperimentationClient` (and its cache) with the rest of your application.
+`controlvar.ExperimentationClient` (and its cache) with the rest of your application.
 
 ## Resolution rules
 
@@ -97,7 +97,7 @@ Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API
 API; assignment and tracking use `provider.client`.
 
 CI runs this SDK's contract smoke against a real API: `openfeature-python` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml). Run it
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml). Run it
 with `python tests/sdk-contract/live/run_live_contract.py --sdk openfeature-python --strict`.
 
 ## Development

@@ -10,13 +10,13 @@
          - Module "spring-boot-starter" produces the auto-config starter.
          ═══════════════════════════════════════════════════════════════ -->
 
-    <groupId>com.getexperimently</groupId>
-    <artifactId>experimently-sdk-parent</artifactId>
+    <groupId>com.controlvar</groupId>
+    <artifactId>controlvar-sdk-parent</artifactId>
     <version>1.0.0</version>
     <packaging>pom</packaging>
 
-    <name>Experimently Java SDK — Parent</name>
-    <description>Parent POM for the Experimently Java SDK and Spring Boot starter</description>
+    <name>Controlvar Java SDK — Parent</name>
+    <description>Parent POM for the Controlvar Java SDK and Spring Boot starter</description>
 
     <modules>
         <!-- Core SDK (the original single-module project, now a sub-module) -->

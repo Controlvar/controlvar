@@ -1,3 +1,3 @@
-module github.com/getexperimently/experimently/sdk/go
+module github.com/controlvar/controlvar/sdk/go
 
 go 1.21

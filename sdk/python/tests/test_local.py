@@ -17,10 +17,10 @@ from urllib.parse import parse_qsl, urlsplit
 
 import pytest
 
-from experimentation import ExperimentationClient, ExperimentationError, ReadyResult
-from experimentation import local as local_module
-from experimentation.evaluator import is_well_formed
-from experimentation.local import (
+from controlvar import ExperimentationClient, ExperimentationError, ReadyResult
+from controlvar import local as local_module
+from controlvar.evaluator import is_well_formed
+from controlvar.local import (
     DEFAULT_REFRESH_INTERVAL_SECONDS,
     EVALUATIONS_PATH,
     FLUSH_INTERVAL_SECONDS,
@@ -30,8 +30,8 @@ from experimentation.local import (
     RULESET_PATH,
     LocalEvaluation,
 )
-from experimentation.testing import make_response
-from experimentation.transport import Response
+from controlvar.testing import make_response
+from controlvar.transport import Response
 
 VECTORS = json.loads(
     (Path(__file__).resolve().parents[3] / "tests" / "sdk-contract" / "ruleset-vectors.json").read_text("utf-8")
@@ -303,7 +303,7 @@ def test_5xx_after_a_load_keeps_serving_and_reports_each_failure(no_thread):
 
 
 def test_a_network_failure_before_the_first_load(no_thread):
-    from experimentation import TransportError
+    from controlvar import TransportError
 
     server = FakeServer(TransportError("connection refused"))
     client, errors = loaded(server)
@@ -350,7 +350,7 @@ def test_a_scope_granted_later_is_picked_up(no_thread):
 def test_404_names_the_minimum_server_release_and_discards(no_thread):
     client, errors = loaded(FakeServer(make_response(404)))
     assert not client.ready(0)
-    assert f"Experimently {MIN_SERVER_RELEASE} or later" in errors[0][1].message
+    assert f"Controlvar {MIN_SERVER_RELEASE} or later" in errors[0][1].message
 
     later, _ = loaded(FakeServer(ok(), make_response(404)))
     later._local.refresh_once()

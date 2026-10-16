@@ -17,7 +17,7 @@ import (
 	"os"
 	"time"
 
-	exp "github.com/getexperimently/experimently/sdk/go"
+	exp "github.com/controlvar/controlvar/sdk/go"
 )
 
 type assignReport struct {

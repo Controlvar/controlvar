@@ -1,5 +1,5 @@
 {
-  "name": "@getexperimently/edge-sdk",
+  "name": "@controlvar/edge-sdk",
   "version": "0.2.0",
   "description": "Edge-compatible SDK for Cloudflare Workers, Vercel Edge Functions, and Deno Deploy (server-decided flags and assignments, zero runtime dependencies)",
   "main": "dist/index.js",
@@ -57,7 +57,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/getexperimently/experimently.git",
+    "url": "git+https://github.com/Controlvar/controlvar.git",
     "directory": "sdk/edge"
   },
   "jest": {

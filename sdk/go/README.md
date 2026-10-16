@@ -1,24 +1,24 @@
-# Experimently Go SDK
+# Controlvar Go SDK
 
-Go client for the Experimently A/B testing and feature flag platform. Zero dependencies outside
+Go client for the Controlvar A/B testing and feature flag platform. Zero dependencies outside
 the standard library, safe for concurrent use.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key for a TTL. Nothing is bucketed locally.
 
-Full reference: [`docs/sdk/go.md`](https://github.com/getexperimently/experimently/blob/main/docs/sdk/go.md).
+Full reference: [`docs/sdk/go.md`](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/go.md).
 
 ## Installation
 
 ```bash
-go get github.com/getexperimently/experimently/sdk/go
+go get github.com/controlvar/controlvar/sdk/go
 ```
 
-- `go get github.com/getexperimently/experimently/sdk/go`: Go 1.21+
+- `go get github.com/controlvar/controlvar/sdk/go`: Go 1.21+
 
 ```go
-import exp "github.com/getexperimently/experimently/sdk/go"
+import exp "github.com/controlvar/controlvar/sdk/go"
 ```
 
 ## Quick Start
@@ -150,7 +150,7 @@ Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API
 `python tests/sdk-contract/live/run_live_contract.py --sdk go --strict`.
 
 CI runs this SDK's contract smoke against a real API: `go` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ## Tests
 

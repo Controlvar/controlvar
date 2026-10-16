@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Experimently;
+namespace Controlvar;
 
 /**
  * Result of a server-side feature flag evaluation

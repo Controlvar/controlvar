@@ -1,6 +1,6 @@
 # React Native SDK
 
-`@getexperimently/react-native-sdk` (v0.1) provides feature flag evaluation, A/B experiment
+`@controlvar/react-native-sdk` (v0.1) provides feature flag evaluation, A/B experiment
 assignment and event tracking for React Native apps: a context provider, three hooks and a plain
 client, with an in-memory cache and an AsyncStorage-backed offline fallback.
 
@@ -17,20 +17,20 @@ the SDK caches the answer per user + key. Nothing is bucketed locally.
 Source: `sdk/react-native`. Example app: `sdk/react-native/example/App.tsx`.
 
 CI runs this SDK's contract smoke against a real API: `react-native` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ---
 
 ## Installation
 
-**Not yet published.** `@getexperimently/react-native-sdk` is not on npm, so build it from
+**Not yet published.** `@controlvar/react-native-sdk` is not on npm, so build it from
 source: pack it from a clone of this repository (it ships TypeScript source, so there is no build
 step) and install the tarball. No CI job packs the tarball or installs it into a React Native app.
-`npm pack` writes `getexperimently-react-native-sdk-0.1.0.tgz`:
+`npm pack` writes `controlvar-react-native-sdk-0.1.0.tgz`:
 
 ```bash
-git clone https://github.com/getexperimently/experimently.git
-cd experimently/sdk/react-native
+git clone https://github.com/Controlvar/controlvar.git
+cd controlvar/sdk/react-native
 npm pack
 ```
 
@@ -39,7 +39,7 @@ dependencies of the package (its peer dependencies are `react` and `react-native
 names them too, so they are direct dependencies of your app:
 
 ```bash
-npm install /path/to/experimently/sdk/react-native/getexperimently-react-native-sdk-0.1.0.tgz @react-native-async-storage/async-storage md5
+npm install /path/to/controlvar/sdk/react-native/controlvar-react-native-sdk-0.1.0.tgz @react-native-async-storage/async-storage md5
 ```
 
 - **iOS**: `cd ios && pod install` (required by `@react-native-async-storage/async-storage`).
@@ -59,7 +59,7 @@ import {
   useFlag,
   useExperiment,
   useExperimentationClient,
-} from '@getexperimently/react-native-sdk';
+} from '@controlvar/react-native-sdk';
 // darkStyles, lightStyles, NewCheckout and OldCheckout below are your app's own.
 
 // Create the client once, at app start-up.
@@ -171,7 +171,7 @@ Escape hatch to the underlying client, e.g. for imperative tracking or `client.c
 ## Direct Client API
 
 ```typescript
-import { ExperimentationClient } from '@getexperimently/react-native-sdk';
+import { ExperimentationClient } from '@controlvar/react-native-sdk';
 
 const client = new ExperimentationClient({ apiKey: 'YOUR_API_KEY', baseUrl: 'http://localhost:8000' });
 
@@ -275,7 +275,7 @@ MD5("{userId}:{flagKey}") → first 4 bytes as little-endian uint32 → ÷ 2^32 
 ```
 
 ```typescript
-import { hashUser } from '@getexperimently/react-native-sdk';
+import { hashUser } from '@controlvar/react-native-sdk';
 hashUser('user-123', 'my-flag'); // ≈ 0.6927449859
 ```
 
@@ -303,7 +303,7 @@ config, as the SDK's own Jest config does:
 Stub the methods with the real return shapes:
 
 ```typescript
-import type { ExperimentationClient } from '@getexperimently/react-native-sdk';
+import type { ExperimentationClient } from '@controlvar/react-native-sdk';
 
 const mockClient = {
   evaluateFlag: jest.fn().mockResolvedValue({ key: 'my-flag', enabled: true, config: null }),
@@ -319,7 +319,7 @@ const mockClient = {
 
 ```tsx
 import { render, waitFor } from '@testing-library/react-native';
-import { ExperimentationProvider, useFlag } from '@getexperimently/react-native-sdk';
+import { ExperimentationProvider, useFlag } from '@controlvar/react-native-sdk';
 
 function Probe() {
   const { enabled, loading } = useFlag('my-flag');

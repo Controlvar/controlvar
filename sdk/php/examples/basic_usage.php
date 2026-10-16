@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Basic usage example for the Experimently PHP SDK.
+ * Basic usage example for the Controlvar PHP SDK.
  *
  * Demonstrates:
  *  1. Creating a client
@@ -21,9 +21,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use Experimently\ExperimentationClient;
-use Experimently\FeatureFlagEvaluator;
-use Experimently\SdkConfig;
+use Controlvar\ExperimentationClient;
+use Controlvar\FeatureFlagEvaluator;
+use Controlvar\SdkConfig;
 
 // ---------------------------------------------------------------------------
 // 1. Configure and create the client

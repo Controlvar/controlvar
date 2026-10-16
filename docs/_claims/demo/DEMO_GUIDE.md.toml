@@ -960,7 +960,7 @@ by = [
     "journey:sdk-python#quick-start-user-on",
     "journey:sdk-javascript#quick-start-user-on",
     "journey:sdk-go#quick-start-user-on",
-    "test:sdk/java/spring-boot-starter/src/test/java/com/getexperimently/sdk/spring/ExperimentationAutoConfigurationTest.java::beansCreatedWhenApiKeyPresent",
+    "test:sdk/java/spring-boot-starter/src/test/java/com/controlvar/sdk/spring/ExperimentationAutoConfigurationTest.java::beansCreatedWhenApiKeyPresent",
     "test:sdk/react/src/__tests__/ServerClient.test.ts::returns an enabled evaluation with the full structure",
 ]
 
@@ -1023,7 +1023,7 @@ by = [
 [[unit]]
 text = "The Java SDK (with Spring Boot auto-configuration) and the React SDK (with hooks and SSR support) build from the repository's sdk/ directory."
 by = [
-    "test:sdk/java/spring-boot-starter/src/test/java/com/getexperimently/sdk/spring/ExperimentationAutoConfigurationTest.java::beansCreatedWhenApiKeyPresent",
+    "test:sdk/java/spring-boot-starter/src/test/java/com/controlvar/sdk/spring/ExperimentationAutoConfigurationTest.java::beansCreatedWhenApiKeyPresent",
     "test:sdk/react/src/__tests__/ServerClient.test.ts::returns an enabled evaluation with the full structure",
     "test:sdk/react/src/__tests__/useExperiment.test.tsx::reports a control assignment with isControl: true",
 ]

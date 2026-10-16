@@ -17,7 +17,7 @@
 
 require 'json'
 require 'securerandom'
-require 'experimently'
+require 'controlvar'
 
 def smoke_fail(message)
   $stderr.puts "contract_smoke(ruby): #{message}"
@@ -32,7 +32,7 @@ user_id        = ENV['CONTRACT_USER_ID'] || "smoke-#{SecureRandom.uuid}"
 
 smoke_fail('EXPERIMENTLY_API_KEY is required') if api_key.nil? || api_key.strip.empty?
 
-client = Experimently::Client.new(base_url: api_url, api_key: api_key, timeout: 10)
+client = Controlvar::Client.new(base_url: api_url, api_key: api_key, timeout: 10)
 
 # 1. Sticky assignment: assign twice, dropping the local cache in between so the
 #    second answer really comes from the server.

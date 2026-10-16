@@ -415,7 +415,7 @@ def test_each_app_has_the_documented_scripts_and_tests_with_the_sdk_mocked(app):
     assert {"jest", "@testing-library/react"} <= set(package["devDependencies"])
     jest = (REPO_ROOT / "demo" / app / "jest.config.js").read_text(encoding="utf-8")
     assert re.search(
-        r"'\^@getexperimently/react-sdk\$': '<rootDir>/src/__mocks__/[^']+'", jest
+        r"'\^@controlvar/react-sdk\$': '<rootDir>/src/__mocks__/[^']+'", jest
     ), "the app's tests no longer replace the SDK with a mock"
 
 
@@ -424,7 +424,7 @@ def test_each_app_builds_against_the_react_sdk_source_with_its_own_react(app):
     root = REPO_ROOT / "demo" / app
     tsconfig = json.loads((root / "tsconfig.json").read_text(encoding="utf-8"))
     paths = tsconfig["compilerOptions"]["paths"]
-    assert paths["@getexperimently/react-sdk"] == ["../../sdk/react/src/index.ts"]
+    assert paths["@controlvar/react-sdk"] == ["../../sdk/react/src/index.ts"]
     config = (root / "next.config.js").read_text(encoding="utf-8")
     assert "path.resolve(__dirname, '../../sdk/react/src/index.ts')" in config
     assert "react: path.resolve(__dirname, 'node_modules/react')" in config

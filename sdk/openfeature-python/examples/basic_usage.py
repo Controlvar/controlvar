@@ -1,5 +1,5 @@
 """
-Basic usage example: Experimently OpenFeature Python Provider.
+Basic usage example: Controlvar OpenFeature Python Provider.
 
 Run from the repository root with the virtual environment activated:
     source venv/bin/activate
@@ -20,7 +20,7 @@ for _path in (_HERE.parents[1] / "src", _HERE.parents[2] / "python"):
 from openfeature import api  # noqa: E402
 from openfeature.evaluation_context import EvaluationContext  # noqa: E402
 
-from experimentation_openfeature import ExperimentationProvider  # noqa: E402
+from controlvar_openfeature import ExperimentationProvider  # noqa: E402
 
 
 def main() -> None:

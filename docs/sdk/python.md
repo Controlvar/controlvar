@@ -1,7 +1,7 @@
 # Python SDK
 
-`experimently` (v0.1.0) is a synchronous, dependency-free Python client for the
-Experimently public API: experiment assignment, feature-flag evaluation and event
+`controlvar` (v0.1.0) is a synchronous, dependency-free Python client for the
+Controlvar public API: experiment assignment, feature-flag evaluation and event
 tracking. Requires Python 3.9+; HTTP goes through the standard library (`urllib`).
 
 By default, flag evaluation and experiment assignment are decided **by the server**: every call
@@ -18,11 +18,11 @@ client (see [openfeature.md](openfeature.md)).
 
 ## Installation
 
-The `experimently` package is on [PyPI](https://pypi.org/project/experimently/). 0.1.0 is a
+The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/). 0.1.0 is a
 beta release.
 
 ```bash
-pip install experimently==0.1.0
+pip install controlvar==0.1.0
 ```
 
 To work on the SDK itself, install it from the root of a clone of this repository instead:
@@ -41,7 +41,7 @@ raises `NameError`.
 
 ```python
 import os
-from experimentation import ExperimentationClient, ExperimentationError
+from controlvar import ExperimentationClient, ExperimentationError
 
 client = ExperimentationClient(
     api_url=os.environ.get("EXPERIMENTLY_API_URL", "http://localhost:8000"),  # origin only
@@ -76,7 +76,7 @@ ExperimentationClient(
     timeout_seconds: float = 5.0,    # per request
     cache_ttl_seconds: float = 300,  # how long a successful assignment/evaluation is reused per user + key
     default_variant: str = "control",# what get_variant returns on failure
-    transport: Transport | None = None,  # inject your own HTTP layer (tests use experimentation.testing.FakeTransport)
+    transport: Transport | None = None,  # inject your own HTTP layer (tests use controlvar.testing.FakeTransport)
     evaluation: str = "server",      # "server" (default) or "local" (server-side only; see Local evaluation)
     refresh_interval_seconds: float = 30,  # local mode: ruleset refresh (minimum 5, ±10% jitter)
     max_stale_seconds: float | None = None,  # local mode: evaluate on the server once the ruleset is this old
@@ -189,11 +189,11 @@ With `evaluation="local"` the client downloads the flag ruleset (`GET /api/v1/sd
 refreshes it on a daemon thread every `refresh_interval_seconds` (30 s by default, 5 s minimum),
 and answers `get_feature_flag`, `is_feature_enabled` and `get_all_flags` in-process whenever it can
 give exactly the server's answer; otherwise it makes the usual request. Experiments are always
-assigned by the server. It needs an Experimently server at 0.11.0 or later and a key with the
+assigned by the server. It needs an Controlvar server at 0.11.0 or later and a key with the
 `sdk:ruleset` scope, and it is for server-side code only.
 
 ```python
-from experimentation import ExperimentationClient
+from controlvar import ExperimentationClient
 
 with ExperimentationClient(api_url, server_key, evaluation="local") as client:
     client.ready(timeout_seconds=5)                       # optional; never raises
@@ -212,12 +212,12 @@ What is answered locally, the refresh failure table, safety monitoring and troub
 
 ## Testing your own code
 
-`experimentation.testing.FakeTransport` records requests and serves canned responses, so unit
+`controlvar.testing.FakeTransport` records requests and serves canned responses, so unit
 tests can assert the exact request without a network:
 
 ```python
-from experimentation import ExperimentationClient
-from experimentation.testing import FakeTransport
+from controlvar import ExperimentationClient
+from controlvar.testing import FakeTransport
 
 transport = FakeTransport().route(
     "GET", "/api/v1/feature-flags/evaluate/new_search",
@@ -252,7 +252,7 @@ Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API
 the script adds `sdk/python` to `sys.path`.
 
 CI runs this SDK's contract smoke against a real API: `python` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 Fixtures: `backend/scripts/seed_sdk_contract.py`; the live
 runner: `python tests/sdk-contract/live/run_live_contract.py --sdk python --strict`.
 

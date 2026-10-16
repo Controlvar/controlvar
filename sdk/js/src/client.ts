@@ -80,7 +80,7 @@ function toIso(timestamp: Date | string): string {
 }
 
 /**
- * Client for the Experimently public API.
+ * Client for the Controlvar public API.
  *
  * - By default (`evaluation: 'server'`) flag evaluation and experiment assignment
  *   are decided by the server. With `evaluation: 'local'` (server-side code only)

@@ -61,7 +61,7 @@ GUARDS: Dict[str, str] = {
 KEEP: List[Tuple[str, str, str]] = [
     (
         ".github/workflows/sdk-release.yml",
-        "#   sdk/go/v1.2.3        github.com/getexperimently/experimently/sdk/go",
+        "#   sdk/go/v1.2.3        github.com/controlvar/controlvar/sdk/go",
         "a comment: the Go module path go.mod declares (moves with the SDKs)",
     ),
     (

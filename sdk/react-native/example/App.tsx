@@ -1,5 +1,5 @@
 /**
- * Example React Native app demonstrating the Experimently SDK.
+ * Example React Native app demonstrating the Controlvar SDK.
  *
  * Shows:
  *  - Provider setup
@@ -24,7 +24,7 @@ import {
   useFlag,
   useExperiment,
   useExperimentationClient,
-} from '@getexperimently/react-native-sdk';
+} from '@controlvar/react-native-sdk';
 
 // ---------------------------------------------------------------------------
 // SDK client setup — do this once at app startup.
@@ -32,7 +32,7 @@ import {
 
 const client = new ExperimentationClient({
   apiKey: 'YOUR_API_KEY',
-  baseUrl: 'https://api.getexperimently.com',
+  baseUrl: 'https://api.controlvar.example.com',
   cacheTtlMs: 300_000,
   offlineFallback: true,
 });

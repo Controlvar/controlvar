@@ -1,13 +1,13 @@
 {
-  "name": "@getexperimently/react-native-sdk",
+  "name": "@controlvar/react-native-sdk",
   "version": "0.1.0",
-  "description": "React Native SDK for Experimently — server-decided feature flags and A/B assignments, event tracking, in-memory cache and AsyncStorage offline fallback.",
+  "description": "React Native SDK for Controlvar — server-decided feature flags and A/B assignments, event tracking, in-memory cache and AsyncStorage offline fallback.",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "files": ["src"],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/getexperimently/experimently.git",
+    "url": "git+https://github.com/Controlvar/controlvar.git",
     "directory": "sdk/react-native"
   },
   "keywords": [

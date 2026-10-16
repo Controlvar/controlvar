@@ -18,9 +18,9 @@ defmodule ContractSmoke.Http do
   # `:http_client` option: it delegates to the real HTTP client and reports
   # every failed request to the smoke process.
 
-  @behaviour Experimently.HttpBehaviour
+  @behaviour Controlvar.HttpBehaviour
 
-  alias Experimently.HttpClient
+  alias Controlvar.HttpClient
 
   @impl true
   def get(config, path), do: HttpClient.get(config, path)
@@ -48,8 +48,8 @@ end
 defmodule ContractSmoke do
   @moduledoc false
 
-  alias Experimently, as: EP
-  alias Experimently.{Assignment, BatchResult, FlagEvaluation}
+  alias Controlvar, as: EP
+  alias Controlvar.{Assignment, BatchResult, FlagEvaluation}
 
   def run do
     api_key = System.get_env("EXPERIMENTLY_API_KEY")

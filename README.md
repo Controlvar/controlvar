@@ -136,9 +136,9 @@ tracking against a live API in CI (the SDK Live Contract job of `pr-qa-gate.yml`
 
 | SDK | Install |
 |---|---|
-| JavaScript | `npm install @getexperimently/js-sdk` |
-| Python | `pip install experimently` (it imports as `experimentation`) |
-| Go | `go get github.com/getexperimently/experimently/sdk/go` |
+| JavaScript | `npm install @controlvar/js-sdk` |
+| Python | `pip install controlvar` (it imports as `experimentation`) |
+| Go | `go get github.com/controlvar/controlvar/sdk/go` |
 
 Every other SDK installs from a clone of this repository. The [SDK guide](docs/sdk-guide.md) says
 how, and what CI runs for each one.

@@ -30,8 +30,8 @@ for _path in (_HERE.parents[1] / "src", _HERE.parents[2] / "python"):
 from openfeature import api  # noqa: E402
 from openfeature.evaluation_context import EvaluationContext  # noqa: E402
 
-from experimentation import ExperimentationError  # noqa: E402
-from experimentation_openfeature import ExperimentationProvider  # noqa: E402
+from controlvar import ExperimentationError  # noqa: E402
+from controlvar_openfeature import ExperimentationProvider  # noqa: E402
 
 
 def fail(message: str) -> None:

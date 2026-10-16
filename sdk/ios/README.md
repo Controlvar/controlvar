@@ -1,6 +1,6 @@
-# Experimently iOS / Swift SDK
+# Controlvar iOS / Swift SDK
 
-`Experimently` is a Swift Package (iOS 14+, macOS 11+, Swift 5.5+) for feature flags,
+`Controlvar` is a Swift Package (iOS 14+, macOS 11+, Swift 5.5+) for feature flags,
 experiment assignment and event tracking with `async`/`await`. Foundation only (URLSession,
 NSCache, UserDefaults, CommonCrypto).
 
@@ -24,20 +24,20 @@ repository root) of a clone of this repository, so add it as a local package:
 ```swift
 // Package.swift
 dependencies: [
-    .package(name: "Experimently", path: "../experimently/sdk/ios")
+    .package(name: "Controlvar", path: "../controlvar/sdk/ios")
 ],
 targets: [
-    .target(name: "MyApp", dependencies: [.product(name: "Experimently", package: "Experimently")])
+    .target(name: "MyApp", dependencies: [.product(name: "Controlvar", package: "Controlvar")])
 ]
 ```
 
 In Xcode: File → Add Package Dependencies… → Add Local… → select `sdk/ios` → product
-`Experimently`.
+`Controlvar`.
 
 ## Quick Start
 
 ```swift
-import Experimently
+import Controlvar
 
 let client = ExperimentationClient(
     config: SdkConfig(baseURL: "http://localhost:8000",   // origin only; the SDK appends /api/v1/...
@@ -160,7 +160,7 @@ random `smoke-<uuid>`). The smoke runs with `enableOfflineFallback: false` so it
 `UserDefaults`. Repo-wide runner: `python tests/sdk-contract/live/run_live_contract.py --sdk ios --strict`.
 
 CI does not run this SDK's contract smoke against a real API: `ios` is not in the
-`sdks:` list of the SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+`sdks:` list of the SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ## Tests
 

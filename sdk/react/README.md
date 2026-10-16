@@ -1,38 +1,38 @@
-# @getexperimently/react-sdk
+# @controlvar/react-sdk
 
-React hooks and clients for the Experimently public API. Feature flags and
+React hooks and clients for the Controlvar public API. Feature flags and
 experiment assignments are decided **by the server** (sticky per user); the SDK caches the
 answers per user + key and never buckets locally.
 
 ## Install
 
-**Not yet published.** `@getexperimently/react-sdk` is not on npm, so build it from source in a
+**Not yet published.** `@controlvar/react-sdk` is not on npm, so build it from source in a
 clone of this repository and install the packed tarball (the blocks below).
 
 Its peer dependencies are `react` >= 17 and `react-dom` >= 17.
 
 To install from source, clone the repository and build a package; `npm pack` writes
-`getexperimently-react-sdk-1.1.0.tgz`:
+`controlvar-react-sdk-1.1.0.tgz`:
 
 ```bash
-git clone https://github.com/getexperimently/experimently.git
-cd experimently/sdk/react
+git clone https://github.com/Controlvar/controlvar.git
+cd controlvar/sdk/react
 npm ci && npm run build && npm pack
 ```
 
 Then install that file in your app:
 
 ```bash
-npm install /path/to/experimently/sdk/react/getexperimently-react-sdk-1.1.0.tgz
+npm install /path/to/controlvar/sdk/react/controlvar-react-sdk-1.1.0.tgz
 ```
 
-Consuming from source (as the ShopLab demo does): alias `@getexperimently/react-sdk`
+Consuming from source (as the ShopLab demo does): alias `@controlvar/react-sdk`
 to `sdk/react/src` in your bundler and tsconfig.
 
 ## Provider setup
 
 ```tsx
-import { ExperimentationProvider } from '@getexperimently/react-sdk';
+import { ExperimentationProvider } from '@controlvar/react-sdk';
 
 <ExperimentationProvider
   config={{ apiKey: process.env.NEXT_PUBLIC_EXPERIMENTLY_API_KEY!, baseUrl: 'http://localhost:8000' }}
@@ -132,7 +132,7 @@ HOC that injects `flagEvaluation: FeatureFlagEvaluation` into `Component`.
 `ServerClient` (Node/SSR) — same requests, `(key, user)` argument order, **never throws**:
 
 ```ts
-import { ServerClient } from '@getexperimently/react-sdk';
+import { ServerClient } from '@controlvar/react-sdk';
 
 export async function getServerSideProps({ req }) {
   const client = new ServerClient({ apiKey: process.env.EXPERIMENTLY_API_KEY!, baseUrl: process.env.EXPERIMENTLY_API_URL! });

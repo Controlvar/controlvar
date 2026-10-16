@@ -9,7 +9,7 @@ not a list (``None``, a number, a bool, an object) does not match.
 
 The SDKs' local evaluators do not implement these operators: they are not in
 ``LOCAL_OPERATORS`` (``backend/app/services/sdk_ruleset.py``,
-``sdk/js/src/evaluator.ts``, ``sdk/python/experimentation/evaluator.py``), so
+``sdk/js/src/evaluator.ts``, ``sdk/python/controlvar/evaluator.py``), so
 a flag that uses them is ``evaluation: "remote"`` and the server answers it.
 """
 

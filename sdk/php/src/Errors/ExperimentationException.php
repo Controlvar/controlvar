@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Experimently\Errors;
+namespace Controlvar\Errors;
 
 /**
- * Base exception for all Experimently SDK errors.
+ * Base exception for all Controlvar SDK errors.
  */
 class ExperimentationException extends \RuntimeException
 {

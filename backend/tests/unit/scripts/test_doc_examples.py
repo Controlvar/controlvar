@@ -742,17 +742,17 @@ def test_skip_reason_names_a_category(reason, ok):
 @pytest.mark.parametrize(
     "body, tool",
     [
-        ("pip install openfeature-sdk experimently experimently-openfeature", "pip"),
+        ("pip install openfeature-sdk experimently controlvar-openfeature", "pip"),
         ("gem install experimently", "gem"),
-        ("npx @getexperimently/cli init", "npx"),
-        ("uv pip install experimently", "uv"),
+        ("npx @controlvar/cli init", "npx"),
+        ("uv pip install controlvar", "uv"),
         ("cd sdk/js && npm ci", "npm"),
         ("sudo pip3 install experimently", "pip3"),
-        ("python -m pip install experimently", "python -m pip"),
-        ("dotnet add package Experimently.SDK", "dotnet add"),
+        ("python -m pip install controlvar", "python -m pip"),
+        ("dotnet add package Controlvar.SDK", "dotnet add"),
         ("composer require experimently/sdk", "composer"),
         ("go get github.com/getexperimently/go-sdk", "go get"),
-        ("FOO=1 yarn add @getexperimently/js-sdk", "yarn"),
+        ("FOO=1 yarn add @controlvar/js-sdk", "yarn"),
         ("VERSION=$(npm view x version)", "npm"),
         ("if true; then pnpm i; fi", "pnpm"),
         ("pipx run experimently", "pipx"),
@@ -1294,9 +1294,9 @@ def test_only_the_stack_start_may_print_without_an_expectation():
     "body, message",
     [
         ("\\aws sts get-caller-identity", "may not call 'aws'"),
-        ("\\pip install experimently", "may not run 'pip'"),
+        ("\\pip install controlvar", "may not run 'pip'"),
         ("/usr/local/bin/aws sts get-caller-identity", "may not call 'aws'"),
-        ("/usr/bin/pip install experimently", "may not run 'pip'"),
+        ("/usr/bin/pip install controlvar", "may not run 'pip'"),
         ('"aws" sts get-caller-identity', "may not call 'aws'"),
         ("'npm' ci", "may not run 'npm'"),
         ("sudo /usr/bin/env FOO=1 \\npx x", "may not run 'npx'"),
@@ -1307,7 +1307,7 @@ def test_only_the_stack_start_may_print_without_an_expectation():
         ("swift build", "may not run 'swift build'"),
         ("dotnet restore", "may not run 'dotnet restore'"),
         ("dotnet build", "may not run 'dotnet build'"),
-        ("dotnet add package Experimently.SDK", "may not run 'dotnet add'"),
+        ("dotnet add package Controlvar.SDK", "may not run 'dotnet add'"),
     ],
 )
 def test_a_command_word_is_normalised_before_it_is_matched(body, message):
@@ -3338,7 +3338,7 @@ AUTHORING_CATEGORIES = [
 @pytest.mark.parametrize("category", AUTHORING_CATEGORIES)
 def test_every_category_the_authoring_page_lists_is_accepted(category):
     body = {
-        "registry": "pip install experimently",
+        "registry": "pip install controlvar",
         "timing": GATE,
     }.get(category, "printf hi")
     (block,) = blocks(

@@ -1,4 +1,4 @@
-# @getexperimently/edge-sdk
+# @controlvar/edge-sdk
 
 SDK for edge runtimes, with adapters for Cloudflare Workers, Vercel Edge Middleware and Deno Deploy;
 declares Node >= 18. Zero runtime dependencies, no Node.js built-ins. Its tests and contract smoke
@@ -7,11 +7,11 @@ run it under Node, with the adapters' KV and request objects stubbed.
 Flag evaluation and experiment assignment are **decided by the server**; results are cached per
 user + key in memory (and optionally in Cloudflare KV / Deno KV). Nothing is bucketed locally.
 
-Full documentation: [`docs/sdk/edge.md`](https://github.com/getexperimently/experimently/blob/main/docs/sdk/edge.md).
+Full documentation: [`docs/sdk/edge.md`](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/edge.md).
 
 ## Installation
 
-**Not yet published.** `@getexperimently/edge-sdk` is not on npm, so build it from source in a
+**Not yet published.** `@controlvar/edge-sdk` is not on npm, so build it from source in a
 clone of this repository and install the packed tarball in your app:
 
 ```bash
@@ -19,12 +19,12 @@ cd sdk/edge
 npm ci && npm run build && npm pack
 ```
 
-`npm pack` writes `getexperimently-edge-sdk-0.2.0.tgz`; `npm install <path to that file>` adds it.
+`npm pack` writes `controlvar-edge-sdk-0.2.0.tgz`; `npm install <path to that file>` adds it.
 
 ## Quick start
 
 ```ts
-import { EdgeExperimentationClient } from '@getexperimently/edge-sdk';
+import { EdgeExperimentationClient } from '@controlvar/edge-sdk';
 
 const client = new EdgeExperimentationClient({ apiKey: env.EP_API_KEY, baseUrl: 'http://localhost:8000' });
 
@@ -34,7 +34,7 @@ await client.track('purchase', userId, { sku: 'A1' }, { value: 49.99, experiment
 await client.track('page_view', userId); // no key → fans out to every cached assignment + flag
 ```
 
-Adapters: `@getexperimently/edge-sdk/cloudflare` (`withExperimentation`, KV store),
+Adapters: `@controlvar/edge-sdk/cloudflare` (`withExperimentation`, KV store),
 `/vercel` (`createEdgeMiddleware`), `/deno` (`createDenoHandler`, Deno KV store).
 
 ## Backend endpoints used
@@ -61,7 +61,7 @@ Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API
 `CONTRACT_EXPERIMENT_KEY` (`sdk_contract_ab`), `CONTRACT_FLAG_KEY` (`sdk_contract_flag`), `CONTRACT_USER_ID`.
 
 CI runs this SDK's contract smoke against a real API: `edge` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ## Development
 

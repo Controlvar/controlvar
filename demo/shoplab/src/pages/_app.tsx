@@ -2,7 +2,7 @@ import '@/styles/globals.css';
 import React, { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import type { AppProps } from 'next/app';
-import { ExperimentationProvider } from '@getexperimently/react-sdk';
+import { ExperimentationProvider } from '@controlvar/react-sdk';
 import Layout from '@/components/Layout';
 import ControlvarPanel from '@/components/ControlvarPanel';
 import { EventLogProvider } from '@/lib/eventLog';

@@ -3,7 +3,7 @@ import { fireEvent, screen } from '@testing-library/react';
 import ProductListPage from '@/pages/products/index';
 import { PRODUCTS } from '@/data/products';
 import { sortByMl, sortByPriceAsc, sortByRelevance } from '@/lib/sorting';
-import { __setExperiment, DEFAULT_TEST_USER } from '@/__mocks__/experimently-sdk';
+import { __setExperiment, DEFAULT_TEST_USER } from '@/__mocks__/controlvar-sdk';
 import { callsFor, renderPage, resetTestState } from '@/test-utils';
 
 function renderedIds(): string[] {

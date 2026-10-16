@@ -1,46 +1,46 @@
-# Experimently Java SDK
+# Controlvar Java SDK
 
-Java 11+ client for the Experimently A/B testing and feature flag platform (OkHttp + Jackson),
+Java 11+ client for the Controlvar A/B testing and feature flag platform (OkHttp + Jackson),
 plus a Spring Boot 3 auto-configuration starter. Thread-safe; one client per application.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key for a TTL. Nothing is bucketed locally.
 
-Modules: `core/` (`experimently-sdk`) and `spring-boot-starter/`
-(`experimently-spring-boot-starter`). Full reference: [`docs/sdk/java.md`](../../docs/sdk/java.md).
+Modules: `core/` (`controlvar-sdk`) and `spring-boot-starter/`
+(`controlvar-spring-boot-starter`). Full reference: [`docs/sdk/java.md`](../../docs/sdk/java.md).
 
 ## Installation
 
-**Not yet published.** `com.getexperimently:experimently-sdk` and the Spring Boot starter are not
+**Not yet published.** `com.controlvar:controlvar-sdk` and the Spring Boot starter are not
 on Maven Central, so build them from source: in a clone of this repository,
 `cd sdk/java && ./mvnw install` installs both into your local `~/.m2`, and the dependencies
 below then resolve from there.
 
 ```xml
 <dependency>
-    <groupId>com.getexperimently</groupId>
-    <artifactId>experimently-sdk</artifactId>          <!-- core client -->
+    <groupId>com.controlvar</groupId>
+    <artifactId>controlvar-sdk</artifactId>          <!-- core client -->
     <version>1.0.0</version>
 </dependency>
 <!-- or, for Spring Boot: -->
 <dependency>
-    <groupId>com.getexperimently</groupId>
-    <artifactId>experimently-spring-boot-starter</artifactId> <!-- pulls in the core -->
+    <groupId>com.controlvar</groupId>
+    <artifactId>controlvar-spring-boot-starter</artifactId> <!-- pulls in the core -->
     <version>1.0.0</version>
 </dependency>
 ```
 
 Gradle reads `~/.m2` only through `mavenLocal()`: add it to `repositories`, then
-`implementation 'com.getexperimently:experimently-sdk:1.0.0'`.
+`implementation 'com.controlvar:controlvar-sdk:1.0.0'`.
 
 ## Quick Start (core client)
 
 ```java
-import com.getexperimently.sdk.ExperimentationClient;
-import com.getexperimently.sdk.config.SdkConfig;
-import com.getexperimently.sdk.exception.ExperimentationException;
-import com.getexperimently.sdk.model.*;
+import com.controlvar.sdk.ExperimentationClient;
+import com.controlvar.sdk.config.SdkConfig;
+import com.controlvar.sdk.exception.ExperimentationException;
+import com.controlvar.sdk.model.*;
 import java.util.Map;
 
 SdkConfig config = SdkConfig.builder(System.getenv("EXPERIMENTLY_API_KEY"), "http://localhost:8000").build();
@@ -108,7 +108,7 @@ bean suppresses the auto-configured one.
 | Builder method | Starter property (`experimentation.*`) | Default | Description |
 |---|---|---|---|
 | *(constructor)* `apiKey` | `api-key` | — (required) | Sent as `X-API-Key`; the starter is inactive without it |
-| *(constructor)* `baseUrl` | `base-url` | starter: `https://api.experimently.example.com` | Backend origin; the SDK appends `/api/v1/...`; trailing `/` stripped |
+| *(constructor)* `baseUrl` | `base-url` | starter: `https://api.controlvar.example.com` | Backend origin; the SDK appends `/api/v1/...`; trailing `/` stripped |
 | `timeoutMs(int)` | `timeout-ms` | `5000` | OkHttp connect/read/write timeout |
 | `cacheTtlMs(long)` | `cache-ttl-seconds` | `300000` ms / `300` s | Lifetime of a cached evaluation/assignment |
 | `cacheSize(int)` | `cache-size` | `1000` | Max entries per cache (flags and assignments each), LRU |
@@ -184,14 +184,14 @@ It prints:
 
 The script runs `./mvnw -q -B -pl core -am package -DskipTests` when `core/target` is stale (Maven output
 goes to stderr) and then `java -cp "core/target/classes:core/target/lib/*"
-com.getexperimently.sdk.examples.ContractSmoke`; `FORCE_BUILD=1` forces a rebuild. Env:
+com.controlvar.sdk.examples.ContractSmoke`; `FORCE_BUILD=1` forces a rebuild. Env:
 `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). Repo-wide runner:
 `python tests/sdk-contract/live/run_live_contract.py --sdk java --strict`.
 
 CI runs this SDK's contract smoke against a real API: `java` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ## Tests
 

@@ -1,6 +1,6 @@
 # Go SDK
 
-`github.com/getexperimently/experimently/sdk/go` (package `experimentation`) provides
+`github.com/controlvar/controlvar/sdk/go` (package `experimentation`) provides
 feature flag evaluation, experiment assignment and event tracking for Go services. Standard
 library only, goroutine-safe, context-aware.
 
@@ -25,7 +25,7 @@ In a new directory, make a module for your program and add the SDK to it:
 
 ```bash
 go mod init example.com/quickstart
-go get github.com/getexperimently/experimently/sdk/go
+go get github.com/controlvar/controlvar/sdk/go
 ```
 
 Adding the SDK to a program that already has a `go.mod`? Run only the `go get`.
@@ -34,7 +34,7 @@ The module has no tagged release yet, so `go get` resolves the head of the
 `main` branch and records it in your `go.mod` as a pseudo-version
 (`v0.0.0-<date>-<commit>`). Your builds stay on that version until you run
 `go get` again. To pin a particular commit, name it:
-`go get github.com/getexperimently/experimently/sdk/go@<commit>`, where
+`go get github.com/controlvar/controlvar/sdk/go@<commit>`, where
 `<commit>` is a commit hash from this repository.
 
 ---
@@ -56,7 +56,7 @@ import (
 	"os"
 	"time"
 
-	exp "github.com/getexperimently/experimently/sdk/go"
+	exp "github.com/controlvar/controlvar/sdk/go"
 )
 
 func main() {
@@ -249,7 +249,7 @@ and sends a 2-event `TrackBatch`. Fixtures: `backend/scripts/seed_sdk_contract.p
 runner: `python tests/sdk-contract/live/run_live_contract.py --sdk go --strict`.
 
 CI runs this SDK's contract smoke against a real API: `go` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ---
 

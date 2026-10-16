@@ -1,6 +1,6 @@
-# Experimently — .NET/C# SDK
+# Controlvar — .NET/C# SDK
 
-Official .NET SDK for Experimently: feature flag evaluation, experiment
+Official .NET SDK for Controlvar: feature flag evaluation, experiment
 assignment and analytics event tracking.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
@@ -8,7 +8,7 @@ public API with your `X-API-Key`, the server buckets the user (sticky per user +
 the SDK caches the answer per user + key. Nothing is bucketed locally.
 
 **Target frameworks**: `netstandard2.1` / `net6.0`
-**Package ID**: `Experimently.SDK` (no release on NuGet: build from source)
+**Package ID**: `Controlvar.SDK` (no release on NuGet: build from source)
 **Version**: 0.2.0
 **Dependencies**: none beyond `System.Text.Json` (framework-provided on `net6.0`; NuGet on `netstandard2.1`)
 
@@ -16,8 +16,8 @@ the SDK caches the answer per user + key. Nothing is bucketed locally.
 
 ## Installation
 
-**Not yet published.** `Experimently.SDK` has no release on NuGet, so build it from source: add a
-`<ProjectReference>` to `sdk/dotnet/src/Experimently/Experimently.csproj` in a clone of this
+**Not yet published.** `Controlvar.SDK` has no release on NuGet, so build it from source: add a
+`<ProjectReference>` to `sdk/dotnet/src/Controlvar/Controlvar.csproj` in a clone of this
 repository (this is what `examples/` and `tests/` do).
 
 ---
@@ -25,7 +25,7 @@ repository (this is what `examples/` and `tests/` do).
 ## Quick Start
 
 ```csharp
-using Experimently;
+using Controlvar;
 
 var config = new SdkConfig(
     Environment.GetEnvironmentVariable("EXPERIMENTLY_API_URL") ?? "http://localhost:8000",
@@ -179,7 +179,7 @@ Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API
 written to stderr and the exit code is 1.
 
 CI runs this SDK's contract smoke against a real API: `dotnet` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml). Run it
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml). Run it
 yourself with `dotnet test sdk/dotnet` and
 `python tests/sdk-contract/live/run_live_contract.py --sdk dotnet --strict` on a machine with the
 .NET 6+ SDK.
@@ -213,8 +213,8 @@ All HTTP is faked with an `HttpMessageHandler` injected through `HttpClient`; no
 
 ```
 sdk/dotnet/
-  Experimently.sln
-  src/Experimently/            # SDK source (netstandard2.1 + net6.0)
+  Controlvar.sln
+  src/Controlvar/            # SDK source (netstandard2.1 + net6.0)
     SdkConfig.cs
     ExperimentationClient.cs              # public API (evaluate / assign / track / batch / cache helpers)
     ExperimentationHttpClient.cs          # X-API-Key, JSON, error mapping
@@ -223,7 +223,7 @@ sdk/dotnet/
     IsExternalInit.cs                     # `init` accessor polyfill for netstandard2.1
     Models/                               # FlagEvaluationResult, Assignment, TrackEvent
     Exceptions/                           # ExperimentationException, NetworkException, ApiException, AuthException
-  tests/Experimently.Tests/    # xUnit (net6.0), fake HttpMessageHandler
+  tests/Controlvar.Tests/    # xUnit (net6.0), fake HttpMessageHandler
   examples/BasicUsage/                    # Walk-through app
   examples/ContractSmoke/                 # Contract smoke (see above)
   verify_hash.py                          # Cross-SDK hash parity script

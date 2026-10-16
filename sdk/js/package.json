@@ -1,7 +1,7 @@
 {
-  "name": "@getexperimently/js-sdk",
+  "name": "@controlvar/js-sdk",
   "version": "0.1.0",
-  "description": "JavaScript/TypeScript SDK for the Experimently public API (Node >= 18 and browsers, zero runtime dependencies)",
+  "description": "JavaScript/TypeScript SDK for the Controlvar public API (Node >= 18 and browsers, zero runtime dependencies)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -28,12 +28,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/getexperimently/experimently.git",
+    "url": "git+https://github.com/Controlvar/controlvar.git",
     "directory": "sdk/js"
   },
-  "homepage": "https://github.com/getexperimently/experimently/tree/main/sdk/js#readme",
+  "homepage": "https://github.com/Controlvar/controlvar/tree/main/sdk/js#readme",
   "bugs": {
-    "url": "https://github.com/getexperimently/experimently/issues"
+    "url": "https://github.com/Controlvar/controlvar/issues"
   },
   "dependencies": {},
   "devDependencies": {

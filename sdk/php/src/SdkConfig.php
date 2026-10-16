@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Experimently;
+namespace Controlvar;
 
 /**
  * Configuration for the ExperimentationClient SDK.
@@ -12,7 +12,7 @@ namespace Experimently;
 class SdkConfig
 {
     /**
-     * @param string $baseUrl       Base URL of the Experimently API (e.g. https://api.example.com)
+     * @param string $baseUrl       Base URL of the Controlvar API (e.g. https://api.example.com)
      * @param string $apiKey        API key for authenticating SDK requests
      * @param int    $cacheTtl      Cache time-to-live in seconds (default 300 = 5 minutes)
      * @param int    $timeout       HTTP request timeout in seconds (default 10)

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Experimently\Tests;
+namespace Controlvar\Tests;
 
-use Experimently\FeatureFlagEvaluator;
+use Controlvar\FeatureFlagEvaluator;
 use PHPUnit\Framework\TestCase;
 
 /**

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { useFeatureFlag } from '@getexperimently/react-sdk';
+import { useFeatureFlag } from '@controlvar/react-sdk';
 import { chronologicalFeed, formatDuration, recommendedFeed } from '@/data/tracks';
 import { FLAG_KEYS } from '@/lib/env';
 import { useScreenView, useTrack } from '@/lib/eventLog';

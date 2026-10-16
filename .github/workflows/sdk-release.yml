@@ -3,9 +3,9 @@
 # SDKs version independently of the platform -- a fix to the JavaScript client
 # should not force a release of the API images -- so each has its own tag:
 #
-#   sdk/js/v1.2.3        @getexperimently/js-sdk 1.2.3 -> npm
+#   sdk/js/v1.2.3        @controlvar/js-sdk 1.2.3 -> npm
 #   sdk/python/v1.2.3    experimently 1.2.3            -> PyPI
-#   sdk/go/v1.2.3        github.com/getexperimently/experimently/sdk/go
+#   sdk/go/v1.2.3        github.com/controlvar/controlvar/sdk/go
 #
 # That shape is Go's requirement (a module in a subdirectory is released by a
 # `<subdir>/vX.Y.Z` tag), reused for every SDK so there is one convention.
@@ -116,8 +116,8 @@ jobs:
           python scripts/check_sdk_version.py "$sdk" --expect "$version"
           ecosystem="$(python scripts/check_sdk_version.py "$sdk" --print-ecosystem)"
           # The registry name, from the manifest. It is not derivable from the
-          # directory: sdk/openfeature is @getexperimently/openfeature-provider
-          # while sdk/js is @getexperimently/js-sdk.
+          # directory: sdk/openfeature is @controlvar/openfeature-provider
+          # while sdk/js is @controlvar/js-sdk.
           name=""
           if [ "$ecosystem" = "pypi" ] || [ "$ecosystem" = "npm" ]; then
             name="$(python scripts/check_sdk_version.py "$sdk" --print-name)"
@@ -394,7 +394,7 @@ jobs:
           npm run build --if-present
 
       # The published manifest must install from npm. sdk/openfeature depends
-      # on @getexperimently/js-sdk as `file:../js` so its tests run against the
+      # on @controlvar/js-sdk as `file:../js` so its tests run against the
       # JS SDK in this tree; `npm pack` copies that spec into the tarball
       # unchanged and `npm publish` does not resolve it (#687). This rewrites
       # each `file:` dependency to `^<that package's version on this ref>` and

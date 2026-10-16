@@ -8,7 +8,7 @@ import ProfileScreen from '@/components/screens/ProfileScreen';
 import OnboardingScreen from '@/components/screens/OnboardingScreen';
 import PaymentsScreen from '@/components/screens/PaymentsScreen';
 import { EXPERIMENT_KEYS, FLAG_KEYS } from '@/lib/env';
-import { __setExperiment, __setFlag, trackEventMock } from '@/__mocks__/experimently-sdk';
+import { __setExperiment, __setFlag, trackEventMock } from '@/__mocks__/controlvar-sdk';
 import { callsFor, renderScreen, resetTestState } from '@/test-utils';
 
 beforeEach(resetTestState);

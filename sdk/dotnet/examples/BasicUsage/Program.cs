@@ -1,4 +1,4 @@
-// BasicUsage — demonstrates the Experimently .NET SDK
+// BasicUsage — demonstrates the Controlvar .NET SDK
 //
 // To run:
 //   cd sdk/dotnet/examples/BasicUsage
@@ -6,8 +6,8 @@
 //
 // Flags and experiments are decided by the server; the SDK caches the answers per user + key.
 
-using Experimently;
-using Experimently.Models;
+using Controlvar;
+using Controlvar.Models;
 
 // -----------------------------------------------------------------
 // 1. Configure the SDK

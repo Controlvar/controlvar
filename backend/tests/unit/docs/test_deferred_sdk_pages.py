@@ -266,7 +266,7 @@ INSTALLS: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
             r"\b(?P<args>[^\n`;&|]{0,300})"
         ),
     ),
-    ("npm", re.compile(r"\bnpm:(?P<name>@getexperimently/[A-Za-z0-9._-]{1,60})")),
+    ("npm", re.compile(r"\bnpm:(?P<name>@controlvar/[A-Za-z0-9._-]{1,60})")),
     ("pypi", re.compile(r"\bpip3?[ \t]{1,40}install\b(?P<args>[^\n`;&|]{0,300})")),
     (
         "rubygems",
@@ -373,7 +373,7 @@ def published_identities() -> Set[Tuple[str, str]]:
 def ours(ecosystem: str, name: str, group: Optional[str] = None) -> bool:
     """Whether a package name in an install command is one of this repository's."""
     if ecosystem == "npm":
-        return name.startswith("@getexperimently/")
+        return name.startswith("@controlvar/")
     if ecosystem == "pypi":
         return name.lower() in {
             tomllib.loads(p.read_text("utf-8"))["project"]["name"].lower()
@@ -382,7 +382,7 @@ def ours(ecosystem: str, name: str, group: Optional[str] = None) -> bool:
     if ecosystem == "rubygems":
         return name in re.findall(
             r"\.name\s{0,40}=\s{0,40}\"([^\"]{1,40})\"",
-            _manifest("ruby", "experimently.gemspec"),
+            _manifest("ruby", "controlvar.gemspec"),
         )
     if ecosystem == "hex":
         return name in re.findall(
@@ -397,7 +397,7 @@ def ours(ecosystem: str, name: str, group: Optional[str] = None) -> bool:
     if ecosystem == "nuget":
         return name.lower().startswith("experimently")
     if ecosystem in ("maven", "gradle"):
-        return (group or "").startswith("com.getexperimently")
+        return (group or "").startswith("com.controlvar")
     if ecosystem == "cocoapods":
         return name.lower().startswith("experimently")
     if ecosystem == "swiftpm":
@@ -468,18 +468,18 @@ def registry_installs(page_text: str) -> List[Tuple[str, str]]:
 
 #: (sample, the registry installs it holds). Each pattern above has a sample.
 INSTALL_SAMPLES = (
-    ("npm install @getexperimently/edge-sdk", [("npm", "@getexperimently/edge-sdk")]),
+    ("npm install @controlvar/edge-sdk", [("npm", "@controlvar/edge-sdk")]),
     (
-        "yarn add @getexperimently/react-native-sdk@0.1.0 md5",
-        [("npm", "@getexperimently/react-native-sdk")],
+        "yarn add @controlvar/react-native-sdk@0.1.0 md5",
+        [("npm", "@controlvar/react-native-sdk")],
     ),
     (
-        "import { x } from 'npm:@getexperimently/edge-sdk/deno';",
-        [("npm", "@getexperimently/edge-sdk")],
+        "import { x } from 'npm:@controlvar/edge-sdk/deno';",
+        [("npm", "@controlvar/edge-sdk")],
     ),
     (
-        "pip install openfeature-sdk experimently experimently-openfeature==0.1.0",
-        [("pypi", "experimently-openfeature")],
+        "pip install openfeature-sdk experimently controlvar-openfeature==0.1.0",
+        [("pypi", "controlvar-openfeature")],
     ),
     ("```ruby\ngem 'experimently', '~> 0.1'\n```\n", [("rubygems", "experimently")]),
     ("gem install experimently", [("rubygems", "experimently")]),
@@ -493,31 +493,31 @@ INSTALL_SAMPLES = (
         "```bash\ncomposer require experimently/sdk\n```\n",
         [("packagist", "experimently/sdk")],
     ),
-    ("dotnet add package Experimently.SDK", [("nuget", "Experimently.SDK")]),
-    ("Install-Package Experimently.SDK", [("nuget", "Experimently.SDK")]),
+    ("dotnet add package Controlvar.SDK", [("nuget", "Controlvar.SDK")]),
+    ("Install-Package Controlvar.SDK", [("nuget", "Controlvar.SDK")]),
     (
-        '<PackageReference Include="Experimently.SDK" Version="0.2.0" />',
-        [("nuget", "Experimently.SDK")],
+        '<PackageReference Include="Controlvar.SDK" Version="0.2.0" />',
+        [("nuget", "Controlvar.SDK")],
     ),
     (
-        "<groupId>com.getexperimently</groupId>\n    <artifactId>experimently-sdk</artifactId>",
-        [("maven", "experimently-sdk")],
+        "<groupId>com.controlvar</groupId>\n    <artifactId>controlvar-sdk</artifactId>",
+        [("maven", "controlvar-sdk")],
     ),
     (
-        'implementation("com.getexperimently:experimently-android:1.0.0")',
-        [("gradle", "experimently-android")],
+        'implementation("com.controlvar:controlvar-android:1.0.0")',
+        [("gradle", "controlvar-android")],
     ),
-    ("pod 'Experimently'", [("cocoapods", "Experimently")]),
+    ("pod 'Controlvar'", [("cocoapods", "Controlvar")]),
     (
         '.package(url: "https://github.com/getexperimently/experimently.git", from: "1.0.0")',
         [("swiftpm", "https://github.com/getexperimently/experimently.git")],
     ),
     # Source installs, and the published packages, are not refused.
-    ("npm install @getexperimently/js-sdk", []),
-    ("pip install experimently", []),
+    ("npm install @controlvar/js-sdk", []),
+    ("pip install controlvar", []),
     ("pip install -e sdk/python -e sdk/openfeature-python", []),
     (
-        "npm install /path/to/experimently/sdk/edge/getexperimently-edge-sdk-0.2.0.tgz",
+        "npm install /path/to/experimently/sdk/edge/controlvar-edge-sdk-0.2.0.tgz",
         [],
     ),
     (
@@ -532,7 +532,7 @@ INSTALL_SAMPLES = (
     ),
     (
         "`./mvnw install`, then add `mavenLocal()` and\n"
-        "`implementation 'com.getexperimently:experimently-sdk:1.0.0'`",
+        "`implementation 'com.controlvar:controlvar-sdk:1.0.0'`",
         [],
     ),
 )
@@ -618,7 +618,7 @@ DELEGATES: Dict[str, Tuple[str, "re.Pattern[str]"]] = {
         ),
     ),
     "openfeature-python": (
-        "src/experimentation_openfeature/provider.py",
+        "src/controlvar_openfeature/provider.py",
         re.compile(r"\.get_feature_flag\((?P<args>[^()]{0,160})\)"),
     ),
 }

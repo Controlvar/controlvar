@@ -24,7 +24,7 @@ from pathlib import Path
 # Make ``experimentation`` importable straight from the source tree.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from experimentation import ExperimentationClient, ExperimentationError  # noqa: E402
+from controlvar import ExperimentationClient, ExperimentationError  # noqa: E402
 
 
 def fail(message: str) -> None:

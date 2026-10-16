@@ -70,7 +70,7 @@ Then:
   no suite here runs those test by test, so they are held at job level, by
   that SDK's job in the counted sdk-unit-tests.yml run, and the report names
   them as the residual.
-* P published packages (``PACKAGES``: npm's ``@getexperimently/js-sdk`` and
+* P published packages (``PACKAGES``: npm's ``@controlvar/js-sdk`` and
   PyPI's ``experimently``). The manifest at the RC gives the name and version.
   The tag ``sdk/<sdk>/v<version>`` exists, and the RC's ``sdk/<sdk>`` tree is
   the tag's (the same git tree id: ``git diff --quiet <tag> <rc> --
@@ -86,8 +86,8 @@ Then:
   for file; the npm tarball the registry serves has the recorded sha256 and
   its ``dist.integrity`` is that tarball's. The description the registry shows
   (PyPI's, npm's README) quotes the manifest version in its install line
-  (``pip install experimently==X.Y.Z``, ``npm install
-  @getexperimently/js-sdk@X.Y.Z``), links only to absolute URLs and does not
+  (``pip install controlvar==X.Y.Z``, ``npm install
+  @controlvar/js-sdk@X.Y.Z``), links only to absolute URLs and does not
   say it is not yet published.
 * Registry. ``scripts/doc_claims.py`` of the tag's own tree finds no problem,
   ``CLAIMS_PENDING`` is empty and no unit is ``untested``. The tree must be the

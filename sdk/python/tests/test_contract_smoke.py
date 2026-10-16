@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-import experimentation.client as client_module
-from experimentation.testing import FakeTransport
+import controlvar.client as client_module
+from controlvar.testing import FakeTransport
 
 SDK_ROOT = Path(__file__).resolve().parents[1]
 SMOKE = SDK_ROOT / "examples" / "contract_smoke.py"

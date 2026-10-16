@@ -421,7 +421,7 @@ reach behaves as off.
 ### JavaScript SDK
 
 ```javascript
-import { ExperimentationClient } from '@getexperimently/js-sdk';
+import { ExperimentationClient } from '@controlvar/js-sdk';
 
 const client = new ExperimentationClient({
   apiUrl: 'http://localhost:8000',   // your API origin; the SDK appends /api/v1/...

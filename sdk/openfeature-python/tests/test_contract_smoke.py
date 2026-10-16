@@ -17,8 +17,8 @@ import pytest
 from openfeature import api
 from openfeature.provider.no_op_provider import NoOpProvider
 
-import experimentation.client as client_module
-from experimentation.testing import FakeTransport
+import controlvar.client as client_module
+from controlvar.testing import FakeTransport
 
 SMOKE = Path(__file__).resolve().parents[1] / "examples" / "contract_smoke.py"
 VARIABLES = (
