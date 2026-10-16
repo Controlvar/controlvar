@@ -92,6 +92,14 @@ by = [
 ]
 
 [[unit]]
+text = "The MCP server's manifest, GET /api/v1/mcp/manifest, now gives the name controlvar."
+by = ["test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_mcp_manifest_names_the_server_controlvar"]
+
+[[unit]]
+text = "A client that matched the former name on it needs the new one."
+by = ["exempt:instruction"]
+
+[[unit]]
 text = "The dashboard keeps its sign-in token under the same key and the API keeps the issuer it signs tokens with, so nobody is signed out by the upgrade."
 by = ["test:backend/tests/unit/infrastructure/test_cross_version_identifiers.py::test_cross_version_identifiers_are_literal"]
 

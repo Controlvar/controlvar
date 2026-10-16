@@ -405,6 +405,12 @@ class TestMCPManifestEndpoint:
         assert "name" in data
         assert "version" in data
 
+    def test_mcp_manifest_names_the_server_controlvar(self, client_no_auth):
+        """The manifest's name is the product's; an agent that matched the
+        former name sees it change (the upgrade note says so)."""
+        response = client_no_auth.get("/api/v1/mcp/manifest")
+        assert response.json()["name"] == "controlvar"
+
     def test_mcp_manifest_has_at_least_three_tools(self, client_no_auth):
         """MCP manifest includes at least 3 tools."""
         response = client_no_auth.get("/api/v1/mcp/manifest")

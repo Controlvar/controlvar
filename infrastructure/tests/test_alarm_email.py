@@ -77,7 +77,7 @@ REFUSED = {
     "blank": "   ",
     "empty": "",
     "too long": "a" * 243 + "@example.org.uk",  # 258 characters
-    "exactly 255": "a" * 235 + "@controlvar.com",
+    "exactly 255": "a" * 240 + "@controlvar.com",
     "whitespace inside": "ops team@controlvar.com",
     "leading whitespace": " hello@controlvar.com",
     "trailing newline": "hello@controlvar.com\n",
@@ -124,7 +124,7 @@ def test_a_bad_value_is_refused_in_every_environment(value, environment):
         "ops@example.company",
         "ops@example.com.au",
         # Exactly 254 characters is the limit, and allowed.
-        "a" * 234 + "@controlvar.com",
+        "a" * 239 + "@controlvar.com",
     ],
 )
 @pytest.mark.parametrize("environment", REQUIRED + OPTIONAL)
