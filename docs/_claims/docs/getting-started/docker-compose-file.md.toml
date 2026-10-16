@@ -95,11 +95,36 @@ text = "It prints api, frontend, postgres and redis, one per line."
 by = ["docex:docs/getting-started/docker-compose-file.md#api"]
 
 [[unit]]
-text = "The demo profile's applications also need the shoplab and streampulse seeds: without them, both simulators exit at start."
-by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_a_demo_simulator_exits_without_its_seed"]
+text = "The demo profile adds ShopLab, StreamPulse and their traffic simulators."
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_profiles_add_what_the_guide_says"]
 
 [[unit]]
-text = "To run the demo, use ./demo/setup-local.sh, which the Demo guide walks through."
+text = "Start it with the seeds the apps need:"
+by = [
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_a_demo_simulator_exits_without_its_seed",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_a_demo_app_is_built_with_the_key_its_seed_creates",
+]
+
+[[unit]]
+text = "make demo runs the same command with --build."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_make_demo_runs_the_demo_command_with_build"]
+
+[[unit]]
+text = "Without the shoplab and streampulse seeds the API key built into the apps does not exist: they load, but every flag shows its fallback, and both simulators exit at start."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_a_demo_app_is_built_with_the_key_its_seed_creates",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_a_demo_simulator_exits_without_its_seed",
+]
+
+[[unit]]
+text = "If you already started the profile without them, run the command above once: it applies the missing seeds to the existing database, with no down -v."
+by = [
+    "test:backend/tests/unit/scripts/test_entrypoint_seed_force_and_workers.py::test_a_recorded_seed_is_skipped_and_seed_force_applies_it_again",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_a_demo_app_is_built_with_the_key_its_seed_creates",
+]
+
+[[unit]]
+text = "To run the apps outside Docker, use ./demo/setup-local.sh, which the Demo guide walks through."
 by = ["journey:demo-guide#dashboard-address"]
 
 [[unit]]

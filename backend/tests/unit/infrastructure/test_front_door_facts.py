@@ -119,15 +119,50 @@ def test_each_host_port_has_its_override(compose, service, variable):
     assert port.startswith("127.0.0.1:${" + variable + ":-"), port
 
 
+#: The one command that starts the demo profile with the seeds its apps need
+#: (#1266). The bare `docker compose --profile demo up -d` starts ShopLab,
+#: StreamPulse and their simulators with no API key in the database: the apps
+#: answer 401 and the simulators exit at start.
+DEMO_COMMAND = (
+    "SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait"
+)
+
+
+def _header() -> str:
+    return _text("docker-compose.yml").split("\n\n", 1)[0]
+
+
 def test_the_header_describes_the_profiles_and_the_port_overrides():
-    header = _text("docker-compose.yml").split("\n\n", 1)[0]
+    header = _header()
     for needle in (
-        "--profile demo",
         "--profile tools",
         "--profile aws",
         "*_HOST_PORT",
     ):
         assert needle in header, needle
+    demo = [line for line in header.split("\n") if "--profile demo" in line]
+    assert [line.lstrip("#").strip() for line in demo] == [DEMO_COMMAND], demo
+
+
+def test_the_demo_banner_and_both_simulators_print_the_demo_command(compose):
+    text = _text("docker-compose.yml")
+    banner = text.split("# profile: demo", 1)[1].split("# ====", 1)[0]
+    assert f"#   {DEMO_COMMAND}\n" in banner, banner
+    for app in ("shoplab", "streampulse"):
+        command = " ".join(compose["services"][f"{app}-simulator"]["command"])
+        assert (
+            f"no /data/demo/{app}/.api_key: the {app} seed has not run. "
+            f"Start the stack with: {DEMO_COMMAND}"
+        ) in command, command
+
+
+def test_make_demo_runs_the_demo_command_with_build():
+    makefile = _text("Makefile")
+    assert "COMPOSE := docker compose\n" in makefile
+    recipe = makefile.split("\ndemo:", 1)[1].split("\n")[1].strip()
+    assert recipe.replace("$(COMPOSE)", "docker compose") == DEMO_COMMAND.replace(
+        "up -d --wait", "up -d --build --wait"
+    ), recipe
 
 
 def test_the_demo_seed_creates_three_experiments_and_two_flags():

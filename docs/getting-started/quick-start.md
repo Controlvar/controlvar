@@ -225,8 +225,18 @@ Run these from the repository root; the backend is imported as `backend.app.*`.
 
 ## Demo applications
 
-To see the platform drive two sample apps, ShopLab and StreamPulse, follow the
-[demo guide](https://github.com/getexperimently/experimently/blob/main/demo/DEMO_GUIDE.md).
+To run the two sample apps, ShopLab (http://localhost:3200) and StreamPulse
+(http://localhost:3300), and their traffic simulators in Docker as well:
+
+```{.bash skip reason="demo: builds both demo app images and starts their simulators"}
+SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait
+```
+
+The first start builds both apps' images. If you already started the `demo` profile
+without the seeds and the apps answer 401, run the same command once: it applies the
+missing seeds to the existing database, with no `down -v`. The
+[demo guide](https://github.com/getexperimently/experimently/blob/main/demo/DEMO_GUIDE.md)
+walks through what to look at, and how to run the apps outside Docker.
 
 ---
 
