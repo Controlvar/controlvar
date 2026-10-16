@@ -16,8 +16,9 @@ read as text: importing the constant would compare it with itself and pass
 whatever it became. A line moving within its file is fine; a line changing is
 not, and the count is exact so a second, diverging copy is caught too.
 
-Lines under ``modules/`` are checked when the tree has ``modules/`` (a core
-build deletes it, and the core tree has no such line to keep).
+The modules' identifiers are pinned the same way by a test of the modules'
+own (``test_cross_version_identifiers_modules.py``), so that this core test
+names no module path.
 """
 
 from __future__ import annotations
@@ -30,7 +31,6 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-MODULES_PRESENT = (REPO_ROOT / "modules").is_dir()
 
 #: (path, the exact stripped line, how many times it occurs, what it keys).
 IDENTIFIERS: List[Tuple[str, str, int, str]] = [
@@ -45,24 +45,6 @@ IDENTIFIERS: List[Tuple[str, str, int, str]] = [
         'BOOTSTRAP_LOCK_NAMESPACE = "experimently.bootstrap."',
         1,
         "the bootstrap advisory lock",
-    ),
-    (
-        "modules/backend/app/services/warehouse_runner.py",
-        'ADMISSION_LOCK_NAME = "experimently.warehouse.runs"',
-        1,
-        "the warehouse admission advisory lock",
-    ),
-    (
-        "modules/backend/app/services/warehouse_runner.py",
-        'RESULTS_SCHEMA = "experimently.warehouse.results/v1"',
-        1,
-        "stored with warehouse results and matched on read",
-    ),
-    (
-        "modules/backend/app/services/warehouse_sufficient_stats.py",
-        'SCHEMA_ID: Final = "experimently.warehouse.sufficient_statistics/v2"',
-        1,
-        "stored with sufficient statistics and matched on read",
     ),
     (
         "backend/app/core/security.py",
@@ -87,48 +69,6 @@ IDENTIFIERS: List[Tuple[str, str, int, str]] = [
         "export const TOKEN_STORAGE_KEY = 'experimently.token';",
         1,
         "where the dashboard keeps the session",
-    ),
-    (
-        "modules/frontend/src/services/sso.ts",
-        "export const SSO_STORAGE_KEY = 'experimently.sso';",
-        1,
-        "where the dashboard keeps the SSO session",
-    ),
-    (
-        "modules/backend/app/services/sso_service.py",
-        'OIDC_STATE_COOKIE = "__Host-experimently_oidc"',
-        1,
-        "the OIDC state cookie of a sign-in in flight",
-    ),
-    (
-        "modules/backend/app/services/sso_service.py",
-        '_STATE_AUDIENCE = "experimently:oidc-state"',
-        1,
-        "the aud of an OIDC state token in flight",
-    ),
-    (
-        "modules/backend/app/services/sso_service.py",
-        '_HANDOFF_AUDIENCE = "experimently:sso-handoff"',
-        1,
-        "the aud of an SSO hand-off code in flight",
-    ),
-    (
-        "modules/backend/app/services/sso_service.py",
-        'b"experimently:oidc-state:v1",',
-        1,
-        "the HMAC tag deriving the OIDC state key",
-    ),
-    (
-        "modules/backend/app/services/sso_service.py",
-        'b"experimently:sso-handoff:v1",',
-        1,
-        "the HMAC tag deriving the hand-off key",
-    ),
-    (
-        "modules/backend/app/services/integrations/webhook_auth.py",
-        'SHARED_SECRET_HEADER = "X-Experimently-Webhook-Secret"',
-        1,
-        "the header customers configured in Jira and Salesforce",
     ),
     (
         "backend/Dockerfile",
@@ -188,8 +128,6 @@ def occurrences(path: Path, line: str) -> int:
 
 @pytest.mark.parametrize("path, line, count, why", IDENTIFIERS, ids=_ids())
 def test_cross_version_identifiers_are_literal(path, line, count, why):
-    if path.startswith("modules/") and not MODULES_PRESENT:
-        pytest.skip("a core tree: no modules/")
     source = REPO_ROOT / path
     assert source.is_file(), f"{path} is gone; it held {why}"
     found = occurrences(source, line)
