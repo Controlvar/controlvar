@@ -62,7 +62,6 @@ def services(compose) -> Dict[str, Any]:
     return compose["services"]
 
 
-
 #: The volumes, and the database user, of every install made before the
 #: project was renamed: compose names a volume `<project>_<key>`, and Postgres
 #: applies the user only when it initialises an empty volume.
@@ -80,8 +79,9 @@ def test_compose_upgrade_keeps_the_postgres_volume(compose):
     volumes, the bootstrap would make a fresh database with the first
     administrator, and the stack would come up healthy on it."""
     volumes = {
-        spec.get("name") if isinstance(spec, dict) and spec.get("name") else
-        f"{compose['name']}_{key}"
+        spec.get("name")
+        if isinstance(spec, dict) and spec.get("name")
+        else f"{compose['name']}_{key}"
         for key, spec in compose["volumes"].items()
     }
     assert volumes == VOLUMES_BEFORE_THE_RENAME
@@ -90,6 +90,7 @@ def test_compose_upgrade_keeps_the_postgres_volume(compose):
             compose["services"][service]["environment"]["POSTGRES_USER"]
             == DATABASE_USER_BEFORE_THE_RENAME
         ), service
+
 
 class TestShape:
     def test_exactly_the_four_services(self, services):

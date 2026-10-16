@@ -225,13 +225,14 @@ $(VENV)/bin/pip-licenses:
 	$(PY) -m pip install "pip-licenses==$(PIP_LICENSES_VERSION)"
 
 .PHONY: lint-boundary
-lint-boundary: $(VENV)/bin/lint-imports $(VENV)/bin/reuse ## The core/modules boundary: import-linter contracts, REUSE licensing, requirements lock
+lint-boundary: $(VENV)/bin/lint-imports $(VENV)/bin/reuse ## The core/modules boundary: import-linter contracts, REUSE licensing, requirements lock, the former name
 	$(VENV)/bin/lint-imports
 	cd backend/lambda && ../../$(VENV)/bin/lint-imports
 	$(VENV)/bin/reuse lint
 	@cmp -s LICENSE LICENSES/Apache-2.0.txt \
 		|| { echo "LICENSES/Apache-2.0.txt has drifted from LICENSE (cp LICENSE LICENSES/Apache-2.0.txt)"; exit 1; }
 	$(PY) scripts/check_requirements_lock.py
+	$(PY) scripts/check_legacy_name.py
 
 .PHONY: format
 format: ## Format and auto-fix backend/, scripts/, tests/acceptance/ and modules/ in place (ruff replaces black + isort)

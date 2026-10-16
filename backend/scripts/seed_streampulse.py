@@ -551,7 +551,9 @@ def _write_env_line(path: Path, name: str, value: Optional[str]) -> None:
     """Create/replace the ``name=`` line in ``path`` (or drop it when value is None)."""
     lines = path.read_text().splitlines() if path.exists() else []
     names = (name, FORMER_ENV_KEY_NAME) if name == ENV_KEY_NAME else (name,)
-    kept = [line for line in lines if not line.startswith(tuple(f"{n}=" for n in names))]
+    kept = [
+        line for line in lines if not line.startswith(tuple(f"{n}=" for n in names))
+    ]
     if value is not None:
         kept.append(f"{name}={value}")
     if not kept and not path.exists():

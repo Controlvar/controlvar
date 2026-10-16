@@ -495,7 +495,9 @@ def test_streampulse_offers_the_five_device_presets():
     assert labels[4].endswith(" tester · iPhone 15 · employee"), labels[4]
 
 
-@pytest.mark.parametrize("seed", [seed_shoplab, seed_streampulse], ids=["shoplab", "streampulse"])
+@pytest.mark.parametrize(
+    "seed", [seed_shoplab, seed_streampulse], ids=["shoplab", "streampulse"]
+)
 def test_the_seed_replaces_the_key_line_an_older_env_local_holds(seed, tmp_path):
     """An .env.local written before the rename has the key under its former
     name; the seed writes the new line and drops that one, so the file holds
@@ -511,4 +513,3 @@ def test_the_seed_replaces_the_key_line_an_older_env_local_holds(seed, tmp_path)
     ]
     seed._write_env_line(env_local, seed.ENV_KEY_NAME, None)
     assert env_local.read_text(encoding="utf-8").splitlines() == ["OTHER=1"]
-

@@ -1273,6 +1273,8 @@ make format
 #                                      LICENSES/Apache-2.0.txt matches LICENSE
 #   check_requirements_lock.py         both requirements locks match their inputs,
 #                                      and the requirements files share their pins
+#   check_legacy_name.py               the former name only where
+#                                      scripts/legacy_name_keep.toml keeps it
 #   eslint + tsc                       frontend/
 #   hadolint                           the four Dockerfiles
 #   actionlint                         .github/workflows

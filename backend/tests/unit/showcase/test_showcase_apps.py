@@ -1327,8 +1327,10 @@ def test_the_app_settings_name_each_setting_twice_and_nothing_else_may():
     either name."""
     app = guard.app_settings(app="shoplab", api_port=28400, dashboard_port=28401)
     for setting in ("API_URL", "API_KEY", "DASHBOARD_URL"):
-        new, old = f"NEXT_PUBLIC_CONTROLVAR_{setting}", f"NEXT_PUBLIC_EXPERIMENTLY_{setting}"
+        new, old = (
+            f"NEXT_PUBLIC_CONTROLVAR_{setting}",
+            f"NEXT_PUBLIC_EXPERIMENTLY_{setting}",
+        )
         assert app[new] == app[old] and app[new], setting
         for kind in ("docker", "api", "seed-shoplab", "dashboard"):
             assert not {new, old} & guard.allowed_env_keys(kind), kind
-

@@ -457,7 +457,10 @@ OBJECTS_BEFORE_THE_RENAME = {
             ("StatefulSet", "-postgres"),
         )
     )
-    for release, prefix in (("experimently", "experimently"), ("foo", "foo-experimently"))
+    for release, prefix in (
+        ("experimently", "experimently"),
+        ("foo", "foo-experimently"),
+    )
 }
 
 

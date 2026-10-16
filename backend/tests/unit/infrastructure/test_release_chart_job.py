@@ -53,18 +53,20 @@ def _index(runs: list[str], needle: str) -> int:
 # --- the job graph -----------------------------------------------------------
 
 
-
 def test_every_site_that_follows_the_chart_name_agrees() -> None:
     """`helm package` names the archive after Chart.yaml's `name:`; the checker
     and the upload must expect that file. The chart's directory keeps its
     former name, so nothing here may be derived from the path."""
-    chart = yaml.safe_load((ROOT / "charts" / "experimently" / "Chart.yaml").read_text())
+    chart = yaml.safe_load(
+        (ROOT / "charts" / "experimently" / "Chart.yaml").read_text()
+    )
     assert chart["name"] == "controlvar"
     checker = CHECKER.read_text(encoding="utf-8")
     assert f'CHART_NAME = "{chart["name"]}"' in checker
     release = RELEASE.read_text(encoding="utf-8")
     assert f'"dist/{chart["name"]}-${{VERSION}}.tgz"' in release
     assert f'grep -Fx "{chart["name"]}-${{VERSION}}.tgz"' in release
+
 
 def test_chart_job_runs_after_the_release_exists() -> None:
     assert _needs(_jobs()["chart"]) == {"verify", "publish"}

@@ -93,7 +93,7 @@ def test_the_image_path_and_signing_identity_follow_the_repository(workflow):
     resolve = workflow["jobs"]["verify"]["steps"][0]
     assert resolve["env"]["REPOSITORY"] == "${{ github.repository }}"
     assert (
-        'image="${REGISTRY}/$(echo "$REPOSITORY" | tr \'[:upper:]\' \'[:lower:]\')"'
+        "image=\"${REGISTRY}/$(echo \"$REPOSITORY\" | tr '[:upper:]' '[:lower:]')\""
         in resolve["run"]
     )
     notes = "\n".join(runs(job) for job in workflow["jobs"].values())

@@ -28,7 +28,11 @@ SEED = REPO_ROOT / "backend" / "scripts" / "seed_sdk_contract.py"
 SETTINGS = {
     "url": ("CONTROLVAR_API_URL", "EXPERIMENTLY_API_URL", "http://localhost:8000"),
     "key": ("CONTROLVAR_API_KEY", "EXPERIMENTLY_API_KEY", "file-key"),
-    "local": ("CONTROLVAR_LOCAL_API_KEY", "EXPERIMENTLY_LOCAL_API_KEY", "file-local-key"),
+    "local": (
+        "CONTROLVAR_LOCAL_API_KEY",
+        "EXPERIMENTLY_LOCAL_API_KEY",
+        "file-local-key",
+    ),
 }
 #: Three distinct values per setting: neither is a default, and neither is the
 #: 127.0.0.1:8000 CI sets.
@@ -221,4 +225,3 @@ def test_the_smokes_are_given_each_setting_under_both_names(monkeypatch, runner)
     assert env["CONTROLVAR_API_KEY"] == "contract-key"
     name, old, _ = SETTINGS["local"]
     assert local and local[0][name] == local[0][old] == "scoped"
-
