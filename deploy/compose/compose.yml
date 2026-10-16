@@ -45,7 +45,7 @@ services:
 
   # ---------------------------------------------------------------------------
   api:
-    image: ghcr.io/getexperimently/experimently:${EXPERIMENTLY_PROFILE:-core}-0.34.3 # x-release-please-version
+    image: ghcr.io/getexperimently/experimently:${EXPERIMENTLY_PROFILE:-core}-0.34.4 # x-release-please-version
     # Published for linux/amd64 only (#181): an arm64 host runs it emulated.
     platform: linux/amd64
     environment:
@@ -90,7 +90,7 @@ services:
 
   # ---------------------------------------------------------------------------
   web:
-    image: ghcr.io/getexperimently/experimently-web:${EXPERIMENTLY_PROFILE:-core}-0.34.3 # x-release-please-version
+    image: ghcr.io/getexperimently/experimently-web:${EXPERIMENTLY_PROFILE:-core}-0.34.4 # x-release-please-version
     platform: linux/amd64
     environment:
       # The dashboard serves the static app and proxies /api, /ws and /health
