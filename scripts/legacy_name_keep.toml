@@ -2430,7 +2430,7 @@ reason = "the setting's name before the rename, still read when the new one is n
 [[keep]]
 path = "backend/tests/unit/scripts/test_run_live_contract.py"
 literal = "EXPERIMENTLY_API_URL"
-count = 1
+count = 2
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
