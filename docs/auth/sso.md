@@ -200,10 +200,10 @@ curl -X POST https://app.example.com/api/v1/auth/sso/configs \
     "org_domain": "acme.com",
     "provider_type": "saml",
     "entity_id": "http://www.okta.com/exk1234567890",
-    "sso_url": "https://acme.okta.com/app/acme_experimently/exk1234567890/sso/saml",
+    "sso_url": "https://acme.okta.com/app/acme_controlvar/exk1234567890/sso/saml",
     "x509_certificate": "MIIC...",
     "role_mapping": {
-      "experimently-admins": "admin",
+      "controlvar-admins": "admin",
       "developers": "developer",
       "analysts": "analyst"
     }
@@ -301,7 +301,7 @@ The `role_mapping` field maps the group names the IdP sends to platform roles.
 ```json
 {
   "role_mapping": {
-    "experimently-admins": "admin",
+    "controlvar-admins": "admin",
     "developers":          "developer",
     "data-analysts":       "analyst",
     "contractors":         "viewer"

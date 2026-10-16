@@ -178,7 +178,7 @@ export default function HomePage() {
             </p>
             <pre className="mt-5 overflow-x-auto rounded-lg bg-slate-900 p-5 text-sm leading-relaxed text-slate-100">
               <code>{`git clone https://github.com/Controlvar/controlvar.git
-cd experimently
+cd controlvar
 docker compose up -d --wait`}</code>
             </pre>
             <p className="mt-4 text-sm text-slate-500">

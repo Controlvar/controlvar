@@ -86,7 +86,7 @@ a key pair it generates. There is no password field.
    is the organisation-account identifier, for example `MYORG-MYACCOUNT`
    (Snowsight › Admin › Accounts), not a locator or a URL. Saving generates
    the key pair and shows the statement that registers its public key, for
-   example `ALTER USER EXPERIMENTLY SET RSA_PUBLIC_KEY='…';`. Run it as an
+   example `ALTER USER CONTROLVAR SET RSA_PUBLIC_KEY='…';`. Run it as an
    administrator. The private key never leaves Controlvar.
 3. **Test the connection.** The test signs in and runs one statement that
    reads no table.

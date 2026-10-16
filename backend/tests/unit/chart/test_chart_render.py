@@ -434,6 +434,56 @@ def test_the_bundled_postgres_and_redis_are_one_replica_each_and_never_backed_up
     assert [d["kind"] for d in docs if d["kind"] in ("CronJob", "Job")] == []
 
 
+#: Every object, by (kind, name), that the chart rendered for each release
+#: before it was renamed (charts/experimently at 1303435c, ci/values-core.yaml).
+#: Measured, not derived from anything the chart now says.
+OBJECTS_BEFORE_THE_RENAME = {
+    release: sorted(
+        (kind, f"{prefix}{suffix}")
+        for kind, suffix in (
+            ("ConfigMap", "-config"),
+            ("Deployment", "-api"),
+            ("Deployment", "-redis"),
+            ("Deployment", "-web"),
+            ("Ingress", ""),
+            ("PersistentVolumeClaim", "-redis"),
+            ("Pod", "-smoke"),
+            ("Secret", "-secrets"),
+            ("Service", "-api"),
+            ("Service", "-postgres"),
+            ("Service", "-redis"),
+            ("Service", "-web"),
+            ("ServiceAccount", ""),
+            ("StatefulSet", "-postgres"),
+        )
+    )
+    for release, prefix in (("experimently", "experimently"), ("foo", "foo-experimently"))
+}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("release", sorted(OBJECTS_BEFORE_THE_RENAME))
+def test_chart_rename_keeps_every_object_name(release):
+    """Renaming the chart renames no object. Its names and selector labels
+    come from the stem `experimently`, not from Chart.yaml's `name:`; were they
+    taken from the name, `helm upgrade` would create a new PostgreSQL
+    StatefulSet with a new, empty volume and leave the data on the old one,
+    and every pod would still come up Ready."""
+    result = subprocess.run(
+        [str(HELM), "template", release, str(CHART), "-f", str(CI_VALUES["core"])],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    names = sorted((d["kind"], d["metadata"]["name"]) for d in docs)
+    assert names == OBJECTS_BEFORE_THE_RENAME[release]
+    for doc in docs:
+        labels = doc["metadata"].get("labels", {})
+        if "app.kubernetes.io/name" in labels:
+            assert labels["app.kubernetes.io/name"] == "experimently", doc["metadata"]
+
+
 @pytest.mark.parametrize(
     "release, prefix",
     [
@@ -445,7 +495,8 @@ def test_the_bundled_postgres_and_redis_are_one_replica_each_and_never_backed_up
 def test_the_resources_are_named_after_the_release(release, prefix):
     """The guide installs release `experimently`, whose resources are
     `experimently-api` and `experimently-web`: a release name that contains the
-    chart's name is used as it is, any other gets `-experimently` added."""
+    resource stem, `experimently`, is used as it is, any other gets
+    `-experimently` added. The stem is not the chart's name (see below)."""
     result = subprocess.run(
         [str(HELM), "template", release, str(CHART), "-f", str(CI_VALUES["core"])],
         capture_output=True,

@@ -217,3 +217,10 @@ def test_the_profiles_add_what_the_guide_says(services):
             "streampulse-simulator",
         },
     }
+
+
+def test_the_project_name_follows_the_checkout_directory():
+    """No `name:`: compose takes the project, and so the volume names, from the
+    directory of the checkout. The upgrade note says what that means for a clone
+    made under the new name."""
+    assert "name" not in yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))

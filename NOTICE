@@ -1,7 +1,7 @@
 Controlvar
 Copyright (c) 2024-2026 The Controlvar authors
 
-This product includes software developed by Controlvar
+This product includes software developed by The Controlvar authors
 (https://github.com/Controlvar/controlvar) and by third parties.
 
 --------------------------------------------------------------------------------
@@ -58,12 +58,3 @@ of them, and each remains under its own licence:
 `caniuse-lite`, pulled in transitively by the dashboard build toolchain, carries
 a CC-BY-4.0 licence over its browser-support database. It is a build-time
 dependency only and its data is not redistributed by Controlvar.
-
---------------------------------------------------------------------------------
-Trademarks
---------------------------------------------------------------------------------
-
-"Controlvar" and the Controlvar logo are trademarks of Controlvar. Section
-6 of the Apache License 2.0 and the MIT Licence grant no trademark rights. You
-may state that your product is built on Controlvar; you may not name a fork
-or a hosted service "Controlvar" without written permission.

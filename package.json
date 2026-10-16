@@ -1,5 +1,5 @@
 {
-  "name": "experimently",
+  "name": "controlvar",
   "version": "1.0.0",
   "description": "A scalable, AWS-based platform for A/B testing and feature flags with real-time evaluation capabilities.",
   "homepage": "https://github.com/Controlvar/controlvar#readme",

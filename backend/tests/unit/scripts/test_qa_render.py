@@ -72,7 +72,7 @@ BAD = {
     ],
     "run_link": [
         "https://github.com/getexperimently/experimently-other/actions/runs/1",
-        "https://github.com/other/experimently/actions/runs/1",
+        "https://github.com/other/controlvar/actions/runs/1",
         "http://github.com/Controlvar/controlvar/actions/runs/1",
         "https://github.com/Controlvar/controlvar/actions/runs/1/attempts/2",
         "https://github.com/Controlvar/controlvar/actions/runs/1?x=y",

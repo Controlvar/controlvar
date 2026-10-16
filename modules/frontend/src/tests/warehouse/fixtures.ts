@@ -37,7 +37,7 @@ export function connection(overrides: Partial<Connection> = {}): Connection {
     parameters: {
       billing_project: 'acme-billing',
       location: 'EU',
-      client_email: 'experimently@acme-billing.iam.gserviceaccount.com',
+      client_email: 'controlvar@acme-billing.iam.gserviceaccount.com',
     },
     credentials_status: 'ok',
     public_key_fingerprint: null,
@@ -120,7 +120,7 @@ export const SERVICE_ACCOUNT_JSON = JSON.stringify({
   project_id: 'acme-billing',
   private_key_id: 'kid-1',
   private_key: `${PEM[0]}\n${KEY_SENTINEL}\n${PEM[1]}\n`,
-  client_email: 'experimently@acme-billing.iam.gserviceaccount.com',
+  client_email: 'controlvar@acme-billing.iam.gserviceaccount.com',
   token_uri: 'https://oauth2.googleapis.com/token',
 });
 

@@ -269,7 +269,7 @@ class Client:
             url += "?" + urllib.parse.urlencode(query)
         headers = {
             "Accept": "application/json",
-            "User-Agent": "experimently-synthetic-check",
+            "User-Agent": "controlvar-synthetic-check",
         }
         data = None
         if body is not None:

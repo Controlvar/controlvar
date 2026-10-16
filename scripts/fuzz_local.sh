@@ -12,7 +12,7 @@
 #     built from exactly that commit;
 #   * removes whatever a killed run left of its compose project, then builds
 #     and starts the API with Postgres and Redis as that project,
-#     experimently-fuzz, on its own ports (API 18700) and its own image tag
+#     controlvar-fuzz, on its own ports (API 18700) and its own image tag
 #     (experimently-api:fuzz), with the full profile and the data seed set
 #     here (SEED=demo, plus sdk-contract for the sdk pass) -- never the make
 #     variable -- and with tests/fuzz/compose.fuzz.yml giving the api the
@@ -79,7 +79,7 @@ python=${FUZZ_PYTHON:-python3}
 "$python" -c 'import sys; sys.exit(sys.version_info < (3, 11))' ||
   refuse "needs Python 3.11 or newer as python3 (or FUZZ_PYTHON)"
 
-project=experimently-fuzz
+project=controlvar-fuzz
 image=experimently-api:fuzz
 api=http://127.0.0.1:18700
 compose=(docker compose -p "$project" --env-file /dev/null
@@ -95,7 +95,7 @@ else
   export SEED=demo
 fi
 
-work=$(mktemp -d "${TMPDIR:-/tmp}/experimently-fuzz.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/controlvar-fuzz.XXXXXX")
 cleanup() {
   if ! "${compose[@]}" down -v --remove-orphans > "$work/compose-down.log" 2>&1; then
     echo "make fuzz: could not remove the $project project; run: docker compose -p $project down -v" >&2

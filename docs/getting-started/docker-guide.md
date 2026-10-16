@@ -22,7 +22,7 @@ every service with its host port and profile.
 The commands below run from the root of a clone of the repository, which contains:
 
 ```text
-experimently/
+controlvar/
 ├── backend/
 ├── frontend/
 ├── localstack/

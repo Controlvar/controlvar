@@ -377,7 +377,7 @@ def test_the_table_is_the_plans_and_keeps_letters_and_digits():
     assert contract.SPOKEN == (
         ("SDKs", "S.D.K.s"),
         ("SDK", "S.D.K."),
-        ("controlvar.com", "get experimently dot com"),
+        ("controlvar.com", "controlvar dot com"),
     )
     assert contract.spoken_problems() == []
 
@@ -406,7 +406,7 @@ def test_a_table_entry_that_changes_what_is_said_is_refused(entry, problem):
         ("Both SDKs do it.", "Both S.D.K.s do it."),
         (
             "Try Controlvar at controlvar.com.",
-            "Try Controlvar at get experimently dot com.",
+            "Try Controlvar at controlvar dot com.",
         ),
         ("The SDKfoo stays.", "The SDKfoo stays."),
         ("No change here.", "No change here."),

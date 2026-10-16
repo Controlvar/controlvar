@@ -5,6 +5,9 @@
 The core, the optional modules and the dashboard are Apache-2.0; the client SDKs under `sdk/`
 are MIT. Controlvar is pre-1.0: see the
 [releases](https://github.com/Controlvar/controlvar/releases).
+Controlvar was called Experimently before 0.35.0;
+[Upgrading to Controlvar](docs/self-hosting/upgrading-to-controlvar.md) says what
+that changes for an install you already run.
 
 ---
 
@@ -14,7 +17,7 @@ You need Docker with Compose v2, `curl` and `jq`. Clone the repository:
 
 ```{.bash skip reason="checkout: the runner starts inside a checkout"}
 git clone https://github.com/Controlvar/controlvar.git
-cd experimently
+cd controlvar
 ```
 
 Then start the stack from the repository root:

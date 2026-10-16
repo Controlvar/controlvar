@@ -242,7 +242,7 @@ def test_snowflake_admin_roles_are_refused(wh):
                 "warehouse_type": "snowflake",
                 "name": "Snow",
                 "account": "MYORG-MYACCOUNT",
-                "user": "EXPERIMENTLY",
+                "user": "CONTROLVAR",
                 "role": role,
                 "warehouse": "ANALYSIS_WH",
             },

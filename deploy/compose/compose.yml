@@ -3,7 +3,8 @@
 #
 # README.md beside this file says how to run it and lists its settings.
 
-# Not `experimently`: that is the project name the development compose file
+# Not `controlvar` (or `experimently`, the directory of a clone made before
+# the rename): that is the project name the development compose file
 # gets from a checkout directory of that name, and sharing it would make this
 # file recreate those containers and adopt their volumes. Fixed rather than
 # taken from the directory, so the volume names (experimently-selfhost_

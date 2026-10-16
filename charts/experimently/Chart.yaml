@@ -1,5 +1,5 @@
 apiVersion: v2
-name: experimently
+name: controlvar
 description: >-
   Controlvar, the open-source experimentation and feature-flag platform:
   the API, the dashboard, and optionally an evaluation-grade Postgres and Redis.

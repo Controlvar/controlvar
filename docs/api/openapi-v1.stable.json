@@ -11804,7 +11804,7 @@
             "default": "slack"
           },
           "message": {
-            "default": "Test notification from Experimently",
+            "default": "Test notification from Controlvar",
             "maxLength": 500,
             "title": "Message",
             "type": "string"
@@ -13843,7 +13843,7 @@
   },
   "info": {
     "description": "API for managing experiments and feature flags in test environment",
-    "title": "Experimently",
+    "title": "Controlvar",
     "version": "0.34.4"
   },
   "openapi": "3.1.0",

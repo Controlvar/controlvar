@@ -82,7 +82,7 @@ it('shows the non-secret settings and the credential status', async () => {
   const details = await screen.findByTestId('warehouse-connection-details');
   expect(details).toHaveTextContent('Billing project');
   expect(details).toHaveTextContent('acme-billing');
-  expect(details).toHaveTextContent('experimently@acme-billing.iam.gserviceaccount.com');
+  expect(details).toHaveTextContent('controlvar@acme-billing.iam.gserviceaccount.com');
   expect(details).toHaveTextContent('Credentials stored');
   expect(details).toHaveTextContent('50 GB');
   expect(details).toHaveTextContent('20 (UTC day, previews included)');

@@ -14,7 +14,7 @@ export function Wordmark({ href = '/', className = '' }: WordmarkProps) {
         aria-hidden="true"
         className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-sm font-bold text-white"
       >
-        E
+        C
       </span>
       <span className="text-lg font-semibold tracking-tight text-slate-900">Controlvar</span>
     </span>

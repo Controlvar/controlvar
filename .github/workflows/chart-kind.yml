@@ -95,7 +95,7 @@ env:
   INGRESS_NGINX_MANIFEST_URL: 'https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.15.1/deploy/static/provider/kind/deploy.yaml'
   INGRESS_NGINX_MANIFEST_SHA256: '2a3ae008c8786431115502644e77ab398fdebfb721a5d1195ed3089cde3299df'
   # publicBaseUrl's host; /etc/hosts points it at the kind node's port 80
-  KIND_HOST: experimently.kind.test
+  KIND_HOST: controlvar.kind.test
 
 jobs:
   chart-kind:

@@ -11,7 +11,7 @@ Creates all demo DB records including:
 This script is IDEMPOTENT: safe to re-run. Checks for existing data before inserting.
 
 Usage:
-    cd /path/to/experimently
+    cd /path/to/controlvar
     source venv/bin/activate
     python backend/scripts/seed_demo_data.py
 """

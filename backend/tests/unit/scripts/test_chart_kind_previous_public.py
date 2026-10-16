@@ -161,7 +161,7 @@ def test_previous_resolves_n_minus_1_on_a_pull_request_from_a_fork(sandbox):
         GITHUB_STEP_SUMMARY=str(summary),
         GITHUB_REPOSITORY="Controlvar/controlvar",
         # What a fork's pull request looked like to the old skip.
-        HEAD_REPO="someone/experimently",
+        HEAD_REPO="someone/controlvar",
         GITHUB_EVENT_NAME="pull_request",
     )
     result = _run(

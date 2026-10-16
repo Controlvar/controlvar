@@ -1,6 +1,6 @@
 # Releases, images and verification
 
-Experimently releases are cut by CI from a tag: `release.yml` builds, signs
+Controlvar releases are cut by CI from a tag: `release.yml` builds, signs
 and publishes each one. The version a running deployment reports in
 `GET /api/v1/modules` is the string in the repository's `VERSION` file, and
 each image's `org.opencontainers.image.version` label and the Helm chart's
@@ -13,10 +13,10 @@ For version `X.Y.Z`, in the repository's GitHub Container Registry namespace:
 
 | Image | Platforms |
 |---|---|
-| `…/experimently:core-X.Y.Z` | `linux/amd64` |
-| `…/experimently:full-X.Y.Z` | `linux/amd64` |
-| `…/experimently-web:core-X.Y.Z` | `linux/amd64` |
-| `…/experimently-web:full-X.Y.Z` | `linux/amd64` |
+| `…/controlvar:core-X.Y.Z` | `linux/amd64` |
+| `…/controlvar:full-X.Y.Z` | `linux/amd64` |
+| `…/controlvar-web:core-X.Y.Z` | `linux/amd64` |
+| `…/controlvar-web:full-X.Y.Z` | `linux/amd64` |
 
 A final release also moves `:core` and `:full` to point at it, and only once
 everything else in the release, including the chart below, has succeeded.
@@ -42,7 +42,7 @@ So the remaining gap is third-party files on the paths the default rules
 skip. After the push, the release checks that the pushed image's layers are
 the layers it scanned, before signing it.
 
-The GitHub release also carries the Helm chart as `experimently-X.Y.Z.tgz`,
+The GitHub release also carries the Helm chart as `controlvar-X.Y.Z.tgz`,
 packaged from the tagged tree after `helm lint --strict`. Before it is
 attached, `scripts/check_chart_package.py` reads the `Chart.yaml` inside the
 archive and requires its `version` and `appVersion` to be exactly `X.Y.Z`, so
@@ -64,6 +64,18 @@ attached to the GitHub release.
 You need [cosign][cosign], Docker with Buildx (`docker buildx version` prints
 one) and `jq`. Nothing is pulled: every command below reads the registry, and
 none needs an account.
+
+The project was renamed from Experimently to Controlvar between two releases, and
+an image's signature names the repository that built it. Releases up to 0.34.x
+were published as `ghcr.io/getexperimently/experimently` and
+`ghcr.io/getexperimently/experimently-web` and signed by
+`https://github.com/getexperimently/experimently/.github/workflows/release.yml`.
+Releases from 0.35.0 on are published as `ghcr.io/controlvar/controlvar` and
+`ghcr.io/controlvar/controlvar-web` and signed by
+`https://github.com/Controlvar/controlvar/.github/workflows/release.yml`.
+Verify an image with the identity of the repository that built it; the other
+one fails with `no matching signatures`. The commands below verify the newest
+release under the former name.
 
 Set `IMAGE` to the image you run. `:core` is the newest final release; a
 versioned tag such as `:core-0.26.3` is one release, and `full` in place of

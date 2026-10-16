@@ -86,7 +86,7 @@ export default function StreamPulseApp({ apiKey = API_KEY, apiUrl = API_URL, ini
       </main>
 
       <footer className="mx-auto max-w-7xl px-4 py-6 text-xs text-neutral-500">
-        StreamPulse is a demo. No audio, no images, no real users — every tap is an Controlvar event for device{' '}
+        StreamPulse is a demo. No audio, no images, no real users — every tap is a Controlvar event for device{' '}
         <code className="font-mono">{device.device_id}</code>.
       </footer>
     </div>

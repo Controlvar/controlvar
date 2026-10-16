@@ -23,6 +23,13 @@ text = "Controlvar is pre-1.0: see the releases."
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_version_is_before_1_0"]
 
 [[unit]]
+text = "Controlvar was called Experimently before 0.35.0; Upgrading to Controlvar says what that changes for an install you already run."
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_chart_job.py::test_every_site_that_follows_the_chart_name_agrees",
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_the_image_path_and_signing_identity_follow_the_repository",
+]
+
+[[unit]]
 text = "Try it on your machine"
 by = ["exempt:label"]
 

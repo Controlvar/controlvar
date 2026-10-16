@@ -22,7 +22,7 @@ Clone the repository:
 
 ```{.bash skip reason="checkout: the runner starts inside a checkout"}
 git clone https://github.com/Controlvar/controlvar.git
-cd experimently
+cd controlvar
 ```
 
 Then start everything from the repository root:

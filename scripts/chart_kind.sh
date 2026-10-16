@@ -50,7 +50,7 @@ REPO_ROOT=$(pwd)
 
 PROFILE=${PROFILE:?PROFILE must be core or full}
 CLUSTER=${KIND_CLUSTER:-chart-kind}
-HOST=${KIND_HOST:-experimently.kind.test}
+HOST=${KIND_HOST:-controlvar.kind.test}
 WORK=${CHART_KIND_WORK:-${RUNNER_TEMP:-/tmp}/chart-kind-$PROFILE}
 GUIDE=docs/self-hosting/kubernetes.md
 GUIDE_BLOCKS=secrets,install,first-admin,upgrade

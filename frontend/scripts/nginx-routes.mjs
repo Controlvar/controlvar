@@ -17,7 +17,7 @@
  *   node scripts/nginx-routes.mjs --out path.conf
  *   node scripts/nginx-routes.mjs --check         # print, do not write
  *
- * The generated file is included by frontend/nginx.conf (`include /etc/nginx/experimently-routes.conf;`).
+ * The generated file is included by frontend/nginx.conf (`include /etc/nginx/controlvar-routes.conf;`).
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';

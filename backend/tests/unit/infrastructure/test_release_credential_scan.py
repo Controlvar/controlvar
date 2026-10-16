@@ -675,7 +675,7 @@ def render(
             str(RENDER),
             str(path),
             "--label",
-            "experimently:core-1.2.3 (whole image)",
+            "controlvar:core-1.2.3 (whole image)",
         ],
         capture_output=True,
         text=True,

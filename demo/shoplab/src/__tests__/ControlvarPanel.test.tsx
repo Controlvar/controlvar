@@ -66,7 +66,7 @@ describe('ControlvarPanel', () => {
 
   it('collapses/expands and the "New visitor" button calls the handler', () => {
     const { onNewVisitor } = renderPanel();
-    const toggle = screen.getByRole('button', { name: /powered by experimently/i });
+    const toggle = screen.getByRole('button', { name: /powered by controlvar/i });
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
 
     fireEvent.click(screen.getByRole('button', { name: 'New visitor' }));

@@ -223,7 +223,7 @@ text = "The account is the organisation-account identifier, for example MYORG-MY
 by = ["test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_account_must_be_the_organisation_account_identifier"]
 
 [[unit]]
-text = "Saving generates the key pair and shows the statement that registers its public key, for example ALTER USER EXPERIMENTLY SET RSA_PUBLIC_KEY='…';."
+text = "Saving generates the key pair and shows the statement that registers its public key, for example ALTER USER CONTROLVAR SET RSA_PUBLIC_KEY='…';."
 by = ["test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_only_the_public_key_and_statement_are_shown"]
 
 [[unit]]

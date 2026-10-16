@@ -11,7 +11,7 @@ since the tracking API endpoint uses Experiment.key which may not be present
 in all deployment configurations.
 
 Usage:
-    cd /path/to/experimently
+    cd /path/to/controlvar
     source venv/bin/activate
     python backend/scripts/simulate_live_events.py \\
         --rate 5 \\

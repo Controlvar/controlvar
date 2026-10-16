@@ -88,7 +88,7 @@ logs: ## Follow the API and dashboard logs
 
 .PHONY: fuzz
 # One API fuzzing pass on this machine, with fuzz.yml's flags, lists and
-# verdict, on a compose stack of its own (experimently-fuzz: its own ports,
+# verdict, on a compose stack of its own (controlvar-fuzz: its own ports,
 # removed again on the way out, image included); scripts/fuzz_local.sh says how
 # that stack differs from the workflow's. The seed is FUZZ_SEED, not SEED: SEED is
 # docker-compose.yml's data seed, and a variable given to make on the command

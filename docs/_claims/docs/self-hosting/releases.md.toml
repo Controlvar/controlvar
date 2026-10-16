@@ -8,7 +8,7 @@ text = "Releases, images and verification"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Experimently releases are cut by CI from a tag: release.yml builds, signs and publishes each one."
+text = "Controlvar releases are cut by CI from a tag: release.yml builds, signs and publishes each one."
 by = [
     "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_a_release_starts_from_a_tag",
     "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_signed_and_carries_its_sbom_as_an_attestation",
@@ -39,22 +39,22 @@ text = "Image | Platforms"
 by = ["exempt:label"]
 
 [[unit]]
-text = "…/experimently:core-X.Y.Z | linux/amd64"
+text = "…/controlvar:core-X.Y.Z | linux/amd64"
 by = ["test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_both_profiles_tagged_with_the_version_and_amd64_only"]
 
 [[unit]]
-text = "…/experimently:full-X.Y.Z | linux/amd64"
+text = "…/controlvar:full-X.Y.Z | linux/amd64"
 by = ["test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_both_profiles_tagged_with_the_version_and_amd64_only"]
 
 [[unit]]
-text = "…/experimently-web:core-X.Y.Z | linux/amd64"
+text = "…/controlvar-web:core-X.Y.Z | linux/amd64"
 by = [
     "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_both_profiles_tagged_with_the_version_and_amd64_only",
     "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_the_web_image_is_the_api_image_name_with_web",
 ]
 
 [[unit]]
-text = "…/experimently-web:full-X.Y.Z | linux/amd64"
+text = "…/controlvar-web:full-X.Y.Z | linux/amd64"
 by = [
     "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_both_profiles_tagged_with_the_version_and_amd64_only",
     "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_the_web_image_is_the_api_image_name_with_web",
@@ -126,7 +126,7 @@ by = [
 ]
 
 [[unit]]
-text = "The GitHub release also carries the Helm chart as experimently-X.Y.Z.tgz, packaged from the tagged tree after helm lint --strict."
+text = "The GitHub release also carries the Helm chart as controlvar-X.Y.Z.tgz, packaged from the tagged tree after helm lint --strict."
 by = [
     "test:backend/tests/unit/infrastructure/test_release_chart_job.py::test_chart_job_lints_packages_checks_then_attaches_in_that_order",
     "test:backend/tests/unit/infrastructure/test_release_chart_job.py::test_chart_job_checks_out_the_tag",
@@ -173,6 +173,32 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Nothing is pulled: every command below reads the registry, and none needs an account."
+by = ["docex:docs/self-hosting/releases.md#https://github.com/getexperimently/experimently/.github/workflows/release.yml@refs/"]
+
+[[unit]]
+text = "The project was renamed from Experimently to Controlvar between two releases, and an image's signature names the repository that built it."
+by = ["test:backend/tests/unit/infrastructure/test_release_publishes.py::test_the_image_path_and_signing_identity_follow_the_repository"]
+
+[[unit]]
+text = "Releases up to 0.34.x were published as ghcr.io/getexperimently/experimently and ghcr.io/getexperimently/experimently-web and signed by https://github.com/getexperimently/experimently/.github/workflows/release.yml."
+by = [
+    "docex:docs/self-hosting/releases.md#https://github.com/getexperimently/experimently/.github/workflows/release.yml@refs/",
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_the_image_path_and_signing_identity_follow_the_repository",
+]
+
+[[unit]]
+text = "Releases from 0.35.0 on are published as ghcr.io/controlvar/controlvar and ghcr.io/controlvar/controlvar-web and signed by https://github.com/Controlvar/controlvar/.github/workflows/release.yml."
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_the_image_path_and_signing_identity_follow_the_repository",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version",
+]
+
+[[unit]]
+text = "Verify an image with the identity of the repository that built it; the other one fails with no matching signatures."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The commands below verify the newest release under the former name."
 by = ["docex:docs/self-hosting/releases.md#https://github.com/getexperimently/experimently/.github/workflows/release.yml@refs/"]
 
 [[unit]]

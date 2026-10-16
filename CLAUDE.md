@@ -1142,7 +1142,7 @@ Release-please also needs the ORGANISATION to allow it. If it fails with
 that is not a repository setting you can fix from here -- the repository API
 answers `409 The organization does not allow GitHub Actions to create or
 approve pull requests`. It is
-`github.com/organizations/getexperimently/settings/actions` -> Workflow
+`github.com/organizations/Controlvar/settings/actions` -> Workflow
 permissions, and it needs an org owner.
 
 ### A release bumps VERSION and leaves the fixtures behind

@@ -174,10 +174,10 @@ RUN rm -f /etc/nginx/conf.d/default.conf \
     && mkdir -p /etc/nginx/templates \
     && chown -R nginx:nginx /etc/nginx/conf.d /etc/nginx/templates
 COPY --chown=nginx:nginx frontend/nginx.conf /etc/nginx/templates/default.conf.template
-COPY --chown=nginx:nginx frontend/docker-entrypoint.sh /usr/local/bin/experimently-entrypoint.sh
-COPY --from=builder --chown=nginx:nginx /app/nginx/routes.conf /etc/nginx/experimently-routes.conf
+COPY --chown=nginx:nginx frontend/docker-entrypoint.sh /usr/local/bin/controlvar-entrypoint.sh
+COPY --from=builder --chown=nginx:nginx /app/nginx/routes.conf /etc/nginx/controlvar-routes.conf
 COPY --from=builder --chown=nginx:nginx /app/frontend/out /usr/share/nginx/html
-RUN chmod +x /usr/local/bin/experimently-entrypoint.sh
+RUN chmod +x /usr/local/bin/controlvar-entrypoint.sh
 USER nginx
 
 EXPOSE 8080
@@ -185,5 +185,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || exit 1
 
-ENTRYPOINT ["/usr/local/bin/experimently-entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/controlvar-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
