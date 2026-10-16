@@ -358,6 +358,12 @@ class ExperimentEnd(_Strict):
     winner: str
     #: The ``record`` name of the element that showed the recommendation.
     shown: str
+    #: The minimum detectable effect typed in the wizard: the Planned sample
+    #: card plans with it, as the effect saved with the experiment (#1257).
+    mde: float = Field(gt=0, lt=1)
+    #: The ``record`` names of the Planned sample card and of its effect line.
+    planned: str
+    effect: str
 
 
 #: The audit action types a flag's end state may name.
@@ -477,6 +483,15 @@ class Storyboard(_Strict):
                 )
         if self.end_state.experiment is not None and self.traffic is None:
             raise ValueError("an experiment's end state needs the storyboard's traffic")
+        recorded = [name for s in self.scenes for b in s.beats for name in b.record]
+        made = self.end_state.experiment
+        if made is not None:
+            for name in (made.shown, made.planned, made.effect):
+                if name not in recorded:
+                    raise ValueError(
+                        f"the experiment's end state compares {name!r}, which no beat"
+                        " records"
+                    )
         flag = self.end_state.flag
         if flag is not None:
             made = [s.name for s in self.setup.segments] if self.setup else []
@@ -484,7 +499,6 @@ class Storyboard(_Strict):
                 raise ValueError(
                     f"the flag's rule names {flag.segment!r}, which the setup does not make"
                 )
-            recorded = [name for s in self.scenes for b in s.beats for name in b.record]
             if flag.shown not in recorded:
                 raise ValueError(
                     f"the flag's end state compares {flag.shown!r}, which no beat records"

@@ -5,6 +5,8 @@
 #
 # * The segment, Beta testers, is made through the API off camera before the
 #   first scene (`setup`): the video is about the flag, not the segments page.
+#   D84: the first scene says so in the caption that names the segment, and
+#   that the sign-in before it was off camera in its first caption.
 # * The rule's operator and segment are native selects: each is set without
 #   its list opening and held on its new text (C9), because a screencast never
 #   draws an open list.
@@ -47,8 +49,13 @@ scenes:
   - id: flag
     open: /feature-flags
     signed_in: true
+    departures:
+      - kind: off-camera setup
+        says: Signed in off camera
+      - kind: off-camera setup
+        says: Beta testers segment, made off camera
     beats:
-      - cue: Wrap a new feature in a flag.
+      - cue: Signed in off camera. Wrap a new feature in a flag.
         focus: {testid: new-flag-btn}
         steps:
           - move: {testid: new-flag-btn}
@@ -67,7 +74,7 @@ scenes:
           - type: {label: Description, exact: true}
             text: One-tap checkout for returning shoppers
 
-      - cue: Add a rule for the Beta testers segment.
+      - cue: Add a rule for the Beta testers segment, made off camera.
         focus: {testid: flag-targeting-section}
         steps:
           - scroll_to: {testid: flag-targeting-section}

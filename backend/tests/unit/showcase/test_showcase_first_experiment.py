@@ -60,12 +60,12 @@ def v2_data() -> dict:
     return yaml.safe_load(V2.read_text(encoding="utf-8"))
 
 
-def beat(text_start: str) -> storyboard.Beat:
+def beat(words: str) -> storyboard.Beat:
     for scene in board().scenes:
         for item in scene.beats:
-            if item.cue.startswith(text_start):
+            if words in item.cue:
                 return item
-    raise AssertionError(f"no cue starts {text_start!r}")
+    raise AssertionError(f"no cue says {words!r}")
 
 
 def form_key(name: str) -> str:
@@ -134,6 +134,19 @@ def test_the_time_card_states_the_traffics_users():
     made = board()
     headline = next(s.card.headline for s in made.scenes if s.card and s.card.headline)
     assert storyboard.numbers_in(headline) == [f"{made.traffic.users:,}"]
+
+
+def test_the_sdk_card_states_the_simulated_traffics_count_and_rates():
+    """D84 (b): the screen says the shoppers are simulated, and how: how many,
+    and the rates the generator converts them at."""
+    made = board()
+    note = next(s.card.note for s in made.scenes if s.traffic == "start")
+    assert "simulated" in note
+    assert storyboard.numbers_in(note) == [
+        f"{made.traffic.users:,}",
+        gates._pct(made.traffic.control_rate),
+        gates._pct(made.traffic.treatment_rate),
+    ]
 
 
 def test_a_code_card_that_names_a_host_and_port_is_refused():
@@ -388,6 +401,27 @@ def results_for(split: dict, p_value: float, reason: str = REASON) -> dict:
     }
 
 
+#: The sample-size API's answer for that traffic, planned with the 10% the
+#: wizard saved with the experiment (#1257), on the control's observed rate.
+OBSERVED = 1_569 / 31_309
+SAMPLE_SIZE = {
+    "required_sample_size_per_variant": 31_159,
+    "current_sample_size_per_variant": 31_309,
+    "is_adequate": True,
+    "baseline_rate": OBSERVED,
+    "baseline_source": "observed",
+    "mde": 0.1,
+    "mde_source": "experiment",
+}
+#: The Planned sample card as the page's innerText gives it (the label is
+#: drawn in capitals), and the effect line under it.
+PLANNED_SHOWN = "PLANNED SAMPLE\nReached\n31,309 of 31,159 per variant"
+EFFECT = (
+    "To detect a 10% lift on the control's 5.01%. The 10% was set when the"
+    " experiment was created."
+)
+
+
 def end_check(**changes):
     end = board().end_state.experiment
     oracle = traffic.generator().fisher_p_value(PLANNED)
@@ -398,6 +432,9 @@ def end_check(**changes):
         "report": PLANNED,
         "oracle_p": oracle,
         "shown": " " + REASON + "\n",
+        "sample_size": dict(SAMPLE_SIZE),
+        "planned_shown": PLANNED_SHOWN,
+        "effect_shown": EFFECT + "\n",
     }
     kwargs.update(changes)
     return gates.experiment_end(end, **kwargs)
@@ -440,6 +477,198 @@ def test_one_conversion_more_on_the_platform_is_refused():
 def test_an_end_state_that_disagrees_anywhere_is_refused(changes, words):
     ok, _numbers, why = end_check(**changes)
     assert not ok and words in why
+
+
+# --- Gate 10: the Planned sample, as the wizard sized it (#1257, QA row 15) ---------
+
+
+def test_the_planned_sample_is_planned_with_the_mde_typed_in_the_wizard():
+    """The end state's MDE is the one typed; the oracle sizes it as the API's
+    own function does, at the typed baseline (the estimate's 31,234) and at
+    the control's observed rate at the seed (31,159)."""
+    typed = [s.text for s in beat("Size it first").steps]
+    end = board().end_state.experiment
+    assert end.mde == float(typed[1]) / 100 == 0.10
+    observed = PLANNED["control"]["converting_users"] / PLANNED["control"]["users"]
+    assert observed == OBSERVED
+    for baseline, size in ((float(typed[0]) / 100, 31_234), (observed, 31_159)):
+        assert gates.planned_sample_oracle(baseline, end.mde) == size
+        assert size == sample_size_two_proportions(
+            p1=baseline, p2=baseline * 1.10, alpha=0.05, power=0.8, two_tailed=True
+        )
+    # At the 5% default the card planned with before #1257: four times as many.
+    assert gates.planned_sample_oracle(observed, 0.05) == 121_833
+    assert gates.planned_card(SAMPLE_SIZE) == (
+        "Reached",
+        "31,309 of 31,159 per variant",
+        EFFECT,
+    )
+    ok, numbers, why = end_check()
+    assert ok, why
+    assert numbers["planned_sample"]["card"] == (
+        "Planned sample: Reached · 31,309 of 31,159 per variant"
+    )
+    assert numbers["planned_sample"]["oracle_required"] == 31_159
+
+
+def test_the_card_text_follows_the_results_pages_own_words():
+    """``planned_card`` repeats ExperimentSummary.tsx's sentences: each one is
+    in the page's source as written there."""
+    source = (
+        REPO
+        / "frontend"
+        / "src"
+        / "components"
+        / "results"
+        / "ResultsDashboard"
+        / "ExperimentSummary.tsx"
+    ).read_text(encoding="utf-8")
+    for template in (
+        "`To detect a ${effect} lift${baseline}. The ${effect} was set when the"
+        " experiment was created.`",
+        "`To detect a ${effect} lift${baseline}.`",
+        "`To detect a ${effect} lift (the default: no effect was saved with this"
+        " experiment)${baseline}.`",
+        "` on the control's ${pct(plannedSample.baseline_rate)}`",
+        "` on a ${pct(plannedSample.baseline_rate)} baseline`",
+        "`${current.toLocaleString()} of ${required.toLocaleString()} per variant`",
+        "`${current.toLocaleString()} per variant, no plan yet`",
+        "value: 'Reached'",
+        "value: 'Not yet'",
+        'label="Planned sample"',
+    ):
+        assert template in source, template
+    assert gates._pct(0.1) == "10%" and gates._pct(OBSERVED) == "5.01%"
+    assert gates._pct(0.056) == "5.6%" and gates._pct(0.125) == "12.5%"
+
+
+def _answer(**changes):
+    return {**SAMPLE_SIZE, **changes}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "changes, words",
+    [
+        # QA row 15's plant: the 5% default's plan, from before #1257.
+        (
+            {
+                "sample_size": _answer(
+                    mde=0.05, required_sample_size_per_variant=121_833
+                )
+            },
+            "plans for an effect of 0.05",
+        ),
+        (
+            {
+                "sample_size": _answer(
+                    mde=0.05,
+                    mde_source="default",
+                    required_sample_size_per_variant=121_833,
+                    is_adequate=False,
+                )
+            },
+            "plans for an effect of 0.05 (default)",
+        ),
+        ({"sample_size": _answer(mde_source="request")}, "(request)"),
+        ({"sample_size": _answer(mde_source=None)}, "(None)"),
+        (
+            {"sample_size": _answer(required_sample_size_per_variant=31_160)},
+            "the API plans 31160 users per variant; 31159 detect",
+        ),
+        (
+            {"sample_size": _answer(required_sample_size_per_variant=31_234)},
+            "the API plans 31234 users",
+        ),
+        (
+            {"sample_size": _answer(baseline_rate=0.05, baseline_source="request")},
+            "starts from 0.05 (request)",
+        ),
+        ({"sample_size": None}, "the sample-size API gave no answer"),
+        # QA row 15's page plant: the card as the 5% default drew it.
+        (
+            {"planned_shown": "PLANNED SAMPLE\nNot yet\n31,309 of 121,833 per variant"},
+            "the page's Planned sample read 'PLANNED SAMPLE · Not yet · 31,309 of"
+            " 121,833 per variant'",
+        ),
+        ({"planned_shown": "PLANNED SAMPLE\nReached"}, "the page's Planned sample"),
+        ({"planned_shown": None}, "the page's Planned sample"),
+        (
+            {"planned_shown": "Planned total\nReached\n31,309 of 31,159 per variant"},
+            "the page's Planned sample",
+        ),
+        (
+            {
+                "effect_shown": "To detect a 5% lift (the default: no effect was saved"
+                " with this experiment) on the control's 5.01%."
+            },
+            "the page's effect line read",
+        ),
+        ({"effect_shown": None}, "the page's effect line read"),
+        # Consistent, but the plan is not reached: the video says it is.
+        (
+            {
+                "sample_size": _answer(
+                    current_sample_size_per_variant=31_000, is_adequate=False
+                ),
+                "planned_shown": "PLANNED SAMPLE\nNot yet\n31,000 of 31,159 per variant",
+            },
+            "not Reached",
+        ),
+    ],
+)
+def test_a_planned_sample_that_is_not_the_wizards_plan_is_refused(changes, words):
+    ok, _numbers, why = end_check(**changes)
+    assert not ok and words in why, why
+
+
+def test_the_capture_asks_the_sample_size_api_and_compares_the_pages_readings(
+    monkeypatch,
+):
+    """``Users.end_state``: the plan as the results page asks for it (the
+    server's own inputs) and the beat's readings of the card, into gate 10."""
+    from showcase.capture import run
+
+    seen = []
+
+    def answer(url, token=None, body=None):
+        seen.append(url.split("/api/v1", 1)[1])
+        if "/experiments/" in url:
+            return {
+                "items": [
+                    {
+                        "id": "e-1",
+                        "name": "Sticky add-to-cart bar",
+                        "key": "sticky_add_to_cart_bar",
+                        "status": "active",
+                    }
+                ]
+            }
+        if url.endswith("/sample-size"):
+            return dict(SAMPLE_SIZE)
+        return results_for(PLANNED, traffic.generator().fisher_p_value(PLANNED))
+
+    monkeypatch.setattr(run, "_api", answer)
+    users = run.Users(None, "http://127.0.0.1:28400", "token-1", None, print)
+    users.sender = SimpleNamespace(plan=SimpleNamespace(split=PLANNED, p_value=None))
+    users.report = traffic.Report(by_arm=PLANNED)
+    end = board().end_state.experiment
+    readings = {"recommendation": REASON, "planned": PLANNED_SHOWN, "effect": EFFECT}
+    ok, numbers, why = users.end_state(end, readings)
+    assert ok, why
+    assert "/results/e-1/sample-size" in seen
+    assert numbers["planned_sample"]["mde_source"] == "experiment"
+    ok, _numbers, why = users.end_state(end, {**readings, "planned": "Not yet"})
+    assert not ok and "the page's Planned sample read 'Not yet'" in why
+
+
+def test_the_end_state_compares_only_readings_a_beat_records():
+    data = v2_data()
+    data["end_state"]["experiment"]["planned"] = "plan"
+    with pytest.raises(
+        storyboard.StoryboardError, match="'plan', which no beat records"
+    ):
+        storyboard.parse(data)
 
 
 def test_a_winner_the_storyboard_did_not_name_is_refused():
