@@ -35,15 +35,10 @@ OLD = "experi" + "mently"
 
 #: The reviewed size of the keep-list. A new entry is a reviewed change, so it
 #: moves these numbers in the same pull request.
-ENTRIES = 510
-KEPT = 1467
+ENTRIES = 565
+KEPT = 1176
 EXCLUDES = [
     "CHANGELOG.md",
-    "sdk/",
-    "docs/sdk/",
-    "docs/_claims/docs/sdk/",
-    "docs/_claims/sdk/",
-    "tests/sdk-contract/",
     "backend/tests/unit/infrastructure/fixtures/branch_protection/live_main_2026-10-01.json",
     "backend/tests/unit/infrastructure/fixtures/rollback_runs/",
 ]
@@ -216,3 +211,43 @@ def test_without_git_generated_directories_are_skipped(tmp_path):
     assert _run(root) == []
     (root / "src" / "app.py").write_text(f"# {OLD}\n")
     assert _run(root) == [f"RESIDUAL src/app.py:1: # {OLD}"]
+
+
+#: The Python SDK's former import name, assembled like OLD.
+MODULE = "experi" + "mentation"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"from {MODULE} import ExperimentationClient",
+        f"from {MODULE}.testing import FakeTransport",
+        f"import {MODULE}",
+        f"    import {MODULE}.client as client_module",
+        f">>> import {MODULE}",
+        f"from {MODULE}_openfeature import ExperimentationProvider",
+        f'mock.patch("{MODULE}.cache._now")',
+        f"see `{MODULE}.testing.FakeTransport`",
+    ],
+)
+def test_the_former_python_import_name_is_residual(tmp_path, line):
+    root = _tree(tmp_path, {"docs/page.md": f"```python\n{line}\n```\n"})
+    assert _run(root) == [f"RESIDUAL-IMPORT docs/page.md:2: {line.strip()}"]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"select email from {MODULE}.users where is_superuser",
+        f"POSTGRES_SCHEMA={MODULE}",
+        f'{MODULE} "github.com/controlvar/controlvar/sdk/go"',
+        f"hashes = append(hashes, {MODULE}.ConsistentHash(a, b))",
+        f'"{MODULE}.cache-ttl-seconds=60"',
+        f"| `{MODULE}.cache-size` | `int` |",
+        f"from controlvar import ExperimentationClient",
+    ],
+    ids=["sql", "schema", "go-import", "go-call", "spring", "spring-doc", "new-name"],
+)
+def test_the_schema_the_go_package_and_the_spring_prefix_are_not(tmp_path, line):
+    root = _tree(tmp_path, {"a.txt": line + "\n"})
+    assert _run(root) == []

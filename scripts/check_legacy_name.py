@@ -15,6 +15,13 @@ sides of that line:
              for), or the entry is dead.
 * COUNT      an entry that matched a different number of times than it pins.
              A count that moves is a reviewed change, not a side effect.
+* RESIDUAL-IMPORT  the Python SDK's former import name, which is not the
+             brand and so is not matched above: a Python import of it, or a
+             quoted dotted path into one of its modules (``mock.patch("<old>.
+             cache._now")``). The SDK now installs and imports under the new
+             name, so such a line no longer runs. No keep-list entry covers
+             it. The database schema of the same spelling, the Go package and
+             the Spring property prefix do not match.
 
 The keep-list is ``scripts/legacy_name_keep.toml``. Each entry names a path
 (an exact path, or an ``fnmatch`` pattern), an exact case-sensitive literal
@@ -43,7 +50,8 @@ Usage::
 
     python scripts/check_legacy_name.py [--root DIR] [--keep FILE]
 
-Exit status 0 when there is no RESIDUAL, STALE-ALLOW or COUNT line, else 1;
+Exit status 0 when there is no RESIDUAL, RESIDUAL-IMPORT, STALE-ALLOW or COUNT
+line, else 1;
 2 for a usage error (missing keep-list, malformed entry).
 """
 
@@ -52,6 +60,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import os
+import re
 import subprocess
 import sys
 import tomllib
@@ -63,6 +72,23 @@ KEEP_FILE = Path("scripts") / "legacy_name_keep.toml"
 
 # Assembled so this source never contains the word it looks for.
 NEEDLE = ("experi" + "mently").encode("ascii")
+
+# The Python SDK's former import names, assembled for the same reason.
+_MODULE = "experi" + "mentation"
+_SUBMODULES = (
+    "client|cache|evaluator|hashing|local|testing|transport|types|version|provider"
+)
+FORMER_IMPORT = re.compile(
+    (
+        r"\bfrom {m}(?:_openfeature)?(?:\.\w+)* import\b"
+        r"|^\s*(?:>>> )?import {m}(?:_openfeature)?\b"
+        r"|[\"'`]{m}(?:_openfeature)?\.(?:{s})\b(?![-\w])"
+    )
+    .format(m=_MODULE, s=_SUBMODULES)
+    .encode("ascii"),
+    re.M,
+)
+MODULE_NEEDLE = _MODULE.encode("ascii")
 
 GENERATED_DIRS = frozenset(
     {
@@ -225,6 +251,10 @@ def check(root: Path, keep_path: Path) -> tuple[list[str], dict[str, int]]:
             data = full.read_bytes()
         else:
             continue
+        if MODULE_NEEDLE in data:
+            for number, line in enumerate(data.split(b"\n"), start=1):
+                if FORMER_IMPORT.search(line):
+                    problems.append(f"RESIDUAL-IMPORT {rel}:{number}: {snippet(line)}")
         lines = [(0, rel.encode("utf-8", "surrogateescape"))]
         if NEEDLE in data.lower():
             lines += list(enumerate(data.split(b"\n"), start=1))
