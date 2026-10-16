@@ -196,6 +196,38 @@ def test_a_value_of_the_wrong_kind_is_refused(kind, value):
         assert value not in str(refused.value)
 
 
+#: A repository by another name: what a rename or a transfer makes this one.
+RENAMED = "example-org/example-repo"
+
+
+@pytest.mark.regression
+def test_a_run_link_names_the_repository_the_run_is_in(monkeypatch):
+    """The run link's repository is ``GITHUB_REPOSITORY``, not a written name.
+
+    It used to be this repository's name, written into the script, so after a
+    rename every run link the workflows built was refused and no failure was
+    reported."""
+    monkeypatch.setenv("GITHUB_REPOSITORY", RENAMED)
+    qa_render.check_value(
+        "run_link", f"https://github.com/{RENAMED}/actions/runs/37456943504"
+    )
+    with pytest.raises(qa_render.RenderError):
+        qa_render.check_value("run_link", GOOD["run_link"])
+
+
+@pytest.mark.parametrize(
+    "repository", [None, "", "owner", "a/b/c", "owner/repo\n", "-owner/repo", "o/r?"]
+)
+def test_no_run_link_passes_without_a_repository_name(monkeypatch, repository):
+    if repository is None:
+        monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    else:
+        monkeypatch.setenv("GITHUB_REPOSITORY", repository)
+    assert qa_render.run_link_prefix() is None
+    with pytest.raises(qa_render.RenderError):
+        qa_render.check_value("run_link", GOOD["run_link"])
+
+
 def test_the_mapping_covers_exactly_the_placeholders_the_templates_use():
     used = set()
     for name in template_names():

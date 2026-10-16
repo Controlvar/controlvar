@@ -60,7 +60,7 @@ jobs:
   find:
     name: Find the pull requests that need it
     runs-on: ubuntu-latest
-    if: github.repository == 'getexperimently/experimently'
+    if: github.repository_id == '1367480368'
     outputs:
       prs: ${{ steps.find.outputs.prs }}
       count: ${{ steps.find.outputs.count }}

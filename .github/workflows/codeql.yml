@@ -84,10 +84,11 @@ jobs:
       #
       # The analysis itself still runs on the private repository, so a broken
       # query pack or a build failure is caught here and now; only the results
-      # upload waits for the cut. The condition is the repository name,
-      # matching docs.yml's Pages deploy, so it turns itself on with no edit.
+      # upload waits for the cut. The condition is the repository id (which a
+      # rename or a transfer keeps, unlike the name), matching docs.yml's Pages
+      # deploy; pinned by test_repository_guards.py.
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v4
         with:
           category: /language:${{ matrix.language }}
-          upload: ${{ github.repository == 'getexperimently/experimently' && 'always' || 'never' }}
+          upload: ${{ github.repository_id == '1367480368' && 'always' || 'never' }}

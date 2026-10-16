@@ -28,7 +28,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 DOCS_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "docs.yml"
-REPOSITORY = "getexperimently/experimently"
+#: This repository's id: a rename or a transfer keeps it.
+REPOSITORY_ID = "1367480368"
 
 _TOKEN = re.compile(
     r"\s*(?:(?P<str>'(?:[^']|'')*')|(?P<op>&&|\|\||==|!=|[!(),])"
@@ -176,7 +177,7 @@ def test_only_a_release_tag_deploys(
 ):
     context = {
         "github.ref": ref,
-        "github.repository": REPOSITORY,
+        "github.repository_id": REPOSITORY_ID,
         "github.event_name": event,
     }
     assert evaluate(deploy_if, context) is deploys, (
@@ -187,9 +188,17 @@ def test_only_a_release_tag_deploys(
 def test_a_fork_never_deploys(deploy_if: str):
     context = {
         "github.ref": "refs/tags/v0.17.0",
-        "github.repository": "someone/experimently",
+        "github.repository_id": "1",
         "github.event_name": "push",
     }
+    assert evaluate(deploy_if, context) is False
+
+
+@pytest.mark.parametrize("wrong", ["136748036", "13674803680", ""])
+def test_only_this_repository_s_id_deploys(deploy_if: str, wrong: str):
+    """The guard is the id, which a rename keeps; a name in the context is not
+    modelled, so a guard that went back to the name fails as unmodelled."""
+    context = {"github.ref": "refs/tags/v0.17.0", "github.repository_id": wrong}
     assert evaluate(deploy_if, context) is False
 
 
