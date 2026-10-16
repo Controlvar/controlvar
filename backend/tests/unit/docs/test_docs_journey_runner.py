@@ -1868,6 +1868,12 @@ SHA = "c6e0f081d82f1a858e111c86db62aa5d8b8a71d4"
 LINK = "https://github.com/getexperimently/experimently/actions/runs/18000000003"
 
 
+@pytest.fixture(autouse=True)
+def _run_repository(monkeypatch):
+    """qa_render accepts a run link of ``GITHUB_REPOSITORY`` only: LINK's."""
+    monkeypatch.setenv("GITHUB_REPOSITORY", "getexperimently/experimently")
+
+
 def _renderer():
     return report.qa_render()
 

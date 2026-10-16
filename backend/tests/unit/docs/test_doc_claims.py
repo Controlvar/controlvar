@@ -1001,6 +1001,15 @@ PLANTED = [
         "not evidence:",
     ),
     (
+        "evidence from another repository",
+        retarget(
+            "docs/ops.md",
+            "Restore was rehearsed on 2026-10-01.",
+            "evidence:https://github.com/example-org/other-repo/actions/runs/1",
+        ),
+        "not evidence:",
+    ),
+    (
         "evidence, undated",
         lambda t: (
             edit(t, "docs/ops.md", "on 2026-10-01", "last week"),
@@ -1235,6 +1244,49 @@ def test_each_refusal_fires(tmp_path, plant, refusal):
     plant(tree)
     problems = build(tmp_path, tree).problems
     assert any(refusal in p for p in problems), "\n".join(problems) or "no problem"
+
+
+#: The repository by another name: what a rename or a transfer makes it.
+RENAMED = "example-org/example-repo"
+OLD_RUN = "https://github.com/getexperimently/experimently/actions/runs/123"
+OLD_COMMENT = (
+    "https://github.com/getexperimently/experimently/issues/12#issuecomment-345"
+)
+
+
+@pytest.mark.regression
+def test_evidence_keeps_its_recorded_name_and_takes_the_run_s_after_a_rename():
+    """Evidence accepted only the name written into the script, so after a
+    rename a new run's link was refused. The recorded links stay valid (they
+    are dated records, never rewritten); the run's repository is the other."""
+    renamed = {"GITHUB_REPOSITORY": RENAMED}
+    for url in (OLD_RUN, OLD_COMMENT):
+        assert dc.evidence_url(url, renamed)
+        assert dc.evidence_url(url, {})
+    assert dc.evidence_url(f"https://github.com/{RENAMED}/actions/runs/9", renamed)
+    assert not dc.evidence_url(f"https://github.com/{RENAMED}/actions/runs/9", {})
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://github.com/example-org/other-repo/actions/runs/1",
+        "https://github.com/getexperimently/experimently-other/actions/runs/1",
+        "https://github.com/getexperimently/experimently/actions/runs/1/x",
+        "http://github.com/getexperimently/experimently/actions/runs/1",
+        f"https://github.com/{RENAMED}/issues/1",
+    ],
+)
+def test_evidence_from_a_third_repository_or_shape_is_refused(url):
+    assert not dc.evidence_url(url, {"GITHUB_REPOSITORY": RENAMED})
+
+
+def test_a_malformed_run_repository_adds_no_name():
+    for current in ("a/b/c", "x/y\n", "../x", ".*/.*"):
+        assert not dc.evidence_url(
+            f"https://github.com/{current}/actions/runs/1",
+            {"GITHUB_REPOSITORY": current},
+        )
 
 
 #: QA's planted claims (#1142): each is refused as an unregistered unit.

@@ -54,7 +54,7 @@ jobs:
     # builds but does not deploy, so an rc rehearsal never replaces the live
     # site. github.ref is the tag for a push and for a manual run started from
     # a tag alike. Pinned by test_docs_deploy_condition.py.
-    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') && github.repository == 'getexperimently/experimently'
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') && github.repository_id == '1367480368'
     runs-on: ubuntu-latest
     permissions:
       pages: write

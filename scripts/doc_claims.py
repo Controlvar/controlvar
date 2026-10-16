@@ -649,10 +649,33 @@ DATED = re.compile(
     r"\b[Aa]s of v[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}\b"
     r"|\b[Oo]n (?P<y>[0-9]{4})-(?P<m>[0-9]{2})-(?P<d>[0-9]{2})\b"
 )
-EVIDENCE = re.compile(
-    r"https://github\.com/getexperimently/experimently/"
+#: The repository's name when the dated evidence in the registries was taken.
+#: Evidence is a record of a run and is never rewritten, so its links keep this
+#: name after a rename or a transfer (GitHub redirects them); the repository
+#: the check runs in, ``GITHUB_REPOSITORY``, is the other name accepted.
+EVIDENCE_REPOSITORY = "getexperimently/experimently"
+EVIDENCE_PATH = (
     r"(?:actions/runs/[0-9]{1,12}|issues/[0-9]{1,7}#issuecomment-[0-9]{1,12})"
 )
+REPOSITORY_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}")
+
+
+def evidence_url(url: str, environ: Optional[Mapping[str, str]] = None) -> bool:
+    """A run or issue comment URL of EVIDENCE_REPOSITORY or of this run's."""
+    environ = os.environ if environ is None else environ
+    names = [EVIDENCE_REPOSITORY]
+    current = environ.get("GITHUB_REPOSITORY", "")
+    if REPOSITORY_NAME.fullmatch(current):
+        names.append(current)
+    return any(
+        re.fullmatch(
+            r"https://github\.com/" + re.escape(name) + "/" + EVIDENCE_PATH, url
+        )
+        is not None
+        for name in names
+    )
+
+
 SLUG = r"[a-z0-9]{1,60}(?:-[a-z0-9]{1,60}){0,20}"
 PYTHON_NAME = r"[A-Za-z_][A-Za-z0-9_]{0,200}"
 #: Test files, by name, in every language the repository tests in.
@@ -2355,7 +2378,7 @@ def target_problem(
             )
         return None
     if kind == "evidence":
-        if not EVIDENCE.fullmatch(target[len("evidence:") :]):
+        if not evidence_url(target[len("evidence:") :]):
             return "not evidence:<a GitHub run or issue comment URL of this repository>"
         if document.cls != "aws":
             return "evidence: is only for a document of class aws"

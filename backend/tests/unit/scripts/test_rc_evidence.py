@@ -43,6 +43,8 @@ def _load():
 rc = _load()
 
 TAG = "v0.30.0"
+#: GITHUB_REPOSITORY, as conftest.py sets it for every test here.
+REPO = "getexperimently/experimently"
 RC = "a1" * 20
 OLD = "b2" * 20
 COMMIT_TIME = "2026-11-01T10:00:00Z"
@@ -513,7 +515,7 @@ class World:
         self.calls.append(list(args))
         if args[0] == "api":
             assert len(args) == 2, f"only a plain GET is made: {args}"
-            prefix = f"repos/{rc.REPO}/"
+            prefix = f"repos/{REPO}/"
             assert args[1].startswith(prefix)
             path = args[1][len(prefix) :]
             if path.startswith("actions/workflows/") and "/runs?" in path:
@@ -693,7 +695,10 @@ def test_plan_prints_one_dispatch_per_workflow_at_the_tag_and_runs_nothing(capsy
     commands = [line for line in printed if line.startswith("gh workflow run")]
     dispatched = [w.file for w in rc.WORKFLOWS if w.at_tag]
     assert [c.split()[3] for c in commands] == dispatched
-    assert all(f"--ref {TAG} -R {rc.REPO}" in c for c in commands)
+    assert all(f' --ref {TAG} -R "$REPO"' in c for c in commands)
+    assert printed.index(
+        'REPO="$(gh api repositories/1367480368 --jq .full_name)"'
+    ) < printed.index(commands[0])
     assert dispatched[-1] == "rc-evidence.yml" and dispatched[0] == "docs.yml"
     assert dispatched.index("docs.yml") < dispatched.index("docs-journeys.yml")
     checks = [line for line in printed if "--registry" in line]
@@ -702,6 +707,67 @@ def test_plan_prints_one_dispatch_per_workflow_at_the_tag_and_runs_nothing(capsy
         f"python3 scripts/rc_evidence.py {TAG} --registry python --out <dir>",
     ]
     assert printed.index(checks[-1]) < printed.index(commands[0])
+
+
+#: The repository by another name: what a rename or a transfer makes it.
+RENAMED = "example-org/example-repo"
+
+
+@pytest.mark.regression
+def test_the_repository_is_the_run_s_or_the_current_name_of_its_id():
+    """The name used to be written into the script, so after a rename every
+    read went to the old name. A run names its repository; on a machine the
+    API answers the name of the repository's id."""
+    calls = []
+
+    def gh(args):
+        calls.append(args)
+        assert args == ["api", "repositories/1367480368"], args
+        return json.dumps({"id": 1367480368, "full_name": RENAMED})
+
+    assert rc.repository({"GITHUB_REPOSITORY": RENAMED}, gh) == RENAMED
+    assert calls == []
+    assert rc.repository({}, gh) == RENAMED
+    assert len(calls) == 1
+    assert rc.REPOSITORY_ID == "1367480368"
+
+
+@pytest.mark.parametrize(
+    "environ, answer",
+    [
+        ({"GITHUB_REPOSITORY": "a/b/c"}, None),
+        ({"GITHUB_REPOSITORY": "owner/repo\n"}, None),
+        ({}, "{}"),
+        ({}, '{"full_name": "../x"}'),
+        ({}, "not json"),
+        ({}, rc.GhError("gh api failed (exit 1)")),
+    ],
+)
+def test_no_owner_name_for_the_repository_is_a_usage_error(environ, answer):
+    def gh(args):
+        if isinstance(answer, Exception):
+            raise answer
+        assert answer is not None, "a run's own name needs no lookup"
+        return answer
+
+    with pytest.raises(rc.UsageError):
+        rc.repository(environ, gh)
+
+
+def test_main_reads_the_repository_the_id_names(world, monkeypatch):
+    """With no GITHUB_REPOSITORY, every read goes to the id's current name."""
+    monkeypatch.delenv("GITHUB_REPOSITORY")
+    answered = world.gh
+
+    def gh(args):
+        if args == ["api", "repositories/1367480368"]:
+            return json.dumps({"full_name": REPO})
+        return answered(args)
+
+    world.gh = gh
+    code, text = world.main()
+    assert code == 0, text
+    assert world.calls[0] == ["api", f"repos/{REPO}/git/ref/tags/{TAG}"]
 
 
 @pytest.mark.parametrize("tag", ["v0.30", "0.30.0", "v0.30.0-rc.1", "v0.30.0 ", "main"])

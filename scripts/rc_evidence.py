@@ -122,6 +122,13 @@ With ``--registry js|python`` it resolves the tag and runs only that P check
 (and the dispositions); its last line is ``REGISTRY CHECK (<sdk>): PASS`` or
 ``FAIL``, never the RC's verdict.
 
+THE REPOSITORY
+
+The repository read is ``GITHUB_REPOSITORY`` in a run; on a person's machine
+it is the name GitHub gives the repository's id (``REPOSITORY_ID``) now, so a
+renamed or transferred repository needs no edit here. ``--plan``'s commands
+look the name up the same way.
+
 Standard library only. It runs ``gh``, ``git rev-parse HEAD`` and, for
 ``--suite``, pytest or jest.
 """
@@ -149,7 +156,10 @@ import xml.etree.ElementTree as ET
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-REPO = "getexperimently/experimently"
+#: This repository's id. A rename or a transfer keeps it; the name changes.
+REPOSITORY_ID = "1367480368"
+#: ``owner/name``, as ``GITHUB_REPOSITORY`` and the API's ``full_name`` give it.
+REPOSITORY_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}")
 TAG = re.compile(r"v[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}")
 SHA = re.compile(r"[0-9a-f]{40}")
 DISPATCH = "workflow_dispatch"
@@ -595,10 +605,24 @@ def git_head(root: pathlib.Path) -> Optional[str]:
     return head if done.returncode == 0 and SHA.fullmatch(head) else None
 
 
+def repository(environ: Mapping[str, str], gh: Gh) -> str:
+    """``GITHUB_REPOSITORY`` in a run, else the current name of REPOSITORY_ID."""
+    name = environ.get("GITHUB_REPOSITORY", "")
+    if not name:
+        try:
+            answer = json.loads(gh(["api", f"repositories/{REPOSITORY_ID}"]) or "null")
+        except (GhError, ValueError) as error:
+            raise UsageError(f"repository {REPOSITORY_ID}: {error}") from None
+        name = answer.get("full_name", "") if isinstance(answer, dict) else ""
+    if not isinstance(name, str) or REPOSITORY_NAME.fullmatch(name) is None:
+        raise UsageError(f"repository {REPOSITORY_ID}: no owner/name for it")
+    return name
+
+
 class GitHub:
     """Read-only: GETs of the repository's API, and artifact downloads."""
 
-    def __init__(self, gh: Gh, repo: str = REPO):
+    def __init__(self, gh: Gh, repo: str):
         self.gh = gh
         self.repo = repo
 
@@ -2194,10 +2218,12 @@ def plan_lines(tag: str) -> List[str]:
         lines.append(
             f"python3 scripts/rc_evidence.py {tag} --registry {name} --out <dir>"
         )
+    lines.append("# The repository's current name, from its id:")
+    lines.append(f'REPO="$(gh api repositories/{REPOSITORY_ID} --jq .full_name)"')
     dispatched = [w for w in WORKFLOWS if w.at_tag]
     for number, workflow in zip(range(1, len(dispatched) + 1), dispatched):
         lines.append(f"# {number}. {workflow.plan}")
-        command = f"gh workflow run {workflow.file} --ref {tag} -R {REPO}"
+        command = f'gh workflow run {workflow.file} --ref {tag} -R "$REPO"'
         if workflow.file == SELF:
             command += (
                 "  # add -f dispositions='<run id>: <reason>; ...' for any run at"
@@ -2271,7 +2297,9 @@ def main(
     head_of: Callable[[pathlib.Path], Optional[str]] = git_head,
     registry: Callable[[pathlib.Path], Registry] = read_registry,
     fetch: Fetch = http_get,
+    environ: Optional[Mapping[str, str]] = None,
 ) -> int:
+    environ = os.environ if environ is None else environ
     parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n", 1)[0])
     parser.add_argument("tag", nargs="?", help="the release tag, vX.Y.Z")
     parser.add_argument("--plan", metavar="TAG", help="print the dispatch commands")
@@ -2324,9 +2352,10 @@ def main(
                 "--registry checks one package on the coordinator's machine:"
                 " not with --staging, and never in a run"
             )
+        check_tag(args.tag)
         verifier = Verifier(
             args.tag,
-            github=GitHub(gh),
+            github=GitHub(gh, repository(environ, gh)),
             root=args.root,
             out=args.out,
             dispositions=parse_dispositions(args.dispositions),
