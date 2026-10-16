@@ -193,7 +193,7 @@ def test_a_demo_app_is_built_with_the_key_its_seed_creates(services, app):
     that started without it) makes the key in the image valid, with no rebuild.
     """
     variable = f"{app.upper()}_API_KEY"
-    baked = services[app]["build"]["args"]["NEXT_PUBLIC_EXPERIMENTLY_API_KEY"]
+    baked = services[app]["build"]["args"]["NEXT_PUBLIC_CONTROLVAR_API_KEY"]
     assert baked.startswith("${" + variable + ":-eptk_demo_"), baked
     assert services["api"]["environment"][variable] == baked
     seed = (REPO_ROOT / "backend" / "scripts" / f"seed_{app}.py").read_text(

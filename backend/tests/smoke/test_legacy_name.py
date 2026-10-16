@@ -36,7 +36,7 @@ OLD = "experi" + "mently"
 #: The reviewed size of the keep-list. A new entry is a reviewed change, so it
 #: moves these numbers in the same pull request.
 ENTRIES = 171
-KEPT = 1411
+KEPT = 1438
 EXCLUDES = [
     "CHANGELOG.md",
     "sdk/",

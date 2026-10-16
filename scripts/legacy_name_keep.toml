@@ -122,7 +122,7 @@ reason = "C9: the chart keeps its directory; every reference to it"
 [[keep]]
 path = "*"
 literal = "\"charts\" / \"experimently\""
-count = 14
+count = 17
 reason = "C9: the chart's directory, built from parts"
 
 [[keep]]
@@ -374,7 +374,7 @@ reason = "K18: names the kept variables a caller set"
 [[keep]]
 path = "*"
 literal = "experimently-api"
-count = 56
+count = 60
 reason = "K18: local image tag"
 
 [[keep]]
@@ -619,9 +619,9 @@ reason = "dated evidence is a record of a run and is never rewritten"
 
 [[keep]]
 path = "scripts/doc_claims.py"
-literal = "https://github\\.com/getexperimently/experimently/"
+literal = "EVIDENCE_REPOSITORY = (\"getexperimently/experimently\""
 count = 2
-reason = "the evidence links' repository (PR-0a replaces this with EVIDENCE_REPOSITORY)"
+reason = "the name dated evidence links were taken under; never rewritten"
 
 [[keep]]
 path = "*"
@@ -634,18 +634,6 @@ path = ".github/workflows/security-scan.yml"
 literal = "`getexperimently` org."
 count = 1
 reason = "the organisation the quoted message was printed for"
-
-[[keep]]
-path = "scripts/chart_kind.sh"
-literal = "*experimently-web:*"
-count = 1
-reason = "PR-0c resolves N-1's images per tag and removes this"
-
-[[keep]]
-path = "scripts/chart_kind.sh"
-literal = "*experimently:*"
-count = 1
-reason = "PR-0c resolves N-1's images per tag and removes this"
 
 [[keep]]
 path = "modules/backend/tests/live_warehouse/harness.py"
@@ -664,6 +652,18 @@ path = "CLAUDE.md"
 literal = "getexperimently/experimently-internal"
 count = 2
 reason = "the private repository's name until it moves after the window"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_repository_guards.py"
+literal = "experimently"
+count = 4
+reason = "the former slug's own gate: it names the slug and plants it (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_repository_guards.py"
+literal = "Experimently"
+count = 8
+reason = "the former slug's own gate: it names the slug and plants it (this file, whole; its count is pinned)"
 
 [[keep]]
 path = "docs/self-hosting/releases.md"
@@ -777,7 +777,7 @@ reason = "a test's name, about EXPERIMENTLY_PROFILE (K12)"
 path = "backend/tests/unit/scripts/test_qa_render.py"
 literal = "getexperimently/experimently-other"
 count = 2
-reason = "PR-0a rewrites this test"
+reason = "a run link of another repository, refused"
 
 [[keep]]
 path = "backend/tests/unit/docs/test_release_identity_regexp.py"
@@ -794,7 +794,7 @@ reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)
 [[keep]]
 path = "*"
 literal = "github.com/getexperimently/experimently/sdk/go"
-count = 16
+count = 18
 reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
 
 [[keep]]
@@ -824,7 +824,7 @@ reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)
 [[keep]]
 path = "*"
 literal = "com/getexperimently"
-count = 35
+count = 39
 reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
 
 [[keep]]
@@ -950,7 +950,7 @@ reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)
 [[keep]]
 path = "backend/tests/unit/docs/test_doc_claims.py"
 literal = "experimently"
-count = 3
+count = 7
 reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
 
 [[keep]]

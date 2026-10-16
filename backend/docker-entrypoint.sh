@@ -127,7 +127,7 @@ export POSTGRES_SERVER POSTGRES_PORT POSTGRES_USER POSTGRES_DB
 #     read-only /tmp the processes this script starts still get the variable,
 #     and the line below says the rest do not.
 # -------------------------------------------------------------------------
-openssl_marker="${TMPDIR:-/tmp}/experimently-openssl-armcap0"
+openssl_marker="${TMPDIR:-/tmp}/controlvar-openssl-armcap0"
 rm -f "$openssl_marker" 2>/dev/null \
     || log "could not remove ${openssl_marker}; a process started with exec may get OPENSSL_armcap=0 from an earlier start"
 if [ -z "${OPENSSL_armcap:-}" ]; then

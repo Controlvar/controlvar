@@ -317,6 +317,52 @@ def test_a_tag_with_no_charts_fails_closed(sandbox):
     assert "::error::N-1 cannot be resolved: v0.17.0 has no charts/" in result.stdout
 
 
+def test_a_repository_under_another_parent_is_not_the_images(sandbox):
+    """values_repo reads image.<component>.repository only: an api/web block
+    under another top-level key, before image:, is not N-1's image."""
+    tmp, env = sandbox
+    values = (
+        "sidecar:\n  api:\n    repository: ghcr.io/example/wrong\n"
+        "  web:\n    repository: ghcr.io/example/wrong-web\n"
+        + _values(OLD_API, OLD_WEB)
+    )
+    _tree(tmp / "trees", "0.17.0", values=values)
+    result, _ = _run(
+        _harness(
+            extra='tag_images 0.17.0\nprintf "%s|%s\\n" "$TAG_API_REPO" "$TAG_WEB_REPO"\n'
+        ),
+        tmp,
+        env,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip().splitlines()[-1] == f"{OLD_API}|{OLD_WEB}"
+
+
+def test_a_tag_that_cannot_be_fetched_fails_closed(sandbox):
+    tmp, env = sandbox
+    _tree(tmp / "trees", "0.17.0")
+    _stub(
+        tmp / "bin",
+        "git",
+        """\
+        printf 'git %s\\n' "$*" >>"$LOG"
+        case "$1" in
+            fetch) printf 'fatal: could not read from remote\\n' >&2; exit 128 ;;
+            *) exit 64 ;;
+        esac
+        """,
+    )
+    result, _ = _run(
+        _harness(extra="tag_images 0.17.0\nprintf 'still-running\\n'\n"), tmp, env
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "still-running" not in result.stdout
+    assert (
+        "::error::N-1 cannot be resolved: tag v0.17.0 could not be fetched"
+        in result.stdout
+    )
+
+
 def test_the_parser_reads_this_checkouts_own_chart(sandbox):
     # The real chart, served as a tag's tree: what tag_images reads equals what
     # a YAML parser reads, so a restructured values.yaml fails here first.

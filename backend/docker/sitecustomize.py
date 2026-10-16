@@ -20,6 +20,6 @@ probe did not crash on -- it does nothing.
 import os
 
 if os.path.exists(
-    os.path.join(os.environ.get("TMPDIR") or "/tmp", "experimently-openssl-armcap0")
+    os.path.join(os.environ.get("TMPDIR") or "/tmp", "controlvar-openssl-armcap0")
 ):
     os.environ.setdefault("OPENSSL_armcap", "0")
