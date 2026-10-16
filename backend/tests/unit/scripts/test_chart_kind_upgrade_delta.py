@@ -54,5 +54,5 @@ def test_nothing_reads_this_prs_revisions_through_the_shared_tag():
     assert '$PROFILE-$(app_version)" >"$WORK/revisions-this"' not in body
     assert body.count('>"$WORK/revisions-this"') == 1
     # N-1's revisions come from the job's private local tag, which nothing
-    # else writes.
-    assert 'revisions "$API_REPO:$ltag" >"$WORK/revisions-previous"' in body
+    # else writes, under the api repository N-1's own chart names.
+    assert 'revisions "$papi:$ltag" >"$WORK/revisions-previous"' in body
