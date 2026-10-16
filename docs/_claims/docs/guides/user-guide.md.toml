@@ -346,11 +346,27 @@ text = "Add your daily users to see roughly how many days that takes."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The estimate is advisory and is not saved."
-by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+text = "The smallest change worth detecting (the minimum detectable effect) is saved with the experiment, and the results page's Planned sample plans for it; leave it blank and the results page plans for 5%."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::typed without an estimate: saved on the primary metric only, and Review says so",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::left blank: nothing is saved, and Review says the results page plans for 5%",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_the_planned_sample_uses_the_primary_metrics_planned_effect",
+    "test:backend/tests/integration/api/test_planned_sample_effect.py::test_with_no_saved_effect_the_plan_is_for_the_default_and_says_so",
+]
 
 [[unit]]
-text = "It plans each comparison at 1 − the confidence level and makes no correction for comparing several variants, so with three or more variants and a correction the experiment needs more users than it says."
+text = "An effect below 0.1%, or of 100% or more, cannot be saved, and Next says so."
+by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx::an effect %s refuses Next with the step error, and is never dropped silently"]
+
+[[unit]]
+text = "The rest of the estimate is a guide and is not saved: the results page plans from the control variant's own conversion rate, at 80% power."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::keeps the estimate across Back and Next, and puts only its effect in the create request",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::says on the Estimate step what is saved and what is not",
+]
+
+[[unit]]
+text = "The estimate plans each comparison at 1 − the confidence level and makes no correction for comparing several variants, so with three or more variants and a correction the experiment needs more users than it says."
 by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
 
 [[unit]]
@@ -360,6 +376,14 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "Check the summary, including each variant's configuration and the Analysis row (for example \"95% confidence · Benjamini-Hochberg correction\", with \"· Bayesian analysis on\" when it is on), use Edit to go back to any step, then press Create Experiment."
 by = ["journey:experiment-results#estimate-next"]
+
+[[unit]]
+text = "The Sample size row says exactly what is saved: the minimum detectable effect, if you entered one, and nothing else from the estimate."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::typed without an estimate: saved on the primary metric only, and Review says so",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::left blank: nothing is saved, and Review says the results page plans for 5%",
+    "journey:experiment-wizard#estimate-next",
+]
 
 [[unit]]
 text = "The experiment is created as a draft and you land on its page."

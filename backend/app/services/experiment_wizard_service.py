@@ -390,6 +390,9 @@ class ExperimentWizardService:
                 "event_name": metric_name,
                 "metric_type": "conversion",
                 "is_primary": True,
+                # The effect the sample_size step planned for: the results
+                # page's Planned sample plans the primary metric for it (#1257).
+                "expected_effect": draft.mde,
             }
         ] + [
             {

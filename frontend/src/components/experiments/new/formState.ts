@@ -15,6 +15,7 @@ import {
   DEFAULT_CONFIDENCE_LEVEL,
   DEFAULT_CORRECTION_METHOD,
 } from '@/components/results/shared/analysisSettings';
+import { plannedEffectFraction, plannedEffectProblem } from './estimate';
 
 export function generateKey(name: string): string {
   return name
@@ -60,6 +61,14 @@ export interface ExperimentFormState {
   correctionMethod: CorrectionMethod;
   /** Also analyse the primary metric with Bayesian statistics (#216); saved with the experiment. */
   bayesianEnabled: boolean;
+  /**
+   * The minimum detectable effect typed on guided setup's Estimate step, in
+   * percent and RELATIVE (10 means 5% -> 5.5%), as typed. When usable it is
+   * saved as the primary metric's `expected_effect` (10 -> 0.1), and the
+   * results page plans the sample for it (#1257). Blank saves nothing. It is
+   * here, not in the estimate panel, so switching views keeps it.
+   */
+  plannedEffectPct: string;
 }
 
 const DEFAULT_VARIANTS: VariantFormData[] = [
@@ -86,6 +95,7 @@ export function createInitialFormState(): ExperimentFormState {
     confidenceLevel: DEFAULT_CONFIDENCE_LEVEL,
     correctionMethod: DEFAULT_CORRECTION_METHOD,
     bayesianEnabled: false,
+    plannedEffectPct: '',
   };
 }
 
@@ -261,10 +271,12 @@ export type FormStep = (typeof FORM_STEPS)[number];
 /**
  * The first problem with the part of the form one step asks for, or null.
  *
- * `type` always has a valid value, and so do the confidence level and the
- * correction on `estimate` (the rest of that step is not sent), so neither can
- * fail; `review` is the whole-form check. Every message is one `validateForm`
- * can return, and the form is valid exactly when every step is.
+ * `type` always has a valid value and cannot fail. `estimate` fails only on a
+ * minimum detectable effect that is typed but cannot be saved (blank is fine;
+ * the rest of that step is not sent). `review` is the whole-form check, and
+ * every other message is one `validateForm` can return. The single-page form
+ * does not ask for the effect, so `validateForm` does not check it, and
+ * `buildCreatePayload` sends only a usable one.
  */
 export function validateStep(step: FormStep, state: ExperimentFormState): string | null {
   switch (step) {
@@ -275,7 +287,7 @@ export function validateStep(step: FormStep, state: ExperimentFormState): string
     case 'variants':
       return checkVariants(state.variants);
     case 'estimate':
-      return null;
+      return plannedEffectProblem(state.plannedEffectPct);
     case 'review':
       return validateForm(state.name, state.variants, state.metrics);
   }
@@ -296,9 +308,15 @@ export function maxReachableStep(state: ExperimentFormState): number {
 
 // --- payload -----------------------------------------------------------------
 
-/** The `POST /api/v1/experiments` body for the form as it stands. */
+/**
+ * The `POST /api/v1/experiments` body for the form as it stands.
+ *
+ * A usable planned effect goes on the primary metric only, as
+ * `expected_effect`; with none, no metric carries the key at all.
+ */
 export function buildCreatePayload(state: ExperimentFormState): CreateExperimentRequest {
   const { name, key, description, hypothesis, type, rules, variants, metrics } = state;
+  const plannedEffect = plannedEffectFraction(state.plannedEffectPct);
   const payload: CreateExperimentRequest = {
     name: name.trim(),
     key: (key || generateKey(name)).trim() || undefined,
@@ -320,12 +338,16 @@ export function buildCreatePayload(state: ExperimentFormState): CreateExperiment
       }
       return variant;
     }),
-    metrics: metrics.map((m) => ({
-      name: m.name.trim(),
-      event_name: m.event_name.trim(),
-      metric_type: m.metric_type,
-      is_primary: m.is_primary,
-    })),
+    metrics: metrics.map((m) => {
+      const metric: CreateExperimentRequest['metrics'][number] = {
+        name: m.name.trim(),
+        event_name: m.event_name.trim(),
+        metric_type: m.metric_type,
+        is_primary: m.is_primary,
+      };
+      if (m.is_primary && plannedEffect !== undefined) metric.expected_effect = plannedEffect;
+      return metric;
+    }),
     confidence_level: state.confidenceLevel,
     correction_method: state.correctionMethod,
   };
@@ -345,6 +367,7 @@ export type ExperimentFormAction =
   | { type: 'setConfidenceLevel'; confidenceLevel: number }
   | { type: 'setCorrectionMethod'; correctionMethod: CorrectionMethod }
   | { type: 'setBayesianEnabled'; bayesianEnabled: boolean }
+  | { type: 'setPlannedEffect'; plannedEffectPct: string }
   | { type: 'addVariant' }
   | { type: 'removeVariant'; index: number }
   | {
@@ -386,6 +409,8 @@ export function experimentFormReducer(
       return { ...state, correctionMethod: action.correctionMethod };
     case 'setBayesianEnabled':
       return { ...state, bayesianEnabled: action.bayesianEnabled };
+    case 'setPlannedEffect':
+      return { ...state, plannedEffectPct: action.plannedEffectPct };
 
     case 'addVariant':
       return {

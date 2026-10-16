@@ -10,6 +10,14 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.34.3](https://github.com/getexperimently/experimently/compare/v0.34.2...v0.34.3) (2026-10-16)
+
+
+### Bug Fixes
+
+* **dashboard:** the experiment wizard saves the minimum detectable effect it sized the test with ([#1259](https://github.com/getexperimently/experimently/issues/1259)) ([06a564b](https://github.com/getexperimently/experimently/commit/06a564b9e557e0ca93118fe301ddc4e7b4d3bc5f))
+* **results:** the Planned sample plans with the effect saved with the experiment ([#1260](https://github.com/getexperimently/experimently/issues/1260)) ([0c97732](https://github.com/getexperimently/experimently/commit/0c977325a9aeef0f0a1960a1a93011077cd59d27))
+
 ## [0.34.2](https://github.com/getexperimently/experimently/compare/v0.34.1...v0.34.2) (2026-10-15)
 
 

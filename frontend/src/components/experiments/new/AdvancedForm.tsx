@@ -10,6 +10,25 @@ import { CreateError, footMessage } from './createErrors';
 import { TargetingProblems } from './TargetingProblems';
 import { AnalysisSettingsFields } from './AnalysisSettingsFields';
 import { correctionName, formatConfidence } from '@/components/results/shared/analysisSettings';
+import { formatEffect, plannedEffectFraction, plannedEffectProblem } from './estimate';
+
+/**
+ * The minimum detectable effect typed in guided setup, as this form shows it:
+ * read-only, because only guided setup asks for it. Nothing when none was typed.
+ */
+function PlannedEffectLine({ plannedEffectPct }: { plannedEffectPct: string }) {
+  if (plannedEffectPct.trim() === '') return null;
+  const fraction = plannedEffectFraction(plannedEffectPct);
+  return (
+    <p className="text-sm text-slate-700" data-testid="advanced-planned-effect">
+      {fraction !== undefined
+        ? `Minimum detectable effect: ${formatEffect(fraction)} (from guided setup; saved)`
+        : `The minimum detectable effect typed in guided setup is not saved: ${plannedEffectProblem(
+            plannedEffectPct,
+          )} Change it there, or leave it blank.`}
+    </p>
+  );
+}
 
 interface AdvancedFormProps {
   state: ExperimentFormState;
@@ -59,6 +78,7 @@ export function AdvancedForm({
       {/* Metrics */}
       <section className="bg-white rounded-lg border border-slate-200 p-6 space-y-4" data-testid="metrics-section">
         <MetricsEditor metrics={state.metrics} dispatch={dispatch} />
+        <PlannedEffectLine plannedEffectPct={state.plannedEffectPct} />
       </section>
 
       {/* Analysis settings: collapsed, with the current values in the summary,

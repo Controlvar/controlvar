@@ -251,6 +251,8 @@ describe('guided setup sends exactly the request the single-page form sends', ()
     const guided = wire(await createThroughGuided());
     expect(guided).toStrictEqual(advanced);
     expect(guided).toStrictEqual(PARITY_LITERAL);
+    // No effect typed: the body is byte for byte the one sent before #1257.
+    expect(JSON.stringify(guided)).toBe(JSON.stringify(PARITY_LITERAL));
     // Verbatim: the configuration is the object the typed text parses to, in both views.
     const sent = (advanced as typeof PARITY_LITERAL).variants[2].configuration;
     expect(sent).toStrictEqual(JSON.parse(PARITY_CONFIGURATION_TEXT));
@@ -759,7 +761,7 @@ describe('the Estimate step', () => {
     expect(screen.getByTestId('estimate-stale')).toBeInTheDocument();
   });
 
-  it('keeps the estimate across Back and Next, and never puts it in the create request', async () => {
+  it('keeps the estimate across Back and Next, and puts only its effect in the create request', async () => {
     api();
     await toEstimate();
     setValue('estimate-baseline', '12');
@@ -770,12 +772,19 @@ describe('the Estimate step', () => {
     back();
     next();
     expect(screen.getByTestId('estimate-baseline')).toHaveValue(12);
+    expect(screen.getByTestId('estimate-mde')).toHaveValue(5);
     expect(screen.getByTestId('estimate-per-variant')).toBeInTheDocument();
     next();
-    expect(screen.getByTestId('review-estimate')).toHaveTextContent('47,036 users per variant');
+    expect(screen.getByTestId('review-estimate').textContent).toBe(
+      '47,036 users per variant to detect a 5% lift. The 5% is saved; the rest of the estimate is not.',
+    );
     fireEvent.click(screen.getByTestId('wizard-create'));
     await waitFor(() => expect(mockRouter.push).toHaveBeenCalled());
-    const text = JSON.stringify(postedBody());
+    const body = postedBody() as { metrics: Record<string, unknown>[] };
+    expect(body.metrics).toStrictEqual([
+      { name: 'Conversion', event_name: 'conversion', metric_type: 'conversion', is_primary: true, expected_effect: 0.05 },
+    ]);
+    const text = JSON.stringify(body);
     expect(text).not.toMatch(/baseline|detectable|power|significance|daily|47036|5000/);
   });
 
@@ -792,6 +801,153 @@ describe('the Estimate step', () => {
     const seen = mockedApiFetch.mock.calls.map(([p, o]) => `${(o?.method ?? 'GET').toUpperCase()} ${p}`);
     expect(seen).toEqual([`GET ${SAMPLE_SIZE_PATH}`, 'POST /api/v1/experiments']);
     expect(seen.join(' ')).not.toContain('/wizard');
+  });
+});
+
+describe('the minimum detectable effect is saved with the experiment (#1257)', () => {
+  /** Guided setup to the Estimate step, with a second, non-primary metric. */
+  function toEstimateWithTwoMetrics() {
+    render(<NewExperimentPage />);
+    next();
+    setValue('experiment-name', 'Planned');
+    fireEvent.click(screen.getByTestId('add-metric'));
+    setValue('metric-name-1', 'Refund');
+    setValue('metric-event-1', 'refund');
+    next();
+    next();
+    expect(heading()).toHaveTextContent(STEP_HEADINGS.estimate);
+  }
+
+  const PRIMARY = { name: 'Conversion', event_name: 'conversion', metric_type: 'conversion', is_primary: true };
+  const SECONDARY = { name: 'Refund', event_name: 'refund', metric_type: 'conversion', is_primary: false };
+
+  it('says on the Estimate step what is saved and what is not', async () => {
+    await toEstimate();
+    expect(screen.getByRole('heading', { level: 3 }).textContent).toBe('Sample size estimate (optional)');
+    expect(screen.getByTestId('estimate-intro').textContent).toBe(
+      'The minimum detectable effect you enter is saved with the experiment, and its results page plans the ' +
+        'sample for it. The rest of this estimate is a guide and is not saved: the results page plans from the ' +
+        "control variant's own conversion rate, at 80% power. This estimate plans at 5% significance, from the " +
+        'confidence level above.',
+    );
+    expect(document.getElementById('estimate-mde-help')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      '5% means 12% → 12.6%, not 17%. Saved with the experiment; leave it blank and the results page plans for 5%.',
+    );
+  });
+
+  it('typed without an estimate: saved on the primary metric only, and Review says so', async () => {
+    api();
+    toEstimateWithTwoMetrics();
+    setValue('estimate-mde', '10');
+    next();
+    expect(screen.getByTestId('review-estimate').textContent).toBe(
+      'Minimum detectable effect: 10% (saved). No estimate calculated for these inputs.',
+    );
+    fireEvent.click(screen.getByTestId('wizard-create'));
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/experiments/exp-9'));
+    expect((postedBody() as { metrics: unknown[] }).metrics).toStrictEqual([
+      { ...PRIMARY, expected_effect: 0.1 },
+      SECONDARY,
+    ]);
+  });
+
+  it('an estimate made for other inputs is not shown on Review; the effect still is', async () => {
+    api();
+    await toEstimate();
+    setValue('estimate-baseline', '12');
+    setValue('estimate-mde', '5');
+    fireEvent.click(screen.getByTestId('estimate-calculate'));
+    await screen.findByTestId('estimate-per-variant');
+    setValue('estimate-mde', '7');
+    next();
+    expect(screen.getByTestId('review-estimate').textContent).toBe(
+      'Minimum detectable effect: 7% (saved). No estimate calculated for these inputs.',
+    );
+  });
+
+  it('left blank: nothing is saved, and Review says the results page plans for 5%', async () => {
+    api();
+    toEstimateWithTwoMetrics();
+    next();
+    expect(screen.getByTestId('review-estimate').textContent).toBe(
+      'No minimum detectable effect set; the results page will plan for 5%.',
+    );
+    fireEvent.click(screen.getByTestId('wizard-create'));
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalled());
+    const body = postedBody();
+    expect((body as { metrics: unknown[] }).metrics).toStrictEqual([PRIMARY, SECONDARY]);
+    expect(JSON.stringify(body)).not.toContain('expected_effect');
+  });
+
+  it.each([
+    ['below 0.1%', '0.05', ESTIMATE_PROBLEMS.mde],
+    ['negative', '-5', ESTIMATE_PROBLEMS.mde],
+    ['100%', '100', ESTIMATE_PROBLEMS.mdeHigh],
+    ['above 100%', '150', ESTIMATE_PROBLEMS.mdeHigh],
+  ])('an effect %s refuses Next with the step error, and is never dropped silently', async (_label, typed, problem) => {
+    api();
+    await toEstimate();
+    setValue('estimate-mde', typed);
+    next();
+    expect(heading()).toHaveTextContent(STEP_HEADINGS.estimate);
+    expect(screen.getByTestId('step-error')).toHaveTextContent(problem);
+    expect(screen.getByTestId('wizard-next')).toHaveAttribute('aria-describedby', 'wizard-step-error');
+    setValue('estimate-mde', '10');
+    next();
+    expect(heading()).toHaveTextContent(STEP_HEADINGS.review);
+    expect(mockedApiFetch).not.toHaveBeenCalled();
+  });
+
+  it('carries over to the single-page form, read-only, follows the primary metric, and comes back', async () => {
+    api();
+    const { rerender } = render(<NewExperimentPage />);
+    next();
+    setValue('experiment-name', 'Switched');
+    fireEvent.click(screen.getByTestId('add-metric'));
+    setValue('metric-name-1', 'Refund');
+    setValue('metric-event-1', 'refund');
+    next();
+    next();
+    setValue('estimate-mde', '10');
+    mockRouter.query = { advanced: '' };
+    rerender(<NewExperimentPage />);
+    expect(screen.getByTestId('advanced-planned-effect').textContent).toBe(
+      'Minimum detectable effect: 10% (from guided setup; saved)',
+    );
+    expect(screen.queryByTestId('estimate-mde')).not.toBeInTheDocument();
+    mockRouter.query = {};
+    rerender(<NewExperimentPage />);
+    // Back to guided setup: the step is the address's, and the effect is still typed.
+    mockRouter.query = { step: 'estimate' };
+    rerender(<NewExperimentPage />);
+    expect(screen.getByTestId('estimate-mde')).toHaveValue(10);
+    mockRouter.query = { advanced: '' };
+    rerender(<NewExperimentPage />);
+    fireEvent.click(screen.getByTestId('metric-primary-1'));
+    fireEvent.click(screen.getByTestId('submit-experiment'));
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/experiments/exp-9'));
+    expect((postedBody() as { metrics: unknown[] }).metrics).toStrictEqual([
+      { ...PRIMARY, is_primary: false },
+      { ...SECONDARY, is_primary: true, expected_effect: 0.1 },
+    ]);
+  });
+
+  it('an unusable effect carried to the single-page form is named there as not saved, and not sent', async () => {
+    api();
+    const { rerender } = render(<NewExperimentPage />);
+    next();
+    setValue('experiment-name', 'Switched');
+    next();
+    next();
+    setValue('estimate-mde', '150');
+    mockRouter.query = { advanced: '' };
+    rerender(<NewExperimentPage />);
+    expect(screen.getByTestId('advanced-planned-effect').textContent).toBe(
+      `The minimum detectable effect typed in guided setup is not saved: ${ESTIMATE_PROBLEMS.mdeHigh} Change it there, or leave it blank.`,
+    );
+    fireEvent.click(screen.getByTestId('submit-experiment'));
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalled());
+    expect(JSON.stringify(postedBody())).not.toContain('expected_effect');
   });
 });
 
