@@ -239,11 +239,22 @@ def test_every_sdk_journey_exists_and_holds_two_users():
     assert all(len(users) == 2 for users in seen.values()), seen
 
 
+#: The versions the pages install: each SDK's manifest, not a copy of it here.
+JS_VERSION = json.loads((REPO_ROOT / "sdk" / "js" / "package.json").read_text())[
+    "version"
+]
+PY_VERSION = re.search(
+    r'^__version__ = "([^"]+)"$',
+    (REPO_ROOT / "sdk" / "python" / "controlvar" / "version.py").read_text(),
+    re.M,
+).group(1)
+
+
 @pytest.mark.parametrize(
     "page, language, tool, package, version",
     [
-        ("sdk/javascript.md", "typescript", "npm", "@controlvar/js-sdk", "0.1.0"),
-        ("sdk/python.md", "python", "pip", "controlvar", "0.1.0"),
+        ("sdk/javascript.md", "typescript", "npm", "@controlvar/js-sdk", JS_VERSION),
+        ("sdk/python.md", "python", "pip", "controlvar", PY_VERSION),
         ("sdk/go.md", "go", "go", "github.com/controlvar/controlvar/sdk/go", ""),
     ],
 )

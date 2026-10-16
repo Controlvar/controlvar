@@ -8,7 +8,7 @@ text = "Python SDK"
 by = ["exempt:label"]
 
 [[unit]]
-text = "controlvar (v0.1.0) is a synchronous, dependency-free Python client for the Controlvar public API: experiment assignment, feature-flag evaluation and event tracking."
+text = "controlvar (v0.1.1) is a synchronous, dependency-free Python client for the Controlvar public API: experiment assignment, feature-flag evaluation and event tracking."
 by = [
     "mechanism:sdk-doc-versions",
     "test:sdk/python/tests/test_package.py::test_the_client_is_synchronous",
@@ -62,7 +62,7 @@ by = [
 ]
 
 [[unit]]
-text = "0.1.0 is a beta release."
+text = "0.1.1 is a beta release."
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-python#quick-start-user-on",

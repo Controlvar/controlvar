@@ -67,7 +67,7 @@ by = [
 ]
 
 [[unit]]
-text = "0.1.0 is a beta release."
+text = "0.1.1 is a beta release."
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-javascript#quick-start-user-on",

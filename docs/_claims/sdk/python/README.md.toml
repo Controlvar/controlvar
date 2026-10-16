@@ -61,7 +61,7 @@ text = "The controlvar package is on PyPI."
 by = ["journey:sdk-python#quick-start-user-on"]
 
 [[unit]]
-text = "0.1.0 is a beta release."
+text = "0.1.1 is a beta release."
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-python#quick-start-user-on",

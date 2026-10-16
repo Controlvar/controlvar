@@ -365,7 +365,7 @@ by = ["exempt:label"]
 count = 3
 
 [[unit]]
-text = "The controlvar package is on PyPI (0.1.0, beta):"
+text = "The controlvar package is on PyPI (0.1.1, beta):"
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-python#quick-start-user-on",
@@ -508,7 +508,7 @@ text = "For React apps use the React SDK instead."
 by = ["exempt:advice"]
 
 [[unit]]
-text = "The @controlvar/js-sdk package is on npm (0.1.0, beta):"
+text = "The @controlvar/js-sdk package is on npm (0.1.1, beta):"
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-javascript#quick-start-user-on",
@@ -519,7 +519,7 @@ text = "To work on the SDK itself, build it from a clone of this repository inst
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "npm pack writes controlvar-js-sdk-0.1.0.tgz:"
+text = "npm pack writes controlvar-js-sdk-0.1.1.tgz:"
 by = ["mechanism:sdk-doc-versions"]
 
 [[unit]]

@@ -3,8 +3,8 @@
 By default every flag evaluation is a request to the API. **Local evaluation** lets a server-side
 process download the flag ruleset once, refresh it in the background, and answer flags in-process
 with no request per evaluation. It is opt-in, and it is available in the **JavaScript SDK**
-(`@controlvar/js-sdk` 0.1.0, `evaluation: 'local'`) and the **Python SDK** (`controlvar`
-0.1.0, `evaluation="local"`). Every other SDK evaluates on the server.
+(`@controlvar/js-sdk` 0.1.1, `evaluation: 'local'`) and the **Python SDK** (`controlvar`
+0.1.1, `evaluation="local"`). Every other SDK evaluates on the server.
 
 What stays on the server in every mode: **experiments** (assignment is sticky and recorded by the
 server, so `getAssignment` / `get_assignment` and `getVariant` / `get_variant` are always requests)

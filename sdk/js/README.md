@@ -17,11 +17,11 @@ Full documentation: [`docs/sdk/javascript.md`](https://github.com/Controlvar/con
 
 If you installed `@getexperimently/js-sdk`, the name this package had before the project was renamed, uninstall it and install `@controlvar/js-sdk`.
 
-The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk). 0.1.0 is a
+The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk). 0.1.1 is a
 beta release.
 
 ```bash
-npm install @controlvar/js-sdk@0.1.0
+npm install @controlvar/js-sdk@0.1.1
 ```
 
 To work on the SDK itself, see Development below.

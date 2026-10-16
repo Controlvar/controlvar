@@ -16,11 +16,11 @@ else to install.
 
 If you installed `experimently`, the name this package had before the project was renamed, uninstall it and install `controlvar`.
 
-The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/). 0.1.0 is a
+The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/). 0.1.1 is a
 beta release. It installs and imports as `controlvar`.
 
 ```bash
-pip install controlvar==0.1.0
+pip install controlvar==0.1.1
 ```
 
 To work on the SDK itself, install it from the root of a clone of this repository instead:

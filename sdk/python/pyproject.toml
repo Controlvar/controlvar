@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "controlvar"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python client for the Controlvar public API (experiments, feature flags, event tracking)"
 readme = "README.md"
 license = {text = "MIT"}

@@ -96,10 +96,10 @@ synchronous. Full reference: [Python SDK](sdk/python.md).
 
 ### Installation
 
-The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/) (0.1.0, beta):
+The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/) (0.1.1, beta):
 
 ```bash
-pip install controlvar==0.1.0
+pip install controlvar==0.1.1
 ```
 
 To work on the SDK itself, install it from a clone of this repository instead:
@@ -191,14 +191,14 @@ Smoke against a live backend: `python sdk/python/examples/contract_smoke.py`.
 
 ### Installation
 
-The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk) (0.1.0, beta):
+The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk) (0.1.1, beta):
 
 ```bash
-npm install @controlvar/js-sdk@0.1.0
+npm install @controlvar/js-sdk@0.1.1
 ```
 
 To work on the SDK itself, build it from a clone of this repository instead. `npm pack` writes
-`controlvar-js-sdk-0.1.0.tgz`:
+`controlvar-js-sdk-0.1.1.tgz`:
 
 ```bash
 cd sdk/js
@@ -208,7 +208,7 @@ npm ci && npm run build && npm pack
 Then, in your app, install the packed tarball:
 
 ```bash
-npm install /path/to/controlvar/sdk/js/controlvar-js-sdk-0.1.0.tgz
+npm install /path/to/controlvar/sdk/js/controlvar-js-sdk-0.1.1.tgz
 ```
 
 ### Quick Start
