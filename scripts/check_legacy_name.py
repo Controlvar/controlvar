@@ -27,7 +27,10 @@ sides of that line:
              the Spring property prefix do not match. Not seen: a bare
              attribute use with no import on the same line (``<old>.local``
              in prose), a module name built from a variable, or a path whose
-             parts are on different lines.
+             parts are on different lines; nor ``Path("python") / "<old>"``,
+             ``__import__("<old>")`` or ``>>> import os, <old>``. A Go alias
+             whose path is a backtick string (``import <old> `...` ``) is
+             reported, though it is not Python.
 
 The keep-list is ``scripts/legacy_name_keep.toml``. Each entry names a path
 (an exact path, or an ``fnmatch`` pattern), an exact case-sensitive literal
