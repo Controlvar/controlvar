@@ -2,15 +2,22 @@
 Names, labels, image references, and the refusals the schema cannot express.
 */}}
 
+{{/*
+The stem of every object name and of the app.kubernetes.io/name selector label.
+It is written here, not taken from .Chart.Name, so that renaming the chart does
+not rename the objects: `helm upgrade` would otherwise create new ones beside
+the old, including a postgres StatefulSet with a new, empty volume claim.
+Pinned by backend/tests/unit/chart/test_chart_rename.py.
+*/}}
 {{- define "experimently.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
+{{- default "experimently" .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{- define "experimently.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
-{{- $name := default .Chart.Name .Values.nameOverride }}
+{{- $name := default "experimently" .Values.nameOverride }}
 {{- if contains $name .Release.Name }}
 {{- .Release.Name | trunc 63 | trimSuffix "-" }}
 {{- else }}
