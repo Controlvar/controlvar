@@ -202,11 +202,11 @@ PRODUCTION_COMPOSE = "deploy/compose/compose.yml"
 #: those lines may take: the published repository, the profile variable, and a
 #: literal version followed by the marker.
 COMPOSE_IMAGES = {
-    "api": "ghcr.io/getexperimently/experimently",
-    "web": "ghcr.io/getexperimently/experimently-web",
+    "api": "ghcr.io/controlvar/controlvar",
+    "web": "ghcr.io/controlvar/controlvar-web",
 }
 COMPOSE_IMAGE_LINE_RE = re.compile(
-    r"^\s*image:\s*(?P<repo>ghcr\.io/getexperimently/experimently(?:-web)?)"
+    r"^\s*image:\s*(?P<repo>ghcr\.io/controlvar/controlvar(?:-web)?)"
     r":\$\{EXPERIMENTLY_PROFILE:-core\}-(?P<version>[^\s#]+)"
     r"\s+# x-release-please-version\s*$"
 )
@@ -233,7 +233,7 @@ def read_compose_image_versions() -> dict[str, str]:
         if not match or match["repo"] not in found:
             raise AssertionError(
                 f"{PRODUCTION_COMPOSE}:{number} is not "
-                "`image: ghcr.io/getexperimently/experimently[-web]:"
+                "`image: ghcr.io/controlvar/controlvar[-web]:"
                 "${EXPERIMENTLY_PROFILE:-core}-X.Y.Z # x-release-please-version`: "
                 f"{line.strip()!r}"
             )

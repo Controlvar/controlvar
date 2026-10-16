@@ -13,7 +13,7 @@ how to test for an interaction.
   among the users in both.
 
 The pair route is beta
-([#219](https://github.com/getexperimently/experimently/issues/219)): its responses carry
+([#219](https://github.com/Controlvar/controlvar/issues/219)): its responses carry
 `"analysis_status": "beta"` and an `analysis_notice`, and the route is marked
 `x-stability: beta` in the OpenAPI document. Only each experiment's primary metric is
 tested, and only a conversion metric; pairs are tested one at a time, with no correction

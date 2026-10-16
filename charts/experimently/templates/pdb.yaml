@@ -2,13 +2,13 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "experimently.fullname" . }}-api
+  name: {{ include "controlvar.fullname" . }}-api
   labels:
-    {{- include "experimently.labels" . | nindent 4 }}
+    {{- include "controlvar.labels" . | nindent 4 }}
     app.kubernetes.io/component: api
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      {{- include "experimently.selectorLabels" (dict "ctx" . "component" "api") | nindent 6 }}
+      {{- include "controlvar.selectorLabels" (dict "ctx" . "component" "api") | nindent 6 }}
 {{- end }}

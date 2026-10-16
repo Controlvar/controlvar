@@ -3,7 +3,7 @@
 The pages in this directory, in the order a new reader needs them:
 
 1. [Quick start](quick-start.md) — start the local stack with Docker, then run a first experiment and a feature flag
-2. [Limitations](limitations.md) — what Experimently does not do, and what happens instead
+2. [Limitations](limitations.md) — what Controlvar does not do, and what happens instead
 3. [Core concepts](concepts.md) — experiments, variants, metrics, feature flags and targeting
 4. [Architecture overview](architecture.md) — the components and where each request goes
 5. [FAQ](faq.md)
@@ -20,4 +20,4 @@ For working on the code:
 
 ## Need Help?
 
-Ask in a [GitHub issue](https://github.com/getexperimently/experimently/issues).
+Ask in a [GitHub issue](https://github.com/Controlvar/controlvar/issues).

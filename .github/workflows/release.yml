@@ -26,7 +26,7 @@
 #
 # The image name comes from `github.repository`, so the private repository
 # rehearses to ghcr.io/amarkanday/experimentation-platform and the public one
-# publishes to ghcr.io/getexperimently/experimently with no edit at the cut.
+# publishes to ghcr.io/controlvar/controlvar with no edit at the cut.
 name: Release
 
 on:

@@ -335,7 +335,7 @@ once the problem is fixed writes it once.
 release writes them (`role_unassign` is written only with the modules installed).
 Granting and revoking a direct permission are not recorded because no permission check
 reads direct grants yet
-([#891](https://github.com/getexperimently/experimently/issues/891)).
+([#891](https://github.com/Controlvar/controlvar/issues/891)).
 
 ### Changes the platform makes on its own
 

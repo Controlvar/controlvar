@@ -145,7 +145,7 @@ def test_the_first_run_installs_the_python_and_node_dependencies_and_seeds_the_d
 
 def test_the_ready_box_gives_the_addresses_and_the_admin_account():
     text = _script(SETUP_LOCAL)
-    box = text[text.index("Experimently Demo — Ready!") :]
+    box = text[text.index("Controlvar Demo — Ready!") :]
     for line in (
         "Frontend:    http://localhost:3100",
         "ShopLab:     http://localhost:3200",

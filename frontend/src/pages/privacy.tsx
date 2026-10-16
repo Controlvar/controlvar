@@ -2,9 +2,9 @@ import { PageTitle } from '@/components/PageTitle';
 import { CONTACT_EMAIL } from '@/utils/site-mode';
 
 /**
- * The privacy notice for the website at getexperimently.com.
+ * The privacy notice for the website at controlvar.com.
  *
- * It covers the website only, not the platform: a self-hosted Experimently
+ * It covers the website only, not the platform: a self-hosted Controlvar
  * keeps its data on its operator's own infrastructure, and that is not
  * described here.
  *
@@ -20,7 +20,7 @@ export default function PrivacyPage() {
     <>
       <PageTitle
         title="Privacy"
-        description="What the getexperimently.com website collects: no cookies, no analytics, and the hosting provider's standard access logs."
+        description="What the controlvar.com website collects: no cookies, no analytics, and the hosting provider's standard access logs."
       />
       <div className="flex-1 bg-white">
         <article className="mx-auto max-w-3xl px-6 py-14 text-slate-700">
@@ -28,8 +28,8 @@ export default function PrivacyPage() {
           <p className="mt-2 text-sm text-slate-500">Last updated 3 October 2026.</p>
 
           <p className="mt-6 leading-relaxed">
-            This page covers the website at getexperimently.com. It does not cover a copy of
-            Experimently that you run yourself; that runs on your own infrastructure and its data
+            This page covers the website at controlvar.com. It does not cover a copy of
+            Controlvar that you run yourself; that runs on your own infrastructure and its data
             stays with you.
           </p>
 

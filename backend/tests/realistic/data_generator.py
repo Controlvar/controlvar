@@ -1,5 +1,5 @@
 """
-Domain-specific synthetic data engine for the Experimently platform.
+Domain-specific synthetic data engine for the Controlvar platform.
 
 Generates statistically realistic experimentation scenarios — not just valid
 shapes but data that behaves like the real world: baseline conversion rates,
@@ -946,7 +946,7 @@ SCENARIOS: dict[str, Optional[Callable[..., DataScenario]]] = {
 
 def main(argv: Optional[list[str]] = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Generate realistic experiment data for the Experimently platform."
+        description="Generate realistic experiment data for the Controlvar platform."
     )
     parser.add_argument(
         "--scenario",

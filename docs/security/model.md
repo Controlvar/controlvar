@@ -2,7 +2,7 @@
 
 What the API does to protect a deployment and its data, as the code does it today. To
 report a vulnerability, follow
-[SECURITY.md](https://github.com/getexperimently/experimently/blob/main/SECURITY.md).
+[SECURITY.md](https://github.com/Controlvar/controlvar/blob/main/SECURITY.md).
 
 ## Sign-in and passwords
 

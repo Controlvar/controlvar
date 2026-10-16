@@ -88,7 +88,7 @@ def test_the_settings_still_accept_a_long_password_in_production(monkeypatch):
         _env_file=None,
         ENVIRONMENT="production",
         SECRET_KEY="k" * 48,
-        PUBLIC_BASE_URL="https://experimently.example.com",
+        PUBLIC_BASE_URL="https://controlvar.example.com",
         FIRST_SUPERUSER_PASSWORD=_OVER_THE_LIMIT,
     )
     assert settings.FIRST_SUPERUSER_PASSWORD == _OVER_THE_LIMIT

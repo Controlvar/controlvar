@@ -2,13 +2,13 @@ function stripTrailingSlash(url: string): string {
   return url.replace(/\/+$/, '');
 }
 
-/** Experimently API origin. The SDK appends `/api/v1` to every request. */
+/** Controlvar API origin. The SDK appends `/api/v1` to every request. */
 export const API_URL = stripTrailingSlash(process.env.NEXT_PUBLIC_EXPERIMENTLY_API_URL || 'http://localhost:8000');
 
 /** Plaintext API key (`streampulse-app`, owned by admin@demo.com). Written by the seed script. */
 export const API_KEY = process.env.NEXT_PUBLIC_EXPERIMENTLY_API_KEY || '';
 
-/** Experimently dashboard, used by the Experimently panel's links. */
+/** Controlvar dashboard, used by the Controlvar panel's links. */
 export const DASHBOARD_URL = stripTrailingSlash(
   process.env.NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL || 'http://localhost:3100',
 );

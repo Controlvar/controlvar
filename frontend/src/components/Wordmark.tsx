@@ -6,7 +6,7 @@ interface WordmarkProps {
   className?: string;
 }
 
-/** "Experimently" wordmark. A wordmark is a wordmark: it carries no status. */
+/** "Controlvar" wordmark. A wordmark is a wordmark: it carries no status. */
 export function Wordmark({ href = '/', className = '' }: WordmarkProps) {
   const inner = (
     <span className={`inline-flex items-center gap-2 ${className}`}>
@@ -16,13 +16,13 @@ export function Wordmark({ href = '/', className = '' }: WordmarkProps) {
       >
         E
       </span>
-      <span className="text-lg font-semibold tracking-tight text-slate-900">Experimently</span>
+      <span className="text-lg font-semibold tracking-tight text-slate-900">Controlvar</span>
     </span>
   );
 
   if (!href) return inner;
   return (
-    <Link href={href} className="inline-flex items-center" aria-label="Experimently home">
+    <Link href={href} className="inline-flex items-center" aria-label="Controlvar home">
       {inner}
     </Link>
   );

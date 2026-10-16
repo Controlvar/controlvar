@@ -1,4 +1,4 @@
-# Experimently — common tasks.
+# Controlvar — common tasks.
 #
 #   make dev        start Postgres + Redis and run the API and dashboard locally
 #   make demo       build the images and run the whole stack in Docker

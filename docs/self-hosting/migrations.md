@@ -410,7 +410,7 @@ and the rollback record's `safety_config_id` is null. Earlier releases gave such
 a flag an empty configuration of its own at the rollback, with no thresholds, so
 the monitor stopped checking it against the defaults. Those configurations
 stay: this release does not remove them
-([#1206](https://github.com/getexperimently/experimently/issues/1206)).
+([#1206](https://github.com/Controlvar/controlvar/issues/1206)).
 
 Deleting a safety configuration keeps the flag's rollback records: their
 `safety_config_id` becomes null. Before this revision the delete took them with
@@ -632,7 +632,7 @@ Rolling back to an older image after a release that carried a migration leaves
 the database recorded at a revision the older image has no file for. Both
 documented paths refuse, exit non-zero and leave the database untouched, with a
 message naming the revision and the image's version: *this database was
-migrated by a newer Experimently release*. The two ways out are the ones it
+migrated by a newer Controlvar release*. The two ways out are the ones it
 names:
 
 - run the newer release that migrated the database, or

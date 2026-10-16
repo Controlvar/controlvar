@@ -31,7 +31,7 @@ GOOD = {
     "ENVIRONMENT": "production",
     "SECRET_KEY": _KEY,
     "FIRST_SUPERUSER_PASSWORD": _PASSWORD,
-    "PUBLIC_BASE_URL": "https://experimently.example.com",
+    "PUBLIC_BASE_URL": "https://controlvar.example.com",
     "AUDIT_HMAC_KEY": _KEY[::-1],
     "POSTGRES_SERVER": "db.internal",
 }
@@ -81,7 +81,7 @@ def test_nothing_set_lists_every_required_setting_at_once():
     ]
     text = preflight.render(problems)
     assert text.startswith(
-        "[preflight] Experimently cannot start: 5 settings need attention.\n"
+        "[preflight] Controlvar cannot start: 5 settings need attention.\n"
     )
     assert text.count("\n  - ") == 5
     assert "continuing on the core profile" not in text
@@ -99,7 +99,7 @@ def test_the_core_profile_does_not_ask_for_the_audit_key():
 def test_main_exits_78_and_prints_the_list(capsys):
     assert preflight.main({"ENVIRONMENT": "staging"}) == preflight.EX_CONFIG == 78
     err = capsys.readouterr().err
-    assert "[preflight] Experimently cannot start" in err
+    assert "[preflight] Controlvar cannot start" in err
     assert "SECRET_KEY" in err and "POSTGRES_SERVER" in err
 
 
@@ -139,13 +139,13 @@ def test_each_secret_refusal_names_the_setting_and_how_to_generate_it(
 @pytest.mark.regression
 def test_public_base_url_missing_gives_the_dashboard_url_as_the_example():
     message = only_problem(check(with_(PUBLIC_BASE_URL=None)), "PUBLIC_BASE_URL")
-    assert "https://experimently.example.com" in message
+    assert "https://controlvar.example.com" in message
     assert "api." not in message
 
 
 @pytest.mark.parametrize(
     "url",
-    ["experimently.example.com", "ftp://x.example.com", "https://x.example.com/app"],
+    ["controlvar.example.com", "ftp://x.example.com", "https://x.example.com/app"],
 )
 def test_a_malformed_public_base_url_is_refused(url):
     message = only_problem(check(with_(PUBLIC_BASE_URL=url)), "PUBLIC_BASE_URL")

@@ -1020,7 +1020,7 @@ text = "Rolling back to an older image after a release that carried a migration 
 by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated"]
 
 [[unit]]
-text = "Both documented paths refuse, exit non-zero and leave the database untouched, with a message naming the revision and the image's version: this database was migrated by a newer Experimently release."
+text = "Both documented paths refuse, exit non-zero and leave the database untouched, with a message naming the revision and the image's version: this database was migrated by a newer Controlvar release."
 by = ["exempt:baseline"]
 
 [[unit]]

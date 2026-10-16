@@ -4,7 +4,7 @@
 document = "README.md"
 
 [[unit]]
-text = "Experimently"
+text = "Controlvar"
 by = ["exempt:label"]
 
 [[unit]]
@@ -19,7 +19,7 @@ text = "The core, the optional modules and the dashboard are Apache-2.0; the cli
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit"]
 
 [[unit]]
-text = "Experimently is pre-1.0: see the releases."
+text = "Controlvar is pre-1.0: see the releases."
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_version_is_before_1_0"]
 
 [[unit]]
@@ -96,7 +96,7 @@ by = [
 ]
 
 [[unit]]
-text = "To run Experimently where others can reach it, see Self-host it."
+text = "To run Controlvar where others can reach it, see Self-host it."
 by = ["exempt:navigation"]
 
 [[unit]]

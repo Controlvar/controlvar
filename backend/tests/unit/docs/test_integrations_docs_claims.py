@@ -480,7 +480,7 @@ def test_every_claim_about_what_the_platform_does_is_on_the_list() -> None:
     [
         "The platform creates a GitHub issue for each experiment.",
         "A Salesforce campaign is updated automatically when an experiment completes.",
-        "Experimently opens a pull request for every rollout.",
+        "Controlvar opens a pull request for every rollout.",
         "Results are pushed to Jira by the platform.",
         "| `project_key` | Default project for issues the platform creates |",
     ],

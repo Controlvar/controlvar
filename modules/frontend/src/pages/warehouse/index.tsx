@@ -262,7 +262,7 @@ function WarehousePage() {
       <PageTitle title="Warehouse" />
       <WarehouseHeader title="Warehouse" />
       <p className="mb-6 max-w-3xl text-sm text-slate-700">
-        Analyse experiments with assignment and metric data that stays in your own warehouse. Experimently sends a
+        Analyse experiments with assignment and metric data that stays in your own warehouse. Controlvar sends a
         generated query and receives aggregates back; no rows are copied.
       </p>
       {!allowed ? (

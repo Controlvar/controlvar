@@ -12,7 +12,7 @@ const INTERACTIONS_NOTICE =
   "own treatments, and is_significant uses it at the experiment's " +
   'confidence level. Pairs are tested one at a time, with no correction ' +
   'across pairs. Secondary and non-conversion metrics are not tested. ' +
-  'https://github.com/getexperimently/experimently/issues/219';
+  'https://github.com/Controlvar/controlvar/issues/219';
 
 describe('AnalysisNotice', () => {
   it('renders a Beta label, the notice text and the issue link when beta', () => {
@@ -28,7 +28,7 @@ describe('AnalysisNotice', () => {
     const link = within(region).getByRole('link', { name: 'issue #219' });
     expect(link).toHaveAttribute(
       'href',
-      'https://github.com/getexperimently/experimently/issues/219'
+      'https://github.com/Controlvar/controlvar/issues/219'
     );
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
   });
@@ -50,7 +50,7 @@ describe('AnalysisNotice', () => {
           'Beta: the stop/continue decision is mSPRT alone, at the significance ' +
           'level shown by the boundary (1/alpha). alpha_spending is always empty: ' +
           'the planned-looks (alpha-spending) table is not computed yet. ' +
-          'https://github.com/getexperimently/experimently/issues/232 ' +
+          'https://github.com/Controlvar/controlvar/issues/232 ' +
           "The configured method 'always_valid' is an alias of 'msprt'; this is the " +
           'mSPRT analysis.'
         }

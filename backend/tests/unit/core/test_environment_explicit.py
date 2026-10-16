@@ -194,7 +194,7 @@ def test_a_whole_configuration_refusal_does_not_echo_any_value(monkeypatch):
         ProdSettings(
             ENVIRONMENT="production",
             SECRET_KEY=secret,
-            PUBLIC_BASE_URL="https://experimently.example.com",
+            PUBLIC_BASE_URL="https://controlvar.example.com",
         )
     rendered = str(refused.value)
     assert "TESTING" in rendered

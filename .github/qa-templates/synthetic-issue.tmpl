@@ -8,7 +8,7 @@ Failing step: {step} of 8. Status: {status}.
 
 The check runs these eight steps in order and stops at the first one that fails:
 
-1. Ready: the API's readiness probe answers 200. If this fails, the API is down or not ready; the rollback runbook is https://github.com/getexperimently/experimently/blob/main/docs/deployment/rollback-runbook.md
+1. Ready: the API's readiness probe answers 200. If this fails, the API is down or not ready; the rollback runbook is https://github.com/Controlvar/controlvar/blob/main/docs/deployment/rollback-runbook.md
 2. Sign in: the synthetic account signs in, and the API reports it as an ANALYST that is not a superuser. If this fails, the account's password or role has changed.
 3. Key expiry: the account has exactly one active key and it expires in more than 3 days. If this fails, create a new key with an expiry, replace the stored one, then delete the old key.
 4. Results before: the canary experiment's results are read without the cache. If this fails, the API cannot compute them, or the synthetic account may no longer read them.

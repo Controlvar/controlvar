@@ -1865,13 +1865,13 @@ def test_a_search_result_is_found_by_its_page():
 # The headers: QA templates through scripts/qa_render.py
 # ---------------------------------------------------------------------------
 SHA = "c6e0f081d82f1a858e111c86db62aa5d8b8a71d4"
-LINK = "https://github.com/getexperimently/experimently/actions/runs/18000000003"
+LINK = "https://github.com/Controlvar/controlvar/actions/runs/18000000003"
 
 
 @pytest.fixture(autouse=True)
 def _run_repository(monkeypatch):
     """qa_render accepts a run link of ``GITHUB_REPOSITORY`` only: LINK's."""
-    monkeypatch.setenv("GITHUB_REPOSITORY", "getexperimently/experimently")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "Controlvar/controlvar")
 
 
 def _renderer():
@@ -1912,7 +1912,7 @@ def test_a_ci_run_renders_its_guide_header_from_the_fail_template(tmp_path):
 def test_a_ci_run_renders_pass_and_partial_headers():
     def run(*records):
         return report.GuideRun(
-            "s", "README.md", "Rollback — Experimently", "x", records=records
+            "s", "README.md", "Rollback — Controlvar", "x", records=records
         )
 
     info = report.RunInfo("2026-10-06", SHA, LINK)
@@ -1920,9 +1920,9 @@ def test_a_ci_run_renders_pass_and_partial_headers():
     name, values = report.header_template(passed, info)
     assert name == "docs-guide-pass.tmpl"
     assert values["count_steps"] == "1"
-    assert values["heading_guide"] == "Rollback - Experimently"
+    assert values["heading_guide"] == "Rollback - Controlvar"
     assert report.guide_header(passed, info).startswith(
-        "# Rollback - Experimently (README.md), 2026-10-06, commit "
+        "# Rollback - Controlvar (README.md), 2026-10-06, commit "
     )
     partial = run(_record(), _record(step=2, result="NOT RUN", reason="needs-aws"))
     name, values = report.header_template(partial, info)
@@ -1933,7 +1933,7 @@ def test_a_ci_run_renders_pass_and_partial_headers():
 @pytest.mark.parametrize(
     "text, folded",
     [
-        ("Rollback Runbook — Experimently", "Rollback Runbook - Experimently"),
+        ("Rollback Runbook — Controlvar", "Rollback Runbook - Controlvar"),
         ("Café “quoted”", 'Cafe "quoted"'),
         ("Costs $5 <b>", "Costs 5 b"),
         ("See https://example.org now", "See example.org now"),
@@ -1949,7 +1949,7 @@ def test_a_heading_is_folded_to_what_a_template_takes(text, folded):
 def test_a_failing_step_is_named_by_its_own_id_when_steps_share_a_heading():
     """The docs-site journey's steps all point at the home page's heading, so
     the heading alone says nothing about which of them failed."""
-    heading = "Experimently Documentation"
+    heading = "Controlvar Documentation"
 
     def run(failing_id: str, failing_step: int):
         steps = ["home", "nav-pages", "links", "search-quick-start"]
@@ -1986,7 +1986,7 @@ def test_a_failing_step_is_named_by_its_own_id_when_steps_share_a_heading():
     "heading, step_id, named",
     [
         ("Sign in", "sign-in", "Sign in (sign-in)"),
-        ("Rollback \u2014 Experimently", "size", "Rollback - Experimently (size)"),
+        ("Rollback \u2014 Controlvar", "size", "Rollback - Controlvar (size)"),
         ("\u2603", "size", "untitled (size)"),
         ("x" * 130, "nav-pages", "x" * 108 + " (nav-pages)"),
         ("Home", "a" * 118, "(" + "a" * 118),

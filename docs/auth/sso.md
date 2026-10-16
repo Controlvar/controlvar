@@ -6,7 +6,7 @@
 The `sso` module adds Single Sign-On (SSO) through OpenID Connect (OIDC) and OAuth 2 providers; it is part of the full profile and, like every module, Apache-2.0. An administrator creates one **SSO configuration** per email domain; users of that domain then sign in through the identity provider (IdP) instead of with a password.
 
 SSO sign-in needs `AUTH_PROVIDER=local`. When `AUTH_PROVIDER` is `cognito`, an SSO sign-in does
-not sign the user in ([#707](https://github.com/getexperimently/experimently/issues/707)).
+not sign the user in ([#707](https://github.com/Controlvar/controlvar/issues/707)).
 
 !!! warning "SAML 2.0 sign-in is not available yet; use OIDC"
     A SAML configuration can be created, and its metadata and ACS are served, but a SAML sign-in does not give the user a session. Use an OIDC configuration (`okta`, `google` or `github`) for sign-in.

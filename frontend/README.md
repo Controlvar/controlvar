@@ -1,6 +1,6 @@
-# Experimently dashboard
+# Controlvar dashboard
 
-The web dashboard for Experimently: experiments, feature flags, results and administration.
+The web dashboard for Controlvar: experiments, feature flags, results and administration.
 It is a Next.js 16 application exported as static HTML (`output: 'export'`) and served by
 nginx in the `experimently-web` image, which proxies `/api/`, `/health*` and `/ws/` to
 the API container.

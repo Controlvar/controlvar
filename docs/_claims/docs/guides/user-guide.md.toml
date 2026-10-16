@@ -8,7 +8,7 @@ text = "User Guide"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Guide for product managers, experimenters, and analysts using Experimently."
+text = "Guide for product managers, experimenters, and analysts using Controlvar."
 by = ["exempt:baseline"]
 
 [[unit]]
@@ -1367,5 +1367,5 @@ text = "Technical Guide: See Technical Guide for implementation details"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Issues: https://github.com/getexperimently/experimently/issues"
+text = "Issues: https://github.com/Controlvar/controlvar/issues"
 by = ["exempt:baseline"]

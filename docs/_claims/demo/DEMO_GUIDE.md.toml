@@ -4,7 +4,7 @@
 document = "demo/DEMO_GUIDE.md"
 
 [[unit]]
-text = "Experimently — Client Demo Guide"
+text = "Controlvar — Client Demo Guide"
 by = ["exempt:label"]
 
 [[unit]]
@@ -12,7 +12,7 @@ text = "Overview"
 by = ["exempt:label"]
 
 [[unit]]
-text = "This guide walks you through a 20-minute live demo of the Experimently experimentation platform."
+text = "This guide walks you through a 20-minute live demo of the Controlvar experimentation platform."
 by = ["exempt:navigation"]
 
 [[unit]]
@@ -134,7 +134,7 @@ by = ["exempt:label"]
 count = 7
 
 [[unit]]
-text = "Open http://localhost:3200 — point at the Experimently panel (bottom-right): the visitor id, the variant this visitor got for each experiment, and the two feature flags."
+text = "Open http://localhost:3200 — point at the Controlvar panel (bottom-right): the visitor id, the variant this visitor got for each experiment, and the two feature flags."
 by = [
     "journey:demo-shoplab#storefront",
     "journey:demo-shoplab#panel",
@@ -305,7 +305,7 @@ by = [
 ]
 
 [[unit]]
-text = "The Experimently panel shows streampulse_ai_search: on (targeting_rule) vs off (rollout)."
+text = "The Controlvar panel shows streampulse_ai_search: on (targeting_rule) vs off (rollout)."
 by = [
     "journey:demo-guide#search-tab",
     "journey:demo-guide#keyword-search",

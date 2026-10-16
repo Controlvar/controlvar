@@ -1,8 +1,8 @@
-# StreamPulse — mobile feature-flag demo for Experimently
+# StreamPulse — mobile feature-flag demo for Controlvar
 
 StreamPulse is a web page that renders a phone. Pick a simulated device (OS, OS version, app
 version, region, tier, employee) and the phone shows, screen by screen, which feature flags and
-experiments *that device* gets from the Experimently platform — with the server's reason for each
+experiments *that device* gets from the Controlvar platform — with the server's reason for each
 decision. A Python simulator pretends to be thousands of devices, and a scripted "rollout story"
 walks a feature flag from internal testers to 100 % with a crash incident and an automatic rollback
 on the way.
@@ -35,7 +35,7 @@ The right-hand side has two panels:
   attribute is sent as targeting `context`. Applying any change re-mounts the SDK provider, which
   drops the SDK caches and re-fetches everything. Otherwise the SDK keeps each answer for 5 s
   (`cacheTtlMs: 5000`) and asks again the next time a screen needs it.
-- **Powered by Experimently** — per flag: on/off + the server `reason` (`targeting_rule`,
+- **Powered by Controlvar** — per flag: on/off + the server `reason` (`targeting_rule`,
   `rollout`, `inactive`, `error`) spelled out; per experiment: the variant and whether the device
   was actually enrolled (`assigned: false` → "in global holdout streampulse-holdout", "excluded:
   mutual exclusion group streampulse-profile", "excluded: targeting rules"); the last 8 events;
@@ -46,7 +46,7 @@ and a live readout of `streampulse_player_v2` for the current device.
 
 ## Running it
 
-Prerequisites: the Experimently backend on `http://localhost:8000`, the dashboard on
+Prerequisites: the Controlvar backend on `http://localhost:8000`, the dashboard on
 `http://localhost:3100`, Node 20.9 or later (Next.js 16 refuses older versions), and the
 repo's Python venv.
 

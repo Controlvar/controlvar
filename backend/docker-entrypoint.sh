@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =========================================================================
-# Experimently API container entrypoint.
+# Controlvar API container entrypoint.
 #
 #   0. python -m backend.app.core.preflight: the settings check. Every problem
 #      it finds is printed in one list and the container exits 78 (EX_CONFIG)

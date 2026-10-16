@@ -26,7 +26,7 @@ export default function App({ Component, pageProps, router }: AppProps) {
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-        <title>Experimently</title>
+        <title>Controlvar</title>
       </Head>
       <ModulesProvider>
         <AuthProvider>

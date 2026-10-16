@@ -34,7 +34,7 @@ steps:
       aria: |
         - main:
           - article:
-            - heading "Experimently Documentation" [level=1]
+            - heading "Controlvar Documentation" [level=1]
             - heading "Start Here" [level=2]
     fail: the site does not answer, or its home page is not the documentation's home page
   - id: search-quick-start

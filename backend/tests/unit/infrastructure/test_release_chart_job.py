@@ -154,7 +154,7 @@ annotations:
   licenses: Apache-2.0
 apiVersion: v2
 appVersion: {app}
-description: 'Experimently: the API and the dashboard.'
+description: 'Controlvar: the API and the dashboard.'
 name: {name}
 type: application
 version: {version}

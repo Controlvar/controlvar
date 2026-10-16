@@ -200,7 +200,7 @@ Every user has one of four roles, each with progressively broader permissions:
 | **DEVELOPER** | Create and manage experiments and feature flags |
 | **ADMIN** | Full access: user management, global settings, compliance exports |
 
-Custom roles and direct permission grants are stored and shown alongside the base role, but no permission check reads them yet: routes check the base role ([#891](https://github.com/getexperimently/experimently/issues/891)).
+Custom roles and direct permission grants are stored and shown alongside the base role, but no permission check reads them yet: routes check the base role ([#891](https://github.com/Controlvar/controlvar/issues/891)).
 
 ---
 

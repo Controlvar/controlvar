@@ -1,11 +1,11 @@
 # Responding to an incident on your deployment
 
-You run your own Experimently deployment, so your team runs its incident
+You run your own Controlvar deployment, so your team runs its incident
 response. This page points to the two things the project provides for that.
 
-## If the cause may be a vulnerability in Experimently
+## If the cause may be a vulnerability in Controlvar
 
-Report it privately, as [SECURITY.md](https://github.com/getexperimently/experimently/blob/main/SECURITY.md)
+Report it privately, as [SECURITY.md](https://github.com/Controlvar/controlvar/blob/main/SECURITY.md)
 describes: through GitHub private vulnerability reporting, or by email. Do not
 open a public issue. SECURITY.md also says what happens after you report and on
 what timeline; this page adds nothing to it.

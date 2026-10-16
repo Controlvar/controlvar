@@ -125,7 +125,7 @@ function check(type: WarehouseType, v: Values, key: string, keyRequired: boolean
     put('region', checkPattern(v.region, AWS_REGION, 'Region', 'Use an AWS region code such as eu-west-1.'));
     put(
       'role_arn',
-      checkPattern(v.role_arn, ROLE_ARN, 'Role ARN', 'Use a role ARN such as arn:aws:iam::123456789012:role/ExperimentlyAthena.'),
+      checkPattern(v.role_arn, ROLE_ARN, 'Role ARN', 'Use a role ARN such as arn:aws:iam::123456789012:role/ControlvarAthena.'),
     );
     put('workgroup', checkPattern(v.workgroup, ATHENA_WORKGROUP, 'Workgroup', 'Use letters, digits, . _ and - (up to 128).'));
     put('database', checkPattern(v.database, ATHENA_DATABASE, 'Database', 'Use lower-case letters, digits and _.'));
@@ -461,7 +461,7 @@ export function ConnectionForm({ mode, connectors, connection, onSaved, onCancel
           {type === 'athena' && (
             <>
               {input('region', 'Region', 'The AWS region of your Athena workgroup, e.g. eu-west-1.')}
-              {input('role_arn', 'Role ARN', 'The role Experimently assumes in your account. It must not be in this deployment’s own AWS account.')}
+              {input('role_arn', 'Role ARN', 'The role Controlvar assumes in your account. It must not be in this deployment’s own AWS account.')}
               {input('workgroup', 'Workgroup', 'A workgroup that enforces its settings, with a per-query data limit and a results location.')}
               {input('database', 'Database', 'The Glue database your tables are in.')}
             </>

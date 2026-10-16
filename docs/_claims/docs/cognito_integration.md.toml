@@ -8,7 +8,7 @@ text = "AWS Cognito Integration"
 by = ["exempt:label"]
 
 [[unit]]
-text = "This document explains how Experimently integrates with AWS Cognito for authentication and role-based access control."
+text = "This document explains how Controlvar integrates with AWS Cognito for authentication and role-based access control."
 by = ["exempt:navigation"]
 
 [[unit]]

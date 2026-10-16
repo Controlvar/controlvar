@@ -1,9 +1,9 @@
-# ShopLab — demo storefront for Experimently
+# ShopLab — demo storefront for Controlvar
 
 ShopLab is a small e-commerce storefront (Next.js 16, pages router, Tailwind) whose every
-page runs a real experiment or feature flag through the Experimently platform via the React
+page runs a real experiment or feature flag through the Controlvar platform via the React
 SDK. It exists to *show* the platform: open the storefront, click around, watch the
-"Powered by Experimently" panel, then open the dashboard and see the same visitor, the
+"Powered by Controlvar" panel, then open the dashboard and see the same visitor, the
 same variants and the same events turn into statistics.
 
 Nothing is for sale. There are no images, no external fonts and no CDNs — just twelve
@@ -20,7 +20,7 @@ made-up products with gradient artwork.
 | **Search** `/search` | `shoplab_new_search` flag — exact name match vs. fuzzy engine with highlights | **Feature-flag gradual rollout** (10% → 50% → 100%), safety config, flag-attributed events |
 | Header (every page) | `shoplab_free_shipping_banner` flag | **Kill switch**: turn the banner off in the dashboard, reload the storefront |
 
-The bottom-right **Powered by Experimently** panel shows the visitor id, the variant for each
+The bottom-right **Powered by Controlvar** panel shows the visitor id, the variant for each
 of the four experiments, both flags, the last 8 tracked events, a "New visitor" button
 (new id + reload → fresh assignments) and a link to the dashboard.
 
@@ -33,7 +33,7 @@ SDK to every experiment the visitor has been assigned to in the session.
 
 ## Running it
 
-Prerequisites: the Experimently backend on `http://localhost:8000`, the dashboard on
+Prerequisites: the Controlvar backend on `http://localhost:8000`, the dashboard on
 `http://localhost:3100`, Node 20.9 or later (Next.js 16 refuses older versions), and the
 repo's Python venv.
 

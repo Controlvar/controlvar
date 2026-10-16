@@ -8,7 +8,7 @@ text = "Python Virtual Environment Setup Guide"
 by = ["exempt:label"]
 
 [[unit]]
-text = "This guide outlines how to set up and configure a Python virtual environment for the Experimently project."
+text = "This guide outlines how to set up and configure a Python virtual environment for the Controlvar project."
 by = ["exempt:navigation"]
 
 [[unit]]

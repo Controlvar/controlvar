@@ -28,7 +28,7 @@
 # repository's settings script now.
 set -uo pipefail
 
-REPO="getexperimently/experimently"
+REPO="Controlvar/controlvar"
 DRY=0
 PRINT_PAYLOAD=0
 HERE=$(cd "$(dirname "$0")" && pwd)

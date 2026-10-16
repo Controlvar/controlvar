@@ -53,10 +53,10 @@ VERSION = (REPO_ROOT / "VERSION").read_text().strip()
 PR_QA_GATE = REPO_ROOT / ".github" / "workflows" / "pr-qa-gate.yml"
 RELEASE = "exp"
 FULLNAME = f"{RELEASE}-experimently"
-PUBLIC_BASE_URL = "https://experimently.example.com"
+PUBLIC_BASE_URL = "https://controlvar.example.com"
 
-API_REPOSITORY = "ghcr.io/getexperimently/experimently"
-WEB_REPOSITORY = "ghcr.io/getexperimently/experimently-web"
+API_REPOSITORY = "ghcr.io/controlvar/controlvar"
+WEB_REPOSITORY = "ghcr.io/controlvar/controlvar-web"
 
 #: Every value the chart must never carry in plain text.
 SECRET_NAMES = {
@@ -380,7 +380,7 @@ def test_the_dashboard_proxies_to_the_api_service(docs):
 
 @pytest.mark.parametrize(
     "url",
-    ["https://experimently.example.com", "http://flags.internal.example.org"],
+    ["https://controlvar.example.com", "http://flags.internal.example.org"],
 )
 def test_the_ingress_host_is_the_public_base_url_hostname(url):
     docs = render("core", "--set-string", f"publicBaseUrl={url}")
@@ -493,7 +493,7 @@ def test_cors_origins_reach_the_api_as_one_list():
 
 
 @pytest.mark.parametrize(
-    "url", ["http://10.0.0.5", "https://experimently.example.com:8443", "http://[::1]"]
+    "url", ["http://10.0.0.5", "https://controlvar.example.com:8443", "http://[::1]"]
 )
 def test_an_ip_or_port_origin_is_refused_with_the_ingress_on(url):
     error = refused("core", "--set-string", f"publicBaseUrl={url}")

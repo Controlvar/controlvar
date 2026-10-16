@@ -611,7 +611,7 @@ class TestFailureDescriptionsCarryNoSecret:
         assert "<value>" not in described
         assert "Value error," not in described
         assert described.startswith("ValidationError: PUBLIC_BASE_URL is not set")
-        assert "https://experimently.example.com" in described
+        assert "https://controlvar.example.com" in described
         assert "api.example.com" not in described
 
     @pytest.mark.regression

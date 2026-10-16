@@ -46,7 +46,7 @@ PLACEHOLDER_VERSION = "0.0.0+unknown"
 
 #: Where every published image comes from. Not derived from the repository the
 #: workflow runs in: a fork's build is still this project's code.
-SOURCE = "https://github.com/getexperimently/experimently"
+SOURCE = "https://github.com/Controlvar/controlvar"
 
 
 def image_configs(data: object) -> list[dict]:

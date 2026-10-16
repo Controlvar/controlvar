@@ -65,7 +65,7 @@ class EmailNotifier:
         self._from_address: str = getattr(
             settings, "EMAIL_FROM_ADDRESS", "platform@example.com"
         )
-        self._from_name: str = getattr(settings, "EMAIL_FROM_NAME", "Experimently")
+        self._from_name: str = getattr(settings, "EMAIL_FROM_NAME", "Controlvar")
         self._admin_emails: List[str] = list(
             getattr(settings, "NOTIFICATION_ADMIN_EMAILS", []) or []
         )
@@ -367,7 +367,7 @@ class EmailNotifier:
 <html>
 <body style="font-family: Arial, sans-serif; color: #333;">
   <h2 style="color: #cc0000;">Safety Rollback Alert</h2>
-  <p>Experimently has automatically rolled back a feature flag
+  <p>Controlvar has automatically rolled back a feature flag
   due to a safety threshold violation.</p>
   <table style="border-collapse: collapse; width: 100%; max-width: 600px;">
     <tr>
@@ -384,7 +384,7 @@ class EmailNotifier:
     </tr>
   </table>
   <p style="color: #666; font-size: 12px; margin-top: 24px;">
-    This is an automated message from Experimently.
+    This is an automated message from Controlvar.
   </p>
 </body>
 </html>
@@ -424,7 +424,7 @@ class EmailNotifier:
   {winner_section}
   {f'<table style="border-collapse: collapse; width: 100%; max-width: 600px;">{details_rows}</table>' if details_rows else ""}
   <p style="color: #666; font-size: 12px; margin-top: 24px;">
-    This is an automated message from Experimently.
+    This is an automated message from Controlvar.
   </p>
 </body>
 </html>
@@ -459,7 +459,7 @@ class EmailNotifier:
     </tr>
   </table>
   <p style="color: #666; font-size: 12px; margin-top: 24px;">
-    This is an automated message from Experimently.
+    This is an automated message from Controlvar.
   </p>
 </body>
 </html>

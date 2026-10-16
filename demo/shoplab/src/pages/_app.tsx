@@ -4,7 +4,7 @@ import Head from 'next/head';
 import type { AppProps } from 'next/app';
 import { ExperimentationProvider } from '@getexperimently/react-sdk';
 import Layout from '@/components/Layout';
-import ExperimentlyPanel from '@/components/ExperimentlyPanel';
+import ControlvarPanel from '@/components/ControlvarPanel';
 import { EventLogProvider } from '@/lib/eventLog';
 import { API_KEY, API_URL } from '@/lib/env';
 import { getOrCreateVisitor, type Visitor } from '@/lib/visitor';
@@ -25,7 +25,7 @@ export default function ShopLabApp({ Component, pageProps }: AppProps) {
       <Head>
         <title>ShopLab — outdoor gear, tested live</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="description" content="ShopLab is a demo storefront running live experiments on Experimently." />
+        <meta name="description" content="ShopLab is a demo storefront running live experiments on Controlvar." />
       </Head>
       {user ? (
         <ExperimentationProvider config={config} user={user}>
@@ -33,7 +33,7 @@ export default function ShopLabApp({ Component, pageProps }: AppProps) {
             <Layout>
               <Component {...pageProps} />
             </Layout>
-            <ExperimentlyPanel />
+            <ControlvarPanel />
           </EventLogProvider>
         </ExperimentationProvider>
       ) : (

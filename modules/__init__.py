@@ -1,4 +1,4 @@
-"""Experimently's optional modules.
+"""Controlvar's optional modules.
 
 Everything under this directory is Apache-2.0 like the rest of the repository.
 A core build deletes the directory whole (``scripts/core_build.sh``);

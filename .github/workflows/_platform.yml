@@ -3,7 +3,7 @@ name: Platform
 # =============================================================================
 # Reusable workflow: boot the platform, run one named suite against it.
 #
-# Every job that needs a *running* Experimently used to repeat the same twenty
+# Every job that needs a *running* Controlvar used to repeat the same twenty
 # lines: pg + redis services, Python, bootstrap, seeds, uvicorn from the
 # repository root, poll /health. This is that sequence, once. Its callers
 # are pr-qa-gate.yml's sdk-live-contract and fuzz.yml's three API fuzzing

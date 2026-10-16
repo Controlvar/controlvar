@@ -8,7 +8,7 @@ text = "Authentication Flow Diagrams"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "This document contains the flow diagrams for the Cognito authentication system implemented in Experimently."
+text = "This document contains the flow diagrams for the Cognito authentication system implemented in Controlvar."
 by = ["exempt:navigation"]
 
 [[unit]]

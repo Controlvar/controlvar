@@ -299,7 +299,7 @@ by = [
 ]
 
 [[unit]]
-text = "channel is slack, email or webhook; recipient is optional (a Slack channel or an email address) and message defaults to \"Test notification from Experimently\":"
+text = "channel is slack, email or webhook; recipient is optional (a Slack channel or an email address) and message defaults to \"Test notification from Controlvar\":"
 by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "test:backend/tests/unit/api/test_notifications_api.py::test_test_notification_webhook_channel",

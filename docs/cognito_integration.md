@@ -1,6 +1,6 @@
 # AWS Cognito Integration
 
-This document explains how Experimently integrates with AWS Cognito for authentication and role-based access control.
+This document explains how Controlvar integrates with AWS Cognito for authentication and role-based access control.
 
 ## Overview
 
@@ -21,7 +21,7 @@ The dashboard does not yet sign in with Cognito. Sign in through the API with
 
 Under `AUTH_PROVIDER=cognito` the dashboard's sign-in form answers that its endpoint is not
 available, and an SSO sign-in does not sign the user in. Dashboard sign-in
-under Cognito is tracked in [#708](https://github.com/getexperimently/experimently/issues/708).
+under Cognito is tracked in [#708](https://github.com/Controlvar/controlvar/issues/708).
 
 ## Required settings
 

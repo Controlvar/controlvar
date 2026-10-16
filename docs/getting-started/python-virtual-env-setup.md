@@ -1,6 +1,6 @@
 # Python Virtual Environment Setup Guide
 
-This guide outlines how to set up and configure a Python virtual environment for the Experimently project.
+This guide outlines how to set up and configure a Python virtual environment for the Controlvar project.
 
 ## The requirements layout
 

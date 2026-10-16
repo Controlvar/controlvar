@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Live event simulator for Experimently demo.
+Live event simulator for Controlvar demo.
 
 Streams synthetic events directly to the database at a configurable rate,
 targeting the active A/B test and MAB experiment so charts update
@@ -342,7 +342,7 @@ class Simulator:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Stream live events for Experimently demo (writes directly to DB)"
+        description="Stream live events for Controlvar demo (writes directly to DB)"
     )
     parser.add_argument(
         "--api-url",

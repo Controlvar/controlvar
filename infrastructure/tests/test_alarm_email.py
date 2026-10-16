@@ -79,9 +79,9 @@ REFUSED = {
     "too long": "a" * 243 + "@example.org.uk",  # 258 characters
     "exactly 255": "a" * 235 + "@getexperimently.com",
     "whitespace inside": "ops team@getexperimently.com",
-    "leading whitespace": " hello@getexperimently.com",
-    "trailing newline": "hello@getexperimently.com\n",
-    "tab": "hello@getexperimently.com\t",
+    "leading whitespace": " hello@controlvar.com",
+    "trailing newline": "hello@controlvar.com\n",
+    "tab": "hello@controlvar.com\t",
     "no @": "hello.getexperimently.com",
     "two @": "hello@ops@getexperimently.com",
     "nothing before @": "@getexperimently.com",
@@ -116,7 +116,7 @@ def test_a_bad_value_is_refused_in_every_environment(value, environment):
 @pytest.mark.parametrize(
     "value",
     [
-        "hello@getexperimently.com",
+        "hello@controlvar.com",
         "Hello@GetExperimently.com",
         TEST_ALARM_EMAIL,
         # Only the documentation domains themselves, not look-alikes.

@@ -4,7 +4,7 @@
 document = "infrastructure/cdk/README.md"
 
 [[unit]]
-text = "Experimently Infrastructure"
+text = "Controlvar Infrastructure"
 by = ["exempt:label"]
 
 [[unit]]

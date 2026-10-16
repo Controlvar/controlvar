@@ -556,13 +556,13 @@ def unresolvable_revisions_message(cfg: Config, foreign: set[str], schema: str) 
             f"Schema {schema} records migration(s) this build has no file "
             f"for ({revisions}) and this build's own migrations are not all "
             "applied, so alembic cannot run at all. This is a database built "
-            "by the full profile being opened by a core build (Experimently "
+            "by the full profile being opened by a core build (Controlvar "
             f"{version}). Run the full image of this release against it; it "
             "applies these migrations as well. Leave alembic_version as it is."
         )
     return (
         f"Schema {schema} records migration(s) this build has no file for "
-        f"({revisions}): this database was migrated by a newer Experimently "
+        f"({revisions}): this database was migrated by a newer Controlvar "
         f"release than this image ({version}), so this image cannot run "
         "against it. Run the newer release that migrated it, or restore the "
         "backup taken before that upgrade and run this image against the "

@@ -4,7 +4,7 @@
 document = "docs/performance/load-testing.md"
 
 [[unit]]
-text = "Load Testing — Experimently"
+text = "Load Testing — Controlvar"
 by = ["exempt:baseline"]
 
 [[unit]]

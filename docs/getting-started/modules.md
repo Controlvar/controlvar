@@ -1,6 +1,6 @@
 # Modules and profiles
 
-Experimently is one codebase, open source (Apache-2.0, with the client SDKs
+Controlvar is one codebase, open source (Apache-2.0, with the client SDKs
 MIT), and it runs in one of two **profiles**:
 
 - **core** — the product without the optional modules. This is what a
@@ -52,7 +52,7 @@ the dashboard checks:
 | Module | Name | What it adds |
 | --- | --- | --- |
 | Team workspaces | `workspaces` | Group users into teams, with workspace roles and email invites. Grouping only: access to experiments and flags is by platform role |
-| Custom roles | `rbac` | Roles beyond the built-in four, and permissions granted directly to a user. Both are recorded, but they do not change what anyone can do yet: each user's built-in role decides ([#891](https://github.com/getexperimently/experimently/issues/891)) |
+| Custom roles | `rbac` | Roles beyond the built-in four, and permissions granted directly to a user. Both are recorded, but they do not change what anyone can do yet: each user's built-in role decides ([#891](https://github.com/Controlvar/controlvar/issues/891)) |
 | SSO / SAML / OIDC | `sso` | OIDC identity providers with just-in-time provisioning and role mapping. SAML 2.0 sign-in is not available yet; use OIDC |
 | HIPAA | `hipaa` | PHI encryption, PHI access records stamped with a six-year retention (nothing deletes them), BAA records |
 | Compliance reporting | `compliance` | SOC 2 / ISO 27001 reports, signed audit exports |
@@ -60,7 +60,7 @@ the dashboard checks:
 | Third-party integrations | `integrations` | Jira, Salesforce and GitHub |
 | Counters | `counters` | Routes to increment and read assignment and conversion counters in DynamoDB; assignment and tracking do not write them |
 | ETL | `etl` | Glue crawlers, Athena partitions and scheduled jobs |
-| Split URL testing | `split_url` | Server-side URL splitting at the edge. The edge router has no configuration source in this release, so it does not split traffic yet; experiments, their URL configuration and the preview work ([#393](https://github.com/getexperimently/experimently/issues/393)) |
+| Split URL testing | `split_url` | Server-side URL splitting at the edge. The edge router has no configuration source in this release, so it does not split traffic yet; experiments, their URL configuration and the preview work ([#393](https://github.com/Controlvar/controlvar/issues/393)) |
 
 The split is along "one team running the product" versus "an organisation
 administering it".

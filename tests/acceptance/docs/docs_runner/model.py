@@ -22,7 +22,7 @@ without ``pending``)::
         expect:
           status: 200
           aria: |
-            - heading "Experimently Documentation" [level=1]
+            - heading "Controlvar Documentation" [level=1]
         fail: the home page does not answer, or its heading is not the source's first heading
       - id: open-quick-start
         doc: start-here

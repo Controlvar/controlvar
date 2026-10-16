@@ -281,7 +281,7 @@ def render(problems: List[str]) -> str:
     if len(problems) == 1 and problems[0] in _ONE_LINE_REFUSALS:
         return f"{PREFIX} {problems[0]}"
     noun = "setting needs" if len(problems) == 1 else "settings need"
-    lines = [f"{PREFIX} Experimently cannot start: {len(problems)} {noun} attention."]
+    lines = [f"{PREFIX} Controlvar cannot start: {len(problems)} {noun} attention."]
     lines.extend(f"  - {problem}" for problem in problems)
     return "\n".join(lines)
 

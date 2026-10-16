@@ -8,7 +8,7 @@ text = "Responding to an incident on your deployment"
 by = ["exempt:label"]
 
 [[unit]]
-text = "You run your own Experimently deployment, so your team runs its incident response."
+text = "You run your own Controlvar deployment, so your team runs its incident response."
 by = ["exempt:policy"]
 
 [[unit]]
@@ -16,7 +16,7 @@ text = "This page points to the two things the project provides for that."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "If the cause may be a vulnerability in Experimently"
+text = "If the cause may be a vulnerability in Controlvar"
 by = ["exempt:label"]
 
 [[unit]]

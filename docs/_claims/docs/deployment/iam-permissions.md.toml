@@ -8,7 +8,7 @@ text = "IAM permissions for deploying"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Three identities touch an AWS account that runs Experimently, and they need different things."
+text = "Three identities touch an AWS account that runs Controlvar, and they need different things."
 by = ["exempt:label"]
 
 [[unit]]

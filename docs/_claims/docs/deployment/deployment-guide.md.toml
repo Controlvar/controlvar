@@ -4,7 +4,7 @@
 document = "docs/deployment/deployment-guide.md"
 
 [[unit]]
-text = "Deployment Guide — Experimently"
+text = "Deployment Guide — Controlvar"
 by = ["exempt:label"]
 
 [[unit]]

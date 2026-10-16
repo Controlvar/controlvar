@@ -2,9 +2,9 @@
 
 How to run the test suites, and the rules a new test follows. The `make` targets
 are under "Tests" in
-[CONTRIBUTING.md](https://github.com/getexperimently/experimently/blob/main/CONTRIBUTING.md),
+[CONTRIBUTING.md](https://github.com/Controlvar/controlvar/blob/main/CONTRIBUTING.md),
 and the conventions behind these rules are in
-[CLAUDE.md](https://github.com/getexperimently/experimently/blob/main/CLAUDE.md).
+[CLAUDE.md](https://github.com/Controlvar/controlvar/blob/main/CLAUDE.md).
 
 ## Running the backend tests
 

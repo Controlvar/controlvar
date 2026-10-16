@@ -1121,7 +1121,7 @@ def test_the_red_summary_is_the_red_template(tmp_path):
     interactions = dict(REACHED_ALL)
     interactions["GET /api/v1/items"] = [("GET", 503)]
     interactions["POST /api/v1/items"] = [("POST", 403)]
-    link = "https://github.com/getexperimently/experimently/actions/runs/123"
+    link = "https://github.com/Controlvar/controlvar/actions/runs/123"
     assert (
         _run_main(
             tmp_path,

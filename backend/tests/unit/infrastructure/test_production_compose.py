@@ -44,8 +44,8 @@ REQUIRED = (
 #: Secret, but optional: the only default either may have is empty.
 OPTIONAL_SECRETS = ("AUDIT_HMAC_KEY", "METRICS_TOKEN")
 
-API_REPO = "ghcr.io/getexperimently/experimently"
-WEB_REPO = "ghcr.io/getexperimently/experimently-web"
+API_REPO = "ghcr.io/controlvar/controlvar"
+WEB_REPO = "ghcr.io/controlvar/controlvar-web"
 
 
 def _version() -> str:
@@ -269,7 +269,7 @@ class TestGenerator:
         env = {k: v for k, v in os.environ.items() if k not in REQUIRED}
         env.update(
             ENV_FILE=str(env_file),
-            PUBLIC_BASE_URL="https://experimently.example.com",
+            PUBLIC_BASE_URL="https://controlvar.example.com",
             FIRST_SUPERUSER="you@example.com",
             EXPERIMENTLY_PROFILE="full",
         )
@@ -278,7 +278,7 @@ class TestGenerator:
         )
         assert result.returncode == 0, result.stderr
         text = env_file.read_text()
-        assert "PUBLIC_BASE_URL=https://experimently.example.com\n" in text
+        assert "PUBLIC_BASE_URL=https://controlvar.example.com\n" in text
         assert "FIRST_SUPERUSER=you@example.com\n" in text
         assert "EXPERIMENTLY_PROFILE=full\n" in text
 

@@ -256,7 +256,7 @@ class TestSecurityMisconfiguration:
         s = ProdSettings(
             SECRET_KEY="a" * 64,
             FIRST_SUPERUSER_PASSWORD="StrongProd1!",
-            PUBLIC_BASE_URL="https://experimently.example.com",
+            PUBLIC_BASE_URL="https://controlvar.example.com",
             _env_file=None,
         )
         assert s.DEBUG is False, "DEBUG must be False in production"

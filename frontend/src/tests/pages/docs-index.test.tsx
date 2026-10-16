@@ -120,7 +120,7 @@ describe('/docs hub entries for methods that do not work yet', () => {
     const compose = getAllByRole('link').filter((a) => /^Docker Compose/.test(a.textContent ?? ''));
     expect(compose).toHaveLength(1);
     expect(compose[0].getAttribute('href')).toBe(
-      'https://github.com/getexperimently/experimently/blob/main/deploy/compose/README.md',
+      'https://github.com/Controlvar/controlvar/blob/main/deploy/compose/README.md',
     );
     expect(compose[0].getAttribute('href')).not.toMatch(/docker-guide/);
     expect(compose[0].textContent ?? '').toMatch(/deploy\/compose\/compose\.yml/);

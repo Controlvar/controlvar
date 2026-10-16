@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =========================================================================
-# scripts/core_build.sh — prove that one profile of Experimently builds,
+# scripts/core_build.sh — prove that one profile of Controlvar builds,
 # boots and passes its tests on its own.
 #
 #   scripts/core_build.sh                 # core profile: delete modules/, rebuild

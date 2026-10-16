@@ -12,7 +12,7 @@
     configuration, and the preview endpoint. The preview does not predict the router either:
     it hashes the `user_id` you pass with the experiment's id, while the router hashes the
     viewer's IP address and User-Agent with the `experiment_key` in its configuration
-    ([#393](https://github.com/getexperimently/experimently/issues/393)).
+    ([#393](https://github.com/Controlvar/controlvar/issues/393)).
 
 This document describes the server-side split URL testing feature. Split URL experiments are meant to redirect different users to distinct URLs (e.g., `/checkout` vs `/checkout-v2`) at the CloudFront layer, with a Lambda@Edge router and a cookie that keeps each viewer on one variant.
 

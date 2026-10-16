@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft-07/schema#",
-  "title": "Experimently chart values",
+  "title": "Controlvar chart values",
   "type": "object",
   "additionalProperties": false,
   "required": ["publicBaseUrl", "profile", "image", "secrets", "api", "web", "ingress", "postgresql", "redis"],

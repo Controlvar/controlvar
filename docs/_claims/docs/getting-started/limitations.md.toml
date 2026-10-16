@@ -8,7 +8,7 @@ text = "Limitations"
 by = ["exempt:label"]
 
 [[unit]]
-text = "What Experimently does not do, and what happens instead."
+text = "What Controlvar does not do, and what happens instead."
 by = ["exempt:navigation"]
 
 [[unit]]

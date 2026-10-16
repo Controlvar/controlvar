@@ -27,12 +27,12 @@ interface Props {
 }
 
 /**
- * "Powered by Experimently" panel: what the platform decided for the current
+ * "Powered by Controlvar" panel: what the platform decided for the current
  * device (every flag with its `reason`, every experiment with its variant and
  * enrolment status), the last 8 events, dashboard links and "Refresh now".
  * Must be rendered inside the SDK provider.
  */
-export default function ExperimentlyPanel({ onRefresh }: Props) {
+export default function ControlvarPanel({ onRefresh }: Props) {
   const { client, user } = useExperimentation();
   const events = useEventLog();
 
@@ -58,11 +58,11 @@ export default function ExperimentlyPanel({ onRefresh }: Props) {
   };
 
   return (
-    <section className="card p-4 text-sm" aria-labelledby="experimently-panel-title">
+    <section className="card p-4 text-sm" aria-labelledby="controlvar-panel-title">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 id="experimently-panel-title" className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-neutral-700">
+        <h2 id="controlvar-panel-title" className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-neutral-700">
           <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
-          Powered by Experimently
+          Powered by Controlvar
         </h2>
         <button type="button" className="btn-secondary text-xs" onClick={refresh}>
           Refresh now

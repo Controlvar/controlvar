@@ -318,8 +318,8 @@ CREDENTIAL_SHAPES = (
 FENCE = re.compile(r"^\s*(?:```|~~~)", re.M)
 URL = re.compile(r"https?://[^\s)\]]+")
 ALLOWED_URL_PREFIXES = (
-    "https://github.com/getexperimently/experimently/",
-    "https://getexperimently.github.io/experimently/",
+    "https://github.com/Controlvar/controlvar/",
+    "https://docs.controlvar.com/",
 )
 HOST = re.compile(
     r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|io|net|org|dev|app|cloud|ai|co)\b", re.I
@@ -677,8 +677,8 @@ def test_the_rule_fires_on_a_planted_defect(template, plant, fragment):
     "line",
     [
         "Sign in as admin@example.com.",
-        "See https://github.com/getexperimently/experimently/blob/main/README.md",
-        "See https://getexperimently.github.io/experimently/",
+        "See https://github.com/Controlvar/controlvar/blob/main/README.md",
+        "See https://docs.controlvar.com/",
         "The pass named {check}, at 50% of the 8 steps.",
     ],
 )

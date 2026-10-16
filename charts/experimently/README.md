@@ -1,8 +1,8 @@
-# Experimently Helm chart
+# Controlvar Helm chart
 
-This chart installs Experimently on Kubernetes: the API, the dashboard and, by
+This chart installs Controlvar on Kubernetes: the API, the dashboard and, by
 default, a bundled PostgreSQL and Redis. Install it with the four blocks of
-[Kubernetes (Helm)](https://getexperimently.github.io/experimently/self-hosting/kubernetes/):
+[Kubernetes (Helm)](https://docs.controlvar.com/self-hosting/kubernetes/):
 the `chart-kind` workflow runs those blocks as written on a kind cluster, for
 the `core` and `full` profiles, and runs `helm test` after the install.
 

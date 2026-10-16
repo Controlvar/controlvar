@@ -4,7 +4,7 @@ and per function.
 
 ``backend/app/services/sufficient_stats_analysis.py`` computes metric results
 from per-variant counts or sums, for ``/results`` and for callers with no
-Experimently database rows (warehouse analysis, #312).  This test runs fixed
+Controlvar database rows (warehouse analysis, #312).  This test runs fixed
 counts through each estimator, hashes the outputs and compares the hash with
 the one pinned for the current ``ENGINE_VERSION`` **and that function**.
 

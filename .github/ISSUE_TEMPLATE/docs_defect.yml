@@ -102,6 +102,6 @@ body:
     attributes:
       label: Run
       description: The docs-journeys run whose report shows it.
-      placeholder: https://github.com/getexperimently/experimently/actions/runs/<id>
+      placeholder: https://github.com/Controlvar/controlvar/actions/runs/<id>
     validations:
       required: true

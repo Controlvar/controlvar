@@ -76,7 +76,7 @@ def test_a_notice_is_present_exactly_when_beta(name):
         assert label.notice.startswith("Beta: ")
         issue = EXPECTED_ISSUE[name]
         assert label.notice.endswith(
-            f"https://github.com/getexperimently/experimently/issues/{issue}"
+            f"https://github.com/Controlvar/controlvar/issues/{issue}"
         )
 
 

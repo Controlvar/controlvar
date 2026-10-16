@@ -1,4 +1,4 @@
-# Deployment Guide — Experimently
+# Deployment Guide — Controlvar
 
 **Audience:** whoever stands up an environment, and whoever deploys to it.
 **Environments:** `staging` and `prod` -- one path for both. `<env>` below is
@@ -321,7 +321,7 @@ In **staging**, before prod is ever deployed:
    watches the new task set's target group) to ALARM by hand. Do the same once
    in the hour after a shift. The state set by hand lasts until the alarm's
    next evaluation; on staging on 2026-10-11 (UTC) the alarm was back to OK within
-   two minutes ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)):
+   two minutes ([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399595)):
 
     ```{.bash skip reason="aws: forces a real alarm into ALARM in the staging account"}
     aws cloudwatch set-alarm-state --alarm-name experimentation-api-5xx-green-staging --state-value ALARM --state-reason "rehearsal: forced during the canary"
@@ -337,18 +337,18 @@ deploy refuses until it is not (section 3).
 **What has run on staging:**
 
 - On 2026-10-02 (UTC), tag A deployed
-  ([run](https://github.com/getexperimently/experimently/actions/runs/37070072132)), and tag B, dispatched inside the
+  ([run](https://github.com/Controlvar/controlvar/actions/runs/37070072132)), and tag B, dispatched inside the
   hour after A's shift, was refused before it changed anything
-  ([run](https://github.com/getexperimently/experimently/actions/runs/37074588665)).
+  ([run](https://github.com/Controlvar/controlvar/actions/runs/37074588665)).
 - On 2026-10-04 (UTC), v0.18.0 deployed and the Rollback workflow put the API and the
   dashboard back on the previous release
-  ([run](https://github.com/getexperimently/experimently/actions/runs/37213010211),
-  [run](https://github.com/getexperimently/experimently/actions/runs/37217043185)).
+  ([run](https://github.com/Controlvar/controlvar/actions/runs/37213010211),
+  [run](https://github.com/Controlvar/controlvar/actions/runs/37217043185)).
 - On 2026-10-11 (UTC), the Rollback workflow did it again
-  ([run](https://github.com/getexperimently/experimently/actions/runs/38098724258)), and a 5xx alarm forced into
+  ([run](https://github.com/Controlvar/controlvar/actions/runs/38098724258)), and a 5xx alarm forced into
   ALARM in the hour after a deploy's shift stopped that deployment, and
   CodeDeploy moved the API back by itself while the dashboard stayed on the new
-  release ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)).
+  release ([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399595)).
 
 ---
 
@@ -356,7 +356,7 @@ deploy refuses until it is not (section 3).
 
 > **What has run against a real AWS account.** Deploy has run to success on a
 > staging account, most recently v0.31.0 on 2026-10-13 (UTC)
-> ([run](https://github.com/getexperimently/experimently/actions/runs/38423251771)), and the Rollback workflow
+> ([run](https://github.com/Controlvar/controlvar/actions/runs/38423251771)), and the Rollback workflow
 > has run there end to end ([section 2](#2-the-first-deploys-and-the-rollback-rehearsal)).
 > Deploy to staging before prod, and read the run and its summary closely.
 
@@ -427,7 +427,7 @@ The deploy job's timeout is 160 minutes: every wait in it is a named bound
 and the sum leaves room for two uncached image builds.
 
 **Alarms watch the API until the deployment ends**
-([#148](https://github.com/getexperimently/experimently/issues/148)). The deployment group has
+([#148](https://github.com/Controlvar/controlvar/issues/148)). The deployment group has
 two alarms, `experimentation-api-5xx-blue-<env>` and
 `experimentation-api-5xx-green-<env>`, one per target group, because
 CodeDeploy swaps the two on every deployment. Both are polled for the whole
@@ -436,9 +436,9 @@ shift while CodeDeploy keeps the previous task set. While either is in ALARM,
 CodeDeploy stops the deployment and rolls the API back to the previous
 revision by itself. On 2026-10-03 (UTC) CodeDeploy stopped and reverted an API deployment
 on staging when an alarm went into ALARM
-([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5971647359)),
+([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-5971647359)),
 and on 2026-10-11 (UTC) an alarm forced in the hour after the shift did the same
-([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)). An alarm in the time before the approval has not been rehearsed
+([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399595)). An alarm in the time before the approval has not been rehearsed
 on AWS as of v0.31.1. An alarm fires on a minute with at least 5 target 5xx
 **and** at least 5% of that target group's requests, for 2 minutes of 3; a
 minute with no requests counts as fine. What they do not catch:
@@ -482,7 +482,7 @@ and `create-deployment` has no parameter that overrides it. Rollback's
 all-at-once `--deployment-config-name` changes how traffic moves, not how long
 the old task set is kept. On staging on 2026-10-11 (UTC), the Rollback run's
 deployment stayed active for about an hour after its traffic shift
-([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)).
+([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399595)).
 
 One deploy or manual migration per environment at a time.
 

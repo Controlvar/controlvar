@@ -23,7 +23,7 @@ const EventLogContext = createContext<EventLogContextValue | null>(null);
 
 /**
  * Wraps the SDK's `useTrackEvent()` so every event the storefront sends is also kept in
- * an in-memory log for the "Powered by Experimently" panel. The returned `track` has a
+ * an in-memory log for the "Powered by Controlvar" panel. The returned `track` has a
  * stable identity, so it is safe to list in effect dependencies.
  */
 export function EventLogProvider({ children }: { children: React.ReactNode }) {

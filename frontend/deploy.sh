@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Experimently Marketing Website Deployment Script
+# Controlvar Marketing Website Deployment Script
 # Usage: ./deploy.sh [environment]
 # Environments: dev, staging, prod
 
@@ -14,11 +14,11 @@ NC='\033[0m' # No Color
 
 # Configuration
 ENVIRONMENT=${1:-prod}
-BUCKET_NAME="getexperimently.com"
+BUCKET_NAME="controlvar.com"
 CLOUDFRONT_DISTRIBUTION_ID=""  # Set this after creating CloudFront distribution
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}   Experimently Marketing Deployment${NC}"
+echo -e "${BLUE}   Controlvar Marketing Deployment${NC}"
 echo -e "${BLUE}   Environment: ${ENVIRONMENT}${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
@@ -138,10 +138,10 @@ echo -e "  Environment: ${ENVIRONMENT}"
 echo -e "  S3 Bucket: s3://${BUCKET_NAME}"
 echo -e "  Website: https://${BUCKET_NAME}"
 echo -e "\n🌍 URLs:"
-echo -e "  Marketing: ${GREEN}https://getexperimently.com${NC}"
-echo -e "  App:       https://app.getexperimently.com"
-echo -e "  API:       https://api.getexperimently.com"
-echo -e "  Docs:      https://docs.getexperimently.com"
+echo -e "  Marketing: ${GREEN}https://controlvar.com${NC}"
+echo -e "  App:       https://app.controlvar.com"
+echo -e "  API:       https://api.controlvar.com"
+echo -e "  Docs:      https://docs.controlvar.com"
 
 # Test deployment
 echo -e "\n${BLUE}🧪 Testing deployment...${NC}"
@@ -158,7 +158,7 @@ fi
 
 echo -e "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "Next steps:"
-echo -e "  1. Visit https://getexperimently.com to verify"
+echo -e "  1. Visit https://controlvar.com to verify"
 echo -e "  2. Test on mobile devices"
 echo -e "  3. Check Google PageSpeed Insights"
 echo -e "  4. Set up monitoring and analytics"

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Demo data seeder for the Experimently platform.
+Demo data seeder for the Controlvar platform.
 
 Creates all demo DB records including:
 - 4 demo users (ADMIN, DEVELOPER, ANALYST, VIEWER)
@@ -1109,7 +1109,7 @@ def _bulk_insert(db, objects, batch_size=500):
 def main():
     require_development_environment("demo")
     parser = argparse.ArgumentParser(
-        description="Seed demo data for Experimently platform"
+        description="Seed demo data for Controlvar platform"
     )
     parser.add_argument(
         "--api-url", default=None, help="API URL (unused, kept for AWS script compat)"
@@ -1117,7 +1117,7 @@ def main():
     parser.parse_args()
 
     print("\n" + "=" * 60)
-    print("  Experimently Demo Data Seeder")
+    print("  Controlvar Demo Data Seeder")
     print("=" * 60)
 
     # Ensure schema and tables exist

@@ -1,5 +1,5 @@
 # backend/app/middleware/trusted_host_middleware.py
-# SPDX-FileCopyrightText: 2026 Experimently contributors
+# SPDX-FileCopyrightText: 2026 The Controlvar authors
 # SPDX-License-Identifier: Apache-2.0
 """Refuse a request whose ``Host`` header is not one of ours.
 

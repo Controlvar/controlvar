@@ -4,9 +4,9 @@
 
 ## General
 
-### What is Experimently?
+### What is Controlvar?
 
-Experimently is a self-hosted experimentation platform for running A/B tests, feature flags, and controlled rollouts. It provides a complete solution for data-driven product development: design experiments, assign users to variants, track conversion events, run statistical analysis, and make shipping decisions — all in one platform.
+Controlvar is a self-hosted experimentation platform for running A/B tests, feature flags, and controlled rollouts. It provides a complete solution for data-driven product development: design experiments, assign users to variants, track conversion events, run statistical analysis, and make shipping decisions — all in one platform.
 
 The platform includes a REST API backend (FastAPI), a React management dashboard, client SDKs (JavaScript, Python, Java, React), and AWS CDK infrastructure code.
 
@@ -31,7 +31,7 @@ A full production deployment uses the following AWS services:
 | ElastiCache Redis | Rate-limit counters and the API's caches |
 | DynamoDB | Full profile: the `counters` module's counters, which only its own routes write |
 | Lambda | No request or event processing: placeholder functions that do nothing, and a daily Glue ETL trigger in the full profile. Assignment and flag evaluation are API calls ([AWS Integration](../integrations/aws.md#lambda-functions)) |
-| CloudFront | Not created by the CDK. Only the split-URL module's Lambda@Edge construct would use it, and its router has no configuration source yet ([#393](https://github.com/getexperimently/experimently/issues/393)) |
+| CloudFront | Not created by the CDK. Only the split-URL module's Lambda@Edge construct would use it, and its router has no configuration source yet ([#393](https://github.com/Controlvar/controlvar/issues/393)) |
 | Kinesis | Full profile only: a stream feeding Firehose and the S3 data lake. The API does not write to it today |
 | OpenSearch | Full profile only: a domain is created; nothing writes to it today |
 | Cognito | A user pool the CDK creates; sign-in uses local accounts by default ([Cognito Integration](../cognito_integration.md)) |
@@ -152,7 +152,7 @@ See [Bayesian Experimentation API](../api/bayesian.md) to enable Bayesian analys
 
 ### How does Split URL testing work?
 
-Split URL testing would send different users to different URLs — for example, `/checkout` vs `/checkout-v2` — with a Lambda@Edge router at the CDN. It does not split traffic yet: the router has no configuration source in this release ([#393](https://github.com/getexperimently/experimently/issues/393)).
+Split URL testing would send different users to different URLs — for example, `/checkout` vs `/checkout-v2` — with a Lambda@Edge router at the CDN. It does not split traffic yet: the router has no configuration source in this release ([#393](https://github.com/Controlvar/controlvar/issues/393)).
 
 The split-URL module ships a CloudFront construct with a Lambda@Edge router, which no stack uses: you add it to a stack yourself. The router reads a cookie to check whether the visitor has already been assigned. If not, it hashes the client fingerprint (IP address and User-Agent) to pick a variant, returns a 302 redirect to the variant URL, and sets a cookie that lasts `cookie_ttl_days` (30 days by default). A request that carries a cookie naming a known variant URL passes through without being bucketed again.
 
@@ -205,7 +205,7 @@ The platform uses a layered role-based access control system with four built-in 
 | **DEVELOPER** | Create and manage experiments and feature flags; read integration settings, but not change them |
 | **ADMIN** | Full access: user management, compliance exports, global settings, integrations |
 
-Beyond the four base roles, admins can create **custom roles** with specific per-resource and per-action permissions. They can also grant **direct permission** to a user for a specific resource, with an optional expiry timestamp for temporary access. Both are stored and shown by `GET /api/v1/rbac/users/{user_id}/permissions`, but no permission check reads them yet: what a user can do is decided by their base role ([#891](https://github.com/getexperimently/experimently/issues/891)).
+Beyond the four base roles, admins can create **custom roles** with specific per-resource and per-action permissions. They can also grant **direct permission** to a user for a specific resource, with an optional expiry timestamp for temporary access. Both are stored and shown by `GET /api/v1/rbac/users/{user_id}/permissions`, but no permission check reads them yet: what a user can do is decided by their base role ([#891](https://github.com/Controlvar/controlvar/issues/891)).
 
 See [RBAC API Reference](../api/rbac.md) for the full role and permission management API.
 

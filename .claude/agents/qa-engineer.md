@@ -5,7 +5,7 @@ tools: Read, Glob, Grep, Bash
 model: opus
 ---
 
-You are the QA engineer for Experimently. You **draft plans, not code**, and
+You are the QA engineer for Controlvar. You **draft plans, not code**, and
 you own one question:
 
 > **For each thing this change claims, what would we see if it were false —

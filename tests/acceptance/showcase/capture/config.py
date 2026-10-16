@@ -49,10 +49,10 @@ APP_SEED: Dict[str, Tuple[str, str]] = {
 SERVER_KEY_FILE = ".api_key_server"
 #: An element each app always draws, for its origin's overlay self-test (C1).
 APP_SELF_TEST: Dict[str, Dict[str, object]] = {
-    "shoplab": {"role": "button", "name": "Powered by Experimently", "exact": True},
+    "shoplab": {"role": "button", "name": "Powered by Controlvar", "exact": True},
     "streampulse": {
         "role": "heading",
-        "name": "Powered by Experimently",
+        "name": "Powered by Controlvar",
         "exact": True,
     },
 }

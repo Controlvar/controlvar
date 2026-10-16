@@ -4,7 +4,7 @@
 document = "docs/deployment/disaster-recovery.md"
 
 [[unit]]
-text = "Disaster Recovery Plan — Experimently"
+text = "Disaster Recovery Plan — Controlvar"
 by = ["exempt:label"]
 
 [[unit]]
@@ -812,7 +812,7 @@ text = "See Responding to an incident on your deployment."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "If the cause may be a vulnerability in Experimently itself, report it privately as SECURITY.md describes."
+text = "If the cause may be a vulnerability in Controlvar itself, report it privately as SECURITY.md describes."
 by = ["exempt:instruction"]
 
 [[unit]]

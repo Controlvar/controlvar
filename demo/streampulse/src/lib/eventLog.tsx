@@ -22,7 +22,7 @@ export const MAX_LOGGED_EVENTS = 50;
 const EventLogContext = createContext<EventLogContextValue | null>(null);
 
 /**
- * In-memory log of every event the app sends, for the Experimently panel.
+ * In-memory log of every event the app sends, for the Controlvar panel.
  *
  * It deliberately lives *outside* the SDK provider (which is re-mounted on every
  * device change and on "Refresh now"), so the log survives a refresh; the page

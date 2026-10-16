@@ -12,11 +12,11 @@ text = "General"
 by = ["exempt:label"]
 
 [[unit]]
-text = "What is Experimently?"
+text = "What is Controlvar?"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Experimently is a self-hosted experimentation platform for running A/B tests, feature flags, and controlled rollouts."
+text = "Controlvar is a self-hosted experimentation platform for running A/B tests, feature flags, and controlled rollouts."
 by = [
     "docex:docs/getting-started/quick-start.md#\"assigned\": true",
     "docex:docs/getting-started/quick-start.md#\"reason\": \"rollout\"",

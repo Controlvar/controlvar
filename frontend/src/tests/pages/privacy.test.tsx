@@ -13,8 +13,8 @@ jest.mock('next/head', () => { const H=({children}:{children:React.ReactNode})=>
 describe('/privacy', () => {
   it('gives the contact address as a mailto link', () => {
     render(<PrivacyPage />);
-    expect(screen.getByRole('link', { name: 'hello@getexperimently.com' }))
-      .toHaveAttribute('href', 'mailto:hello@getexperimently.com');
+    expect(screen.getByRole('link', { name: 'hello@controlvar.com' }))
+      .toHaveAttribute('href', 'mailto:hello@controlvar.com');
   });
 
   it('says the site sets no cookies and runs no analytics', () => {

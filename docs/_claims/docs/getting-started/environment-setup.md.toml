@@ -8,7 +8,7 @@ text = "Environment Configuration Setup Guide"
 by = ["exempt:label"]
 
 [[unit]]
-text = "This guide explains how to set up the environment configuration for Experimently."
+text = "This guide explains how to set up the environment configuration for Controlvar."
 by = ["exempt:navigation"]
 
 [[unit]]

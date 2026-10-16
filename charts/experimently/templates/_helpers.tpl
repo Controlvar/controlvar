@@ -9,11 +9,11 @@ not rename the objects: `helm upgrade` would otherwise create new ones beside
 the old, including a postgres StatefulSet with a new, empty volume claim.
 Pinned by backend/tests/unit/chart/test_chart_rename.py.
 */}}
-{{- define "experimently.name" -}}
+{{- define "controlvar.name" -}}
 {{- default "experimently" .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{- define "experimently.fullname" -}}
+{{- define "controlvar.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,35 +26,35 @@ Pinned by backend/tests/unit/chart/test_chart_rename.py.
 {{- end }}
 {{- end }}
 
-{{- define "experimently.labels" -}}
+{{- define "controlvar.labels" -}}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
-app.kubernetes.io/name: {{ include "experimently.name" . }}
+app.kubernetes.io/name: {{ include "controlvar.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
 {{/* Selector labels for one component: pass (dict "ctx" $ "component" "api"). */}}
-{{- define "experimently.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "experimently.name" .ctx }}
+{{- define "controlvar.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "controlvar.name" .ctx }}
 app.kubernetes.io/instance: {{ .ctx.Release.Name }}
 app.kubernetes.io/component: {{ .component }}
 {{- end }}
 
-{{- define "experimently.serviceAccountName" -}}
+{{- define "controlvar.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "experimently.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "controlvar.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
 
-{{- define "experimently.secretName" -}}
-{{- default (printf "%s-secrets" (include "experimently.fullname" .)) .Values.existingSecret }}
+{{- define "controlvar.secretName" -}}
+{{- default (printf "%s-secrets" (include "controlvar.fullname" .)) .Values.existingSecret }}
 {{- end }}
 
 {{/* The image tag: `<profile>-<appVersion>` unless a versioned tag is given. */}}
-{{- define "experimently.imageTag" -}}
+{{- define "controlvar.imageTag" -}}
 {{- $tag := default (printf "%s-%s" .Values.profile .Chart.AppVersion) .Values.image.tag }}
 {{- if not (hasPrefix (printf "%s-" .Values.profile) $tag) }}
 {{- fail (printf "image.tag %q does not match profile %q: a mismatched image serves the wrong profile without an error" $tag .Values.profile) }}
@@ -63,31 +63,31 @@ app.kubernetes.io/component: {{ .component }}
 {{- end }}
 
 {{/* pass (dict "ctx" $ "image" .Values.image.api) */}}
-{{- define "experimently.image" -}}
+{{- define "controlvar.image" -}}
 {{- if .image.digest }}
 {{- printf "%s@%s" .image.repository .image.digest }}
 {{- else }}
-{{- printf "%s:%s" .image.repository (include "experimently.imageTag" .ctx) }}
+{{- printf "%s:%s" .image.repository (include "controlvar.imageTag" .ctx) }}
 {{- end }}
 {{- end }}
 
 {{/* The host people reach: publicBaseUrl without scheme (and without port). */}}
-{{- define "experimently.publicHost" -}}
-{{- $u := urlParse (required "publicBaseUrl is required, e.g. https://experimently.example.com" .Values.publicBaseUrl) }}
+{{- define "controlvar.publicHost" -}}
+{{- $u := urlParse (required "publicBaseUrl is required, e.g. https://controlvar.example.com" .Values.publicBaseUrl) }}
 {{- (split ":" $u.host)._0 }}
 {{- end }}
 
-{{- define "experimently.postgresHost" -}}
+{{- define "controlvar.postgresHost" -}}
 {{- if .Values.postgresql.bundled }}
-{{- printf "%s-postgres" (include "experimently.fullname" .) }}
+{{- printf "%s-postgres" (include "controlvar.fullname" .) }}
 {{- else }}
 {{- required "postgresql.host is required when postgresql.bundled=false" .Values.postgresql.host }}
 {{- end }}
 {{- end }}
 
-{{- define "experimently.redisHost" -}}
+{{- define "controlvar.redisHost" -}}
 {{- if .Values.redis.bundled }}
-{{- printf "%s-redis" (include "experimently.fullname" .) }}
+{{- printf "%s-redis" (include "controlvar.fullname" .) }}
 {{- else }}
 {{- required "redis.host is required when redis.enabled=true and redis.bundled=false" .Values.redis.host }}
 {{- end }}
@@ -98,8 +98,8 @@ The env entries every API process gets beyond the ConfigMap: secrets, only
 ever by reference. Required keys are not `optional`, so a missing key in an
 existingSecret stops the pod with CreateContainerConfigError naming it.
 */}}
-{{- define "experimently.secretEnv" -}}
-{{- $secret := include "experimently.secretName" . }}
+{{- define "controlvar.secretEnv" -}}
+{{- $secret := include "controlvar.secretName" . }}
 {{- $keys := list "SECRET_KEY" "FIRST_SUPERUSER_PASSWORD" "POSTGRES_USER" "POSTGRES_PASSWORD" }}
 {{- if eq .Values.profile "full" }}
 {{- $keys = append $keys "AUDIT_HMAC_KEY" }}
@@ -133,11 +133,11 @@ ConfigMap or Secret named in api.extraEnvFrom cannot override these. (A later
 PUBLIC_BASE_URL are here and not in the chart's own ConfigMap.)
 pass (dict "ctx" $ "runMigrations" "true"|"false")
 */}}
-{{- define "experimently.pinnedEnvNames" -}}
+{{- define "controlvar.pinnedEnvNames" -}}
 {{- list "ENVIRONMENT" "PUBLIC_BASE_URL" "RUN_MIGRATIONS" "SEED" "SEED_FORCE" | toJson }}
 {{- end }}
 
-{{- define "experimently.pinnedEnv" -}}
+{{- define "controlvar.pinnedEnv" -}}
 - name: ENVIRONMENT
   value: production
 - name: PUBLIC_BASE_URL
@@ -155,8 +155,8 @@ pass (dict "ctx" $ "runMigrations" "true"|"false")
 extraEnv may not reintroduce what the chart pins: in `env`, a later duplicate
 name wins, and extraEnv is rendered after the pinned entries.
 */}}
-{{- define "experimently.extraEnv" -}}
-{{- $pinned := include "experimently.pinnedEnvNames" . | fromJsonArray }}
+{{- define "controlvar.extraEnv" -}}
+{{- $pinned := include "controlvar.pinnedEnvNames" . | fromJsonArray }}
 {{- range .Values.api.extraEnv }}
 {{- if has .name $pinned }}
 {{- fail (printf "api.extraEnv may not set %s: the chart pins it (migrations run once in the migrate init container, demo seeds are not available through this chart, and ENVIRONMENT/PUBLIC_BASE_URL come from the chart's values)" .name) }}
@@ -167,7 +167,7 @@ name wins, and extraEnv is rendered after the pinned entries.
 {{- end }}
 {{- end }}
 
-{{- define "experimently.podSecurity" -}}
+{{- define "controlvar.podSecurity" -}}
 runAsNonRoot: true
 runAsUser: {{ .uid }}
 runAsGroup: {{ .gid }}
@@ -176,7 +176,7 @@ seccompProfile:
   type: RuntimeDefault
 {{- end }}
 
-{{- define "experimently.containerSecurity" -}}
+{{- define "controlvar.containerSecurity" -}}
 allowPrivilegeEscalation: false
 readOnlyRootFilesystem: true
 capabilities:

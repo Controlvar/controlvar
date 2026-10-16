@@ -1,4 +1,4 @@
-Run the full autonomous multi-agent QA pipeline for the Experimently platform.
+Run the full autonomous multi-agent QA pipeline for the Controlvar platform.
 
 Usage: /autotest [scenario_name or "all"]
 
@@ -129,7 +129,7 @@ After all agents complete, produce a consolidated report:
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  AUTOTEST REPORT — Experimently Platform (Multi-Agent QA)
+  AUTOTEST REPORT — Controlvar Platform (Multi-Agent QA)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Scenario:      <name>

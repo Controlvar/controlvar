@@ -4,7 +4,7 @@
 document = "demo/streampulse/README.md"
 
 [[unit]]
-text = "StreamPulse — mobile feature-flag demo for Experimently"
+text = "StreamPulse — mobile feature-flag demo for Controlvar"
 by = ["exempt:label"]
 
 [[unit]]
@@ -15,7 +15,7 @@ by = [
 ]
 
 [[unit]]
-text = "Pick a simulated device (OS, OS version, app version, region, tier, employee) and the phone shows, screen by screen, which feature flags and experiments that device gets from the Experimently platform — with the server's reason for each decision."
+text = "Pick a simulated device (OS, OS version, app version, region, tier, employee) and the phone shows, screen by screen, which feature flags and experiments that device gets from the Controlvar platform — with the server's reason for each decision."
 by = [
     "journey:demo-streampulse#premium-iphone",
     "journey:demo-streampulse#gb-iphone",
@@ -163,7 +163,7 @@ by = [
 ]
 
 [[unit]]
-text = "Powered by Experimently — per flag: on/off + the server reason (targeting_rule, rollout, inactive, error) spelled out; per experiment: the variant and whether the device was actually enrolled (assigned: false → \"in global holdout streampulse-holdout\", \"excluded: mutual exclusion group streampulse-profile\", \"excluded: targeting rules\"); the last 8 events; links to the dashboard; Refresh now (clears the SDK cache and re-evaluates)."
+text = "Powered by Controlvar — per flag: on/off + the server reason (targeting_rule, rollout, inactive, error) spelled out; per experiment: the variant and whether the device was actually enrolled (assigned: false → \"in global holdout streampulse-holdout\", \"excluded: mutual exclusion group streampulse-profile\", \"excluded: targeting rules\"); the last 8 events; links to the dashboard; Refresh now (clears the SDK cache and re-evaluates)."
 by = [
     "journey:demo-streampulse#premium-iphone",
     "journey:demo-streampulse#gb-iphone",
@@ -184,7 +184,7 @@ text = "Running it"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Prerequisites: the Experimently backend on http://localhost:8000, the dashboard on http://localhost:3100, Node 20.9 or later (Next.js 16 refuses older versions), and the repo's Python venv."
+text = "Prerequisites: the Controlvar backend on http://localhost:8000, the dashboard on http://localhost:3100, Node 20.9 or later (Next.js 16 refuses older versions), and the repo's Python venv."
 by = [
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_is_next_16_on_the_pages_router_with_tailwind",
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard",

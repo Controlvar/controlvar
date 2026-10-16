@@ -30,7 +30,7 @@ def test_the_cards_addresses_are_the_repositorys_own():
     reuse = (REPO_ROOT / "REUSE.toml").read_text(encoding="utf-8")
     assert f'SPDX-PackageDownloadLocation = "https://{templates.REPOSITORY}"' in reuse
     assert f"<hello@{templates.SITE}>" in reuse
-    assert templates.PRODUCT_NAME == "Experimently"
+    assert templates.PRODUCT_NAME == "Controlvar"
 
 
 def test_the_end_card_names_the_product_site_repository_and_version():
@@ -40,7 +40,7 @@ def test_the_end_card_names_the_product_site_repository_and_version():
         templates.END_LINE,
         templates.SITE,
         templates.REPOSITORY,
-        "Recorded on Experimently v0.26.4, a local stack with demo data",
+        "Recorded on Controlvar v0.26.4, a local stack with demo data",
     ):
         assert expected in text
 

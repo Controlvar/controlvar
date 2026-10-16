@@ -8,7 +8,7 @@ text = "Technical Guide"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Implementation reference for Experimently: authentication, targeting rules, assignment, results, the background schedulers and caching."
+text = "Implementation reference for Controlvar: authentication, targeting rules, assignment, results, the background schedulers and caching."
 by = ["exempt:navigation"]
 
 [[unit]]

@@ -1,10 +1,10 @@
 # =============================================================================
-# Experimently — the LOCAL DEVELOPMENT stack, built from this checkout.
+# Controlvar — the LOCAL DEVELOPMENT stack, built from this checkout.
 #
 # It is for one machine: every port below is published on 127.0.0.1 only.
 # ENVIRONMENT=development accepts a short or placeholder SECRET_KEY, and the
 # first start creates a demo administrator with a documented password. To run
-# Experimently on a server, use the published images in
+# Controlvar on a server, use the published images in
 # deploy/compose/compose.yml instead.
 #
 #   docker compose up -d --wait            # postgres + redis + api + dashboard

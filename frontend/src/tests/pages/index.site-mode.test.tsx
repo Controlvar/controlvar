@@ -1,7 +1,7 @@
 /**
  * The marketing build must not offer a sign-in that cannot work.
  *
- * `getexperimently.com` has no API: `POST /api/v1/auth/login` returns the
+ * `controlvar.com` has no API: `POST /api/v1/auth/login` returns the
  * site's own HTML with a 404. Three "Sign in" controls pointed at it. A dead
  * login button reads as a broken product rather than as software you run
  * yourself, and the homepage already says there is no hosted tier.
@@ -47,8 +47,8 @@ describe('marketing build', () => {
 
   it('shows a contact address and links the privacy page', () => {
     const { container } = renderHome();
-    const mail = screen.getByRole('link', { name: 'hello@getexperimently.com' });
-    expect(mail).toHaveAttribute('href', 'mailto:hello@getexperimently.com');
+    const mail = screen.getByRole('link', { name: 'hello@controlvar.com' });
+    expect(mail).toHaveAttribute('href', 'mailto:hello@controlvar.com');
     expect(container.querySelector('a[href="/privacy"]')).toBeInTheDocument();
   });
 
@@ -92,7 +92,7 @@ describe.each([
   it('links the repository once', () => {
     const { container } = renderHome();
     const footer = container.querySelector('footer') as HTMLElement;
-    const repo = footer.querySelectorAll('a[href="https://github.com/getexperimently/experimently"]');
+    const repo = footer.querySelectorAll('a[href="https://github.com/Controlvar/controlvar"]');
     expect(repo).toHaveLength(1);
     expect(repo[0]).toHaveAccessibleName('Source');
     expect(repo[0]).toHaveAttribute('target', '_blank');

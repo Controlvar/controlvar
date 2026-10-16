@@ -248,7 +248,7 @@ describe('ChangePasswordPage', () => {
     signIn('cognito');
     render(<ChangePasswordPage />);
     expect(screen.getByTestId('change-password-not-local')).toHaveTextContent(
-      'Your account signs in through your identity provider, so its password is changed there, not in Experimently.',
+      'Your account signs in through your identity provider, so its password is changed there, not in Controlvar.',
     );
     expect(screen.queryByTestId('current-password-input')).not.toBeInTheDocument();
     expect(screen.queryByTestId('change-password-submit')).not.toBeInTheDocument();

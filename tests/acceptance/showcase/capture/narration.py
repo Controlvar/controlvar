@@ -9,7 +9,7 @@ step before it sends anything (``showcase.voice``), with the same function:
   ``!``; numbers in digits, as the page prints them (a number word is refused
   unless the beat lists it under ``claims:`` with a page of the docs); no host,
   port, address, ``localhost``, ``127.0.0.1`` or URL other than
-  getexperimently.com; nothing from ``config.FORBIDDEN_TEXT`` or the
+  controlvar.com; nothing from ``config.FORBIDDEN_TEXT`` or the
   storyboard's ``never_show``; no secret value (the static needles, compared
   as the OCR scan compares them with punctuation removed as well, and
   ``eptk_``); no template; "live" only as "the
@@ -145,7 +145,7 @@ _DOMAIN = re.compile(
     r"\b[a-z0-9-]{1,63}\.(?:com|io|dev|net|org|ai|app|co)\b", re.IGNORECASE
 )
 #: The one address a narration may say (the end card's, if it is ever spoken).
-SITE = "getexperimently.com"
+SITE = "controlvar.com"
 _ENDS = re.compile(r"[.?!]$")
 _INNER_END = re.compile(r"[.?!]\s")
 #: An API key's prefix: no narration says one, even in part.

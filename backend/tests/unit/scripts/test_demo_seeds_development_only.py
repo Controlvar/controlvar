@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Experimently contributors
+# SPDX-FileCopyrightText: 2026 The Controlvar authors
 # SPDX-License-Identifier: Apache-2.0
 """The seeds run only in development and test.
 
@@ -231,7 +231,7 @@ def test_script_run_as_a_program_refuses_production(module_name, seed, tmp_path)
         # refuses. Not real values: this is not a deployment.
         SECRET_KEY="s" * 64,
         FIRST_SUPERUSER_PASSWORD="Str0ng-first-admin",
-        PUBLIC_BASE_URL="https://experimently.example.com",
+        PUBLIC_BASE_URL="https://controlvar.example.com",
         AUDIT_HMAC_KEY="h" * 64,
         POSTGRES_SERVER="127.0.0.1",
         POSTGRES_PORT="1",

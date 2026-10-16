@@ -1,4 +1,4 @@
-# Experimently Documentation
+# Controlvar Documentation
 
 Open-source A/B testing and feature flags that you run yourself. The core, the optional modules
 and the dashboard are Apache-2.0; the client SDKs are MIT.
@@ -8,8 +8,8 @@ and the dashboard are Apache-2.0; the client SDKs are MIT.
 | Guide | What it covers |
 |-------|----------------|
 | [Quick Start](getting-started/quick-start.md) | Start the local stack with Docker, then create, start and read an experiment, an API key and a feature flag |
-| [Demo guide](https://github.com/getexperimently/experimently/blob/main/demo/DEMO_GUIDE.md) | ShopLab and StreamPulse, two sample apps that `./demo/setup-local.sh` starts with the platform |
-| [Limitations](getting-started/limitations.md) | What Experimently does not do, and what happens instead |
+| [Demo guide](https://github.com/Controlvar/controlvar/blob/main/demo/DEMO_GUIDE.md) | ShopLab and StreamPulse, two sample apps that `./demo/setup-local.sh` starts with the platform |
+| [Limitations](getting-started/limitations.md) | What Controlvar does not do, and what happens instead |
 
 ---
 
@@ -24,7 +24,7 @@ and the dashboard are Apache-2.0; the client SDKs are MIT.
 
 ## Self-Hosting
 
-- [Docker Compose on one host](https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml) — the self-hosting stack, on the published images
+- [Docker Compose on one host](https://github.com/Controlvar/controlvar/blob/main/deploy/compose/compose.yml) — the self-hosting stack, on the published images
 - [Kubernetes (Helm)](self-hosting/kubernetes.md)
 - [AWS CDK Deployment](self-hosting/cdk.md)
 
