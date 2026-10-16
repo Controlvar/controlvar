@@ -2,9 +2,9 @@
 #
 # Run from the repository root (fetch deps once with `mix deps.get`):
 #
-#     cd sdk/elixir && EXPERIMENTLY_API_KEY=<key> mix run examples/contract_smoke.exs
+#     cd sdk/elixir && CONTROLVAR_API_KEY=<key> mix run examples/contract_smoke.exs
 #
-# Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY
+# Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY
 # (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY
 # (default sdk_contract_flag), CONTRACT_USER_ID (default: random "smoke-<uuid>").
 #
@@ -52,10 +52,10 @@ defmodule ContractSmoke do
   alias Controlvar.{Assignment, BatchResult, FlagEvaluation}
 
   def run do
-    api_key = System.get_env("EXPERIMENTLY_API_KEY")
-    if api_key in [nil, ""], do: fail("EXPERIMENTLY_API_KEY is required")
+    api_key = env("CONTROLVAR_API_KEY", System.get_env("EXPERIMENTLY_API_KEY"))
+    if api_key in [nil, ""], do: fail("CONTROLVAR_API_KEY is required")
 
-    api_url = env("EXPERIMENTLY_API_URL", "http://localhost:8000")
+    api_url = env("CONTROLVAR_API_URL", env("EXPERIMENTLY_API_URL", "http://localhost:8000"))
     experiment_key = env("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab")
     flag_key = env("CONTRACT_FLAG_KEY", "sdk_contract_flag")
     user_id = env("CONTRACT_USER_ID", random_user_id())

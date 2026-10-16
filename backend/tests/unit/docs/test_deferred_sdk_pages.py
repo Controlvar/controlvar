@@ -395,13 +395,13 @@ def ours(ecosystem: str, name: str, group: Optional[str] = None) -> bool:
     if ecosystem == "packagist":
         return name == json.loads(_manifest("php", "composer.json"))["name"]
     if ecosystem == "nuget":
-        return name.lower().startswith("experimently")
+        return name.lower().startswith("controlvar")
     if ecosystem in ("maven", "gradle"):
         return (group or "").startswith("com.controlvar")
     if ecosystem == "cocoapods":
-        return name.lower().startswith("experimently")
+        return name.lower().startswith("controlvar")
     if ecosystem == "swiftpm":
-        return "getexperimently/" in name
+        return "controlvar/" in name
     raise AssertionError(ecosystem)
 
 
@@ -478,20 +478,20 @@ INSTALL_SAMPLES = (
         [("npm", "@controlvar/edge-sdk")],
     ),
     (
-        "pip install openfeature-sdk experimently controlvar-openfeature==0.1.0",
+        "pip install openfeature-sdk controlvar controlvar-openfeature==0.1.0",
         [("pypi", "controlvar-openfeature")],
     ),
-    ("```ruby\ngem 'experimently', '~> 0.1'\n```\n", [("rubygems", "experimently")]),
-    ("gem install experimently", [("rubygems", "experimently")]),
-    ('```elixir\n    {:experimently, "~> 0.1.0"}\n```\n', [("hex", "experimently")]),
-    ("flutter pub add experimently", [("pub", "experimently")]),
+    ("```ruby\ngem 'controlvar', '~> 0.1'\n```\n", [("rubygems", "controlvar")]),
+    ("gem install controlvar", [("rubygems", "controlvar")]),
+    ('```elixir\n    {:controlvar, "~> 0.1.0"}\n```\n', [("hex", "controlvar")]),
+    ("flutter pub add controlvar", [("pub", "controlvar")]),
     (
-        "```yaml\ndependencies:\n  experimently: ^0.2.0\n```\n",
-        [("pub", "experimently")],
+        "```yaml\ndependencies:\n  controlvar: ^0.2.0\n```\n",
+        [("pub", "controlvar")],
     ),
     (
-        "```bash\ncomposer require experimently/sdk\n```\n",
-        [("packagist", "experimently/sdk")],
+        "```bash\ncomposer require controlvar/sdk\n```\n",
+        [("packagist", "controlvar/sdk")],
     ),
     ("dotnet add package Controlvar.SDK", [("nuget", "Controlvar.SDK")]),
     ("Install-Package Controlvar.SDK", [("nuget", "Controlvar.SDK")]),
@@ -509,25 +509,25 @@ INSTALL_SAMPLES = (
     ),
     ("pod 'Controlvar'", [("cocoapods", "Controlvar")]),
     (
-        '.package(url: "https://github.com/getexperimently/experimently.git", from: "1.0.0")',
-        [("swiftpm", "https://github.com/getexperimently/experimently.git")],
+        '.package(url: "https://github.com/Controlvar/controlvar.git", from: "1.0.0")',
+        [("swiftpm", "https://github.com/Controlvar/controlvar.git")],
     ),
     # Source installs, and the published packages, are not refused.
     ("npm install @controlvar/js-sdk", []),
     ("pip install controlvar", []),
     ("pip install -e sdk/python -e sdk/openfeature-python", []),
     (
-        "npm install /path/to/experimently/sdk/edge/controlvar-edge-sdk-0.2.0.tgz",
+        "npm install /path/to/controlvar/sdk/edge/controlvar-edge-sdk-0.2.0.tgz",
         [],
     ),
     (
-        "gem 'experimently', git: 'https://github.com/getexperimently/experimently.git'",
+        "gem 'controlvar', git: 'https://github.com/Controlvar/controlvar.git'",
         [],
     ),
-    ('{:experimently, git: "https://github.com/getexperimently/experimently.git"}', []),
+    ('{:controlvar, git: "https://github.com/Controlvar/controlvar.git"}', []),
     (
-        "```bash\ncomposer config repositories.experimently path /p/sdk/php\n"
-        "composer require experimently/sdk:@dev\n```\n",
+        "```bash\ncomposer config repositories.controlvar path /p/sdk/php\n"
+        "composer require controlvar/sdk:@dev\n```\n",
         [],
     ),
     (

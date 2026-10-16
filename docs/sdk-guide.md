@@ -91,12 +91,12 @@ machine with the toolchain before relying on them.
 
 ## Python SDK
 
-`sdk/python` — package `experimently`, stdlib only (no runtime dependencies), Python ≥ 3.9,
+`sdk/python` — package `controlvar`, stdlib only (no runtime dependencies), Python ≥ 3.9,
 synchronous. Full reference: [Python SDK](sdk/python.md).
 
 ### Installation
 
-The `experimently` package is on [PyPI](https://pypi.org/project/controlvar/) (0.1.0, beta):
+The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/) (0.1.0, beta):
 
 ```bash
 pip install controlvar==0.1.0
@@ -208,7 +208,7 @@ npm ci && npm run build && npm pack
 Then, in your app, install the packed tarball:
 
 ```bash
-npm install /path/to/experimently/sdk/js/controlvar-js-sdk-0.1.0.tgz
+npm install /path/to/controlvar/sdk/js/controlvar-js-sdk-0.1.0.tgz
 ```
 
 ### Quick Start
@@ -291,7 +291,7 @@ import {
 function App() {
   return (
     <ExperimentationProvider
-      config={{ apiKey: process.env.NEXT_PUBLIC_EXPERIMENTLY_API_KEY!, baseUrl: 'http://localhost:8000' }}
+      config={{ apiKey: process.env.NEXT_PUBLIC_CONTROLVAR_API_KEY!, baseUrl: 'http://localhost:8000' }}
       user={{ userId: currentUser.id, attributes: { plan: currentUser.plan } }}
     >
       <CheckoutButton />

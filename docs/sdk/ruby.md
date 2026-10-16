@@ -30,12 +30,14 @@ with `ruby -Isdk/ruby/lib ...` (no install).
 
 ## Quick Start
 
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
 ```ruby
 require 'controlvar'
 
 client = Controlvar::Client.new(
-  base_url: ENV.fetch('EXPERIMENTLY_API_URL', 'http://localhost:8000'),  # origin only
-  api_key:  ENV.fetch('EXPERIMENTLY_API_KEY')                             # sent as X-API-Key
+  base_url: ENV.fetch('CONTROLVAR_API_URL', 'http://localhost:8000'),  # origin only
+  api_key:  ENV.fetch('CONTROLVAR_API_KEY')                             # sent as X-API-Key
 )
 
 # 1. Assignment — POST /api/v1/tracking/assign (sticky, records the exposure)
@@ -162,10 +164,10 @@ Conversions are matched to metrics by **event name**: a metric on `purchase` cou
 
 ```ruby
 # config/initializers/controlvar.rb
-EXPERIMENTLY = Controlvar::Client.new(
-  base_url: ENV.fetch('EXPERIMENTLY_API_URL'), api_key: ENV.fetch('EXPERIMENTLY_API_KEY'), cache_ttl: 60
+CONTROLVAR = Controlvar::Client.new(
+  base_url: ENV.fetch('CONTROLVAR_API_URL'), api_key: ENV.fetch('CONTROLVAR_API_KEY'), cache_ttl: 60
 )
-at_exit { EXPERIMENTLY.close }
+at_exit { CONTROLVAR.close }
 
 # app/controllers/application_controller.rb
 class ApplicationController < ActionController::Base
@@ -178,18 +180,18 @@ class ApplicationController < ActionController::Base
   end
 
   def feature_enabled?(flag_key)
-    EXPERIMENTLY.feature_enabled?(flag_key, controlvar_user_id)
+    CONTROLVAR.feature_enabled?(flag_key, controlvar_user_id)
   end
 
   def experiment_variant(experiment_key)
-    EXPERIMENTLY.get_assignment(experiment_key, controlvar_user_id, { plan: current_user&.plan })
+    CONTROLVAR.get_assignment(experiment_key, controlvar_user_id, { plan: current_user&.plan })
                 &.variant_name || 'control'
   end
 end
 ```
 
 In your own specs stub HTTP with WebMock (as `sdk/ruby/spec` does) or double the client
-(`allow(EXPERIMENTLY).to receive(:feature_enabled?).and_return(true)`).
+(`allow(CONTROLVAR).to receive(:feature_enabled?).and_return(true)`).
 
 ---
 
@@ -232,7 +234,7 @@ It prints:
 {"sdk":"ruby","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). The smoke assigns,
 clears the cache and assigns again (server stickiness), evaluates the flag, tracks `purchase` with

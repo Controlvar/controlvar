@@ -2,12 +2,13 @@
 #
 # Flag evaluation and experiment assignment are decided by the server through
 # the public API; this script shows every public call. Point it at a running
-# backend with EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY.
+# backend with CONTROLVAR_API_URL / CONTROLVAR_API_KEY.
 #
 # Run with:
 #   cd sdk/elixir
 #   mix deps.get
-#   EXPERIMENTLY_API_KEY=<key> mix run examples/basic_usage.exs
+#   CONTROLVAR_API_KEY=<key> mix run examples/basic_usage.exs
+# (earlier versions of this example read EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY.)
 
 alias Controlvar.{Assignment, BatchResult, FlagEvaluation}
 
@@ -18,8 +19,8 @@ IO.puts("Starting Controlvar client...")
 
 {:ok, client} =
   Controlvar.start(
-    base_url: System.get_env("EXPERIMENTLY_API_URL", "http://localhost:8000"),
-    api_key: System.get_env("EXPERIMENTLY_API_KEY", "your-api-key-here"),
+    base_url: System.get_env("CONTROLVAR_API_URL", "http://localhost:8000"),
+    api_key: System.get_env("CONTROLVAR_API_KEY", "your-api-key-here"),
     # Seconds a successful evaluation/assignment is reused
     cache_ttl: 300,
     # HTTP timeout in milliseconds

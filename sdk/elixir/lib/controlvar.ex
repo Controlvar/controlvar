@@ -16,7 +16,7 @@ defmodule Controlvar do
 
       {:ok, client} = Controlvar.start(
         base_url: "http://localhost:8000",
-        api_key: System.fetch_env!("EXPERIMENTLY_API_KEY")
+        api_key: System.fetch_env!("CONTROLVAR_API_KEY")
       )
 
       # Feature flag (GET /api/v1/feature-flags/evaluate/{key}?user_id=...)

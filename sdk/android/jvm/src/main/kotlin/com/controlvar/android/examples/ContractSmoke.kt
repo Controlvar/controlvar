@@ -19,8 +19,8 @@ import kotlin.system.exitProcess
  * JSON line on stdout on success (exit 0); on failure it prints one line to
  * stderr and exits 1.
  *
- * Environment: EXPERIMENTLY_API_URL (default http://localhost:8000),
- * EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default
+ * Environment: CONTROLVAR_API_URL (default http://localhost:8000),
+ * CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default
  * sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag),
  * CONTRACT_USER_ID (default smoke-<uuid>).
  *
@@ -38,9 +38,9 @@ object ContractSmoke {
 
     @JvmStatic
     fun main(args: Array<String>) {
-        val apiKey = env("EXPERIMENTLY_API_KEY", "")
-        if (apiKey.isEmpty()) fail("EXPERIMENTLY_API_KEY is required")
-        val baseUrl = env("EXPERIMENTLY_API_URL", "http://localhost:8000")
+        val apiKey = env("CONTROLVAR_API_KEY", env("EXPERIMENTLY_API_KEY", ""))
+        if (apiKey.isEmpty()) fail("CONTROLVAR_API_KEY is required")
+        val baseUrl = env("CONTROLVAR_API_URL", env("EXPERIMENTLY_API_URL", "http://localhost:8000"))
         val experimentKey = env("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab")
         val flagKey = env("CONTRACT_FLAG_KEY", "sdk_contract_flag")
         val userId = env("CONTRACT_USER_ID", "smoke-${UUID.randomUUID()}")

@@ -14,8 +14,10 @@ else to install.
 
 ## Install
 
+If you installed `experimently`, the name this package had before the project was renamed, uninstall it and install `controlvar`.
+
 The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/). 0.1.0 is a
-beta release. It installs as `controlvar` and imports as `experimentation`.
+beta release. It installs and imports as `controlvar`.
 
 ```bash
 pip install controlvar==0.1.0
@@ -29,7 +31,7 @@ pip install -e sdk/python
 
 ## Quick start
 
-Set `EXPERIMENTLY_API_KEY` to an API key, then run the block as it is; the two `print` calls
+Set `CONTROLVAR_API_KEY` to an API key, then run the block as it is; the two `print` calls
 stand for your own code.
 
 ```python
@@ -37,8 +39,8 @@ import os
 from controlvar import ExperimentationClient, ExperimentationError
 
 client = ExperimentationClient(
-    api_url=os.environ.get("EXPERIMENTLY_API_URL", "http://localhost:8000"),  # origin only
-    api_key=os.environ["EXPERIMENTLY_API_KEY"],
+    api_url=os.environ.get("CONTROLVAR_API_URL", "http://localhost:8000"),  # origin only
+    api_key=os.environ["CONTROLVAR_API_KEY"],
 )
 
 # Experiments — sticky assignment made by the server (POST /api/v1/tracking/assign)
@@ -128,7 +130,7 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json` and `
 ## Contract smoke
 
 ```bash
-EXPERIMENTLY_API_KEY=<key> python sdk/python/examples/contract_smoke.py
+CONTROLVAR_API_KEY=<key> python sdk/python/examples/contract_smoke.py
 ```
 
 It prints:
@@ -137,7 +139,7 @@ It prints:
 {"sdk":"python","assign":{"variant_name":"treatment","is_control":false,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default `sdk_contract_flag`),
 `CONTRACT_USER_ID` (default random `smoke-<uuid>`).
 

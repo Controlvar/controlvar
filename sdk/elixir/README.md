@@ -37,8 +37,8 @@ end
 ```elixir
 {:ok, client} =
   Controlvar.start(
-    base_url: System.get_env("EXPERIMENTLY_API_URL", "http://localhost:8000"),
-    api_key: System.fetch_env!("EXPERIMENTLY_API_KEY")
+    base_url: System.get_env("CONTROLVAR_API_URL", "http://localhost:8000"),
+    api_key: System.fetch_env!("CONTROLVAR_API_KEY")
   )
 
 # Feature flag — GET /api/v1/feature-flags/evaluate/{key}?user_id=...
@@ -146,7 +146,7 @@ plus a 2-event batch) against a live backend and prints one JSON line:
 
 ```bash
 cd sdk/elixir && mix deps.get
-EXPERIMENTLY_API_KEY=<key> mix run examples/contract_smoke.exs
+CONTROLVAR_API_KEY=<key> mix run examples/contract_smoke.exs
 ```
 
 - `cd sdk/elixir && mix deps.get`: once
@@ -157,7 +157,7 @@ It prints:
 {"sdk":"elixir","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). Set `MIX_QUIET=1` to keep
 Mix's compile messages off stdout.

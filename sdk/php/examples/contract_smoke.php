@@ -7,13 +7,13 @@ declare(strict_types=1);
  * backend and prints exactly one JSON line on stdout.
  *
  * Run from the repository root (no composer install needed):
- *   EXPERIMENTLY_API_KEY=<key> php sdk/php/examples/contract_smoke.php
+ *   CONTROLVAR_API_KEY=<key> php sdk/php/examples/contract_smoke.php
  * or through the live runner, which seeds the fixtures and supplies the key:
  *   python tests/sdk-contract/live/run_live_contract.py --sdk php --strict
  *
  * Environment:
- *   EXPERIMENTLY_API_URL     backend origin (default http://localhost:8000)
- *   EXPERIMENTLY_API_KEY     API key (required)
+ *   CONTROLVAR_API_URL     backend origin (default http://localhost:8000)
+ *   CONTROLVAR_API_KEY     API key (required)
  *   CONTRACT_EXPERIMENT_KEY  default sdk_contract_ab
  *   CONTRACT_FLAG_KEY        default sdk_contract_flag
  *   CONTRACT_USER_ID         default smoke-<uuid>
@@ -139,14 +139,14 @@ function runSmoke(string $apiUrl, string $apiKey, string $experimentKey, string 
     ];
 }
 
-$apiKey = envOr('EXPERIMENTLY_API_KEY', '');
+$apiKey = envOr('CONTROLVAR_API_KEY', envOr('EXPERIMENTLY_API_KEY', ''));
 if (trim($apiKey) === '') {
-    smokeFail('EXPERIMENTLY_API_KEY is required');
+    smokeFail('CONTROLVAR_API_KEY is required');
 }
 
 try {
     $report = runSmoke(
-        envOr('EXPERIMENTLY_API_URL', 'http://localhost:8000'),
+        envOr('CONTROLVAR_API_URL', envOr('EXPERIMENTLY_API_URL', 'http://localhost:8000')),
         $apiKey,
         envOr('CONTRACT_EXPERIMENT_KEY', 'sdk_contract_ab'),
         envOr('CONTRACT_FLAG_KEY', 'sdk_contract_flag'),

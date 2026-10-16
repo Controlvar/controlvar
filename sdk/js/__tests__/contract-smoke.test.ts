@@ -74,7 +74,7 @@ function runSmoke(env: Record<string, string>) {
 }
 
 test('it reads its settings from the environment, with these defaults', () => {
-  const { run, seen } = runSmoke({ EXPERIMENTLY_API_KEY: 'smoke-key' });
+  const { run, seen } = runSmoke({ CONTROLVAR_API_KEY: 'smoke-key' });
   expect(run.stderr).toBe('');
   expect(run.status).toBe(0);
   expect(seen.length).toBeGreaterThan(0);
@@ -87,8 +87,8 @@ test('it reads its settings from the environment, with these defaults', () => {
 
 test('it assigns twice, evaluates the flag, tracks with and without a key and sends a 2-event batch', () => {
   const { run, seen } = runSmoke({
-    EXPERIMENTLY_API_URL: 'http://api.test',
-    EXPERIMENTLY_API_KEY: 'k',
+    CONTROLVAR_API_URL: 'http://api.test',
+    CONTROLVAR_API_KEY: 'k',
     CONTRACT_EXPERIMENT_KEY: 'exp_a',
     CONTRACT_FLAG_KEY: 'flag_a',
     CONTRACT_USER_ID: 'user-a',
@@ -122,6 +122,28 @@ test('it assigns twice, evaluates the flag, tracks with and without a key and se
 test('it stops without a key and sends nothing', () => {
   const { run, seen } = runSmoke({});
   expect(run.status).toBe(1);
-  expect(run.stderr).toContain('EXPERIMENTLY_API_KEY is required');
+  expect(run.stderr).toContain('CONTROLVAR_API_KEY is required');
   expect(seen).toEqual([]);
+});
+
+// Three distinct values per setting, none of them the default or what CI sets.
+const NEW_URL = 'http://127.0.0.1:9';
+const OLD_URL = 'http://127.0.0.1:7';
+
+test.each([
+  ['the former names only', { EXPERIMENTLY_API_URL: OLD_URL, EXPERIMENTLY_API_KEY: 'old-key' }, OLD_URL, 'old-key'],
+  ['the new names only', { CONTROLVAR_API_URL: NEW_URL, CONTROLVAR_API_KEY: 'new-key' }, NEW_URL, 'new-key'],
+  [
+    'both: the new names win',
+    { CONTROLVAR_API_URL: NEW_URL, CONTROLVAR_API_KEY: 'new-key', EXPERIMENTLY_API_URL: OLD_URL, EXPERIMENTLY_API_KEY: 'old-key' },
+    NEW_URL,
+    'new-key',
+  ],
+  ['no URL: the default', { EXPERIMENTLY_API_KEY: 'old-key' }, 'http://localhost:8000', 'old-key'],
+])('%s', (_name, env, url, key) => {
+  const { run, seen } = runSmoke(env as Record<string, string>);
+  expect(run.status).toBe(0);
+  expect(seen.length).toBeGreaterThan(0);
+  expect(new Set(seen.map(r => new URL(r.url).origin))).toEqual(new Set([new URL(url).origin]));
+  expect(new Set(seen.map(r => r.key))).toEqual(new Set([key]));
 });

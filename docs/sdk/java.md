@@ -43,6 +43,8 @@ Gradle reads `~/.m2` only through `mavenLocal()`: add it to `repositories`, then
 
 ## Quick Start
 
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
 ```java
 import com.controlvar.sdk.ExperimentationClient;
 import com.controlvar.sdk.config.SdkConfig;
@@ -53,7 +55,7 @@ import com.controlvar.sdk.model.TrackEvent;
 import com.controlvar.sdk.model.User;
 import java.util.Map;
 
-SdkConfig config = SdkConfig.builder(System.getenv("EXPERIMENTLY_API_KEY"), "http://localhost:8000")
+SdkConfig config = SdkConfig.builder(System.getenv("CONTROLVAR_API_KEY"), "http://localhost:8000")
         .timeoutMs(3000)
         .build();
 
@@ -174,7 +176,7 @@ registers one `ExperimentationClient` bean (`@ConditionalOnMissingBean`, so your
 
 ```yaml
 experimentation:
-  api-key: ${EXPERIMENTLY_API_KEY}      # required; relaxed binding (EXPERIMENTATION_API_KEY works)
+  api-key: ${CONTROLVAR_API_KEY}      # required; relaxed binding (EXPERIMENTATION_API_KEY works)
   base-url: http://localhost:8000
   timeout-ms: 5000
   cache-ttl-seconds: 300
@@ -243,7 +245,7 @@ It prints:
 The script builds when needed (`./mvnw -q -B -pl core -am package -DskipTests`, Maven output on stderr;
 `FORCE_BUILD=1` forces it) and runs
 `java -cp "core/target/classes:core/target/lib/*" com.controlvar.sdk.examples.ContractSmoke`.
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). The smoke assigns on one
 client twice and on a fresh client once (server stickiness), evaluates the flag, tracks `purchase`

@@ -742,21 +742,21 @@ def test_skip_reason_names_a_category(reason, ok):
 @pytest.mark.parametrize(
     "body, tool",
     [
-        ("pip install openfeature-sdk experimently controlvar-openfeature", "pip"),
-        ("gem install experimently", "gem"),
+        ("pip install openfeature-sdk controlvar controlvar-openfeature", "pip"),
+        ("gem install controlvar", "gem"),
         ("npx @controlvar/cli init", "npx"),
         ("uv pip install controlvar", "uv"),
         ("cd sdk/js && npm ci", "npm"),
-        ("sudo pip3 install experimently", "pip3"),
+        ("sudo pip3 install controlvar", "pip3"),
         ("python -m pip install controlvar", "python -m pip"),
         ("dotnet add package Controlvar.SDK", "dotnet add"),
-        ("composer require experimently/sdk", "composer"),
-        ("go get github.com/getexperimently/go-sdk", "go get"),
+        ("composer require controlvar/sdk", "composer"),
+        ("go get github.com/controlvar/go-sdk", "go get"),
         ("FOO=1 yarn add @controlvar/js-sdk", "yarn"),
         ("VERSION=$(npm view x version)", "npm"),
         ("if true; then pnpm i; fi", "pnpm"),
-        ("pipx run experimently", "pipx"),
-        ("poetry add experimently", "poetry"),
+        ("pipx run controlvar", "pipx"),
+        ("poetry add controlvar", "poetry"),
     ],
 )
 def test_a_block_that_runs_may_not_install_or_run_a_package(body, tool):
@@ -798,7 +798,7 @@ def test_the_words_alone_are_not_a_package_manager_or_aws(body):
 
 def test_a_registry_skip_must_run_a_package_manager():
     good = page(
-        f'{FENCE}{{.bash skip reason="registry: not published"}}\npip install experimently\n{FENCE}'
+        f'{FENCE}{{.bash skip reason="registry: not published"}}\npip install controlvar\n{FENCE}'
     )
     bad = page(
         f'{FENCE}{{.bash skip reason="registry: not published"}}\ncurl localhost\n{FENCE}'
@@ -1556,7 +1556,7 @@ def test_a_here_document_body_is_scanned_like_any_other_line(name, line, message
 
 def test_a_registry_skip_counts_an_install_inside_a_here_document():
     """The registry predicate reads the same text the refusal does."""
-    body = "sh <<'EOF'\npip install experimently\nEOF"
+    body = "sh <<'EOF'\npip install controlvar\nEOF"
     (block,) = blocks(
         page(f'{FENCE}{{.bash skip reason="registry: not published"}}\n{body}\n{FENCE}')
     )

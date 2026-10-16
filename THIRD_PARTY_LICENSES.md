@@ -1036,6 +1036,6 @@ These ecosystems have no resolver in this repository, so the list below is read 
 
 | Package | Version | Licence |
 |---|---|---|
-| `(experimently: standard library only)` | — | — |
+| `(controlvar: standard library only)` | — | — |
 | `openfeature-sdk` | >=0.9.0 | Apache-2.0 |
 

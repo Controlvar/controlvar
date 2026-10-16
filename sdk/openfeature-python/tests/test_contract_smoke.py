@@ -22,6 +22,8 @@ from controlvar.testing import FakeTransport
 
 SMOKE = Path(__file__).resolve().parents[1] / "examples" / "contract_smoke.py"
 VARIABLES = (
+    "CONTROLVAR_API_URL",
+    "CONTROLVAR_API_KEY",
     "EXPERIMENTLY_API_URL",
     "EXPERIMENTLY_API_KEY",
     "CONTRACT_EXPERIMENT_KEY",
@@ -56,7 +58,7 @@ def fake_api(experiment_key: str, flag_key: str) -> FakeTransport:
 def smoke(monkeypatch):
     for name in VARIABLES:
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("EXPERIMENTLY_API_KEY", "smoke-key")
+    monkeypatch.setenv("CONTROLVAR_API_KEY", "smoke-key")
     spec = importlib.util.spec_from_file_location("openfeature_contract_smoke_under_test", SMOKE)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -83,7 +85,7 @@ def test_it_reads_its_settings_from_the_environment_with_these_defaults(smoke, m
 
 
 def test_the_flag_goes_through_openfeature_and_the_rest_through_provider_client(smoke, monkeypatch, capsys):
-    monkeypatch.setenv("EXPERIMENTLY_API_URL", "http://api.test")
+    monkeypatch.setenv("CONTROLVAR_API_URL", "http://api.test")
     monkeypatch.setenv("CONTRACT_EXPERIMENT_KEY", "exp_a")
     monkeypatch.setenv("CONTRACT_FLAG_KEY", "flag_a")
     monkeypatch.setenv("CONTRACT_USER_ID", "user-a")
@@ -110,3 +112,50 @@ def test_the_flag_goes_through_openfeature_and_the_rest_through_provider_client(
     ]
     assert transport.requests[2].query == {"user_id": "user-a"}
     assert len(capsys.readouterr().out.strip().splitlines()) == 1
+
+
+#: Three distinct values per setting, none of them the default or what CI sets.
+NEW_URL, OLD_URL, DEFAULT_URL = "http://127.0.0.1:9", "http://127.0.0.1:7", "http://localhost:8000"
+
+
+@pytest.mark.parametrize(
+    ("names", "url", "key"),
+    [
+        pytest.param(
+            {"EXPERIMENTLY_API_URL": OLD_URL, "EXPERIMENTLY_API_KEY": "old-key"},
+            OLD_URL,
+            "old-key",
+            id="former-names-only",
+        ),
+        pytest.param(
+            {"CONTROLVAR_API_URL": NEW_URL, "CONTROLVAR_API_KEY": "new-key"},
+            NEW_URL,
+            "new-key",
+            id="new-names-only",
+        ),
+        pytest.param(
+            {
+                "CONTROLVAR_API_URL": NEW_URL,
+                "CONTROLVAR_API_KEY": "new-key",
+                "EXPERIMENTLY_API_URL": OLD_URL,
+                "EXPERIMENTLY_API_KEY": "old-key",
+            },
+            NEW_URL,
+            "new-key",
+            id="both-new-wins",
+        ),
+        pytest.param({"EXPERIMENTLY_API_KEY": "old-key"}, DEFAULT_URL, "old-key", id="no-url"),
+    ],
+)
+def test_the_new_names_win_and_the_former_names_are_still_read(smoke, monkeypatch, names, url, key):
+    monkeypatch.delenv("CONTROLVAR_API_KEY")
+    for name, value in names.items():
+        monkeypatch.setenv(name, value)
+    transport = fake_api("sdk_contract_ab", "sdk_contract_flag")
+    monkeypatch.setattr(client_module, "UrllibTransport", lambda: transport)
+
+    smoke.main()
+
+    assert transport.requests
+    assert {r.url.split("/api/v1/")[0] for r in transport.requests} == {url}
+    assert {r.headers["X-API-Key"] for r in transport.requests} == {key}

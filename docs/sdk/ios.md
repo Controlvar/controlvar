@@ -39,6 +39,8 @@ Xcode: File → Add Package Dependencies… → Add Local… → `sdk/ios` → p
 
 ## Quick Start
 
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
 ```swift
 import Controlvar
 
@@ -230,7 +232,7 @@ It prints:
 ```
 
 SwiftPM build output goes to stderr (the repo runner uses `swift run -q contract-smoke`). Env:
-`EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+`CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). The smoke uses
 `enableOfflineFallback: false`, assigns on two clients (server stickiness), evaluates the flag,

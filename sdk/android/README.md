@@ -46,7 +46,7 @@ import com.controlvar.android.User
 val client = ExperimentationClient(
     SdkConfig(
         baseUrl = "http://10.0.2.2:8000",   // origin only; 10.0.2.2 = host localhost from the emulator
-        apiKey = BuildConfig.EXPERIMENTLY_API_KEY   // sent as X-API-Key
+        apiKey = BuildConfig.CONTROLVAR_API_KEY   // sent as X-API-Key
     )
 )
 
@@ -165,8 +165,8 @@ It prints:
 
 Runs `com.controlvar.android.examples.ContractSmoke` from the JVM build above
 (`./mvnw -q package -DskipTests` when `jvm/target` is stale, Maven output to stderr; `FORCE_BUILD=1`
-forces a rebuild). Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`),
-`EXPERIMENTLY_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`),
+forces a rebuild). Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`),
+`CONTROLVAR_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`),
 `CONTRACT_FLAG_KEY` (default `sdk_contract_flag`), `CONTRACT_USER_ID` (default random
 `smoke-<uuid>`). Repo-wide runner:
 `python tests/sdk-contract/live/run_live_contract.py --sdk android`.

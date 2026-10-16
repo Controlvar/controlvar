@@ -137,7 +137,7 @@ tracking against a live API in CI (the SDK Live Contract job of `pr-qa-gate.yml`
 | SDK | Install |
 |---|---|
 | JavaScript | `npm install @controlvar/js-sdk` |
-| Python | `pip install controlvar` (it imports as `experimentation`) |
+| Python | `pip install controlvar` |
 | Go | `go get github.com/controlvar/controlvar/sdk/go` |
 
 Every other SDK installs from a clone of this repository. The [SDK guide](docs/sdk-guide.md) says

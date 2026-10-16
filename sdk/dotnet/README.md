@@ -28,8 +28,8 @@ repository (this is what `examples/` and `tests/` do).
 using Controlvar;
 
 var config = new SdkConfig(
-    Environment.GetEnvironmentVariable("EXPERIMENTLY_API_URL") ?? "http://localhost:8000",
-    Environment.GetEnvironmentVariable("EXPERIMENTLY_API_KEY")!);
+    Environment.GetEnvironmentVariable("CONTROLVAR_API_URL") ?? "http://localhost:8000",
+    Environment.GetEnvironmentVariable("CONTROLVAR_API_KEY")!);
 using var client = new ExperimentationClient(config);
 
 // Feature flag — GET /api/v1/feature-flags/evaluate/{key}?user_id=…
@@ -164,7 +164,7 @@ Runs the four contract steps (sticky assignment, flag evaluation, keyed track, k
 plus a 2-event batch) against a live backend and prints one JSON line:
 
 ```bash
-EXPERIMENTLY_API_KEY=<key> dotnet run --project sdk/dotnet/examples/ContractSmoke
+CONTROLVAR_API_KEY=<key> dotnet run --project sdk/dotnet/examples/ContractSmoke
 ```
 
 It prints:
@@ -173,7 +173,7 @@ It prints:
 {"sdk":"dotnet","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<guid>`). On failure one line is
 written to stderr and the exit code is 1.

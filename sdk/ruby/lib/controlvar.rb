@@ -19,7 +19,7 @@ require_relative 'controlvar/client'
 #
 #   client = Controlvar::Client.new(
 #     base_url: "http://localhost:8000",
-#     api_key:  ENV["EXPERIMENTLY_API_KEY"]
+#     api_key:  ENV["CONTROLVAR_API_KEY"]
 #   )
 #
 #   flag = client.evaluate_flag("dark-mode", "user-123")

@@ -43,7 +43,7 @@ import com.controlvar.sdk.exception.ExperimentationException;
 import com.controlvar.sdk.model.*;
 import java.util.Map;
 
-SdkConfig config = SdkConfig.builder(System.getenv("EXPERIMENTLY_API_KEY"), "http://localhost:8000").build();
+SdkConfig config = SdkConfig.builder(System.getenv("CONTROLVAR_API_KEY"), "http://localhost:8000").build();
 
 try (ExperimentationClient client = new ExperimentationClient(config)) {
     User user = User.builder("user-123").attribute("plan", "pro").attribute("country", "US").build();
@@ -75,7 +75,7 @@ try (ExperimentationClient client = new ExperimentationClient(config)) {
 
 ```properties
 # application.properties — the starter registers an ExperimentationClient bean when api-key is set
-experimentation.api-key=${EXPERIMENTLY_API_KEY}
+experimentation.api-key=${CONTROLVAR_API_KEY}
 experimentation.base-url=http://localhost:8000
 ```
 
@@ -185,7 +185,7 @@ It prints:
 The script runs `./mvnw -q -B -pl core -am package -DskipTests` when `core/target` is stale (Maven output
 goes to stderr) and then `java -cp "core/target/classes:core/target/lib/*"
 com.controlvar.sdk.examples.ContractSmoke`; `FORCE_BUILD=1` forces a rebuild. Env:
-`EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+`CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). Repo-wide runner:
 `python tests/sdk-contract/live/run_live_contract.py --sdk java --strict`.

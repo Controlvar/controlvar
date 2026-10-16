@@ -71,7 +71,7 @@ Then:
   that SDK's job in the counted sdk-unit-tests.yml run, and the report names
   them as the residual.
 * P published packages (``PACKAGES``: npm's ``@controlvar/js-sdk`` and
-  PyPI's ``experimently``). The manifest at the RC gives the name and version.
+  PyPI's ``controlvar``). The manifest at the RC gives the name and version.
   The tag ``sdk/<sdk>/v<version>`` exists, and the RC's ``sdk/<sdk>`` tree is
   the tag's (the same git tree id: ``git diff --quiet <tag> <rc> --
   sdk/<sdk>``), so the published package was built from what the RC tests;

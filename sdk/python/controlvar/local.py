@@ -67,7 +67,7 @@ __all__ = [
     "ReadyResult",
 ]
 
-logger = logging.getLogger("experimentation")
+logger = logging.getLogger("controlvar")
 
 RULESET_PATH = "/api/v1/sdk/ruleset"
 EVALUATIONS_PATH = "/api/v1/tracking/evaluations"

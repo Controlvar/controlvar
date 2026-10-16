@@ -41,7 +41,7 @@ by = [
 
 [[unit]]
 text = "Source: sdk/python."
-by = ["test:sdk/python/tests/test_package.py::test_it_installs_as_controlvar_and_imports_as_experimentation"]
+by = ["test:sdk/python/tests/test_package.py::test_it_installs_and_imports_as_controlvar"]
 
 [[unit]]
 text = "The OpenFeature provider in sdk/openfeature-python is built on top of this client (see openfeature.md)."
@@ -513,7 +513,7 @@ text = "It prints:"
 by = ["test:sdk/python/tests/test_contract_smoke.py::test_it_runs_from_the_source_tree_with_its_defaults"]
 
 [[unit]]
-text = "Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
+text = "Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
 by = [
     "test:sdk/python/tests/test_contract_smoke.py::test_it_runs_from_the_source_tree_with_its_defaults",
     "test:sdk/python/tests/test_contract_smoke.py::test_it_runs_the_four_contract_steps",
@@ -551,3 +551,11 @@ by = [
     "test:sdk/python/tests/test_hashing.py::test_consistent_hash_matches_golden_vector",
     "test:sdk/python/tests/test_hashing.py::test_md5_hex_matches_golden_vector",
 ]
+
+[[unit]]
+text = "If you set EXPERIMENTLY_API_KEY or EXPERIMENTLY_API_URL from an earlier version of these pages, set CONTROLVAR_API_KEY and CONTROLVAR_API_URL instead."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If you installed experimently, the name this package had before the project was renamed, uninstall it and install controlvar."
+by = ["exempt:instruction"]

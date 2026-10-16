@@ -5,13 +5,13 @@ and Python SDKs were "1.1" while both manifests said 0.1.0 (#784). This reads
 every place a page quotes a package with a version and compares it with the
 manifest:
 
-* `` `@controlvar/js-sdk` (v0.1.0) `` and `` `experimently` 0.1.0 ``;
+* `` `@controlvar/js-sdk` (v0.1.0) `` and `` `controlvar` 0.1.0 ``;
 * a tarball name such as ``controlvar-js-sdk-0.1.0.tgz``;
 * an install command pinned to a version, ``npm install
   @controlvar/js-sdk@0.1.0`` or ``pip install controlvar==0.1.0``;
 * an install command followed by the version, `` (`pip install controlvar`,
   0.1.0, beta) ``;
-* the sentence naming the registry, `` The `experimently` package is on
+* the sentence naming the registry, `` The `controlvar` package is on
   [PyPI](...). 0.1.0 is a beta release `` or `` ... on [npm](...) (0.1.0,
   beta) ``.
 
@@ -26,7 +26,7 @@ A quote in a form this file does not read would go stale unseen, so:
 * on the pages that quote nothing but the two published packages (their
   READMEs, the FAQ and the two journeys, ``STRICT``), every ``X.Y.Z`` must be
   one of the forms above and must be its package's manifest version exactly,
-  with no pre-release suffix: ``experimently~=0.1.0``, a ``package.json``
+  with no pre-release suffix: ``controlvar~=0.1.0``, a ``package.json``
   line, a URL or a bare ``v0.1.0`` fails there;
 * on the other pages about them, which also quote the server's and other
   SDKs' versions, every ``X.Y.Z`` with the packages' major and a minor at or
@@ -38,7 +38,7 @@ from this repository, where ``../../docs/x.md`` leads nowhere. A published
 package's README does not say it is unpublished, whatever its markup.
 
 A quoted version may be shorter than the manifest's ("v1.1" for 1.1.0), but
-every part it gives must match. The plain name ``experimently`` is shared by
+every part it gives must match. The plain name ``controlvar`` is shared by
 the Python, Ruby, Elixir and Flutter packages, so in the first form it is
 checked only on the pages about the Python SDK; the install and registry
 forms name the Python package whatever the page.
@@ -71,7 +71,7 @@ PYPI = ("python", "openfeature-python")
 #: The SDK directories whose package is on its registry. PyPI and npm show the
 #: README of each as the package's page.
 PUBLISHED = ("python", "js")
-#: Pages on which the bare name `experimently` means the Python SDK.
+#: Pages on which the bare name `controlvar` means the Python SDK.
 PYTHON_PAGES = {
     "docs/sdk/python.md",
     "docs/sdk/local-evaluation.md",
@@ -79,14 +79,14 @@ PYTHON_PAGES = {
 }
 
 VERSION = r"v?(\d+(?:\.\d+){1,2})"
-PACKAGE = r"@controlvar/[A-Za-z0-9_-]+|experimently(?:-openfeature)?"
+PACKAGE = r"@controlvar/[A-Za-z0-9_-]+|controlvar(?:-openfeature)?"
 #: (form, pattern): group 1 the package, group 2 the version. Whitespace is
 #: folded before matching, so a line break may fall anywhere.
 FORMS: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
     ("quoted", re.compile(r"`(" + PACKAGE + r")` \(?" + VERSION)),
-    ("tarball", re.compile(r"getexperimently-([A-Za-z0-9-]+?)-(\d+\.\d+\.\d+)\.tgz")),
+    ("tarball", re.compile(r"controlvar-([A-Za-z0-9-]+?)-(\d+\.\d+\.\d+)\.tgz")),
     ("npm pin", re.compile(r"(@controlvar/[A-Za-z0-9_-]+)@" + VERSION)),
-    ("pip pin", re.compile(r"(?<![\w-])(experimently(?:-openfeature)?)==" + VERSION)),
+    ("pip pin", re.compile(r"(?<![\w-])(controlvar(?:-openfeature)?)==" + VERSION)),
     (
         "install, then version",
         re.compile(r"`(?:npm|pip) install (" + PACKAGE + r")`, " + VERSION),
@@ -147,7 +147,7 @@ def quotes(rel: str, text: str) -> List[Tuple[str, str, Tuple[int, int]]]:
                 package = f"@controlvar/{package}"
             if (
                 form == "quoted"
-                and package == "experimently"
+                and package == "controlvar"
                 and rel not in PYTHON_PAGES
             ):
                 continue
@@ -263,14 +263,14 @@ def test_the_scan_finds_the_quotes_it_exists_for():
     assert {
         ("docs/sdk/javascript.md", "@controlvar/js-sdk"),
         ("docs/sdk/react.md", "@controlvar/react-sdk"),
-        ("docs/sdk/python.md", "experimently"),
+        ("docs/sdk/python.md", "controlvar"),
         ("docs/sdk/local-evaluation.md", "@controlvar/js-sdk"),
-        ("docs/sdk/local-evaluation.md", "experimently"),
-        ("docs/getting-started/faq.md", "experimently"),
+        ("docs/sdk/local-evaluation.md", "controlvar"),
+        ("docs/getting-started/faq.md", "controlvar"),
         ("docs/getting-started/faq.md", "@controlvar/js-sdk"),
-        ("sdk/python/README.md", "experimently"),
+        ("sdk/python/README.md", "controlvar"),
         ("sdk/js/README.md", "@controlvar/js-sdk"),
-        ("tests/acceptance/docs/journeys/sdk-python.yaml", "experimently"),
+        ("tests/acceptance/docs/journeys/sdk-python.yaml", "controlvar"),
         (
             "tests/acceptance/docs/journeys/sdk-javascript.yaml",
             "@controlvar/js-sdk",
@@ -337,19 +337,19 @@ def test_a_page_left_behind_at_a_version_bump_is_refused(part):
             f"{rel(page)} at the old version passed"
         )
     js = versions["@controlvar/js-sdk"]
-    py = versions["experimently"]
+    py = versions["controlvar"]
     for sentence, package in (
         (f"npm install @controlvar/js-sdk@{js}", "@controlvar/js-sdk"),
-        (f"pip install controlvar=={py}", "experimently"),
+        (f"pip install controlvar=={py}", "controlvar"),
         (
             f"(`npm install @controlvar/js-sdk`, {js}, beta)",
             "@controlvar/js-sdk",
         ),
-        (f"(`pip install controlvar`, {py}, beta)", "experimently"),
+        (f"(`pip install controlvar`, {py}, beta)", "controlvar"),
         (
-            "The `experimently` package is on [PyPI](https://pypi.org/project/controlvar/)."
+            "The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/)."
             f" {py} is a beta release.",
-            "experimently",
+            "controlvar",
         ),
         (
             "The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/x)"
@@ -370,8 +370,8 @@ def test_a_page_left_behind_at_a_version_bump_is_refused(part):
 #: compares, each planted beside a page whose recognised quotes were all
 #: moved to a minor release.
 STALE = {
-    "compatible release": 'pip install "experimently~={old}"',
-    "at least": 'pip install "experimently>={old}"',
+    "compatible release": 'pip install "controlvar~={old}"',
+    "at least": 'pip install "controlvar>={old}"',
     "arbitrary equality": "pip install controlvar==={old}",
     "caret": "npm install @controlvar/js-sdk@^{old}",
     "tilde": "npm install @controlvar/js-sdk@~{old}",
@@ -381,7 +381,7 @@ STALE = {
     "bare v-name": "The current release is v{old}.",
     "url": "See https://pypi.org/project/controlvar/{old}/ for the files.",
     "release candidate": "pip install controlvar=={new}rc1",
-    "fenced block": "```bash\npip install experimently~={old}\n```",
+    "fenced block": "```bash\npip install controlvar~={old}\n```",
 }
 
 
@@ -390,8 +390,8 @@ STALE = {
 def test_a_stale_quote_in_any_form_is_refused_on_a_strict_page(page, form):
     versions = manifest_versions()
     bumped = _bumped(versions, "minor")
-    old = versions["experimently"]
-    new = bumped["experimently"]
+    old = versions["controlvar"]
+    new = bumped["controlvar"]
     moved = page.read_text(encoding="utf-8")
     for name in published_names():
         moved = moved.replace(versions[name], bumped[name])
@@ -407,11 +407,11 @@ def test_faq_prose_with_an_old_version_is_refused():
     versions = manifest_versions()
     bumped = _bumped(versions, "minor")
     moved = page.read_text(encoding="utf-8").replace(
-        versions["experimently"], bumped["experimently"]
+        versions["controlvar"], bumped["controlvar"]
     )
     planted = moved.replace(
         "### What SDKs are available?\n",
-        f"### What SDKs are available?\n\nThe Python SDK {versions['experimently']} is on PyPI.\n",
+        f"### What SDKs are available?\n\nThe Python SDK {versions['controlvar']} is on PyPI.\n",
     )
     assert planted != moved
     assert strict_problems(rel(page), planted, bumped)

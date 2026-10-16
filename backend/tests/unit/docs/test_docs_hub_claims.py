@@ -222,7 +222,7 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("Android applications", "docs/sdk/android.md"),
         lede("for Go services", "docs/sdk/go.md"),
         says("The @controlvar/js-sdk package is on npm", "docs/sdk/javascript.md"),
-        says("The experimently package is on PyPI", "docs/sdk/python.md"),
+        says("The controlvar package is on PyPI", "docs/sdk/python.md"),
     ),
     "Browser and Node.js": (lede("for Node >= 18 and browsers"),),
     "A synchronous Python client with no dependencies": (

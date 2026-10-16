@@ -347,9 +347,9 @@ text = "Python SDK"
 by = ["exempt:label"]
 
 [[unit]]
-text = "sdk/python — package experimently, stdlib only (no runtime dependencies), Python ≥ 3.9, synchronous."
+text = "sdk/python — package controlvar, stdlib only (no runtime dependencies), Python ≥ 3.9, synchronous."
 by = [
-    "test:sdk/python/tests/test_package.py::test_it_installs_as_experimently_and_imports_as_experimentation",
+    "test:sdk/python/tests/test_package.py::test_it_installs_and_imports_as_controlvar",
     "test:sdk/python/tests/test_package.py::test_it_needs_python_3_9_and_no_other_package",
     "test:sdk/python/tests/test_package.py::test_every_module_imports_only_the_standard_library_and_itself",
     "test:sdk/python/tests/test_package.py::test_the_client_is_synchronous",
@@ -365,7 +365,7 @@ by = ["exempt:label"]
 count = 3
 
 [[unit]]
-text = "The experimently package is on PyPI (0.1.0, beta):"
+text = "The controlvar package is on PyPI (0.1.0, beta):"
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-python#quick-start-user-on",

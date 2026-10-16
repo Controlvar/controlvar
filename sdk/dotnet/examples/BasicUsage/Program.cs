@@ -2,7 +2,8 @@
 //
 // To run:
 //   cd sdk/dotnet/examples/BasicUsage
-//   EXPERIMENTLY_API_URL=http://localhost:8000 EXPERIMENTLY_API_KEY=<key> dotnet run
+//   CONTROLVAR_API_URL=http://localhost:8000 CONTROLVAR_API_KEY=<key> dotnet run
+// (earlier versions of this example read EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY.)
 //
 // Flags and experiments are decided by the server; the SDK caches the answers per user + key.
 
@@ -12,8 +13,8 @@ using Controlvar.Models;
 // -----------------------------------------------------------------
 // 1. Configure the SDK
 // -----------------------------------------------------------------
-var baseUrl = Environment.GetEnvironmentVariable("EXPERIMENTLY_API_URL") ?? "http://localhost:8000";
-var apiKey  = Environment.GetEnvironmentVariable("EXPERIMENTLY_API_KEY")  ?? "your-api-key-here";
+var baseUrl = Environment.GetEnvironmentVariable("CONTROLVAR_API_URL") ?? "http://localhost:8000";
+var apiKey  = Environment.GetEnvironmentVariable("CONTROLVAR_API_KEY")  ?? "your-api-key-here";
 
 var config = new SdkConfig(baseUrl, apiKey)
 {

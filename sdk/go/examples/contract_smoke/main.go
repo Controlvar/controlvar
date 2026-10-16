@@ -1,10 +1,10 @@
 // Command contract_smoke exercises the Go SDK against a live backend using only
 // its public API and prints exactly one JSON line on success.
 //
-//	EXPERIMENTLY_API_KEY=... go run ./examples/contract_smoke
+//	CONTROLVAR_API_KEY=... go run ./examples/contract_smoke
 //
-// Environment: EXPERIMENTLY_API_URL (default http://localhost:8000),
-// EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default
+// Environment: CONTROLVAR_API_URL (default http://localhost:8000),
+// CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default
 // sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag),
 // CONTRACT_USER_ID (default smoke-<uuid>).
 package main
@@ -65,11 +65,11 @@ func fail(format string, args ...interface{}) {
 }
 
 func main() {
-	apiKey := os.Getenv("EXPERIMENTLY_API_KEY")
+	apiKey := env("CONTROLVAR_API_KEY", os.Getenv("EXPERIMENTLY_API_KEY"))
 	if apiKey == "" {
-		fail("EXPERIMENTLY_API_KEY is required")
+		fail("CONTROLVAR_API_KEY is required")
 	}
-	baseURL := env("EXPERIMENTLY_API_URL", "http://localhost:8000")
+	baseURL := env("CONTROLVAR_API_URL", env("EXPERIMENTLY_API_URL", "http://localhost:8000"))
 	experimentKey := env("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab")
 	flagKey := env("CONTRACT_FLAG_KEY", "sdk_contract_flag")
 	userID := env("CONTRACT_USER_ID", randomUserID())

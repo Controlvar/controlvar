@@ -36,7 +36,6 @@ import type {
   TrackOptions,
 } from './types.js';
 
-const DEFAULT_BASE_URL = 'https://api.controlvar.example.com';
 const DEFAULT_CACHE_TTL_MS = 60_000; // 1 minute
 const DEFAULT_TIMEOUT_MS = 500;      // 500ms — edge functions must be fast
 /** Maximum events per `POST /api/v1/tracking/batch` request. */
@@ -85,9 +84,16 @@ export class EdgeExperimentationClient {
 
   constructor(config: EdgeSdkConfig) {
     if (!config || !config.apiKey) throw new Error('apiKey is required');
+    // No default: the SDK talks only to the origin it is given.
+    if (typeof config.baseUrl !== 'string' || !config.baseUrl.trim()) {
+      throw new Error(
+        "baseUrl is required: the origin of your API, such as 'https://api.example.com' " +
+          '(the SDK appends /api/v1/...)'
+      );
+    }
 
     this.apiKey = config.apiKey;
-    this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+    this.baseUrl = config.baseUrl.trim().replace(/\/+$/, '');
     this.cacheTtlMs = config.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
     this.timeout = config.timeout ?? DEFAULT_TIMEOUT_MS;
     this.store = config.store;

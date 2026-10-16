@@ -42,6 +42,8 @@ The build (`npm run build`) emits ESM to `dist/` with type declarations.
 
 ## Quick start
 
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
 ```typescript
 import { EdgeExperimentationClient } from '@controlvar/edge-sdk';
 
@@ -211,7 +213,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 ```typescript
 interface EdgeSdkConfig {
   apiKey: string;        // Required. Sent as X-API-Key.
-  baseUrl?: string;      // Backend origin. Set it: the default, https://api.controlvar.example.com, serves no API.
+  baseUrl: string;       // Required. Backend origin; the SDK appends /api/v1/... There is no default.
   cacheTtlMs?: number;   // Per user + key cache TTL (default: 60_000 ms).
   timeout?: number;      // Per-request timeout (default: 500 ms).
   store?: EdgeStore;     // Optional shared KV store ({ get(key), put(key, value, ttlMs) }).
@@ -303,7 +305,7 @@ It prints one line:
 {"sdk":"edge","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). Runs under plain Node
 (no adapter) and assigns twice (sticky), evaluates the flag (async and sync), tracks with a key,

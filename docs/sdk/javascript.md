@@ -22,6 +22,8 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlv
 
 ## Installation
 
+If you installed `@getexperimently/js-sdk`, the name this package had before the project was renamed, uninstall it and install `@controlvar/js-sdk`.
+
 The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk).
 0.1.0 is a beta release.
 
@@ -50,12 +52,14 @@ CommonJS build (`dist/index.js`) with type declarations; `import`/`require` both
 
 ## Quick start
 
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
 ```typescript
 import { ExperimentationClient } from '@controlvar/js-sdk';
 
 const client = new ExperimentationClient({
   apiUrl: 'http://localhost:8000',   // origin only; the SDK appends /api/v1/...
-  apiKey: process.env.EXPERIMENTLY_API_KEY!,
+  apiKey: process.env.CONTROLVAR_API_KEY!,
 });
 
 const user = { userId: 'user-123', attributes: { country: 'US', plan: 'pro' } };
@@ -81,9 +85,9 @@ await client.track('user-123', 'page_view', { properties: { page: '/checkout' } 
 
 The block is TypeScript and uses top-level `await`, so it runs as an ES module. To run it as it
 is, save it as `quick-start.mts` in the project where you installed the package, set
-`EXPERIMENTLY_API_KEY`, and run it with `node --experimental-strip-types quick-start.mts`
+`CONTROLVAR_API_KEY`, and run it with `node --experimental-strip-types quick-start.mts`
 (Node 22.6 or later; it may print an `ExperimentalWarning`). As plain JavaScript, delete the `!` after
-`process.env.EXPERIMENTLY_API_KEY`, save it as `quick-start.mjs` and run `node quick-start.mjs`.
+`process.env.CONTROLVAR_API_KEY`, save it as `quick-start.mjs` and run `node quick-start.mjs`.
 
 ---
 
@@ -316,8 +320,8 @@ server-side code only: the constructor throws in a browser.
 
 ```typescript
 const client = new ExperimentationClient({
-  apiUrl: process.env.EXPERIMENTLY_API_URL!,
-  apiKey: process.env.EXPERIMENTLY_SERVER_KEY!, // sdk:ruleset scope
+  apiUrl: process.env.CONTROLVAR_API_URL!,
+  apiKey: process.env.CONTROLVAR_SERVER_KEY!, // sdk:ruleset scope
   evaluation: 'local',
 });
 await client.ready({ timeoutMs: 5_000 });        // optional; never rejects
@@ -342,8 +346,8 @@ rules. Server-side, lower `timeoutMs` if the SDK sits on a request path:
 
 ```typescript
 const client = new ExperimentationClient({
-  apiUrl: process.env.EXPERIMENTLY_API_URL!,
-  apiKey: process.env.EXPERIMENTLY_API_KEY!,
+  apiUrl: process.env.CONTROLVAR_API_URL!,
+  apiKey: process.env.CONTROLVAR_API_KEY!,
   timeoutMs: 1000,
 });
 ```
@@ -362,7 +366,7 @@ It prints one line:
 {"sdk":"js","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). The script assigns twice
 (sticky), evaluates the flag, tracks `purchase` with a key, tracks `page_view` without a key

@@ -236,12 +236,12 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-# NOT `experimently`: that name belongs to the Python SDK
+# NOT `controlvar`: that name belongs to the Python SDK
 # (`sdk/python/pyproject.toml`), which the launch publishes to PyPI. Both
 # tables carried it until P3.5, so `pip install -e . && pip install -e
 # sdk/python` in one environment produced two distributions with one name --
 # the second silently replacing the first's metadata -- and
-# `importlib.metadata.version("experimently")` could not say which tree it was
+# `importlib.metadata.version()` of that name could not say which tree it was
 # answering for. The platform is the bigger thing but the smaller audience:
 # the SDK is what people install.
 name = "experimently-platform"

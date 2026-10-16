@@ -16,7 +16,7 @@ import controlvar  # noqa: E402
 # An `controlvar` wheel installed in this interpreter would also answer to
 # `import controlvar`; make sure the one under test is the checkout's.
 _loaded = Path(controlvar.__file__).resolve()
-if SDK_ROOT / "experimentation" not in _loaded.parents:
+if SDK_ROOT / "controlvar" not in _loaded.parents:
     sys.exit(f"imported {_loaded}, not the SDK under {SDK_ROOT}")
 
 inputs = json.load(sys.stdin)["inputs"]

@@ -329,7 +329,7 @@ text = "JavaScript / TypeScript | @controlvar/js-sdk (npm)"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]
-text = "Python | experimently (PyPI)"
+text = "Python | controlvar (PyPI)"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]

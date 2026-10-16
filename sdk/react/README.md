@@ -35,7 +35,7 @@ to `sdk/react/src` in your bundler and tsconfig.
 import { ExperimentationProvider } from '@controlvar/react-sdk';
 
 <ExperimentationProvider
-  config={{ apiKey: process.env.NEXT_PUBLIC_EXPERIMENTLY_API_KEY!, baseUrl: 'http://localhost:8000' }}
+  config={{ apiKey: process.env.NEXT_PUBLIC_CONTROLVAR_API_KEY!, baseUrl: 'http://localhost:8000' }}
   user={{ userId: visitorId, attributes: { device: 'mobile', country: 'US', returning: false } }}
 >
   <App />
@@ -135,7 +135,7 @@ HOC that injects `flagEvaluation: FeatureFlagEvaluation` into `Component`.
 import { ServerClient } from '@controlvar/react-sdk';
 
 export async function getServerSideProps({ req }) {
-  const client = new ServerClient({ apiKey: process.env.EXPERIMENTLY_API_KEY!, baseUrl: process.env.EXPERIMENTLY_API_URL! });
+  const client = new ServerClient({ apiKey: process.env.CONTROLVAR_API_KEY!, baseUrl: process.env.CONTROLVAR_API_URL! });
   const user = { userId: req.cookies.visitor_id };
   const flags = await client.getAll(['shoplab_new_search', 'shoplab_free_shipping_banner'], user);
   const hero = await client.assignExperiment('shoplab_hero_banner', user);  // control defaults + error on failure
@@ -167,8 +167,8 @@ It prints:
 ```
 
 Drives the SSR entry point (`ServerClient`) plus `ExperimentationClient` for tracking under plain
-node — no DOM, no React render. Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`),
-`EXPERIMENTLY_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`),
+node — no DOM, no React render. Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`),
+`CONTROLVAR_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`),
 `CONTRACT_FLAG_KEY` (default `sdk_contract_flag`), `CONTRACT_USER_ID` (default random
 `smoke-<uuid>`). Repo-wide runner:
 `python tests/sdk-contract/live/run_live_contract.py --sdk react`.

@@ -176,7 +176,7 @@ def test_a_mechanism_holds_only_the_sentences_it_checks(real_context):
     quoted = [
         u.text
         for u in dc.units((REPO_ROOT / page.path).read_text(encoding="utf-8"))
-        if u.text.startswith("experimently (v")
+        if u.text.startswith("controlvar (v")
     ]
     assert quoted, "docs/sdk/python.md no longer quotes its version this way"
     assert dc.target_problem(ctx, page, {"text": quoted[0]}, target) is None

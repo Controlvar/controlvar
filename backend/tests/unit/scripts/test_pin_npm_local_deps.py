@@ -97,7 +97,7 @@ def test_the_provider_declares_its_repository() -> None:
     data = json.loads((SDK_DIR / "openfeature" / "package.json").read_text())
     assert (
         data["repository"]["url"]
-        == "git+https://github.com/getexperimently/experimently.git"
+        == "git+https://github.com/Controlvar/controlvar.git"
     )
     assert data["repository"]["directory"] == "sdk/openfeature"
 
@@ -238,9 +238,9 @@ def test_dev_dependencies_are_left_alone(tree: Path) -> None:
 @pytest.mark.parametrize(
     "spec",
     [
-        "git+https://github.com/getexperimently/experimently.git",
-        "github:getexperimently/experimently",
-        "getexperimently/experimently",
+        "git+https://github.com/Controlvar/controlvar.git",
+        "github:Controlvar/controlvar",
+        "Controlvar/controlvar",
         "workspace:*",
         "link:../js",
         "npm:other@1.0.0",

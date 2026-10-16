@@ -2,9 +2,9 @@
 //
 // Run from the repo root against a seeded backend (see backend/scripts/seed_sdk_contract.py):
 //
-//     cd sdk/ios && EXPERIMENTLY_API_KEY=... swift run contract-smoke
+//     cd sdk/ios && CONTROLVAR_API_KEY=... swift run contract-smoke
 //
-// Environment: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY
+// Environment: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY
 // (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default
 // sdk_contract_flag), CONTRACT_USER_ID (default smoke-<uuid>).
 //
@@ -44,9 +44,9 @@ func jsonString(_ value: String) -> String {
     return "\"\(escaped)\""
 }
 
-let apiURL = env("EXPERIMENTLY_API_URL", default: "http://localhost:8000")
-let apiKey = env("EXPERIMENTLY_API_KEY", default: "")
-guard !apiKey.isEmpty else { fail("EXPERIMENTLY_API_KEY is required") }
+let apiURL = env("CONTROLVAR_API_URL", default: env("EXPERIMENTLY_API_URL", default: "http://localhost:8000"))
+let apiKey = env("CONTROLVAR_API_KEY", default: env("EXPERIMENTLY_API_KEY", default: ""))
+guard !apiKey.isEmpty else { fail("CONTROLVAR_API_KEY is required") }
 let experimentKey = env("CONTRACT_EXPERIMENT_KEY", default: "sdk_contract_ab")
 let flagKey = env("CONTRACT_FLAG_KEY", default: "sdk_contract_flag")
 let userId = env("CONTRACT_USER_ID", default: "smoke-\(UUID().uuidString.lowercased())")

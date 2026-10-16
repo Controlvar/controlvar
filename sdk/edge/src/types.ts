@@ -13,8 +13,8 @@
 export interface EdgeSdkConfig {
   /** API key sent as `X-API-Key`. Required. */
   apiKey: string;
-  /** Backend origin, e.g. `https://api.example.com`; the SDK appends `/api/v1/...`. */
-  baseUrl?: string;
+  /** Backend origin, e.g. `https://api.example.com`; the SDK appends `/api/v1/...`. Required: there is no default. */
+  baseUrl: string;
   /**
    * How long a successful evaluation/assignment is reused per user + key, in ms.
    * Defaults to 60_000 (1 minute) — edge instances are short-lived.

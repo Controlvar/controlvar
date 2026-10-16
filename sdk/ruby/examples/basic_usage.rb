@@ -21,8 +21,8 @@ puts "-" * 30
 
 # Option A: keyword arguments
 client = Controlvar::Client.new(
-  base_url:  ENV.fetch("EXPERIMENTLY_API_URL", "http://localhost:8000"),  # origin only
-  api_key:   ENV.fetch("EXPERIMENTLY_API_KEY", "sk_live_demo_key"),       # sent as X-API-Key
+  base_url:  ENV.fetch("CONTROLVAR_API_URL", "http://localhost:8000"),  # origin only
+  api_key:   ENV.fetch("CONTROLVAR_API_KEY", "sk_live_demo_key"),       # sent as X-API-Key
   cache_ttl: 300,   # cache evaluations/assignments per user + key for 5 minutes
   timeout:   10     # HTTP timeout in seconds
 )
@@ -31,7 +31,7 @@ puts "   Client created with keyword args"
 # Option B: SdkConfig struct
 config = Controlvar::SdkConfig.new(
   base_url:  "http://localhost:8000",
-  api_key:   ENV.fetch("EXPERIMENTLY_API_KEY", "sk_live_demo_key"),
+  api_key:   ENV.fetch("CONTROLVAR_API_KEY", "sk_live_demo_key"),
   cache_ttl: 60,
   timeout:   5
 )

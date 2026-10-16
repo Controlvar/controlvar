@@ -69,8 +69,8 @@ by = [
 ]
 
 [[unit]]
-text = "It installs as controlvar and imports as experimentation."
-by = ["test:sdk/python/tests/test_package.py::test_it_installs_as_controlvar_and_imports_as_experimentation"]
+text = "It installs and imports as controlvar."
+by = ["test:sdk/python/tests/test_package.py::test_it_installs_and_imports_as_controlvar"]
 
 [[unit]]
 text = "To work on the SDK itself, install it from the root of a clone of this repository instead:"
@@ -81,7 +81,7 @@ text = "Quick start"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Set EXPERIMENTLY_API_KEY to an API key, then run the block as it is; the two print calls stand for your own code."
+text = "Set CONTROLVAR_API_KEY to an API key, then run the block as it is; the two print calls stand for your own code."
 by = ["mechanism:python-readme-quick-start"]
 
 [[unit]]
@@ -318,7 +318,7 @@ text = "It prints:"
 by = ["test:sdk/python/tests/test_contract_smoke.py::test_it_runs_from_the_source_tree_with_its_defaults"]
 
 [[unit]]
-text = "Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
+text = "Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
 by = [
     "test:sdk/python/tests/test_contract_smoke.py::test_it_runs_from_the_source_tree_with_its_defaults",
     "test:sdk/python/tests/test_contract_smoke.py::test_it_runs_the_four_contract_steps",
@@ -359,3 +359,7 @@ by = [
     "test:sdk/python/tests/test_transport.py::test_the_suite_cannot_open_a_real_connection",
     "test:backend/tests/unit/infrastructure/test_sdk_unit_tests_workflow.py::test_the_python_suites_run_on_python_3_11",
 ]
+
+[[unit]]
+text = "If you installed experimently, the name this package had before the project was renamed, uninstall it and install controlvar."
+by = ["exempt:instruction"]

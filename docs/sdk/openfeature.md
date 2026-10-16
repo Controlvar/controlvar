@@ -17,6 +17,8 @@ This means you can:
 
 ## TypeScript / Node.js Provider
 
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
 `@controlvar/openfeature-provider` (v0.1.0 beta, source `sdk/openfeature`) implements the
 `@openfeature/server-sdk` `Provider` interface by delegating every evaluation to the
 [JavaScript SDK](javascript.md) (`@controlvar/js-sdk`), which calls
@@ -60,8 +62,8 @@ import { ExperimentationProvider } from '@controlvar/openfeature-provider';
 
 // 1. Register the provider (once, at app start-up).
 const provider = new ExperimentationProvider({
-  apiKey: process.env.EXPERIMENTLY_API_KEY!,
-  baseUrl: process.env.EXPERIMENTLY_API_URL ?? 'http://localhost:8000', // origin only
+  apiKey: process.env.CONTROLVAR_API_KEY!,
+  baseUrl: process.env.CONTROLVAR_API_URL ?? 'http://localhost:8000', // origin only
   cacheTtlMs: 5 * 60_000, // reuse a successful evaluation per user + flag for 5 minutes
 });
 await OpenFeature.setProviderAndWait(provider);
@@ -166,7 +168,7 @@ It prints one line:
 {"sdk":"openfeature","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). The flag is resolved
 through `OpenFeature.getClient().getBooleanDetails`; assignment and tracking go through
@@ -188,7 +190,7 @@ npm run build
 ## Python Provider
 
 `controlvar-openfeature` (v0.1.0 beta, source `sdk/openfeature-python`) delegates every
-evaluation to the [`experimentation` Python SDK](python.md), which calls
+evaluation to the [`controlvar` Python SDK](python.md), which calls
 `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>` and caches the answer per
 user + flag. Flags are decided **by the server**; nothing is bucketed locally and no flag
 definitions are downloaded. Requires Python 3.9+ and `openfeature-sdk >= 0.10.0`.
@@ -214,8 +216,8 @@ from controlvar_openfeature import ExperimentationProvider
 
 # 1. Register the provider (once, at startup).
 provider = ExperimentationProvider(
-    api_key=os.environ["EXPERIMENTLY_API_KEY"],
-    base_url=os.environ.get("EXPERIMENTLY_API_URL", "http://localhost:8000"),  # origin only
+    api_key=os.environ["CONTROLVAR_API_KEY"],
+    base_url=os.environ.get("CONTROLVAR_API_URL", "http://localhost:8000"),  # origin only
     cache_ttl=300,   # seconds a successful evaluation is reused per user + flag
     timeout=10,      # seconds
 )
@@ -299,7 +301,7 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json`, `Acc
 ### Contract smoke (Python)
 
 ```bash
-EXPERIMENTLY_API_KEY=<key> python sdk/openfeature-python/examples/contract_smoke.py
+CONTROLVAR_API_KEY=<key> python sdk/openfeature-python/examples/contract_smoke.py
 ```
 
 It prints one line:
@@ -308,7 +310,7 @@ It prints one line:
 {"sdk":"openfeature-python","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). The flag is resolved
 through the OpenFeature API; assignment and tracking go through `provider.client`.

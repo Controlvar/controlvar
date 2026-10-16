@@ -64,7 +64,7 @@ by = [
 ]
 
 [[unit]]
-text = "Only the Quick Start's quoted address and keys change: the stack's API address, the keys of an experiment and a flag the run creates, and a user ID of its own take their place, and EXPERIMENTLY_API_KEY holds a key the run creates."
+text = "Only the Quick Start's quoted address and keys change: the stack's API address, the keys of an experiment and a flag the run creates, and a user ID of its own take their place, and CONTROLVAR_API_KEY holds a key the run creates."
 by = [
     "journey:sdk-go#quick-start-user-on",
     "journey:sdk-go#quick-start-user-off",
@@ -106,7 +106,7 @@ text = "Quick Start"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Save this as main.go next to the go.mod, set EXPERIMENTLY_API_KEY to an API key, and run it with go run .."
+text = "Save this as main.go next to the go.mod, set CONTROLVAR_API_KEY to an API key, and run it with go run .."
 by = [
     "journey:sdk-go#quick-start-user-on",
     "journey:sdk-go#quick-start-user-off",
@@ -425,7 +425,7 @@ text = "It prints:"
 by = ["test:sdk/go/examples/contract_smoke/main_test.go::TestContractSmoke_AssignsThreeTimesEvaluatesTracksAndBatches"]
 
 [[unit]]
-text = "Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
+text = "Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
 by = [
     "test:sdk/go/examples/contract_smoke/main_test.go::TestContractSmoke_ReadsTheEnvironmentWithTheseDefaults",
     "test:sdk/go/examples/contract_smoke/main_test.go::TestContractSmoke_AssignsThreeTimesEvaluatesTracksAndBatches",
@@ -467,3 +467,7 @@ by = [
 [[unit]]
 text = "go run ./examples: examples/main.go walkthrough against a running backend"
 by = ["test:sdk/go/examples/main_test.go::TestWalkthrough_RunsAgainstTheBackend"]
+
+[[unit]]
+text = "If you set EXPERIMENTLY_API_KEY or EXPERIMENTLY_API_URL from an earlier version of these pages, set CONTROLVAR_API_KEY and CONTROLVAR_API_URL instead."
+by = ["exempt:instruction"]

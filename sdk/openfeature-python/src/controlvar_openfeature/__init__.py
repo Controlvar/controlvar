@@ -1,7 +1,7 @@
 """
 controlvar-openfeature: OpenFeature provider for Controlvar.
 
-Flags are evaluated by the server through the ``experimentation`` SDK
+Flags are evaluated by the server through the ``controlvar`` SDK
 (``GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>``).
 
 Usage:

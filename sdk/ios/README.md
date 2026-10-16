@@ -41,7 +41,7 @@ import Controlvar
 
 let client = ExperimentationClient(
     config: SdkConfig(baseURL: "http://localhost:8000",   // origin only; the SDK appends /api/v1/...
-                      apiKey: "<EXPERIMENTLY_API_KEY>")   // sent as X-API-Key
+                      apiKey: "<CONTROLVAR_API_KEY>")   // sent as X-API-Key
 )
 let user = User(id: "user-123", attributes: ["plan": "pro", "country": "US"])
 
@@ -153,8 +153,8 @@ It prints:
 {"sdk":"ios","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Build output goes to stderr (the repo runner passes `-q`). Env: `EXPERIMENTLY_API_URL` (default
-`http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default
+Build output goes to stderr (the repo runner passes `-q`). Env: `CONTROLVAR_API_URL` (default
+`http://localhost:8000`), `CONTROLVAR_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default
 `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default `sdk_contract_flag`), `CONTRACT_USER_ID` (default
 random `smoke-<uuid>`). The smoke runs with `enableOfflineFallback: false` so it never writes
 `UserDefaults`. Repo-wide runner: `python tests/sdk-contract/live/run_live_contract.py --sdk ios --strict`.

@@ -143,7 +143,7 @@ It is exported as a utility only — nothing in the SDK uses it to decide a vari
 
 ```bash
 cd sdk/flutter && flutter pub get
-EXPERIMENTLY_API_KEY=<key> dart run example/contract_smoke.dart
+CONTROLVAR_API_KEY=<key> dart run example/contract_smoke.dart
 ```
 
 It prints:
@@ -152,7 +152,7 @@ It prints:
 {"sdk":"flutter","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). The smoke imports only
 `controlvar_core.dart` (no `package:flutter` code is loaded), but dependency resolution

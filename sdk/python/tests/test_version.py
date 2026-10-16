@@ -2,7 +2,7 @@
 
 ``pyproject.toml`` is what the build stamps on the wheel and what
 ``scripts/check_sdk_version.py`` compares a release tag against.
-``experimentation/version.py`` is what the client sends in its User-Agent and
+``controlvar/version.py`` is what the client sends in its User-Agent and
 what ``controlvar.__version__`` returns. Nothing derives one from the
 other, so this test is what keeps them equal.
 """

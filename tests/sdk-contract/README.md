@@ -86,7 +86,7 @@ and checks the JSON it prints: a sticky assignment (`control` / `treatment`), a 
 (`enabled: true`), one tracked event with an experiment key, and one key-less event that fans out
 to the cached assignment and flag. Before the SDKs it checks `GET /api/v1/sdk/ruleset` once: the
 seed's plain key gets 403, its `sdk:ruleset` key gets the ruleset with `sdk_contract_flag` in it,
-and sending the ETag back gets 304 (the `ruleset (server)` row; `EXPERIMENTLY_LOCAL_API_KEY`
+and sending the ETag back gets 304 (the `ruleset (server)` row; `CONTROLVAR_LOCAL_API_KEY`
 overrides the scoped key). After the SDKs, each SDK with a local mode runs its local smoke with that
 key (the `python (local)` and `js (local)` rows): the runner reads the database before and after, through the backend's own
 `SafetyService.get_error_metrics`, and requires no new per-user evaluation row (no evaluate call),
@@ -112,7 +112,7 @@ python tests/sdk-contract/live/run_live_contract.py --sdk go --sdk python --stri
 
 Each SDK documents its smoke command in its README; the runner's `MANIFEST` lists them. Missing
 toolchains are skipped (reported as `SKIP`) unless `--strict` is given. The seeded API key can be
-overridden with `EXPERIMENTLY_API_KEY`, the backend with `EXPERIMENTLY_API_URL`.
+overridden with `CONTROLVAR_API_KEY`, the backend with `CONTROLVAR_API_URL`.
 
 Three entries need no toolchain beyond node or a JVM, but get there differently from the rest:
 

@@ -700,3 +700,7 @@ by = [
     "test:sdk/js/__tests__/local.test.ts::is reported as evaluate, and the call goes to the server",
     "test:sdk/python/tests/test_local.py::test_an_unexpected_failure_in_local_evaluation_is_reported_and_goes_to_the_server",
 ]
+
+[[unit]]
+text = "If you set EXPERIMENTLY_SERVER_KEY or EXPERIMENTLY_API_URL from an earlier version of these pages, set CONTROLVAR_SERVER_KEY and CONTROLVAR_API_URL instead."
+by = ["exempt:instruction"]

@@ -169,7 +169,7 @@ MANIFEST_DEPS: dict[str, list[tuple[str, str, str]]] = {
         ("coverlet.collector (test)", "6.0.0", "MIT"),
     ],
     "Python SDKs (`sdk/python`, `sdk/openfeature-python`)": [
-        ("(experimently: standard library only)", "—", "—"),
+        ("(controlvar: standard library only)", "—", "—"),
         ("openfeature-sdk", ">=0.9.0", "Apache-2.0"),
     ],
 }

@@ -29,8 +29,8 @@ is needed: `ruby -Isdk/ruby/lib your_script.rb`.
 require 'controlvar'
 
 client = Controlvar::Client.new(
-  base_url: ENV.fetch("EXPERIMENTLY_API_URL", "http://localhost:8000"),  # origin only
-  api_key:  ENV.fetch("EXPERIMENTLY_API_KEY")                             # sent as X-API-Key
+  base_url: ENV.fetch("CONTROLVAR_API_URL", "http://localhost:8000"),  # origin only
+  api_key:  ENV.fetch("CONTROLVAR_API_KEY")                             # sent as X-API-Key
 )
 
 # Experiment assignment — POST /api/v1/tracking/assign (sticky on the server)
@@ -143,7 +143,7 @@ It prints:
 {"sdk":"ruby","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). Fixtures:
 `backend/scripts/seed_sdk_contract.py`; repo-wide runner:

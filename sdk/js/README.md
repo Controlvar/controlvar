@@ -15,6 +15,8 @@ Full documentation: [`docs/sdk/javascript.md`](https://github.com/Controlvar/con
 
 ## Install
 
+If you installed `@getexperimently/js-sdk`, the name this package had before the project was renamed, uninstall it and install `@controlvar/js-sdk`.
+
 The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk). 0.1.0 is a
 beta release.
 
@@ -100,7 +102,7 @@ A flag that is not ACTIVE is not an error: it answers `enabled: false`, `reason:
 cd sdk/js && npm run build --silent && node examples/contract_smoke.mjs
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (`sdk_contract_ab`), `CONTRACT_FLAG_KEY` (`sdk_contract_flag`), `CONTRACT_USER_ID`.
 
 CI runs this SDK's contract smoke against a real API: `js` is in the `sdks:` list of the

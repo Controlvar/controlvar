@@ -62,8 +62,8 @@ def fake_api() -> FakeTransport:
 def test_the_readme_quick_start_runs_as_written(monkeypatch, capsys):
     transport = fake_api()
     monkeypatch.setattr(client_module, "UrllibTransport", lambda: transport)
-    monkeypatch.setenv("EXPERIMENTLY_API_KEY", "readme-key")
-    monkeypatch.delenv("EXPERIMENTLY_API_URL", raising=False)
+    monkeypatch.setenv("CONTROLVAR_API_KEY", "readme-key")
+    monkeypatch.delenv("CONTROLVAR_API_URL", raising=False)
 
     exec(compile(quick_start_block(), str(README), "exec"), {"__name__": "readme_quick_start"})
 
@@ -89,7 +89,7 @@ def test_the_block_stops_without_its_key(monkeypatch):
     """The block reads the key it documents, and nothing else supplies one."""
     transport = fake_api()
     monkeypatch.setattr(client_module, "UrllibTransport", lambda: transport)
-    monkeypatch.delenv("EXPERIMENTLY_API_KEY", raising=False)
-    with pytest.raises(KeyError, match="EXPERIMENTLY_API_KEY"):
+    monkeypatch.delenv("CONTROLVAR_API_KEY", raising=False)
+    with pytest.raises(KeyError, match="CONTROLVAR_API_KEY"):
         exec(compile(quick_start_block(), str(README), "exec"), {"__name__": "readme_quick_start"})
     assert transport.requests == []

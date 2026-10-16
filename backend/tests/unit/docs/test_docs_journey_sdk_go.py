@@ -90,7 +90,7 @@ import (
 )
 
 func main() {
-	client, _ := exp.New(exp.WithBaseURL("http://localhost:8000"), exp.WithAPIKey(os.Getenv("EXPERIMENTLY_API_KEY")))
+	client, _ := exp.New(exp.WithBaseURL("http://localhost:8000"), exp.WithAPIKey(os.Getenv("CONTROLVAR_API_KEY")))
 	user := &exp.User{ID: "user-123"}
 	a, _ := client.GetAssignment(nil, "checkout_flow", user)
 	flag, _ := client.EvaluateFlag(nil, "new_search", user)

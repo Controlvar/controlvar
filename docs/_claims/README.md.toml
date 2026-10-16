@@ -392,7 +392,7 @@ by = [
 ]
 
 [[unit]]
-text = "Python | pip install controlvar (it imports as experimentation)"
+text = "Python | pip install controlvar"
 by = [
     "journey:sdk-python#quick-start-user-on",
     "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names",

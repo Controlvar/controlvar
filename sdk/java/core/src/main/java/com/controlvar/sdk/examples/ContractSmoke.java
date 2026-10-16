@@ -18,8 +18,8 @@ import java.util.UUID;
  * API and prints exactly one JSON line on success (exit 0); on failure prints one line
  * to stderr and exits 1.
  *
- * <p>Environment: {@code EXPERIMENTLY_API_URL} (default {@code http://localhost:8000}),
- * {@code EXPERIMENTLY_API_KEY} (required), {@code CONTRACT_EXPERIMENT_KEY} (default
+ * <p>Environment: {@code CONTROLVAR_API_URL} (default {@code http://localhost:8000}),
+ * {@code CONTROLVAR_API_KEY} (required), {@code CONTRACT_EXPERIMENT_KEY} (default
  * {@code sdk_contract_ab}), {@code CONTRACT_FLAG_KEY} (default {@code sdk_contract_flag}),
  * {@code CONTRACT_USER_ID} (default {@code smoke-<uuid>}).
  *
@@ -40,11 +40,11 @@ public final class ContractSmoke {
     }
 
     public static void main(String[] args) {
-        String apiKey = env("EXPERIMENTLY_API_KEY", "");
+        String apiKey = env("CONTROLVAR_API_KEY", env("EXPERIMENTLY_API_KEY", ""));
         if (apiKey.isEmpty()) {
-            fail("EXPERIMENTLY_API_KEY is required");
+            fail("CONTROLVAR_API_KEY is required");
         }
-        String baseUrl = env("EXPERIMENTLY_API_URL", "http://localhost:8000");
+        String baseUrl = env("CONTROLVAR_API_URL", env("EXPERIMENTLY_API_URL", "http://localhost:8000"));
         String experimentKey = env("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab");
         String flagKey = env("CONTRACT_FLAG_KEY", "sdk_contract_flag");
         String userId = env("CONTRACT_USER_ID", "smoke-" + UUID.randomUUID());

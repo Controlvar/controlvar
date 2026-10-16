@@ -316,7 +316,7 @@ text = "Contract smoke"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (sdk_contract_ab), CONTRACT_FLAG_KEY (sdk_contract_flag), CONTRACT_USER_ID."
+text = "Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (sdk_contract_ab), CONTRACT_FLAG_KEY (sdk_contract_flag), CONTRACT_USER_ID."
 by = [
     "test:sdk/js/__tests__/contract-smoke.test.ts::it reads its settings from the environment, with these defaults",
     "test:sdk/js/__tests__/contract-smoke.test.ts::it assigns twice, evaluates the flag, tracks with and without a key and sends a 2-event batch",
@@ -346,3 +346,7 @@ by = [
 [[unit]]
 text = "npm run build: tsc → dist/ (CommonJS + .d.ts)"
 by = ["test:sdk/js/__tests__/package.test.ts::builds CommonJS with type declarations into dist/"]
+
+[[unit]]
+text = "If you installed @getexperimently/js-sdk, the name this package had before the project was renamed, uninstall it and install @controlvar/js-sdk."
+by = ["exempt:instruction"]

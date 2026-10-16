@@ -54,8 +54,8 @@ KEY = "eptk_Fake0KeyForTheUnitJob9876543210abcdef"
 SECRETS_ENV = {
     "CONTROLVAR_API_URL": "http://api",
     "CONTROLVAR_API_KEY": KEY,
-    "EXPERIMENTLY_API_URL": "http://api",
-    "EXPERIMENTLY_API_KEY": KEY,
+    "CONTROLVAR_API_URL": "http://api",
+    "CONTROLVAR_API_KEY": KEY,
 }
 
 PAGE = """# Sample SDK
@@ -79,7 +79,7 @@ import { ExperimentationClient } from '@controlvar/js-sdk';
 
 const client = new ExperimentationClient({
   apiUrl: 'http://localhost:8000',
-  apiKey: process.env.EXPERIMENTLY_API_KEY!,
+  apiKey: process.env.CONTROLVAR_API_KEY!,
 });
 const user = { userId: 'user-123' };
 const variant = await client.getVariant('checkout_flow', user);
@@ -243,7 +243,7 @@ def test_every_sdk_journey_exists_and_holds_two_users():
     "page, language, tool, package, version",
     [
         ("sdk/javascript.md", "typescript", "npm", "@controlvar/js-sdk", "0.1.0"),
-        ("sdk/python.md", "python", "pip", "experimently", "0.1.0"),
+        ("sdk/python.md", "python", "pip", "controlvar", "0.1.0"),
         ("sdk/go.md", "go", "go", "github.com/controlvar/controlvar/sdk/go", ""),
     ],
 )
@@ -289,7 +289,7 @@ def test_the_program_run_is_the_pages_block_with_only_its_placeholders_replaced(
                     )
             assert undone == old, (journey.guide, old, new)
         # The key is never in the program: the block reads it from the environment.
-        assert "EXPERIMENTLY_API_KEY" in block
+        assert "CONTROLVAR_API_KEY" in block
         assert "eptk_" not in program
 
 
@@ -589,7 +589,7 @@ NPM = sdk.Install(
 PIP = sdk.Install(
     line="pip install controlvar==0.1.0",
     tool="pip",
-    package="experimently",
+    package="controlvar",
     version="0.1.0",
 )
 
@@ -630,7 +630,7 @@ def test_a_python_run_makes_a_fresh_environment_and_installs_into_it():
     assert fake.calls[1]["argv"] == [
         f"{venv}/bin/pip",
         "install",
-        "experimently==0.1.0",
+        "controlvar==0.1.0",
     ]
     assert fake.calls[2]["argv"][:2] == [f"{venv}/bin/python", "-c"]
     assert fake.calls[3]["argv"] == [f"{venv}/bin/python", "quick_start.py"]
@@ -655,7 +655,7 @@ def test_another_version_installed_fails_the_step():
         " @controlvar/js-sdk 0.1.1, not 0.1.0"
     ]
     outcome = _run(FakeCommands(installed="0.2.0"), PIP)
-    assert "installed experimently 0.2.0, not 0.1.0" in outcome.problems[0]
+    assert "installed controlvar 0.2.0, not 0.1.0" in outcome.problems[0]
 
 
 def test_only_the_block_is_given_the_key_and_nothing_else_is_inherited(monkeypatch):

@@ -1,7 +1,7 @@
 """
 Tests for ExperimentationProvider (OpenFeature Python provider).
 
-The provider delegates to the ``experimentation`` SDK; its HTTP transport is
+The provider delegates to the ``controlvar`` SDK; its HTTP transport is
 replaced with ``controlvar.testing.FakeTransport`` so every test can
 assert the exact request that would reach the backend.
 

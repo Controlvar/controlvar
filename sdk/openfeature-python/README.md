@@ -3,7 +3,7 @@
 **Beta.** This is a 0.x release: pin the exact version you test against.
 
 [OpenFeature](https://openfeature.dev) provider for Controlvar. Flags are
-evaluated **by the server** through the [`experimentation`](https://github.com/Controlvar/controlvar/tree/main/sdk/python) Python SDK
+evaluated **by the server** through the [`controlvar`](https://github.com/Controlvar/controlvar/tree/main/sdk/python) Python SDK
 (`GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>`) and cached per
 user + flag; nothing is bucketed locally.
 
@@ -28,8 +28,8 @@ from openfeature.evaluation_context import EvaluationContext
 from controlvar_openfeature import ExperimentationProvider
 
 provider = ExperimentationProvider(
-    api_key=os.environ["EXPERIMENTLY_API_KEY"],
-    base_url=os.environ.get("EXPERIMENTLY_API_URL", "http://localhost:8000"),
+    api_key=os.environ["CONTROLVAR_API_KEY"],
+    base_url=os.environ.get("CONTROLVAR_API_URL", "http://localhost:8000"),
     cache_ttl=300,   # seconds a successful evaluation is reused per user + flag
     timeout=10,      # seconds
 )
@@ -82,7 +82,7 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json`, `Acc
 ## Contract smoke
 
 ```bash
-EXPERIMENTLY_API_KEY=<key> python sdk/openfeature-python/examples/contract_smoke.py
+CONTROLVAR_API_KEY=<key> python sdk/openfeature-python/examples/contract_smoke.py
 ```
 
 It prints:
@@ -91,7 +91,7 @@ It prints:
 {"sdk":"openfeature-python","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default `sdk_contract_flag`),
 `CONTRACT_USER_ID` (default random `smoke-<uuid>`). The flag is resolved through the OpenFeature
 API; assignment and tracking use `provider.client`.

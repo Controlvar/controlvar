@@ -261,7 +261,7 @@ def test_the_sdk_package_names():
         == "@controlvar/react-sdk"
     )
     python = tomllib.loads(_text("sdk/python/pyproject.toml"))["project"]
-    assert python["name"] == "experimently"
+    assert python["name"] == "controlvar"
     assert (ROOT / "sdk/python/controlvar/__init__.py").is_file()
     pom = _text("sdk/java/core/pom.xml")
     assert "<groupId>com.controlvar</groupId>" in pom

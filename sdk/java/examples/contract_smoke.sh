@@ -5,10 +5,10 @@
 # (core/target/lib) when they are missing or older than the sources, then runs
 # com.controlvar.sdk.examples.ContractSmoke. Only the smoke's JSON line is
 # written to stdout; Maven output goes to stderr. Environment variables
-# (EXPERIMENTLY_API_URL, EXPERIMENTLY_API_KEY, CONTRACT_*) are passed through and the
+# (CONTROLVAR_API_URL, CONTROLVAR_API_KEY, CONTRACT_*) are passed through and the
 # exit status is the smoke's (non-zero on failure).
 #
-#   EXPERIMENTLY_API_KEY=... bash sdk/java/examples/contract_smoke.sh
+#   CONTROLVAR_API_KEY=... bash sdk/java/examples/contract_smoke.sh
 #   FORCE_BUILD=1 bash sdk/java/examples/contract_smoke.sh   # always rebuild
 set -euo pipefail
 

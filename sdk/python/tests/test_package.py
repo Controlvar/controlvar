@@ -2,7 +2,7 @@
 
 These hold the package's description of itself (``pyproject.toml``) and the
 source to the few plain facts a reader acts on before writing any code: that
-it installs as ``controlvar`` and imports as ``experimentation``, needs
+it installs and imports as ``controlvar``, needs
 Python 3.9 or later and nothing else, is a 0.x beta, talks HTTP through the
 standard library, and is synchronous.
 """
@@ -23,7 +23,7 @@ from controlvar import transport as transport_module
 
 SDK_ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = SDK_ROOT / "pyproject.toml"
-PACKAGE = SDK_ROOT / "experimentation"
+PACKAGE = SDK_ROOT / "controlvar"
 
 
 def project() -> Dict[str, Any]:
@@ -43,10 +43,10 @@ def test_the_package_is_a_0_x_beta():
     assert "Development Status :: 4 - Beta" in meta["classifiers"]
 
 
-def test_it_installs_as_controlvar_and_imports_as_experimentation():
+def test_it_installs_and_imports_as_controlvar():
     data = project()
     assert data["project"]["name"] == "controlvar"
-    assert data["setuptools"]["packages"] == ["experimentation"]
+    assert data["setuptools"]["packages"] == ["controlvar"]
     assert Path(controlvar.__file__).resolve().parent == PACKAGE.resolve()
 
 

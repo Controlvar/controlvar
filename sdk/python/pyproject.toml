@@ -34,10 +34,10 @@ Issues = "https://github.com/Controlvar/controlvar/issues"
 dev = ["pytest>=7.0"]
 
 [tool.setuptools]
-packages = ["experimentation"]
+packages = ["controlvar"]
 
 [tool.setuptools.package-data]
-experimentation = ["py.typed"]
+controlvar = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -85,7 +85,7 @@ Errors: 401 bad key, 404 an experiment unknown or not ACTIVE, or an unknown flag
 cd sdk/openfeature && npm run build --silent && node examples/contract_smoke.mjs
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (`sdk_contract_ab`), `CONTRACT_FLAG_KEY` (`sdk_contract_flag`), `CONTRACT_USER_ID`.
 
 CI runs this SDK's contract smoke against a real API: `openfeature` is in the `sdks:` list of the

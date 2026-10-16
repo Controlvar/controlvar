@@ -56,6 +56,8 @@ Two library entry points are available:
 
 ## Quick Start
 
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
 ```dart
 import 'package:controlvar/controlvar.dart';
 
@@ -380,7 +382,7 @@ plus a 2-event batch) against a live backend and prints one JSON line:
 
 ```bash
 cd sdk/flutter && flutter pub get
-EXPERIMENTLY_API_KEY=<key> dart run example/contract_smoke.dart
+CONTROLVAR_API_KEY=<key> dart run example/contract_smoke.dart
 ```
 
 It prints:
@@ -390,8 +392,8 @@ It prints:
 ```
 
 The live runner (`tests/sdk-contract/live/run_live_contract.py`) invokes exactly
-`cd sdk/flutter && dart run example/contract_smoke.dart`. Env: `EXPERIMENTLY_API_URL` (default
-`http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default
+`cd sdk/flutter && dart run example/contract_smoke.dart`. Env: `CONTROLVAR_API_URL` (default
+`http://localhost:8000`), `CONTROLVAR_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default
 `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default `sdk_contract_flag`), `CONTRACT_USER_ID` (default
 random `smoke-<uuid>`). The smoke imports only `controlvar_core.dart`, so no
 `package:flutter` code is loaded — but the package depends on the `flutter` SDK, so dependency

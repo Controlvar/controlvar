@@ -39,8 +39,8 @@ use Controlvar\ExperimentationClient;
 use Controlvar\SdkConfig;
 
 $client = new ExperimentationClient(new SdkConfig(
-    baseUrl: getenv('EXPERIMENTLY_API_URL') ?: 'http://localhost:8000',  // origin only
-    apiKey:  getenv('EXPERIMENTLY_API_KEY'),                             // sent as X-API-Key
+    baseUrl: getenv('CONTROLVAR_API_URL') ?: 'http://localhost:8000',  // origin only
+    apiKey:  getenv('CONTROLVAR_API_KEY'),                             // sent as X-API-Key
 ));
 
 // Feature flag (GET /api/v1/feature-flags/evaluate/{key}?user_id=…)
@@ -161,7 +161,7 @@ It is exported as a utility only — nothing in the SDK uses it to decide a vari
 ## Contract smoke
 
 ```bash
-EXPERIMENTLY_API_KEY=<key> php sdk/php/examples/contract_smoke.php
+CONTROLVAR_API_KEY=<key> php sdk/php/examples/contract_smoke.php
 ```
 
 It prints one line:
@@ -170,7 +170,7 @@ It prints one line:
 {"sdk":"php","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). Works without
 `composer install` (it `require`s `src/` directly when `vendor/` is absent).

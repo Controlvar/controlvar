@@ -48,6 +48,8 @@ dependencies {
 
 ## Quick Start
 
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
 ```kotlin
 import com.controlvar.android.ExperimentationClient
 import com.controlvar.android.SdkConfig
@@ -57,7 +59,7 @@ import com.controlvar.android.User
 val client = ExperimentationClient(
     SdkConfig(
         baseUrl = "http://10.0.2.2:8000",           // origin only; the SDK appends /api/v1/...
-        apiKey = BuildConfig.EXPERIMENTLY_API_KEY   // sent as X-API-Key
+        apiKey = BuildConfig.CONTROLVAR_API_KEY   // sent as X-API-Key
     )
 )
 

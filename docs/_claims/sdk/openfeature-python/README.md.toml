@@ -20,7 +20,7 @@ text = "OpenFeature provider for Controlvar."
 by = ["test:sdk/openfeature-python/tests/test_provider.py::TestOpenFeatureIntegration::test_provider_can_be_registered_with_api_set_provider"]
 
 [[unit]]
-text = "Flags are evaluated by the server through the experimentation Python SDK (GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>) and cached per user + flag; nothing is bucketed locally."
+text = "Flags are evaluated by the server through the controlvar Python SDK (GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>) and cached per user + flag; nothing is bucketed locally."
 by = [
     "test:sdk/openfeature-python/tests/test_provider.py::TestRequestShape::test_evaluate_request_url_headers_and_no_context",
     "test:sdk/openfeature-python/tests/test_provider.py::TestCache::test_cache_hit_makes_no_additional_requests",
@@ -192,7 +192,7 @@ text = "It prints:"
 by = ["test:sdk/openfeature-python/tests/test_contract_smoke.py::test_it_reads_its_settings_from_the_environment_with_these_defaults"]
 
 [[unit]]
-text = "Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
+text = "Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
 by = [
     "test:sdk/openfeature-python/tests/test_contract_smoke.py::test_it_reads_its_settings_from_the_environment_with_these_defaults",
     "test:sdk/openfeature-python/tests/test_contract_smoke.py::test_the_flag_goes_through_openfeature_and_the_rest_through_provider_client",

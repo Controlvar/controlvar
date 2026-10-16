@@ -39,11 +39,13 @@ end
 
 ## Quick Start
 
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
 ```elixir
 {:ok, client} =
   Controlvar.start(
-    base_url: System.get_env("EXPERIMENTLY_API_URL", "http://localhost:8000"),
-    api_key: System.fetch_env!("EXPERIMENTLY_API_KEY")
+    base_url: System.get_env("CONTROLVAR_API_URL", "http://localhost:8000"),
+    api_key: System.fetch_env!("CONTROLVAR_API_KEY")
   )
 
 if Controlvar.feature_enabled?(client, "new-checkout", "user-123") do
@@ -94,8 +96,8 @@ keyword list, a map or an `%Controlvar.Config{}`:
 # lib/my_app/application.ex
 children = [
   {Controlvar.Client,
-   base_url: System.fetch_env!("EXPERIMENTLY_API_URL"),
-   api_key: System.fetch_env!("EXPERIMENTLY_API_KEY"),
+   base_url: System.fetch_env!("CONTROLVAR_API_URL"),
+   api_key: System.fetch_env!("CONTROLVAR_API_KEY"),
    name: MyApp.Experiments}
 ]
 
@@ -368,7 +370,7 @@ plus a 2-event batch) against a live backend and prints one JSON line:
 
 ```bash
 cd sdk/elixir && mix deps.get
-EXPERIMENTLY_API_KEY=<key> mix run examples/contract_smoke.exs
+CONTROLVAR_API_KEY=<key> mix run examples/contract_smoke.exs
 ```
 
 - `cd sdk/elixir && mix deps.get`: once
@@ -379,7 +381,7 @@ It prints:
 {"sdk":"elixir","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). The script verifies the
 fire-and-forget `track/5` calls by injecting a thin wrapper around the real HTTP client through

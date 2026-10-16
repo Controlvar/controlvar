@@ -83,7 +83,7 @@ path, and the other SDKs from a clone of this repository: each SDK's page
 | SDK | Package |
 |-----|---------|
 | JavaScript / TypeScript | `@controlvar/js-sdk` (npm) |
-| Python | `experimently` (PyPI) |
+| Python | `controlvar` (PyPI) |
 | Java / JVM | `com.controlvar:controlvar-sdk` (Maven/Gradle) |
 | React | `@controlvar/react-sdk` (npm) |
 

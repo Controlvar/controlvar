@@ -25,8 +25,8 @@ import exp "github.com/controlvar/controlvar/sdk/go"
 
 ```go
 client, err := exp.New(
-    exp.WithBaseURL(os.Getenv("EXPERIMENTLY_API_URL")), // origin only, e.g. http://localhost:8000
-    exp.WithAPIKey(os.Getenv("EXPERIMENTLY_API_KEY")),  // sent as X-API-Key
+    exp.WithBaseURL(os.Getenv("CONTROLVAR_API_URL")), // origin only, e.g. http://localhost:8000
+    exp.WithAPIKey(os.Getenv("CONTROLVAR_API_KEY")),  // sent as X-API-Key
 )
 if err != nil {
     log.Fatal(err)
@@ -143,7 +143,7 @@ It prints:
 {"sdk":"go","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). Seed the fixtures with
 `backend/scripts/seed_sdk_contract.py`; the repo-wide runner is

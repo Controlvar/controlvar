@@ -2,7 +2,7 @@
 ExperimentationProvider — OpenFeature provider for Controlvar.
 
 Every flag is evaluated **by the server**: the provider delegates to the
-``experimentation`` Python SDK, which calls
+``controlvar`` Python SDK, which calls
 ``GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>`` and
 caches the answer per user + key for ``cache_ttl`` seconds. Nothing is
 bucketed locally and no flag definitions are downloaded.

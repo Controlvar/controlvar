@@ -327,7 +327,7 @@ text = "It prints:"
 by = ["test:sdk/go/examples/contract_smoke/main_test.go::TestContractSmoke_AssignsThreeTimesEvaluatesTracksAndBatches"]
 
 [[unit]]
-text = "Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
+text = "Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
 by = [
     "test:sdk/go/examples/contract_smoke/main_test.go::TestContractSmoke_ReadsTheEnvironmentWithTheseDefaults",
     "test:sdk/go/examples/contract_smoke/main_test.go::TestContractSmoke_AssignsThreeTimesEvaluatesTracksAndBatches",

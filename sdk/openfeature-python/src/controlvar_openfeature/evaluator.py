@@ -1,5 +1,5 @@
 """
-Cross-SDK MD5 consistent hash (re-exported from the ``experimentation`` SDK).
+Cross-SDK MD5 consistent hash (re-exported from the ``controlvar`` SDK).
 
 Kept as a utility so buckets can be reproduced offline and checked against
 ``tests/sdk-contract/golden-vectors.json``. The provider never calls it:

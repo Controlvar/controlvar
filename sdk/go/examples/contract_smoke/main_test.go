@@ -57,7 +57,7 @@ func (f *fakeAPI) RoundTrip(req *http.Request) (*http.Response, error) {
 // default transport, and returns what it printed and what it sent.
 func run(t *testing.T, env map[string]string) (string, []seenRequest) {
 	t.Helper()
-	for _, name := range []string{"EXPERIMENTLY_API_URL", "EXPERIMENTLY_API_KEY", "CONTRACT_EXPERIMENT_KEY", "CONTRACT_FLAG_KEY", "CONTRACT_USER_ID"} {
+	for _, name := range []string{"CONTROLVAR_API_URL", "CONTROLVAR_API_KEY", "EXPERIMENTLY_API_URL", "EXPERIMENTLY_API_KEY", "CONTRACT_EXPERIMENT_KEY", "CONTRACT_FLAG_KEY", "CONTRACT_USER_ID"} {
 		t.Setenv(name, env[name])
 	}
 	api := &fakeAPI{}
@@ -79,7 +79,7 @@ func run(t *testing.T, env map[string]string) (string, []seenRequest) {
 }
 
 func TestContractSmoke_ReadsTheEnvironmentWithTheseDefaults(t *testing.T) {
-	printed, seen := run(t, map[string]string{"EXPERIMENTLY_API_KEY": "smoke-key"})
+	printed, seen := run(t, map[string]string{"CONTROLVAR_API_KEY": "smoke-key"})
 	if len(seen) == 0 {
 		t.Fatal("no request was made")
 	}
@@ -109,7 +109,7 @@ func TestContractSmoke_ReadsTheEnvironmentWithTheseDefaults(t *testing.T) {
 
 func TestContractSmoke_AssignsThreeTimesEvaluatesTracksAndBatches(t *testing.T) {
 	printed, seen := run(t, map[string]string{
-		"EXPERIMENTLY_API_URL": "http://api.test", "EXPERIMENTLY_API_KEY": "k",
+		"CONTROLVAR_API_URL": "http://api.test", "CONTROLVAR_API_KEY": "k",
 		"CONTRACT_EXPERIMENT_KEY": "exp_a", "CONTRACT_FLAG_KEY": "flag_a", "CONTRACT_USER_ID": "user-a",
 	})
 	var calls []string
@@ -141,5 +141,37 @@ func TestContractSmoke_AssignsThreeTimesEvaluatesTracksAndBatches(t *testing.T) 
 	}
 	if report["sdk"] != "go" || report["assign"].(map[string]interface{})["sticky"] != true {
 		t.Errorf("report %v", report)
+	}
+}
+
+// The new names win; the former ones are still read. Three distinct values per
+// setting, none of them the default or what CI sets.
+func TestContractSmoke_TheNewNamesWinAndTheFormerNamesAreStillRead(t *testing.T) {
+	const newURL, oldURL = "http://127.0.0.1:9", "http://127.0.0.1:7"
+	cases := []struct {
+		name     string
+		env      map[string]string
+		url, key string
+	}{
+		{"former names only", map[string]string{"EXPERIMENTLY_API_URL": oldURL, "EXPERIMENTLY_API_KEY": "old-key"}, oldURL, "old-key"},
+		{"new names only", map[string]string{"CONTROLVAR_API_URL": newURL, "CONTROLVAR_API_KEY": "new-key"}, newURL, "new-key"},
+		{"both: the new names win", map[string]string{
+			"CONTROLVAR_API_URL": newURL, "CONTROLVAR_API_KEY": "new-key",
+			"EXPERIMENTLY_API_URL": oldURL, "EXPERIMENTLY_API_KEY": "old-key",
+		}, newURL, "new-key"},
+		{"no URL: the default", map[string]string{"EXPERIMENTLY_API_KEY": "old-key"}, "http://localhost:8000", "old-key"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, seen := run(t, c.env)
+			if len(seen) == 0 {
+				t.Fatal("no request was made")
+			}
+			for _, r := range seen {
+				if !strings.HasPrefix(r.URL, c.url+"/api/v1/") || r.Key != c.key {
+					t.Errorf("request %s %s with key %q, want %s and %q", r.Method, r.URL, r.Key, c.url, c.key)
+				}
+			}
+		})
 	}
 }

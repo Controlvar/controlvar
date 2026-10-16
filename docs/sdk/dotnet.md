@@ -33,12 +33,14 @@ the project in `sdk/dotnet/src/Controlvar` of a clone of this repository from yo
 
 ## Quick Start
 
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
 ```csharp
 using Controlvar;
 
 var config = new SdkConfig(
-    baseUrl: Environment.GetEnvironmentVariable("EXPERIMENTLY_API_URL") ?? "http://localhost:8000",
-    apiKey:  Environment.GetEnvironmentVariable("EXPERIMENTLY_API_KEY")!);
+    baseUrl: Environment.GetEnvironmentVariable("CONTROLVAR_API_URL") ?? "http://localhost:8000",
+    apiKey:  Environment.GetEnvironmentVariable("CONTROLVAR_API_KEY")!);
 
 using var client = new ExperimentationClient(config);
 
@@ -331,7 +333,7 @@ Runs the four contract steps (sticky assignment, flag evaluation, keyed track, k
 plus a 2-event batch) against a live backend and prints one JSON line:
 
 ```bash
-EXPERIMENTLY_API_KEY=<key> dotnet run --project sdk/dotnet/examples/ContractSmoke
+CONTROLVAR_API_KEY=<key> dotnet run --project sdk/dotnet/examples/ContractSmoke
 ```
 
 It prints:
@@ -340,7 +342,7 @@ It prints:
 {"sdk":"dotnet","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<guid>`). The program writes only
 that line to stdout (on first run `dotnet run` may print restore/build messages first; the live

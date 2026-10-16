@@ -45,6 +45,8 @@ your bundler, and alias `react`/`react-dom` to your app's copies to avoid a dupl
 
 ## Provider Setup
 
+If you set `NEXT_PUBLIC_EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_KEY` from an earlier version of these pages, set `NEXT_PUBLIC_CONTROLVAR_API_KEY` and `CONTROLVAR_API_KEY` instead.
+
 ```tsx
 import { ExperimentationProvider } from '@controlvar/react-sdk';
 
@@ -52,8 +54,8 @@ function App() {
   return (
     <ExperimentationProvider
       config={{
-        apiKey: process.env.NEXT_PUBLIC_EXPERIMENTLY_API_KEY!,
-        baseUrl: process.env.NEXT_PUBLIC_EXPERIMENTLY_API_URL ?? 'http://localhost:8000',
+        apiKey: process.env.NEXT_PUBLIC_CONTROLVAR_API_KEY!,
+        baseUrl: process.env.NEXT_PUBLIC_CONTROLVAR_API_URL ?? 'http://localhost:8000',
       }}
       user={{ userId: currentUser.id, attributes: { country: currentUser.country, plan: currentUser.plan } }}
     >
@@ -231,8 +233,8 @@ import type { GetServerSideProps } from 'next';
 
 export const getServerSideProps: GetServerSideProps = async ({ req }) => {
   const client = new ServerClient({
-    apiKey: process.env.EXPERIMENTLY_API_KEY!,
-    baseUrl: process.env.EXPERIMENTLY_API_URL!,
+    apiKey: process.env.CONTROLVAR_API_KEY!,
+    baseUrl: process.env.CONTROLVAR_API_URL!,
   });
   const user = { userId: req.cookies['visitor_id'] ?? 'anonymous' };
 

@@ -1,7 +1,7 @@
 """An SDK that depends on a sibling SDK admits the sibling's version (#668).
 
-``sdk/openfeature-python`` required ``experimently>=1.0.0`` while
-``sdk/python`` -- the package that publishes ``experimently`` -- was versioned
+``sdk/openfeature-python`` required ``controlvar>=1.0.0`` while
+``sdk/python`` -- the package that publishes ``controlvar`` -- was versioned
 0.1.0. Every test passed, because each package's tests install the sibling from
 its local path; the first place the mismatch shows is a user's ``pip install``
 after both are published, and by then the version is burned.

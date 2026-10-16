@@ -2,12 +2,12 @@
 //
 // Run from the repo root against a seeded backend (see backend/scripts/seed_sdk_contract.py):
 //
-//     cd sdk/flutter && EXPERIMENTLY_API_KEY=... dart run example/contract_smoke.dart
+//     cd sdk/flutter && CONTROLVAR_API_KEY=... dart run example/contract_smoke.dart
 //
 // Needs the Flutter toolchain (the package depends on the `flutter` SDK); run
 // `flutter pub get` once first so `dart run` does not print resolution output.
 //
-// Environment: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY
+// Environment: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY
 // (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default
 // sdk_contract_flag), CONTRACT_USER_ID (default smoke-<uuid>).
 //
@@ -51,9 +51,10 @@ Future<void> main() async {
 }
 
 Future<void> _run() async {
-  final apiUrl = _env('EXPERIMENTLY_API_URL', 'http://localhost:8000');
-  final apiKey = _env('EXPERIMENTLY_API_KEY', '');
-  if (apiKey.isEmpty) _fail('EXPERIMENTLY_API_KEY is required');
+  final apiUrl =
+      _env('CONTROLVAR_API_URL', _env('EXPERIMENTLY_API_URL', 'http://localhost:8000'));
+  final apiKey = _env('CONTROLVAR_API_KEY', _env('EXPERIMENTLY_API_KEY', ''));
+  if (apiKey.isEmpty) _fail('CONTROLVAR_API_KEY is required');
   final experimentKey = _env('CONTRACT_EXPERIMENT_KEY', 'sdk_contract_ab');
   final flagKey = _env('CONTRACT_FLAG_KEY', 'sdk_contract_flag');
   final userId = _env('CONTRACT_USER_ID', 'smoke-${_uuidV4()}');

@@ -15,7 +15,7 @@ start there (`dyld: missing LC_UUID load command`). On Linux, Go 1.21 works: eve
 Installation and Quick Start with go1.21 against a running stack. Only the
 Quick Start's quoted address and keys change: the stack's API address, the keys
 of an experiment and a flag the run creates, and a user ID of its own take their
-place, and `EXPERIMENTLY_API_KEY` holds a key the run creates.
+place, and `CONTROLVAR_API_KEY` holds a key the run creates.
 
 ---
 
@@ -41,7 +41,9 @@ The module has no tagged release yet, so `go get` resolves the head of the
 
 ## Quick Start
 
-Save this as `main.go` next to the `go.mod`, set `EXPERIMENTLY_API_KEY` to an
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
+Save this as `main.go` next to the `go.mod`, set `CONTROLVAR_API_KEY` to an
 API key, and run it with `go run .`. It needs an ACTIVE experiment with the key
 `checkout_flow` and a feature flag with the key `new_search`; put your own keys
 in their place.
@@ -62,7 +64,7 @@ import (
 func main() {
 	client, err := exp.New(
 		exp.WithBaseURL("http://localhost:8000"),          // origin only; the SDK appends /api/v1/...
-		exp.WithAPIKey(os.Getenv("EXPERIMENTLY_API_KEY")), // sent as X-API-Key
+		exp.WithAPIKey(os.Getenv("CONTROLVAR_API_KEY")), // sent as X-API-Key
 		exp.WithTimeout(5*time.Second),
 	)
 	if err != nil {
@@ -240,7 +242,7 @@ It prints:
 {"sdk":"go","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). The smoke assigns
 three times (twice on one client, once on a fresh client) to prove server-side stickiness,

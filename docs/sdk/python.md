@@ -18,6 +18,8 @@ client (see [openfeature.md](openfeature.md)).
 
 ## Installation
 
+If you installed `experimently`, the name this package had before the project was renamed, uninstall it and install `controlvar`.
+
 The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/). 0.1.0 is a
 beta release.
 
@@ -35,6 +37,8 @@ pip install -e sdk/python
 
 ## Quick start
 
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
 `render_new_checkout()` and `use_new_search()` below stand for your own code: define them, or
 replace the two calls, before you run the block. As written, a branch that reaches one of them
 raises `NameError`.
@@ -44,8 +48,8 @@ import os
 from controlvar import ExperimentationClient, ExperimentationError
 
 client = ExperimentationClient(
-    api_url=os.environ.get("EXPERIMENTLY_API_URL", "http://localhost:8000"),  # origin only
-    api_key=os.environ["EXPERIMENTLY_API_KEY"],
+    api_url=os.environ.get("CONTROLVAR_API_URL", "http://localhost:8000"),  # origin only
+    api_key=os.environ["CONTROLVAR_API_KEY"],
 )
 
 # Experiments — sticky assignment made by the server (POST /api/v1/tracking/assign)
@@ -237,7 +241,7 @@ Runs the four contract steps (sticky assignment, flag evaluation, keyed track, k
 plus a 2-event batch) against a live backend and prints one JSON line:
 
 ```bash
-EXPERIMENTLY_API_KEY=<key> python sdk/python/examples/contract_smoke.py
+CONTROLVAR_API_KEY=<key> python sdk/python/examples/contract_smoke.py
 ```
 
 It prints:
@@ -246,7 +250,7 @@ It prints:
 {"sdk":"python","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). No install is needed;
 the script adds `sdk/python` to `sys.path`.
