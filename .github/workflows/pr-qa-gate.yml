@@ -1376,6 +1376,17 @@ jobs:
           rm -f full.log core.log url.log noenv.log testenv.log testing.log
           echo "start-up check: every refusal fired, and a good set starts"
 
+      # The entrypoint's OpenSSL fallback (#1265) reaches a process started
+      # later with `docker exec`, not only the entrypoint's own children. No
+      # runner has the arm64 CPU that crashes, so the script runs against a
+      # model of it; tests/docker/openssl_fallback.sh says what a pass means.
+      - name: OpenSSL fallback reaches every Python process in the container
+        run: |
+          set -euo pipefail
+          for image in experimently-api:core experimently-api:full; do
+            bash tests/docker/openssl_fallback.sh "$image"
+          done
+
       - name: Build dashboard image
         uses: docker/build-push-action@v7
         with:
