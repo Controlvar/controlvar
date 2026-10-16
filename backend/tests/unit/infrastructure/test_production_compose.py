@@ -104,6 +104,57 @@ class TestShape:
         assert set(compose["volumes"]) == {"postgres_data", "redis_data"}
 
 
+RELEASE = REPO_ROOT / ".github" / "workflows" / "release.yml"
+
+
+@pytest.mark.regression
+@pytest.mark.skipif(not RELEASE.is_file(), reason="this tree has no .github/workflows")
+class TestPlatform:
+    """api and web name the one platform their images are built for (#1268).
+
+    The images are published for ``linux/amd64`` only, so on an arm64 host
+    (Apple Silicon) ``up`` failed with "no matching manifest for
+    linux/arm64/v8". Pinning those two services runs them emulated there;
+    postgres and redis are multi-platform and must stay native.
+    ``DOCKER_DEFAULT_PLATFORM`` is not a fix: it forces them to amd64 too.
+
+    The platform is read from release.yml's ``API_PLATFORMS`` and
+    ``WEB_PLATFORMS``, the one place it is written (#239), so this file cannot
+    name a platform that is not built. Once either lists more than one, the
+    pin would force emulation on hosts that have a native image: remove it.
+    """
+
+    @pytest.fixture(scope="class")
+    def built(self) -> Dict[str, str]:
+        env = yaml.safe_load(RELEASE.read_text(encoding="utf-8"))["env"]
+        built = {}
+        for service, name in (("api", "API_PLATFORMS"), ("web", "WEB_PLATFORMS")):
+            listed = [p.strip() for p in str(env[name]).split(",") if p.strip()]
+            assert len(listed) == 1, (
+                f"release.yml's {name} is {listed}: the {service} image is now "
+                "built for more than one platform, so remove `platform:` from "
+                "the api and web services of deploy/compose/compose.yml (#181), "
+                "and this test with it"
+            )
+            built[service] = listed[0]
+        return built
+
+    def test_exactly_api_and_web_name_a_platform(self, services):
+        pinned = sorted(name for name, svc in services.items() if "platform" in svc)
+        assert pinned == ["api", "web"], (
+            f"services with a platform: key: {pinned}, not exactly api and web: "
+            "those two images are amd64 only, and postgres and redis publish "
+            "arm64 images and must run natively"
+        )
+
+    def test_api_and_web_ask_for_the_one_built_platform(self, services, built):
+        for service, platform in built.items():
+            assert services[service].get("platform") == platform, (
+                f"{service} must carry `platform: {platform}`, the one platform "
+                "release.yml builds its image for"
+            )
+
+
 class TestApiEnvironment:
     @pytest.fixture(scope="class")
     def env(self, services) -> Dict[str, Any]:
