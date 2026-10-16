@@ -4,7 +4,11 @@ Order, and what must be true before each step:
 
 1. Refused before anything is started: a port (``guard.refuse_ports``), an
    unknown video, an output or work directory inside a git checkout, the
-   wrong Playwright, a missing ffmpeg, a ref that is not here.
+   wrong Playwright, a missing ffmpeg, a ref that is not here, and for a
+   narrated video a clip missing from the voice cache (``voiced.find_clips``,
+   read only: ``make showcase-voice`` makes them) or clips that project the
+   video past the length cap. ``--voice none`` (``make showcase VOICE=none``)
+   records a narrated storyboard silent, as before narration existed.
 2. The machine lock (``guard.machine_lock``), which ``main`` takes before
    ``run`` and releases after the render: one run per machine, whatever its
    work root and ports. Then whatever a killed run left: its child processes
@@ -27,7 +31,8 @@ Order, and what must be true before each step:
 The capture directory is ``<work root>/<slug>/capture/`` (contract.py):
 ``frames/`` and ``frames.jsonl``, ``cues.json``, ``needles.txt`` (mode 0600,
 for the render side's OCR scan, which deletes it) and ``manifest.json`` with
-every capture gate's verdict and numbers.
+every capture gate's verdict and numbers; a narrated one adds ``voice.json``
+and ``voice/NNN.wav`` (``voiced.write_voice``).
 """
 
 from __future__ import annotations
@@ -46,7 +51,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from showcase import contract
-from showcase.capture import build, compose, config, guard, storyboard, traffic
+from showcase.capture import build, compose, config, guard, storyboard, traffic, voiced
 from showcase.capture import overrides as override_lists
 from showcase.capture.procs import Children
 from showcase.capture.stack import (
@@ -73,6 +78,11 @@ class Options:
     floor: int = contract.DISK_FLOOR_BYTES
     #: ``quickstart`` (the Quick Start's compose stack) or ``uvicorn``.
     stack: str = config.FINAL_STACK
+    #: The narrating voice, or none: a storyboard without narration is silent
+    #: whatever this says (``voiced.voice_for``).
+    voice: str = contract.SILENT
+    #: The voice step's cache, read only (``voiced.find_clips``).
+    voice_cache: Optional[Path] = None
 
 
 class DiskSampler:
@@ -350,6 +360,7 @@ def preflight(options: Options, environ: Mapping[str, str]) -> None:
         checkout = guard.inside_git_checkout(path)
         if checkout is not None:
             raise guard.Refused(f"{name} {path} is inside the git checkout {checkout}")
+    refuse_voice_cache_inside(options)
     if options.render:
         guard.refuse_out_beside_work(options.out, options.work_dir)
     guard.refuse_lock_inside(
@@ -367,8 +378,47 @@ def preflight(options: Options, environ: Mapping[str, str]) -> None:
             f" {config.PLAYWRIGHT_VERSION} (tests/acceptance/requirements.txt)"
         )
     refuse_missing_ffmpeg()
-    for board in options.videos:
-        storyboard.load(board_path(board))
+    for slug in options.videos:
+        board = storyboard.load(board_path(slug))
+        narration_clips(board, options)
+
+
+def refuse_voice_cache_inside(options: Options) -> None:
+    """The voice cache is read in place and never written, so it may not sit
+    inside the work root or the output directory, which the tool writes and
+    deletes in (as it may not sit inside a git checkout: ``voiced.find_clips``)."""
+    if options.voice_cache is None or options.voice == contract.SILENT:
+        return
+    cache = Path(os.path.realpath(options.voice_cache))
+    for name, path in (("--work-dir", options.work_dir), ("--out", options.out)):
+        root = Path(os.path.realpath(path))
+        if cache == root or root in cache.parents:
+            raise guard.Refused(
+                f"--voice-cache {options.voice_cache} is inside {name} {path}: the"
+                " tool writes and deletes there; give a cache outside both"
+            )
+
+
+def narration_clips(
+    board: storyboard.Storyboard, options: Options
+) -> Tuple[str, List[voiced.Clip]]:
+    """The video's voice and its clips from the voice cache, or refused: a
+    missing clip (with the command that makes it), a damaged entry, or a video
+    the clips project past the length cap. Reads the cache, never writes it."""
+    voice = voiced.voice_for(board, options.voice)
+    if voice == contract.SILENT:
+        return voice, []
+    if options.voice_cache is None:
+        raise voiced.VoiceRefused(f"{board.slug}: no voice cache was given")
+    clips = voiced.find_clips(board, voice, options.voice_cache)
+    projected = voiced.projected_ms(board, clips)
+    limit = contract.MAX_VIDEO_MS * contract.PROJECTION_SHARE
+    if projected > limit:
+        raise voiced.VoiceRefused(
+            f"{board.slug}: its clips project {projected / 1000:.1f} s, above"
+            f" {limit / 1000:.1f} s: cut narration by the UX cut list"
+        )
+    return voice, clips
 
 
 # ---------------------------------------------------------------------------
@@ -403,6 +453,8 @@ def capture_video(
     from showcase.capture import director as directing  # Playwright, only here
 
     board = storyboard.load(board_path(slug))
+    # Again, as the preflight did: the cache is read as the video starts.
+    voice, clips = narration_clips(board, options)
     built = dict(app_trees or {})
     missing = [app for app in board.apps if app not in built]
     if missing:
@@ -494,7 +546,15 @@ def capture_video(
                 )
             try:
                 facts = record(
-                    board, stack, options, token, frames_dir, gates, log, work
+                    board,
+                    stack,
+                    options,
+                    token,
+                    frames_dir,
+                    gates,
+                    log,
+                    work,
+                    pacing=voiced.Pacing(clips),
                 )
             except directing.CaptureFailed as error:
                 drop_recording(error, frames_dir, work)
@@ -530,11 +590,12 @@ def capture_video(
         source=source,
         options=options,
         versions=versions,
-        facts=facts,
+        facts={**facts, "voice": voice, "clips": clips},
         gates=gates,
         children=children,
         wall_seconds=time.monotonic() - started,
         stack=stack.manifest(),
+        work=work,
     )
     return capture
 
@@ -596,6 +657,7 @@ def record(
     gates: Dict[str, Dict[str, Any]],
     log: Callable[[str], None],
     work: guard.WorkRoot,
+    pacing: Optional[voiced.Pacing] = None,
 ) -> Dict[str, Any]:
     """The browser part of a capture: self-test, scenes, end state, recorded-data gates."""
     from docs_runner import redaction
@@ -633,6 +695,7 @@ def record(
                 forbidden=forbidden,
                 work=work,
                 resolve=lambda name: experiment_id(stack.api_url, token, name),
+                pacing=pacing,
                 apps={app: ports.app(app) for app in board.apps},
                 app_ready=lambda app: app_ready(stack.api_url, token, app),
             )
@@ -820,6 +883,8 @@ def record(
         ),
         "U5": judge.payoff_still(entries, tally.payoffs),
     }
+    if director.pacing.narrated:
+        checks.update(voiced_checks(director, board))
     failed = []
     for name, (ok, numbers, why) in checks.items():
         gates[name] = gate(ok, **numbers)
@@ -837,6 +902,24 @@ def record(
         "cues": director.cues,
         "needles": sorted(set(config.STATIC_NEEDLES) | set(redactor.values)),
         "zoom": zoom["body"],
+    }
+
+
+def voiced_checks(director: Any, board: storyboard.Storyboard) -> Dict[str, Any]:
+    """A narrated capture's own gates: G2's count and G20's beats."""
+    from showcase.capture import gates as judge
+
+    tally = director.tally
+    sentences = len(storyboard.narration_lines(board))
+    ok, numbers, why = judge.narration_tally(tally.narration_checks, sentences)
+    beats = len(director.pacing.beats)
+    return {
+        "G2": (ok, {**numbers, "spoken": tally.spoken}, why),
+        "G20": (
+            len(tally.voiced_beats) == beats,
+            {"narrated_beats": beats, "beats": tally.voiced_beats},
+            f"{len(tally.voiced_beats)} narrated beats paced of {beats}",
+        ),
     }
 
 
@@ -1072,6 +1155,7 @@ def write_capture(
     children: Children,
     wall_seconds: float,
     stack: Optional[Mapping[str, Any]] = None,
+    work: Optional[guard.WorkRoot] = None,
 ) -> None:
     from showcase.capture import gates as judge
 
@@ -1102,6 +1186,13 @@ def write_capture(
         json.dumps(cues, indent=2) + "\n", encoding="utf-8"
     )
     write_private(capture / "needles.txt", "\n".join(facts["needles"]) + "\n")
+    voice = facts.get("voice", contract.SILENT)
+    if voice != contract.SILENT:
+        assert work is not None
+        tiled = voiced.write_voice(
+            capture, voice=voice, clips=facts["clips"], cues=facts["cues"], work=work
+        )
+        gates["G20"]["numbers"]["tile"] = tiled
     manifest = {
         "ref": source.ref,
         "commit": source.commit,
@@ -1113,8 +1204,8 @@ def write_capture(
         "zoom": round(facts["zoom"], 6),
         "page_h": contract.PAGE_H,
         "band_h": contract.BAND_H,
-        # Narrated captures come with the paced capture (voice PR C2).
-        "voice": contract.SILENT,
+        # The narrating voice (voice.json and voice/ beside), or "none".
+        "voice": voice,
         "gates": gates,
         # What the approval record names: the stack, its project and images
         # (EM C1, C5 of T166). The render refuses any stack but quickstart.
@@ -1174,6 +1265,19 @@ def parse_args(argv: List[str], environ: Mapping[str, str]) -> Options:
         help="where the render writes the MP4, the .vtt and the review page",
     )
     parser.add_argument(
+        "--voice",
+        default=environ.get("VOICE") or contract.VOICES[0],
+        help=(
+            f"the narrating voice, or none for a silent capture (default {contract.VOICES[0]};"
+            " make showcase VOICE=none); a storyboard without narration is silent"
+        ),
+    )
+    parser.add_argument(
+        "--voice-cache",
+        default=None,
+        help="the voice step's cache, read only (default ~/.cache/experimently-showcase/voice)",
+    )
+    parser.add_argument(
         "--capture-only",
         action="store_true",
         help="stop at the capture directory; do not run the render",
@@ -1185,6 +1289,16 @@ def parse_args(argv: List[str], environ: Mapping[str, str]) -> Options:
             " validated against the storyboards yet"
         )
     videos = list(config.VIDEOS) if args.video == "all" else [args.video]
+    if args.voice not in (contract.SILENT, *contract.VOICES):
+        raise guard.Refused(
+            f"--voice {args.voice!r} is one of {[contract.SILENT, *contract.VOICES]}"
+        )
+    if args.voice_cache:
+        cache = Path(args.voice_cache).expanduser()
+    elif environ.get("HOME"):
+        cache = Path(environ["HOME"]).joinpath(*contract.VOICE_CACHE_HOME)
+    else:
+        cache = None
     return Options(
         videos=videos,
         ref=args.ref,
@@ -1202,6 +1316,8 @@ def parse_args(argv: List[str], environ: Mapping[str, str]) -> Options:
         out=Path(args.out).expanduser(),
         render=not args.capture_only,
         stack=args.stack,
+        voice=args.voice,
+        voice_cache=cache,
     )
 
 

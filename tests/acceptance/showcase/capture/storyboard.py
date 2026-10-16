@@ -22,8 +22,9 @@ browser and recorded like a page). A scene is a list of beats; a beat is
   (``showcase.capture.narration`` says what a sentence may say), and
   ``claims``: any number it says as a word, with the page of the docs that
   states it. A storyboard narrates every beat or none, and the cue list
-  (``compile_cues``) and so the capture are the same either way: the voice
-  step (``python -m showcase.voice``) makes the clips.
+  (``compile_cues``) is the same either way: the voice step (``python -m
+  showcase.voice``) makes the clips, and a narrated capture holds each beat
+  for its clips as well (``showcase.capture.voiced``).
 
 A scene opens a page (``open``), an experiment's results page by the
 experiment's name (``results_of``, its id looked up off camera), or draws a

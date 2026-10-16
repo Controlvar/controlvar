@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 import pytest
+import yaml
 from showcase.capture import build, config, director, gates, guard, run, storyboard
 from showcase.capture.procs import Children, python_argv
 from showcase.capture.stack import Ports, Stack, StackError, read_key
@@ -988,9 +989,14 @@ def test_simulated_traffic_is_stated_in_every_scene_it_runs_through():
     ]
 
 
-def test_v1s_warmed_results_are_a_departure_to_state():
+def test_v1s_warmed_results_are_a_departure_it_states():
     v1 = storyboard.load(run.board_path("01-getting-started"))
-    assert storyboard.departure_problems(v1) == [
+    assert storyboard.departure_problems(v1) == []
+    # Without its statement, the warmed results are refused as before.
+    raw = yaml.safe_load(run.board_path("01-getting-started").read_text())
+    for scene in raw["scenes"]:
+        scene.pop("departures", None)
+    assert storyboard.departure_problems(storyboard.parse(raw)) == [
         "scene dashboard: off-camera setup is not stated on screen (departures)"
     ]
 
@@ -1002,9 +1008,7 @@ def test_setup_made_before_the_first_scene_is_stated_there():
     ]
 
 
-@pytest.mark.parametrize(
-    "slug", ["01-getting-started", "02-first-experiment", "03-flag-rollout"]
-)
+@pytest.mark.parametrize("slug", ["02-first-experiment", "03-flag-rollout"])
 def test_a_video_whose_departure_is_not_stated_is_refused_before_it_starts(
     tmp_path, slug
 ):

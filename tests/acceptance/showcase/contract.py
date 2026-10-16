@@ -225,6 +225,11 @@ REQUIRED_CAPTURE_GATES = (
     "teardown",
 )
 
+#: And a narrated capture's (voice PR C2): G2, every number a sentence says on
+#: the page as it is said, and G20, every narrated beat held for its sentences'
+#: slots and ended no sooner.
+VOICED_CAPTURE_GATES = ("G2", "G20")
+
 FRAME_NAME = re.compile(r"^[0-9]{6}\.jpg$")
 SLUG = re.compile(r"^[0-9]{2}(?:-[a-z0-9]+)+$")
 VERSION = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.]+)?$")
@@ -698,6 +703,104 @@ def clip_key(voice: str, request_text: str) -> str:
         separators=(",", ":"),
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+# --- The voice cache's entries ---------------------------------------------------
+#
+# The voice step writes the cache (``showcase.voice.cache``); the capture reads
+# it, read only, for the clips it is paced by and copies (voice PR C2). Both read
+# an entry with ``cache_entry_problems``, here, so the capture never imports the
+# voice step. An entry is ``<root>/<key>/`` holding Polly's answer, the clip at
+# 90% pace and ``entry.json``.
+
+#: The cache's default root, under ``$HOME``.
+VOICE_CACHE_HOME = (".cache", "experimently-showcase", "voice")
+CACHE_SOURCE = "source.mp3"
+CACHE_CLIP = "clip.wav"
+CACHE_ENTRY = "entry.json"
+#: ``entry.json``: what the clip is made from (the key's fields), what Polly
+#: billed, and the two files' sha256 and sample counts. Nothing about who made
+#: it or where: no profile, region, account or request id.
+CACHE_ENTRY_KEYS = frozenset(
+    {
+        "key",
+        "recipe",
+        "engine",
+        "voice",
+        "format",
+        "polly_rate",
+        "tempo",
+        "rate",
+        "text",
+        "request_characters",
+        "source_sha256",
+        "raw_samples",
+        "clip_sha256",
+        "samples",
+    }
+)
+
+
+def _is_count(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def cache_entry_problems(path: Path, key: str, voice: str, text: str) -> List[str]:
+    """Why the directory at *path* is not the cache entry for *key*, or nothing.
+
+    *text* is the text sent to Polly (``polly_text``), which the key is made from.
+    """
+    if path.is_symlink() or not path.is_dir():
+        return ["it is not a directory"]
+    for name in (CACHE_SOURCE, CACHE_CLIP, CACHE_ENTRY):
+        member = path / name
+        if member.is_symlink() or not member.is_file():
+            return [f"{name} is missing or not a plain file"]
+    try:
+        data = json.loads((path / CACHE_ENTRY).read_text(encoding="utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return [f"{CACHE_ENTRY} is not JSON"]
+    if not isinstance(data, dict) or set(data) != CACHE_ENTRY_KEYS:
+        found = set(data) if isinstance(data, dict) else set()
+        return [
+            f"{CACHE_ENTRY} has keys missing {sorted(CACHE_ENTRY_KEYS - found)} and"
+            f" unexpected {sorted(found - CACHE_ENTRY_KEYS)}"
+        ]
+    problems: List[str] = []
+    if clip_key(voice, text) != key or data["key"] != key:
+        problems.append("its key is not the key of the text it is filed under")
+    expected = clip_key_fields(voice, text)
+    differ = sorted(k for k, v in expected.items() if data[k] != v)
+    if differ:
+        problems.append(f"{CACHE_ENTRY} says other {', '.join(differ)} than the key")
+    if not all(
+        _is_count(data[k]) for k in ("request_characters", "raw_samples", "samples")
+    ):
+        problems.append(
+            f"{CACHE_ENTRY} has a count that is not a positive whole number"
+        )
+    elif data["request_characters"] != len(text):
+        problems.append(
+            f"Polly billed {data['request_characters']} characters for {len(text)}"
+        )
+    if file_sha256(path / CACHE_SOURCE) != data["source_sha256"]:
+        problems.append(f"{CACHE_SOURCE} is not the file Polly answered with")
+    if file_sha256(path / CACHE_CLIP) != data["clip_sha256"]:
+        problems.append(f"{CACHE_CLIP} is not the clip made from it")
+    else:
+        try:
+            shape, frames = _clip_shape(path / CACHE_CLIP)
+        except (OSError, EOFError, wave.Error):
+            problems.append(f"{CACHE_CLIP} is not a WAV file")
+        else:
+            if shape != (VOICE_RATE, 1, 2):
+                problems.append(
+                    f"{CACHE_CLIP} is {shape[0]} Hz, {shape[1]} channel(s),"
+                    f" {8 * shape[2]}-bit; a clip is {VOICE_RATE} Hz, mono, 16-bit"
+                )
+            elif frames != data["samples"]:
+                problems.append(f"{CACHE_CLIP} does not hold {data['samples']} samples")
+    return problems
 
 
 def clip_ms(samples: int) -> int:
@@ -1343,7 +1446,10 @@ def _read_manifest(root: Path, problems: List[str]) -> Optional[Manifest]:
     if not isinstance(gates, dict):
         problems.append("manifest gates is not an object")
     else:
-        for name in REQUIRED_CAPTURE_GATES:
+        required = REQUIRED_CAPTURE_GATES
+        if data["voice"] != SILENT:
+            required += VOICED_CAPTURE_GATES
+        for name in required:
             if name not in gates:
                 problems.append(f"capture gate {name} is not in the manifest")
         for name, entry in gates.items():

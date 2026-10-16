@@ -6,6 +6,7 @@ sample size / power analysis, cache invalidation, and sequential testing analysi
 """
 
 import logging
+import math
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 from uuid import UUID
@@ -18,7 +19,7 @@ from backend.app.core.analysis_status import analysis_notice, analysis_status
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.models.analysis_snapshot import AnalysisKind
-from backend.app.models.experiment import Experiment, MetricType
+from backend.app.models.experiment import Experiment, Metric, MetricType
 from backend.app.models.user import User
 from backend.app.schemas.bayesian import BayesianResultsResponse
 from backend.app.schemas.dimensional import (
@@ -798,8 +799,32 @@ def get_experiment_daily_results(
 # ---------------------------------------------------------------------------
 
 
-#: The relative MDE planned for when the request names none.
+#: The relative MDE planned for when neither the request nor the experiment
+#: names one.
 DEFAULT_SAMPLE_SIZE_MDE = 0.05
+
+
+def _planned_effect(metric: Optional[Metric]) -> Optional[float]:
+    """The relative MDE saved with the metric planned on, when usable.
+
+    Only the primary metric's ``expected_effect`` is a plan, and only a finite
+    value strictly between 0 and 1 (the range the ``mde`` parameter accepts).
+    Anything else -- no metric, a secondary metric, null, 0, 1 or more, a
+    negative number, NaN or infinity -- is not used, and the plan falls back
+    to the default.
+    """
+    if metric is None or not getattr(metric, "is_primary", False):
+        return None
+    value = getattr(metric, "expected_effect", None)
+    if value is None:
+        return None
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(value) or not 0.0 < value < 1.0:
+        return None
+    return value
 
 
 def _guide_only_reasons(experiment: Experiment) -> List[str]:
@@ -836,13 +861,15 @@ def get_sample_size_status(
             "observed in the control variant on the primary metric so far."
         ),
     ),
-    mde: float = Query(
-        default=DEFAULT_SAMPLE_SIZE_MDE,
+    mde: Optional[float] = Query(
+        default=None,
         gt=0.0,
         lt=1.0,
         description=(
             "Minimum detectable effect, relative to the baseline: 0.05 means "
-            "12% -> 12.6%. Default 0.05."
+            "12% -> 12.6%. Omit it to use the effect saved with the experiment "
+            "(the primary metric's expected_effect, when it is above 0 and "
+            "below 1), or 0.05 when none was saved. mde_source says which."
         ),
     ),
     confidence_level: Optional[float] = Query(
@@ -878,11 +905,13 @@ def get_sample_size_status(
 
     Plans a two-sided two-proportion test on the primary metric: the users
     each variant needs to detect a relative lift of ``mde`` over the baseline
-    at ``confidence_level`` with ``power_target`` power.  The baseline is
-    ``baseline_conversion_rate`` when sent, otherwise the control variant's
-    conversion rate so far -- counted the way the results count it, but not
-    read from the results cache, so for up to its five minutes it can be
-    newer than the rate the results show.
+    at ``confidence_level`` with ``power_target`` power.  The MDE is ``mde``
+    when sent, otherwise the primary metric's saved ``expected_effect`` when
+    it is above 0 and below 1, otherwise 0.05 (``mde_source`` says which).
+    The baseline is ``baseline_conversion_rate`` when sent, otherwise the
+    control variant's conversion rate so far -- counted the way the results
+    count it, but not read from the results cache, so for up to its five
+    minutes it can be newer than the rate the results show.
 
     Progress is the smallest variant's assignments.  Nothing is saved.
     With no data to plan from the answer is 200 with
@@ -891,12 +920,6 @@ def get_sample_size_status(
     does one too close to its treatment rate for the size to be a finite
     number; an observed rate in that position gives ``effect_too_small``.
     """
-    if (
-        baseline_conversion_rate is not None
-        and baseline_conversion_rate * (1.0 + mde) >= 1.0
-    ):
-        raise HTTPException(status_code=422, detail=TREATMENT_RATE_CEILING_MESSAGE)
-
     experiment = (
         db.query(Experiment)
         .options(
@@ -910,6 +933,28 @@ def get_sample_size_status(
         raise HTTPException(status_code=404, detail="Experiment not found")
 
     try:
+        metrics = AnalysisService._ordered_metrics(experiment)
+        metric = metrics[0] if metrics else None
+
+        # The MDE: the request's, else the one saved with the experiment on the
+        # metric planned on, else the default.
+        mde_source: str
+        if mde is not None:
+            mde_source = "request"
+        else:
+            mde = _planned_effect(metric)
+            if mde is not None:
+                mde_source = "experiment"
+            else:
+                mde = DEFAULT_SAMPLE_SIZE_MDE
+                mde_source = "default"
+
+        if (
+            baseline_conversion_rate is not None
+            and baseline_conversion_rate * (1.0 + mde) >= 1.0
+        ):
+            raise HTTPException(status_code=422, detail=TREATMENT_RATE_CEILING_MESSAGE)
+
         confidence_level, correction_method = resolve_analysis_settings(
             experiment, confidence_level, correction_method
         )
@@ -935,8 +980,6 @@ def get_sample_size_status(
         per_variant = {str(v.id): int(counts.get(v.id, 0) or 0) for v in variants}
         current = min(per_variant.values()) if per_variant else 0
 
-        metrics = AnalysisService._ordered_metrics(experiment)
-        metric = metrics[0] if metrics else None
         control = next((v for v in variants if v.is_control), None)
 
         baseline: Optional[float] = None
@@ -1000,6 +1043,7 @@ def get_sample_size_status(
             projected_completion_date=None,
             baseline_rate=baseline,
             mde=mde,
+            mde_source=mde_source,
             confidence_level=confidence_level,
             power_target=power_target,
             baseline_source=baseline_source,

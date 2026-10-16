@@ -248,6 +248,8 @@ def make_voiced_capture(
     ``voice.json`` and a stdlib-written clip per sentence."""
     manifest = default_manifest()
     manifest["voice"] = "Ruth"
+    for name in contract.VOICED_CAPTURE_GATES:
+        manifest["gates"][name] = {"ok": True, "numbers": {}}
     make_capture(root, manifest=manifest, **kwargs)
     cues = json.loads((root / "cues.json").read_text(encoding="utf-8"))["cues"]
     listed = (

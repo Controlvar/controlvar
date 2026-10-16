@@ -39,7 +39,9 @@
 #   withheld for the floor and not for the p-value: CONTINUE TESTING, with the
 #   floor's reason. The page's "Planned sample" card reads "Not yet" here, as
 #   it does on the other two: at a 10% control rate the Sample Size tab's
-#   default plan (5% relative effect) is far above 400 per variant (#1244).
+#   default plan (5% relative effect) is 57,763 per variant (#1244). None of
+#   the three saves an effect, so the line under the cards says the plan is
+#   for the 5% default (#1257).
 #
 # The results are cached for up to five minutes, so each experiment's
 # population is complete before its results are first read, on the page or
@@ -363,7 +365,8 @@ steps:
           - paragraph: "800"
           - paragraph: Planned sample
           - paragraph: Not yet
-          - paragraph: /^400 of [\d,]+ per variant$/
+          - paragraph: "400 of 57,763 per variant"
+          - paragraph: "To detect a 5% lift (the default: no effect was saved with this experiment) on the control's 10%."
           - paragraph: "Analysis: 95% confidence · one comparison with the control on each metric, so no correction is needed"
           - paragraph: "Sample ratio check passed: the traffic split matches the allocation (p = 1)."
           - tabpanel:
@@ -529,7 +532,8 @@ steps:
           - paragraph: "500"
           - paragraph: Planned sample
           - paragraph: Not yet
-          - paragraph: /^200 of [\d,]+ per variant$/
+          - paragraph: "200 of 57,763 per variant"
+          - paragraph: "To detect a 5% lift (the default: no effect was saved with this experiment) on the control's 10%."
           - paragraph: /^Leading. Treatment.*The traffic split does not match the allocation, so treat this with caution\.$/
           - region "The traffic split does not match the allocation.":
             - heading "The traffic split does not match the allocation." [level=3]
@@ -655,7 +659,8 @@ steps:
           - paragraph: "120"
           - paragraph: Planned sample
           - paragraph: Not yet
-          - paragraph: /^60 of [\d,]+ per variant$/
+          - paragraph: "60 of 57,763 per variant"
+          - paragraph: "To detect a 5% lift (the default: no effect was saved with this experiment) on the control's 10%."
           - paragraph: /Not every variant has reached the minimum sample size yet/
           - paragraph: "Sample ratio check passed: the traffic split matches the allocation (p = 1)."
           - tabpanel:

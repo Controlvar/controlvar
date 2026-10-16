@@ -43,6 +43,9 @@ repo's Python venv.
 `backend/scripts/seed_shoplab.py` is idempotent. It writes the key to `demo/shoplab/.api_key`
 and the `NEXT_PUBLIC_EXPERIMENTLY_API_KEY` line into `demo/shoplab/.env.local`. `--no-history`
 skips the 14-day backfill, and `--reset` removes everything it created.
+A run on a database seeded before 0.34.3 leaves the experiments it finds as they are, so
+their results pages plan the sample from the old `expected_effect` values until you re-seed
+with `--reset`.
 
 ```{.bash skip reason="demo: runs the demo applications (Stream F)"}
 source venv/bin/activate

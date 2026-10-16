@@ -84,6 +84,7 @@ const mockSampleSize: SampleSizeResult = {
   projected_completion_date: null,
   baseline_rate: 0.12,
   mde: 0.02,
+  mde_source: 'experiment',
   confidence_level: 0.95,
   power_target: 0.8,
   baseline_source: 'observed',
@@ -337,7 +338,9 @@ describe('ResultsDashboard', () => {
     render(<ResultsDashboard experimentId="exp-1" />);
     await waitFor(() => screen.getByTestId('experiment-summary'));
     await userEvent.click(
-      screen.getByRole('button', { name: 'See the Sample Size tab for the planned sample.' })
+      screen.getByRole('button', {
+        name: 'See the Sample Size tab for how the plan is calculated, or to try another effect.',
+      })
     );
     expect(screen.getByRole('tab', { name: /sample size/i })).toHaveAttribute(
       'aria-selected',
@@ -407,7 +410,12 @@ describe('ResultsDashboard', () => {
           is_adequate: false,
           achieved_power: 0.34,
         })
-        .mockResolvedValue({ ...mockSampleSize, mde: 0.9, baseline_source: 'request' });
+        .mockResolvedValue({
+          ...mockSampleSize,
+          mde: 0.9,
+          mde_source: 'request',
+          baseline_source: 'request',
+        });
 
       render(<ResultsDashboard experimentId="exp-1" />);
       const card = await screen.findByTestId('planned-sample');
@@ -425,6 +433,10 @@ describe('ResultsDashboard', () => {
       await screen.findByTestId('sample-size-meter');
       expect(screen.getByTestId('planned-sample')).toHaveTextContent(
         /^Planned sampleNot yet203 of 69,410 per variant$/
+      );
+      // The effect line is the card's plan too, not the tab's 90% (#1257).
+      expect(screen.getByTestId('planned-sample-effect')).toHaveTextContent(
+        /^To detect a 2% lift on the control's 12%\. The 2% was set when the experiment was created\.$/
       );
     });
 

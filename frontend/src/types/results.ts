@@ -210,6 +210,12 @@ export interface SampleSizeResult {
   baseline_rate: number | null;
   /** Relative: 0.05 means 12% -> 12.6%. */
   mde: number;
+  /**
+   * Where mde came from: sent with the request, saved with the experiment
+   * (the primary metric's expected_effect), or the 0.05 default. An API older
+   * than 0.34.3 does not send it; read its absence as 'default'.
+   */
+  mde_source?: 'request' | 'experiment' | 'default';
   confidence_level: number;
   power_target: number;
   baseline_source: 'observed' | 'request' | null;

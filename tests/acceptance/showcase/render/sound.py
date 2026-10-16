@@ -9,7 +9,7 @@
   gated silent encode's video untouched).
 * ``decode``: the finished file's sound as 48 kHz mono 16-bit samples (G13).
 * ``loudness``: ffmpeg's ebur128 with true peak, on the whole sound or on one
-  sentence's samples (G17). The summary is logged at the info level, so the
+  sentence's samples, counted on the file's own timeline (G17). The summary is logged at the info level, so the
   command line has no ``-v``; ``contract.parse_ebur128`` reads it
   and refuses output without one.
 
@@ -156,10 +156,18 @@ def decode(path: Path) -> bytes:
 
 
 def loudness_argv(path: Path, window: Optional[Tuple[int, int]] = None) -> List[str]:
-    """ebur128 with true peak; *window* is a ``(first, end)`` sample range."""
+    """ebur128 with true peak; *window* is a ``(first, end)`` sample range.
+
+    A window's samples are counted on the file's own timeline (``TIMELINE``
+    before the ``atrim``), as G13 decodes them: without it a sound stream that
+    starts late is trimmed as if it started at 0, so each sentence's level
+    would be read from where its speech should be, not where it is.
+    """
     chain = "ebur128=peak=true"
     if window is not None:
-        chain = f"atrim=start_sample={window[0]}:end_sample={window[1]}," + chain
+        chain = (
+            f"{TIMELINE},atrim=start_sample={window[0]}:end_sample={window[1]}," + chain
+        )
     return [
         FFMPEG,
         "-nostdin",

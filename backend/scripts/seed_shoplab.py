@@ -159,6 +159,9 @@ PDP_BUTTON_TEXT = {
 # Catalogue (spec §2)
 # ---------------------------------------------------------------------------
 
+# A metric's expected_effect is a RELATIVE lift: 0.25 means 12% -> 15%. The
+# primary metric's is the effect the results page plans the sample for, so
+# backend/tests/unit/scripts/test_seed_planned_effects.py pins each plan.
 EXPERIMENTS: List[Dict[str, Any]] = [
     {
         "key": "shoplab_hero_banner",
@@ -201,7 +204,7 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 "metric_type": MetricType.CONVERSION,
                 "is_primary": True,
                 "minimum_sample_size": 2000,
-                "expected_effect": 0.03,
+                "expected_effect": 0.25,
             },
             {
                 "name": "Purchase",
@@ -209,7 +212,7 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 "metric_type": MetricType.CONVERSION,
                 "is_primary": False,
                 "minimum_sample_size": 2000,
-                "expected_effect": 0.01,
+                "expected_effect": 0.33,
             },
         ],
     },
@@ -253,7 +256,7 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 "metric_type": MetricType.CONVERSION,
                 "is_primary": True,
                 "minimum_sample_size": 1000,
-                "expected_effect": 0.03,
+                "expected_effect": 0.14,
             },
             {
                 "name": "Add to cart",
@@ -261,7 +264,7 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 "metric_type": MetricType.CONVERSION,
                 "is_primary": False,
                 "minimum_sample_size": 1000,
-                "expected_effect": 0.01,
+                "expected_effect": 0.15,
             },
         ],
     },
@@ -312,7 +315,7 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 "metric_type": MetricType.CONVERSION,
                 "is_primary": True,
                 "minimum_sample_size": 4000,
-                "expected_effect": 0.02,
+                "expected_effect": 0.25,
             },
             {
                 "name": "Purchase",
@@ -320,7 +323,7 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 "metric_type": MetricType.CONVERSION,
                 "is_primary": False,
                 "minimum_sample_size": 4000,
-                "expected_effect": 0.01,
+                "expected_effect": None,
             },
         ],
     },
@@ -357,7 +360,7 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 "metric_type": MetricType.CONVERSION,
                 "is_primary": True,
                 "minimum_sample_size": 2000,
-                "expected_effect": 0.05,
+                "expected_effect": 0.08,
             },
             {
                 "name": "Order value",
@@ -367,7 +370,7 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 "aggregation_method": "sum",
                 "event_value_path": "value",
                 "minimum_sample_size": 2000,
-                "expected_effect": 0.02,
+                "expected_effect": None,
             },
         ],
     },

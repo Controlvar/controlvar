@@ -61,7 +61,9 @@ crash reports with it, the way the StreamPulse server would forward them, becaus
 sent with a server-side key count toward automatic rollback. Never put that key in `.env.local`:
 it can also download every flag's targeting rules. `--no-history` skips the 7-day backfill,
 `--reset` removes everything it created, and the `STREAMPULSE_DEMO_DIR` environment variable
-changes where the key files go.
+changes where the key files go. A run on a database seeded before 0.34.3 leaves the experiments it finds as they are, so
+their results pages plan the sample from the old `expected_effect` values until you re-seed
+with `--reset`.
 
 ```{.bash skip reason="demo: runs the demo applications (Stream F)"}
 source venv/bin/activate

@@ -654,9 +654,12 @@ class SampleSizeResult(BaseModel):
 
     Plans a two-sided two-proportion test on the primary metric: the users
     each variant needs to detect a relative lift of ``mde`` over the baseline
-    rate.  The baseline is the request's ``baseline_conversion_rate`` or,
-    without one, the rate observed in the control variant so far.  Every input
-    used is returned with where it came from.
+    rate.  The MDE is the request's ``mde`` or, without one, the effect saved
+    with the experiment (the primary metric's ``expected_effect``), or 0.05
+    when none was saved.  The baseline is the request's
+    ``baseline_conversion_rate`` or, without one, the rate observed in the
+    control variant so far.  Every input used is returned with where it came
+    from.
 
     When there is nothing to plan from yet (no metric, no control users, no
     control conversions) the answer is still 200: the required size and the
@@ -715,8 +718,17 @@ class SampleSizeResult(BaseModel):
     mde: float = Field(
         ...,
         description=(
-            "Minimum detectable effect, relative to the baseline rate: 0.05 "
-            "means 12% -> 12.6%."
+            "Minimum detectable effect planned for, relative to the baseline "
+            "rate: 0.05 means 12% -> 12.6%. mde_source says where it came from."
+        ),
+    )
+    mde_source: Literal["request", "experiment", "default"] = Field(
+        "default",
+        description=(
+            "Where mde came from: 'request' (mde was sent), 'experiment' (the "
+            "primary metric's expected_effect, saved with the experiment and "
+            "above 0 and below 1) or 'default' (0.05: no usable effect was "
+            "saved)."
         ),
     )
     confidence_level: float = Field(

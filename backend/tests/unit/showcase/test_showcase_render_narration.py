@@ -663,6 +663,23 @@ def test_the_real_narrated_mp4s_loudness_is_read_from_its_summary():
         contract.parse_ebur128("")
 
 
+@pytest.mark.regression
+def test_a_sentences_loudness_is_read_on_the_files_own_timeline():
+    """The window was trimmed from a decode that moves a late stream to 0, so a
+    sentence's level was read where its speech should be (#1252 review)."""
+    argv = sound.loudness_argv(Path("narrated.mp4"), (144_000, 192_000))
+    chain = argv[argv.index("-af") + 1].split(",")
+    assert chain == [
+        "aresample=async=1:first_pts=0",
+        "atrim=start_sample=144000:end_sample=192000",
+        "ebur128=peak=true",
+    ]
+    assert chain[0] == sound.TIMELINE
+    # The whole file's reading is unchanged: the recorded fixture's command.
+    whole = sound.loudness_argv(Path("narrated.mp4"))
+    assert whole[whole.index("-af") + 1] == "ebur128=peak=true"
+
+
 def test_loudness_on_target_passes_g17():
     problems, numbers = narration.loudness_problems(-19.3, -2.1, [-19.0, -19.6, -18.4])
     assert problems == []

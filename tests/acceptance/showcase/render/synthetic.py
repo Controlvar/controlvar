@@ -353,6 +353,8 @@ def write_voiced(
         fh.write("\n".join(needles) + "\n")
     data = manifest()
     data["voice"] = contract.VOICES[0]
+    for name in contract.VOICED_CAPTURE_GATES:
+        data["gates"][name] = {"ok": True, "numbers": {"synthetic": True}}
     (root / "manifest.json").write_text(
         json.dumps(data, indent=2) + "\n", encoding="utf-8"
     )
