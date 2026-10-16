@@ -277,7 +277,7 @@ steps:
                 - option "Benjamini-Hochberg (recommended)" [selected]
                 - option "Bonferroni (stricter)"
                 - option "None"
-            - region "Sample size estimate (optional, not saved)":
+            - region "Sample size estimate (optional)":
               - button "Calculate estimate"
     fail: the Estimate step does not start with how results will be judged (90, 95 or 99%, 95% chosen; Benjamini-Hochberg chosen, Bonferroni or None), then the optional estimate
   - id: baseline
@@ -303,8 +303,8 @@ steps:
     expect:
       aria: |
         - spinbutton "Minimum detectable effect (relative) (%)": "5"
-        - paragraph: 5% means 12% → 12.6%, not 17%.
-    fail: the effect cannot be typed, or it is not explained as a relative change
+        - paragraph: 5% means 12% → 12.6%, not 17%. Saved with the experiment; leave it blank and the results page plans for 5%.
+    fail: the effect cannot be typed, or it is not explained as a relative change that is saved with the experiment
   - id: calculate
     doc: in-the-dashboard-guided-setup
     do:
@@ -344,9 +344,9 @@ steps:
             - term: Analysis
             - definition:
               - paragraph: 95% confidence · Benjamini-Hochberg correction
-            - term: Estimate
+            - term: Sample size
             - definition:
-              - paragraph: 47,036 users per variant (advisory; not saved)
+              - paragraph: 47,036 users per variant to detect a 5% lift. The 5% is saved; the rest of the estimate is not.
           - button "Create Experiment"
     fail: the Review step does not show everything as it will be sent, with its Analysis row
   - id: create
