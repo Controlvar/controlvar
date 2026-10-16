@@ -549,6 +549,9 @@ class QuickstartStack:
     def up(self) -> None:
         compose_text = (self.tree / COMPOSE_FILE).read_text(encoding="utf-8")
         refuse_unasked_files(self.tree)
+        # The video's logs directory is made by the first child that logs;
+        # the override file is written before any child has run.
+        self.logs.mkdir(parents=True, exist_ok=True)
         self.write_override(self.logs / "compose.override.yml")
         refuse_compose_env(self.compose_env, compose_text)
         if self.project in self.docker.projects():

@@ -717,6 +717,8 @@ def test_an_override_reaches_the_api_through_a_file_not_composes_environment(
     fake.write()
     item = compose.Override("CORS_ORIGINS", "http://127.0.0.1:28401")
     stack, _ = make_stack(tmp_path, fake, overrides=[item])
+    # As in a run: nothing has made the video's logs directory yet (Mac run 1).
+    stack.logs.rmdir()
     stack.up()
     override = stack.logs / "compose.override.yml"
     import yaml
