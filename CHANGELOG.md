@@ -10,6 +10,15 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.34.4](https://github.com/getexperimently/experimently/compare/v0.34.3...v0.34.4) (2026-10-16)
+
+
+### Bug Fixes
+
+* **compose:** the demo-profile command seeds ShopLab and StreamPulse ([#1275](https://github.com/getexperimently/experimently/issues/1275)) ([8da4338](https://github.com/getexperimently/experimently/commit/8da4338ead4449f68d594fd1405f4ef9897b3a53))
+* **compose:** the self-hosting compose file starts on Apple Silicon ([#1269](https://github.com/getexperimently/experimently/issues/1269)) ([ef74e34](https://github.com/getexperimently/experimently/commit/ef74e347e24372e5bbf90b87e4c06bab16940e99))
+* **docker:** docker compose exec commands in the api container work on Apple M4 ([#1271](https://github.com/getexperimently/experimently/issues/1271)) ([5fcc81c](https://github.com/getexperimently/experimently/commit/5fcc81c9f62f8f34f507ae56e7639b85b921e097))
+
 ## [0.34.3](https://github.com/getexperimently/experimently/compare/v0.34.2...v0.34.3) (2026-10-16)
 
 
