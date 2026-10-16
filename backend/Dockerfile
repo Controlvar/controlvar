@@ -51,6 +51,14 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY backend/requirements/runtime.lock /tmp/runtime.lock
 RUN pip install --upgrade pip && pip install --require-hashes -r /tmp/runtime.lock
 
+# The venv's start-up hook (#1265): when backend/docker-entrypoint.sh found that
+# cryptography's OpenSSL crashes on this CPU, it sets OPENSSL_armcap=0 in every
+# Python process of the venv, including the ones `docker compose exec` starts.
+# A no-op everywhere else. In the venv, so both profiles get it through their
+# `COPY --from` of /opt/venv; each of them asserts below that it is loaded.
+ARG PYTHON_VERSION
+COPY backend/docker/sitecustomize.py /opt/venv/lib/python${PYTHON_VERSION}/site-packages/sitecustomize.py
+
 # -------------------------------------------------------------------------
 # Stage 2: runtime — everything the two profiles share EXCEPT the venv.
 #
@@ -301,6 +309,12 @@ RUN set -eu; \
     echo "packaging toolchain removed from the venv and the base image"
 USER appuser
 
+# The venv's start-up hook is where the builder stage put it and Python loads
+# it at start-up -- not merely importable: a path that misses site-packages
+# (a PYTHON_VERSION the COPY above no longer matches) would leave nothing to
+# load, and every `docker compose exec` on an affected CPU would crash again.
+RUN python -c 'import sys; m = sys.modules.get("sitecustomize"); assert m and m.__file__.startswith("/opt/venv/"), m; print("venv start-up hook loaded from", m.__file__)'
+
 # modules/backend, not modules/ whole: modules/frontend is the dashboard's
 # module code, which frontend/Dockerfile needs in the build context and this
 # image has no use for. modules/backend/tests, modules/infrastructure and
@@ -381,6 +395,12 @@ RUN set -eu; \
     fi; \
     echo "packaging toolchain removed from the venv and the base image"
 USER appuser
+
+# The venv's start-up hook is where the builder stage put it and Python loads
+# it at start-up -- not merely importable: a path that misses site-packages
+# (a PYTHON_VERSION the COPY above no longer matches) would leave nothing to
+# load, and every `docker compose exec` on an affected CPU would crash again.
+RUN python -c 'import sys; m = sys.modules.get("sitecustomize"); assert m and m.__file__.startswith("/opt/venv/"), m; print("venv start-up hook loaded from", m.__file__)'
 
 # What must not be in a published image, asserted at the END of the profile
 # stage -- after `full` has copied modules/, which the earlier placement in the
