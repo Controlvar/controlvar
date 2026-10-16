@@ -140,11 +140,11 @@ class ExperimentationAutoConfigurationTest {
         contextRunner
                 .withPropertyValues(
                         "experimentation.api-key=test-key",
-                        "experimentation.base-url=https://internal.mycompany.com"
+                        "experimentation.base-url=https://api.internal.example.com"
                 )
                 .run(context -> {
                     ExperimentationProperties props = context.getBean(ExperimentationProperties.class);
-                    assertThat(props.getBaseUrl()).isEqualTo("https://internal.mycompany.com");
+                    assertThat(props.getBaseUrl()).isEqualTo("https://api.internal.example.com");
                 });
     }
 
