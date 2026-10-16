@@ -26,9 +26,9 @@
 # * D84: each departure is stated in the scene where it happens. The sign-in
 #   before the first scene and the results asked for before the last are off
 #   camera, and say so in a caption; the shoppers are simulated, and the SDK
-#   card says how many and at what rates, the arriving caption and the time
-#   card that they are simulated, and the time card why the results page reads
-#   Duration 0d.
+#   card says how many and at what rates they are set to buy, the arriving
+#   caption and the time card's caption ("simulated in minutes") that they are
+#   simulated, and the time card's note why the results page reads Duration 0d.
 # * `say` is the narration (#1066 voiceover): the UX draft's spoken script, with
 #   every number in digits as the page prints it, and every number on the page
 #   while it is said. So the first beat names no step count (the wizard's 5
@@ -200,7 +200,7 @@ scenes:
       note: >-
         As the docs give it. Your app passes its own experiment's key; the
         shoppers in this video are simulated and sent the same way: 63,000 of
-        them from a fixed seed, buying at 5% in Control and 5.6% with the
+        them from a fixed seed, set to buy at 5% in Control and 5.6% with the
         Sticky bar.
     beats:
       - cue: Your app asks the SDK for a variant, then tracks purchases.
