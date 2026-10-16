@@ -3,9 +3,11 @@
 # SDKs version independently of the platform -- a fix to the JavaScript client
 # should not force a release of the API images -- so each has its own tag:
 #
-#   sdk/js/v1.2.3        @controlvar/js-sdk 1.2.3 -> npm
-#   sdk/python/v1.2.3    controlvar 1.2.3            -> PyPI
-#   sdk/go/v1.2.3        github.com/controlvar/controlvar/sdk/go
+#   sdk/js/v1.2.3        @controlvar/js-sdk 1.2.3                  -> npm
+#   sdk/python/v1.2.3    controlvar 1.2.3                          -> PyPI
+#   sdk/go/v1.2.3        github.com/controlvar/controlvar/sdk/go   -> the Go module proxy
+#                        (the module path is lower case; the repository it is
+#                        fetched from is github.com/Controlvar/controlvar)
 #
 # That shape is Go's requirement (a module in a subdirectory is released by a
 # `<subdir>/vX.Y.Z` tag), reused for every SDK so there is one convention.

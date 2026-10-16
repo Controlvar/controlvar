@@ -9,7 +9,13 @@ single-label test name. This holds for every file under ``sdk/`` and
 What counts as an API origin: a URL on a line that configures one (``baseUrl``,
 ``base_url``, ``apiUrl``, ``api_url``, ``base-url``, ``WithBaseURL``,
 ``EP_BASE_URL`` and the like), and any URL whose host starts with ``api.``.
-Links to documentation and registries are on neither kind of line.
+A client constructed with the origin as a positional argument counts too
+when the call is on one line (``ExperimentationClient("https://...", key)``,
+``Client.new(...)``). Links to documentation and registries are on neither
+kind of line.
+
+Not seen: an origin on its own line inside a multi-line call or object with
+no keyword on that line and no ``api.`` host, or an origin built from parts.
 
 Reads files only (no git), so it runs the same in core_build's copy.
 """
@@ -55,7 +61,7 @@ TEXT_SUFFIXES = (
 
 CONFIG_LINE = re.compile(
     r"base[_-]?url|api[_-]?url|baseurl|apiurl|withbaseurl|ep_base_url|"
-    r"controlvar_api_url|sdkconfig|base-url",
+    r"controlvar_api_url|sdkconfig|base-url|experimentationclient\(|client\.new\(",
     re.IGNORECASE,
 )
 URL = re.compile(r"https?://([A-Za-z0-9.-]{1,253})")
@@ -131,6 +137,7 @@ def test_the_scan_reads_the_examples_it_exists_for():
         "  baseUrl: process.env.EP_BASE_URL ?? 'https://api.your-platform.com',",
         'client = ExperimentationClient(api_url="https://flags.mycompany.com", api_key=k)',
         "fetch('https://api.someone.io/api/v1/feature-flags/evaluate/x')",
+        'client = ExperimentationClient("https://flags.someone.io", "key")',
     ],
 )
 def test_a_registrable_origin_is_refused(tmp_path, line):

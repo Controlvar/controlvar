@@ -22,7 +22,7 @@
  *     const { enabled } = await client.evaluateFlag('new-feature', userId);
  *     return new Response(enabled ? 'new' : 'old');
  *   },
- *   { apiKey: Deno.env.get('EP_API_KEY')!, kv: await Deno.openKv() }
+ *   { apiKey: Deno.env.get('EP_API_KEY')!, baseUrl: Deno.env.get('EP_BASE_URL')!, kv: await Deno.openKv() }
  * );
  * ```
  */

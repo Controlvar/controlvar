@@ -247,7 +247,8 @@ Adapter configs add `kvNamespace` / `kvTtlSeconds` (Cloudflare), `kv` / `kvTtlMs
 | `refreshFlags()` | `Promise<void>` | **Deprecated** no-op (definitions are no longer fetched). |
 | `flagCount` / `experimentCount` | `number` | Size of the in-memory caches (getters). |
 
-No public method throws or rejects: the constructor is the only exception (`apiKey is required`).
+No public method throws or rejects: the constructor is the only exception, when `apiKey` or
+`baseUrl` is missing (`apiKey is required`, `baseUrl is required: ...`).
 There is no `onError` hook and no automatic 429 retry; `trackBatch` surfaces HTTP failures as
 `{ message, status }` entries in `errors` (`EdgeApiError` carries the `status`). Failures are never
 cached, so the next call retries.
