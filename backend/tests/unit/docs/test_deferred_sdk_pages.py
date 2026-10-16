@@ -401,7 +401,7 @@ def ours(ecosystem: str, name: str, group: Optional[str] = None) -> bool:
     if ecosystem == "cocoapods":
         return name.lower().startswith("controlvar")
     if ecosystem == "swiftpm":
-        return "controlvar/" in name
+        return "controlvar/controlvar" in name.lower()
     raise AssertionError(ecosystem)
 
 

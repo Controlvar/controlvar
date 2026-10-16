@@ -60,11 +60,6 @@ GUARDS: Dict[str, str] = {
 #: list holds the few lines here that still carry this repository's former slug.
 KEEP: List[Tuple[str, str, str]] = [
     (
-        ".github/workflows/sdk-release.yml",
-        "#   sdk/go/v1.2.3        github.com/controlvar/controlvar/sdk/go",
-        "a comment: the Go module path go.mod declares (moves with the SDKs)",
-    ),
-    (
         "scripts/doc_claims.py",
         'EVIDENCE_REPOSITORY = ("getexperimently/experimently", "Controlvar/controlvar")',
         "the name dated evidence links were recorded with; never rewritten",
