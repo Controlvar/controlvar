@@ -107,41 +107,12 @@ export POSTGRES_SERVER POSTGRES_PORT POSTGRES_USER POSTGRES_DB
 # code paths from the CPU flags the kernel advertises. Some arm64 VMs (Docker
 # Desktop on Apple M4, for one) advertise SVE/SME that the guest cannot
 # execute, and the import dies with SIGILL (exit 132). Probe once; if it
-# crashes, tell OpenSSL to skip the optimised paths.
-#
-# The export reaches only this script's own children. A process started later
-# with `docker compose exec` (or `kubectl exec`) starts from the container's
-# configured environment instead, so the decision is also saved as a marker
-# file, and backend/docker/sitecustomize.py -- which every Python process of
-# the image's venv runs at start-up -- sets OPENSSL_armcap=0 when it finds the
-# marker (#1265). The marker never sets anything on hardware that does not
-# crash: OPENSSL_armcap=0 costs a large factor in AES-GCM and SHA-256 speed.
-#
-#   * The marker is removed FIRST, before the probe, on every start: a marker
-#     left by an earlier start of this container would make the probe pass
-#     (the hook sets the variable inside it) and hide what this CPU does.
-#   * Only exit 132 (SIGILL) means "this CPU". Any other failure is a broken
-#     install, logged as such, and saves nothing.
-#   * An OPENSSL_armcap the operator set is left alone: no probe, no marker.
-#   * Neither the removal nor the write can stop the container: with a
-#     read-only /tmp the processes this script starts still get the variable,
-#     and the line below says the rest do not.
+# crashes, tell OpenSSL to skip the optimised paths for this process tree.
 # -------------------------------------------------------------------------
-openssl_marker="${TMPDIR:-/tmp}/experimently-openssl-armcap0"
-rm -f "$openssl_marker" 2>/dev/null \
-    || log "could not remove ${openssl_marker}; a process started with exec may get OPENSSL_armcap=0 from an earlier start"
 if [ -z "${OPENSSL_armcap:-}" ]; then
-    openssl_rc=0
-    python -c "from cryptography.hazmat.bindings._rust import openssl" >/dev/null 2>&1 || openssl_rc=$?
-    if [ "$openssl_rc" -eq 132 ]; then
+    if ! python -c "from cryptography.hazmat.bindings._rust import openssl" >/dev/null 2>&1; then
+        log "cryptography's OpenSSL crashed on this CPU; setting OPENSSL_armcap=0 (asm optimisations off)"
         export OPENSSL_armcap=0
-        if { : > "$openssl_marker"; } 2>/dev/null; then
-            log "cryptography's OpenSSL crashed on this CPU (SIGILL); setting OPENSSL_armcap=0 (asm optimisations off) for every Python process in this container"
-        else
-            log "cryptography's OpenSSL crashed on this CPU (SIGILL); setting OPENSSL_armcap=0 (asm optimisations off) for the processes this entrypoint starts. Could not save ${openssl_marker}, so a Python process started with exec does not get it: pass -e OPENSSL_armcap=0 to exec, or give the container a writable /tmp"
-        fi
-    elif [ "$openssl_rc" -ne 0 ]; then
-        log "the cryptography import failed (exit ${openssl_rc}); not a CPU problem, OPENSSL_armcap left unset"
     fi
 fi
 
