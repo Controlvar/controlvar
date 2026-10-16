@@ -92,6 +92,10 @@ by = [
 ]
 
 [[unit]]
+text = "The dashboard keeps its sign-in token under the same key and the API keeps the issuer it signs tokens with, so nobody is signed out by the upgrade."
+by = ["test:backend/tests/unit/infrastructure/test_cross_version_identifiers.py::test_cross_version_identifiers_are_literal"]
+
+[[unit]]
 text = "The development stack"
 by = ["exempt:label"]
 

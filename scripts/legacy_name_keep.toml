@@ -38,7 +38,7 @@ reason = "recorded runs: rewriting them would falsify the record"
 [[keep]]
 path = "*"
 literal = "experimently-selfhost"
-count = 7
+count = 8
 reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
 
 [[keep]]
@@ -102,12 +102,6 @@ count = 2
 reason = "K3/S3: the resource stem"
 
 [[keep]]
-path = "charts/experimently/templates/_helpers.tpl"
-literal = "The resource stem stays \"experimently\""
-count = 1
-reason = "K3/S3: says why"
-
-[[keep]]
 path = "charts/experimently/*"
 literal = "charts/experimently"
 count = 22
@@ -116,43 +110,43 @@ reason = "C9: the chart keeps its directory"
 [[keep]]
 path = "*"
 literal = "charts/experimently"
-count = 68
+count = 69
 reason = "C9: the chart keeps its directory; every reference to it"
 
 [[keep]]
 path = "*"
 literal = "\"charts\" / \"experimently\""
-count = 17
+count = 18
 reason = "C9: the chart's directory, built from parts"
 
 [[keep]]
 path = "*"
 literal = "experimently.scheduler."
-count = 2
+count = 3
 reason = "K4: advisory-lock namespace; N-1 and N must take the same lock"
 
 [[keep]]
 path = "*"
 literal = "experimently.bootstrap."
-count = 1
+count = 2
 reason = "K4: advisory-lock namespace"
 
 [[keep]]
 path = "*"
 literal = "experimently-local"
-count = 2
+count = 3
 reason = "K5: the local JWT issuer; a new one signs every session out"
 
 [[keep]]
 path = "*"
 literal = "experimently.bearer"
-count = 18
+count = 20
 reason = "K6: the WebSocket subprotocol a cached dashboard offers"
 
 [[keep]]
 path = "*"
 literal = "experimently.token"
-count = 10
+count = 11
 reason = "K7: the dashboard's token storage key"
 
 [[keep]]
@@ -188,13 +182,13 @@ reason = "K11: the label, as the docs state it"
 [[keep]]
 path = "*"
 literal = "io.experimently.profile"
-count = 12
+count = 17
 reason = "K12: the image label main's deploy reads off every tag's image"
 
 [[keep]]
 path = "*"
 literal = "EXPERIMENTLY_PROFILE"
-count = 205
+count = 206
 reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
 
 [[keep]]
@@ -242,7 +236,7 @@ reason = "K15: cost-report tag, as the docs set it"
 [[keep]]
 path = "*"
 literal = "experimently-feature-flags"
-count = 2
+count = 3
 reason = "K16: a DynamoDB table name"
 
 [[keep]]
@@ -266,7 +260,7 @@ reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
 [[keep]]
 path = "*"
 literal = "EXPERIMENTLY_CHART_TESTS"
-count = 20
+count = 23
 reason = "K18: CI arming switch (env-inventory.md)"
 
 [[keep]]
@@ -568,6 +562,18 @@ path = "CLAUDE.md"
 literal = "getexperimently/experimently-internal"
 count = 2
 reason = "the private repository's name until it moves after the window"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_rename.py"
+literal = "experimently"
+count = 7
+reason = "K3/S3: pins the resource stem across a rename of the chart (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_cross_version_identifiers.py"
+literal = "experimently"
+count = 1
+reason = "S8: pins every identifier that keeps the former spelling, by its exact line (this file, whole; its count is pinned)"
 
 [[keep]]
 path = "backend/tests/unit/infrastructure/test_repository_guards.py"
@@ -980,37 +986,37 @@ reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)
 [[keep]]
 path = "modules/*"
 literal = "experimently.warehouse.runs"
-count = 1
+count = 2
 reason = "K4: advisory-lock name"
 
 [[keep]]
 path = "modules/*"
 literal = "experimently.sso"
-count = 2
+count = 3
 reason = "K7: the SSO session storage key"
 
 [[keep]]
 path = "modules/*"
 literal = "__Host-experimently_oidc"
-count = 2
+count = 3
 reason = "K7: the OIDC state cookie"
 
 [[keep]]
 path = "modules/*"
 literal = "experimently:oidc-state"
-count = 4
+count = 6
 reason = "K7: HMAC tag and JWT audience of an in-flight SSO login"
 
 [[keep]]
 path = "modules/*"
 literal = "experimently:sso-handoff"
-count = 3
+count = 5
 reason = "K7: HMAC tag and JWT audience of an in-flight SSO handoff"
 
 [[keep]]
 path = "modules/*"
 literal = "X-Experimently-Webhook-Secret"
-count = 11
+count = 12
 reason = "K8: the header Jira and Salesforce senders are configured with"
 
 [[keep]]
@@ -1022,13 +1028,13 @@ reason = "K9: the SAML defaults an operator may have registered in their IdP"
 [[keep]]
 path = "modules/*"
 literal = "experimently.warehouse.results/v1"
-count = 2
+count = 3
 reason = "K10: persisted schema id"
 
 [[keep]]
 path = "modules/*"
 literal = "experimently.warehouse.sufficient_statistics/v2"
-count = 1
+count = 2
 reason = "K10: persisted schema id"
 
 [[keep]]

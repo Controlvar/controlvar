@@ -1,7 +1,7 @@
 """Renaming the chart renames no object it renders.
 
 Every object name and the ``app.kubernetes.io/name`` selector label come from
-the ``experimently.name`` and ``experimently.fullname`` helpers. They used to
+the ``controlvar.name`` and ``controlvar.fullname`` helpers. They used to
 read ``.Chart.Name``, so a chart published under another name made
 ``helm upgrade`` render new objects beside the old ones: a second Deployment
 whose selector matches nothing old, and a postgres StatefulSet with a new,

@@ -32,6 +32,9 @@ The `EXPERIMENTLY_PROFILE` setting keeps its name. Jira and Salesforce senders
 still authenticate with the `X-Experimently-Webhook-Secret` header, so nothing
 changes in their configuration.
 
+The dashboard keeps its sign-in token under the same key and the API keeps the
+issuer it signs tokens with, so nobody is signed out by the upgrade.
+
 ## The development stack
 
 The root `docker-compose.yml` takes its project name from the directory of the
