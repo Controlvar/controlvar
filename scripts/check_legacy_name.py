@@ -31,8 +31,10 @@ clone's ``.git/config``, a venv or an editable-install ``*.egg-info`` are out
 of scope by construction. Without one (the ``core_build.sh`` copy), every file
 under the root except generated directories (``__pycache__``, caches,
 ``node_modules``, ``.next``, ``*.egg-info``). Every file is read as bytes,
-binaries included, and matched case-insensitively. Entries under ``modules/``
-are skipped only when ``modules/`` is absent as a whole (the core profile).
+binaries included, and matched case-insensitively. A file under ``modules/`` is
+kept only by an entry whose path is under ``modules/``, and those entries are
+skipped only when ``modules/`` is absent as a whole (the core profile), so every
+count holds in both profiles.
 
 The search pattern is assembled at run time, so this file never matches
 itself.
@@ -88,6 +90,11 @@ class Keep:
     found: int = 0
 
     def applies_to(self, rel: str) -> bool:
+        # A file under modules/ is kept only by an entry under modules/, so
+        # that every other entry's count is the same with and without the
+        # optional modules (scripts/core_build.sh deletes them).
+        if rel.startswith("modules/") and not self.path.startswith("modules/"):
+            return False
         return rel == self.path or fnmatch.fnmatchcase(rel, self.path)
 
 

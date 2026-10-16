@@ -35,7 +35,7 @@ OLD = "experi" + "mently"
 
 #: The reviewed size of the keep-list. A new entry is a reviewed change, so it
 #: moves these numbers in the same pull request.
-ENTRIES = 171
+ENTRIES = 175
 KEPT = 1438
 EXCLUDES = [
     "CHANGELOG.md",
@@ -163,6 +163,16 @@ def test_a_module_entry_is_skipped_only_when_modules_is_gone(tmp_path):
     assert _run(root) == []
     root = _tree(tmp_path / "2", {"modules/y.py": "x\n"}, keep)
     assert _run(root) == [f"STALE-ALLOW modules/x.py '{OLD}.lock' matched nothing"]
+
+
+def test_a_module_file_is_kept_only_by_a_module_entry(tmp_path):
+    """Otherwise an entry's count would differ between the full tree and the
+    core copy, which deletes modules/."""
+    files = {"modules/a.py": f"LOCK = '{OLD}.lock'\n", "b.py": f"LOCK = '{OLD}.lock'\n"}
+    root = _tree(tmp_path, files, _keep("*", f"{OLD}.lock", 1))
+    assert _run(root) == [f"RESIDUAL modules/a.py:1: LOCK = '{OLD}.lock'"]
+    keep = _keep("*", f"{OLD}.lock", 1) + _keep("modules/*", f"{OLD}.lock", 1)
+    assert _run(_tree(tmp_path / "2", files, keep)) == []
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="no git")

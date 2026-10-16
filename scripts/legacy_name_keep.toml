@@ -139,12 +139,6 @@ reason = "K4: advisory-lock namespace"
 
 [[keep]]
 path = "*"
-literal = "experimently.warehouse.runs"
-count = 1
-reason = "K4: advisory-lock name"
-
-[[keep]]
-path = "*"
 literal = "experimently-local"
 count = 2
 reason = "K5: the local JWT issuer; a new one signs every session out"
@@ -163,38 +157,20 @@ reason = "K7: the dashboard's token storage key"
 
 [[keep]]
 path = "*"
-literal = "experimently.sso"
-count = 2
-reason = "K7: the SSO session storage key"
-
-[[keep]]
-path = "*"
 literal = "__Host-experimently_oidc"
-count = 4
+count = 2
 reason = "K7: the OIDC state cookie"
 
 [[keep]]
 path = "*"
-literal = "experimently:oidc-state"
-count = 4
-reason = "K7: HMAC tag and JWT audience of an in-flight SSO login"
-
-[[keep]]
-path = "*"
-literal = "experimently:sso-handoff"
-count = 3
-reason = "K7: HMAC tag and JWT audience of an in-flight SSO handoff"
-
-[[keep]]
-path = "*"
 literal = "X-Experimently-Webhook-Secret"
-count = 36
+count = 25
 reason = "K8: the header Jira and Salesforce senders are configured with"
 
 [[keep]]
 path = "*"
 literal = "https://experimently.example.com"
-count = 12
+count = 4
 reason = "K9: the SAML defaults an operator may have registered in their IdP"
 
 [[keep]]
@@ -205,63 +181,9 @@ reason = "K9: the default entity id in the metadata"
 
 [[keep]]
 path = "*"
-literal = "experimently.warehouse.results/v1"
-count = 2
-reason = "K10: persisted schema id"
-
-[[keep]]
-path = "*"
-literal = "experimently.warehouse.sufficient_statistics/v2"
-count = 1
-reason = "K10: persisted schema id"
-
-[[keep]]
-path = "*"
-literal = "\"experimently\": \"analysis\""
-count = 7
-reason = "K11: the BigQuery job label customers' billing filters on"
-
-[[keep]]
-path = "*"
 literal = "experimently: analysis"
 count = 2
 reason = "K11: the label, as the docs state it"
-
-[[keep]]
-path = "*"
-literal = "experimently-analysis"
-count = 2
-reason = "K11: the Snowflake query tag"
-
-[[keep]]
-path = "*"
-literal = "\"experimently_\""
-count = 2
-reason = "K11: the BigQuery job id prefix"
-
-[[keep]]
-path = "*"
-literal = "experimently_job1"
-count = 4
-reason = "K11: a job id with the kept prefix"
-
-[[keep]]
-path = "*"
-literal = "experimently_slow"
-count = 2
-reason = "K11: a job id with the kept prefix"
-
-[[keep]]
-path = "*"
-literal = "experimently_lost"
-count = 2
-reason = "K11: a job id with the kept prefix"
-
-[[keep]]
-path = "*"
-literal = "experimently_abc"
-count = 1
-reason = "K11: a job id with the kept prefix"
 
 [[keep]]
 path = "*"
@@ -308,7 +230,7 @@ reason = "K15: the CloudWatch namespace; a new one orphans metric history"
 [[keep]]
 path = "*"
 literal = "\"Service\", \"experimently\""
-count = 6
+count = 5
 reason = "K15: cost-report tag"
 
 [[keep]]
@@ -316,12 +238,6 @@ path = "*"
 literal = "\"Value\":\"experimently\""
 count = 3
 reason = "K15: cost-report tag, as the docs set it"
-
-[[keep]]
-path = "*"
-literal = "\"Project\": \"experimently\""
-count = 3
-reason = "K15: cost-report tag"
 
 [[keep]]
 path = "*"
@@ -1060,3 +976,111 @@ path = "backend/app/core/version.py"
 literal = "experimently"
 count = 1
 reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "modules/*"
+literal = "experimently.warehouse.runs"
+count = 1
+reason = "K4: advisory-lock name"
+
+[[keep]]
+path = "modules/*"
+literal = "experimently.sso"
+count = 2
+reason = "K7: the SSO session storage key"
+
+[[keep]]
+path = "modules/*"
+literal = "__Host-experimently_oidc"
+count = 2
+reason = "K7: the OIDC state cookie"
+
+[[keep]]
+path = "modules/*"
+literal = "experimently:oidc-state"
+count = 4
+reason = "K7: HMAC tag and JWT audience of an in-flight SSO login"
+
+[[keep]]
+path = "modules/*"
+literal = "experimently:sso-handoff"
+count = 3
+reason = "K7: HMAC tag and JWT audience of an in-flight SSO handoff"
+
+[[keep]]
+path = "modules/*"
+literal = "X-Experimently-Webhook-Secret"
+count = 11
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "modules/*"
+literal = "https://experimently.example.com"
+count = 8
+reason = "K9: the SAML defaults an operator may have registered in their IdP"
+
+[[keep]]
+path = "modules/*"
+literal = "experimently.warehouse.results/v1"
+count = 2
+reason = "K10: persisted schema id"
+
+[[keep]]
+path = "modules/*"
+literal = "experimently.warehouse.sufficient_statistics/v2"
+count = 1
+reason = "K10: persisted schema id"
+
+[[keep]]
+path = "modules/*"
+literal = "\"experimently\": \"analysis\""
+count = 7
+reason = "K11: the BigQuery job label customers' billing filters on"
+
+[[keep]]
+path = "modules/*"
+literal = "experimently-analysis"
+count = 2
+reason = "K11: the Snowflake query tag"
+
+[[keep]]
+path = "modules/*"
+literal = "\"experimently_\""
+count = 2
+reason = "K11: the BigQuery job id prefix"
+
+[[keep]]
+path = "modules/*"
+literal = "experimently_job1"
+count = 4
+reason = "K11: a job id with the kept prefix"
+
+[[keep]]
+path = "modules/*"
+literal = "experimently_slow"
+count = 2
+reason = "K11: a job id with the kept prefix"
+
+[[keep]]
+path = "modules/*"
+literal = "experimently_lost"
+count = 2
+reason = "K11: a job id with the kept prefix"
+
+[[keep]]
+path = "modules/*"
+literal = "experimently_abc"
+count = 1
+reason = "K11: a job id with the kept prefix"
+
+[[keep]]
+path = "modules/*"
+literal = "\"Service\", \"experimently\""
+count = 1
+reason = "K15: cost-report tag"
+
+[[keep]]
+path = "modules/*"
+literal = "\"Project\": \"experimently\""
+count = 3
+reason = "K15: cost-report tag"
