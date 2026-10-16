@@ -44,6 +44,11 @@ database schema and the first administrator: sign in at `PUBLIC_BASE_URL` as
 password is read only while the database has no users: changing it later does
 nothing.
 
+On a Mac with Apple Silicon and Docker Desktop, the API and the dashboard run
+under amd64 emulation, because their images are published for `linux/amd64`
+only, and PostgreSQL and Redis run natively (measured on an Apple M4 with the
+v0.34.3 images).
+
 Only the dashboard publishes a port, on `127.0.0.1:8080` by default, and it
 passes `/api` to the API. Put your TLS reverse proxy in front of it and pass
 the Host header unchanged: the API answers only for the host name of

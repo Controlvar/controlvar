@@ -79,7 +79,7 @@ def _run(
 
 def _harness(*functions: str, assignments: tuple[str, ...] = ()) -> str:
     """The script's own definitions, extracted, under its own shell options."""
-    parts = ["set -euo pipefail", "PROFILE=core"]
+    parts = ["set -euo pipefail", "PROFILE=core", 'WORK="$TMPDIR/work"']
     parts += [_assignment(a) for a in assignments]
     parts += [_function(f) for f in ("say", "fail", *functions)]
     return "\n".join(parts) + "\n"
@@ -128,15 +128,30 @@ def test_the_job_logs_in_to_no_registry():
 def test_previous_resolves_n_minus_1_on_a_pull_request_from_a_fork(sandbox):
     tmp, env = sandbox
     (tmp / "VERSION").write_text("0.16.2\n", encoding="utf-8")
+    chart = tmp / "trees" / "v0.16.2" / "charts" / "experimently"
+    chart.mkdir(parents=True)
+    (chart / "Chart.yaml").write_text('appVersion: "0.16.2"\n', encoding="utf-8")
+    (chart / "values.yaml").write_text(
+        "image:\n  api:\n    repository: ghcr.io/example/api\n"
+        "  web:\n    repository: ghcr.io/example/web\n",
+        encoding="utf-8",
+    )
     _stub(
         tmp / "bin",
         "git",
         """\
-        printf 'aaa\\trefs/tags/v0.16.1\\n'
-        printf 'bbb\\trefs/tags/v0.16.2\\n'
-        printf 'ccc\\trefs/tags/v0.17.0\\n'
+        case "$1" in
+            ls-remote)
+                printf 'aaa\\trefs/tags/v0.16.1\\n'
+                printf 'bbb\\trefs/tags/v0.16.2\\n'
+                printf 'ccc\\trefs/tags/v0.17.0\\n' ;;
+            fetch) ;;
+            archive) tag=$2; shift 2; tar -c -C "$TREES/$tag" "$@" ;;
+            *) exit 64 ;;
+        esac
         """,
     )
+    env["TREES"] = str(tmp / "trees")
     # Every manifest read answers: the images are published.
     _stub(tmp / "bin", "docker", "exit 0\n")
     out = tmp / "github_output"
@@ -151,6 +166,8 @@ def test_previous_resolves_n_minus_1_on_a_pull_request_from_a_fork(sandbox):
     )
     result = _run(
         _harness(
+            "values_repo",
+            "tag_images",
             "published",
             "do_previous",
             assignments=("API_REPO", "WEB_REPO", "PULL_FAILED"),
