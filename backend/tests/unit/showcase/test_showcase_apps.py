@@ -969,6 +969,14 @@ def test_a_statement_that_is_not_drawn_is_refused():
     ]
 
 
+def without_departures(slug: str) -> dict:
+    """A video's storyboard as a mapping, every ``departures:`` taken out."""
+    raw = yaml.safe_load(run.board_path(slug).read_text(encoding="utf-8"))
+    for scene in raw["scenes"]:
+        scene.pop("departures", None)
+    return raw
+
+
 def test_simulated_traffic_is_stated_in_every_scene_it_runs_through():
     """V2: from the scene that starts the users to the one that finishes them;
     and V2's off-camera sign-in and warmed results."""
@@ -980,11 +988,14 @@ def test_simulated_traffic_is_stated_in_every_scene_it_runs_through():
         ("later", "simulated traffic"),
         ("result", "off-camera setup"),
     ]
-    # The finishing card already says it; the others do not yet.
-    assert storyboard.departure_problems(v2) == [
+    assert storyboard.departure_problems(v2) == []
+    # Without its statements, every one of them is refused.
+    bare = storyboard.parse(without_departures("02-first-experiment"))
+    assert storyboard.departure_problems(bare) == [
         "scene setup: off-camera setup is not stated on screen (departures)",
         "scene sdk: simulated traffic is not stated on screen (departures)",
         "scene arriving: simulated traffic is not stated on screen (departures)",
+        "scene later: simulated traffic is not stated on screen (departures)",
         "scene result: off-camera setup is not stated on screen (departures)",
     ]
 
@@ -993,9 +1004,7 @@ def test_v1s_warmed_results_are_a_departure_it_states():
     v1 = storyboard.load(run.board_path("01-getting-started"))
     assert storyboard.departure_problems(v1) == []
     # Without its statement, the warmed results are refused as before.
-    raw = yaml.safe_load(run.board_path("01-getting-started").read_text())
-    for scene in raw["scenes"]:
-        scene.pop("departures", None)
+    raw = without_departures("01-getting-started")
     assert storyboard.departure_problems(storyboard.parse(raw)) == [
         "scene dashboard: off-camera setup is not stated on screen (departures)"
     ]
@@ -1003,14 +1012,73 @@ def test_v1s_warmed_results_are_a_departure_it_states():
 
 def test_setup_made_before_the_first_scene_is_stated_there():
     v3 = storyboard.load(run.board_path("03-flag-rollout"))
-    assert storyboard.departure_problems(v3) == [
+    assert storyboard.departure_problems(v3) == []
+    bare = storyboard.parse(without_departures("03-flag-rollout"))
+    assert storyboard.departure_problems(bare) == [
         "scene flag: off-camera setup is not stated on screen (departures)"
+    ]
+
+
+#: Every departure V2 and V3 state (D84), with the scene that states it.
+STATEMENTS = [
+    ("02-first-experiment", "setup", "off-camera setup", "Signed in off camera"),
+    (
+        "02-first-experiment",
+        "sdk",
+        "simulated traffic",
+        "the shoppers in this video are simulated",
+    ),
+    (
+        "02-first-experiment",
+        "arriving",
+        "simulated traffic",
+        "simulated shoppers arrive",
+    ),
+    ("02-first-experiment", "later", "simulated traffic", "simulated in minutes"),
+    (
+        "02-first-experiment",
+        "later",
+        "time skip",
+        "so the results page reads Duration 0d",
+    ),
+    ("02-first-experiment", "result", "off-camera setup", "Computed off camera first"),
+    ("03-flag-rollout", "flag", "off-camera setup", "Signed in off camera"),
+    (
+        "03-flag-rollout",
+        "flag",
+        "off-camera setup",
+        "Beta testers segment, made off camera",
+    ),
+]
+
+
+def test_v2_and_v3_state_exactly_these_departures():
+    stated = []
+    for slug in ("02-first-experiment", "03-flag-rollout"):
+        for scene in storyboard.load(run.board_path(slug)).scenes:
+            stated += [(slug, scene.id, d.kind, d.says) for d in scene.departures]
+    assert stated == STATEMENTS
+
+
+@pytest.mark.parametrize("slug, scene_id, kind, says", STATEMENTS)
+def test_each_statement_taken_off_the_screen_is_refused(slug, scene_id, kind, says):
+    """The words of each statement, taken out of the scene's captions and card
+    (the declaration kept), fail the D84 check."""
+    raw = yaml.safe_load(run.board_path(slug).read_text(encoding="utf-8"))
+    scene = next(s for s in raw["scenes"] if s["id"] == scene_id)
+    for item in scene["beats"]:
+        item["cue"] = item["cue"].replace(says, "Shown here")
+    if "card" in scene:
+        scene["card"]["note"] = scene["card"]["note"].replace(says, "Shown here")
+    assert storyboard.departure_problems(storyboard.parse(raw)) == [
+        f"scene {scene_id}: the {kind} statement {says!r} is not in a caption or"
+        " the card"
     ]
 
 
 @pytest.mark.parametrize("slug", ["02-first-experiment", "03-flag-rollout"])
 def test_a_video_whose_departure_is_not_stated_is_refused_before_it_starts(
-    tmp_path, slug
+    tmp_path, monkeypatch, slug
 ):
     options = run.Options(
         videos=[slug],
@@ -1021,10 +1089,22 @@ def test_a_video_whose_departure_is_not_stated_is_refused_before_it_starts(
         ports=PORTS,
         out=tmp_path / "videos",
     )
+    environ = {"PATH": "/usr/bin", "HOME": str(tmp_path / "home")}
+    # As committed, D84 lets it through (anything refused later is not D84's).
+    try:
+        run.preflight(options, environ)
+    except guard.Refused as refused:
+        assert "D84" not in str(refused)
+    # With its statements taken out, it is refused before anything starts.
+    bare = tmp_path / "boards" / f"{slug}.yaml"
+    bare.parent.mkdir()
+    bare.write_text(yaml.safe_dump(without_departures(slug)), encoding="utf-8")
+    real = run.board_path
+    monkeypatch.setattr(run, "board_path", lambda s: bare if s == slug else real(s))
     with pytest.raises(
         guard.Refused, match=f"{slug}: D84, a departure from a new user"
     ):
-        run.preflight(options, {"PATH": "/usr/bin", "HOME": str(tmp_path / "home")})
+        run.preflight(options, environ)
 
 
 def test_a_card_body_given_empty_is_refused_and_only_the_drawn_body_counts():
