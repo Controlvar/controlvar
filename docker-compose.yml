@@ -8,7 +8,8 @@
 # deploy/compose/compose.yml instead.
 #
 #   docker compose up -d --wait            # postgres + redis + api + dashboard
-#   docker compose --profile demo up -d    # + ShopLab (:3200), StreamPulse (:3300)
+#   SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait
+#                                          # + ShopLab (:3200), StreamPulse (:3300)
 #                                          #   and their traffic simulators
 #   docker compose --profile tools up -d   # + pgAdmin (:5050)
 #   docker compose --profile aws up -d     # + LocalStack (:4566)
@@ -174,8 +175,9 @@ services:
 
   # ===========================================================================
   # profile: demo — ShopLab + StreamPulse demo apps and their simulators.
-  # Add `shoplab,streampulse` to SEED so their experiments, flags and API keys
-  # exist:  SEED=demo,shoplab,streampulse docker compose --profile demo up -d
+  # They need the shoplab and streampulse seeds (their experiments, flags and
+  # API keys), so start the profile with:
+  #   SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait
   # ===========================================================================
   shoplab:
     profiles: ["demo"]
@@ -211,7 +213,7 @@ services:
       - -c
       - >-
         test -f /data/demo/shoplab/.api_key
-        || { echo "no /data/demo/shoplab/.api_key — start the api with SEED=demo,shoplab"; exit 1; };
+        || { echo "no /data/demo/shoplab/.api_key: the shoplab seed has not run. Start the stack with: SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait"; exit 1; };
         exec python demo/shoplab/simulator/traffic.py
         --api-url http://api:8000
         --api-key "$$(cat /data/demo/shoplab/.api_key)"
@@ -253,7 +255,7 @@ services:
       - -c
       - >-
         test -f /data/demo/streampulse/.api_key
-        || { echo "no /data/demo/streampulse/.api_key — start the api with SEED=demo,streampulse"; exit 1; };
+        || { echo "no /data/demo/streampulse/.api_key: the streampulse seed has not run. Start the stack with: SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait"; exit 1; };
         exec python demo/streampulse/simulator/traffic.py
         --api-url http://api:8000
         --api-key "$$(cat /data/demo/streampulse/.api_key)"

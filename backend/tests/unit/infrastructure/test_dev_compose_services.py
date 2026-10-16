@@ -185,6 +185,23 @@ def test_a_demo_simulator_exits_without_its_seed(services, app):
     assert services["api"]["environment"]["SEED"] == "${SEED-demo}"
 
 
+@pytest.mark.parametrize("app", ["shoplab", "streampulse"])
+def test_a_demo_app_is_built_with_the_key_its_seed_creates(services, app):
+    """The app's image and the api's seed take one key, from one variable.
+
+    So running the seed after the app was built (the demo command on a stack
+    that started without it) makes the key in the image valid, with no rebuild.
+    """
+    variable = f"{app.upper()}_API_KEY"
+    baked = services[app]["build"]["args"]["NEXT_PUBLIC_EXPERIMENTLY_API_KEY"]
+    assert baked.startswith("${" + variable + ":-eptk_demo_"), baked
+    assert services["api"]["environment"][variable] == baked
+    seed = (REPO_ROOT / "backend" / "scripts" / f"seed_{app}.py").read_text(
+        encoding="utf-8"
+    )
+    assert f'os.environ.get("{variable}")' in seed
+
+
 def test_the_profiles_add_what_the_guide_says(services):
     by_profile: Dict[Optional[str], set] = {}
     for name, service in services.items():

@@ -169,7 +169,7 @@ universe = [
 path = "docs/getting-started/quick-start.md"
 environment = "bare"
 exec = 11
-skip = 3
+skip = 4
 expects = 11
 
 [[document]]
@@ -232,7 +232,7 @@ expects = 6
 path = "docs/getting-started/docker-compose-file.md"
 environment = "bare"
 exec = 5
-skip = 1
+skip = 2
 expects = 5
 
 [[document]]
