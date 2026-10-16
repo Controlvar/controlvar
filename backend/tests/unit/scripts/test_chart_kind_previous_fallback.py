@@ -14,7 +14,9 @@ profile's api and dashboard) from GHCR anonymously, and:
 * a PREVIOUS_VERSION given by name is never replaced.
 
 Run as shell, the script's own functions extracted, with ``git`` and
-``docker`` stubbed: no registry and no cluster.
+``docker`` stubbed: no registry and no cluster. Each tag's tree carries a chart
+naming the repositories below, which ``published`` reads from that tag
+(test_chart_kind_previous_per_tag.py).
 """
 
 from __future__ import annotations
@@ -53,9 +55,19 @@ def _assignment(name: str) -> str:
 
 
 def _harness() -> str:
-    parts = ["set -euo pipefail", "PROFILE=core"]
+    parts = ["set -euo pipefail", "PROFILE=core", 'WORK="$TMPDIR/work"']
     parts += [_assignment(a) for a in ("API_REPO", "WEB_REPO", "PULL_FAILED")]
-    parts += [_function(f) for f in ("say", "fail", "published", "do_previous")]
+    parts += [
+        _function(f)
+        for f in (
+            "say",
+            "fail",
+            "values_repo",
+            "tag_images",
+            "published",
+            "do_previous",
+        )
+    ]
     return "\n".join(parts) + "\ndo_previous\nprintf 'still-running\\n'\n"
 
 
@@ -81,7 +93,25 @@ def _resolve(
         "".join(r + "\n" for r in unpublished), encoding="utf-8"
     )
     lines = "".join(f"printf 'x\\trefs/tags/v{t}\\n'\n" for t in tags)
-    _stub(bindir, "git", lines)
+    for t in tags:
+        chart = tmp_path / "trees" / f"v{t}" / "charts" / "experimently"
+        chart.mkdir(parents=True)
+        (chart / "Chart.yaml").write_text(f'appVersion: "{t}"\n', encoding="utf-8")
+        (chart / "values.yaml").write_text(
+            f"image:\n  api:\n    repository: {API}\n  web:\n    repository: {WEB}\n",
+            encoding="utf-8",
+        )
+    # ls-remote lists the tags; archive serves a tag's tree; fetch succeeds.
+    _stub(
+        bindir,
+        "git",
+        'case "$1" in\n'
+        f"  ls-remote)\n{lines}  ;;\n"
+        "  fetch) ;;\n"
+        f'  archive) tag=$2; shift 2; tar -c -C "{tmp_path}/trees/$tag" "$@" ;;\n'
+        "  *) exit 64 ;;\n"
+        "esac\n",
+    )
     # docker manifest inspect REF: logs the call and the client configuration
     # it was given; fails like GHCR for a ref listed as unpublished.
     _stub(
