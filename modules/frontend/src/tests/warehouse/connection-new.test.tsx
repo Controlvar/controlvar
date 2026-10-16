@@ -285,7 +285,7 @@ describe('Snowflake (with the connector enabled)', () => {
     fireEvent.click(await screen.findByRole('radio', { name: 'Snowflake' }));
     type(/^Name/, 'SF');
     type(/^Account/, 'MYORG-MYACCOUNT');
-    type(/^User/, 'EXPERIMENTLY_SVC');
+    type(/^User/, 'CONTROLVAR_SVC');
     type(/^Role/, 'ACCOUNTADMIN');
     type(/^Warehouse/, 'ANALYTICS_XS');
     fireEvent.click(screen.getByRole('button', { name: 'Save connection' }));
@@ -303,7 +303,7 @@ describe('Snowflake (with the connector enabled)', () => {
       public_key: {
         public_key: 'MIIBIjANBgkq',
         public_key_fingerprint: 'SHA256:abc123=',
-        statement: "ALTER USER EXPERIMENTLY_SVC SET RSA_PUBLIC_KEY='MIIBIjANBgkq';",
+        statement: "ALTER USER CONTROLVAR_SVC SET RSA_PUBLIC_KEY='MIIBIjANBgkq';",
       },
     });
     renderPage();
@@ -311,12 +311,12 @@ describe('Snowflake (with the connector enabled)', () => {
     expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument();
     type(/^Name/, 'Snowflake prod');
     type(/^Account/, 'MYORG-MYACCOUNT');
-    type(/^User/, 'EXPERIMENTLY_SVC');
-    type(/^Role/, 'EXPERIMENTLY_READER');
+    type(/^User/, 'CONTROLVAR_SVC');
+    type(/^Role/, 'CONTROLVAR_READER');
     type(/^Warehouse/, 'ANALYTICS_XS');
     fireEvent.click(screen.getByRole('button', { name: 'Save connection' }));
     const sql = await screen.findByTestId('warehouse-key-statement-sql');
-    expect(sql).toHaveTextContent("ALTER USER EXPERIMENTLY_SVC SET RSA_PUBLIC_KEY='MIIBIjANBgkq';");
+    expect(sql).toHaveTextContent("ALTER USER CONTROLVAR_SVC SET RSA_PUBLIC_KEY='MIIBIjANBgkq';");
     expect(sql).toHaveAttribute('tabindex', '0');
     expect(sql).toHaveAccessibleName('Snowflake statement');
     expect(screen.getByRole('button', { name: 'Copy Snowflake statement' })).toBeInTheDocument();
@@ -326,8 +326,8 @@ describe('Snowflake (with the connector enabled)', () => {
       warehouse_type: 'snowflake',
       name: 'Snowflake prod',
       account: 'MYORG-MYACCOUNT',
-      user: 'EXPERIMENTLY_SVC',
-      role: 'EXPERIMENTLY_READER',
+      user: 'CONTROLVAR_SVC',
+      role: 'CONTROLVAR_READER',
       warehouse: 'ANALYTICS_XS',
       query_timeout_seconds: 300,
       max_runs_per_day: 20,

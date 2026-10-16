@@ -7,8 +7,8 @@
 # from the page) against PyPI, checks the version it installed, and runs the
 # page's Quick start block, also read from the page, with only its placeholders
 # replaced: the experiment's key, the flag's key and the user. The API's
-# address and the key are given as EXPERIMENTLY_API_URL and
-# EXPERIMENTLY_API_KEY, the variables the block reads (docs_runner/sdk.py).
+# address and the key are given as CONTROLVAR_API_URL and
+# CONTROLVAR_API_KEY (and their former names), the variables the block reads (docs_runner/sdk.py).
 # The block calls two functions it leaves to the reader, render_new_checkout()
 # and use_new_search(); each is defined as a stub that records the call, so
 # use_new_search() is called exactly when is_feature_enabled() says the flag

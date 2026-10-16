@@ -121,7 +121,7 @@ def test_as_shipped_snowflake_and_bigquery_are_created_and_athena_is_422(
             "warehouse_type": "snowflake",
             "name": "Snow",
             "account": "MYORG-MYACCOUNT",
-            "user": "EXPERIMENTLY_READER",
+            "user": "CONTROLVAR_READER",
             "role": "ANALYSIS_READER",
             "warehouse": "ANALYSIS_WH",
         },

@@ -14,7 +14,7 @@
 # tag run, docs_runner/sdk.py). It then writes the page's Quick Start block, a
 # complete program, to main.go with only its placeholders replaced (the API's
 # address, the experiment's key, the flag's key and the user) and runs
-# `go run .`. The key is given as EXPERIMENTLY_API_KEY, the variable the block
+# `go run .`. The key is given as CONTROLVAR_API_KEY (and its former name), the variable the block
 # reads. The program prints one line, `variant=<name> flag=<true|false>`.
 #
 # The oracle does not use the SDK (docs_runner/traffic.py). The variant must be

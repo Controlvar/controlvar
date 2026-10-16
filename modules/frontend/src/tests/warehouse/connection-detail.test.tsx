@@ -160,7 +160,7 @@ describe('Snowflake keys', () => {
       public_key: {
         public_key: 'MIIBnew',
         public_key_fingerprint: 'SHA256:new=',
-        statement: "ALTER USER EXPERIMENTLY_SVC SET RSA_PUBLIC_KEY_2='MIIBnew';",
+        statement: "ALTER USER CONTROLVAR_SVC SET RSA_PUBLIC_KEY_2='MIIBnew';",
       },
     });
     renderPage();

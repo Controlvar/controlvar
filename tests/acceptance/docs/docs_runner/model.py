@@ -173,7 +173,7 @@ block under the ``snippet`` anchor) with only its placeholders replaced: each
 ``replace`` key is a whole quoted string of the block, and each value one of
 ``{{api-url}}``, ``{{experiment}}`` (the key of the experiment saved as
 ``experiment``), ``{{flag}}`` and ``{{user}}``. The API key saved as ``key`` is
-given as ``EXPERIMENTLY_API_KEY``. ``stubs`` are functions the block calls and
+given as ``CONTROLVAR_API_KEY`` (and its former name). ``stubs`` are functions the block calls and
 the page leaves to the reader; ``answers`` name the block's variables (or
 ``called.<stub>``) whose values must be the oracle's: the variant the
 documented assignment hash gives ``user``, and the flag answer the documented
@@ -579,7 +579,7 @@ class Sdk(_Strict):
     install: StrictStr = Field(pattern=r"^[^#\s]+$")
     #: The anchor of the section whose first code block is run.
     snippet: StrictStr = Field(pattern=r"^[^#\s]+$")
-    #: The secret holding the API key, given as ``EXPERIMENTLY_API_KEY``.
+    #: The secret holding the API key, given as ``CONTROLVAR_API_KEY`` (and its former name).
     key: Name
     #: The saved value holding the id of the experiment the block assigns.
     experiment: Name

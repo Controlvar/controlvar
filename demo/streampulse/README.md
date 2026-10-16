@@ -54,7 +54,7 @@ repo's Python venv.
 to skip StreamPulse). It does not run the crash incident or the rollout story.
 
 **1. Seed** the StreamPulse catalogue, from the repository root. It is idempotent, and writes
-the API key to `demo/streampulse/.api_key` and the `NEXT_PUBLIC_EXPERIMENTLY_API_KEY` line into
+the API key to `demo/streampulse/.api_key` and the `NEXT_PUBLIC_CONTROLVAR_API_KEY` line into
 `demo/streampulse/.env.local`. It also writes a second key, the StreamPulse server key (scope
 `sdk:ruleset`), to `demo/streampulse/.api_key_server` and nowhere else: the simulator sends its
 crash reports with it, the way the StreamPulse server would forward them, because only reports
@@ -81,9 +81,12 @@ cp -n .env.example .env.local
 
 | Setting | Value |
 |---|---|
-| `NEXT_PUBLIC_EXPERIMENTLY_API_URL` | defaults to `http://localhost:8000` |
-| `NEXT_PUBLIC_EXPERIMENTLY_API_KEY` | the plaintext key for `streampulse-app`, written by the seed |
-| `NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL` | defaults to `http://localhost:3100` |
+| `NEXT_PUBLIC_CONTROLVAR_API_URL` | defaults to `http://localhost:8000` |
+| `NEXT_PUBLIC_CONTROLVAR_API_KEY` | the plaintext key for `streampulse-app`, written by the seed |
+| `NEXT_PUBLIC_CONTROLVAR_DASHBOARD_URL` | defaults to `http://localhost:3100` |
+
+Each is still read under its name before the project was renamed
+(`NEXT_PUBLIC_EXPERIMENTLY_API_URL` and so on) when the new name is not set.
 
 **3. Run the app**, still in `demo/streampulse`. It is at http://localhost:3300.
 
@@ -179,11 +182,11 @@ per-experiment), so it can differ after `--reset`; the holdout bucket does not.
 
 | Symptom | Cause / fix |
 |---|---|
-| Yellow banner "NEXT_PUBLIC_EXPERIMENTLY_API_KEY is not set"; panel shows `error: API error: 401` everywhere | The key is missing or wrong. Run `python backend/scripts/seed_streampulse.py` (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` — Next reads env vars at startup. |
+| Yellow banner "NEXT_PUBLIC_CONTROLVAR_API_KEY is not set"; panel shows `error: API error: 401` everywhere | The key is missing or wrong. Run `python backend/scripts/seed_streampulse.py` (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` — Next reads env vars at startup. |
 | **401** in the network tab although `.env.local` has a key | The key was revoked or belongs to another environment/database. Re-seed. |
 | **404** on `/tracking/assign` or `/feature-flags/evaluate/streampulse_...` | The StreamPulse experiments are not seeded or not ACTIVE, or the flags are not seeded (`--reset` removes both; a flag that is not ACTIVE answers `enabled: false`, not a 404). Run the seed script. |
 | Browser console: **CORS** error from `localhost:3300` | Port 3300 is not in the backend's CORS allow-list. The development defaults (`DEFAULT_CORS_ORIGINS` in `backend/app/core/config.py`) include it; if you set `CORS_ORIGINS` or `BACKEND_CORS_ORIGINS` yourself, add `http://localhost:3300` and restart the API. Against a staging or production API, add it to that API's `CORS_ORIGINS`: those allow no other origin by default. |
-| Every flag `off`, every experiment `error`, nothing loads | Backend not running on `NEXT_PUBLIC_EXPERIMENTLY_API_URL`. Start it from the repository root: `ENVIRONMENT=development uvicorn backend.app.main:app --reload`. |
+| Every flag `off`, every experiment `error`, nothing loads | Backend not running on `NEXT_PUBLIC_CONTROLVAR_API_URL`. Start it from the repository root: `ENVIRONMENT=development uvicorn backend.app.main:app --reload`. |
 | AI search never turns on | The rule needs `os = iOS`, `os_version ≥ 17.0.0`, `region = US`, `tier = premium` and the flag's own rollout is 0 %. Check the custom fields; the panel reason tells you whether a rule matched. |
 | Player v2 does not change after the story rolls back / advances | The app does not poll: it asks for the decisions when you pick a device or press *Refresh now*, so press *Refresh now*. If the schedulers are involved (auto-rollback, time-based stages), they run every `SAFETY_CHECK_INTERVAL_MINUTES` / `ROLLOUT_CHECK_INTERVAL_MINUTES` (default 5 / 15) — set both to `1` in the backend `.env` for the demo (`setup-local.sh` sets both to `1` unless they are already set). |
 | A preset shows "in global holdout streampulse-holdout" for every experiment | That id hashes into the 2 % holdout. The shipped preset ids do not; if you changed one, pick another id (or use it to demonstrate the holdout). |

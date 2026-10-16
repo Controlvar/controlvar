@@ -135,7 +135,7 @@ describe('StreamPulseApp', () => {
 
   it('warns when the API key is missing but still renders the app', () => {
     renderApp({ apiKey: '' });
-    expect(screen.getByTestId('missing-key-alert')).toHaveTextContent('NEXT_PUBLIC_EXPERIMENTLY_API_KEY is not set');
+    expect(screen.getByTestId('missing-key-alert')).toHaveTextContent('NEXT_PUBLIC_CONTROLVAR_API_KEY is not set');
     expect(screen.getByTestId('phone')).toBeInTheDocument();
     expect(lastMount().config.apiKey).toBe('missing-api-key');
   });

@@ -60,7 +60,7 @@ export function snowflakeConnection(overrides: Partial<Connection> = {}): Connec
     id: 'c-sf',
     name: 'Snowflake prod',
     warehouse_type: 'snowflake',
-    parameters: { account: 'MYORG-MYACCOUNT', user: 'EXPERIMENTLY_SVC', role: 'EXPERIMENTLY_READER', warehouse: 'ANALYTICS_XS' },
+    parameters: { account: 'MYORG-MYACCOUNT', user: 'CONTROLVAR_SVC', role: 'CONTROLVAR_READER', warehouse: 'ANALYTICS_XS' },
     public_key_fingerprint: 'SHA256:abc123=',
     max_bytes_per_query: null,
     worst_case_bytes_per_day: null,

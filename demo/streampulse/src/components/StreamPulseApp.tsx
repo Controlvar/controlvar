@@ -64,7 +64,7 @@ export default function StreamPulseApp({ apiKey = API_KEY, apiUrl = API_URL, ini
 
       {missingKey && (
         <div role="alert" className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900" data-testid="missing-key-alert">
-          <strong>NEXT_PUBLIC_EXPERIMENTLY_API_KEY is not set.</strong> Run <code className="font-mono">python backend/scripts/seed_streampulse.py</code> (it
+          <strong>NEXT_PUBLIC_CONTROLVAR_API_KEY is not set.</strong> Run <code className="font-mono">python backend/scripts/seed_streampulse.py</code> (it
           writes <code className="font-mono">demo/streampulse/.env.local</code>), then restart <code className="font-mono">npm run dev</code>. Until then every
           request fails with 401.
         </div>

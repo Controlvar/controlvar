@@ -215,7 +215,7 @@ COMPOSE_IMAGE_LINE_RE = re.compile(
 def read_compose_image_versions() -> dict[str, str]:
     """The version on each published-image line of the production compose file.
 
-    Every line that names a ``ghcr.io/getexperimently/`` image, and every line
+    Every line that names a ``ghcr.io/controlvar/`` image, and every line
     carrying the release-please marker, must be the one shape above: a line
     release-please would not rewrite (no marker), or a marker on a line it
     would rewrite wrongly, is as stale as a wrong number.
@@ -223,7 +223,7 @@ def read_compose_image_versions() -> dict[str, str]:
     path = ROOT / PRODUCTION_COMPOSE
     found: dict[str, list[str]] = {repo: [] for repo in COMPOSE_IMAGES.values()}
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        if "ghcr.io/getexperimently/" not in line and (
+        if "ghcr.io/controlvar/" not in line and (
             "x-release-please-version" not in line
         ):
             continue

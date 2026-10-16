@@ -1,7 +1,7 @@
 """The StreamPulse seed's two API keys.
 
 ``streampulse-app`` is the app's key: it goes into ``.env.local`` as
-``NEXT_PUBLIC_EXPERIMENTLY_API_KEY`` and from there into the browser bundle, so
+``NEXT_PUBLIC_CONTROLVAR_API_KEY`` and from there into the browser bundle, so
 it carries no scope. ``streampulse-server`` carries ``sdk:ruleset``; the device
 simulator sends crash reports with it, so they count toward automatic
 rollback. It is written only to ``.api_key_server`` (0600) and never to
@@ -73,7 +73,7 @@ def test_the_app_key_has_no_scope_and_the_server_key_stays_out_of_the_app(
     assert app_key != server_key
 
     env_local = (folder / ".env.local").read_text()
-    assert f"NEXT_PUBLIC_EXPERIMENTLY_API_KEY={app_key}" in env_local
+    assert f"NEXT_PUBLIC_CONTROLVAR_API_KEY={app_key}" in env_local
     assert server_key not in env_local
     assert (folder / ".api_key").read_text().strip() == app_key
     server_file = folder / ".api_key_server"

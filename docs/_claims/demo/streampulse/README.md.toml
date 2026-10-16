@@ -215,7 +215,7 @@ text = "Seed the StreamPulse catalogue, from the repository root."
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "It is idempotent, and writes the API key to demo/streampulse/.api_key and the NEXT_PUBLIC_EXPERIMENTLY_API_KEY line into demo/streampulse/.env.local."
+text = "It is idempotent, and writes the API key to demo/streampulse/.api_key and the NEXT_PUBLIC_CONTROLVAR_API_KEY line into demo/streampulse/.env.local."
 by = [
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
     "test:backend/tests/integration/services/test_seed_streampulse_holdout.py::test_twice_from_absent_creates_once_and_changes_nothing_after",
@@ -274,19 +274,26 @@ text = "Setting | Value"
 by = ["exempt:label"]
 
 [[unit]]
-text = "NEXT_PUBLIC_EXPERIMENTLY_API_URL | defaults to http://localhost:8000"
+text = "NEXT_PUBLIC_CONTROLVAR_API_URL | defaults to http://localhost:8000"
 by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard"]
 
 [[unit]]
-text = "NEXT_PUBLIC_EXPERIMENTLY_API_KEY | the plaintext key for streampulse-app, written by the seed"
+text = "NEXT_PUBLIC_CONTROLVAR_API_KEY | the plaintext key for streampulse-app, written by the seed"
 by = [
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard",
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
 ]
 
 [[unit]]
-text = "NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL | defaults to http://localhost:3100"
+text = "NEXT_PUBLIC_CONTROLVAR_DASHBOARD_URL | defaults to http://localhost:3100"
 by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard"]
+
+[[unit]]
+text = "Each is still read under its name before the project was renamed (NEXT_PUBLIC_EXPERIMENTLY_API_URL and so on) when the new name is not set."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard",
+    "test:demo/streampulse/src/__tests__/env.test.ts::reads the name before the rename when the new one is not set",
+]
 
 [[unit]]
 text = "3."
@@ -577,7 +584,7 @@ text = "Symptom | Cause / fix"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Yellow banner \"NEXT_PUBLIC_EXPERIMENTLY_API_KEY is not set\"; panel shows error: API error: 401 everywhere | The key is missing or wrong. Run python backend/scripts/seed_streampulse.py (it rewrites .env.local and .api_key), then restart npm run dev — Next reads env vars at startup."
+text = "Yellow banner \"NEXT_PUBLIC_CONTROLVAR_API_KEY is not set\"; panel shows error: API error: 401 everywhere | The key is missing or wrong. Run python backend/scripts/seed_streampulse.py (it rewrites .env.local and .api_key), then restart npm run dev — Next reads env vars at startup."
 by = [
     "test:demo/streampulse/src/__tests__/StreamPulseApp.test.tsx::warns when the API key is missing but still renders the app",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key",
@@ -604,7 +611,7 @@ by = [
 ]
 
 [[unit]]
-text = "Every flag off, every experiment error, nothing loads | Backend not running on NEXT_PUBLIC_EXPERIMENTLY_API_URL. Start it from the repository root: ENVIRONMENT=development uvicorn backend.app.main:app --reload."
+text = "Every flag off, every experiment error, nothing loads | Backend not running on NEXT_PUBLIC_CONTROLVAR_API_URL. Start it from the repository root: ENVIRONMENT=development uvicorn backend.app.main:app --reload."
 by = [
     "test:sdk/react/src/__tests__/useFeatureFlag.test.tsx::sets error on network failure",
     "test:sdk/react/src/__tests__/useExperiment.test.tsx::sets error and keeps the control defaults on network failure",

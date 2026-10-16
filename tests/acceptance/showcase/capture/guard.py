@@ -246,6 +246,11 @@ def app_settings(*, app: str, api_port: int, dashboard_port: int) -> Dict[str, s
     """What an app's ``next build`` and ``next start`` run with: the three
     addresses and the key its bundle is built with (compose's demo key)."""
     return {
+        # Each under both names, for good: the tool builds an archived ref, and
+        # a ref from before the rename reads only the former ones.
+        "NEXT_PUBLIC_CONTROLVAR_API_URL": origin(api_port),
+        "NEXT_PUBLIC_CONTROLVAR_API_KEY": config.APP_STATIC_KEY[app],
+        "NEXT_PUBLIC_CONTROLVAR_DASHBOARD_URL": origin(dashboard_port),
         "NEXT_PUBLIC_EXPERIMENTLY_API_URL": origin(api_port),
         "NEXT_PUBLIC_EXPERIMENTLY_API_KEY": config.APP_STATIC_KEY[app],
         "NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL": origin(dashboard_port),

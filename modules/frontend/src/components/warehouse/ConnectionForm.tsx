@@ -401,7 +401,7 @@ export function ConnectionForm({ mode, connectors, connection, onSaved, onCancel
           {type === 'snowflake' && (
             <>
               {input('account', 'Account', 'The organisation-account identifier, e.g. MYORG-MYACCOUNT (Snowsight › Admin › Accounts).')}
-              {input('user', 'User', 'A user made for this connection, e.g. EXPERIMENTLY_SVC.')}
+              {input('user', 'User', 'A user made for this connection, e.g. CONTROLVAR_SVC.')}
               {input('role', 'Role', 'A role with read-only grants. It is always sent, so the user’s default role does not matter.')}
               {input('warehouse', 'Warehouse', 'The virtual warehouse queries run on, e.g. ANALYTICS_XS.')}
             </>

@@ -222,7 +222,7 @@ def go(options, environ, log):
     print(json.dumps({
         "own": sorted(os.environ),
         "inherited": sorted(line.split("=", 1)[0] for line in inherited.splitlines()),
-        "copy_kept_the_caller": "EXPERIMENTLY_SENTINEL" in environ,
+        "copy_kept_the_caller": "CONTROLVAR_SENTINEL" in environ,
     }))
     return {}
 
@@ -237,7 +237,7 @@ def test_the_process_keeps_exactly_path_home_and_tmpdir():
     assert guard.PASSED == ("PATH", "HOME", "TMPDIR")
     environ = {
         **PARENT,
-        "EXPERIMENTLY_SENTINEL": "x",
+        "CONTROLVAR_SENTINEL": "x",
         "AWS_PROFILE": "does-not-exist",
         "DOCKER_HOST": "tcp://127.0.0.1:9",
         "LANG": "en_US.UTF-8",
@@ -253,7 +253,7 @@ def test_the_process_keeps_exactly_path_home_and_tmpdir():
             "AWS_PROFILE",
             "DATABASE_URL",
             "DOCKER_HOST",
-            "EXPERIMENTLY_SENTINEL",
+            "CONTROLVAR_SENTINEL",
             "LANG",
             "POSTGRES_PORT",
             "SHOWCASE_PARENT_SENTINEL",
@@ -268,7 +268,7 @@ def test_main_strips_the_process_environment_before_it_starts_anything(tmp_path)
         "PATH": os.environ["PATH"],
         "HOME": str(tmp_path),
         "TMPDIR": str(tmp_path),
-        "EXPERIMENTLY_SENTINEL": "x",
+        "CONTROLVAR_SENTINEL": "x",
         "AWS_PROFILE": "does-not-exist",
         "AWS_REGION": "us-west-2",
         "DOCKER_HOST": "tcp://127.0.0.1:9",

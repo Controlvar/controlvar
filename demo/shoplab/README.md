@@ -41,7 +41,7 @@ repo's Python venv.
 
 **1. Seed** the ShopLab experiments, flags, history and API key, from the repository root.
 `backend/scripts/seed_shoplab.py` is idempotent. It writes the key to `demo/shoplab/.api_key`
-and the `NEXT_PUBLIC_EXPERIMENTLY_API_KEY` line into `demo/shoplab/.env.local`. `--no-history`
+and the `NEXT_PUBLIC_CONTROLVAR_API_KEY` line into `demo/shoplab/.env.local`. `--no-history`
 skips the 14-day backfill, and `--reset` removes everything it created.
 A run on a database seeded before 0.34.3 leaves the experiments it finds as they are, so
 their results pages plan the sample from the old `expected_effect` values until you re-seed
@@ -63,9 +63,12 @@ cp -n .env.example .env.local
 
 | Setting | Value |
 |---|---|
-| `NEXT_PUBLIC_EXPERIMENTLY_API_URL` | defaults to `http://localhost:8000` |
-| `NEXT_PUBLIC_EXPERIMENTLY_API_KEY` | the plaintext key for `shoplab-storefront`, written by the seed |
-| `NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL` | defaults to `http://localhost:3100` |
+| `NEXT_PUBLIC_CONTROLVAR_API_URL` | defaults to `http://localhost:8000` |
+| `NEXT_PUBLIC_CONTROLVAR_API_KEY` | the plaintext key for `shoplab-storefront`, written by the seed |
+| `NEXT_PUBLIC_CONTROLVAR_DASHBOARD_URL` | defaults to `http://localhost:3100` |
+
+Each is still read under its name before the project was renamed
+(`NEXT_PUBLIC_EXPERIMENTLY_API_URL` and so on) when the new name is not set.
 
 **3. Run** it, still in `demo/shoplab`. The storefront is at http://localhost:3200.
 
@@ -151,10 +154,10 @@ source venv/bin/activate && python -m pytest demo/shoplab/simulator/test_traffic
 
 | Symptom | Cause / fix |
 |---|---|
-| Panel shows `error` for every experiment; network tab shows **401** | Wrong or missing `NEXT_PUBLIC_EXPERIMENTLY_API_KEY`. Re-run the seed script (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` (env vars are read at startup). |
+| Panel shows `error` for every experiment; network tab shows **401** | Wrong or missing `NEXT_PUBLIC_CONTROLVAR_API_KEY`. Re-run the seed script (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` (env vars are read at startup). |
 | **404** on `/tracking/assign` or `/feature-flags/evaluate/...` | The ShopLab experiments are not seeded or not ACTIVE, or the flags are not seeded (a flag that is not ACTIVE answers `enabled: false`, not a 404). Run the seed script. |
 | Browser console: **CORS** error from `localhost:3200` | Port 3200 is not in the backend's CORS allow-list. The development defaults (`DEFAULT_CORS_ORIGINS` in `backend/app/core/config.py`) include it; if you set `CORS_ORIGINS` or `BACKEND_CORS_ORIGINS` yourself, add `http://localhost:3200` and restart the API. Against a staging or production API, add it to that API's `CORS_ORIGINS`: those allow no other origin by default. |
-| Every visitor is `control` and nothing loads | Backend not running on `NEXT_PUBLIC_EXPERIMENTLY_API_URL`. Start it from the repository root: `ENVIRONMENT=development uvicorn backend.app.main:app --reload`. |
+| Every visitor is `control` and nothing loads | Backend not running on `NEXT_PUBLIC_CONTROLVAR_API_URL`. Start it from the repository root: `ENVIRONMENT=development uvicorn backend.app.main:app --reload`. |
 | "Invalid hook call" in the browser | Two React copies. `next.config.js` aliases `react`/`react-dom` to this app's `node_modules`; make sure you ran `npm install` inside `demo/shoplab`. |
 | Running with `docker compose --profile demo`: **401** everywhere, and the simulator log says `no /data/demo/shoplab/.api_key` | The shoplab seed did not run. Run `SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait`: it applies the missing seeds to the existing database (no `down -v`). |
 | Simulator exits with code 2 / 3 / 4 | 2 = API key rejected or missing, 3 = experiments not seeded (404), 4 = backend unreachable. |
