@@ -2424,7 +2424,7 @@ reason = "the setting's name before the rename, still read when the new one is n
 [[keep]]
 path = "backend/tests/unit/docs/test_docs_journey_sdk.py"
 literal = "EXPERIMENTLY_API_URL"
-count = 1
+count = 2
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
@@ -2442,7 +2442,7 @@ reason = "the setting's name before the rename, still read when the new one is n
 [[keep]]
 path = "backend/tests/unit/docs/test_docs_journey_sdk.py"
 literal = "EXPERIMENTLY_API_KEY"
-count = 1
+count = 2
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
@@ -3403,4 +3403,16 @@ reason = "the setting's name before the rename, still read when the new one is n
 path = "tests/sdk-contract/live/run_live_contract.py"
 literal = "EXPERIMENTLY_LOCAL_API_KEY"
 count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "tests/sdk-contract/README.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "tests/sdk-contract/README.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"

@@ -257,8 +257,7 @@ def test_thirteen_of_the_sixteen_sdks_run_the_live_contract():
 def test_the_sdk_package_names():
     assert json.loads(_text("sdk/js/package.json"))["name"] == "@controlvar/js-sdk"
     assert (
-        json.loads(_text("sdk/react/package.json"))["name"]
-        == "@controlvar/react-sdk"
+        json.loads(_text("sdk/react/package.json"))["name"] == "@controlvar/react-sdk"
     )
     python = tomllib.loads(_text("sdk/python/pyproject.toml"))["project"]
     assert python["name"] == "controlvar"

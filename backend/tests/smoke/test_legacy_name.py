@@ -35,8 +35,8 @@ OLD = "experi" + "mently"
 
 #: The reviewed size of the keep-list. A new entry is a reviewed change, so it
 #: moves these numbers in the same pull request.
-ENTRIES = 565
-KEPT = 1176
+ENTRIES = 567
+KEPT = 1180
 EXCLUDES = [
     "CHANGELOG.md",
     "backend/tests/unit/infrastructure/fixtures/branch_protection/live_main_2026-10-01.json",
@@ -225,6 +225,7 @@ MODULE = "experi" + "mentation"
         f"import {MODULE}",
         f"    import {MODULE}.client as client_module",
         f">>> import {MODULE}",
+        f'python -c "import {MODULE}; print({MODULE}.__file__)"',
         f"from {MODULE}_openfeature import ExperimentationProvider",
         f'mock.patch("{MODULE}.cache._now")',
         f"see `{MODULE}.testing.FakeTransport`",
@@ -244,7 +245,7 @@ def test_the_former_python_import_name_is_residual(tmp_path, line):
         f"hashes = append(hashes, {MODULE}.ConsistentHash(a, b))",
         f'"{MODULE}.cache-ttl-seconds=60"',
         f"| `{MODULE}.cache-size` | `int` |",
-        f"from controlvar import ExperimentationClient",
+        "from controlvar import ExperimentationClient",
     ],
     ids=["sql", "schema", "go-import", "go-call", "spring", "spring-doc", "new-name"],
 )

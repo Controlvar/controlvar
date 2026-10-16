@@ -96,8 +96,7 @@ def test_the_unpinned_provider_manifest_fails_the_tarball_check() -> None:
 def test_the_provider_declares_its_repository() -> None:
     data = json.loads((SDK_DIR / "openfeature" / "package.json").read_text())
     assert (
-        data["repository"]["url"]
-        == "git+https://github.com/Controlvar/controlvar.git"
+        data["repository"]["url"] == "git+https://github.com/Controlvar/controlvar.git"
     )
     assert data["repository"]["directory"] == "sdk/openfeature"
 
@@ -198,9 +197,7 @@ def test_a_name_mismatch_is_refused(tree: Path) -> None:
     _provider(tree, {"@controlvar/js-sdk": "file:../react"})
     result = _run(tree / "openfeature")
     assert result.returncode == 1
-    assert (
-        "'@controlvar/react-sdk', not '@controlvar/js-sdk'" in result.stderr
-    )
+    assert "'@controlvar/react-sdk', not '@controlvar/js-sdk'" in result.stderr
 
 
 @pytest.mark.parametrize("version", [None, "", "1.0", "latest", "1.0.0+build"])

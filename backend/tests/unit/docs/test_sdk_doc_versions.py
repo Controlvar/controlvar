@@ -145,11 +145,7 @@ def quotes(rel: str, text: str) -> List[Tuple[str, str, Tuple[int, int]]]:
             package = match.group(1)
             if form == "tarball":
                 package = f"@controlvar/{package}"
-            if (
-                form == "quoted"
-                and package == "controlvar"
-                and rel not in PYTHON_PAGES
-            ):
+            if form == "quoted" and package == "controlvar" and rel not in PYTHON_PAGES:
                 continue
             found.append((package, match.group(2), match.span(2)))
     return found

@@ -80,12 +80,10 @@ _SUBMODULES = (
 )
 FORMER_IMPORT = re.compile(
     (
-        r"\bfrom {m}(?:_openfeature)?(?:\.\w+)* import\b"
-        r"|^\s*(?:>>> )?import {m}(?:_openfeature)?\b"
-        r"|[\"'`]{m}(?:_openfeature)?\.(?:{s})\b(?![-\w])"
-    )
-    .format(m=_MODULE, s=_SUBMODULES)
-    .encode("ascii"),
+        rf"\bfrom {_MODULE}(?:_openfeature)?(?:\.\w+)* import\b"
+        rf"|(?:^|[;\"'])\s*(?:>>> )?import {_MODULE}(?:_openfeature)?\b"
+        rf"|[\"'`]{_MODULE}(?:_openfeature)?\.(?:{_SUBMODULES})\b(?![-\w])"
+    ).encode("ascii"),
     re.M,
 )
 MODULE_NEEDLE = _MODULE.encode("ascii")

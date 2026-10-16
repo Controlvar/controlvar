@@ -54,8 +54,8 @@ KEY = "eptk_Fake0KeyForTheUnitJob9876543210abcdef"
 SECRETS_ENV = {
     "CONTROLVAR_API_URL": "http://api",
     "CONTROLVAR_API_KEY": KEY,
-    "CONTROLVAR_API_URL": "http://api",
-    "CONTROLVAR_API_KEY": KEY,
+    "EXPERIMENTLY_API_URL": "http://api",
+    "EXPERIMENTLY_API_KEY": KEY,
 }
 
 PAGE = """# Sample SDK

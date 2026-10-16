@@ -112,7 +112,8 @@ python tests/sdk-contract/live/run_live_contract.py --sdk go --sdk python --stri
 
 Each SDK documents its smoke command in its README; the runner's `MANIFEST` lists them. Missing
 toolchains are skipped (reported as `SKIP`) unless `--strict` is given. The seeded API key can be
-overridden with `CONTROLVAR_API_KEY`, the backend with `CONTROLVAR_API_URL`.
+overridden with `CONTROLVAR_API_KEY`, the backend with `CONTROLVAR_API_URL` (the runner still reads
+the former names, `EXPERIMENTLY_API_KEY` and `EXPERIMENTLY_API_URL`, when these are not set).
 
 Three entries need no toolchain beyond node or a JVM, but get there differently from the rest:
 
