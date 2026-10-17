@@ -10,6 +10,17 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.35.0](https://github.com/Controlvar/controlvar/compare/v0.34.4...v0.35.0) (2026-10-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* Experimently is now Controlvar. New images are ghcr.io/controlvar/controlvar and ghcr.io/controlvar/controlvar-web. The ghcr.io/getexperimently/... images stay where they are; their floating :core and :full tags stay at 0.34.4 and receive no further releases, including security fixes, so pin the new path. Docker Compose keeps its project name and database user, so an upgrade with the new compose.yml keeps its data. The Helm chart is named controlvar; upgrade with your existing release name and every object, the database volume included, keeps its name. Signatures of new images name github.com/Controlvar/controlvar; releases.md gives the identity for each version. The MCP manifest gives the name controlvar. See docs/self-hosting/upgrading-to-controlvar.md.
+
+### Features
+
+* rename the project to Controlvar ([#1277](https://github.com/Controlvar/controlvar/issues/1277)) ([9217740](https://github.com/Controlvar/controlvar/commit/9217740982ec6c6d9f038caefdfd14b98b50092b))
+
 ## [0.34.4](https://github.com/getexperimently/experimently/compare/v0.34.3...v0.34.4) (2026-10-16)
 
 
