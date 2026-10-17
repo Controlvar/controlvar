@@ -49,6 +49,7 @@ with the seeds the apps need:
 SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait
 ```
 
+ShopLab then answers at http://localhost:3200 and StreamPulse at http://localhost:3300.
 `make demo` runs the same command with `--build`. Without the `shoplab` and
 `streampulse` seeds the API key built into the apps does not exist: they load, but
 every flag shows its fallback, and both simulators exit at start. If you already started the profile without them, run the
