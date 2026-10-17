@@ -1,7 +1,7 @@
 import React from 'react';
 import Head from 'next/head';
 
-export const APP_NAME = 'Experimently';
+export const APP_NAME = 'Controlvar';
 
 export function formatPageTitle(title?: string | null): string {
   const trimmed = title?.trim();
@@ -9,7 +9,7 @@ export function formatPageTitle(title?: string | null): string {
 }
 
 interface PageTitleProps {
-  /** Page name; rendered as `<Page> · Experimently`. Omit for the bare app name. */
+  /** Page name; rendered as `<Page> · Controlvar`. Omit for the bare app name. */
   title?: string | null;
   /** Optional `<meta name="description">`. */
   description?: string;

@@ -766,7 +766,7 @@ def test_an_env_file_in_the_build_tree_is_refused(tmp_path):
     app = build.app_dir(tmp_path, "shoplab")
     app.mkdir(parents=True)
     build.refuse_env_files(tmp_path, "shoplab")
-    (app / ".env.local").write_text("NEXT_PUBLIC_EXPERIMENTLY_API_KEY=x\n")
+    (app / ".env.local").write_text("NEXT_PUBLIC_CONTROLVAR_API_KEY=x\n")
     with pytest.raises(
         build.BuildError, match="demo/shoplab/.env.local is in the build tree"
     ):
@@ -1319,3 +1319,18 @@ def test_a_departure_stated_in_a_code_card_line_counts():
         for line in card.code.lines
         if line
     )
+
+
+def test_the_app_settings_name_each_setting_twice_and_nothing_else_may():
+    """An app is built from an archived ref, which may read only the names
+    before the rename: app_settings() gives both. No other child is allowed
+    either name."""
+    app = guard.app_settings(app="shoplab", api_port=28400, dashboard_port=28401)
+    for setting in ("API_URL", "API_KEY", "DASHBOARD_URL"):
+        new, old = (
+            f"NEXT_PUBLIC_CONTROLVAR_{setting}",
+            f"NEXT_PUBLIC_EXPERIMENTLY_{setting}",
+        )
+        assert app[new] == app[old] and app[new], setting
+        for kind in ("docker", "api", "seed-shoplab", "dashboard"):
+            assert not {new, old} & guard.allowed_env_keys(kind), kind

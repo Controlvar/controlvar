@@ -58,20 +58,20 @@ CVE = "CVE-2099-0001"
 
 # -- the renderer's wording, byte for byte ---------------------------------------
 
-RELEASE_LABEL = "experimently:core-1.2.3 (whole image)"
+RELEASE_LABEL = "controlvar:core-1.2.3 (whole image)"
 CI_LABEL = "backend/ (source tree)"
 
 #: Captured from scripts/render_secret_findings.py before ``--stage`` existed.
 RELEASE_FINDINGS_STDOUT = (
-    "2 finding(s) in experimently:core-1.2.3 (whole image) (trivy 0.74.0, secret scanner):\n"
+    "2 finding(s) in controlvar:core-1.2.3 (whole image) (trivy 0.74.0, secret scanner):\n"
     "Target\tRuleID\tSeverity\tStartLine\n"
     "app/backend/x_test.py\tgithub-pat\tCRITICAL\t3\n"
     "usr/share/a|b.js\tgithub-pat\tCRITICAL\t7\n"
-    "::error title=Credential found in image::experimently:core-1.2.3 (whole image) "
+    "::error title=Credential found in image::controlvar:core-1.2.3 (whole image) "
     "was not pushed: 2 finding(s). See the job summary.\n"
 )
 RELEASE_FINDINGS_SUMMARY = (
-    "**Credential scan: 2 finding(s) in experimently:core-1.2.3 (whole image)** "
+    "**Credential scan: 2 finding(s) in controlvar:core-1.2.3 (whole image)** "
     "(trivy 0.74.0, secret scanner). Not pushed.\n"
     "\n"
     "| Target | RuleID | Severity | StartLine |\n"
@@ -81,7 +81,7 @@ RELEASE_FINDINGS_SUMMARY = (
     "\n"
 )
 RELEASE_CLEAN_STDOUT = (
-    "Credential scan: no findings in experimently:core-1.2.3 (whole image) "
+    "Credential scan: no findings in controlvar:core-1.2.3 (whole image) "
     "(trivy 0.74.0, secret scanner), scanned before push.\n"
 )
 RELEASE_CLEAN_SUMMARY = RELEASE_CLEAN_STDOUT + "\n"

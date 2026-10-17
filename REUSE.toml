@@ -17,18 +17,18 @@
 # is the SPDX text for the identifier sdk/LICENSE uses.
 
 version = 1
-SPDX-PackageName = "Experimently"
-SPDX-PackageSupplier = "Experimently <hello@getexperimently.com>"
-SPDX-PackageDownloadLocation = "https://github.com/getexperimently/experimently"
+SPDX-PackageName = "Controlvar"
+SPDX-PackageSupplier = "Controlvar <hello@controlvar.com>"
+SPDX-PackageDownloadLocation = "https://github.com/Controlvar/controlvar"
 
 [[annotations]]
 path = ["**"]
 precedence = "closest"
-SPDX-FileCopyrightText = "2024-2026 Experimently"
+SPDX-FileCopyrightText = "2024-2026 The Controlvar authors"
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = ["sdk/**"]
 precedence = "closest"
-SPDX-FileCopyrightText = "2024-2026 Experimently"
+SPDX-FileCopyrightText = "2024-2026 The Controlvar authors"
 SPDX-License-Identifier = "MIT"

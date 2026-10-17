@@ -1262,7 +1262,7 @@ jobs:
             # A production start must know what hostname it answers on: the
             # Host header is attacker-controlled and ALLOWED_HOSTS derives from
             # this (#220). Never resolved here -- the import opens no socket.
-            -e PUBLIC_BASE_URL=https://experimently.example.com
+            -e PUBLIC_BASE_URL=https://controlvar.example.com
           )
           # Importing main.py runs the registration and the abort check; it
           # opens no connection, so no database or Redis is needed here.
@@ -1321,18 +1321,18 @@ jobs:
 
           # Full image, ENVIRONMENT=production and nothing else: one list.
           expect_refusal experimently-api:full full.log -e ENVIRONMENT=production
-          grep -qF "Experimently cannot start: 5 settings need attention." full.log
+          grep -qF "Controlvar cannot start: 5 settings need attention." full.log
           for s in SECRET_KEY FIRST_SUPERUSER_PASSWORD PUBLIC_BASE_URL AUDIT_HMAC_KEY POSTGRES_SERVER; do
             grep -qE "^  - $s " full.log || { echo "::error::$s is not in the list"; exit 1; }
           done
-          grep -qF "https://experimently.example.com" full.log
+          grep -qF "https://controlvar.example.com" full.log
           refuse_text "continuing on the core profile" full.log
           refuse_text "<value>" full.log
           refuse_text "api.example.com" full.log
 
           # Core image: the same, without the full profile's audit key.
           expect_refusal experimently-api:core core.log -e ENVIRONMENT=production
-          grep -qF "Experimently cannot start: 4 settings need attention." core.log
+          grep -qF "Controlvar cannot start: 4 settings need attention." core.log
           refuse_text AUDIT_HMAC_KEY core.log
 
           KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
@@ -1340,7 +1340,7 @@ jobs:
             -e ENVIRONMENT=production
             -e SECRET_KEY="$KEY"
             -e FIRST_SUPERUSER_PASSWORD="$KEY"
-            -e PUBLIC_BASE_URL=https://experimently.example.com
+            -e PUBLIC_BASE_URL=https://controlvar.example.com
             -e AUDIT_HMAC_KEY="$KEY"
             -e POSTGRES_SERVER=db.invalid
           )
@@ -1492,7 +1492,7 @@ jobs:
           # target repository is private and has no published docs site yet.
           # `docs-links.test.ts` covers the half that can be checked offline --
           # that every linked page exists under docs/.
-          grep -q 'Experimently Documentation' docs.html
+          grep -q 'Controlvar Documentation' docs.html
           grep -qE 'href="https?://[^"]+/getting-started/quick-start(\.md|/)"' docs.html
           # /api and /health are proxied to the api container
           curl -sf localhost:3000/health/ready >/dev/null

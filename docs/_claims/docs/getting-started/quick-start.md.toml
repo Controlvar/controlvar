@@ -409,11 +409,11 @@ text = "What's next"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Limitations — what Experimently does not do, and what happens instead"
+text = "Limitations — what Controlvar does not do, and what happens instead"
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "Docker Compose on one host — run Experimently where others can reach it"
+text = "Docker Compose on one host — run Controlvar where others can reach it"
 by = ["exempt:navigation"]
 
 [[unit]]

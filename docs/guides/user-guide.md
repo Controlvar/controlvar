@@ -1,6 +1,6 @@
 # User Guide
 
-Guide for product managers, experimenters, and analysts using Experimently.
+Guide for product managers, experimenters, and analysts using Controlvar.
 
 ---
 
@@ -524,4 +524,4 @@ If high-risk pairs are found, add the experiments to a [Mutual Exclusion Group](
 
 - **API Documentation**: http://localhost:8000/api/v1/docs
 - **Technical Guide**: See [Technical Guide](../architecture/technical-guide.md) for implementation details
-- **Issues**: https://github.com/getexperimently/experimently/issues
+- **Issues**: https://github.com/Controlvar/controlvar/issues

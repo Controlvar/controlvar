@@ -75,7 +75,7 @@ class MonitoringStack(Stack):
         self.alerts_topic = sns.Topic(
             self,
             "AlertsTopic",
-            display_name="Experimently Alerts",
+            display_name="Controlvar Alerts",
             topic_name="experimentation-alerts" + suffix,
         )
 

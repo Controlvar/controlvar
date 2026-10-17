@@ -3,7 +3,7 @@ name: Platform
 # =============================================================================
 # Reusable workflow: boot the platform, run one named suite against it.
 #
-# Every job that needs a *running* Experimently used to repeat the same twenty
+# Every job that needs a *running* Controlvar used to repeat the same twenty
 # lines: pg + redis services, Python, bootstrap, seeds, uvicorn from the
 # repository root, poll /health. This is that sequence, once. Its callers
 # are pr-qa-gate.yml's sdk-live-contract and fuzz.yml's three API fuzzing
@@ -132,6 +132,8 @@ jobs:
       SECRET_KEY: ci-only-platform-secret-key-0123456789abcdef0123456789
       AUTH_PROVIDER: local
       DEV_AUTH_BYPASS: 'false'
+      # Both names until the SDK smokes read the new one.
+      CONTROLVAR_API_URL: http://127.0.0.1:8000
       EXPERIMENTLY_API_URL: http://127.0.0.1:8000
 
     steps:

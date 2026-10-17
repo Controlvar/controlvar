@@ -196,9 +196,9 @@ def test_an_older_release_refuses_a_database_a_newer_release_migrated(
 
     for result in (rolled_back, raw_upgrade):
         assert result.returncode != 0, result.stdout[-2000:]
-        assert "migrated by a newer Experimently release" in result.stderr, (
-            result.stderr[-3000:]
-        )
+        assert "migrated by a newer Controlvar release" in result.stderr, result.stderr[
+            -3000:
+        ]
         assert next_revision in result.stderr
         assert f"({version})" in result.stderr
         assert "restore the backup taken before that upgrade" in result.stderr

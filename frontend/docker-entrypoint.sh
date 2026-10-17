@@ -1,5 +1,5 @@
 #!/bin/sh
-# Experimently dashboard container entrypoint (nginxinc/nginx-unprivileged).
+# Controlvar dashboard container entrypoint (nginxinc/nginx-unprivileged).
 #
 # Renders /etc/nginx/templates/default.conf.template -> /etc/nginx/conf.d/default.conf,
 # substituting ONLY ${API_UPSTREAM} (default http://api:8000) and

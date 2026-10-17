@@ -266,7 +266,7 @@ def _postgres_url(data: Dict[str, Any]) -> str:
 class Settings(BaseSettings):
     """Base settings class."""
 
-    PROJECT_NAME: str = "Experimently"
+    PROJECT_NAME: str = "Controlvar"
     # Resolved from the repository-root ``VERSION`` file, which release-please
     # maintains and pyproject.toml and the image labels read too; see
     # backend/app/core/version.py.
@@ -479,7 +479,7 @@ class Settings(BaseSettings):
     SMTP_USERNAME: str = ""
     SMTP_PASSWORD: str = ""
     EMAIL_FROM_ADDRESS: str = "platform@example.com"
-    EMAIL_FROM_NAME: str = "Experimently"
+    EMAIL_FROM_NAME: str = "Controlvar"
     NOTIFICATION_ADMIN_EMAILS: List[str] = []
 
     # EP-046: LLM/AI Model Evaluation. There are no LLM_*_API_KEY settings:
@@ -1068,7 +1068,7 @@ class DevSettings(Settings):
     ]
     CACHE_ENABLED: bool = False
     CACHE_CONTROL: Dict[str, Any] = {"enabled": False, "redis": None, "ttl": 3600}
-    PROJECT_NAME: str = "Experimently (Development)"
+    PROJECT_NAME: str = "Controlvar (Development)"
     PROJECT_DESCRIPTION: str = "A platform for managing experiments and feature flags (Development Environment)"
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_USER: str = "postgres"
@@ -1092,7 +1092,7 @@ class TestSettings(Settings):
     LOG_LEVEL: str = (
         "INFO"  # set LOG_LEVEL=DEBUG explicitly; DEBUG makes every library chatty
     )
-    PROJECT_NAME: str = "Experimently"
+    PROJECT_NAME: str = "Controlvar"
     PROJECT_DESCRIPTION: str = (
         "API for managing experiments and feature flags in test environment"
     )
@@ -1117,7 +1117,7 @@ class ProdSettings(Settings):
     """Production/staging environment settings."""
 
     ENVIRONMENT: EnvironmentName = "production"
-    PROJECT_NAME: str = "Experimently"
+    PROJECT_NAME: str = "Controlvar"
     PROJECT_DESCRIPTION: str = "A platform for managing experiments and feature flags"
     # Off by default, as in development and test. It affects the experiment
     # and admin routes only: the feature-flag routes always read the database

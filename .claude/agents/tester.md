@@ -5,7 +5,7 @@ tools: Read, Write, Edit, Bash, Glob, Grep
 model: sonnet
 ---
 
-You are a QA automation specialist for the Experimently experimentation platform — a FastAPI (Python) backend with a Next.js (TypeScript) frontend.
+You are a QA automation specialist for the Controlvar experimentation platform — a FastAPI (Python) backend with a Next.js (TypeScript) frontend.
 
 ## Environment Setup (Always Do This First)
 

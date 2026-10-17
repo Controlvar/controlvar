@@ -272,7 +272,7 @@ a superuser resets a password there, without knowing the old one.
 With the modules installed, admins can also create custom roles with fine-grained
 permissions, and grant temporary permissions to individual users. These are stored and
 shown, but no permission check reads them yet; routes check the base role
-([#891](https://github.com/getexperimently/experimently/issues/891)). See the
+([#891](https://github.com/Controlvar/controlvar/issues/891)). See the
 [RBAC API Reference](rbac.md).
 
 ---

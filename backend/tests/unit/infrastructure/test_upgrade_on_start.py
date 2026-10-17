@@ -248,11 +248,11 @@ def test_an_api_pod_runs_the_commands_the_compose_api_container_runs():
     assert "COPY --chown=appuser:appgroup backend/ /app/backend/" in dockerfile
     assert (REPO_ROOT / "backend" / "app" / "db" / "alembic.ini").is_file()
 
-    assert "configMapRef:" in api and 'include "experimently.secretEnv"' in api
+    assert "configMapRef:" in api and 'include "controlvar.secretEnv"' in api
     config = _template("config.yaml")
-    secret_env = _template("_helpers.tpl").split('define "experimently.secretEnv"')[1]
+    secret_env = _template("_helpers.tpl").split('define "controlvar.secretEnv"')[1]
     secret_keys = re.search(r"\$keys := list ([^}]*)\}\}", secret_env)
-    assert secret_keys, "experimently.secretEnv lists no keys"
+    assert secret_keys, "controlvar.secretEnv lists no keys"
     wanted = sorted(k for k in compose_api["environment"] if k.startswith("POSTGRES_"))
     assert len(wanted) >= 6, wanted
     missing = [

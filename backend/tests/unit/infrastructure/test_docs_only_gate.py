@@ -267,6 +267,10 @@ NOT_DOCS_TESTS = {
     "backend/tests/unit/infrastructure/test_rollback_verdict.py": (
         "printed link strings only"
     ),
+    # Walks every file for the former name, docs/ included; the lint job runs
+    # the same check (scripts/check_legacy_name.py) on every pull request,
+    # docs-only ones too.
+    "backend/tests/smoke/test_legacy_name.py": "the lint job runs the same check",
 }
 # docs-links.test.ts (Jest) runs on a docs-only change as its pinned Python
 # twin, backend/tests/unit/docs/test_dashboard_docs_links.py.

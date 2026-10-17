@@ -29,7 +29,7 @@ function defaultNewVisitor() {
   window.location.reload();
 }
 
-export default function ExperimentlyPanel({ onNewVisitor = defaultNewVisitor, defaultOpen = false }: Props) {
+export default function ControlvarPanel({ onNewVisitor = defaultNewVisitor, defaultOpen = false }: Props) {
   const [open, setOpen] = useState(defaultOpen);
   const { user } = useExperimentation();
   const events = useEventLog();
@@ -49,21 +49,21 @@ export default function ExperimentlyPanel({ onNewVisitor = defaultNewVisitor, de
   const recent = events.slice(-PANEL_EVENT_LIMIT).reverse();
 
   return (
-    <aside className="fixed bottom-4 right-4 z-50 w-[min(24rem,calc(100vw-2rem))] text-sm" aria-label="Experimently panel">
+    <aside className="fixed bottom-4 right-4 z-50 w-[min(24rem,calc(100vw-2rem))] text-sm" aria-label="Controlvar panel">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        aria-controls="experimently-panel-body"
+        aria-controls="controlvar-panel-body"
         className="ml-auto flex items-center gap-2 rounded-full bg-neutral-900 px-4 py-2 font-semibold text-white shadow-lg hover:bg-neutral-800"
       >
         <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" aria-hidden="true" />
-        Powered by Experimently
+        Powered by Controlvar
         <span aria-hidden="true">{open ? '▾' : '▴'}</span>
       </button>
       {open && (
         <div
-          id="experimently-panel-body"
+          id="controlvar-panel-body"
           className="mt-2 max-h-[70vh] overflow-y-auto rounded-lg border border-neutral-200 bg-white p-4 shadow-xl"
         >
           <section className="mb-4">

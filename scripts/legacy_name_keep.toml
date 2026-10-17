@@ -1,0 +1,3096 @@
+# The former name, where it is kept on purpose (scripts/check_legacy_name.py).
+# Each entry: a path (exact or fnmatch), an exact literal containing the name,
+# the number of occurrences it covers (pinned), and why. Excludes take whole
+# paths out. backend/tests/smoke/test_legacy_name.py pins how many there are.
+
+[[exclude]]
+path = "CHANGELOG.md"
+reason = "history: release notes are not rewritten"
+
+[[exclude]]
+path = "sdk/"
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[exclude]]
+path = "docs/sdk/"
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[exclude]]
+path = "docs/_claims/docs/sdk/"
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[exclude]]
+path = "docs/_claims/sdk/"
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[exclude]]
+path = "tests/sdk-contract/"
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[exclude]]
+path = "backend/tests/unit/infrastructure/fixtures/branch_protection/live_main_2026-10-01.json"
+reason = "a recorded API response: rewriting it would falsify the record"
+
+[[exclude]]
+path = "backend/tests/unit/infrastructure/fixtures/rollback_runs/"
+reason = "recorded runs: rewriting them would falsify the record"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_cross_version_identifiers.py"
+literal = "experimently-selfhost"
+count = 1
+reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_production_compose.py"
+literal = "experimently-selfhost"
+count = 3
+reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
+
+[[keep]]
+path = "deploy/compose/compose.yml"
+literal = "experimently-selfhost"
+count = 2
+reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
+
+[[keep]]
+path = "docs/_claims/docs/self-hosting/upgrading-to-controlvar.md.toml"
+literal = "experimently-selfhost"
+count = 1
+reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
+
+[[keep]]
+path = "docs/self-hosting/upgrading-to-controlvar.md"
+literal = "experimently-selfhost"
+count = 1
+reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_production_compose.py"
+literal = "POSTGRES_USER:-experimently"
+count = 1
+reason = "K2: Postgres applies the user only when it creates a volume"
+
+[[keep]]
+path = "deploy/compose/compose.yml"
+literal = "POSTGRES_USER:-experimently"
+count = 2
+reason = "K2: Postgres applies the user only when it creates a volume"
+
+[[keep]]
+path = "deploy/compose/.env.example"
+literal = "# POSTGRES_USER=experimently"
+count = 1
+reason = "K2: the example states the default user"
+
+[[keep]]
+path = "docs/self-hosting/migrations.md"
+literal = "(`experimently` in `deploy/compose/compose.yml`)"
+count = 1
+reason = "K2: states the default user"
+
+[[keep]]
+path = "docs/_claims/docs/self-hosting/migrations.md.toml"
+literal = "(experimently in deploy/compose/compose.yml)"
+count = 1
+reason = "K2: states the default user"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_compose_database_settings.py"
+literal = "(\"default\", \"experimently\")"
+count = 1
+reason = "K2 pin"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_render.py"
+literal = "\"experimently\" if name == \"POSTGRES_USER\""
+count = 1
+reason = "K2 in the chart's test secret"
+
+[[keep]]
+path = "charts/experimently/ci/values-core.yaml"
+literal = "postgresUser: experimently"
+count = 1
+reason = "K2 in the chart's CI values"
+
+[[keep]]
+path = "scripts/chart_kind.sh"
+literal = "secrets.postgresUser=experimently"
+count = 2
+reason = "K2 in the kind job, as the guide sets it"
+
+[[keep]]
+path = "docs/self-hosting/kubernetes.md"
+literal = "POSTGRES_USER=experimently"
+count = 1
+reason = "K2 in the Kubernetes guide's secret"
+
+[[keep]]
+path = "charts/experimently/templates/_helpers.tpl"
+literal = "default \"experimently\" .Values.nameOverride"
+count = 2
+reason = "K3/S3: the resource stem"
+
+[[keep]]
+path = "charts/experimently/.helmignore"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/Chart.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/README.md"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/ci/values-core.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/ci/values-full.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/templates/NOTES.txt"
+literal = "charts/experimently"
+count = 2
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/templates/_helpers.tpl"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/templates/api-deployment.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/templates/api-service.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/templates/config.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/templates/ingress.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/templates/pdb.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/templates/postgres.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/templates/redis.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/templates/secret.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/templates/serviceaccount.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/templates/tests/smoke.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/templates/web-deployment.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/templates/web-service.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/values.schema.json"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = "charts/experimently/values.yaml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory"
+
+[[keep]]
+path = ".github/workflows/chart-kind.yml"
+literal = "charts/experimently"
+count = 2
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = ".github/workflows/chart.yml"
+literal = "charts/experimently"
+count = 7
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = ".github/workflows/release.yml"
+literal = "charts/experimently"
+count = 4
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "CLAUDE.md"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "README.md"
+literal = "charts/experimently"
+count = 2
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "backend/docker-entrypoint.sh"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "backend/tests/smoke/test_version_sources.py"
+literal = "charts/experimently"
+count = 2
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_rename.py"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_render.py"
+literal = "charts/experimently"
+count = 3
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_doc_claims_rc_suites.py"
+literal = "charts/experimently"
+count = 2
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_docs_hub_claims.py"
+literal = "charts/experimently"
+count = 2
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_docs_inventory.py"
+literal = "charts/experimently"
+count = 9
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_api_workers_and_scaling.py"
+literal = "charts/experimently"
+count = 2
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_release_chart_job.py"
+literal = "charts/experimently"
+count = 4
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_rc_evidence.py"
+literal = "charts/experimently"
+count = 2
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "docs/_claims/README.md.toml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "docs/_claims/charts/experimently/README.md.toml"
+literal = "charts/experimently"
+count = 3
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "docs/_claims/charts/experimently/templates/NOTES.txt.toml"
+literal = "charts/experimently"
+count = 4
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "docs/_claims/docs/self-hosting/kubernetes.md.toml"
+literal = "charts/experimently"
+count = 2
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "docs/_claims/docs/self-hosting/upgrading-to-controlvar.md.toml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "docs/_claims/frontend/src/pages/docs/index.tsx.desc.toml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "docs/self-hosting/kubernetes.md"
+literal = "charts/experimently"
+count = 2
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "docs/self-hosting/upgrading-to-controlvar.md"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "frontend/src/pages/docs/index.tsx"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "release-please-config.json"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "scripts/chart_kind.sh"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "scripts/check_chart_package.py"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "scripts/check_version_sources.py"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "scripts/doc_claims.py"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "scripts/doc_examples.toml"
+literal = "charts/experimently"
+count = 1
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "tests/acceptance/docs/inventory.toml"
+literal = "charts/experimently"
+count = 3
+reason = "C9: the chart keeps its directory; every reference to it"
+
+[[keep]]
+path = "backend/tests/smoke/test_version_sources.py"
+literal = "\"charts\" / \"experimently\""
+count = 7
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_rename.py"
+literal = "\"charts\" / \"experimently\""
+count = 1
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_render.py"
+literal = "\"charts\" / \"experimently\""
+count = 1
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "backend/tests/unit/core/test_aws_settings_and_clients.py"
+literal = "\"charts\" / \"experimently\""
+count = 1
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "backend/tests/unit/db/test_schema_from_the_chart.py"
+literal = "\"charts\" / \"experimently\""
+count = 1
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_compose_database_settings.py"
+literal = "\"charts\" / \"experimently\""
+count = 1
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_no_openssl_armcap_setting.py"
+literal = "\"charts\" / \"experimently\""
+count = 1
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_release_chart_job.py"
+literal = "\"charts\" / \"experimently\""
+count = 1
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_upgrade_on_start.py"
+literal = "\"charts\" / \"experimently\""
+count = 1
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_chart_kind_previous_fallback.py"
+literal = "\"charts\" / \"experimently\""
+count = 1
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_chart_kind_previous_public.py"
+literal = "\"charts\" / \"experimently\""
+count = 1
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "scripts/check_version_sources.py"
+literal = "\"charts\" / \"experimently\""
+count = 1
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "backend/app/core/scheduler_lock.py"
+literal = "experimently.scheduler."
+count = 1
+reason = "K4: advisory-lock namespace; N-1 and N must take the same lock"
+
+[[keep]]
+path = "backend/tests/unit/core/test_scheduler_lock.py"
+literal = "experimently.scheduler."
+count = 1
+reason = "K4: advisory-lock namespace; N-1 and N must take the same lock"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_cross_version_identifiers.py"
+literal = "experimently.scheduler."
+count = 1
+reason = "K4: advisory-lock namespace; N-1 and N must take the same lock"
+
+[[keep]]
+path = "backend/app/db/bootstrap.py"
+literal = "experimently.bootstrap."
+count = 1
+reason = "K4: advisory-lock namespace"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_cross_version_identifiers.py"
+literal = "experimently.bootstrap."
+count = 1
+reason = "K4: advisory-lock namespace"
+
+[[keep]]
+path = "backend/app/core/security.py"
+literal = "experimently-local"
+count = 2
+reason = "K5: the local JWT issuer; a new one signs every session out"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_cross_version_identifiers.py"
+literal = "experimently-local"
+count = 1
+reason = "K5: the local JWT issuer; a new one signs every session out"
+
+[[keep]]
+path = "backend/app/api/v1/endpoints/websocket_results.py"
+literal = "experimently.bearer"
+count = 6
+reason = "K6: the WebSocket subprotocol a cached dashboard offers"
+
+[[keep]]
+path = "backend/tests/integration/api/test_local_auth_path.py"
+literal = "experimently.bearer"
+count = 4
+reason = "K6: the WebSocket subprotocol a cached dashboard offers"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_cross_version_identifiers.py"
+literal = "experimently.bearer"
+count = 2
+reason = "K6: the WebSocket subprotocol a cached dashboard offers"
+
+[[keep]]
+path = "docs/_claims/docs/websocket-streaming.md.toml"
+literal = "experimently.bearer"
+count = 2
+reason = "K6: the WebSocket subprotocol a cached dashboard offers"
+
+[[keep]]
+path = "docs/websocket-streaming.md"
+literal = "experimently.bearer"
+count = 3
+reason = "K6: the WebSocket subprotocol a cached dashboard offers"
+
+[[keep]]
+path = "frontend/src/hooks/useExperimentStream.ts"
+literal = "experimently.bearer"
+count = 3
+reason = "K6: the WebSocket subprotocol a cached dashboard offers"
+
+[[keep]]
+path = ".claude/agents/scenario-runner.md"
+literal = "experimently.token"
+count = 1
+reason = "K7: the dashboard's token storage key"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_cross_version_identifiers.py"
+literal = "experimently.token"
+count = 1
+reason = "K7: the dashboard's token storage key"
+
+[[keep]]
+path = "frontend/CLAUDE.md"
+literal = "experimently.token"
+count = 2
+reason = "K7: the dashboard's token storage key"
+
+[[keep]]
+path = "frontend/README.md"
+literal = "experimently.token"
+count = 1
+reason = "K7: the dashboard's token storage key"
+
+[[keep]]
+path = "frontend/src/contexts/AuthContext.tsx"
+literal = "experimently.token"
+count = 1
+reason = "K7: the dashboard's token storage key"
+
+[[keep]]
+path = "frontend/src/services/api.ts"
+literal = "experimently.token"
+count = 2
+reason = "K7: the dashboard's token storage key"
+
+[[keep]]
+path = "frontend/src/tests/services/modules.test.ts"
+literal = "experimently.token"
+count = 1
+reason = "K7: the dashboard's token storage key"
+
+[[keep]]
+path = "frontend/tests/e2e/env.ts"
+literal = "experimently.token"
+count = 1
+reason = "K7: the dashboard's token storage key"
+
+[[keep]]
+path = "tests/acceptance/showcase/capture/run.py"
+literal = "experimently.token"
+count = 1
+reason = "K7: the dashboard's token storage key"
+
+[[keep]]
+path = "docs/_claims/docs/auth/sso.md.toml"
+literal = "__Host-experimently_oidc"
+count = 1
+reason = "K7: the OIDC state cookie"
+
+[[keep]]
+path = "docs/auth/sso.md"
+literal = "__Host-experimently_oidc"
+count = 1
+reason = "K7: the OIDC state cookie"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_docs_hub_claims.py"
+literal = "X-Experimently-Webhook-Secret"
+count = 1
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_integrations_docs_claims.py"
+literal = "X-Experimently-Webhook-Secret"
+count = 3
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "docs/_claims/docs/api/integrations.md.toml"
+literal = "X-Experimently-Webhook-Secret"
+count = 5
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "docs/_claims/docs/integrations/salesforce.md.toml"
+literal = "X-Experimently-Webhook-Secret"
+count = 1
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "docs/_claims/docs/self-hosting/upgrading-to-controlvar.md.toml"
+literal = "X-Experimently-Webhook-Secret"
+count = 1
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "docs/api/integrations.md"
+literal = "X-Experimently-Webhook-Secret"
+count = 7
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "docs/api/openapi-v1.full.json"
+literal = "X-Experimently-Webhook-Secret"
+count = 2
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "docs/integrations/salesforce.md"
+literal = "X-Experimently-Webhook-Secret"
+count = 4
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "docs/self-hosting/upgrading-to-controlvar.md"
+literal = "X-Experimently-Webhook-Secret"
+count = 1
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "docs/_claims/docs/auth/sso.md.toml"
+literal = "https://experimently.example.com"
+count = 2
+reason = "K9: the SAML defaults an operator may have registered in their IdP"
+
+[[keep]]
+path = "docs/auth/sso.md"
+literal = "https://experimently.example.com"
+count = 2
+reason = "K9: the SAML defaults an operator may have registered in their IdP"
+
+[[keep]]
+path = "modules/backend/tests/unit/services/test_sso_service.py"
+literal = "\"experimently\" in xml"
+count = 2
+reason = "K9: the default entity id in the metadata"
+
+[[keep]]
+path = "docs/_claims/docs/api/warehouse-analytics.md.toml"
+literal = "experimently: analysis"
+count = 1
+reason = "K11: the label, as the docs state it"
+
+[[keep]]
+path = "docs/api/warehouse-analytics.md"
+literal = "experimently: analysis"
+count = 1
+reason = "K11: the label, as the docs state it"
+
+[[keep]]
+path = "modules/backend/app/warehouse/snowflake.py"
+literal = "\"User-Agent\": \"Experimently\""
+count = 1
+reason = "K11: the User-Agent customers' network policies and query history filter on"
+
+[[keep]]
+path = ".github/workflows/deploy.yml"
+literal = "io.experimently.profile"
+count = 2
+reason = "K12: the image label main's deploy reads off every tag's image"
+
+[[keep]]
+path = "backend/Dockerfile"
+literal = "io.experimently.profile"
+count = 2
+reason = "K12: the image label main's deploy reads off every tag's image"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_cross_version_identifiers.py"
+literal = "io.experimently.profile"
+count = 5
+reason = "K12: the image label main's deploy reads off every tag's image"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py"
+literal = "io.experimently.profile"
+count = 1
+reason = "K12: the image label main's deploy reads off every tag's image"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_deploy_profile.py"
+literal = "io.experimently.profile"
+count = 1
+reason = "K12: the image label main's deploy reads off every tag's image"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_deploy_workflows.py"
+literal = "io.experimently.profile"
+count = 1
+reason = "K12: the image label main's deploy reads off every tag's image"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_release_image_labels.py"
+literal = "io.experimently.profile"
+count = 2
+reason = "K12: the image label main's deploy reads off every tag's image"
+
+[[keep]]
+path = "docs/self-hosting/releases.md"
+literal = "io.experimently.profile"
+count = 1
+reason = "K12: the image label main's deploy reads off every tag's image"
+
+[[keep]]
+path = "frontend/Dockerfile"
+literal = "io.experimently.profile"
+count = 1
+reason = "K12: the image label main's deploy reads off every tag's image"
+
+[[keep]]
+path = "scripts/check_image_labels.py"
+literal = "io.experimently.profile"
+count = 1
+reason = "K12: the image label main's deploy reads off every tag's image"
+
+[[keep]]
+path = ".github/workflows/_platform.yml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = ".github/workflows/chart-kind.yml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = ".github/workflows/compose-production.yml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = ".github/workflows/deploy.yml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = ".github/workflows/doc-examples.yml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = ".github/workflows/pr-qa-gate.yml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 7
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = ".github/workflows/release.yml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = ".github/workflows/security-scan.yml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "CLAUDE.md"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "CONTRIBUTING.md"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/Dockerfile"
+literal = "EXPERIMENTLY_PROFILE"
+count = 3
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_core_checkout_image.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_cross_version_identifiers.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_dashboard_deploy_wiring.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_dashboard_image_docs.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 8
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_deploy_profile.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_dev_compose_services.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 6
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_front_door_facts.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 8
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_production_compose.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 6
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_security_scan_scope.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_doc_examples.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/showcase/test_showcase_capture_guard.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/showcase/test_showcase_capture_parts.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "deploy/compose/.env.example"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "deploy/compose/README.md"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "deploy/compose/compose.yml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "deploy/compose/generate-env.sh"
+literal = "EXPERIMENTLY_PROFILE"
+count = 3
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "docker-compose.yml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 8
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "docs/_claims/deploy/compose/README.md.toml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "docs/_claims/docs/development/doc-examples.md.toml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "docs/_claims/docs/getting-started/docker-compose-file.md.toml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "docs/_claims/docs/getting-started/modules.md.toml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 18
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "docs/_claims/docs/self-hosting/cdk.md.toml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 3
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "docs/_claims/docs/self-hosting/upgrading-to-controlvar.md.toml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "docs/auth/sso.md"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "docs/deployment/deployment-guide.md"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "docs/development/doc-examples.md"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "docs/getting-started/docker-compose-file.md"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "docs/getting-started/modules.md"
+literal = "EXPERIMENTLY_PROFILE"
+count = 10
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "docs/self-hosting/cdk.md"
+literal = "EXPERIMENTLY_PROFILE"
+count = 5
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "docs/self-hosting/upgrading-to-controlvar.md"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "frontend/Dockerfile"
+literal = "EXPERIMENTLY_PROFILE"
+count = 12
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "frontend/README.md"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "frontend/jest.config.js"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "frontend/modules-alias.js"
+literal = "EXPERIMENTLY_PROFILE"
+count = 3
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "frontend/src/modules-stub/core-fallback-probe.ts"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "frontend/src/tests/helpers/api-literals.ts"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "frontend/src/tests/modules-alias.test.ts"
+literal = "EXPERIMENTLY_PROFILE"
+count = 13
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "frontend/src/tests/pages/experiment-detail.test.tsx"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "frontend/src/tests/services/query-params.test.ts"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "frontend/src/tests/services/url-literals.test.ts"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "infrastructure/cdk/app.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 5
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "infrastructure/tests/test_api_task_and_data_resources.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "infrastructure/tests/test_app_profiles.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 6
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "infrastructure/tests/test_backups_per_environment.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "infrastructure/tests/test_codedeploy_alarms.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "infrastructure/tests/test_environments_do_not_collide.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "infrastructure/tests/test_hand_made_resources.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "infrastructure/tests/test_public_entry_point.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "infrastructure/tests/test_secret_arns.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "infrastructure/tests/test_standing_alarms.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "modules-manifest.txt"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "scripts/check_compose_config.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "scripts/check_version_sources.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "scripts/core_build.sh"
+literal = "EXPERIMENTLY_PROFILE"
+count = 5
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "scripts/doc_claims.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 5
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "scripts/doc_examples.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "scripts/fuzz_local.sh"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "tests/acceptance/docs/docs_runner/stacks.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "tests/acceptance/showcase/capture/guard.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 2
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "tests/acceptance/showcase/capture/procs.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "tests/llm/docker-compose.llm-stub.yml"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/app/core/config.py"
+literal = "EXPERIMENTLY_VERSION"
+count = 2
+reason = "K13: operator override (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_restore_repoint.py"
+literal = "experimently:left-identifier"
+count = 2
+reason = "K14: tag already on restored AWS resources"
+
+[[keep]]
+path = "scripts/restore_repoint.sh"
+literal = "experimently:left-identifier"
+count = 2
+reason = "K14: tag already on restored AWS resources"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_restore_repoint.py"
+literal = "experimently:restore"
+count = 1
+reason = "K14: tag already on restored AWS resources"
+
+[[keep]]
+path = "scripts/restore_repoint.sh"
+literal = "experimently:restore"
+count = 2
+reason = "K14: tag already on restored AWS resources"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/fixtures/restore_repoint/fake_aws.py"
+literal = "experimently-restore"
+count = 1
+reason = "K14: marker already on restored AWS resources"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_restore_repoint.py"
+literal = "experimently-restore"
+count = 2
+reason = "K14: marker already on restored AWS resources"
+
+[[keep]]
+path = "scripts/restore_probe.py"
+literal = "experimently-restore"
+count = 1
+reason = "K14: marker already on restored AWS resources"
+
+[[keep]]
+path = "infrastructure/cdk/stacks/fargate_service_stack.py"
+literal = "Experimently/{env"
+count = 1
+reason = "K15: the CloudWatch namespace; a new one orphans metric history"
+
+[[keep]]
+path = "infrastructure/tests/test_standing_alarms.py"
+literal = "Experimently/{env"
+count = 1
+reason = "K15: the CloudWatch namespace; a new one orphans metric history"
+
+[[keep]]
+path = "infrastructure/cdk/stacks/dynamodb_tables_stack.py"
+literal = "\"Service\", \"experimently\""
+count = 3
+reason = "K15: cost-report tag"
+
+[[keep]]
+path = "infrastructure/cdk/stacks/elasticache_redis_stack.py"
+literal = "\"Service\", \"experimently\""
+count = 1
+reason = "K15: cost-report tag"
+
+[[keep]]
+path = "infrastructure/cdk/stacks/enhanced_database_stack.py"
+literal = "\"Service\", \"experimently\""
+count = 1
+reason = "K15: cost-report tag"
+
+[[keep]]
+path = "docs/deployment/secrets-management.md"
+literal = "\"Value\":\"experimently\""
+count = 3
+reason = "K15: cost-report tag, as the docs set it"
+
+[[keep]]
+path = "backend/lambda/feature_flag_evaluation/evaluator.py"
+literal = "experimently-feature-flags"
+count = 1
+reason = "K16: a DynamoDB table name"
+
+[[keep]]
+path = "backend/lambda/feature_flag_evaluation/tests/conftest.py"
+literal = "experimently-feature-flags"
+count = 1
+reason = "K16: a DynamoDB table name"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_cross_version_identifiers.py"
+literal = "experimently-feature-flags"
+count = 1
+reason = "K16: a DynamoDB table name"
+
+[[keep]]
+path = "backend/app/core/version.py"
+literal = "experimently-platform"
+count = 1
+reason = "K17: the distribution name installed metadata is matched against"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_front_door_facts.py"
+literal = "experimently-platform"
+count = 1
+reason = "K17: the distribution name installed metadata is matched against"
+
+[[keep]]
+path = "docs/_claims/docs/getting-started/python-virtual-env-setup.md.toml"
+literal = "experimently-platform"
+count = 1
+reason = "K17: the distribution name installed metadata is matched against"
+
+[[keep]]
+path = "docs/getting-started/python-virtual-env-setup.md"
+literal = "experimently-platform"
+count = 1
+reason = "K17: the distribution name installed metadata is matched against"
+
+[[keep]]
+path = "pyproject.toml"
+literal = "experimently-platform"
+count = 1
+reason = "K17: the distribution name installed metadata is matched against"
+
+[[keep]]
+path = "release-please-config.json"
+literal = "experimently-platform"
+count = 1
+reason = "K17: the distribution name installed metadata is matched against"
+
+[[keep]]
+path = "scripts/check_version_sources.py"
+literal = "experimently-platform"
+count = 1
+reason = "K17: the distribution name installed metadata is matched against"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_dev_compose_services.py"
+literal = "EXPERIMENTLY_IMAGE_TAG"
+count = 2
+reason = "K18: compose interpolation (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_front_door_facts.py"
+literal = "EXPERIMENTLY_IMAGE_TAG"
+count = 2
+reason = "K18: compose interpolation (env-inventory.md)"
+
+[[keep]]
+path = "docker-compose.yml"
+literal = "EXPERIMENTLY_IMAGE_TAG"
+count = 5
+reason = "K18: compose interpolation (env-inventory.md)"
+
+[[keep]]
+path = "scripts/fuzz_local.sh"
+literal = "EXPERIMENTLY_IMAGE_TAG"
+count = 1
+reason = "K18: compose interpolation (env-inventory.md)"
+
+[[keep]]
+path = "tests/acceptance/docs/docs_runner/stacks.py"
+literal = "EXPERIMENTLY_IMAGE_TAG"
+count = 2
+reason = "K18: compose interpolation (env-inventory.md)"
+
+[[keep]]
+path = "tests/acceptance/docs/stacks/compose-sso.yml"
+literal = "EXPERIMENTLY_IMAGE_TAG"
+count = 1
+reason = "K18: compose interpolation (env-inventory.md)"
+
+[[keep]]
+path = "tests/llm/docker-compose.llm-stub.yml"
+literal = "EXPERIMENTLY_IMAGE_TAG"
+count = 1
+reason = "K18: compose interpolation (env-inventory.md)"
+
+[[keep]]
+path = ".github/workflows/integration-tests.yml"
+literal = "EXPERIMENTLY_REQUIRE_"
+count = 4
+reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
+
+[[keep]]
+path = ".github/workflows/nightly-qa.yml"
+literal = "EXPERIMENTLY_REQUIRE_"
+count = 2
+reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
+
+[[keep]]
+path = ".github/workflows/pr-qa-gate.yml"
+literal = "EXPERIMENTLY_REQUIRE_"
+count = 4
+reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/integration/api/test_experiment_access_by_role.py"
+literal = "EXPERIMENTLY_REQUIRE_"
+count = 2
+reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/integration/api/test_experiment_cache_redis.py"
+literal = "EXPERIMENTLY_REQUIRE_"
+count = 3
+reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/integration/api/test_flag_reads_after_writers.py"
+literal = "EXPERIMENTLY_REQUIRE_"
+count = 3
+reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/integration/database/test_core_tree_isolation.py"
+literal = "EXPERIMENTLY_REQUIRE_"
+count = 2
+reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/integration/test_redis_password_auth.py"
+literal = "EXPERIMENTLY_REQUIRE_"
+count = 3
+reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_doc_claims_rc_suites.py"
+literal = "EXPERIMENTLY_REQUIRE_"
+count = 3
+reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_integration_job_armed.py"
+literal = "EXPERIMENTLY_REQUIRE_"
+count = 10
+reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
+
+[[keep]]
+path = "scripts/rc_evidence.py"
+literal = "EXPERIMENTLY_REQUIRE_"
+count = 3
+reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
+
+[[keep]]
+path = ".github/workflows/chart.yml"
+literal = "EXPERIMENTLY_CHART_TESTS"
+count = 3
+reason = "K18: CI arming switch (env-inventory.md)"
+
+[[keep]]
+path = ".github/workflows/rc-evidence.yml"
+literal = "EXPERIMENTLY_CHART_TESTS"
+count = 1
+reason = "K18: CI arming switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_rename.py"
+literal = "EXPERIMENTLY_CHART_TESTS"
+count = 3
+reason = "K18: CI arming switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_render.py"
+literal = "EXPERIMENTLY_CHART_TESTS"
+count = 4
+reason = "K18: CI arming switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_doc_claims_rc_suites.py"
+literal = "EXPERIMENTLY_CHART_TESTS"
+count = 5
+reason = "K18: CI arming switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_rc_evidence.py"
+literal = "EXPERIMENTLY_CHART_TESTS"
+count = 1
+reason = "K18: CI arming switch (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_rc_evidence_workflow.py"
+literal = "EXPERIMENTLY_CHART_TESTS"
+count = 4
+reason = "K18: CI arming switch (env-inventory.md)"
+
+[[keep]]
+path = "scripts/rc_evidence.py"
+literal = "EXPERIMENTLY_CHART_TESTS"
+count = 2
+reason = "K18: CI arming switch (env-inventory.md)"
+
+[[keep]]
+path = ".github/workflows/integration-tests.yml"
+literal = "EXPERIMENTLY_TEST_SHARD"
+count = 2
+reason = "K18: CI plumbing (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/shard.py"
+literal = "EXPERIMENTLY_TEST_SHARD"
+count = 6
+reason = "K18: CI plumbing (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_integration_job_armed.py"
+literal = "EXPERIMENTLY_TEST_SHARD"
+count = 9
+reason = "K18: CI plumbing (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_check_test_shards.py"
+literal = "EXPERIMENTLY_TEST_SHARD"
+count = 3
+reason = "K18: CI plumbing (env-inventory.md)"
+
+[[keep]]
+path = "conftest.py"
+literal = "EXPERIMENTLY_TEST_SHARD"
+count = 1
+reason = "K18: CI plumbing (env-inventory.md)"
+
+[[keep]]
+path = "tests/llm/docker-compose.llm-stub.yml"
+literal = "EXPERIMENTLY_LLM_SMOKE"
+count = 1
+reason = "K18: developer opt-in, kept by name (PE C6)"
+
+[[keep]]
+path = "tests/llm/smoke.sh"
+literal = "EXPERIMENTLY_LLM_SMOKE"
+count = 3
+reason = "K18: developer opt-in, kept by name (PE C6)"
+
+[[keep]]
+path = "scripts/doc_examples.py"
+literal = "\"EXPERIMENTLY_\""
+count = 1
+reason = "K18: names the kept variables a caller set"
+
+[[keep]]
+path = ".github/workflows/compose-production.yml"
+literal = "experimently-api"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = ".github/workflows/pr-qa-gate.yml"
+literal = "experimently-api"
+count = 23
+reason = "K18: local image tag"
+
+[[keep]]
+path = ".github/workflows/security-scan.yml"
+literal = "experimently-api"
+count = 6
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/Dockerfile"
+literal = "experimently-api"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_render.py"
+literal = "experimently-api"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_dev_compose_services.py"
+literal = "experimently-api"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_front_door_facts.py"
+literal = "experimently-api"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_security_scan_output.py"
+literal = "experimently-api"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_security_scan_scope.py"
+literal = "experimently-api"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_fuzz_check.py"
+literal = "experimently-api"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "charts/experimently/README.md"
+literal = "experimently-api"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docker-compose.yml"
+literal = "experimently-api"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docs/_claims/charts/experimently/README.md.toml"
+literal = "experimently-api"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docs/_claims/docs/getting-started/docker-compose-file.md.toml"
+literal = "experimently-api"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docs/_claims/docs/getting-started/quick-start.md.toml"
+literal = "experimently-api"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docs/getting-started/docker-compose-file.md"
+literal = "experimently-api"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docs/getting-started/modules.md"
+literal = "experimently-api"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docs/getting-started/quick-start.md"
+literal = "experimently-api"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "scripts/fuzz_local.sh"
+literal = "experimently-api"
+count = 3
+reason = "K18: local image tag"
+
+[[keep]]
+path = "tests/acceptance/docs/docs_runner/stacks.py"
+literal = "experimently-api"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "tests/acceptance/docs/stacks/compose-sso.yml"
+literal = "experimently-api"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "tests/docker/openssl_fallback.sh"
+literal = "experimently-api"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = "tests/llm/docker-compose.llm-stub.yml"
+literal = "experimently-api"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = ".github/workflows/compose-production.yml"
+literal = "experimently-web"
+count = 3
+reason = "K18: local image tag"
+
+[[keep]]
+path = ".github/workflows/pr-qa-gate.yml"
+literal = "experimently-web"
+count = 3
+reason = "K18: local image tag"
+
+[[keep]]
+path = ".github/workflows/release.yml"
+literal = "experimently-web"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = ".github/workflows/security-scan.yml"
+literal = "experimently-web"
+count = 6
+reason = "K18: local image tag"
+
+[[keep]]
+path = "CONTRIBUTING.md"
+literal = "experimently-web"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_render.py"
+literal = "experimently-web"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_dashboard_image_docs.py"
+literal = "experimently-web"
+count = 3
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_dev_compose_services.py"
+literal = "experimently-web"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_front_door_facts.py"
+literal = "experimently-web"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_security_scan_output.py"
+literal = "experimently-web"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_security_scan_scope.py"
+literal = "experimently-web"
+count = 5
+reason = "K18: local image tag"
+
+[[keep]]
+path = "charts/experimently/README.md"
+literal = "experimently-web"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docker-compose.yml"
+literal = "experimently-web"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docs/_claims/charts/experimently/README.md.toml"
+literal = "experimently-web"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docs/_claims/docs/getting-started/docker-compose-file.md.toml"
+literal = "experimently-web"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docs/_claims/docs/getting-started/quick-start.md.toml"
+literal = "experimently-web"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docs/getting-started/docker-compose-file.md"
+literal = "experimently-web"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docs/getting-started/modules.md"
+literal = "experimently-web"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docs/getting-started/quick-start.md"
+literal = "experimently-web"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "frontend/Dockerfile"
+literal = "experimently-web"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = "frontend/README.md"
+literal = "experimently-web"
+count = 3
+reason = "K18: local image tag"
+
+[[keep]]
+path = "tests/acceptance/docs/docs_runner/stacks.py"
+literal = "experimently-web"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "tests/web/access_log.sh"
+literal = "experimently-web"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = "demo/shoplab/Dockerfile"
+literal = "experimently-shoplab"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docker-compose.yml"
+literal = "experimently-shoplab"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "demo/streampulse/Dockerfile"
+literal = "experimently-streampulse"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "docker-compose.yml"
+literal = "experimently-streampulse"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_deployment_secrets.py"
+literal = "staging.getexperimently.com"
+count = 1
+reason = "K20: the staging host"
+
+[[keep]]
+path = "Makefile"
+literal = "experimently-showcase"
+count = 2
+reason = "C7: the showcase tool's cache, lock and output paths (renaming discards the voice cache)"
+
+[[keep]]
+path = "backend/tests/unit/showcase/test_showcase_apps.py"
+literal = "experimently-showcase"
+count = 1
+reason = "C7: the showcase tool's cache, lock and output paths (renaming discards the voice cache)"
+
+[[keep]]
+path = "tests/acceptance/showcase/capture/guard.py"
+literal = "experimently-showcase"
+count = 1
+reason = "C7: the showcase tool's cache, lock and output paths (renaming discards the voice cache)"
+
+[[keep]]
+path = "tests/acceptance/showcase/capture/run.py"
+literal = "experimently-showcase"
+count = 2
+reason = "C7: the showcase tool's cache, lock and output paths (renaming discards the voice cache)"
+
+[[keep]]
+path = "tests/acceptance/showcase/voice/cache.py"
+literal = "experimently-showcase"
+count = 1
+reason = "C7: the showcase tool's cache, lock and output paths (renaming discards the voice cache)"
+
+[[keep]]
+path = "tests/acceptance/showcase/voice/step.py"
+literal = "experimently-showcase"
+count = 1
+reason = "C7: the showcase tool's cache, lock and output paths (renaming discards the voice cache)"
+
+[[keep]]
+path = "backend/tests/unit/showcase/test_showcase_apps.py"
+literal = "\"experimently-showcase\""
+count = 1
+reason = "C7: the showcase tool's paths, built from parts"
+
+[[keep]]
+path = "backend/tests/unit/showcase/test_showcase_voice.py"
+literal = "\"experimently-showcase\""
+count = 3
+reason = "C7: the showcase tool's paths, built from parts"
+
+[[keep]]
+path = "tests/acceptance/showcase/capture/config.py"
+literal = "\"experimently-showcase\""
+count = 1
+reason = "C7: the showcase tool's paths, built from parts"
+
+[[keep]]
+path = "tests/acceptance/showcase/capture/run.py"
+literal = "\"experimently-showcase\""
+count = 1
+reason = "C7: the showcase tool's paths, built from parts"
+
+[[keep]]
+path = "tests/acceptance/showcase/contract.py"
+literal = "\"experimently-showcase\""
+count = 1
+reason = "C7: the showcase tool's paths, built from parts"
+
+[[keep]]
+path = "tests/acceptance/showcase/capture/config.py"
+literal = "com.experimently.showcase"
+count = 1
+reason = "C7: the showcase tool's container label"
+
+[[keep]]
+path = ".github/workflows/release.yml"
+literal = "experimently:release-artifacts"
+count = 2
+reason = "the marker a re-run finds in a release body it wrote"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_render.py"
+literal = "experimently-secrets"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "charts/experimently/ci/values-full.yaml"
+literal = "experimently-secrets"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "docs/self-hosting/kubernetes.md"
+literal = "experimently-secrets"
+count = 3
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "charts/experimently/ci/values-full.yaml"
+literal = "experimently-tls"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "charts/experimently/README.md"
+literal = "deploy/experimently-api"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "docs/_claims/charts/experimently/README.md.toml"
+literal = "deploy/experimently-api"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "charts/experimently/README.md"
+literal = "prod-experimently"
+count = 2
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "docs/_claims/charts/experimently/README.md.toml"
+literal = "prod-experimently"
+count = 2
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_render.py"
+literal = "prod-experimently"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_render.py"
+literal = "my-experimently"
+count = 2
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_render.py"
+literal = "foo-experimently"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_render.py"
+literal = "-experimently"
+count = 2
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_render.py"
+literal = "`experimently`"
+count = 3
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_render.py"
+literal = "(\"experimently\", \"experimently\")"
+count = 4
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "scripts/chart_kind.sh"
+literal = "NS=experimently"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "scripts/chart_kind.sh"
+literal = "RELEASE=experimently"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "scripts/chart_kind.sh"
+literal = "SECRET=experimently-secrets"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "docs/self-hosting/kubernetes.md"
+literal = "namespace experimently"
+count = 5
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "docs/self-hosting/kubernetes.md"
+literal = "helm install experimently"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "docs/self-hosting/kubernetes.md"
+literal = "helm upgrade experimently"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "charts/experimently/README.md"
+literal = "-n experimently"
+count = 2
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "docs/_claims/charts/experimently/README.md.toml"
+literal = "-n experimently"
+count = 2
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "charts/experimently/README.md"
+literal = "helm test experimently"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "docs/_claims/charts/experimently/README.md.toml"
+literal = "helm test experimently"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "charts/experimently/README.md"
+literal = "`experimently`"
+count = 3
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "docs/_claims/charts/experimently/README.md.toml"
+literal = "experimently in the namespace experimently"
+count = 2
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "docs/_claims/charts/experimently/README.md.toml"
+literal = "contain experimently"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_qa_templates_public_text.py"
+literal = "experimently-internal"
+count = 1
+reason = "the private repository's names, refused by the public-text gate (C16)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_qa_templates_public_text.py"
+literal = "getexperimently/(?!experimently(?![A-Za-z0-9_.-]))"
+count = 2
+reason = "C16: the former organisation is still refused"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_qa_templates_public_text.py"
+literal = "getexperimently/qa-notes"
+count = 1
+reason = "C16: the planted case for the former organisation"
+
+[[keep]]
+path = "docs/_claims/docs/deployment/iam-permissions.md.toml"
+literal = "getexperimently@328439352/experimently@1367480368"
+count = 2
+reason = "S7/C8: the OIDC subject; replaced by the probed value in the window, never by a predicted one"
+
+[[keep]]
+path = "docs/deployment/iam-permissions.md"
+literal = "getexperimently@328439352/experimently@1367480368"
+count = 2
+reason = "S7/C8: the OIDC subject; replaced by the probed value in the window, never by a predicted one"
+
+[[keep]]
+path = "docs/_claims/docs/deployment/README.md.toml"
+literal = "evidence:https://github.com/getexperimently/experimently/"
+count = 8
+reason = "dated evidence is a record of a run and is never rewritten"
+
+[[keep]]
+path = "docs/_claims/docs/deployment/deployment-guide.md.toml"
+literal = "evidence:https://github.com/getexperimently/experimently/"
+count = 26
+reason = "dated evidence is a record of a run and is never rewritten"
+
+[[keep]]
+path = "docs/_claims/docs/deployment/disaster-recovery.md.toml"
+literal = "evidence:https://github.com/getexperimently/experimently/"
+count = 12
+reason = "dated evidence is a record of a run and is never rewritten"
+
+[[keep]]
+path = "docs/_claims/docs/deployment/iam-permissions.md.toml"
+literal = "evidence:https://github.com/getexperimently/experimently/"
+count = 4
+reason = "dated evidence is a record of a run and is never rewritten"
+
+[[keep]]
+path = "docs/_claims/docs/deployment/rollback-runbook.md.toml"
+literal = "evidence:https://github.com/getexperimently/experimently/"
+count = 18
+reason = "dated evidence is a record of a run and is never rewritten"
+
+[[keep]]
+path = "scripts/doc_claims.py"
+literal = "EVIDENCE_REPOSITORY = (\"getexperimently/experimently\""
+count = 2
+reason = "the name dated evidence links were taken under; never rewritten"
+
+[[keep]]
+path = ".github/workflows/release-gate.yml"
+literal = "[getexperimently] is an organization"
+count = 1
+reason = "a tool's error message, quoted"
+
+[[keep]]
+path = ".github/workflows/security-scan.yml"
+literal = "[getexperimently] is an organization"
+count = 1
+reason = "a tool's error message, quoted"
+
+[[keep]]
+path = ".github/workflows/security-scan.yml"
+literal = "`getexperimently` org."
+count = 1
+reason = "the organisation the quoted message was printed for"
+
+[[keep]]
+path = "modules/backend/tests/live_warehouse/harness.py"
+literal = "experimently"
+count = 3
+reason = "names objects in the live warehouse sandbox and its recorded evidence"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/test_live_check_harness.py"
+literal = "experimently"
+count = 7
+reason = "names objects in the live warehouse sandbox"
+
+[[keep]]
+path = "CLAUDE.md"
+literal = "getexperimently/experimently-internal"
+count = 2
+reason = "the private repository's name until it moves after the window"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_rename.py"
+literal = "experimently"
+count = 7
+reason = "K3/S3: pins the resource stem across a rename of the chart (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_cross_version_identifiers.py"
+literal = "experimently"
+count = 1
+reason = "S8: pins every identifier that keeps the former spelling, by its exact line (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_repository_guards.py"
+literal = "experimently"
+count = 4
+reason = "the former slug's own gate: it names the slug and plants it (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_repository_guards.py"
+literal = "Experimently"
+count = 8
+reason = "the former slug's own gate: it names the slug and plants it (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "docs/self-hosting/releases.md"
+literal = "Experimently"
+count = 1
+reason = "names the former project, for the identity of releases before 0.35.0"
+
+[[keep]]
+path = "docs/_claims/docs/self-hosting/releases.md.toml"
+literal = "Experimently"
+count = 1
+reason = "names the former project"
+
+[[keep]]
+path = "docs/self-hosting/releases.md"
+literal = "getexperimently/experimently"
+count = 14
+reason = "releases before 0.35.0: their image and identity; the executed block verifies the last of them until the releases page moves to 0.35.0"
+
+[[keep]]
+path = "docs/_claims/docs/self-hosting/releases.md.toml"
+literal = "getexperimently/experimently"
+count = 20
+reason = "releases before 0.35.0"
+
+[[keep]]
+path = "docs/self-hosting/upgrading-to-controlvar.md"
+literal = "Experimently"
+count = 1
+reason = "the upgrade note names the former project"
+
+[[keep]]
+path = "docs/self-hosting/upgrading-to-controlvar.md"
+literal = "experimently"
+count = 2
+reason = "the upgrade note names what keeps the former spelling"
+
+[[keep]]
+path = "docs/_claims/docs/self-hosting/upgrading-to-controlvar.md.toml"
+literal = "Experimently"
+count = 1
+reason = "the upgrade note names the former project"
+
+[[keep]]
+path = "docs/_claims/docs/self-hosting/upgrading-to-controlvar.md.toml"
+literal = "experimently"
+count = 3
+reason = "the upgrade note names what keeps the former spelling"
+
+[[keep]]
+path = "README.md"
+literal = "called Experimently"
+count = 1
+reason = "points to the upgrade note"
+
+[[keep]]
+path = "docs/_claims/README.md.toml"
+literal = "called Experimently"
+count = 1
+reason = "points to the upgrade note"
+
+[[keep]]
+path = "deploy/compose/compose.yml"
+literal = "(or `experimently`, the directory"
+count = 1
+reason = "says why the project name is fixed"
+
+[[keep]]
+path = "backend/tests/unit/chart/test_chart_render.py"
+literal = "experimently"
+count = 1
+reason = "K3/S3: pins the resource stem and the object names before the rename"
+
+[[keep]]
+path = "backend/scripts/seed_shoplab.py"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "backend/scripts/seed_streampulse.py"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_demo_apps_catalogues.py"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/showcase/test_showcase_apps.py"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "demo/shoplab/.env.example"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "demo/shoplab/Dockerfile"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 6
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "demo/shoplab/README.md"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "demo/shoplab/src/__tests__/env.test.ts"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 3
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "demo/shoplab/src/lib/env.ts"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 3
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "demo/streampulse/.env.example"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "demo/streampulse/Dockerfile"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 6
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "demo/streampulse/README.md"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "demo/streampulse/src/__tests__/env.test.ts"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 3
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "demo/streampulse/src/lib/env.ts"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 3
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "docs/_claims/demo/shoplab/README.md.toml"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "docs/_claims/demo/streampulse/README.md.toml"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "docs/sdk-guide.md"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "tests/acceptance/showcase/capture/guard.py"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_"
+count = 3
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = ".github/workflows/_platform.yml"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_docs_journey_sdk.py"
+literal = "EXPERIMENTLY_API_URL"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_run_live_contract.py"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "tests/acceptance/docs/docs_runner/execute.py"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_docs_journey_sdk.py"
+literal = "EXPERIMENTLY_API_KEY"
+count = 4
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_docs_journey_sdk_go.py"
+literal = "EXPERIMENTLY_API_KEY"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_run_live_contract.py"
+literal = "EXPERIMENTLY_API_KEY"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "docs/feature-flags/create.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "scripts/doc_claims.py"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "tests/acceptance/docs/docs_runner/execute.py"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_run_live_contract.py"
+literal = "EXPERIMENTLY_LOCAL_API_KEY"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "docs/_claims/docs/getting-started/modules.md.toml"
+literal = "reads_experimently_profile"
+count = 1
+reason = "a test's name, about EXPERIMENTLY_PROFILE (K12)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_front_door_facts.py"
+literal = "reads_experimently_profile"
+count = 1
+reason = "a test's name, about EXPERIMENTLY_PROFILE (K12)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_qa_render.py"
+literal = "getexperimently/experimently-other"
+count = 2
+reason = "a run link of another repository, refused"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_release_identity_regexp.py"
+literal = "experimently"
+count = 3
+reason = "compares the notes with releases.md's executed block, which verifies the newest release under the former name until a release exists under the new one (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "*"
+literal = "@getexperimently/"
+count = 140
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "github.com/getexperimently/experimently/sdk/go"
+count = 18
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "getexperimently-"
+count = 10
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "experimently-openfeature"
+count = 6
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "experimently_openfeature"
+count = 5
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "com.getexperimently"
+count = 11
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "com/getexperimently"
+count = 39
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "Experimently.SDK"
+count = 8
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "Experimently.OpenFeature"
+count = 2
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "sdk/dotnet/Experimently"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "pod 'Experimently'"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "\"cocoapods\", \"Experimently\""
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "experimently.gemspec"
+count = 3
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "pip install experimently"
+count = 29
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "pypi.org/project/experimently"
+count = 3
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "pypi/experimently"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "experimently-sdk"
+count = 13
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "experimently-android"
+count = 2
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "experimently-spring-boot-starter"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "*"
+literal = "@/__mocks__/experimently-sdk"
+count = 11
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_sdk_doc_versions.py"
+literal = "experimently"
+count = 25
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_sdk_live_contract_sentence.py"
+literal = "experimently"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_deferred_sdk_pages.py"
+literal = "experimently"
+count = 25
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/smoke/test_sdk_release_wiring.py"
+literal = "experimently"
+count = 16
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/smoke/test_sdk_sibling_ranges.py"
+literal = "experimently"
+count = 2
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_docs_journey_sdk.py"
+literal = "experimently"
+count = 4
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_docs_hub_claims.py"
+literal = "experimently"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_doc_claims.py"
+literal = "experimently"
+count = 7
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_rc_evidence.py"
+literal = "experimently"
+count = 11
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_rc_evidence_workflow.py"
+literal = "experimently"
+count = 2
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_pin_npm_local_deps.py"
+literal = "experimently"
+count = 6
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/unit/scripts/test_doc_examples.py"
+literal = "experimently"
+count = 6
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_front_door_facts.py"
+literal = "experimently"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "scripts/rc_evidence.py"
+literal = "experimently"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "scripts/doc_claims.py"
+literal = "experimently"
+count = 3
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "scripts/generate_third_party_licenses.py"
+literal = "experimently"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "THIRD_PARTY_LICENSES.md"
+literal = "experimently"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = ".github/workflows/sdk-release.yml"
+literal = "experimently"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "docs/sdk-guide.md"
+literal = "experimently"
+count = 3
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "docs/_claims/docs/sdk-guide.md.toml"
+literal = "experimently"
+count = 3
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "docs/getting-started/faq.md"
+literal = "experimently"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "docs/_claims/docs/getting-started/faq.md.toml"
+literal = "experimently"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "docs/getting-started/python-virtual-env-setup.md"
+literal = "experimently"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "docs/_claims/docs/getting-started/python-virtual-env-setup.md.toml"
+literal = "experimently"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "pyproject.toml"
+literal = "experimently"
+count = 2
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "backend/app/core/version.py"
+literal = "experimently"
+count = 1
+reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
+
+[[keep]]
+path = "modules/backend/app/services/warehouse_runner.py"
+literal = "experimently.warehouse.runs"
+count = 1
+reason = "K4: advisory-lock name"
+
+[[keep]]
+path = "modules/backend/tests/unit/test_cross_version_identifiers_modules.py"
+literal = "experimently.warehouse.runs"
+count = 1
+reason = "K4: advisory-lock name"
+
+[[keep]]
+path = "modules/backend/tests/unit/test_cross_version_identifiers_modules.py"
+literal = "experimently.sso"
+count = 1
+reason = "K7: the SSO session storage key"
+
+[[keep]]
+path = "modules/frontend/src/services/sso.ts"
+literal = "experimently.sso"
+count = 2
+reason = "K7: the SSO session storage key"
+
+[[keep]]
+path = "modules/backend/app/services/sso_service.py"
+literal = "__Host-experimently_oidc"
+count = 1
+reason = "K7: the OIDC state cookie"
+
+[[keep]]
+path = "modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py"
+literal = "__Host-experimently_oidc"
+count = 1
+reason = "K7: the OIDC state cookie"
+
+[[keep]]
+path = "modules/backend/tests/unit/test_cross_version_identifiers_modules.py"
+literal = "__Host-experimently_oidc"
+count = 1
+reason = "K7: the OIDC state cookie"
+
+[[keep]]
+path = "modules/backend/app/services/sso_service.py"
+literal = "experimently:oidc-state"
+count = 2
+reason = "K7: HMAC tag and JWT audience of an in-flight SSO login"
+
+[[keep]]
+path = "modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py"
+literal = "experimently:oidc-state"
+count = 1
+reason = "K7: HMAC tag and JWT audience of an in-flight SSO login"
+
+[[keep]]
+path = "modules/backend/tests/unit/services/test_sso_service.py"
+literal = "experimently:oidc-state"
+count = 1
+reason = "K7: HMAC tag and JWT audience of an in-flight SSO login"
+
+[[keep]]
+path = "modules/backend/tests/unit/test_cross_version_identifiers_modules.py"
+literal = "experimently:oidc-state"
+count = 2
+reason = "K7: HMAC tag and JWT audience of an in-flight SSO login"
+
+[[keep]]
+path = "modules/backend/app/services/sso_service.py"
+literal = "experimently:sso-handoff"
+count = 2
+reason = "K7: HMAC tag and JWT audience of an in-flight SSO handoff"
+
+[[keep]]
+path = "modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py"
+literal = "experimently:sso-handoff"
+count = 1
+reason = "K7: HMAC tag and JWT audience of an in-flight SSO handoff"
+
+[[keep]]
+path = "modules/backend/tests/unit/test_cross_version_identifiers_modules.py"
+literal = "experimently:sso-handoff"
+count = 2
+reason = "K7: HMAC tag and JWT audience of an in-flight SSO handoff"
+
+[[keep]]
+path = "modules/backend/app/api/v1/endpoints/integrations.py"
+literal = "X-Experimently-Webhook-Secret"
+count = 2
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "modules/backend/app/services/integrations/jira_service.py"
+literal = "X-Experimently-Webhook-Secret"
+count = 1
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "modules/backend/app/services/integrations/salesforce_service.py"
+literal = "X-Experimently-Webhook-Secret"
+count = 1
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "modules/backend/app/services/integrations/webhook_auth.py"
+literal = "X-Experimently-Webhook-Secret"
+count = 2
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "modules/backend/tests/integration/api/test_integrations_api.py"
+literal = "X-Experimently-Webhook-Secret"
+count = 2
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "modules/backend/tests/unit/api/test_integrations_api.py"
+literal = "X-Experimently-Webhook-Secret"
+count = 1
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "modules/backend/tests/unit/services/test_jira_service.py"
+literal = "X-Experimently-Webhook-Secret"
+count = 1
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "modules/backend/tests/unit/services/test_salesforce_service.py"
+literal = "X-Experimently-Webhook-Secret"
+count = 1
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "modules/backend/tests/unit/test_cross_version_identifiers_modules.py"
+literal = "X-Experimently-Webhook-Secret"
+count = 1
+reason = "K8: the header Jira and Salesforce senders are configured with"
+
+[[keep]]
+path = "modules/backend/app/services/sso_service.py"
+literal = "https://experimently.example.com"
+count = 4
+reason = "K9: the SAML defaults an operator may have registered in their IdP"
+
+[[keep]]
+path = "modules/backend/app/settings.py"
+literal = "https://experimently.example.com"
+count = 2
+reason = "K9: the SAML defaults an operator may have registered in their IdP"
+
+[[keep]]
+path = "modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py"
+literal = "https://experimently.example.com"
+count = 2
+reason = "K9: the SAML defaults an operator may have registered in their IdP"
+
+[[keep]]
+path = "modules/backend/app/services/warehouse_runner.py"
+literal = "experimently.warehouse.results/v1"
+count = 1
+reason = "K10: persisted schema id"
+
+[[keep]]
+path = "modules/backend/tests/unit/test_cross_version_identifiers_modules.py"
+literal = "experimently.warehouse.results/v1"
+count = 1
+reason = "K10: persisted schema id"
+
+[[keep]]
+path = "modules/frontend/src/tests/warehouse-runs/fixtures.ts"
+literal = "experimently.warehouse.results/v1"
+count = 1
+reason = "K10: persisted schema id"
+
+[[keep]]
+path = "modules/backend/app/services/warehouse_sufficient_stats.py"
+literal = "experimently.warehouse.sufficient_statistics/v2"
+count = 1
+reason = "K10: persisted schema id"
+
+[[keep]]
+path = "modules/backend/tests/unit/test_cross_version_identifiers_modules.py"
+literal = "experimently.warehouse.sufficient_statistics/v2"
+count = 1
+reason = "K10: persisted schema id"
+
+[[keep]]
+path = "modules/backend/app/warehouse/bigquery.py"
+literal = "\"experimently\": \"analysis\""
+count = 1
+reason = "K11: the BigQuery job label customers' billing filters on"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/recorded/bigquery/dry_run_select.json"
+literal = "\"experimently\": \"analysis\""
+count = 1
+reason = "K11: the BigQuery job label customers' billing filters on"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/recorded/bigquery/insert_running.json"
+literal = "\"experimently\": \"analysis\""
+count = 1
+reason = "K11: the BigQuery job label customers' billing filters on"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/recorded/bigquery/job_done.json"
+literal = "\"experimently\": \"analysis\""
+count = 1
+reason = "K11: the BigQuery job label customers' billing filters on"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/recorded/bigquery/real_job_access_denied.json"
+literal = "\"experimently\": \"analysis\""
+count = 1
+reason = "K11: the BigQuery job label customers' billing filters on"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/recorded/bigquery/real_job_bytes_billed_limit.json"
+literal = "\"experimently\": \"analysis\""
+count = 1
+reason = "K11: the BigQuery job label customers' billing filters on"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/test_bigquery.py"
+literal = "\"experimently\": \"analysis\""
+count = 1
+reason = "K11: the BigQuery job label customers' billing filters on"
+
+[[keep]]
+path = "modules/backend/app/warehouse/snowflake.py"
+literal = "experimently-analysis"
+count = 1
+reason = "K11: the Snowflake query tag"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/test_snowflake.py"
+literal = "experimently-analysis"
+count = 1
+reason = "K11: the Snowflake query tag"
+
+[[keep]]
+path = "modules/backend/app/warehouse/bigquery.py"
+literal = "\"experimently_\""
+count = 1
+reason = "K11: the BigQuery job id prefix"
+
+[[keep]]
+path = "modules/backend/tests/integration/warehouse/test_bigquery_run.py"
+literal = "\"experimently_\""
+count = 1
+reason = "K11: the BigQuery job id prefix"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/test_bigquery.py"
+literal = "experimently_job1"
+count = 4
+reason = "K11: a job id with the kept prefix"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/test_bigquery.py"
+literal = "experimently_slow"
+count = 2
+reason = "K11: a job id with the kept prefix"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/test_bigquery.py"
+literal = "experimently_lost"
+count = 2
+reason = "K11: a job id with the kept prefix"
+
+[[keep]]
+path = "modules/backend/tests/unit/warehouse/test_live_check_harness.py"
+literal = "experimently_abc"
+count = 1
+reason = "K11: a job id with the kept prefix"
+
+[[keep]]
+path = "modules/infrastructure/cdk/stacks/dynamodb_counters_stack.py"
+literal = "\"Service\", \"experimently\""
+count = 1
+reason = "K15: cost-report tag"
+
+[[keep]]
+path = "modules/infrastructure/cdk/stacks/glue_etl_stack.py"
+literal = "\"Project\": \"experimently\""
+count = 3
+reason = "K15: cost-report tag"

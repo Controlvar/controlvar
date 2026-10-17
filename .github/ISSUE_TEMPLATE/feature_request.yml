@@ -1,5 +1,5 @@
 name: ✨ Feature request
-description: Suggest a capability Experimently does not have.
+description: Suggest a capability Controlvar does not have.
 labels: ["enhancement", "needs-triage"]
 body:
   - type: markdown

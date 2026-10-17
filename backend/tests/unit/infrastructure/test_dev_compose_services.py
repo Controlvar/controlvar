@@ -193,7 +193,7 @@ def test_a_demo_app_is_built_with_the_key_its_seed_creates(services, app):
     that started without it) makes the key in the image valid, with no rebuild.
     """
     variable = f"{app.upper()}_API_KEY"
-    baked = services[app]["build"]["args"]["NEXT_PUBLIC_EXPERIMENTLY_API_KEY"]
+    baked = services[app]["build"]["args"]["NEXT_PUBLIC_CONTROLVAR_API_KEY"]
     assert baked.startswith("${" + variable + ":-eptk_demo_"), baked
     assert services["api"]["environment"][variable] == baked
     seed = (REPO_ROOT / "backend" / "scripts" / f"seed_{app}.py").read_text(
@@ -217,3 +217,10 @@ def test_the_profiles_add_what_the_guide_says(services):
             "streampulse-simulator",
         },
     }
+
+
+def test_the_project_name_follows_the_checkout_directory():
+    """No `name:`: compose takes the project, and so the volume names, from the
+    directory of the checkout. The upgrade note says what that means for a clone
+    made under the new name."""
+    assert "name" not in yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))

@@ -29,8 +29,8 @@ def test_the_chart_sets_the_schema_from_postgresql_schema():
     deployment = (CHART / "templates" / "api-deployment.yaml").read_text()
     refs = re.findall(r"- configMapRef:\n\s+name: (.+?)\s*$", deployment, re.M)
     assert refs == ["{{ $fullname }}-config", "{{ $fullname }}-config"], refs
-    assert '$fullname := include "experimently.fullname" .' in deployment
-    assert 'name: {{ include "experimently.fullname" . }}-config' in template
+    assert '$fullname := include "controlvar.fullname" .' in deployment
+    assert 'name: {{ include "controlvar.fullname" . }}-config' in template
     # Nothing else in the chart names the variable, so no container's own
     # `env:` overrides what the configuration map gives it.
     named = sorted(

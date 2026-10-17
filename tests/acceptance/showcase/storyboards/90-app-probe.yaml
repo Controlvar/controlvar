@@ -24,11 +24,11 @@ scenes:
     open: /
     beats:
       - cue: The storefront's experiments were seeded off camera.
-        focus: {role: button, name: Powered by Experimently, exact: true}
+        focus: {role: button, name: Powered by Controlvar, exact: true}
         steps:
-          - move: {role: button, name: Powered by Experimently, exact: true}
+          - move: {role: button, name: Powered by Controlvar, exact: true}
         exit:
-          - click: {role: button, name: Powered by Experimently, exact: true}
+          - click: {role: button, name: Powered by Controlvar, exact: true}
 
       - before:
           - wait_for: {role: heading, name: Experiments, exact: true}
@@ -72,9 +72,9 @@ scenes:
     open: /
     beats:
       - cue: The streaming app's flags were seeded off camera.
-        focus: {role: heading, name: Powered by Experimently, exact: true}
+        focus: {role: heading, name: Powered by Controlvar, exact: true}
         steps:
-          - look: {role: heading, name: Powered by Experimently, exact: true}
+          - look: {role: heading, name: Powered by Controlvar, exact: true}
             ms: 2500
           - look: {text: Feature flags, exact: true}
             ms: 2000

@@ -234,7 +234,7 @@ def test_the_report_names_the_card_as_the_journeys_guide(tmp_path):
     )
     run = report.GuideRun("first-run", CARD, CARD, "x", records=(record,))
     sha = "c6e0f081d82f1a858e111c86db62aa5d8b8a71d4"
-    link = "https://github.com/getexperimently/experimently/actions/runs/18000000003"
+    link = "https://github.com/Controlvar/controlvar/actions/runs/18000000003"
     written = report.guide_markdown(
         run, tmp_path, date="2026-10-13", sha=sha, run_link=link
     )

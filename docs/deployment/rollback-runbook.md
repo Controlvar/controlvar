@@ -1,10 +1,10 @@
-# Rollback Runbook — Experimently
+# Rollback Runbook — Controlvar
 
 **Audience:** On-call Engineers
 **Measured:** on 2026-10-11 (UTC), on a staging account, the Rollback job took 5 min
 56 s once approved: the API was verified on the previous revision after 3 min
 27 s, and the dashboard 2 min 27 s later
-([run](https://github.com/getexperimently/experimently/actions/runs/38098724258)).
+([run](https://github.com/Controlvar/controlvar/actions/runs/38098724258)).
 
 Every command below is written for either environment. Set this first, in the
 shell you will paste into. The line names `prod`; to rehearse, or to roll back
@@ -355,7 +355,7 @@ Read the PRIMARY task set's counts, not the service's
 `runningCount`: for the hour after a shift the replaced task set keeps
 running beside the new one, so the service counts both (on staging on
 2026-10-04 (UTC) it counted 4 tasks of 2 desired after a rollback that had worked:
-[#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5982176639)). This is a
+[#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-5982176639)). This is a
 **blue/green** deployment, not a rolling update: a second (green) task set is
 provisioned alongside the current one and traffic moves to it in one shift, so
 `Serving` changes from the old revision to the new one at once rather than
@@ -438,7 +438,7 @@ aws deploy stop-deployment --deployment-id d-XXXXXXXXX --auto-rollback-enabled
 
 On a staging account on 2026-10-03 (UTC), stopping the in-flight deployment
 returned the API both times it was tried
-([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5971647359)).
+([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-5971647359)).
 Run the list again until it prints nothing, then go on.
 
 **Step 3.** Deploy the previous task definition through CodeDeploy.
@@ -555,7 +555,7 @@ curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' "https://app.<domain>/
 **Alarms watch the API while a deployment is active.** The deployment group
 has two alarms, `experimentation-api-5xx-blue-$ENV` and
 `experimentation-api-5xx-green-$ENV`, one per target group
-([#148](https://github.com/getexperimently/experimently/issues/148)). While
+([#148](https://github.com/Controlvar/controlvar/issues/148)). While
 either is in ALARM during a deployment -- its canary, and the hour after its
 traffic shift -- CodeDeploy stops the deployment and rolls the API back to the
 previous revision by itself: see
@@ -564,9 +564,9 @@ against the API when its target group answers at least 5 target 5xx and at
 least 5% of its requests with a 5xx; two such minutes of three fire the alarm.
 On a staging account on 2026-10-03 (UTC), CodeDeploy stopped and reverted an API deployment
 when an alarm went into ALARM
-([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5971647359)),
+([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-5971647359)),
 and on 2026-10-11 (UTC) an alarm did the same in the hour after the traffic shift
-([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)).
+([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399595)).
 
 What the alarms do not cover, so **Method 1 is the response**:
 
@@ -585,7 +585,7 @@ is refused until it is no longer active: about an hour, because the deployment
 group's 60-minute termination wait applies to every deployment in the group,
 Rollback's included. On a staging account on 2026-10-11 (UTC), the Rollback run's
 deployment stayed active for about an hour after its traffic shift
-([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)).
+([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399595)).
 
 **When CodeDeploy does roll back by itself:**
 - one of the two 5xx alarms is in ALARM while the deployment is active (above);
@@ -695,7 +695,7 @@ ALARM is printed as a warning instead, and the deploy goes on unwatched.
 not unblock a deploy: expected, and not rehearsed on AWS as of v0.31.1. CodeDeploy reads the alarms' state, not their actions,
 and a state set by hand lasts only until the next evaluation: on staging on
 2026-10-11 (UTC) the alarm was back to OK within two minutes
-([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595)).
+([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399595)).
 
 To see which alarm is firing, and since when:
 
@@ -810,7 +810,7 @@ renames the restored cluster onto the stack's identifier and the original out
 of it, so the endpoint the tasks carry reaches the restored database with
 nothing redeployed, and it checks the password and the endpoint before the API
 starts. It was rehearsed on a staging account on 2026-10-11 (UTC): a restore, a
-cutover, and a cutover undone ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)).
+cutover, and a cutover undone ([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399822)).
 [Restore from PITR](disaster-recovery.md#restore-from-pitr-preferred)
 in the Disaster Recovery Plan gives it step by step, with what it cannot do.
 
@@ -850,7 +850,7 @@ revision it already serves, with the task count and scaling it had. Before the
 next deploy, change the release: a deploy of the release that contains the
 migration runs it again.
 
-**RTO: on 2026-10-11 (UTC), on a staging database holding little data, the restore took 11 min 41 s and the cutover took the API down for 12 min 45 s ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)); a larger database restores more slowly. The recovery point is the time you restore to.**
+**RTO: on 2026-10-11 (UTC), on a staging database holding little data, the restore took 11 min 41 s and the cutover took the API down for 12 min 45 s ([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399822)); a larger database restores more slowly. The recovery point is the time you restore to.**
 
 ---
 

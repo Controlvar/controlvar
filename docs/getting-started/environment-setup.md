@@ -1,6 +1,6 @@
 # Environment Configuration Setup Guide
 
-This guide explains how to set up the environment configuration for Experimently.
+This guide explains how to set up the environment configuration for Controlvar.
 
 ## Overview
 
@@ -56,7 +56,7 @@ Set `REDIS_PASSWORD` as well if your Redis requires one; the local stack's does 
 
 #### Application Settings
 ```dotenv
-PROJECT_NAME="Experimently"
+PROJECT_NAME="Controlvar"
 ENVIRONMENT=development
 LOG_LEVEL=DEBUG
 ```

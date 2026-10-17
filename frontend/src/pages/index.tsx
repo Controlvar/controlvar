@@ -72,7 +72,7 @@ export default function HomePage() {
             </Link>
             {marketing ? (
               <a
-                href="https://github.com/getexperimently/experimently"
+                href="https://github.com/Controlvar/controlvar"
                 className="rounded-md bg-blue-600 px-3.5 py-1.5 font-medium text-white hover:bg-blue-700"
               >
                 Source
@@ -94,7 +94,7 @@ export default function HomePage() {
               A/B testing and feature flags you run yourself.
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-relaxed text-slate-600">
-              Experimently is an open-source experimentation platform: experiments, feature
+              Controlvar is an open-source experimentation platform: experiments, feature
               flags, targeting rules and statistics, deployed on your own infrastructure so
               the assignment data never leaves it.
             </p>
@@ -177,8 +177,8 @@ export default function HomePage() {
               database created and seeded on the way up.
             </p>
             <pre className="mt-5 overflow-x-auto rounded-lg bg-slate-900 p-5 text-sm leading-relaxed text-slate-100">
-              <code>{`git clone https://github.com/getexperimently/experimently.git
-cd experimently
+              <code>{`git clone https://github.com/Controlvar/controlvar.git
+cd controlvar
 docker compose up -d --wait`}</code>
             </pre>
             <p className="mt-4 text-sm text-slate-500">
@@ -214,7 +214,7 @@ docker compose up -d --wait`}</code>
                 Docs
               </Link>
               <a
-                href="https://github.com/getexperimently/experimently"
+                href="https://github.com/Controlvar/controlvar"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-slate-900"

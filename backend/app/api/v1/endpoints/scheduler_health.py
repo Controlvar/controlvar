@@ -108,7 +108,7 @@ def send_test_notification(
     notification_service = NotificationService()
     test_event = NotificationEvent(
         event_type="test",
-        message="This is a test notification from the Experimently scheduler.",
+        message="This is a test notification from the Controlvar scheduler.",
         timestamp=datetime.now(timezone.utc).isoformat(),
         metadata={"triggered_by": str(current_user.id)},
     )

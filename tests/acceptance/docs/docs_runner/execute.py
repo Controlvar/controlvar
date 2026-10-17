@@ -957,6 +957,10 @@ class JourneyRunner:
             install=install,
             source=source,
             secrets_env={
+                # Both names: the pages under test are the deployed site's, which
+                # may predate the rename of these variables.
+                "CONTROLVAR_API_URL": running.api_url.rstrip("/"),
+                "CONTROLVAR_API_KEY": key,
                 "EXPERIMENTLY_API_URL": running.api_url.rstrip("/"),
                 "EXPERIMENTLY_API_KEY": key,
             },

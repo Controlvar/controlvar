@@ -33,8 +33,8 @@ if str(SCRIPTS) not in sys.path:
 import synthetic_report as sr
 
 NOW = dt.datetime(2026, 10, 8, 12, 0, tzinfo=dt.timezone.utc)
-REPO = "getexperimently/experimently"
-RUN_LINK = "https://github.com/getexperimently/experimently/actions/runs/37456943999"
+REPO = "Controlvar/controlvar"
+RUN_LINK = "https://github.com/Controlvar/controlvar/actions/runs/37456943999"
 ENV = {"GITHUB_REPOSITORY": REPO, "GITHUB_RUN_ID": "37456943999"}
 TITLE = "Synthetic check (staging) is red"
 BOT = {"login": "github-actions"}

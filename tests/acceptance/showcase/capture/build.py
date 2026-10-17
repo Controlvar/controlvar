@@ -367,4 +367,4 @@ def build_app(
     status = spawn(app_build_argv(tree, app), cwd=app_dir(tree, app), env=env, log=log)
     if status != 0:
         raise BuildError(f"next build of {app} exited {status}; see {log}")
-    return app_bundle_check(tree, app, env["NEXT_PUBLIC_EXPERIMENTLY_API_URL"])
+    return app_bundle_check(tree, app, env["NEXT_PUBLIC_CONTROLVAR_API_URL"])

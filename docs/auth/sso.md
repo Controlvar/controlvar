@@ -6,7 +6,7 @@
 The `sso` module adds Single Sign-On (SSO) through OpenID Connect (OIDC) and OAuth 2 providers; it is part of the full profile and, like every module, Apache-2.0. An administrator creates one **SSO configuration** per email domain; users of that domain then sign in through the identity provider (IdP) instead of with a password.
 
 SSO sign-in needs `AUTH_PROVIDER=local`. When `AUTH_PROVIDER` is `cognito`, an SSO sign-in does
-not sign the user in ([#707](https://github.com/getexperimently/experimently/issues/707)).
+not sign the user in ([#707](https://github.com/Controlvar/controlvar/issues/707)).
 
 !!! warning "SAML 2.0 sign-in is not available yet; use OIDC"
     A SAML configuration can be created, and its metadata and ACS are served, but a SAML sign-in does not give the user a session. Use an OIDC configuration (`okta`, `google` or `github`) for sign-in.
@@ -200,10 +200,10 @@ curl -X POST https://app.example.com/api/v1/auth/sso/configs \
     "org_domain": "acme.com",
     "provider_type": "saml",
     "entity_id": "http://www.okta.com/exk1234567890",
-    "sso_url": "https://acme.okta.com/app/acme_experimently/exk1234567890/sso/saml",
+    "sso_url": "https://acme.okta.com/app/acme_controlvar/exk1234567890/sso/saml",
     "x509_certificate": "MIIC...",
     "role_mapping": {
-      "experimently-admins": "admin",
+      "controlvar-admins": "admin",
       "developers": "developer",
       "analysts": "analyst"
     }
@@ -301,7 +301,7 @@ The `role_mapping` field maps the group names the IdP sends to platform roles.
 ```json
 {
   "role_mapping": {
-    "experimently-admins": "admin",
+    "controlvar-admins": "admin",
     "developers":          "developer",
     "data-analysts":       "analyst",
     "contractors":         "viewer"

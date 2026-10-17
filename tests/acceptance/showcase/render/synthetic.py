@@ -110,7 +110,7 @@ def page_html(
         ".key{margin-top:28px;font-size:18px;color:#334155}"
         ".planted{margin-top:24px;font-family:ui-monospace,Menlo,monospace;font-size:18px}"
         "</style></head><body>"
-        "<header><b>Experimently</b><span>Experiments</span><span>Feature Flags</span><span>Admin</span></header>"
+        "<header><b>Controlvar</b><span>Experiments</span><span>Feature Flags</span><span>Admin</span></header>"
         f"<main><h1>Experiments</h1><div class='sub'>Step {step + 1}: four experiments in the demo data</div>"
         f"<table>{rows}</table><div class='key'>API key eptk_ab12… created today</div>{planted}</main>"
         "</body></html>"

@@ -6,7 +6,7 @@
  *   platform   what a self-hoster runs. The dashboard, behind authentication,
  *              against their own API. This is the default, because it is the
  *              product.
- *   marketing  the public site at getexperimently.com. Static, no API behind
+ *   marketing  the public site at controlvar.com. Static, no API behind
  *              it, and there is no hosted tier -- the homepage says so.
  *
  * WHY THIS EXISTS. The marketing build shipped the whole dashboard:
@@ -34,7 +34,7 @@ export const SITE_MODE: SiteMode =
   process.env.NEXT_PUBLIC_SITE_MODE === 'marketing' ? 'marketing' : 'platform';
 
 /** The public site's contact address, shown in the homepage footer and on /privacy. */
-export const CONTACT_EMAIL = 'hello@getexperimently.com';
+export const CONTACT_EMAIL = 'hello@controlvar.com';
 
 export const isMarketingSite = (): boolean => SITE_MODE === 'marketing';
 

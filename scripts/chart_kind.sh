@@ -50,7 +50,7 @@ REPO_ROOT=$(pwd)
 
 PROFILE=${PROFILE:?PROFILE must be core or full}
 CLUSTER=${KIND_CLUSTER:-chart-kind}
-HOST=${KIND_HOST:-experimently.kind.test}
+HOST=${KIND_HOST:-controlvar.kind.test}
 WORK=${CHART_KIND_WORK:-${RUNNER_TEMP:-/tmp}/chart-kind-$PROFILE}
 GUIDE=docs/self-hosting/kubernetes.md
 GUIDE_BLOCKS=secrets,install,first-admin,upgrade
@@ -61,8 +61,8 @@ RELEASE=experimently
 SECRET=experimently-secrets
 ADMIN=admin@example.com
 DRY_RUN_NS=chart-kind-dry-run
-API_REPO=ghcr.io/getexperimently/experimently
-WEB_REPO=ghcr.io/getexperimently/experimently-web
+API_REPO=ghcr.io/controlvar/controlvar
+WEB_REPO=ghcr.io/controlvar/controlvar-web
 
 mkdir -p "$WORK"
 TIMINGS="$WORK/timings.tsv"
@@ -191,10 +191,10 @@ do_dry_run() {
         --show-only templates/ingress.yaml >"$WORK/ingress.yaml"
     local bad expect
     for bad in '10.0.0.5|must be a DNS name, not an IP address' \
-        'experimently.example.com:8080|a lowercase RFC 1123 subdomain'; do
+        'controlvar.example.com:8080|a lowercase RFC 1123 subdomain'; do
         expect=${bad#*|}
         bad=${bad%%|*}
-        sed "s/host: \"experimently.example.com\"/host: \"$bad\"/" "$WORK/ingress.yaml" >"$WORK/bad-ingress.yaml"
+        sed "s/host: \"controlvar.example.com\"/host: \"$bad\"/" "$WORK/ingress.yaml" >"$WORK/bad-ingress.yaml"
         grep -qF "host: \"$bad\"" "$WORK/bad-ingress.yaml" ||
             fail "could not plant host $bad in the rendered Ingress"
         if server_dry_run "$WORK/bad-ingress.yaml" "$WORK/bad.log"; then

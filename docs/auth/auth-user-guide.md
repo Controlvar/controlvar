@@ -1,6 +1,6 @@
 # Authentication User Guide
 
-This guide explains how to use the authentication features of Experimently, including registration, login, password management, and security best practices.
+This guide explains how to use the authentication features of Controlvar, including registration, login, password management, and security best practices.
 
 !!! note "Cognito only"
     The password-reset and token-refresh endpoints (`POST /api/v1/auth/forgot-password`,
@@ -21,7 +21,7 @@ Only with `COGNITO_SELF_SIGNUP_ENABLED=true` and a user pool that allows self si
 
 ### Registration Requirements
 
-To create an account on Experimently, you will need to provide:
+To create an account on Controlvar, you will need to provide:
 
 - **Username**: 3 to 50 characters
 - **Email**: A valid email address you can access for verification
@@ -146,7 +146,7 @@ When making API requests, include the access token in the Authorization header:
 ```javascript
 // Example of an authenticated API request using fetch
 async function fetchExperiments() {
-  const response = await fetch('https://api.experimently.example.com/api/v1/experiments', {
+  const response = await fetch('https://api.controlvar.example.com/api/v1/experiments', {
     method: 'GET',
     headers: {
       'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
@@ -167,7 +167,7 @@ Under `cognito`, when your access token expires, use the refresh token to get a 
 async function refreshTokens() {
   const refreshToken = localStorage.getItem('refreshToken');
   
-  const response = await fetch('https://api.experimently.example.com/api/v1/auth/refresh', {
+  const response = await fetch('https://api.controlvar.example.com/api/v1/auth/refresh', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'

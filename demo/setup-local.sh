@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Experimently — Local Demo Bootstrap
+# Controlvar — Local Demo Bootstrap
 # Usage: ./demo/setup-local.sh
 # =============================================================================
 set -euo pipefail
@@ -26,7 +26,7 @@ err()  { echo -e "${RED}[demo] ERROR:${NC} $*" >&2; }
 # ---------------------------------------------------------------------------
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}║  Experimently Demo — Local Setup              ║${NC}"
+echo -e "${BOLD}║  Controlvar Demo — Local Setup                ║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -346,7 +346,7 @@ ok "Simulator PID: $(cat "$DEMO_DIR/.pids/simulator.pid")"
 # ---------------------------------------------------------------------------
 echo ""
 echo -e "${GREEN}${BOLD}╔════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}${BOLD}║  Experimently Demo — Ready!                    ║${NC}"
+echo -e "${GREEN}${BOLD}║  Controlvar Demo — Ready!                      ║${NC}"
 echo -e "${GREEN}${BOLD}║                                                ║${NC}"
 echo -e "${GREEN}${BOLD}║  Frontend:    http://localhost:3100            ║${NC}"
 if [[ "$SHOPLAB_STARTED" == "1" ]]; then

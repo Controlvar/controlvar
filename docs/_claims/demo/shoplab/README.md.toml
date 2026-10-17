@@ -4,18 +4,18 @@
 document = "demo/shoplab/README.md"
 
 [[unit]]
-text = "ShopLab — demo storefront for Experimently"
+text = "ShopLab — demo storefront for Controlvar"
 by = ["exempt:label"]
 
 [[unit]]
-text = "ShopLab is a small e-commerce storefront (Next.js 16, pages router, Tailwind) whose every page runs a real experiment or feature flag through the Experimently platform via the React SDK."
+text = "ShopLab is a small e-commerce storefront (Next.js 16, pages router, Tailwind) whose every page runs a real experiment or feature flag through the Controlvar platform via the React SDK."
 by = [
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_is_next_16_on_the_pages_router_with_tailwind",
     "journey:demo-shoplab#panel",
 ]
 
 [[unit]]
-text = "It exists to show the platform: open the storefront, click around, watch the \"Powered by Experimently\" panel, then open the dashboard and see the same visitor, the same variants and the same events turn into statistics."
+text = "It exists to show the platform: open the storefront, click around, watch the \"Powered by Controlvar\" panel, then open the dashboard and see the same visitor, the same variants and the same events turn into statistics."
 by = [
     "journey:demo-shoplab#storefront",
     "journey:demo-shoplab#panel",
@@ -92,7 +92,7 @@ by = [
 ]
 
 [[unit]]
-text = "The bottom-right Powered by Experimently panel shows the visitor id, the variant for each of the four experiments, both flags, the last 8 tracked events, a \"New visitor\" button (new id + reload → fresh assignments) and a link to the dashboard."
+text = "The bottom-right Powered by Controlvar panel shows the visitor id, the variant for each of the four experiments, both flags, the last 8 tracked events, a \"New visitor\" button (new id + reload → fresh assignments) and a link to the dashboard."
 by = ["journey:demo-shoplab#panel"]
 
 [[unit]]
@@ -108,7 +108,7 @@ text = "Running it"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Prerequisites: the Experimently backend on http://localhost:8000, the dashboard on http://localhost:3100, Node 20.9 or later (Next.js 16 refuses older versions), and the repo's Python venv."
+text = "Prerequisites: the Controlvar backend on http://localhost:8000, the dashboard on http://localhost:3100, Node 20.9 or later (Next.js 16 refuses older versions), and the repo's Python venv."
 by = [
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_is_next_16_on_the_pages_router_with_tailwind",
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard",
@@ -138,7 +138,7 @@ text = "backend/scripts/seed_shoplab.py is idempotent."
 by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_a_second_shoplab_seed_run_adds_no_experiment_or_flag"]
 
 [[unit]]
-text = "It writes the key to demo/shoplab/.api_key and the NEXT_PUBLIC_EXPERIMENTLY_API_KEY line into demo/shoplab/.env.local."
+text = "It writes the key to demo/shoplab/.api_key and the NEXT_PUBLIC_CONTROLVAR_API_KEY line into demo/shoplab/.env.local."
 by = [
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_key_files_go_to_the_apps_folder_unless_the_variable_moves_them",
@@ -176,19 +176,26 @@ text = "Setting | Value"
 by = ["exempt:label"]
 
 [[unit]]
-text = "NEXT_PUBLIC_EXPERIMENTLY_API_URL | defaults to http://localhost:8000"
+text = "NEXT_PUBLIC_CONTROLVAR_API_URL | defaults to http://localhost:8000"
 by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard"]
 
 [[unit]]
-text = "NEXT_PUBLIC_EXPERIMENTLY_API_KEY | the plaintext key for shoplab-storefront, written by the seed"
+text = "NEXT_PUBLIC_CONTROLVAR_API_KEY | the plaintext key for shoplab-storefront, written by the seed"
 by = [
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard",
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
 ]
 
 [[unit]]
-text = "NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL | defaults to http://localhost:3100"
+text = "NEXT_PUBLIC_CONTROLVAR_DASHBOARD_URL | defaults to http://localhost:3100"
 by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard"]
+
+[[unit]]
+text = "Each is still read under its name before the project was renamed (NEXT_PUBLIC_EXPERIMENTLY_API_URL and so on) when the new name is not set."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_defaults_to_the_local_api_and_dashboard",
+    "test:demo/shoplab/src/__tests__/env.test.ts::reads the name before the rename when the new one is not set",
+]
 
 [[unit]]
 text = "3."
@@ -402,7 +409,7 @@ text = "Symptom | Cause / fix"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Panel shows error for every experiment; network tab shows 401 | Wrong or missing NEXT_PUBLIC_EXPERIMENTLY_API_KEY. Re-run the seed script (it rewrites .env.local and .api_key), then restart npm run dev (env vars are read at startup)."
+text = "Panel shows error for every experiment; network tab shows 401 | Wrong or missing NEXT_PUBLIC_CONTROLVAR_API_KEY. Re-run the seed script (it rewrites .env.local and .api_key), then restart npm run dev (env vars are read at startup)."
 by = [
     "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key",
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
@@ -425,7 +432,7 @@ by = [
 ]
 
 [[unit]]
-text = "Every visitor is control and nothing loads | Backend not running on NEXT_PUBLIC_EXPERIMENTLY_API_URL. Start it from the repository root: ENVIRONMENT=development uvicorn backend.app.main:app --reload."
+text = "Every visitor is control and nothing loads | Backend not running on NEXT_PUBLIC_CONTROLVAR_API_URL. Start it from the repository root: ENVIRONMENT=development uvicorn backend.app.main:app --reload."
 by = ["test:sdk/react/src/__tests__/useExperiment.test.tsx::sets error and keeps the control defaults on network failure"]
 
 [[unit]]

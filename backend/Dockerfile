@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # =========================================================================
-# Experimently API image.
+# Controlvar API image.
 #
 # Build context is the REPOSITORY ROOT (the code imports `backend.app.*`):
 #
@@ -79,14 +79,14 @@ ARG GIT_COMMIT
 # reads like a release.
 ARG VERSION=0.0.0+unknown
 
-LABEL org.opencontainers.image.title="Experimently API" \
-      org.opencontainers.image.description="FastAPI backend for the Experimently experimentation platform" \
+LABEL org.opencontainers.image.title="Controlvar API" \
+      org.opencontainers.image.description="FastAPI backend for the Controlvar experimentation platform" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.revision="${GIT_COMMIT}" \
       org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.source="https://github.com/getexperimently/experimently" \
-      org.opencontainers.image.url="https://github.com/getexperimently/experimently"
+      org.opencontainers.image.source="https://github.com/Controlvar/controlvar" \
+      org.opencontainers.image.url="https://github.com/Controlvar/controlvar"
 
 # The profile is NOT a build argument: it is the target you build. `core` and
 # `full` below each set EXPERIMENTLY_PROFILE and the profile label for

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Experimently contributors
+# SPDX-FileCopyrightText: 2026 The Controlvar authors
 # SPDX-License-Identifier: Apache-2.0
 """Whose X-Forwarded-* the server believes (#237).
 

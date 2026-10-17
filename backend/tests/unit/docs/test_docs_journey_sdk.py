@@ -50,6 +50,13 @@ from docs_runner.model import Journey, Step
 
 TODAY = datetime.date(2026, 10, 7)
 KEY = "eptk_Fake0KeyForTheUnitJob9876543210abcdef"
+#: What execute.py gives a block: the key and the address under both names.
+SECRETS_ENV = {
+    "CONTROLVAR_API_URL": "http://api",
+    "CONTROLVAR_API_KEY": KEY,
+    "EXPERIMENTLY_API_URL": "http://api",
+    "EXPERIMENTLY_API_KEY": KEY,
+}
 
 PAGE = """# Sample SDK
 
@@ -594,7 +601,7 @@ def _run(fake: FakeCommands, install: sdk.Install = NPM) -> sdk.Outcome:
         language="typescript" if install.tool == "npm" else "python",
         install=install,
         source="the program\n",
-        secrets_env={"EXPERIMENTLY_API_URL": "http://api", "EXPERIMENTLY_API_KEY": KEY},
+        secrets_env=SECRETS_ENV,
         redact=redactor.redact,
         run_command=fake,
         python="/usr/bin/python3",
@@ -665,9 +672,10 @@ def test_only_the_block_is_given_the_key_and_nothing_else_is_inherited(monkeypat
         assert env["PIP_INDEX_URL"] == sdk.PYPI_INDEX
         assert env["PIP_CONFIG_FILE"] == os.devnull
         assert Path(env["HOME"]) == call["cwd"].parent
-    keyed = [c for c in fake.calls if "EXPERIMENTLY_API_KEY" in c["env"]]
+    keyed = [c for c in fake.calls if set(SECRETS_ENV) & set(c["env"])]
     assert [c["argv"][-1] for c in keyed] == ["quick_start.py"]
-    assert keyed[0]["env"]["EXPERIMENTLY_API_KEY"] == KEY
+    for name, value in SECRETS_ENV.items():
+        assert keyed[0]["env"][name] == value, name
 
 
 def test_the_directory_is_removed_when_the_step_ends():
@@ -935,8 +943,12 @@ def test_the_step_passes_when_every_answer_is_the_oracles(
     assert "'exp_key'" in written["program"] and f"'{ON}'" in written["program"]
     assert "'http://api'" in written["program"] and "user-123" not in written["program"]
     block_env = fake.calls[-1]["env"]
-    assert block_env["EXPERIMENTLY_API_KEY"] == KEY
-    assert block_env["EXPERIMENTLY_API_URL"] == "http://api"
+    # Both names: the pages under test are the deployed site's, which may
+    # predate the rename of these variables.
+    for name in ("CONTROLVAR_API_KEY", "EXPERIMENTLY_API_KEY"):
+        assert block_env[name] == KEY, name
+    for name in ("CONTROLVAR_API_URL", "EXPERIMENTLY_API_URL"):
+        assert block_env[name] == "http://api", name
 
 
 def test_a_swapped_variant_fails_the_step_and_both_snapshots_are_written(

@@ -122,9 +122,9 @@ steps:
     expect:
       status: 200
       aria: |
-        - complementary "Experimently panel":
-          - button "Powered by Experimently"
-    fail: ShopLab does not answer at the address the guide gives, or has no Experimently panel
+        - complementary "Controlvar panel":
+          - button "Powered by Controlvar"
+    fail: ShopLab does not answer at the address the guide gives, or has no Controlvar panel
   - id: streampulse-address
     doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
     do:
@@ -156,7 +156,7 @@ steps:
           - tabpanel "Search":
             - region "AI search ✨":
               - heading "AI search ✨" [level=2]
-          - region "Powered by Experimently":
+          - region "Powered by Controlvar":
             - region "Feature flags":
               - list:
                 - listitem:
@@ -189,7 +189,7 @@ steps:
             - region "Search":
               - heading "Search" [level=2]
               - paragraph: Keyword search
-          - region "Powered by Experimently":
+          - region "Powered by Controlvar":
             - region "Feature flags":
               - list:
                 - listitem:

@@ -16,7 +16,7 @@ text = "Quick start — start the local stack with Docker, then run a first expe
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "Limitations — what Experimently does not do, and what happens instead"
+text = "Limitations — what Controlvar does not do, and what happens instead"
 by = ["exempt:navigation"]
 
 [[unit]]

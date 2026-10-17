@@ -1,4 +1,4 @@
-# Experimently — common tasks.
+# Controlvar — common tasks.
 #
 #   make dev        start Postgres + Redis and run the API and dashboard locally
 #   make demo       build the images and run the whole stack in Docker
@@ -88,7 +88,7 @@ logs: ## Follow the API and dashboard logs
 
 .PHONY: fuzz
 # One API fuzzing pass on this machine, with fuzz.yml's flags, lists and
-# verdict, on a compose stack of its own (experimently-fuzz: its own ports,
+# verdict, on a compose stack of its own (controlvar-fuzz: its own ports,
 # removed again on the way out, image included); scripts/fuzz_local.sh says how
 # that stack differs from the workflow's. The seed is FUZZ_SEED, not SEED: SEED is
 # docker-compose.yml's data seed, and a variable given to make on the command
@@ -225,13 +225,14 @@ $(VENV)/bin/pip-licenses:
 	$(PY) -m pip install "pip-licenses==$(PIP_LICENSES_VERSION)"
 
 .PHONY: lint-boundary
-lint-boundary: $(VENV)/bin/lint-imports $(VENV)/bin/reuse ## The core/modules boundary: import-linter contracts, REUSE licensing, requirements lock
+lint-boundary: $(VENV)/bin/lint-imports $(VENV)/bin/reuse ## The core/modules boundary: import-linter contracts, REUSE licensing, requirements lock, the former name
 	$(VENV)/bin/lint-imports
 	cd backend/lambda && ../../$(VENV)/bin/lint-imports
 	$(VENV)/bin/reuse lint
 	@cmp -s LICENSE LICENSES/Apache-2.0.txt \
 		|| { echo "LICENSES/Apache-2.0.txt has drifted from LICENSE (cp LICENSE LICENSES/Apache-2.0.txt)"; exit 1; }
 	$(PY) scripts/check_requirements_lock.py
+	$(PY) scripts/check_legacy_name.py
 
 .PHONY: format
 format: ## Format and auto-fix backend/, scripts/, tests/acceptance/ and modules/ in place (ruff replaces black + isort)

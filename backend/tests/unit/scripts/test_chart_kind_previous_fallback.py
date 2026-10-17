@@ -34,8 +34,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.regression]
 ROOT = pathlib.Path(__file__).resolve().parents[4]
 SCRIPT = ROOT / "scripts" / "chart_kind.sh"
 
-API = "ghcr.io/getexperimently/experimently"
-WEB = "ghcr.io/getexperimently/experimently-web"
+API = "ghcr.io/controlvar/controlvar"
+WEB = "ghcr.io/controlvar/controlvar-web"
 
 
 def _function(name: str) -> str:

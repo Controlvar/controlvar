@@ -1,6 +1,6 @@
 # Development Documentation
 
-This directory contains development guidelines, best practices, and technical documentation for Experimently.
+This directory contains development guidelines, best practices, and technical documentation for Controlvar.
 
 ## Files
 

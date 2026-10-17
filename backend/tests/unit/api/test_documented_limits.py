@@ -1,7 +1,7 @@
 """What the product does not do, pinned where the code decides it.
 
 The Limitations page, the README's short list and the getting-started pages
-say what Experimently does not do and what happens instead. Each test holds
+say what Controlvar does not do and what happens instead. Each test holds
 one of those statements against the schema, the model, the mounted routes or
 the source that decides it. When one of these starts to fail, the product has
 gained the thing the page says it lacks: change the page in the same pull

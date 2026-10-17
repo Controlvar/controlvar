@@ -55,84 +55,25 @@ GUARDS: Dict[str, str] = {
     ),
 }
 
-#: Lines that keep the old name, by path, with why. Stripped, exact.
+#: Lines that keep the old name, by path, with why. Stripped, exact. Since the
+#: rename, scripts/check_legacy_name.py holds the former name everywhere; this
+#: list holds the few lines here that still carry this repository's former slug.
 KEEP: List[Tuple[str, str, str]] = [
-    (
-        ".github/workflows/release.yml",
-        "# publishes to ghcr.io/getexperimently/experimently with no edit at the cut.",
-        "a comment about the image path, which follows the repository",
-    ),
     (
         ".github/workflows/sdk-release.yml",
         "#   sdk/go/v1.2.3        github.com/getexperimently/experimently/sdk/go",
-        "a comment: the Go module path go.mod declares",
-    ),
-    (
-        ".github/workflows/sdk-release.yml",
-        "# (getexperimently/experimently), deliberately and permanently, while",
-        "a comment on the Go module path",
+        "a comment: the Go module path go.mod declares (moves with the SDKs)",
     ),
     (
         "scripts/doc_claims.py",
-        'EVIDENCE_REPOSITORY = "getexperimently/experimently"',
+        'EVIDENCE_REPOSITORY = ("getexperimently/experimently", "Controlvar/controlvar")',
         "the name dated evidence links were recorded with; never rewritten",
     ),
-    (
-        "scripts/check_required_checks.sh",
-        'REPO="getexperimently/experimently"',
-        "an operator tool run against the named repository",
-    ),
-    (
-        "scripts/configure-repo.sh",
-        'REPO="getexperimently/experimently"',
-        "an operator tool run against the named repository",
-    ),
-    (
-        "scripts/check_version_sources.py",
-        '"api": "ghcr.io/getexperimently/experimently",',
-        "the published image path, compared with equally literal files",
-    ),
-    (
-        "scripts/check_version_sources.py",
-        '"web": "ghcr.io/getexperimently/experimently-web",',
-        "the published image path, compared with equally literal files",
-    ),
-    (
-        "scripts/check_version_sources.py",
-        r'r"^\s*image:\s*(?P<repo>ghcr\.io/getexperimently/experimently(?:-web)?)"',
-        "the published image path, compared with equally literal files",
-    ),
-    (
-        "scripts/check_version_sources.py",
-        '"`image: ghcr.io/getexperimently/experimently[-web]:"',
-        "the published image path, in a message",
-    ),
-    (
-        "scripts/check_image_labels.py",
-        'SOURCE = "https://github.com/getexperimently/experimently"',
-        "the image source label, compared with the equally literal Dockerfiles",
-    ),
-    (
-        "scripts/check_compose_config.py",
-        '"api": f"ghcr.io/getexperimently/experimently:{profile}-{args.version}",',
-        "the published image path, compared with the equally literal compose file",
-    ),
-    (
-        "scripts/check_compose_config.py",
-        '"web": f"ghcr.io/getexperimently/experimently-web:{profile}-{args.version}",',
-        "the published image path, compared with the equally literal compose file",
-    ),
-    (
-        "scripts/chart_kind.sh",
-        "API_REPO=ghcr.io/getexperimently/experimently",
-        "the published image path; the previous release's is resolved separately",
-    ),
-    (
-        "scripts/chart_kind.sh",
-        "WEB_REPO=ghcr.io/getexperimently/experimently-web",
-        "the published image path; the previous release's is resolved separately",
-    ),
 ]
+
+#: The former name's keep-list, which names it by design; its own test
+#: (backend/tests/smoke/test_legacy_name.py) pins every entry.
+NOT_SCANNED = (REPO_ROOT / "scripts" / "legacy_name_keep.toml",)
 
 _NAME_COMPARISON = re.compile(
     r"github\.repository\s*(?:==|!=)|(?:==|!=)\s*github\.repository\b(?!_)"
@@ -147,7 +88,7 @@ def _files() -> List[Path]:
             out.extend(
                 p
                 for p in sorted(root.rglob("*"))
-                if p.is_file() and "__pycache__" not in p.parts
+                if p.is_file() and "__pycache__" not in p.parts and p not in NOT_SCANNED
             )
     return out
 

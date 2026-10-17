@@ -1246,25 +1246,29 @@ def test_each_refusal_fires(tmp_path, plant, refusal):
     assert any(refusal in p for p in problems), "\n".join(problems) or "no problem"
 
 
-#: The repository by another name: what a rename or a transfer makes it.
-RENAMED = "example-org/example-repo"
 OLD_RUN = "https://github.com/getexperimently/experimently/actions/runs/123"
 OLD_COMMENT = (
     "https://github.com/getexperimently/experimently/issues/12#issuecomment-345"
 )
+NEW_RUN = "https://github.com/Controlvar/controlvar/actions/runs/9"
 
 
 @pytest.mark.regression
-def test_evidence_keeps_its_recorded_name_and_takes_the_run_s_after_a_rename():
-    """Evidence accepted only the name written into the script, so after a
+def test_evidence_keeps_its_recorded_name_and_takes_the_new_one(monkeypatch):
+    """Evidence accepted only the name written into the script, so after the
     rename a new run's link was refused. The recorded links stay valid (they
-    are dated records, never rewritten); the run's repository is the other."""
-    renamed = {"GITHUB_REPOSITORY": RENAMED}
-    for url in (OLD_RUN, OLD_COMMENT):
-        assert dc.evidence_url(url, renamed)
-        assert dc.evidence_url(url, {})
-    assert dc.evidence_url(f"https://github.com/{RENAMED}/actions/runs/9", renamed)
-    assert not dc.evidence_url(f"https://github.com/{RENAMED}/actions/runs/9", {})
+    are dated records, never rewritten), the new name is the other, and the
+    environment decides nothing: GITHUB_REPOSITORY is set only in CI."""
+    for current in (None, "example-org/example-repo"):
+        if current is None:
+            monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+        else:
+            monkeypatch.setenv("GITHUB_REPOSITORY", current)
+        for url in (OLD_RUN, OLD_COMMENT, NEW_RUN):
+            assert dc.evidence_url(url), url
+        assert not dc.evidence_url(
+            "https://github.com/example-org/example-repo/actions/runs/9"
+        )
 
 
 @pytest.mark.parametrize(
@@ -1272,21 +1276,14 @@ def test_evidence_keeps_its_recorded_name_and_takes_the_run_s_after_a_rename():
     [
         "https://github.com/example-org/other-repo/actions/runs/1",
         "https://github.com/getexperimently/experimently-other/actions/runs/1",
-        "https://github.com/getexperimently/experimently/actions/runs/1/x",
-        "http://github.com/getexperimently/experimently/actions/runs/1",
-        f"https://github.com/{RENAMED}/issues/1",
+        "https://github.com/Controlvar/controlvar-other/actions/runs/1",
+        "https://github.com/Controlvar/controlvar/actions/runs/1/x",
+        "http://github.com/Controlvar/controlvar/actions/runs/1",
+        "https://github.com/getexperimently/experimently/issues/1",
     ],
 )
 def test_evidence_from_a_third_repository_or_shape_is_refused(url):
-    assert not dc.evidence_url(url, {"GITHUB_REPOSITORY": RENAMED})
-
-
-def test_a_malformed_run_repository_adds_no_name():
-    for current in ("a/b/c", "x/y\n", "../x", ".*/.*"):
-        assert not dc.evidence_url(
-            f"https://github.com/{current}/actions/runs/1",
-            {"GITHUB_REPOSITORY": current},
-        )
+    assert not dc.evidence_url(url)
 
 
 #: QA's planted claims (#1142): each is refused as an unregistered unit.

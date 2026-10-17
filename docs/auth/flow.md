@@ -1,6 +1,6 @@
 # Authentication Flow Diagrams
 
-This document contains the flow diagrams for the Cognito authentication system implemented in Experimently.
+This document contains the flow diagrams for the Cognito authentication system implemented in Controlvar.
 
 !!! note "Cognito only"
     The password-reset and token-refresh endpoints (`POST /api/v1/auth/forgot-password`,

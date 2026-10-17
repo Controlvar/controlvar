@@ -1,5 +1,5 @@
 {
-  "name": "experimently-frontend",
+  "name": "controlvar-frontend",
   "version": "0.1.0",
   "license": "Apache-2.0",
   "private": true,
@@ -17,7 +17,7 @@
     "test:visual:update": "playwright test visual-regression --update-snapshots",
     "test:a11y": "playwright test accessibility",
     "openapi:dump": "cd .. && python -m backend.scripts.dump_openapi --profile full frontend/src/tests/fixtures/openapi.json",
-    "build:marketing": "NEXT_PUBLIC_SITE_MODE=marketing NEXT_PUBLIC_DOCS_URL=https://getexperimently.github.io/experimently next build && NEXT_PUBLIC_SITE_MODE=marketing node scripts/prune-marketing-site.mjs out"
+    "build:marketing": "NEXT_PUBLIC_SITE_MODE=marketing NEXT_PUBLIC_DOCS_URL=https://docs.controlvar.com/ next build && NEXT_PUBLIC_SITE_MODE=marketing node scripts/prune-marketing-site.mjs out"
   },
   "dependencies": {
     "@playwright/test": "^1.64.0",

@@ -729,7 +729,7 @@ def test_the_sentinel_reaches_no_public_text(serve, tmp_path, step):
         out=report_dir,
     )
     report_env = {
-        "GITHUB_REPOSITORY": "getexperimently/experimently",
+        "GITHUB_REPOSITORY": "Controlvar/controlvar",
         "GITHUB_RUN_ID": "37456943999",
         "GITHUB_SERVER_URL": "https://github.com",
     }

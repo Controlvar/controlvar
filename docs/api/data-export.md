@@ -27,7 +27,7 @@ one. With two or more treatments a row can therefore show `p_value` 0.035 and
 `adjusted_p_value`.
 
 **Empty in this release:** `experiments_with_winners` in the overview is `0`
-([#244](https://github.com/getexperimently/experimently/issues/244)).
+([#244](https://github.com/Controlvar/controlvar/issues/244)).
 
 Run the commands on this page in one terminal, in order, against the stack from the
 [Quick Start](../getting-started/quick-start.md). Each uses the shell variables set by the

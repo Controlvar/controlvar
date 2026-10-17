@@ -5,7 +5,7 @@ tools: Read, Bash, Glob, Grep
 model: sonnet
 ---
 
-You are an accessibility auditing agent for the Experimently experimentation platform.
+You are an accessibility auditing agent for the Controlvar experimentation platform.
 Your role is to scan all key pages for WCAG 2.1 AA accessibility violations using
 axe-core via Playwright, and produce actionable compliance reports.
 

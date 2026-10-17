@@ -8,7 +8,7 @@ text = "Modules and profiles"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Experimently is one codebase, open source (Apache-2.0, with the client SDKs MIT), and it runs in one of two profiles:"
+text = "Controlvar is one codebase, open source (Apache-2.0, with the client SDKs MIT), and it runs in one of two profiles:"
 by = [
     "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit",
     "test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointShape::test_profile_matches_the_loader",

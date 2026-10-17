@@ -1,6 +1,6 @@
 # Limitations
 
-What Experimently does not do, and what happens instead. Where a public issue tracks a change,
+What Controlvar does not do, and what happens instead. Where a public issue tracks a change,
 the row links it.
 
 ## Feature flags
@@ -29,7 +29,7 @@ the row links it.
 |---|---|
 | Multi-factor sign-in | Not available: a local account signs in with its email and password alone. |
 | SAML sign-in | Not available. OIDC sign-in is, with the `sso` module (full profile). |
-| Custom roles and direct permission grants that change access | The `rbac` module records them and shows them, but no permission check reads them: each user's built-in role decides ([#891](https://github.com/getexperimently/experimently/issues/891)). |
+| Custom roles and direct permission grants that change access | The `rbac` module records them and shows them, but no permission check reads them: each user's built-in role decides ([#891](https://github.com/Controlvar/controlvar/issues/891)). |
 
 ## Data
 
@@ -41,7 +41,7 @@ the row links it.
 
 | What you might expect | What happens instead |
 |---|---|
-| Traffic split between URLs at the edge | The `split_url` module's edge router has no configuration source in this release, so it splits no traffic ([#393](https://github.com/getexperimently/experimently/issues/393)). |
+| Traffic split between URLs at the edge | The `split_url` module's edge router has no configuration source in this release, so it splits no traffic ([#393](https://github.com/Controlvar/controlvar/issues/393)). |
 
 ## SDKs
 

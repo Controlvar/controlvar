@@ -35,7 +35,7 @@ HOOK = REPO_ROOT / "backend" / "docker" / "sitecustomize.py"
 DOCKERFILE = REPO_ROOT / "backend" / "Dockerfile"
 BASH = shutil.which("bash")
 
-MARKER_NAME = "experimently-openssl-armcap0"
+MARKER_NAME = "controlvar-openssl-armcap0"
 PROBE_ARGS = "-c from cryptography.hazmat.bindings._rust import openssl"
 SAVED_FOR_EVERY_PROCESS = "for every Python process in this container"
 

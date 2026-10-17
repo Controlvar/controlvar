@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import ExperimentlyPanel, { PANEL_EVENT_LIMIT } from '@/components/ExperimentlyPanel';
+import ControlvarPanel, { PANEL_EVENT_LIMIT } from '@/components/ControlvarPanel';
 import { EventLogProvider, useTrack } from '@/lib/eventLog';
 import { DASHBOARD_URL } from '@/lib/env';
 import { __setExperiment, __setFlag, DEFAULT_TEST_USER } from '@/__mocks__/experimently-sdk';
@@ -19,13 +19,13 @@ function renderPanel(extra?: React.ReactNode, onNewVisitor = jest.fn()) {
   const utils = render(
     <EventLogProvider>
       {extra}
-      <ExperimentlyPanel defaultOpen onNewVisitor={onNewVisitor} />
+      <ControlvarPanel defaultOpen onNewVisitor={onNewVisitor} />
     </EventLogProvider>,
   );
   return { ...utils, onNewVisitor };
 }
 
-describe('ExperimentlyPanel', () => {
+describe('ControlvarPanel', () => {
   beforeEach(resetTestState);
 
   it('shows the visitor id and the variant for each of the four experiments', () => {
@@ -66,7 +66,7 @@ describe('ExperimentlyPanel', () => {
 
   it('collapses/expands and the "New visitor" button calls the handler', () => {
     const { onNewVisitor } = renderPanel();
-    const toggle = screen.getByRole('button', { name: /powered by experimently/i });
+    const toggle = screen.getByRole('button', { name: /powered by controlvar/i });
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
 
     fireEvent.click(screen.getByRole('button', { name: 'New visitor' }));

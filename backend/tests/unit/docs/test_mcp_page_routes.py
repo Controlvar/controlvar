@@ -193,7 +193,7 @@ OLD_CLIENT_CONFIG = """
 ```json
 {
   "mcpServers": {
-    "experimently": {
+    "controlvar": {
       "url": "http://localhost:8000/api/v1/mcp/manifest"
     }
   }

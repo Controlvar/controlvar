@@ -10,7 +10,7 @@ of the repository they would fail in CI instead.
 import pytest
 
 #: The repository the tests' run links name.
-RUN_REPOSITORY = "getexperimently/experimently"
+RUN_REPOSITORY = "Controlvar/controlvar"
 
 
 @pytest.fixture(autouse=True)

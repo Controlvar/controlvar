@@ -38,7 +38,7 @@ export const PASSWORD_RULES =
 
 /** What the page says when the signed-in account does not use local sign-in. */
 export const NOT_LOCAL_SENTENCE =
-  'Your account signs in through your identity provider, so its password is changed there, not in Experimently.';
+  'Your account signs in through your identity provider, so its password is changed there, not in Controlvar.';
 
 const SENTENCES: Record<Exclude<PasswordChangeOutcome, 'locked'>, string> = {
   changed:

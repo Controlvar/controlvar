@@ -29,7 +29,7 @@ export function wrongHostMessage(): string {
   const host = loc?.host || 'this address';
   const origin = loc?.origin || 'the URL people open';
   return (
-    `This Experimently server isn't configured for the address you used (${host}). ` +
+    `This Controlvar server isn't configured for the address you used (${host}). ` +
     `An administrator needs to set PUBLIC_BASE_URL to ${origin} ` +
     `(or add ${host} to ALLOWED_HOSTS, if that is set).`
   );

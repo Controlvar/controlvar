@@ -60,7 +60,7 @@ _REALISTIC = {
     "POSTGRES_SERVER": "aurora.example.internal",
     # Not a secret and not a random string: the settings validator requires an
     # absolute http(s) origin with no path, and ALLOWED_HOSTS derives its host.
-    "PUBLIC_BASE_URL": "https://experimently.example.com",
+    "PUBLIC_BASE_URL": "https://controlvar.example.com",
 }
 
 pytestmark = pytest.mark.skipif(

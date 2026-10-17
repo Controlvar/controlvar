@@ -250,7 +250,7 @@ name = "experimently-platform"
 # `version` is absent on purpose -- a literal here would be a second source,
 # and PEP 621 forbids declaring both.
 dynamic = ["version"]
-description = "Experimently — experimentation platform for A/B testing and feature flags"
+description = "Controlvar — experimentation platform for A/B testing and feature flags"
 requires-python = ">=3.11"
 # Everything in the distribution is Apache-2.0: the core under backend/ and the
 # optional modules under modules/ ship in one wheel under one licence. `sdk/`

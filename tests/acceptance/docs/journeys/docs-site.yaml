@@ -26,7 +26,7 @@ recordings:
 written: 2026-10-06
 steps:
   - id: home
-    doc: experimently-documentation
+    doc: controlvar-documentation
     do:
       goto: /
     expect:
@@ -34,7 +34,7 @@ steps:
       aria: |
         - main:
           - article:
-            - heading "Experimently Documentation" [level=1]
+            - heading "Controlvar Documentation" [level=1]
             - heading "Start Here" [level=2]
     fail: the site does not answer, or its home page is not the documentation's home page
   - id: search-quick-start
@@ -45,14 +45,14 @@ steps:
       found: /getting-started/quick-start/
     fail: the Quick Start is not among the first three results for "quick start"
   - id: search-power-analysis
-    doc: experimently-documentation
+    doc: controlvar-documentation
     do:
       search: power analysis
     expect:
       found: /statistics/power-analysis/
     fail: the power analysis page is not among the first three results for "power analysis"
   - id: search-safety-monitoring
-    doc: experimently-documentation
+    doc: controlvar-documentation
     do:
       search: safety monitoring
     expect:
@@ -88,12 +88,12 @@ steps:
             - heading "API Endpoints Documentation" [level=1]
     fail: the experiments API reference does not answer, or does not show its heading
   - id: nav-pages
-    doc: experimently-documentation
+    doc: controlvar-documentation
     do:
       crawl: nav
     fail: a page of the nav answers anything but 2xx, leaves the site, or shows a heading its source does not have
   - id: links
-    doc: experimently-documentation
+    doc: controlvar-documentation
     do:
       crawl: links
     fail: a link to the site, on a nav page or written absolute in its source, answers anything but 2xx or redirects out of the site

@@ -55,12 +55,12 @@ the server's `md5-mod100-v1` bucketing instead.
 
 "Verified live" means the SDK's `contract_smoke` entry point passed
 `tests/sdk-contract/live/run_live_contract.py` against a running backend (see
-[tests/sdk-contract/README.md](https://github.com/getexperimently/experimently/blob/main/tests/sdk-contract/README.md)); the `SDK Live Contract` CI job repeats
+[tests/sdk-contract/README.md](https://github.com/Controlvar/controlvar/blob/main/tests/sdk-contract/README.md)); the `SDK Live Contract` CI job repeats
 this on every pull request, with `--strict`, for python, openfeature-python, js, openfeature, edge,
 react, react-native, go, java, android, ruby, php and dotnet (the `sdks:` list of the job in
-[pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml)).
+[pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml)).
 Each SDK's own unit tests run in
-[sdk-unit-tests.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/sdk-unit-tests.yml):
+[sdk-unit-tests.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/sdk-unit-tests.yml):
 the Linux SDKs on pull requests that touch them (js, python and react on every one), and elixir, flutter, android and ios nightly and
 when touched.
 

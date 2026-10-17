@@ -8,7 +8,7 @@ text = "Self-hosting with Docker Compose"
 by = ["exempt:label"]
 
 [[unit]]
-text = "compose.yml in this directory runs Experimently on one Docker host from the published images."
+text = "compose.yml in this directory runs Controlvar on one Docker host from the published images."
 by = [
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version",
     "workflow:compose-production.yml",
@@ -178,7 +178,7 @@ text = "Run an external PostgreSQL server with its TimeZone set to UTC."
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "The image lines name the images of this file's own release, ghcr.io/getexperimently/experimently:<profile>-X.Y.Z and ghcr.io/getexperimently/experimently-web:<profile>-X.Y.Z."
+text = "The image lines name the images of this file's own release, ghcr.io/controlvar/controlvar:<profile>-X.Y.Z and ghcr.io/controlvar/controlvar-web:<profile>-X.Y.Z."
 by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version"]
 
 [[unit]]

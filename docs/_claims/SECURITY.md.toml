@@ -8,7 +8,7 @@ text = "Security policy"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Experimently handles experiment assignments, feature-flag evaluations, audit records and, with the hipaa module installed, PHI."
+text = "Controlvar handles experiment assignments, feature-flag evaluations, audit records and, with the hipaa module installed, PHI."
 by = [
     "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key",
     "test:backend/tests/integration/api/test_front_door_behaviour.py::test_every_flag_evaluates_with_a_null_config",
@@ -45,7 +45,7 @@ text = "This creates a private advisory that only the maintainers and you can se
 by = ["exempt:third-party"]
 
 [[unit]]
-text = "Email — security@getexperimently.com."
+text = "Email — security@controlvar.com."
 by = ["exempt:policy"]
 
 [[unit]]
@@ -133,7 +133,7 @@ text = "Supported versions"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Experimently has not yet cut a 1.0.0 release."
+text = "Controlvar has not yet cut a 1.0.0 release."
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_version_is_before_1_0"]
 
 [[unit]]
@@ -228,7 +228,7 @@ text = "Safe harbour"
 by = ["exempt:label"]
 
 [[unit]]
-text = "If you make a good-faith effort to comply with this policy while researching a vulnerability in Experimently, we will consider your research authorised, we will not initiate or support legal action against you, and we will not report you to law enforcement."
+text = "If you make a good-faith effort to comply with this policy while researching a vulnerability in Controlvar, we will consider your research authorised, we will not initiate or support legal action against you, and we will not report you to law enforcement."
 by = ["exempt:policy"]
 
 [[unit]]
@@ -260,11 +260,11 @@ text = "you comply with applicable law."
 by = ["exempt:policy"]
 
 [[unit]]
-text = "This safe harbour is a commitment from the Experimently maintainers about how we will behave."
+text = "This safe harbour is a commitment from the Controlvar maintainers about how we will behave."
 by = ["exempt:policy"]
 
 [[unit]]
-text = "It cannot bind a third party — if you test against someone else's hosted Experimently deployment, their terms and their law apply, not ours."
+text = "It cannot bind a third party — if you test against someone else's hosted Controlvar deployment, their terms and their law apply, not ours."
 by = ["exempt:policy"]
 
 [[unit]]

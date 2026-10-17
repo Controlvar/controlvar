@@ -1,8 +1,8 @@
-Experimently
-Copyright (c) 2024-2026 Experimently
+Controlvar
+Copyright (c) 2024-2026 The Controlvar authors
 
-This product includes software developed by Experimently
-(https://github.com/getexperimently/experimently) and by third parties.
+This product includes software developed by The Controlvar authors
+(https://github.com/Controlvar/controlvar) and by third parties.
 
 --------------------------------------------------------------------------------
 Licensing of this repository
@@ -44,7 +44,7 @@ must not be removed:
     @playwright/test (test-time only)
 
 The following dependencies carry weak-copyleft licences. They are used as
-separate, unmodified libraries; no Experimently source code is a derivative work
+separate, unmodified libraries; no Controlvar source code is a derivative work
 of them, and each remains under its own licence:
 
   psycopg2-binary                      LGPL-3.0-or-later (with OpenSSL exception)
@@ -57,13 +57,4 @@ of them, and each remains under its own licence:
 
 `caniuse-lite`, pulled in transitively by the dashboard build toolchain, carries
 a CC-BY-4.0 licence over its browser-support database. It is a build-time
-dependency only and its data is not redistributed by Experimently.
-
---------------------------------------------------------------------------------
-Trademarks
---------------------------------------------------------------------------------
-
-"Experimently" and the Experimently logo are trademarks of Experimently. Section
-6 of the Apache License 2.0 and the MIT Licence grant no trademark rights. You
-may state that your product is built on Experimently; you may not name a fork
-or a hosted service "Experimently" without written permission.
+dependency only and its data is not redistributed by Controlvar.

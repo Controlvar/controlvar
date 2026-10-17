@@ -1,8 +1,8 @@
-# StreamPulse — mobile feature-flag demo for Experimently
+# StreamPulse — mobile feature-flag demo for Controlvar
 
 StreamPulse is a web page that renders a phone. Pick a simulated device (OS, OS version, app
 version, region, tier, employee) and the phone shows, screen by screen, which feature flags and
-experiments *that device* gets from the Experimently platform — with the server's reason for each
+experiments *that device* gets from the Controlvar platform — with the server's reason for each
 decision. A Python simulator pretends to be thousands of devices, and a scripted "rollout story"
 walks a feature flag from internal testers to 100 % with a crash incident and an automatic rollback
 on the way.
@@ -35,7 +35,7 @@ The right-hand side has two panels:
   attribute is sent as targeting `context`. Applying any change re-mounts the SDK provider, which
   drops the SDK caches and re-fetches everything. Otherwise the SDK keeps each answer for 5 s
   (`cacheTtlMs: 5000`) and asks again the next time a screen needs it.
-- **Powered by Experimently** — per flag: on/off + the server `reason` (`targeting_rule`,
+- **Powered by Controlvar** — per flag: on/off + the server `reason` (`targeting_rule`,
   `rollout`, `inactive`, `error`) spelled out; per experiment: the variant and whether the device
   was actually enrolled (`assigned: false` → "in global holdout streampulse-holdout", "excluded:
   mutual exclusion group streampulse-profile", "excluded: targeting rules"); the last 8 events;
@@ -46,7 +46,7 @@ and a live readout of `streampulse_player_v2` for the current device.
 
 ## Running it
 
-Prerequisites: the Experimently backend on `http://localhost:8000`, the dashboard on
+Prerequisites: the Controlvar backend on `http://localhost:8000`, the dashboard on
 `http://localhost:3100`, Node 20.9 or later (Next.js 16 refuses older versions), and the
 repo's Python venv.
 
@@ -54,7 +54,7 @@ repo's Python venv.
 to skip StreamPulse). It does not run the crash incident or the rollout story.
 
 **1. Seed** the StreamPulse catalogue, from the repository root. It is idempotent, and writes
-the API key to `demo/streampulse/.api_key` and the `NEXT_PUBLIC_EXPERIMENTLY_API_KEY` line into
+the API key to `demo/streampulse/.api_key` and the `NEXT_PUBLIC_CONTROLVAR_API_KEY` line into
 `demo/streampulse/.env.local`. It also writes a second key, the StreamPulse server key (scope
 `sdk:ruleset`), to `demo/streampulse/.api_key_server` and nowhere else: the simulator sends its
 crash reports with it, the way the StreamPulse server would forward them, because only reports
@@ -81,9 +81,12 @@ cp -n .env.example .env.local
 
 | Setting | Value |
 |---|---|
-| `NEXT_PUBLIC_EXPERIMENTLY_API_URL` | defaults to `http://localhost:8000` |
-| `NEXT_PUBLIC_EXPERIMENTLY_API_KEY` | the plaintext key for `streampulse-app`, written by the seed |
-| `NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL` | defaults to `http://localhost:3100` |
+| `NEXT_PUBLIC_CONTROLVAR_API_URL` | defaults to `http://localhost:8000` |
+| `NEXT_PUBLIC_CONTROLVAR_API_KEY` | the plaintext key for `streampulse-app`, written by the seed |
+| `NEXT_PUBLIC_CONTROLVAR_DASHBOARD_URL` | defaults to `http://localhost:3100` |
+
+Each is still read under its name before the project was renamed
+(`NEXT_PUBLIC_EXPERIMENTLY_API_URL` and so on) when the new name is not set.
 
 **3. Run the app**, still in `demo/streampulse`. It is at http://localhost:3300.
 
@@ -179,11 +182,11 @@ per-experiment), so it can differ after `--reset`; the holdout bucket does not.
 
 | Symptom | Cause / fix |
 |---|---|
-| Yellow banner "NEXT_PUBLIC_EXPERIMENTLY_API_KEY is not set"; panel shows `error: API error: 401` everywhere | The key is missing or wrong. Run `python backend/scripts/seed_streampulse.py` (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` — Next reads env vars at startup. |
+| Yellow banner "NEXT_PUBLIC_CONTROLVAR_API_KEY is not set"; panel shows `error: API error: 401` everywhere | The key is missing or wrong. Run `python backend/scripts/seed_streampulse.py` (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` — Next reads env vars at startup. |
 | **401** in the network tab although `.env.local` has a key | The key was revoked or belongs to another environment/database. Re-seed. |
 | **404** on `/tracking/assign` or `/feature-flags/evaluate/streampulse_...` | The StreamPulse experiments are not seeded or not ACTIVE, or the flags are not seeded (`--reset` removes both; a flag that is not ACTIVE answers `enabled: false`, not a 404). Run the seed script. |
 | Browser console: **CORS** error from `localhost:3300` | Port 3300 is not in the backend's CORS allow-list. The development defaults (`DEFAULT_CORS_ORIGINS` in `backend/app/core/config.py`) include it; if you set `CORS_ORIGINS` or `BACKEND_CORS_ORIGINS` yourself, add `http://localhost:3300` and restart the API. Against a staging or production API, add it to that API's `CORS_ORIGINS`: those allow no other origin by default. |
-| Every flag `off`, every experiment `error`, nothing loads | Backend not running on `NEXT_PUBLIC_EXPERIMENTLY_API_URL`. Start it from the repository root: `ENVIRONMENT=development uvicorn backend.app.main:app --reload`. |
+| Every flag `off`, every experiment `error`, nothing loads | Backend not running on `NEXT_PUBLIC_CONTROLVAR_API_URL`. Start it from the repository root: `ENVIRONMENT=development uvicorn backend.app.main:app --reload`. |
 | AI search never turns on | The rule needs `os = iOS`, `os_version ≥ 17.0.0`, `region = US`, `tier = premium` and the flag's own rollout is 0 %. Check the custom fields; the panel reason tells you whether a rule matched. |
 | Player v2 does not change after the story rolls back / advances | The app does not poll: it asks for the decisions when you pick a device or press *Refresh now*, so press *Refresh now*. If the schedulers are involved (auto-rollback, time-based stages), they run every `SAFETY_CHECK_INTERVAL_MINUTES` / `ROLLOUT_CHECK_INTERVAL_MINUTES` (default 5 / 15) — set both to `1` in the backend `.env` for the demo (`setup-local.sh` sets both to `1` unless they are already set). |
 | A preset shows "in global holdout streampulse-holdout" for every experiment | That id hashes into the 2 % holdout. The shipped preset ids do not; if you changed one, pick another id (or use it to demonstrate the holdout). |

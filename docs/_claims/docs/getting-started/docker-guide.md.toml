@@ -27,7 +27,7 @@ by = [
 ]
 
 [[unit]]
-text = "To run Experimently on a server, use the published images in deploy/compose/compose.yml: the README beside it says how to run it and lists its settings, and Releases, images and verification covers the versions and how to verify the images."
+text = "To run Controlvar on a server, use the published images in deploy/compose/compose.yml: the README beside it says how to run it and lists its settings, and Releases, images and verification covers the versions and how to verify the images."
 by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version"]
 
 [[unit]]
@@ -35,7 +35,7 @@ text = "Overview"
 by = ["exempt:label"]
 
 [[unit]]
-text = "This guide runs Experimently locally with Docker Compose and shows how to reach each service."
+text = "This guide runs Controlvar locally with Docker Compose and shows how to reach each service."
 by = ["exempt:navigation"]
 
 [[unit]]

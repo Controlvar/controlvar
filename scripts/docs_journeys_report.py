@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Experimently contributors
+# SPDX-FileCopyrightText: 2026 The Controlvar authors
 # SPDX-License-Identifier: Apache-2.0
 """What the docs journeys' runs add up to: one rolling issue per failing guide,
 and the launch walkthroughs a run keeps.

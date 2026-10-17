@@ -24,7 +24,7 @@ AnalysisStatusValue = Literal["ga", "beta"]
 GA: AnalysisStatusValue = "ga"
 BETA: AnalysisStatusValue = "beta"
 
-_ISSUES = "https://github.com/getexperimently/experimently/issues"
+_ISSUES = "https://github.com/Controlvar/controlvar/issues"
 
 
 @dataclass(frozen=True)

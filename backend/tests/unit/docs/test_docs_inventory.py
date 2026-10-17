@@ -1451,7 +1451,7 @@ HUB_TEXT = """const sections = [
 #: The hub's last card, which the hub plants add a card after.
 HUB_LAST = """desc: "Variance reduction from each user's own events" },"""
 FILES: Dict[str, str] = {
-    "charts/experimently/templates/NOTES.txt": "Experimently is installing.\n",
+    "charts/experimently/templates/NOTES.txt": "Controlvar is installing.\n",
     "deploy/compose/compose.yml": "# The production compose file.\nname: x\n",
     "deploy/compose/generate-env.sh": "#!/bin/sh\n# Writes .env.\nset -eu\n",
     "frontend/src/pages/docs/index.tsx": HUB_TEXT,

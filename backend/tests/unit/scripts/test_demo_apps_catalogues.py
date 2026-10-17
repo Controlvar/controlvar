@@ -120,7 +120,7 @@ def test_each_seed_writes_its_key_files_and_backfills_its_history(
     assert seed.API_KEY_FILE.name == ".api_key"
     assert seed.ENV_LOCAL_FILE.name == ".env.local"
     assert seed.API_KEY_FILE.parent == seed.ENV_LOCAL_FILE.parent
-    assert seed.ENV_KEY_NAME == "NEXT_PUBLIC_EXPERIMENTLY_API_KEY"
+    assert seed.ENV_KEY_NAME == "NEXT_PUBLIC_CONTROLVAR_API_KEY"
     source = Path(seed.__file__).read_text(encoding="utf-8")
     assert re.search(
         r"_write_env_line\(ENV_LOCAL_FILE, ENV_KEY_NAME, plaintext\)", source
@@ -440,14 +440,19 @@ def test_each_app_defaults_to_the_local_api_and_dashboard(app):
     env = (REPO_ROOT / "demo" / app / "src" / "lib" / "env.ts").read_text(
         encoding="utf-8"
     )
-    assert (
-        "process.env.NEXT_PUBLIC_EXPERIMENTLY_API_URL || 'http://localhost:8000'" in env
-    )
-    assert (
-        "process.env.NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL || 'http://localhost:3100'"
-        in env
-    )
-    assert "process.env.NEXT_PUBLIC_EXPERIMENTLY_API_KEY || ''" in env
+    # Each read is a literal `process.env.NAME`, the new name before the one it
+    # had before the rename: Next.js inlines only that form, so a helper taking
+    # the name as a string would bake the default into the bundle.
+    for setting, default in (
+        ("API_URL", "'http://localhost:8000'"),
+        ("DASHBOARD_URL", "'http://localhost:3100'"),
+        ("API_KEY", "''"),
+    ):
+        assert (
+            f"process.env.NEXT_PUBLIC_CONTROLVAR_{setting}"
+            f" || process.env.NEXT_PUBLIC_EXPERIMENTLY_{setting} || {default}"
+        ) in env, setting
+    assert "process.env[" not in env
 
 
 def test_the_react_sdk_is_1_1_0_with_the_hooks_the_apps_use():
@@ -488,3 +493,23 @@ def test_streampulse_offers_the_five_device_presets():
     ]
     # The fifth is the employees' preset, the one the employee rule matches.
     assert labels[4].endswith(" tester · iPhone 15 · employee"), labels[4]
+
+
+@pytest.mark.parametrize(
+    "seed", [seed_shoplab, seed_streampulse], ids=["shoplab", "streampulse"]
+)
+def test_the_seed_replaces_the_key_line_an_older_env_local_holds(seed, tmp_path):
+    """An .env.local written before the rename has the key under its former
+    name; the seed writes the new line and drops that one, so the file holds
+    one key."""
+    env_local = tmp_path / ".env.local"
+    env_local.write_text(
+        "NEXT_PUBLIC_EXPERIMENTLY_API_KEY=old-key\nOTHER=1\n", encoding="utf-8"
+    )
+    seed._write_env_line(env_local, seed.ENV_KEY_NAME, "new-key")
+    assert env_local.read_text(encoding="utf-8").splitlines() == [
+        "OTHER=1",
+        "NEXT_PUBLIC_CONTROLVAR_API_KEY=new-key",
+    ]
+    seed._write_env_line(env_local, seed.ENV_KEY_NAME, None)
+    assert env_local.read_text(encoding="utf-8").splitlines() == ["OTHER=1"]

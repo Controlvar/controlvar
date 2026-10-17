@@ -27,7 +27,7 @@ SCRIPT = REPO_ROOT / "scripts" / "iam_actions.py"
 TRUST = REPO_ROOT / "infrastructure" / "cdk" / "github-actions-trust-policy.json"
 POLICY = REPO_ROOT / "infrastructure" / "cdk" / "github-actions-deploy-policy.json"
 DOC = REPO_ROOT / "docs" / "deployment" / "iam-permissions.md"
-IMMUTABLE_SUBJECT = "repo:getexperimently@328439352/experimently@1367480368"
+IMMUTABLE_SUBJECT = "repo:Controlvar@341280474/controlvar@1367480368"
 
 pytestmark = pytest.mark.skipif(
     not (REPO_ROOT / ".github" / "workflows").is_dir(),

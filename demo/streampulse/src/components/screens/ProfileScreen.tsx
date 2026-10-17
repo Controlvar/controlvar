@@ -131,7 +131,7 @@ export default function ProfileScreen({ deviceModel, tier }: Props) {
       {!showWrapped && !showBadges && (
         <p className="mt-3 text-xs text-neutral-400" data-testid="profile-plain">
           Standard profile. This device is in neither Profile experiment
-          {wrapped.assigned === false || badges.assigned === false ? ' (see the Experimently panel for why)' : ''}.
+          {wrapped.assigned === false || badges.assigned === false ? ' (see the Controlvar panel for why)' : ''}.
         </p>
       )}
 

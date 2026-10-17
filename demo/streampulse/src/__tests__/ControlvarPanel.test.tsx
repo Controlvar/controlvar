@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { STORY_STEPS } from '@/components/RolloutStoryDrawer';
-import ExperimentlyPanel, { PANEL_EVENT_LIMIT } from '@/components/ExperimentlyPanel';
+import ControlvarPanel, { PANEL_EVENT_LIMIT } from '@/components/ControlvarPanel';
 import { DASHBOARD_URL, EXPERIMENT_KEYS, FLAG_KEYS } from '@/lib/env';
 import { EventLogProvider, useTrack } from '@/lib/eventLog';
 import { __setExperiment, __setFlag, clearCacheMock, DEFAULT_TEST_USER } from '@/__mocks__/experimently-sdk';
@@ -28,13 +28,13 @@ function renderPanel(extra?: React.ReactNode) {
   const utils = render(
     <EventLogProvider>
       {extra}
-      <ExperimentlyPanel onRefresh={onRefresh} />
+      <ControlvarPanel onRefresh={onRefresh} />
     </EventLogProvider>,
   );
   return { ...utils, onRefresh };
 }
 
-describe('ExperimentlyPanel', () => {
+describe('ControlvarPanel', () => {
   beforeEach(resetTestState);
 
   it('shows every flag as on/off with the server reason spelled out', () => {

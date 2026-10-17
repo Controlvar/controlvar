@@ -21,8 +21,8 @@ Only needed if you want to run the backend or dashboard outside Docker: Python 3
 Clone the repository:
 
 ```{.bash skip reason="checkout: the runner starts inside a checkout"}
-git clone https://github.com/getexperimently/experimently.git
-cd experimently
+git clone https://github.com/Controlvar/controlvar.git
+cd controlvar
 ```
 
 Then start everything from the repository root:
@@ -45,7 +45,7 @@ Default login: **admin@demo.com / Demo1234!**. This is the development stack: it
 publishes its ports on `127.0.0.1` only. Change `FIRST_SUPERUSER_PASSWORD`, `SECRET_KEY`
 and `POSTGRES_PASSWORD` in a `.env` file next to `docker-compose.yml` before anyone else
 uses it, and run a server from the published images in
-[`deploy/compose/compose.yml`](https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml)
+[`deploy/compose/compose.yml`](https://github.com/Controlvar/controlvar/blob/main/deploy/compose/compose.yml)
 instead. The header comment of `docker-compose.yml` describes the optional `demo`, `tools`
 and `aws` profiles and the host-port overrides.
 
@@ -235,7 +235,7 @@ SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait
 The first start builds both apps' images. If you already started the `demo` profile
 without the seeds and the apps answer 401, run the same command once: it applies the
 missing seeds to the existing database, with no `down -v`. The
-[demo guide](https://github.com/getexperimently/experimently/blob/main/demo/DEMO_GUIDE.md)
+[demo guide](https://github.com/Controlvar/controlvar/blob/main/demo/DEMO_GUIDE.md)
 walks through what to look at, and how to run the apps outside Docker.
 
 ---
@@ -275,8 +275,8 @@ The event's `event_name` must equal the metric's `event_name`, the experiment mu
 
 ## What's next
 
-- [Limitations](limitations.md) — what Experimently does not do, and what happens instead
-- [Docker Compose on one host](https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml) — run Experimently where others can reach it
+- [Limitations](limitations.md) — what Controlvar does not do, and what happens instead
+- [Docker Compose on one host](https://github.com/Controlvar/controlvar/blob/main/deploy/compose/compose.yml) — run Controlvar where others can reach it
 - [SDK guide](../sdk-guide.md) — endpoint contract and per-SDK status
 - [Docker guide](docker-guide.md) — the local development stack: services, ports and profiles
 - [User guide](../guides/user-guide.md) — for experiment designers and analysts

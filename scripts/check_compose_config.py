@@ -105,8 +105,8 @@ def main() -> int:
     expected_images = {
         "postgres": "postgres:16-alpine",
         "redis": "redis:7-alpine",
-        "api": f"ghcr.io/getexperimently/experimently:{profile}-{args.version}",
-        "web": f"ghcr.io/getexperimently/experimently-web:{profile}-{args.version}",
+        "api": f"ghcr.io/controlvar/controlvar:{profile}-{args.version}",
+        "web": f"ghcr.io/controlvar/controlvar-web:{profile}-{args.version}",
     }
     images = {name: svc.get("image") for name, svc in services.items()}
     if images != expected_images:

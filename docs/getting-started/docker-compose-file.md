@@ -3,8 +3,8 @@
 The repository ships one development compose file, `docker-compose.yml` at the repository root.
 This page lists its services, profiles and the settings you are most likely to change.
 Every host port below is published on `127.0.0.1` only. For a server, use
-[`deploy/compose/compose.yml`](https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml):
-the [README](https://github.com/getexperimently/experimently/blob/main/deploy/compose/README.md)
+[`deploy/compose/compose.yml`](https://github.com/Controlvar/controlvar/blob/main/deploy/compose/compose.yml):
+the [README](https://github.com/Controlvar/controlvar/blob/main/deploy/compose/README.md)
 beside it says how to run it and lists its settings; see
 [Releases, images and verification](../self-hosting/releases.md) for the versions and
 how to verify the images.
@@ -54,7 +54,7 @@ SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait
 every flag shows its fallback, and both simulators exit at start. If you already started the profile without them, run the
 command above once: it applies the missing seeds to the existing database, with no
 `down -v`. To run the apps outside Docker, use `./demo/setup-local.sh`, which the
-[Demo guide](https://github.com/getexperimently/experimently/blob/main/demo/DEMO_GUIDE.md)
+[Demo guide](https://github.com/Controlvar/controlvar/blob/main/demo/DEMO_GUIDE.md)
 walks through.
 
 Add pgAdmin and LocalStack with the `tools` and `aws` profiles:

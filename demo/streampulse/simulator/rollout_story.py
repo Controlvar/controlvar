@@ -624,13 +624,13 @@ def shlex_quote(value: str) -> str:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rollout_story.py",
-        description="Drive the StreamPulse 'Player v2' rollout story against the Experimently API.",
+        description="Drive the StreamPulse 'Player v2' rollout story against the Controlvar API.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--token", default=None, help="bearer token for the dashboard API (default: sign in with --email/--password)")
     parser.add_argument("--email", default=DEFAULT_EMAIL, help="user to sign in as when --token is not given")
     parser.add_argument("--password", default=DEFAULT_PASSWORD, help="password for --email")
-    parser.add_argument("--api-url", default=DEFAULT_API_URL, help="Experimently API origin")
+    parser.add_argument("--api-url", default=DEFAULT_API_URL, help="Controlvar API origin")
     parser.add_argument("--api-key", default=None, help=f"X-API-Key for the incident traffic (default: contents of {DEFAULT_API_KEY_FILE})")
     parser.add_argument("--dashboard-url", default=DEFAULT_DASHBOARD_URL, help="platform dashboard origin (for the 'look at' hints)")
     parser.add_argument("--app-url", default=DEFAULT_APP_URL, help="StreamPulse app origin (for the 'look at' hints)")

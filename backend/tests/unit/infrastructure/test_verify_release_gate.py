@@ -32,7 +32,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SCRIPT = REPO_ROOT / "scripts" / "verify_release_gate.sh"
 
-REPO = "getexperimently/experimently"
+REPO = "Controlvar/controlvar"
 SHA = "0123456789abcdef0123456789abcdef01234567"
 TAG = "v1.2.3"
 GATE = "Release Gate Summary"

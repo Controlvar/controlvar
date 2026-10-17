@@ -202,11 +202,11 @@ PRODUCTION_COMPOSE = "deploy/compose/compose.yml"
 #: those lines may take: the published repository, the profile variable, and a
 #: literal version followed by the marker.
 COMPOSE_IMAGES = {
-    "api": "ghcr.io/getexperimently/experimently",
-    "web": "ghcr.io/getexperimently/experimently-web",
+    "api": "ghcr.io/controlvar/controlvar",
+    "web": "ghcr.io/controlvar/controlvar-web",
 }
 COMPOSE_IMAGE_LINE_RE = re.compile(
-    r"^\s*image:\s*(?P<repo>ghcr\.io/getexperimently/experimently(?:-web)?)"
+    r"^\s*image:\s*(?P<repo>ghcr\.io/controlvar/controlvar(?:-web)?)"
     r":\$\{EXPERIMENTLY_PROFILE:-core\}-(?P<version>[^\s#]+)"
     r"\s+# x-release-please-version\s*$"
 )
@@ -215,7 +215,7 @@ COMPOSE_IMAGE_LINE_RE = re.compile(
 def read_compose_image_versions() -> dict[str, str]:
     """The version on each published-image line of the production compose file.
 
-    Every line that names a ``ghcr.io/getexperimently/`` image, and every line
+    Every line that names a ``ghcr.io/controlvar/`` image, and every line
     carrying the release-please marker, must be the one shape above: a line
     release-please would not rewrite (no marker), or a marker on a line it
     would rewrite wrongly, is as stale as a wrong number.
@@ -223,7 +223,7 @@ def read_compose_image_versions() -> dict[str, str]:
     path = ROOT / PRODUCTION_COMPOSE
     found: dict[str, list[str]] = {repo: [] for repo in COMPOSE_IMAGES.values()}
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        if "ghcr.io/getexperimently/" not in line and (
+        if "ghcr.io/controlvar/" not in line and (
             "x-release-please-version" not in line
         ):
             continue
@@ -233,7 +233,7 @@ def read_compose_image_versions() -> dict[str, str]:
         if not match or match["repo"] not in found:
             raise AssertionError(
                 f"{PRODUCTION_COMPOSE}:{number} is not "
-                "`image: ghcr.io/getexperimently/experimently[-web]:"
+                "`image: ghcr.io/controlvar/controlvar[-web]:"
                 "${EXPERIMENTLY_PROFILE:-core}-X.Y.Z # x-release-please-version`: "
                 f"{line.strip()!r}"
             )

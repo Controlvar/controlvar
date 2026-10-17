@@ -1,16 +1,19 @@
+// Each setting is read under its name, then under the name it had before the
+// project was renamed (an existing .env.local), then defaults. Each read is a
+// literal `process.env.NAME`: Next.js inlines only that form into the bundle.
 function stripTrailingSlash(url: string): string {
   return url.replace(/\/+$/, '');
 }
 
-/** Experimently API origin. The SDK appends `/api/v1` to every request. */
-export const API_URL = stripTrailingSlash(process.env.NEXT_PUBLIC_EXPERIMENTLY_API_URL || 'http://localhost:8000');
+/** Controlvar API origin. The SDK appends `/api/v1` to every request. */
+export const API_URL = stripTrailingSlash(process.env.NEXT_PUBLIC_CONTROLVAR_API_URL || process.env.NEXT_PUBLIC_EXPERIMENTLY_API_URL || 'http://localhost:8000');
 
 /** Plaintext API key (`shoplab-storefront`, owned by admin@demo.com). Written by the seed script. */
-export const API_KEY = process.env.NEXT_PUBLIC_EXPERIMENTLY_API_KEY || '';
+export const API_KEY = process.env.NEXT_PUBLIC_CONTROLVAR_API_KEY || process.env.NEXT_PUBLIC_EXPERIMENTLY_API_KEY || '';
 
-/** Experimently dashboard, used by the overlay panel's links. */
+/** Controlvar dashboard, used by the overlay panel's links. */
 export const DASHBOARD_URL = stripTrailingSlash(
-  process.env.NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL || 'http://localhost:3100',
+  process.env.NEXT_PUBLIC_CONTROLVAR_DASHBOARD_URL || process.env.NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL || 'http://localhost:3100',
 );
 
 /** Experiment keys the storefront uses — must match the seed script exactly. */

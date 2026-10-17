@@ -1,9 +1,10 @@
-# Experimently: the production compose file, for one Docker host. It runs the
+# Controlvar: the production compose file, for one Docker host. It runs the
 # published images and builds nothing.
 #
 # README.md beside this file says how to run it and lists its settings.
 
-# Not `experimently`: that is the project name the development compose file
+# Not `controlvar` (or `experimently`, the directory of a clone made before
+# the rename): that is the project name the development compose file
 # gets from a checkout directory of that name, and sharing it would make this
 # file recreate those containers and adopt their volumes. Fixed rather than
 # taken from the directory, so the volume names (experimently-selfhost_
@@ -45,7 +46,7 @@ services:
 
   # ---------------------------------------------------------------------------
   api:
-    image: ghcr.io/getexperimently/experimently:${EXPERIMENTLY_PROFILE:-core}-0.34.4 # x-release-please-version
+    image: ghcr.io/controlvar/controlvar:${EXPERIMENTLY_PROFILE:-core}-0.34.4 # x-release-please-version
     # Published for linux/amd64 only (#181): an arm64 host runs it emulated.
     platform: linux/amd64
     environment:
@@ -55,7 +56,7 @@ services:
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
       AUTH_PROVIDER: local
       DEV_AUTH_BYPASS: "false"
-      PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:?required: the URL people open, e.g. https://experimently.example.com}"
+      PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:?required: the URL people open, e.g. https://controlvar.example.com}"
       SECRET_KEY: "${SECRET_KEY:?required: generate with openssl rand -hex 32}"
       FIRST_SUPERUSER: "${FIRST_SUPERUSER:?required: the first administrator's email address}"
       FIRST_SUPERUSER_PASSWORD: "${FIRST_SUPERUSER_PASSWORD:?required: generate with openssl rand -base64 18}"
@@ -90,7 +91,7 @@ services:
 
   # ---------------------------------------------------------------------------
   web:
-    image: ghcr.io/getexperimently/experimently-web:${EXPERIMENTLY_PROFILE:-core}-0.34.4 # x-release-please-version
+    image: ghcr.io/controlvar/controlvar-web:${EXPERIMENTLY_PROFILE:-core}-0.34.4 # x-release-please-version
     platform: linux/amd64
     environment:
       # The dashboard serves the static app and proxies /api, /ws and /health

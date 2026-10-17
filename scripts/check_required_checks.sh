@@ -40,7 +40,7 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-REPO="getexperimently/experimently"
+REPO="Controlvar/controlvar"
 LIVE_FILE=""
 WANT_FILE=""
 NAMES_OK=0

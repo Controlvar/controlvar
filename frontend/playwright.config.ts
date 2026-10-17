@@ -4,7 +4,7 @@ import { defineConfig, devices } from "@playwright/test";
 import { API_URL, BASE_URL, IS_EXTERNAL_BASE_URL, PORT } from "./tests/e2e/env";
 
 /**
- * Playwright configuration for the Experimently dashboard.
+ * Playwright configuration for the Controlvar dashboard.
  *
  * Four projects:
  *   - `journeys` — the fail-hard PR journeys (`*.journey.spec.ts`), the

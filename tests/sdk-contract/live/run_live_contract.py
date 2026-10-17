@@ -27,7 +27,7 @@ seed's unscoped key and requires that it is stored but not counted
 (``error_count`` +0, ``uncounted_error_count`` +1).
 
 Prerequisites
-    1. A backend at ``$EXPERIMENTLY_API_URL`` (default http://localhost:8000)
+    1. A backend at ``$CONTROLVAR_API_URL`` (default http://localhost:8000)
        seeded with ``python backend/scripts/seed_sdk_contract.py`` (creates the
        ``sdk_contract_ab`` experiment, the ``sdk_contract_flag`` flag and two API
        keys, written to tests/sdk-contract/live/.api_key and, with the
@@ -97,7 +97,7 @@ MANIFEST: dict[str, tuple[str, tuple[str, ...]]] = {
 }
 
 # SDKs with a local-evaluation mode -> the command that runs their local smoke
-# (with EXPERIMENTLY_LOCAL_API_KEY set). Run after every SDK above, because the
+# (with CONTROLVAR_LOCAL_API_KEY set). Run after every SDK above, because the
 # errors it posts count against the shared contract flag.
 LOCAL_MANIFEST: dict[str, tuple[str, tuple[str, ...]]] = {
     "python": ("python sdk/python/examples/local_eval_smoke.py", ("python",)),
@@ -257,7 +257,7 @@ def run_local(sdk: str, command: str, env: dict[str, str], timeout: int, flag_ke
     rate = after["error_count"] / after["total_evaluations"]
 
     # One report with the seed's unscoped key: stored, not counted.
-    report_status = _report_error(env["EXPERIMENTLY_API_URL"], env["EXPERIMENTLY_API_KEY"], flag_key, sdk)
+    report_status = _report_error(env["CONTROLVAR_API_URL"], env["CONTROLVAR_API_KEY"], flag_key, sdk)
     if report_status != 201:
         return "FAIL", f"POST /api/v1/tracking/errors with the unscoped key answered {report_status}, expected 201"
     unscoped = _flag_counters(flag_key)
@@ -349,19 +349,32 @@ def main() -> int:
     parser.add_argument("--sdk", action="append", help="run only this SDK (repeatable)")
     parser.add_argument("--strict", action="store_true", help="treat a missing toolchain as a failure")
     parser.add_argument("--timeout", type=int, default=300, help="seconds per SDK (builds included)")
-    parser.add_argument("--api-url", default=os.environ.get("EXPERIMENTLY_API_URL", "http://localhost:8000"))
+    parser.add_argument(
+        "--api-url",
+        # The name before the rename is still read; an empty value counts as unset.
+        default=os.environ.get("CONTROLVAR_API_URL") or os.environ.get("EXPERIMENTLY_API_URL") or "http://localhost:8000",
+    )
     args = parser.parse_args()
 
-    api_key = os.environ.get("EXPERIMENTLY_API_KEY") or (KEY_FILE.read_text().strip() if KEY_FILE.exists() else "")
+    api_key = os.environ.get("CONTROLVAR_API_KEY") or os.environ.get("EXPERIMENTLY_API_KEY") or (KEY_FILE.read_text().strip() if KEY_FILE.exists() else "")
     if not api_key:
-        print("No API key: set EXPERIMENTLY_API_KEY or run backend/scripts/seed_sdk_contract.py", file=sys.stderr)
+        print("No API key: set CONTROLVAR_API_KEY or run backend/scripts/seed_sdk_contract.py", file=sys.stderr)
         return 2
     if not backend_healthy(args.api_url):
         print(f"Backend at {args.api_url} is not healthy", file=sys.stderr)
         return 2
 
     env = dict(os.environ)
-    env.update({"EXPERIMENTLY_API_URL": args.api_url, "EXPERIMENTLY_API_KEY": api_key})
+    # Both names: the smokes under sdk/ read the name before the rename until
+    # they move to the new one.
+    env.update(
+        {
+            "CONTROLVAR_API_URL": args.api_url,
+            "CONTROLVAR_API_KEY": api_key,
+            "EXPERIMENTLY_API_URL": args.api_url,
+            "EXPERIMENTLY_API_KEY": api_key,
+        }
+    )
     env.setdefault("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab")
     env.setdefault("CONTRACT_FLAG_KEY", "sdk_contract_flag")
 
@@ -374,14 +387,14 @@ def main() -> int:
     results: list[tuple[str, str, str]] = []
 
     # The ruleset endpoint is checked once, before the SDKs, with the seed's two keys.
-    local_key = os.environ.get("EXPERIMENTLY_LOCAL_API_KEY") or (
+    local_key = os.environ.get("CONTROLVAR_LOCAL_API_KEY") or os.environ.get("EXPERIMENTLY_LOCAL_API_KEY") or (
         LOCAL_KEY_FILE.read_text().strip() if LOCAL_KEY_FILE.exists() else ""
     )
     if local_key:
         status, detail = check_ruleset(args.api_url, api_key, local_key, env["CONTRACT_FLAG_KEY"])
     else:
         status = "FAIL" if args.strict else "SKIP"
-        detail = "no sdk:ruleset key: set EXPERIMENTLY_LOCAL_API_KEY or run seed_sdk_contract.py"
+        detail = "no sdk:ruleset key: set CONTROLVAR_LOCAL_API_KEY or run seed_sdk_contract.py"
     results.append(("ruleset (server)", status, detail))
     print(f"{status:4} {'ruleset (server)':<20} {detail}", flush=True)
 
@@ -406,7 +419,7 @@ def main() -> int:
         if not local_key:
             results.append((name, "FAIL" if args.strict else "SKIP", "no sdk:ruleset key"))
             continue
-        local_env = dict(env, EXPERIMENTLY_LOCAL_API_KEY=local_key)
+        local_env = dict(env, CONTROLVAR_LOCAL_API_KEY=local_key, EXPERIMENTLY_LOCAL_API_KEY=local_key)
         status, detail = run_local(sdk, command, local_env, args.timeout, env["CONTRACT_FLAG_KEY"])
         results.append((name, status, detail))
         print(f"{status:4} {name:<20} {detail}", flush=True)

@@ -44,8 +44,8 @@ REQUIRED = (
 #: Secret, but optional: the only default either may have is empty.
 OPTIONAL_SECRETS = ("AUDIT_HMAC_KEY", "METRICS_TOKEN")
 
-API_REPO = "ghcr.io/getexperimently/experimently"
-WEB_REPO = "ghcr.io/getexperimently/experimently-web"
+API_REPO = "ghcr.io/controlvar/controlvar"
+WEB_REPO = "ghcr.io/controlvar/controlvar-web"
 
 
 def _version() -> str:
@@ -60,6 +60,36 @@ def compose() -> Dict[str, Any]:
 @pytest.fixture(scope="module")
 def services(compose) -> Dict[str, Any]:
     return compose["services"]
+
+
+#: The volumes, and the database user, of every install made before the
+#: project was renamed: compose names a volume `<project>_<key>`, and Postgres
+#: applies the user only when it initialises an empty volume.
+VOLUMES_BEFORE_THE_RENAME = {
+    "experimently-selfhost_postgres_data",
+    "experimently-selfhost_redis_data",
+}
+DATABASE_USER_BEFORE_THE_RENAME = "${POSTGRES_USER:-experimently}"
+
+
+@pytest.mark.regression
+def test_compose_upgrade_keeps_the_postgres_volume(compose):
+    """An upgrade with the new file reaches the database it had. Were the
+    project name renamed, `docker compose up -d` would create new, empty
+    volumes, the bootstrap would make a fresh database with the first
+    administrator, and the stack would come up healthy on it."""
+    volumes = {
+        spec.get("name")
+        if isinstance(spec, dict) and spec.get("name")
+        else f"{compose['name']}_{key}"
+        for key, spec in compose["volumes"].items()
+    }
+    assert volumes == VOLUMES_BEFORE_THE_RENAME
+    for service in ("postgres", "api"):
+        assert (
+            compose["services"][service]["environment"]["POSTGRES_USER"]
+            == DATABASE_USER_BEFORE_THE_RENAME
+        ), service
 
 
 class TestShape:
@@ -93,7 +123,7 @@ class TestShape:
         assert "depends_on" not in services["api"]
 
     def test_the_project_name_is_not_the_development_stacks(self, compose):
-        """A checkout in `experimently/` gives docker-compose.yml that project name.
+        """A checkout in `controlvar/` gives docker-compose.yml that project name.
 
         Sharing it, `up` recreates the development containers with this file's
         settings and mounts their volumes -- measured, not hypothetical.
@@ -269,7 +299,7 @@ class TestGenerator:
         env = {k: v for k, v in os.environ.items() if k not in REQUIRED}
         env.update(
             ENV_FILE=str(env_file),
-            PUBLIC_BASE_URL="https://experimently.example.com",
+            PUBLIC_BASE_URL="https://controlvar.example.com",
             FIRST_SUPERUSER="you@example.com",
             EXPERIMENTLY_PROFILE="full",
         )
@@ -278,7 +308,7 @@ class TestGenerator:
         )
         assert result.returncode == 0, result.stderr
         text = env_file.read_text()
-        assert "PUBLIC_BASE_URL=https://experimently.example.com\n" in text
+        assert "PUBLIC_BASE_URL=https://controlvar.example.com\n" in text
         assert "FIRST_SUPERUSER=you@example.com\n" in text
         assert "EXPERIMENTLY_PROFILE=full\n" in text
 

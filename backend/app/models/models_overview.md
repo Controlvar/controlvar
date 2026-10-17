@@ -1,4 +1,4 @@
-# Experimently Models
+# Controlvar Models
 
 ## 1. `base.py`
 **Purpose**: Provides a base class for all models.

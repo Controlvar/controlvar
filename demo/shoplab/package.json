@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "license": "Apache-2.0",
   "private": true,
-  "description": "ShopLab \u2014 a demo storefront running live experiments on the Experimently platform",
+  "description": "ShopLab \u2014 a demo storefront running live experiments on the Controlvar platform",
   "scripts": {
     "dev": "next dev --webpack -p 3200 -H 127.0.0.1",
     "build": "next build",

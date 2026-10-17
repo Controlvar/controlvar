@@ -1,7 +1,7 @@
 apiVersion: v2
-name: experimently
+name: controlvar
 description: >-
-  Experimently, the open-source experimentation and feature-flag platform:
+  Controlvar, the open-source experimentation and feature-flag platform:
   the API, the dashboard, and optionally an evaluation-grade Postgres and Redis.
 type: application
 # The chart version IS the platform version: `--version X` installs images X.
@@ -12,9 +12,9 @@ type: application
 version: 0.34.4 # x-release-please-version
 appVersion: "0.34.4" # x-release-please-version
 kubeVersion: ">=1.27.0-0"
-home: https://github.com/getexperimently/experimently
+home: https://github.com/Controlvar/controlvar
 sources:
-  - https://github.com/getexperimently/experimently
+  - https://github.com/Controlvar/controlvar
 keywords:
   - experimentation
   - feature-flags

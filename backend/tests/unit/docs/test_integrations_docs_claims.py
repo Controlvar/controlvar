@@ -364,7 +364,7 @@ PLATFORM_PAGES = (
 #: "creates", "created" and "creating" are one entry; the actor includes
 #: "automatically", the usual subject of a passive claim.
 _ACTOR = re.compile(
-    r"(?i)\b(?:platform|experimently|automatically)\b"
+    r"(?i)\b(?:platform|controlvar|automatically)\b"
     # An actor-less passive ("a Jira issue is created for ...") is a claim too.
     r"|\b(?:is|are|was|were|be|been|being|gets?|got)\s+(?:\w+ly\s+)?"
     r"(?:creat|push|sync|updat|link|post|comment|open|clos|transition|sent|writ"
@@ -387,7 +387,6 @@ ALLOWED_PLATFORM_SENTENCES: Dict[str, Tuple[str, ...]] = {
     "docs/api/integrations.md": (
         "Nothing in the platform calls Jira, Salesforce or GitHub yet, and an authenticated delivery is acknowledged without changing anything in the platform (see [What a delivery does](#what-a-delivery-does)).",
         "An authenticated delivery is acknowledged, and nothing in the platform changes because of it yet: no experiment, flag or other record is created or updated from a Jira, Salesforce or GitHub event.",
-        "Then set the same value at the provider: GitHub's webhook *Secret* field, Jira's webhook secret (Jira Cloud) or the `X-Experimently-Webhook-Secret` header on the relay in front of it, and the same header on the Salesforce callout (or relay).",
         "The Jira client is written for **HTTP Basic Auth** (`email:api_token`); nothing in the platform calls it yet.",
         "A Jira project key such as `EXP`, stored for calls to Jira, which nothing in the platform makes yet",
         "The Salesforce client is written for **OAuth 2.0 Client Credentials** (`client_id` and `client_secret` for an access token at the Salesforce token endpoint); nothing in the platform calls it yet.",
@@ -480,7 +479,7 @@ def test_every_claim_about_what_the_platform_does_is_on_the_list() -> None:
     [
         "The platform creates a GitHub issue for each experiment.",
         "A Salesforce campaign is updated automatically when an experiment completes.",
-        "Experimently opens a pull request for every rollout.",
+        "Controlvar opens a pull request for every rollout.",
         "Results are pushed to Jira by the platform.",
         "| `project_key` | Default project for issues the platform creates |",
     ],

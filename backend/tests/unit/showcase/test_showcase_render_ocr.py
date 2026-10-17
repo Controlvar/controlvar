@@ -82,7 +82,7 @@ def test_a_needle_is_found_through_misreadings(ocr_text):
 
 def test_ordinary_dashboard_text_is_not_a_needle():
     text = (
-        "Experimently Experiments Feature Flags Admin\nHomepage hero copy test Active 2 variants 12,408 users\n"
+        "Controlvar Experiments Feature Flags Admin\nHomepage hero copy test Active 2 variants 12,408 users\n"
         "Checkout button colour Draft 3 variants\nAPI key eptk_ab12... created today\nSign in as admin@demo.com"
     )
     assert ocr.findings(text, [NEEDLE, "Demo1234!x"]) == []
@@ -303,7 +303,7 @@ def test_contract_fps_is_the_one_the_samples_assume():
 
 #: Made-up text of the kind a dashboard frame holds, for the no-false-match checks.
 DASHBOARD_TEXT = (
-    "Experimently Experiments Feature Flags Segments Reports Admin Audit Log\n"
+    "Controlvar Experiments Feature Flags Segments Reports Admin Audit Log\n"
     "Experiments 4 experiments in the demo data New experiment\n"
     "Homepage hero copy test Active 2 variants 12,408 users Started 3 days ago\n"
     "Checkout button colour Draft 3 variants 0 users\n"

@@ -4,7 +4,7 @@
 document = "charts/experimently/templates/NOTES.txt"
 
 [[unit]]
-text = "Experimently {{ .Chart.AppVersion }} ({{ .Values.profile }} profile) is installing as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}."
+text = "Controlvar {{ .Chart.AppVersion }} ({{ .Values.profile }} profile) is installing as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}."
 by = ["workflow:chart-kind.yml"]
 
 [[unit]]
@@ -23,5 +23,5 @@ text = "Then sign in at {{ .Values.publicBaseUrl }} as {{ .Values.firstSuperuser
 by = ["workflow:chart-kind.yml"]
 
 [[unit]]
-text = "The chart's README says what to do when a pod stays in Init or the Ingress is disabled: https://github.com/getexperimently/experimently/blob/v{{ .Chart.AppVersion }}/charts/experimently/README.md"
+text = "The chart's README says what to do when a pod stays in Init or the Ingress is disabled: https://github.com/Controlvar/controlvar/blob/v{{ .Chart.AppVersion }}/charts/experimently/README.md"
 by = ["exempt:navigation"]

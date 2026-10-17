@@ -4,7 +4,7 @@
 document = "deploy/compose/compose.yml#header"
 
 [[unit]]
-text = "Experimently: the production compose file, for one Docker host."
+text = "Controlvar: the production compose file, for one Docker host."
 by = [
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_production_with_no_seed_and_no_bypass",
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_exactly_the_four_services",

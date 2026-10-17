@@ -5,37 +5,37 @@ check -- so an install whose publicBaseUrl is wrong is green everywhere else.
 It talks to the API Service directly; it does not exercise the Ingress.
 */ -}}
 {{- if .Values.tests.enabled }}
-{{- $fullname := include "experimently.fullname" . }}
+{{- $fullname := include "controlvar.fullname" . }}
 apiVersion: v1
 kind: Pod
 metadata:
   name: {{ $fullname }}-smoke
   labels:
-    {{- include "experimently.labels" . | nindent 4 }}
+    {{- include "controlvar.labels" . | nindent 4 }}
     app.kubernetes.io/component: test
   annotations:
     helm.sh/hook: test
     helm.sh/hook-delete-policy: before-hook-creation
 spec:
   restartPolicy: Never
-  serviceAccountName: {{ include "experimently.serviceAccountName" . }}
+  serviceAccountName: {{ include "controlvar.serviceAccountName" . }}
   automountServiceAccountToken: false
   {{- with .Values.imagePullSecrets }}
   imagePullSecrets:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   securityContext:
-    {{- include "experimently.podSecurity" (dict "uid" 1001 "gid" 1001) | nindent 4 }}
+    {{- include "controlvar.podSecurity" (dict "uid" 1001 "gid" 1001) | nindent 4 }}
   containers:
     - name: smoke
-      image: {{ include "experimently.image" (dict "ctx" . "image" .Values.image.api) }}
+      image: {{ include "controlvar.image" (dict "ctx" . "image" .Values.image.api) }}
       imagePullPolicy: {{ .Values.image.pullPolicy }}
       command: ["/bin/sh", "-c"]
       env:
         - name: BASE
           value: http://{{ $fullname }}-api:8000
         - name: PUBLIC_HOST
-          value: {{ include "experimently.publicHost" . | quote }}
+          value: {{ include "controlvar.publicHost" . | quote }}
         - name: PROFILE
           value: {{ .Values.profile | quote }}
       args:
@@ -51,7 +51,7 @@ spec:
           [ "$code" = 400 ] || { echo "Host not-$PUBLIC_HOST: expected 400, got $code (the Host check is off)"; exit 1; }
           echo "Host not-$PUBLIC_HOST: 400"
       securityContext:
-        {{- include "experimently.containerSecurity" . | nindent 8 }}
+        {{- include "controlvar.containerSecurity" . | nindent 8 }}
       volumeMounts:
         - name: tmp
           mountPath: /tmp

@@ -689,7 +689,7 @@ jobs:
       # names -- `sdk/go/vX.Y.Z` publishes the module at `sdk/go` -- because
       # that is what the go tool resolves. It is NOT that the path contains
       # `github.repository`: go.mod already declares the post-cut home
-      # (getexperimently/experimently), deliberately and permanently, while
+      # (Controlvar/controlvar), deliberately and permanently, while
       # this workflow still runs on the pre-cut repository. Comparing against
       # `github.repository` made every `sdk/go/v*` tag fail here -- a gate
       # that can only ever reject, which is no better than one that can only

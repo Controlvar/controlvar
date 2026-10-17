@@ -2,7 +2,7 @@
 """StreamPulse device simulator.
 
 Pretends to be thousands of mobile devices opening the StreamPulse app, using only the
-public Experimently API and the app's API key — no database access, stdlib only.
+public Controlvar API and the app's API key — no database access, stdlib only.
 
 Per tick (one app session on one device):
   1. GET  /api/v1/feature-flags/evaluate/{key}?user_id=…&context=<device attributes>  (4 flags)
@@ -738,10 +738,10 @@ def read_api_key_file(path: Path) -> str | None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="traffic.py",
-        description="Simulate StreamPulse mobile devices against the Experimently public API.",
+        description="Simulate StreamPulse mobile devices against the Controlvar public API.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--api-url", default=DEFAULT_API_URL, help="Experimently API origin")
+    parser.add_argument("--api-url", default=DEFAULT_API_URL, help="Controlvar API origin")
     parser.add_argument("--api-key", default=None, help=f"X-API-Key value (default: contents of {DEFAULT_API_KEY_FILE})")
     parser.add_argument(
         "--server-api-key",

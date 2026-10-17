@@ -1,17 +1,17 @@
 blank_issues_enabled: false
 contact_links:
   - name: 🔒 Report a security vulnerability
-    url: https://github.com/getexperimently/experimently/security/advisories/new
+    url: https://github.com/Controlvar/controlvar/security/advisories/new
     about: >-
       Never report a vulnerability in a public issue. Use GitHub private
-      vulnerability reporting, or email security@getexperimently.com. See
+      vulnerability reporting, or email security@controlvar.com. See
       SECURITY.md for the disclosure timeline and safe harbour.
   - name: 💬 Question or usage help
-    url: https://getexperimently.github.io/experimently/
+    url: https://docs.controlvar.com/
     about: >-
       Start with the documentation site: self-hosting, the SDKs, statistics
       and the API. If it does not answer your question, open a feature
       request or a bug report.
   - name: 📖 Documentation
-    url: https://github.com/getexperimently/experimently/tree/main/docs
+    url: https://github.com/Controlvar/controlvar/tree/main/docs
     about: Self-hosting, SDKs, statistics and API reference.

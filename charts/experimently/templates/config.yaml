@@ -1,17 +1,17 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "experimently.fullname" . }}-config
+  name: {{ include "controlvar.fullname" . }}-config
   labels:
-    {{- include "experimently.labels" . | nindent 4 }}
+    {{- include "controlvar.labels" . | nindent 4 }}
 data:
   # ENVIRONMENT and PUBLIC_BASE_URL are explicit `env` on the API containers
-  # (templates/_helpers.tpl, experimently.pinnedEnv), not here: a ConfigMap
+  # (templates/_helpers.tpl, controlvar.pinnedEnv), not here: a ConfigMap
   # named in api.extraEnvFrom would override a value from this one.
   {{- with .Values.allowedHosts }}
   # ALLOWED_HOSTS replaces the host derived from PUBLIC_BASE_URL, so it
   # carries that host as well as the extra names.
-  ALLOWED_HOSTS: {{ prepend . (include "experimently.publicHost" $) | join "," | quote }}
+  ALLOWED_HOSTS: {{ prepend . (include "controlvar.publicHost" $) | join "," | quote }}
   {{- end }}
   {{- with .Values.corsOrigins }}
   CORS_ORIGINS: {{ join "," . | quote }}
@@ -20,7 +20,7 @@ data:
   LOG_FORMAT: json
   WEB_CONCURRENCY: "1"
   FIRST_SUPERUSER: {{ required "firstSuperuser is required: the email of the first administrator" .Values.firstSuperuser | quote }}
-  POSTGRES_SERVER: {{ include "experimently.postgresHost" . | quote }}
+  POSTGRES_SERVER: {{ include "controlvar.postgresHost" . | quote }}
   POSTGRES_PORT: {{ .Values.postgresql.port | quote }}
   POSTGRES_DB: {{ .Values.postgresql.database | quote }}
   POSTGRES_SCHEMA: {{ .Values.postgresql.schema | quote }}
@@ -28,7 +28,7 @@ data:
   PGSSLMODE: {{ . | quote }}
   {{- end }}
   {{- if .Values.redis.enabled }}
-  REDIS_HOST: {{ include "experimently.redisHost" . | quote }}
+  REDIS_HOST: {{ include "controlvar.redisHost" . | quote }}
   REDIS_PORT: {{ .Values.redis.port | quote }}
   REDIS_SSL: {{ .Values.redis.ssl | quote }}
   {{- end }}

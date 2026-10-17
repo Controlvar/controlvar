@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: 2026 Experimently contributors
+# SPDX-FileCopyrightText: 2026 The Controlvar authors
 # SPDX-License-Identifier: Apache-2.0
 """Refuse to let a secret or a false claim into this repository.
 

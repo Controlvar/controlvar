@@ -1,4 +1,4 @@
-# Experimently Requirements
+# Controlvar Requirements
 #
 # backend/requirements.txt is the single source of truth for Python
 # dependencies (it is what the Dockerfile, the CI workflows and Dependabot

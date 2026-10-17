@@ -8,7 +8,7 @@ text = "Kubernetes (Helm)"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Experimently installs on Kubernetes with the Helm chart in charts/experimently: a one-time secret step, then one install command."
+text = "Controlvar installs on Kubernetes with the Helm chart in charts/experimently: a one-time secret step, then one install command."
 by = ["workflow:chart-kind.yml"]
 
 [[unit]]
@@ -28,7 +28,7 @@ text = "CHART | the chart: a path to charts/experimently, or a packaged chart"
 by = ["workflow:chart-kind.yml"]
 
 [[unit]]
-text = "PUBLIC_BASE_URL | the origin people open, such as https://experimently.example.com: a DNS name, no port, no path"
+text = "PUBLIC_BASE_URL | the origin people open, such as https://controlvar.example.com: a DNS name, no port, no path"
 by = [
     "test:backend/tests/unit/chart/test_chart_render.py::test_an_ip_or_port_origin_is_refused_with_the_ingress_on",
     "test:backend/tests/unit/chart/test_chart_render.py::test_schema_refuses",

@@ -45,7 +45,7 @@ def prod_settings(monkeypatch):
         ENVIRONMENT="staging",
         SECRET_KEY="s" * 64,
         FIRST_SUPERUSER_PASSWORD="Str0ng-first-admin",
-        PUBLIC_BASE_URL="https://experimently.example.com",
+        PUBLIC_BASE_URL="https://controlvar.example.com",
         _env_file=None,
     )
 

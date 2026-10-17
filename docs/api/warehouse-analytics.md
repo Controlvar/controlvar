@@ -2,7 +2,7 @@
 
 !!! note "Beta: Snowflake and BigQuery are available"
     Warehouse analysis runs an experiment's analysis on tables in your own
-    data warehouse instead of on events sent to Experimently. The API below is
+    data warehouse instead of on events sent to Controlvar. The API below is
     part of the **full profile** and every route is `x-stability: beta`: its
     shape may still change.
 
@@ -15,14 +15,14 @@
 
 ## What it does
 
-You point Experimently at two of your own tables or views:
+You point Controlvar at two of your own tables or views:
 
 - an **assignment source**: one row per exposure, with the unit id, the
   experiment key, the variant label and the time of the exposure;
 - a **metric source** per metric: one row per event, with the unit id and the
   time of the event, and for a mean metric the event's value.
 
-Experimently writes the SQL itself (there is no field that takes SQL), runs
+Controlvar writes the SQL itself (there is no field that takes SQL), runs
 it as the identity you created for it, and computes the results
 from what comes back. A metric is one of two types:
 
@@ -73,10 +73,10 @@ otherwise the warehouse numbers are the stricter ones.
 
 ## Setting up Snowflake
 
-Experimently signs in to Snowflake's SQL API as a user in your account, with
+Controlvar signs in to Snowflake's SQL API as a user in your account, with
 a key pair it generates. There is no password field.
 
-1. **In Snowflake, give Experimently a user and a role of its own.** Grant
+1. **In Snowflake, give Controlvar a user and a role of its own.** Grant
    the role `USAGE` on the warehouse, the database and the schema, and `SELECT`
    on each table or view analysis reads, and nothing else.
 
@@ -86,8 +86,8 @@ a key pair it generates. There is no password field.
    is the organisation-account identifier, for example `MYORG-MYACCOUNT`
    (Snowsight › Admin › Accounts), not a locator or a URL. Saving generates
    the key pair and shows the statement that registers its public key, for
-   example `ALTER USER EXPERIMENTLY SET RSA_PUBLIC_KEY='…';`. Run it as an
-   administrator. The private key never leaves Experimently.
+   example `ALTER USER CONTROLVAR SET RSA_PUBLIC_KEY='…';`. Run it as an
+   administrator. The private key never leaves Controlvar.
 3. **Test the connection.** The test signs in and runs one statement that
    reads no table.
 4. **Name tables in full** in a source: `DATABASE.SCHEMA.TABLE`, each part
@@ -103,10 +103,10 @@ working until a test with the new one passes.
 
 ## Setting up BigQuery
 
-Experimently signs in to BigQuery with a service-account key you create for
+Controlvar signs in to BigQuery with a service-account key you create for
 it, and runs every query as a job in a project you choose.
 
-1. **In Google Cloud, create a service account for Experimently** with these
+1. **In Google Cloud, create a service account for Controlvar** with these
    two roles only:
     - **BigQuery Job User** on the project that runs and pays for the
       queries (the connection's billing project);
@@ -119,7 +119,7 @@ it, and runs every query as a job in a project you choose.
 3. **Set the location** to where your datasets are: `US`, `EU`, or a region
    such as `europe-west2`.
 4. **Set the bytes cap** ("Most data a query may read"). Before each query
-   Experimently runs a dry run: anything that is not a single `SELECT`, or
+   Controlvar runs a dry run: anything that is not a single `SELECT`, or
    that would read more than the cap, is refused before it runs. The real
    query is also sent with the cap as its billing limit, so BigQuery stops it
    rather than bill more.

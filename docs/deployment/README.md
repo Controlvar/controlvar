@@ -1,6 +1,6 @@
 # Deployment Documentation
 
-Operational documentation for deploying and operating Experimently in an AWS account.
+Operational documentation for deploying and operating Controlvar in an AWS account.
 There are two environments, **`staging`** and **`prod`**, and one path for
 both: the same stacks (`ENVIRONMENT=<env> cdk deploy`) and the same three
 workflows, each dispatched with `environment: staging` or `environment: prod`.
@@ -54,15 +54,15 @@ checklist in [the deployment guide](deployment-guide.md#1-before-the-first-deplo
 
 > **What has run against a real AWS account.** Deploy has run to success on a
 > staging account, most recently v0.31.0 on 2026-10-13 (UTC)
-> ([run](https://github.com/getexperimently/experimently/actions/runs/38423251771)).
+> ([run](https://github.com/Controlvar/controlvar/actions/runs/38423251771)).
 > On 2026-10-04 (UTC) and on 2026-10-11 (UTC) the Rollback workflow ran there end to end,
 > putting the API and the dashboard back on the previous release
-> ([run](https://github.com/getexperimently/experimently/actions/runs/37217043185),
-> [run](https://github.com/getexperimently/experimently/actions/runs/38098724258)).
+> ([run](https://github.com/Controlvar/controlvar/actions/runs/37217043185),
+> [run](https://github.com/Controlvar/controlvar/actions/runs/38098724258)).
 > On 2026-10-11 (UTC) a 5xx alarm forced into ALARM in the hour after a deploy's
 > traffic shift stopped the deployment there, and CodeDeploy moved the API back
 > to the previous revision by itself
-> ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399595), [#148](https://github.com/getexperimently/experimently/issues/148)).
+> ([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399595), [#148](https://github.com/Controlvar/controlvar/issues/148)).
 
 **How the traffic moves.** The deploy creates a CodeDeploy blue/green
 deployment. When CodeDeploy reports it `Ready`, the deploy checks that every
@@ -91,7 +91,7 @@ too, so the dashboard alone goes back with
 > **Alarms watch the API's canary and the hour after it.** The deployment
 > group has two alarms, `experimentation-api-5xx-blue-<env>` and
 > `experimentation-api-5xx-green-<env>`, one per target group
-> ([#148](https://github.com/getexperimently/experimently/issues/148)). While
+> ([#148](https://github.com/Controlvar/controlvar/issues/148)). While
 > either is in ALARM, CodeDeploy stops the deployment and rolls the API back
 > to the previous revision by itself. That can happen after the run has gone
 > green, in the hour CodeDeploy keeps the previous task set, and nothing

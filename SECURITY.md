@@ -1,6 +1,6 @@
 # Security policy
 
-Experimently handles experiment assignments, feature-flag evaluations, audit
+Controlvar handles experiment assignments, feature-flag evaluations, audit
 records and, with the `hipaa` module installed, PHI. We take vulnerability
 reports seriously and we would rather hear about a problem from you than from
 an incident.
@@ -15,7 +15,7 @@ Report privately, by either route:
 1. **GitHub private vulnerability reporting** (preferred) — on this repository,
    go to **Security → Report a vulnerability**. This creates a private advisory
    that only the maintainers and you can see.
-2. **Email** — <security@getexperimently.com>.
+2. **Email** — <security@controlvar.com>.
 
 Please include, as far as you have it:
 
@@ -55,7 +55,7 @@ reporters in the advisory and the changelog unless you ask us not to.
 
 ## Supported versions
 
-Experimently has not yet cut a `1.0.0` release. Until it does, only the latest
+Controlvar has not yet cut a `1.0.0` release. Until it does, only the latest
 release receives fixes: upgrade to it.
 
 | Version | Supported |
@@ -102,7 +102,7 @@ be closed as informational):
 ## Safe harbour
 
 If you make a good-faith effort to comply with this policy while researching a
-vulnerability in Experimently, we will consider your research authorised, we
+vulnerability in Controlvar, we will consider your research authorised, we
 will not initiate or support legal action against you, and we will not report
 you to law enforcement. We will make it known that your actions were authorised
 if a third party brings legal action against you for research conducted under
@@ -121,9 +121,9 @@ Good faith means:
   per the timelines above;
 - you comply with applicable law.
 
-This safe harbour is a commitment from the Experimently maintainers about how we
+This safe harbour is a commitment from the Controlvar maintainers about how we
 will behave. It cannot bind a third party — if you test against someone else's
-hosted Experimently deployment, their terms and their law apply, not ours.
+hosted Controlvar deployment, their terms and their law apply, not ours.
 
 ## Hardening your own deployment
 

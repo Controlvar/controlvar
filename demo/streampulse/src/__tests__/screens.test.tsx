@@ -175,7 +175,7 @@ describe('Profile (streampulse_wrapped + streampulse_profile_badges)', () => {
     __setExperiment(EXPERIMENT_KEYS.wrapped, { configuration: { wrapped: false }, assigned: false, reason: 'holdout' });
     __setExperiment(EXPERIMENT_KEYS.profileBadges, { configuration: { badges: false }, assigned: false, reason: 'holdout' });
     renderScreen(<ProfileScreen deviceModel="Pixel 7" tier="free" />);
-    expect(screen.getByTestId('profile-plain')).toHaveTextContent('see the Experimently panel for why');
+    expect(screen.getByTestId('profile-plain')).toHaveTextContent('see the Controlvar panel for why');
   });
 });
 

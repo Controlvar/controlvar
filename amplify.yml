@@ -1,7 +1,6 @@
-# AWS Amplify builds getexperimently.com from this file, on every push to the
+# AWS Amplify builds controlvar.com from this file, on every push to the
 # PUBLIC repository's main branch. That is the whole deploy path -- there is no
-# pipeline elsewhere, and `frontend/deploy.sh` is a separate manual route that
-# names an S3 bucket this account does not have.
+# pipeline elsewhere.
 #
 # `npm run build` builds the PLATFORM: the dashboard, /admin/*, /experiments,
 # /feature-flags, /results, /workspaces and three "Sign in" buttons. The public

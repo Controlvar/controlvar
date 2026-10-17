@@ -1,4 +1,4 @@
-# Contributing to Experimently
+# Contributing to Controlvar
 
 Thanks for wanting to help. This document is the short version of everything you
 need: how to sign your work, how to run the stack, and where code lives.
@@ -16,7 +16,7 @@ need: how to sign your work, how to run the stack, and where code lives.
 
 ## Developer Certificate of Origin (DCO)
 
-Experimently uses the [Developer Certificate of Origin](https://developercertificate.org/),
+Controlvar uses the [Developer Certificate of Origin](https://developercertificate.org/),
 not a CLA. You keep the copyright in your contribution; you certify that you
 have the right to submit it under the licence of the file you are changing.
 There is no paperwork and no copyright assignment, anywhere in the tree.

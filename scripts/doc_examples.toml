@@ -138,6 +138,7 @@ universe = [
     "docs/self-hosting/migrations.md",
     "docs/self-hosting/monitoring.md",
     "docs/self-hosting/releases.md",
+    "docs/self-hosting/upgrading-to-controlvar.md",
     "docs/statistics/fdr-correction.md",
     "docs/statistics/post-stratification.md",
     "docs/statistics/power-analysis.md",

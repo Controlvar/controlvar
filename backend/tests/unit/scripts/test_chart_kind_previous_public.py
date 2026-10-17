@@ -159,9 +159,9 @@ def test_previous_resolves_n_minus_1_on_a_pull_request_from_a_fork(sandbox):
     env.update(
         GITHUB_OUTPUT=str(out),
         GITHUB_STEP_SUMMARY=str(summary),
-        GITHUB_REPOSITORY="getexperimently/experimently",
+        GITHUB_REPOSITORY="Controlvar/controlvar",
         # What a fork's pull request looked like to the old skip.
-        HEAD_REPO="someone/experimently",
+        HEAD_REPO="someone/controlvar",
         GITHUB_EVENT_NAME="pull_request",
     )
     result = _run(
@@ -190,7 +190,7 @@ def test_a_failed_anonymous_pull_fails_with_the_message(sandbox):
     _stub(tmp / "bin", "docker", 'printf "denied\\n" >&2\nexit 1\n')
     result = _run(
         _harness("pull_anonymously", assignments=("PULL_FAILED",))
-        + "pull_anonymously ghcr.io/getexperimently/experimently:core-0.16.2\n"
+        + "pull_anonymously ghcr.io/controlvar/controlvar:core-0.16.2\n"
         + "printf 'still-running\\n'\n",
         tmp,
         env,
@@ -223,12 +223,12 @@ def test_a_successful_pull_sends_no_stored_credential(sandbox):
     )
     result = _run(
         _harness("pull_anonymously", assignments=("PULL_FAILED",))
-        + "pull_anonymously ghcr.io/getexperimently/experimently:core-0.16.2\n",
+        + "pull_anonymously ghcr.io/controlvar/controlvar:core-0.16.2\n",
         tmp,
         env,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     log = (tmp / "docker.log").read_text(encoding="utf-8")
-    assert "args=pull ghcr.io/getexperimently/experimently:core-0.16.2" in log
+    assert "args=pull ghcr.io/controlvar/controlvar:core-0.16.2" in log
     assert f"config={home_cfg}\n" not in log
     assert "auths" not in log, log

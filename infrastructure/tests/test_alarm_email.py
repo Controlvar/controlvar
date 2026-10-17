@@ -77,14 +77,14 @@ REFUSED = {
     "blank": "   ",
     "empty": "",
     "too long": "a" * 243 + "@example.org.uk",  # 258 characters
-    "exactly 255": "a" * 235 + "@getexperimently.com",
-    "whitespace inside": "ops team@getexperimently.com",
-    "leading whitespace": " hello@getexperimently.com",
-    "trailing newline": "hello@getexperimently.com\n",
-    "tab": "hello@getexperimently.com\t",
-    "no @": "hello.getexperimently.com",
-    "two @": "hello@ops@getexperimently.com",
-    "nothing before @": "@getexperimently.com",
+    "exactly 255": "a" * 240 + "@controlvar.com",
+    "whitespace inside": "ops team@controlvar.com",
+    "leading whitespace": " hello@controlvar.com",
+    "trailing newline": "hello@controlvar.com\n",
+    "tab": "hello@controlvar.com\t",
+    "no @": "hello.controlvar.com",
+    "two @": "hello@ops@controlvar.com",
+    "nothing before @": "@controlvar.com",
     "nothing after @": "hello@",
     "domain with no dot": "hello@localhost",
     "example.com": "alerts@example.com",
@@ -116,15 +116,15 @@ def test_a_bad_value_is_refused_in_every_environment(value, environment):
 @pytest.mark.parametrize(
     "value",
     [
-        "hello@getexperimently.com",
-        "Hello@GetExperimently.com",
+        "hello@controlvar.com",
+        "Hello@Controlvar.com",
         TEST_ALARM_EMAIL,
         # Only the documentation domains themselves, not look-alikes.
         "ops@notexample.com",
         "ops@example.company",
         "ops@example.com.au",
         # Exactly 254 characters is the limit, and allowed.
-        "a" * 234 + "@getexperimently.com",
+        "a" * 239 + "@controlvar.com",
     ],
 )
 @pytest.mark.parametrize("environment", REQUIRED + OPTIONAL)

@@ -44,7 +44,7 @@ rc = _load()
 
 TAG = "v0.30.0"
 #: GITHUB_REPOSITORY, as conftest.py sets it for every test here.
-REPO = "getexperimently/experimently"
+REPO = "Controlvar/controlvar"
 RC = "a1" * 20
 OLD = "b2" * 20
 COMMIT_TIME = "2026-11-01T10:00:00Z"
@@ -83,13 +83,13 @@ TARBALL_URL = f"https://registry.npmjs.org/{JS_NAME}/-/js-sdk-{JS_VERSION}.tgz"
 GOOD_DESCRIPTION = {
     "PyPI": (
         "# experimently\n\nThe Python client. See the"
-        " [guide](https://getexperimently.github.io/experimently/sdk/python/).\n\n"
+        " [guide](https://docs.controlvar.com/sdk/python/).\n\n"
         f"```bash\npip install experimently=={PY_VERSION}\n```\n\n"
         "```bash\n# from a clone\npip install -e sdk/python\n```\n"
     ),
     "npm": (
         "# @getexperimently/js-sdk\n\nSee the"
-        " [guide](https://getexperimently.github.io/experimently/sdk/javascript/).\n\n"
+        " [guide](https://docs.controlvar.com/sdk/javascript/).\n\n"
         f"```bash\nnpm install @getexperimently/js-sdk@{JS_VERSION}\n```\n"
     ),
 }
@@ -122,7 +122,7 @@ def _run(
         "run_attempt": attempt,
         "created_at": created,
         "updated_at": updated or created,
-        "html_url": f"https://github.com/getexperimently/experimently/actions/runs/{run_id}",
+        "html_url": f"https://github.com/Controlvar/controlvar/actions/runs/{run_id}",
         "display_title": title or workflow,
     }
 

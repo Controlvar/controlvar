@@ -54,7 +54,7 @@ trap cleanup EXIT
 
 PROBE='from cryptography.hazmat.bindings._rust import openssl'
 PRINT='import os; print(os.environ.get("OPENSSL_armcap"))'
-MARKER=/tmp/experimently-openssl-armcap0
+MARKER=/tmp/controlvar-openssl-armcap0
 SAVED='for every Python process in this container'
 
 # The two CPU models: one whose import crashes unless told, one that never does.

@@ -23,6 +23,21 @@ pytestmark = [pytest.mark.unit]
 REPO_ROOT = Path(__file__).resolve().parents[4]
 RUNNER = REPO_ROOT / "tests" / "sdk-contract" / "live" / "run_live_contract.py"
 SEED = REPO_ROOT / "backend" / "scripts" / "seed_sdk_contract.py"
+#: Each setting the runner reads: its name, its name before the rename, and
+#: what it falls back to (the key files below hold the fallback keys).
+SETTINGS = {
+    "url": ("CONTROLVAR_API_URL", "EXPERIMENTLY_API_URL", "http://localhost:8000"),
+    "key": ("CONTROLVAR_API_KEY", "EXPERIMENTLY_API_KEY", "file-key"),
+    "local": (
+        "CONTROLVAR_LOCAL_API_KEY",
+        "EXPERIMENTLY_LOCAL_API_KEY",
+        "file-local-key",
+    ),
+}
+#: Three distinct values per setting: neither is a default, and neither is the
+#: 127.0.0.1:8000 CI sets.
+NEW = {"url": "http://127.0.0.1:9", "key": "new-key", "local": "new-local-key"}
+OLD = {"url": "http://127.0.0.1:7", "key": "old-key", "local": "old-local-key"}
 GOOD = {
     "assign": {"variant_name": "control", "is_control": True, "sticky": True},
     "flag": {"enabled": True},
@@ -41,13 +56,15 @@ def runner(monkeypatch, tmp_path):
     monkeypatch.setattr(module, "KEY_FILE", tmp_path / "no-key")
     monkeypatch.setattr(module, "LOCAL_KEY_FILE", tmp_path / "no-local-key")
     monkeypatch.setattr(module, "backend_healthy", lambda api_url: True)
+    # Every name each setting is read under, so a developer's shell cannot
+    # stand in for the value a test sets.
     for name in (
-        "EXPERIMENTLY_LOCAL_API_KEY",
+        *(n for names in SETTINGS.values() for n in names[:2]),
         "CONTRACT_EXPERIMENT_KEY",
         "CONTRACT_FLAG_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("EXPERIMENTLY_API_KEY", "contract-key")
+    monkeypatch.setenv("CONTROLVAR_API_KEY", "contract-key")
     return module
 
 
@@ -144,3 +161,67 @@ def test_the_seed_creates_the_fixtures_the_runner_defaults_to(monkeypatch, runne
         constants["EXPERIMENT_KEY"],
         constants["FLAG_KEY"],
     )
+
+
+def _what_main_read(monkeypatch, runner, tmp_path, env):
+    """The URL, key and sdk:ruleset key main() went on to use, given *env*."""
+    for name, old, _ in SETTINGS.values():
+        monkeypatch.delenv(name, raising=False)
+        monkeypatch.delenv(old, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    (tmp_path / "key").write_text("file-key\n")
+    (tmp_path / "local").write_text("file-local-key\n")
+    monkeypatch.setattr(runner, "KEY_FILE", tmp_path / "key")
+    monkeypatch.setattr(runner, "LOCAL_KEY_FILE", tmp_path / "local")
+    read = {}
+
+    def healthy(api_url):
+        read["url"] = api_url
+        return True
+
+    def ruleset(api_url, plain_key, scoped_key, flag_key):
+        read["key"], read["local"] = plain_key, scoped_key
+        return "PASS", "ok"
+
+    monkeypatch.setattr(runner, "backend_healthy", healthy)
+    monkeypatch.setattr(runner, "check_ruleset", ruleset)
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: None)
+    monkeypatch.setattr(sys, "argv", ["run_live_contract.py", "--sdk", "go"])
+    runner.main()
+    return read
+
+
+@pytest.mark.parametrize("setting", sorted(SETTINGS))
+def test_each_setting_is_read_under_its_name_then_its_former_one(
+    monkeypatch, runner, tmp_path, setting
+):
+    name, old, fallback = SETTINGS[setting]
+    read = lambda env: _what_main_read(monkeypatch, runner, tmp_path, env)[setting]  # noqa: E731
+    assert read({name: NEW[setting]}) == NEW[setting]
+    assert read({old: OLD[setting]}) == OLD[setting]
+    both = read({name: NEW[setting], old: OLD[setting]})
+    assert both == NEW[setting] and both != OLD[setting]
+    assert read({}) == fallback
+
+
+def test_the_smokes_are_given_each_setting_under_both_names(monkeypatch, runner):
+    """The smokes under sdk/ read the names before the rename until they move
+    to the new ones: the runner hands them both, equal."""
+    monkeypatch.setenv("CONTROLVAR_LOCAL_API_KEY", "scoped")
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    monkeypatch.setattr(runner, "check_ruleset", lambda *args: ("PASS", "ok"))
+    local = []
+    monkeypatch.setattr(
+        runner,
+        "run_local",
+        lambda sdk, command, env, timeout, flag: local.append(env) or ("PASS", "ok"),
+    )
+    _, ran = run_main(monkeypatch, runner, "--sdk", "js")
+    env = ran[0][1]
+    for setting in ("url", "key"):
+        name, old, _ = SETTINGS[setting]
+        assert env[name] == env[old] and env[name], setting
+    assert env["CONTROLVAR_API_KEY"] == "contract-key"
+    name, old, _ = SETTINGS["local"]
+    assert local and local[0][name] == local[0][old] == "scoped"

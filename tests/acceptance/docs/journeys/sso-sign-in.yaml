@@ -20,7 +20,7 @@
 # authorization server as sso_url, and the page's own role_mapping example. Its
 # org_domain is written " @SSO-Docs.Example.com", which the page says is
 # stored as sso-docs.example.com. The provider sends the groups Engineering,
-# data-analysts and experimently-admins, in that order, so the role is
+# data-analysts and controlvar-admins, in that order, so the role is
 # analyst: the first group the mapping names, not the highest one.
 #
 # Expectations written on 2026-10-07 from the page, the dashboard's source
@@ -47,7 +47,7 @@ steps:
           client_secret: docs-journey-secret
           sso_url: https://localhost:28443/oauth2/default
           role_mapping:
-            experimently-admins: admin
+            controlvar-admins: admin
             developers: developer
             data-analysts: analyst
             contractors: viewer

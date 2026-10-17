@@ -97,7 +97,7 @@ MODULES_BRANCH = "modules"
 #: The modules branch's versions directory, resolved from this file rather
 #: than matched by name.  A bare ``"modules" in path.parts`` test answers True
 #: for a *core* versions directory that merely sits under some parent called
-#: ``modules`` -- a checkout in ``~/modules/experimently`` -- and
+#: ``modules`` -- a checkout in ``~/modules/controlvar`` -- and
 #: would then hand a core revision no filter at all.
 MODULES_VERSIONS_DIR = (
     pathlib.Path(__file__).resolve().parents[3]

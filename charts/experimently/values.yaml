@@ -1,7 +1,7 @@
-# Experimently Helm chart values.
+# Controlvar Helm chart values.
 #
 # Two things are always yours to provide, and the render stops until they are:
-#   publicBaseUrl     the one origin people reach, e.g. https://experimently.example.com
+#   publicBaseUrl     the one origin people reach, e.g. https://controlvar.example.com
 #   the secrets       either in an existing Secret (existingSecret), or under `secrets:`
 #
 # values.schema.json refuses unknown keys, so a typo fails the install instead
@@ -35,11 +35,11 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
   api:
-    repository: ghcr.io/getexperimently/experimently
+    repository: ghcr.io/controlvar/controlvar
     # -- `sha256:...`; when set it pins the image and the tag is informational.
     digest: ""
   web:
-    repository: ghcr.io/getexperimently/experimently-web
+    repository: ghcr.io/controlvar/controlvar-web
     digest: ""
 
 imagePullSecrets: []

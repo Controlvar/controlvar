@@ -152,7 +152,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import yaml
 
-PUBLISHED_URL = "https://getexperimently.github.io/experimently/"
+PUBLISHED_URL = "https://docs.controlvar.com/"
 #: A ref as ``docs_journeys_report.py deployed`` accepts one.
 SOURCE_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,99}")
 

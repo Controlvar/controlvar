@@ -4,7 +4,7 @@
 document = "README.md"
 
 [[unit]]
-text = "Experimently"
+text = "Controlvar"
 by = ["exempt:label"]
 
 [[unit]]
@@ -19,8 +19,15 @@ text = "The core, the optional modules and the dashboard are Apache-2.0; the cli
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit"]
 
 [[unit]]
-text = "Experimently is pre-1.0: see the releases."
+text = "Controlvar is pre-1.0: see the releases."
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_version_is_before_1_0"]
+
+[[unit]]
+text = "Controlvar was called Experimently before 0.35.0; Upgrading to Controlvar says what that changes for an install you already run."
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_chart_job.py::test_every_site_that_follows_the_chart_name_agrees",
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_the_image_path_and_signing_identity_follow_the_repository",
+]
 
 [[unit]]
 text = "Try it on your machine"
@@ -96,7 +103,7 @@ by = [
 ]
 
 [[unit]]
-text = "To run Experimently where others can reach it, see Self-host it."
+text = "To run Controlvar where others can reach it, see Self-host it."
 by = ["exempt:navigation"]
 
 [[unit]]

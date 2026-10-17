@@ -19,7 +19,7 @@ The RBAC (Role-Based Access Control) module stores three layers of permissions f
     `GET /api/v1/rbac/users/{user_id}/permissions`, but no permission check reads them:
     assigning a custom role or granting a permission changes nothing a user can do.
     Whether to make them take effect or remove them is tracked in
-    [#891](https://github.com/getexperimently/experimently/issues/891).
+    [#891](https://github.com/Controlvar/controlvar/issues/891).
 
 ### Effective Permissions Resolution
 
@@ -430,7 +430,7 @@ it is still the only thing that decides what the analyst can do.
 POST /api/v1/rbac/users/{user_id}/grant
 ```
 
-Grant a specific resource permission directly to a user, without assigning a role. The grant is stored and shown by Get Effective Permissions; no permission check reads it yet ([#891](https://github.com/getexperimently/experimently/issues/891)). Supports optional expiry for temporary grants. **ADMIN only.**
+Grant a specific resource permission directly to a user, without assigning a role. The grant is stored and shown by Get Effective Permissions; no permission check reads it yet ([#891](https://github.com/Controlvar/controlvar/issues/891)). Supports optional expiry for temporary grants. **ADMIN only.**
 
 **Request Body**
 
@@ -520,7 +520,7 @@ Revoke all direct permission grants for a user+resource combination. **ADMIN onl
 
 ### Create a "Read-Only Experiments" Custom Role
 
-This defines and assigns a role for a user who should see experiments and results but never create or modify them. The role is stored and shown; it does not change what the user can do, which their base role decides ([#891](https://github.com/getexperimently/experimently/issues/891)). Today, to keep a user read-only, give them the `viewer` or `analyst` base role.
+This defines and assigns a role for a user who should see experiments and results but never create or modify them. The role is stored and shown; it does not change what the user can do, which their base role decides ([#891](https://github.com/Controlvar/controlvar/issues/891)). Today, to keep a user read-only, give them the `viewer` or `analyst` base role.
 
 Step 1: Create the role:
 
@@ -571,7 +571,7 @@ after the examples above. What the analyst can do is unchanged.
 
 ### Grant a Temporary Export Permission
 
-This records a week-long export grant for a data analyst without changing their role. The grant is stored and shown by Get Effective Permissions, but no permission check reads it: it does **not** let the analyst export anything their base role does not already allow ([#891](https://github.com/getexperimently/experimently/issues/891)).
+This records a week-long export grant for a data analyst without changing their role. The grant is stored and shown by Get Effective Permissions, but no permission check reads it: it does **not** let the analyst export anything their base role does not already allow ([#891](https://github.com/Controlvar/controlvar/issues/891)).
 
 ```{.bash exec}
 WEEK=$(jq -nr 'now + 7*86400 | todate')
@@ -621,7 +621,7 @@ It prints the whole set, beginning with the analyst's `user_id`, `username` and
 
 ## Service API
 
-The `RBACService` in `modules/backend/app/services/rbac_service.py` provides these methods. `get_effective_permissions` builds the set the Get Effective Permissions endpoint returns. `check_effective_permission` is not called by any route ([#891](https://github.com/getexperimently/experimently/issues/891)):
+The `RBACService` in `modules/backend/app/services/rbac_service.py` provides these methods. `get_effective_permissions` builds the set the Get Effective Permissions endpoint returns. `check_effective_permission` is not called by any route ([#891](https://github.com/Controlvar/controlvar/issues/891)):
 
 ```python
 from modules.backend.app.services.rbac_service import RBACService

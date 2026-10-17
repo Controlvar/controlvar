@@ -34,7 +34,7 @@ DEVELOPMENT_PAGES = (
     "getting-started/docker-guide.md",
     "getting-started/docker-compose-file.md",
 )
-BLOB = "https://github.com/getexperimently/experimently/blob/main/"
+BLOB = "https://github.com/Controlvar/controlvar/blob/main/"
 SELF_HOSTING_STACK = BLOB + "deploy/compose/compose.yml"
 #: What Self-Hosting -> Docker Compose links: the README beside the file, which
 #: says how to run it and lists its settings.

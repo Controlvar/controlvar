@@ -156,7 +156,7 @@ It prints `"total": 0`.
 Sends a test notification, to check a channel's settings. Requires the DEVELOPER or
 ADMIN role. `channel` is `slack`, `email` or `webhook`; `recipient` is optional (a Slack
 channel or an email address) and `message` defaults to "Test notification from
-Experimently":
+Controlvar":
 
 ```{.bash exec}
 curl -s -X POST localhost:8000/api/v1/notifications/test \

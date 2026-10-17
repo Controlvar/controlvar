@@ -1,10 +1,10 @@
 # =============================================================================
-# Experimently — the LOCAL DEVELOPMENT stack, built from this checkout.
+# Controlvar — the LOCAL DEVELOPMENT stack, built from this checkout.
 #
 # It is for one machine: every port below is published on 127.0.0.1 only.
 # ENVIRONMENT=development accepts a short or placeholder SECRET_KEY, and the
 # first start creates a demo administrator with a documented password. To run
-# Experimently on a server, use the published images in
+# Controlvar on a server, use the published images in
 # deploy/compose/compose.yml instead.
 #
 #   docker compose up -d --wait            # postgres + redis + api + dashboard
@@ -185,9 +185,9 @@ services:
       context: .
       dockerfile: demo/shoplab/Dockerfile
       args:
-        NEXT_PUBLIC_EXPERIMENTLY_API_URL: ${SHOPLAB_API_URL:-http://localhost:${API_HOST_PORT:-8000}}
-        NEXT_PUBLIC_EXPERIMENTLY_API_KEY: ${SHOPLAB_API_KEY:-eptk_demo_shoplab_0123456789abcdef0123456789abcdef}
-        NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:${FRONTEND_HOST_PORT:-3000}}
+        NEXT_PUBLIC_CONTROLVAR_API_URL: ${SHOPLAB_API_URL:-http://localhost:${API_HOST_PORT:-8000}}
+        NEXT_PUBLIC_CONTROLVAR_API_KEY: ${SHOPLAB_API_KEY:-eptk_demo_shoplab_0123456789abcdef0123456789abcdef}
+        NEXT_PUBLIC_CONTROLVAR_DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:${FRONTEND_HOST_PORT:-3000}}
     image: experimently-shoplab:${EXPERIMENTLY_IMAGE_TAG:-${EXPERIMENTLY_PROFILE:-core}}
     ports:
       - "127.0.0.1:${SHOPLAB_HOST_PORT:-3200}:3200"
@@ -229,9 +229,9 @@ services:
       context: .
       dockerfile: demo/streampulse/Dockerfile
       args:
-        NEXT_PUBLIC_EXPERIMENTLY_API_URL: ${STREAMPULSE_API_URL:-http://localhost:${API_HOST_PORT:-8000}}
-        NEXT_PUBLIC_EXPERIMENTLY_API_KEY: ${STREAMPULSE_API_KEY:-eptk_demo_streampulse_0123456789abcdef0123456789ab}
-        NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:${FRONTEND_HOST_PORT:-3000}}
+        NEXT_PUBLIC_CONTROLVAR_API_URL: ${STREAMPULSE_API_URL:-http://localhost:${API_HOST_PORT:-8000}}
+        NEXT_PUBLIC_CONTROLVAR_API_KEY: ${STREAMPULSE_API_KEY:-eptk_demo_streampulse_0123456789abcdef0123456789ab}
+        NEXT_PUBLIC_CONTROLVAR_DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:${FRONTEND_HOST_PORT:-3000}}
     image: experimently-streampulse:${EXPERIMENTLY_IMAGE_TAG:-${EXPERIMENTLY_PROFILE:-core}}
     ports:
       - "127.0.0.1:${STREAMPULSE_HOST_PORT:-3300}:3300"

@@ -18,15 +18,15 @@ body:
         1. **[Report a vulnerability privately][advisory]** — Security → Report
            a vulnerability on this repository. Only the maintainers and you can
            see it.
-        2. **Email** — security@getexperimently.com
+        2. **Email** — security@controlvar.com
 
         Read **[SECURITY.md][policy]** for what to include, the response
         timeline (acknowledgement in 3 business days, fixes for High and
         Critical within 14 days, public disclosure at 90 days) and the safe
         harbour we offer to good-faith researchers.
 
-        [advisory]: https://github.com/getexperimently/experimently/security/advisories/new
-        [policy]: https://github.com/getexperimently/experimently/blob/main/SECURITY.md
+        [advisory]: https://github.com/Controlvar/controlvar/security/advisories/new
+        [policy]: https://github.com/Controlvar/controlvar/blob/main/SECURITY.md
 
         ---
 
@@ -55,5 +55,5 @@ body:
         - label: >-
             I understand this form is a redirect and that I should close it
             without submitting. I will report privately via the security
-            advisory form or security@getexperimently.com.
+            advisory form or security@controlvar.com.
           required: true

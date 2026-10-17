@@ -18,8 +18,9 @@ An ``sdk`` step (compose-dev only) follows an SDK page the way its reader does:
    placeholder is a whole quoted string of the block (``'user-123'``,
    ``"http://localhost:8000"``), replaced by one of ``PLACEHOLDERS``: the
    stack's API address, the experiment's key, the flag's key, the step's user.
-   The API key is given as ``EXPERIMENTLY_API_KEY`` and the API's address as
-   ``EXPERIMENTLY_API_URL``, the variables the pages' blocks read.
+   The API key is given as ``CONTROLVAR_API_KEY`` and the API's address as
+   ``CONTROLVAR_API_URL``, the variables the pages' blocks read, and under
+   their names before the rename for a page that predates it.
 3. Before the block, each of the step's ``stubs`` is defined: a function the
    block calls that the page leaves to the reader (``render_new_checkout()``),
    which records that it was called and does nothing else. After the block,

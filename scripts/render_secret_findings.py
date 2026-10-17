@@ -30,7 +30,7 @@ the same rows, worded for a scan where nothing is being pushed.
 
 Usage::
 
-    render_secret_findings.py REPORT.json --label "experimently:core-1.2.3 (image)"
+    render_secret_findings.py REPORT.json --label "controlvar:core-1.2.3 (image)"
     render_secret_findings.py REPORT.json --stage ci --label "backend/ (source tree)"
 """
 

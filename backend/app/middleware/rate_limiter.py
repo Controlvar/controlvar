@@ -1,5 +1,5 @@
 """
-Rate limiting middleware for Experimently.
+Rate limiting middleware for Controlvar.
 
 Provides a Redis-backed rate limiter (fixed-window via INCR + EXPIRE) with
 automatic fallback to an in-memory sliding-window limiter when Redis is

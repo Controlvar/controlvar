@@ -35,9 +35,7 @@ WORKFLOWS = GITHUB / "workflows"
 SCRIPT = REPO_ROOT / "scripts" / "iam_actions.py"
 POLICY = REPO_ROOT / "infrastructure" / "cdk" / "github-actions-deploy-policy.json"
 TRUST = REPO_ROOT / "infrastructure" / "cdk" / "github-actions-trust-policy.json"
-SUBJECT = (
-    "repo:getexperimently@328439352/experimently@1367480368:environment:<ENVIRONMENT>"
-)
+SUBJECT = "repo:Controlvar@341280474/controlvar@1367480368:environment:<ENVIRONMENT>"
 
 pytestmark = pytest.mark.skipif(
     not WORKFLOWS.is_dir(), reason="this tree has no .github/workflows"

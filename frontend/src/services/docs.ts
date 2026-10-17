@@ -20,7 +20,7 @@
  * `NEXT_PUBLIC_DOCS_URL` overrides that with the origin of a *built* site, and
  * the URLs then take MkDocs's `use_directory_urls` shape instead. The
  * marketing build (`npm run build:marketing`) sets it to the published site,
- * which is where getexperimently.com's links go; anyone serving their own
+ * which is where controlvar.com's links go; anyone serving their own
  * `mkdocs build` output can set it to that. Read at build time, like every
  * `NEXT_PUBLIC_*`.
  *
@@ -32,11 +32,11 @@
  */
 
 /** The repository the markdown lives in, and the branch links point at. */
-export const DOCS_REPO = 'https://github.com/getexperimently/experimently';
+export const DOCS_REPO = 'https://github.com/Controlvar/controlvar';
 export const DOCS_BRANCH = 'main';
 
 /** The published MkDocs site, deployed from release tags (mkdocs.yml `site_url`). */
-export const MKDOCS_SITE_URL = 'https://getexperimently.github.io/experimently';
+export const MKDOCS_SITE_URL = 'https://docs.controlvar.com/';
 
 /** A self-hosted built site, if one is configured. Empty means "use the repository". */
 export const DOCS_SITE = (process.env.NEXT_PUBLIC_DOCS_URL || '').replace(/\/+$/, '');

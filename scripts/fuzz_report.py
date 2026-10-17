@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Experimently contributors
+# SPDX-FileCopyrightText: 2026 The Controlvar authors
 # SPDX-License-Identifier: Apache-2.0
 """What a run of the three API fuzzing passes adds up to: one rolling issue.
 

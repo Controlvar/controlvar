@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { ExperimentationProvider } from '@getexperimently/react-sdk';
 import DevicePanel from '@/components/DevicePanel';
-import ExperimentlyPanel from '@/components/ExperimentlyPanel';
+import ControlvarPanel from '@/components/ControlvarPanel';
 import PhoneFrame from '@/components/PhoneFrame';
 import RolloutStoryDrawer from '@/components/RolloutStoryDrawer';
 import { DEFAULT_PRESET, deviceKey, toUserContext, type Device } from '@/lib/devices';
@@ -16,7 +16,7 @@ interface Props {
 }
 
 /**
- * Page layout: phone on the left, Device + Experimently panels on the right,
+ * Page layout: phone on the left, Device + Controlvar panels on the right,
  * rollout-story drawer on demand.
  *
  * The SDK provider is keyed on the device (every attribute) plus a refresh
@@ -64,7 +64,7 @@ export default function StreamPulseApp({ apiKey = API_KEY, apiUrl = API_URL, ini
 
       {missingKey && (
         <div role="alert" className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900" data-testid="missing-key-alert">
-          <strong>NEXT_PUBLIC_EXPERIMENTLY_API_KEY is not set.</strong> Run <code className="font-mono">python backend/scripts/seed_streampulse.py</code> (it
+          <strong>NEXT_PUBLIC_CONTROLVAR_API_KEY is not set.</strong> Run <code className="font-mono">python backend/scripts/seed_streampulse.py</code> (it
           writes <code className="font-mono">demo/streampulse/.env.local</code>), then restart <code className="font-mono">npm run dev</code>. Until then every
           request fails with 401.
         </div>
@@ -78,7 +78,7 @@ export default function StreamPulseApp({ apiKey = API_KEY, apiUrl = API_URL, ini
             </div>
             <div className="grid content-start gap-4 xl:grid-cols-2">
               <DevicePanel device={device} onChange={setDevice} />
-              <ExperimentlyPanel onRefresh={refresh} />
+              <ControlvarPanel onRefresh={refresh} />
             </div>
             <RolloutStoryDrawer open={storyOpen} onClose={closeStory} device={device} />
           </ExperimentationProvider>
@@ -86,7 +86,7 @@ export default function StreamPulseApp({ apiKey = API_KEY, apiUrl = API_URL, ini
       </main>
 
       <footer className="mx-auto max-w-7xl px-4 py-6 text-xs text-neutral-500">
-        StreamPulse is a demo. No audio, no images, no real users — every tap is an Experimently event for device{' '}
+        StreamPulse is a demo. No audio, no images, no real users — every tap is a Controlvar event for device{' '}
         <code className="font-mono">{device.device_id}</code>.
       </footer>
     </div>

@@ -1,6 +1,6 @@
 # IAM permissions for deploying
 
-Three identities touch an AWS account that runs Experimently, and they need
+Three identities touch an AWS account that runs Controlvar, and they need
 different things. Keep them separate: the one that deploys releases every week
 should not be able to rewrite the account.
 
@@ -53,20 +53,23 @@ environment, and each holding the same permissions policy.
 
 ### Trust policy
 
-[`infrastructure/cdk/github-actions-trust-policy.json`](https://github.com/getexperimently/experimently/blob/main/infrastructure/cdk/github-actions-trust-policy.json)
+[`infrastructure/cdk/github-actions-trust-policy.json`](https://github.com/Controlvar/controlvar/blob/main/infrastructure/cdk/github-actions-trust-policy.json)
 is the template. Replace `<AWS_ACCOUNT_ID>` and `<ENVIRONMENT>` (`staging` or
 `prod`) and create one role from each copy. It pins the token's `sub` claim
 exactly -- `StringEquals`, no wildcard:
 
 ```
-repo:getexperimently@328439352/experimently@1367480368:environment:<ENVIRONMENT>
+repo:Controlvar@341280474/controlvar@1367480368:environment:<ENVIRONMENT>
 ```
 
 That is GitHub's **immutable subject**: the owner and the repository by name
 *and* numeric id. On 2026-10-02 (UTC) a job of this repository bound to the
 `staging` environment received
 `repo:getexperimently@328439352/experimently@1367480368:environment:staging`
-([run](https://github.com/getexperimently/experimently/actions/runs/36972395116)).
+([run](https://github.com/Controlvar/controlvar/actions/runs/36972395116)).
+On 2026-10-17 (UTC), after the repository moved, a job bound to the `staging`
+environment received `repo:Controlvar@341280474/controlvar@1367480368:environment:staging`
+([run](https://github.com/Controlvar/controlvar/actions/runs/39047349118)).
 A fork or a copy of this repository has another prefix: the OIDC subject probe
 below prints yours. The `:environment:<name>` suffix is what a job that declares
 `environment:` receives, which is the only kind of job in these workflows that
@@ -103,7 +106,7 @@ aws iam update-role --role-name <ROLE_NAME> --max-session-duration 10800
 
 ### Permissions policy
 
-[`infrastructure/cdk/github-actions-deploy-policy.json`](https://github.com/getexperimently/experimently/blob/main/infrastructure/cdk/github-actions-deploy-policy.json),
+[`infrastructure/cdk/github-actions-deploy-policy.json`](https://github.com/Controlvar/controlvar/blob/main/infrastructure/cdk/github-actions-deploy-policy.json),
 generated -- like the table below -- by `scripts/iam_actions.py` from every
 `aws <service> <verb>` in `deploy.yml`, `rollback.yml`, `db-migrate.yml`, the
 local actions under `.github/actions/`, the scripts those run, and any script
@@ -206,7 +209,7 @@ and nothing is snapshotted, migrated or shifted.
 
 `codedeploy:GetApplicationRevision` (#754) was added after the staging
 rollback rehearsal on 2026-10-03 (UTC), where its absence stopped Rollback
-([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-5963917501)). Roles created from a
+([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-5963917501)). Roles created from a
 policy before #754 lack it; re-apply this policy in every account before the
 next rollback. The failure without it comes after the in-flight deployment has
 been stopped: Rollback's "Roll back via CodeDeploy" step stops with "not

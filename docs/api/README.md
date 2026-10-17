@@ -1,6 +1,6 @@
 # API Documentation
 
-This directory contains the API documentation for Experimently.
+This directory contains the API documentation for Controlvar.
 
 ## Files
 

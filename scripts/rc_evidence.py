@@ -562,7 +562,7 @@ def http_get(url: str) -> bytes:
     if not url.startswith(REGISTRY_URLS):
         raise FetchError(f"not a registry URL: {url[:200]}")
     request = urllib.request.Request(
-        url, headers={"User-Agent": "experimently-rc-evidence"}, method="GET"
+        url, headers={"User-Agent": "controlvar-rc-evidence"}, method="GET"
     )
     try:
         with urllib.request.urlopen(request, timeout=120) as response:

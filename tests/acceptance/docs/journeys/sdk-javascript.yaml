@@ -7,7 +7,7 @@
 # page) against the public registry, checks the version it installed, and runs
 # the page's Quick start block, also read from the page, with only its
 # placeholders replaced: the API's address, the experiment's key, the flag's key
-# and the user. The key is given as EXPERIMENTLY_API_KEY, the variable the block
+# and the user. The key is given as CONTROLVAR_API_KEY (and its former name), the variable the block
 # reads. The block is TypeScript; Node runs it with its own type stripping, so
 # nothing but the package is installed (docs_runner/sdk.py).
 #

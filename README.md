@@ -1,10 +1,13 @@
-# Experimently
+# Controlvar
 
 > **Open-source A/B testing and feature flags that you run yourself.**
 
 The core, the optional modules and the dashboard are Apache-2.0; the client SDKs under `sdk/`
-are MIT. Experimently is pre-1.0: see the
-[releases](https://github.com/getexperimently/experimently/releases).
+are MIT. Controlvar is pre-1.0: see the
+[releases](https://github.com/Controlvar/controlvar/releases).
+Controlvar was called Experimently before 0.35.0;
+[Upgrading to Controlvar](docs/self-hosting/upgrading-to-controlvar.md) says what
+that changes for an install you already run.
 
 ---
 
@@ -13,8 +16,8 @@ are MIT. Experimently is pre-1.0: see the
 You need Docker with Compose v2, `curl` and `jq`. Clone the repository:
 
 ```{.bash skip reason="checkout: the runner starts inside a checkout"}
-git clone https://github.com/getexperimently/experimently.git
-cd experimently
+git clone https://github.com/Controlvar/controlvar.git
+cd controlvar
 ```
 
 Then start the stack from the repository root:
@@ -45,7 +48,7 @@ The first start builds the API and dashboard images from source.
 `docker compose down -v` removes it all again, volumes included.
 
 This stack is for your own machine. It runs with development settings and publishes its ports
-on `127.0.0.1` only, and the demo account's password is on this page. To run Experimently
+on `127.0.0.1` only, and the demo account's password is on this page. To run Controlvar
 where others can reach it, see [Self-host it](#self-host-it).
 [**Quick start**](docs/getting-started/quick-start.md) has the rest: the
 service table, the verification commands, and the `demo`, `tools` and `aws`
@@ -178,7 +181,7 @@ the core through the registration hooks in `backend/app/core/`:
 | Module | What it adds |
 |---|---|
 | `workspaces` | Group users into teams, with workspace roles and email invites. Grouping only: access to experiments and flags is by platform role |
-| `rbac` | Roles beyond the built-in four, and permissions granted directly to a user. Both are recorded, but they do not change what anyone can do yet: each user's built-in role decides ([#891](https://github.com/getexperimently/experimently/issues/891)) |
+| `rbac` | Roles beyond the built-in four, and permissions granted directly to a user. Both are recorded, but they do not change what anyone can do yet: each user's built-in role decides ([#891](https://github.com/Controlvar/controlvar/issues/891)) |
 | `sso` | OIDC identity providers with just-in-time provisioning and role mapping. SAML 2.0 sign-in is not available yet; use OIDC |
 | `hipaa` | PHI encryption, PHI access records stamped with a six-year retention (nothing deletes them), BAA records |
 | `compliance` | SOC 2 / ISO 27001 reports, signed audit exports |
@@ -186,7 +189,7 @@ the core through the registration hooks in `backend/app/core/`:
 | `integrations` | Jira, Salesforce and GitHub |
 | `counters` | Routes to increment and read assignment and conversion counters in DynamoDB; assignment and tracking do not write them |
 | `etl` | Glue crawlers, Athena partitions and scheduled jobs |
-| `split_url` | Server-side URL splitting at the edge. The edge router has no configuration source in this release, so it does not split traffic yet; experiments, their URL configuration and the preview work ([#393](https://github.com/getexperimently/experimently/issues/393)) |
+| `split_url` | Server-side URL splitting at the edge. The edge router has no configuration source in this release, so it does not split traffic yet; experiments, their URL configuration and the preview work ([#393](https://github.com/Controlvar/controlvar/issues/393)) |
 
 `GET /api/v1/modules` reports the running profile and the installed modules — ask it first, rather
 than inferring the profile from a status code. A core deployment is the repository with `modules/`

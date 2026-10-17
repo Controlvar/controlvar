@@ -291,10 +291,14 @@ BANNED_STEMS = (
 )
 
 #: The private repository and its directories, by name; and any repository of
-#: the organisation other than this one.
-PRIVATE_NAMES = ("launch-readiness", "experimently-internal")
+#: the organisation other than this one. Both organisations' names are held:
+#: the former one, which keeps the frozen packages, and the current one, whose
+#: owner GitHub compares without regard to case.
+PRIVATE_NAMES = ("launch-readiness", "experimently-internal", "controlvar-internal")
 OTHER_REPOSITORY = re.compile(
-    r"getexperimently/(?!experimently(?![A-Za-z0-9_.-]))[A-Za-z0-9_.-]+"
+    r"(?:getexperimently/(?!experimently(?![A-Za-z0-9_.-]))"
+    r"|(?<![A-Za-z0-9_.-])(?<![Cc][Oo][Nn][Tt][Rr][Oo][Ll][Vv][Aa][Rr]/)"
+    r"(?i:controlvar)/(?!controlvar(?![A-Za-z0-9_.-])))[A-Za-z0-9_.-]+"
 )
 
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)")
@@ -318,13 +322,13 @@ CREDENTIAL_SHAPES = (
 FENCE = re.compile(r"^\s*(?:```|~~~)", re.M)
 URL = re.compile(r"https?://[^\s)\]]+")
 ALLOWED_URL_PREFIXES = (
-    "https://github.com/getexperimently/experimently/",
-    "https://getexperimently.github.io/experimently/",
+    "https://github.com/Controlvar/controlvar/",
+    "https://docs.controlvar.com/",
 )
 HOST = re.compile(
     r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|io|net|org|dev|app|cloud|ai|co)\b", re.I
 )
-ALLOWED_HOSTS = {"github.com", "getexperimently.github.io", "example.com"}
+ALLOWED_HOSTS = {"github.com", "docs.controlvar.com", "example.com"}
 
 WHAT_TO_DO = "What to do"
 COUNT = re.compile(r"\{count(?:_[a-z0-9_]+)?\}")
@@ -655,6 +659,30 @@ PLANTS = [
         _add("See getexperimently/qa-notes"),
         "another repository",
     ),
+    (
+        "private-repository-renamed-org",
+        "docs-run-red.tmpl",
+        _add("See Controlvar/other"),
+        "another repository",
+    ),
+    (
+        "private-repository-lowercase-owner",
+        "docs-run-red.tmpl",
+        _add("See controlvar/qa-notes"),
+        "another repository",
+    ),
+    (
+        "private-repository-in-a-path",
+        "docs-run-red.tmpl",
+        _add("See ghcr.io/Controlvar/other"),
+        "another repository",
+    ),
+    (
+        "private-repository-renamed",
+        "docs-run-red.tmpl",
+        _add("Notes: controlvar-internal"),
+        "private name",
+    ),
 ] + [
     (f"stem-{n}", "docs-guide-partial.tmpl", _add(f"x{stem}x"), "word stem")
     for n, stem in zip(range(len(BANNED_STEMS)), BANNED_STEMS)
@@ -677,8 +705,8 @@ def test_the_rule_fires_on_a_planted_defect(template, plant, fragment):
     "line",
     [
         "Sign in as admin@example.com.",
-        "See https://github.com/getexperimently/experimently/blob/main/README.md",
-        "See https://getexperimently.github.io/experimently/",
+        "See https://github.com/Controlvar/controlvar/blob/main/README.md",
+        "See https://docs.controlvar.com/",
         "The pass named {check}, at 50% of the 8 steps.",
     ],
 )
