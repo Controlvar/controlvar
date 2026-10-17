@@ -108,7 +108,8 @@ def test_the_first_step_holds_both_simulators_for_a_minute_and_the_events_growin
 def test_the_journey_opens_both_apps_at_the_addresses_the_page_gives():
     journey = _load()
     opened = [step.do.open for step in journey.steps if step.do.open is not None]
-    assert opened == ["http://localhost:3200", "http://localhost:3300"]
+    # Once on the first start, once more after the recovery (PR-3b).
+    assert opened == ["http://localhost:3200", "http://localhost:3300"] * 2
     page = guides.load(REPO_ROOT / "docs", PAGE)
     assert page.contains(
         "ShopLab then answers at http://localhost:3200 and StreamPulse at"

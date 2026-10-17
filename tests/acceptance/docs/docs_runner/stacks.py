@@ -124,6 +124,13 @@
   in a job whose own timeout is 60 minutes, so a build that hangs fails this
   journey alone and leaves the session time for the others.
 
+  Its ``Running.relaunch`` walks the page's recovery note for a ``relaunch:
+  recovery`` step (``ComposeDemo.relaunch``): ``down -v``, the page's command
+  less its ``SEED=`` (a start without the seeds; its exit status is not held,
+  ``DOCS_JOURNEY_DEMO_BARE_TIMEOUT`` seconds at most, default 300), the
+  apps' key files checked absent in the api service, then the page's command
+  as written, which must exit 0, with no ``down -v`` between the two starts.
+
 A command that cannot be started at all (no ``docker``, no ``npm``) is a
 ``StackError`` like one that fails, so the journey is reported FAIL before its
 first step rather than ending the session.
@@ -193,7 +200,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 import yaml
 
@@ -300,6 +307,9 @@ class Running:
     #: compose-demo only: its compose project's services, which a ``services``
     #: step watches (``services.ComposeServices``).
     compose: Optional[Any] = None
+    #: compose-demo only: brings the stack down and up again as the page's
+    #: recovery note says (``ComposeDemo.relaunch``), for a ``relaunch`` step.
+    relaunch: Optional[Callable[[str], Dict[str, Any]]] = None
 
 
 def free_port() -> int:
@@ -814,6 +824,20 @@ DEMO_COMPOSE_PORTS: Tuple[Tuple[str, str, int], ...] = (
 #: Under the docs-journeys job's 60 minutes with room for the rest of the
 #: session (about 15 minutes on main), so a hung build fails this journey only.
 DEMO_COMPOSE_TIMEOUT = 1500
+#: compose-demo's recovery: how long, in seconds, the start without the seeds
+#: may take by default. Its exit status is not held (with a simulator looping,
+#: ``--wait`` may say so), so reaching the bound is not a failure either.
+DEMO_BARE_TIMEOUT = 300
+#: A shell command's leading ``SEED=<value>``: what a reader who left the
+#: seeds out did not type.
+SEED_PREFIX = re.compile(r"^SEED=\S*[ \t]+")
+#: What the shoplab and streampulse seeds write in the api service
+#: (docker-compose.yml's SHOPLAB_DEMO_DIR and STREAMPULSE_DEMO_DIR, on the
+#: volume the simulators read): absent after a start without those seeds.
+COMPOSE_DEMO_SEEDED_FILES = (
+    "/data/demo/shoplab/.api_key",
+    "/data/demo/streampulse/.api_key",
+)
 #: The compose variables of the four services a browser opens on compose-demo.
 DEMO_HTTP_PORT_VARIABLES = (
     "API_HOST_PORT",
@@ -858,6 +882,23 @@ def demo_command(repo_root: Path) -> str:
     return found[0].strip()
 
 
+def without_seeds(command: str) -> str:
+    """The page's demo command less its leading ``SEED=<value>``: the start a
+    reader who left the seeds out made. StackError when the command does not
+    begin with one, or names ``SEED=`` again after it."""
+    bare = SEED_PREFIX.sub("", command.strip(), count=1)
+    if bare == command.strip():
+        raise StackError(
+            f"the page's demo command ({command.strip()}) does not begin with SEED=;"
+            " the recovery leg starts the stack without it"
+        )
+    if "SEED=" in bare:
+        raise StackError(
+            f"the page's demo command less its first SEED= ({bare}) still sets SEED"
+        )
+    return bare
+
+
 class ComposeDemo(ComposeDev):
     """docker-compose.yml's demo profile, started with the page's own demo command."""
 
@@ -879,6 +920,9 @@ class ComposeDemo(ComposeDev):
         }
         self.timeout = float(
             environ.get("DOCS_JOURNEY_DEMO_COMPOSE_TIMEOUT", str(DEMO_COMPOSE_TIMEOUT))
+        )
+        self.bare_timeout = float(
+            environ.get("DOCS_JOURNEY_DEMO_BARE_TIMEOUT", str(DEMO_BARE_TIMEOUT))
         )
         #: The page's command, read when the stack comes up.
         self.command = ""
@@ -1054,6 +1098,7 @@ class ComposeDemo(ComposeDev):
             published=published,
             up_seconds=time.monotonic() - started,
             compose=self.services(profile),
+            relaunch=self.relaunch,
         )
         _COMPOSE_UP[self.project] = self
         try:
@@ -1066,6 +1111,95 @@ class ComposeDemo(ComposeDev):
             self.down()
             raise
         return self.running
+
+    def relaunch(self, how: str) -> Dict[str, Any]:
+        """``relaunch: recovery``: the page's recovery note, walked on this stack.
+
+        ``down -v``; then the page's command less its ``SEED=`` (``without_seeds``,
+        the start a reader who left the seeds out made), whose exit status is
+        not held and which may take ``bare_timeout`` seconds; then each of
+        ``COMPOSE_DEMO_SEEDED_FILES`` must be absent in the api service, so the
+        recovery has something to recover; then the page's command as written,
+        which must exit 0, with no ``down -v`` between the two starts; then the
+        API must report the journey's profile. The images are the ones the
+        stack's start built: neither start builds, as a reader's does not.
+
+        What it did is returned, ``problem`` naming the first thing that did not
+        hold ("" when all did); the stack is left as it is either way.
+        """
+        from docs_runner.services import ServicesError
+
+        record: Dict[str, Any] = {"relaunch": how, "problem": ""}
+        if how != "recovery":
+            record["problem"] = f"no relaunch {how!r}; recovery is the only one"
+            return record
+        if self.running is None:
+            record["problem"] = f"the {self.NAME} stack is not up"
+            return record
+        profile = self.running.profile
+        try:
+            bare = without_seeds(self.command)
+            self._clear(profile)
+            record["cleared"] = "down -v --remove-orphans"
+            started = time.monotonic()
+            status = _run_logged(
+                ["sh", "-c", bare],
+                cwd=self.repo_root,
+                env=self.env(profile),
+                log=self.log,
+                timeout=self.bare_timeout,
+            )
+            record["without_seeds"] = {
+                "command": bare,
+                "exit": status,
+                "seconds": round(time.monotonic() - started, 1),
+            }
+            compose = self.services(profile)
+            states = {
+                path: compose.file_state("api", path)
+                for path in COMPOSE_DEMO_SEEDED_FILES
+            }
+            record["seeded_files"] = states
+            left = [
+                f"{path} {state}" for path, state in states.items() if state != "absent"
+            ]
+            if left:
+                record["problem"] = (
+                    "after the start without the seeds, "
+                    + ", ".join(left)
+                    + ": the recovery would recover nothing"
+                )
+                return record
+            started = time.monotonic()
+            status = _run_logged(
+                ["sh", "-c", self.command],
+                cwd=self.repo_root,
+                env=self.env(profile),
+                log=self.log,
+                timeout=self.timeout,
+            )
+            record["command"] = {
+                "command": self.command,
+                "exit": status,
+                "seconds": round(time.monotonic() - started, 1),
+            }
+            if status != 0:
+                record["problem"] = (
+                    f"the page's demo command ({self.command}) "
+                    + ("timed out" if status is None else f"exited {status}")
+                    + " on the stack started without the seeds; its output is in"
+                    f" stacks/{self.log.name}"
+                )
+                return record
+            served = self._served_profile(self.running.api_url)
+            record["profile"] = served
+            if served != profile:
+                record["problem"] = (
+                    f"the stack serves the {served} profile, not {profile}"
+                )
+        except (StackError, ServicesError) as error:
+            record["problem"] = str(error)
+        return record
 
     def _clear(self, profile: str) -> None:
         # With the demo profile, so its services are taken down with the rest.

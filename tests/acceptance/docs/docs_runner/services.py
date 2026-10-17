@@ -53,6 +53,8 @@ COUNTS: Dict[str, str] = {
 #: ``psql`` in the ``postgres`` service, as the user and database its own
 #: environment names (the compose file sets both).
 PSQL = 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "$0"'
+#: Prints "absent" when the file named as ``$0`` does not exist (``file_state``).
+FILE_TEST = 'test -e "$0" || echo absent'
 
 
 class ServicesError(Exception):
@@ -169,6 +171,21 @@ class ComposeServices:
                 f"counting the {what} exited {status} and printed {text[:80]!r}"
             )
         return int(text)
+
+    def file_state(self, service: str, path: str) -> str:
+        """Whether *path* exists in *service*'s container: "absent", "present",
+        or "unreadable (...)" when docker could not say (no container, say).
+
+        "absent" is printed by the container's own shell only when the test
+        ran and failed, so a command that never reached the container cannot
+        read as absent.
+        """
+        status, out = self._run(
+            [*self.compose, "exec", "-T", service, "sh", "-c", FILE_TEST, path]
+        )
+        if status != 0:
+            return f"unreadable (exit {status})"
+        return "absent" if out.strip() == "absent" else "present"
 
     def logs(self, service: str, lines: int = LOG_LINES) -> str:
         """The service's last *lines* lines of output ("" when docker answers nothing)."""

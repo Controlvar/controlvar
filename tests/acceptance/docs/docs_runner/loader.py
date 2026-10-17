@@ -106,7 +106,9 @@ YAML, or not a mapping, stops at that. Refused, besides what ``model`` refuses:
   demo command, ``model.SERVICE_STACKS``), or with an ``expect`` or a
   ``snapshot`` setting (its check is the action); or naming a service that
   ``docker-compose.yml`` does not define, or that the guide's text does not
-  name.
+  name;
+* a ``relaunch`` step on any stack but compose-demo (``model.RELAUNCH_STACKS``),
+  or with an ``expect`` or a ``snapshot`` setting (its check is the action).
 """
 
 from __future__ import annotations
@@ -141,6 +143,7 @@ from docs_runner.model import (
     COMPOSE_STACKS,
     GUIDE_PATTERN,
     LOCAL_URL,
+    RELAUNCH_STACKS,
     RUN_EXPECTS,
     RUN_STACKS,
     SCREEN_ACTIONS,
@@ -432,6 +435,21 @@ def _expect_problems(label: str, step: Step, stack: Optional[str]) -> List[str]:
             )
         if step.snapshot is not None:
             found.append(f"{label}: a services step has no screen to snapshot")
+        return found
+    if kind == "relaunch":
+        if stack is not None and stack not in RELAUNCH_STACKS:
+            found.append(
+                f"{label}: a relaunch step walks the recovery note of the page whose"
+                f" demo command starts its stack ({', '.join(RELAUNCH_STACKS)});"
+                f" {stack} is not that stack"
+            )
+        if given:
+            found.append(
+                f"{label}: relaunch checks what the action says (the start without"
+                " the seeds, then the page's command exits 0); it has no expect"
+            )
+        if step.snapshot is not None:
+            found.append(f"{label}: a relaunch step has no screen to snapshot")
         return found
     if kind in ("run", "finish"):
         if stack is not None and stack not in RUN_STACKS:
