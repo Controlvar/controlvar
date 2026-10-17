@@ -4,7 +4,7 @@
 # Each sdk step makes a fresh directory and runs the page's own install
 # commands exactly as written and in the page's order, read from the page:
 # `go mod init example.com/quickstart`, then
-# `go get github.com/getexperimently/experimently/sdk/go`, from
+# `go get github.com/controlvar/controlvar/sdk/go`, from
 # proxy.golang.org. The runner never writes go.mod. `go version` must be the
 # line sdk/go/go.mod's `go` directive names (setup-go installs it from that
 # file), and the page's "Requires Go X+" must be that version. The module has

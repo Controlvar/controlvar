@@ -8,26 +8,6 @@ path = "CHANGELOG.md"
 reason = "history: release notes are not rewritten"
 
 [[exclude]]
-path = "sdk/"
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[exclude]]
-path = "docs/sdk/"
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[exclude]]
-path = "docs/_claims/docs/sdk/"
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[exclude]]
-path = "docs/_claims/sdk/"
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[exclude]]
-path = "tests/sdk-contract/"
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[exclude]]
 path = "backend/tests/unit/infrastructure/fixtures/branch_protection/live_main_2026-10-01.json"
 reason = "a recorded API response: rewriting it would falsify the record"
 
@@ -1346,7 +1326,7 @@ reason = "K16: a DynamoDB table name"
 [[keep]]
 path = "backend/app/core/version.py"
 literal = "experimently-platform"
-count = 1
+count = 2
 reason = "K17: the distribution name installed metadata is matched against"
 
 [[keep]]
@@ -2306,7 +2286,7 @@ reason = "the upgrade note names the former project"
 [[keep]]
 path = "docs/_claims/docs/self-hosting/upgrading-to-controlvar.md.toml"
 literal = "experimently"
-count = 3
+count = 4
 reason = "the upgrade note names what keeps the former spelling"
 
 [[keep]]
@@ -2430,12 +2410,6 @@ count = 1
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
-path = "docs/sdk-guide.md"
-literal = "NEXT_PUBLIC_EXPERIMENTLY_"
-count = 1
-reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
-
-[[keep]]
 path = "tests/acceptance/showcase/capture/guard.py"
 literal = "NEXT_PUBLIC_EXPERIMENTLY_"
 count = 3
@@ -2456,7 +2430,7 @@ reason = "the setting's name before the rename, still read when the new one is n
 [[keep]]
 path = "backend/tests/unit/scripts/test_run_live_contract.py"
 literal = "EXPERIMENTLY_API_URL"
-count = 1
+count = 2
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
@@ -2468,31 +2442,19 @@ reason = "the setting's name before the rename, still read when the new one is n
 [[keep]]
 path = "backend/tests/unit/docs/test_docs_journey_sdk.py"
 literal = "EXPERIMENTLY_API_KEY"
-count = 4
+count = 2
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
 path = "backend/tests/unit/docs/test_docs_journey_sdk_go.py"
 literal = "EXPERIMENTLY_API_KEY"
-count = 2
+count = 1
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
 path = "backend/tests/unit/scripts/test_run_live_contract.py"
 literal = "EXPERIMENTLY_API_KEY"
 count = 2
-reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
-
-[[keep]]
-path = "docs/feature-flags/create.md"
-literal = "EXPERIMENTLY_API_KEY"
-count = 2
-reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
-
-[[keep]]
-path = "scripts/doc_claims.py"
-literal = "EXPERIMENTLY_API_KEY"
-count = 1
 reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
 
 [[keep]]
@@ -2530,282 +2492,6 @@ path = "backend/tests/unit/docs/test_release_identity_regexp.py"
 literal = "experimently"
 count = 3
 reason = "compares the notes with releases.md's executed block, which verifies the newest release under the former name until a release exists under the new one (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "*"
-literal = "@getexperimently/"
-count = 140
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "github.com/getexperimently/experimently/sdk/go"
-count = 18
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "getexperimently-"
-count = 10
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "experimently-openfeature"
-count = 6
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "experimently_openfeature"
-count = 5
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "com.getexperimently"
-count = 11
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "com/getexperimently"
-count = 39
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "Experimently.SDK"
-count = 8
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "Experimently.OpenFeature"
-count = 2
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "sdk/dotnet/Experimently"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "pod 'Experimently'"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "\"cocoapods\", \"Experimently\""
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "experimently.gemspec"
-count = 3
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "pip install experimently"
-count = 29
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "pypi.org/project/experimently"
-count = 3
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "pypi/experimently"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "experimently-sdk"
-count = 13
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "experimently-android"
-count = 2
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "experimently-spring-boot-starter"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "*"
-literal = "@/__mocks__/experimently-sdk"
-count = 11
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2)"
-
-[[keep]]
-path = "backend/tests/unit/docs/test_sdk_doc_versions.py"
-literal = "experimently"
-count = 25
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "backend/tests/unit/docs/test_sdk_live_contract_sentence.py"
-literal = "experimently"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "backend/tests/unit/docs/test_deferred_sdk_pages.py"
-literal = "experimently"
-count = 25
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "backend/tests/smoke/test_sdk_release_wiring.py"
-literal = "experimently"
-count = 16
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "backend/tests/smoke/test_sdk_sibling_ranges.py"
-literal = "experimently"
-count = 2
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "backend/tests/unit/docs/test_docs_journey_sdk.py"
-literal = "experimently"
-count = 4
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "backend/tests/unit/docs/test_docs_hub_claims.py"
-literal = "experimently"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "backend/tests/unit/docs/test_doc_claims.py"
-literal = "experimently"
-count = 7
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "backend/tests/unit/scripts/test_rc_evidence.py"
-literal = "experimently"
-count = 11
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "backend/tests/unit/scripts/test_rc_evidence_workflow.py"
-literal = "experimently"
-count = 2
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "backend/tests/unit/scripts/test_pin_npm_local_deps.py"
-literal = "experimently"
-count = 6
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "backend/tests/unit/scripts/test_doc_examples.py"
-literal = "experimently"
-count = 6
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "backend/tests/unit/infrastructure/test_front_door_facts.py"
-literal = "experimently"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "scripts/rc_evidence.py"
-literal = "experimently"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "scripts/doc_claims.py"
-literal = "experimently"
-count = 3
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "scripts/generate_third_party_licenses.py"
-literal = "experimently"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "THIRD_PARTY_LICENSES.md"
-literal = "experimently"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = ".github/workflows/sdk-release.yml"
-literal = "experimently"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "docs/sdk-guide.md"
-literal = "experimently"
-count = 3
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "docs/_claims/docs/sdk-guide.md.toml"
-literal = "experimently"
-count = 3
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "docs/getting-started/faq.md"
-literal = "experimently"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "docs/_claims/docs/getting-started/faq.md.toml"
-literal = "experimently"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "docs/getting-started/python-virtual-env-setup.md"
-literal = "experimently"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "docs/_claims/docs/getting-started/python-virtual-env-setup.md.toml"
-literal = "experimently"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "pyproject.toml"
-literal = "experimently"
-count = 2
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
-
-[[keep]]
-path = "backend/app/core/version.py"
-literal = "experimently"
-count = 1
-reason = "PR-2a: moves with the SDK packages, their names and their pages (EMR2) (this file, whole; its count is pinned)"
 
 [[keep]]
 path = "modules/backend/app/services/warehouse_runner.py"
@@ -3094,3 +2780,639 @@ path = "modules/infrastructure/cdk/stacks/glue_etl_stack.py"
 literal = "\"Project\": \"experimently\""
 count = 3
 reason = "K15: cost-report tag"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_doc_claims.py"
+literal = "getexperimently/experimently"
+count = 12
+reason = "the former repository name: dated evidence links taken under it stay valid, and a look-alike repository or another link shape is still refused"
+
+[[keep]]
+path = "docs/_claims/docs/sdk/go.md.toml"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/_claims/docs/sdk/go.md.toml"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/_claims/docs/sdk/javascript.md.toml"
+literal = "@getexperimently/js-sdk"
+count = 1
+reason = "the package's name before the rename, in a one-line note (v1.3 addendum)"
+
+[[keep]]
+path = "docs/_claims/docs/sdk/javascript.md.toml"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/_claims/docs/sdk/javascript.md.toml"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/_claims/docs/sdk/local-evaluation.md.toml"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/_claims/docs/sdk/local-evaluation.md.toml"
+literal = "EXPERIMENTLY_SERVER_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/_claims/docs/sdk/python.md.toml"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/_claims/docs/sdk/python.md.toml"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/_claims/docs/sdk/python.md.toml"
+literal = "If you installed experimently"
+count = 1
+reason = "the package's name before the rename, in a one-line note (v1.3 addendum)"
+
+[[keep]]
+path = "docs/_claims/sdk/js/README.md.toml"
+literal = "@getexperimently/js-sdk"
+count = 1
+reason = "the package's name before the rename, in a one-line note (v1.3 addendum)"
+
+[[keep]]
+path = "docs/_claims/sdk/python/README.md.toml"
+literal = "If you installed experimently"
+count = 1
+reason = "the package's name before the rename, in a one-line note (v1.3 addendum)"
+
+[[keep]]
+path = "docs/sdk/android.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/android.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/dotnet.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/dotnet.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/edge.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/edge.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/elixir.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/elixir.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/flutter.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/flutter.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/go.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/go.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/ios.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/ios.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/java.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/java.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/javascript.md"
+literal = "@getexperimently/js-sdk"
+count = 1
+reason = "the package's name before the rename, in a one-line note (v1.3 addendum)"
+
+[[keep]]
+path = "docs/sdk/javascript.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/javascript.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/local-evaluation.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/local-evaluation.md"
+literal = "EXPERIMENTLY_SERVER_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/openfeature.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/openfeature.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/php.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/php.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/python.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/python.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/python.md"
+literal = "If you installed `experimently`"
+count = 1
+reason = "the package's name before the rename, in a one-line note (v1.3 addendum)"
+
+[[keep]]
+path = "docs/sdk/react.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/react.md"
+literal = "NEXT_PUBLIC_EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/ruby.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "docs/sdk/ruby.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "a one-line note on the setting's former name; it does not say the SDK reads it (EMR1, PE C8)"
+
+[[keep]]
+path = "sdk/android/jvm/src/main/kotlin/com/controlvar/android/examples/ContractSmoke.kt"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/android/jvm/src/main/kotlin/com/controlvar/android/examples/ContractSmoke.kt"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/dotnet/examples/BasicUsage/Program.cs"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/dotnet/examples/BasicUsage/Program.cs"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/dotnet/examples/ContractSmoke/Program.cs"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/dotnet/examples/ContractSmoke/Program.cs"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/edge/examples/contract_smoke.mjs"
+literal = "EXPERIMENTLY_API_KEY"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/edge/examples/contract_smoke.mjs"
+literal = "EXPERIMENTLY_API_URL"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/elixir/examples/basic_usage.exs"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/elixir/examples/basic_usage.exs"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/elixir/examples/contract_smoke.exs"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/elixir/examples/contract_smoke.exs"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/flutter/example/contract_smoke.dart"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/flutter/example/contract_smoke.dart"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/go/examples/contract_smoke/main.go"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/go/examples/contract_smoke/main.go"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/go/examples/contract_smoke/main_test.go"
+literal = "EXPERIMENTLY_API_KEY"
+count = 4
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/go/examples/contract_smoke/main_test.go"
+literal = "EXPERIMENTLY_API_URL"
+count = 3
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/go/examples/main.go"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/go/examples/main.go"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/ios/Sources/contract-smoke/main.swift"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/ios/Sources/contract-smoke/main.swift"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/java/core/src/main/java/com/controlvar/sdk/examples/ContractSmoke.java"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/java/core/src/main/java/com/controlvar/sdk/examples/ContractSmoke.java"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/js/README.md"
+literal = "@getexperimently/js-sdk"
+count = 1
+reason = "the package's name before the rename, in a one-line note (v1.3 addendum)"
+
+[[keep]]
+path = "sdk/js/__tests__/contract-smoke.test.ts"
+literal = "EXPERIMENTLY_API_KEY"
+count = 3
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/js/__tests__/contract-smoke.test.ts"
+literal = "EXPERIMENTLY_API_URL"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/js/examples/contract_smoke.mjs"
+literal = "EXPERIMENTLY_API_KEY"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/js/examples/contract_smoke.mjs"
+literal = "EXPERIMENTLY_API_URL"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/js/examples/local_eval_smoke.mjs"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/js/examples/local_eval_smoke.mjs"
+literal = "EXPERIMENTLY_LOCAL_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/openfeature-python/examples/basic_usage.py"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/openfeature-python/examples/basic_usage.py"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/openfeature-python/examples/contract_smoke.py"
+literal = "EXPERIMENTLY_API_KEY"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/openfeature-python/examples/contract_smoke.py"
+literal = "EXPERIMENTLY_API_URL"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/openfeature-python/tests/test_contract_smoke.py"
+literal = "EXPERIMENTLY_API_KEY"
+count = 4
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/openfeature-python/tests/test_contract_smoke.py"
+literal = "EXPERIMENTLY_API_URL"
+count = 3
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/openfeature/examples/contract_smoke.mjs"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/openfeature/examples/contract_smoke.mjs"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/php/examples/basic_usage.php"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/php/examples/basic_usage.php"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/php/examples/contract_smoke.php"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/php/examples/contract_smoke.php"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/python/README.md"
+literal = "If you installed `experimently`"
+count = 1
+reason = "the package's name before the rename, in a one-line note (v1.3 addendum)"
+
+[[keep]]
+path = "sdk/python/examples/contract_smoke.py"
+literal = "EXPERIMENTLY_API_KEY"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/python/examples/contract_smoke.py"
+literal = "EXPERIMENTLY_API_URL"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/python/examples/local_eval_smoke.py"
+literal = "EXPERIMENTLY_API_URL"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/python/examples/local_eval_smoke.py"
+literal = "EXPERIMENTLY_LOCAL_API_KEY"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/python/tests/test_contract_smoke.py"
+literal = "EXPERIMENTLY_API_KEY"
+count = 4
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/python/tests/test_contract_smoke.py"
+literal = "EXPERIMENTLY_API_URL"
+count = 3
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/react-native/examples/contract_smoke.test.ts"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/react-native/examples/contract_smoke.test.ts"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/react/examples/contract_smoke.mjs"
+literal = "EXPERIMENTLY_API_KEY"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/react/examples/contract_smoke.mjs"
+literal = "EXPERIMENTLY_API_URL"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/ruby/examples/contract_smoke.rb"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "sdk/ruby/examples/contract_smoke.rb"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "tests/sdk-contract/live/run_live_contract.py"
+literal = "EXPERIMENTLY_API_KEY"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "tests/sdk-contract/live/run_live_contract.py"
+literal = "EXPERIMENTLY_API_URL"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "tests/sdk-contract/live/run_live_contract.py"
+literal = "EXPERIMENTLY_LOCAL_API_KEY"
+count = 2
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "tests/sdk-contract/README.md"
+literal = "EXPERIMENTLY_API_KEY"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"
+
+[[keep]]
+path = "tests/sdk-contract/README.md"
+literal = "EXPERIMENTLY_API_URL"
+count = 1
+reason = "the setting's name before the rename, still read when the new one is not set, or set beside it for a reader at another version (env-inventory.md)"

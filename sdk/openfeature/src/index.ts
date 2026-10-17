@@ -1,13 +1,13 @@
 /**
- * @getexperimently/openfeature-provider
+ * @controlvar/openfeature-provider
  *
- * OpenFeature provider for Experimently. Flag evaluation is
- * delegated to `@getexperimently/js-sdk` and decided by the server.
+ * OpenFeature provider for Controlvar. Flag evaluation is
+ * delegated to `@controlvar/js-sdk` and decided by the server.
  *
  * @example
  * ```typescript
  * import { OpenFeature } from '@openfeature/server-sdk';
- * import { ExperimentationProvider } from '@getexperimently/openfeature-provider';
+ * import { ExperimentationProvider } from '@controlvar/openfeature-provider';
  *
  * const provider = new ExperimentationProvider({ apiKey: 'my-api-key', baseUrl: 'http://localhost:8000' });
  * await OpenFeature.setProviderAndWait(provider);
@@ -23,5 +23,5 @@
 
 export { ExperimentationProvider } from './ExperimentationProvider';
 export type { ExperimentationProviderOptions, ExperimentationFlagMetadata, EvalReason } from './types';
-export { ExperimentationClient, ExperimentationError } from '@getexperimently/js-sdk';
-export type { FlagEvaluation, Assignment, UserContext, TrackOptions } from '@getexperimently/js-sdk';
+export { ExperimentationClient, ExperimentationError } from '@controlvar/js-sdk';
+export type { FlagEvaluation, Assignment, UserContext, TrackOptions } from '@controlvar/js-sdk';

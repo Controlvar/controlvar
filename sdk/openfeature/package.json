@@ -1,7 +1,7 @@
 {
-  "name": "@getexperimently/openfeature-provider",
+  "name": "@controlvar/openfeature-provider",
   "version": "0.1.0",
-  "description": "OpenFeature provider for Experimently (delegates to @getexperimently/js-sdk)",
+  "description": "OpenFeature provider for Controlvar (delegates to @controlvar/js-sdk)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -28,11 +28,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/getexperimently/experimently.git",
+    "url": "git+https://github.com/Controlvar/controlvar.git",
     "directory": "sdk/openfeature"
   },
   "dependencies": {
-    "@getexperimently/js-sdk": "file:../js"
+    "@controlvar/js-sdk": "file:../js"
   },
   "peerDependencies": {
     "@openfeature/server-sdk": "^1.7.0"

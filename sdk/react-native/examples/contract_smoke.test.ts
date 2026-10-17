@@ -9,10 +9,10 @@
  * unit tests already use.
  *
  * Run from the repo root (or via tests/sdk-contract/live/run_live_contract.py):
- *   cd sdk/react-native && EXPERIMENTLY_API_KEY=... \
+ *   cd sdk/react-native && CONTROLVAR_API_KEY=... \
  *     npx jest --config jest.contract.config.js
  *
- * Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY
+ * Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY
  *      (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab),
  *      CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID.
  *
@@ -26,8 +26,9 @@ import { randomUUID } from 'crypto';
 import { ExperimentationClient } from '../src/client';
 import type { SwallowedOperation } from '../src/types';
 
-const apiUrl = process.env.EXPERIMENTLY_API_URL || 'http://localhost:8000';
-const apiKey = process.env.EXPERIMENTLY_API_KEY || '';
+const apiUrl =
+  process.env.CONTROLVAR_API_URL || process.env.EXPERIMENTLY_API_URL || 'http://localhost:8000';
+const apiKey = process.env.CONTROLVAR_API_KEY || process.env.EXPERIMENTLY_API_KEY || '';
 const experimentKey = process.env.CONTRACT_EXPERIMENT_KEY || 'sdk_contract_ab';
 const flagKey = process.env.CONTRACT_FLAG_KEY || 'sdk_contract_flag';
 const userId = process.env.CONTRACT_USER_ID || `smoke-${randomUUID()}`;

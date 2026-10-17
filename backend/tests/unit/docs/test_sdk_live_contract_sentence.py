@@ -57,7 +57,7 @@ NOT_AN_SDK_PAGE: Dict[str, str] = {
 }
 
 LINK = (
-    r"\[pr-qa-gate\.yml\]\(https://github\.com/getexperimently/experimently/blob/main/"
+    r"\[pr-qa-gate\.yml\]\(https://github\.com/Controlvar/controlvar/blob/main/"
     r"\.github/workflows/pr-qa-gate\.yml\)"
 )
 SENTENCE = re.compile(

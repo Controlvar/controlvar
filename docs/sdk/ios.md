@@ -1,6 +1,6 @@
 # iOS Swift SDK
 
-`Experimently` is a Swift Package (iOS 14+, macOS 11+, Swift 5.5+) providing feature flag
+`Controlvar` is a Swift Package (iOS 14+, macOS 11+, Swift 5.5+) providing feature flag
 evaluation, experiment assignment and event tracking with `async`/`await`. It depends only on
 Foundation (URLSession, NSCache, UserDefaults) and CommonCrypto.
 
@@ -26,25 +26,27 @@ repository, so add the SDK as a local package:
 ```swift
 // Package.swift
 dependencies: [
-    .package(name: "Experimently", path: "../experimently/sdk/ios")
+    .package(name: "Controlvar", path: "../controlvar/sdk/ios")
 ],
 targets: [
-    .target(name: "MyApp", dependencies: [.product(name: "Experimently", package: "Experimently")])
+    .target(name: "MyApp", dependencies: [.product(name: "Controlvar", package: "Controlvar")])
 ]
 ```
 
-Xcode: File → Add Package Dependencies… → Add Local… → `sdk/ios` → product `Experimently`.
+Xcode: File → Add Package Dependencies… → Add Local… → `sdk/ios` → product `Controlvar`.
 
 ---
 
 ## Quick Start
 
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
 ```swift
-import Experimently
+import Controlvar
 
 let client = ExperimentationClient(config: SdkConfig(
     baseURL: "http://localhost:8000",             // origin only; the SDK appends /api/v1/...
-    apiKey: Secrets.experimentlyApiKey            // sent as X-API-Key
+    apiKey: Secrets.controlvarApiKey            // sent as X-API-Key
 ))
 let user = User(id: "user-123", attributes: ["plan": "pro"])   // attributes = assignment context
 
@@ -230,7 +232,7 @@ It prints:
 ```
 
 SwiftPM build output goes to stderr (the repo runner uses `swift run -q contract-smoke`). Env:
-`EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+`CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). The smoke uses
 `enableOfflineFallback: false`, assigns on two clients (server stickiness), evaluates the flag,
@@ -239,7 +241,7 @@ tracks `purchase` with the experiment key, tracks `page_view` without a key and 
 `python tests/sdk-contract/live/run_live_contract.py --sdk ios --strict`.
 
 CI does not run this SDK's contract smoke against a real API: `ios` is not in the
-`sdks:` list of the SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+`sdks:` list of the SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ---
 

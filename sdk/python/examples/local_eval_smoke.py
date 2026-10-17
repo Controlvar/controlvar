@@ -10,10 +10,11 @@ reports sent with a server-side key count toward a flag's error rate and automat
 
 Run from the repository root (no install needed):
 
-    EXPERIMENTLY_LOCAL_API_KEY=<sdk:ruleset key> python sdk/python/examples/local_eval_smoke.py
+    CONTROLVAR_LOCAL_API_KEY=<sdk:ruleset key> python sdk/python/examples/local_eval_smoke.py
 
-Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_LOCAL_API_KEY (a key
-with the sdk:ruleset scope, required; also used for POST /api/v1/tracking/errors),
+Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_LOCAL_API_KEY (a key
+with the sdk:ruleset scope, required; also used for POST /api/v1/tracking/errors;
+the former names EXPERIMENTLY_API_URL / EXPERIMENTLY_LOCAL_API_KEY are read when these are unset),
 CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default local-smoke-<uuid>),
 LOCAL_EVALUATIONS (default 40), LOCAL_ERRORS (default 2).
 
@@ -32,10 +33,10 @@ import uuid
 from pathlib import Path
 from typing import List, NoReturn
 
-# Make ``experimentation`` importable straight from the source tree.
+# Make ``controlvar`` importable straight from the source tree.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from experimentation import ExperimentationClient  # noqa: E402
+from controlvar import ExperimentationClient  # noqa: E402
 
 
 def fail(message: str) -> NoReturn:
@@ -44,10 +45,16 @@ def fail(message: str) -> NoReturn:
 
 
 def main() -> None:
-    api_url = os.environ.get("EXPERIMENTLY_API_URL", "http://localhost:8000").rstrip("/")
-    local_key = os.environ.get("EXPERIMENTLY_LOCAL_API_KEY")
+    api_url = (
+        os.environ.get("CONTROLVAR_API_URL")
+        or os.environ.get("EXPERIMENTLY_API_URL")
+        or "http://localhost:8000"
+    ).rstrip("/")
+    local_key = os.environ.get("CONTROLVAR_LOCAL_API_KEY") or os.environ.get(
+        "EXPERIMENTLY_LOCAL_API_KEY"
+    )
     if not local_key:
-        fail("EXPERIMENTLY_LOCAL_API_KEY (a key with the sdk:ruleset scope) is required")
+        fail("CONTROLVAR_LOCAL_API_KEY (a key with the sdk:ruleset scope) is required")
     flag_key = os.environ.get("CONTRACT_FLAG_KEY", "sdk_contract_flag")
     user_id = os.environ.get("CONTRACT_USER_ID") or f"local-smoke-{uuid.uuid4()}"
     evaluations = int(os.environ.get("LOCAL_EVALUATIONS", "40"))

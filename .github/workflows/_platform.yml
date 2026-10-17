@@ -132,7 +132,9 @@ jobs:
       SECRET_KEY: ci-only-platform-secret-key-0123456789abcdef0123456789
       AUTH_PROVIDER: local
       DEV_AUTH_BYPASS: 'false'
-      # Both names until the SDK smokes read the new one.
+      # The live-contract runner reads the new name first and the former one
+      # after it; it hands the smokes the real value under the new name and a
+      # decoy under the former one.
       CONTROLVAR_API_URL: http://127.0.0.1:8000
       EXPERIMENTLY_API_URL: http://127.0.0.1:8000
 

@@ -61,36 +61,36 @@ DEMO_JEST = "test:demo/shoplab/src/__tests__/search.test.tsx::flag on: fuzzy eng
 DEMO_SIM = "test:demo/streampulse/simulator/test_story.py::test_the_story_runs"
 SDK_GO = "test:sdk/go/client_test.go::TestClient_Flags"
 SDK_JAVA = "test:sdk/java/core/src/test/java/ClientTest.java"
-JS_NAME, PY_NAME = "@getexperimently/js-sdk", "experimently"
+JS_NAME, PY_NAME = "@controlvar/js-sdk", "controlvar"
 #: The commits the SDK tags name: older than the RC, as a release that
 #: publishes no new SDK version finds them.
 TAG_COMMITS = {"js": "d4" * 20, "python": "e5" * 20}
 #: Made-up git tree ids of sdk/js and sdk/python.
 TREES = {"js": "f6" * 20, "python": "a7" * 20}
 JS_VERSION = PY_VERSION = "0.1.1"
-WHEEL = f"experimently-{PY_VERSION}-py3-none-any.whl"
-SDIST = f"experimently-{PY_VERSION}.tar.gz"
-TGZ = f"getexperimently-js-sdk-{JS_VERSION}.tgz"
+WHEEL = f"controlvar-{PY_VERSION}-py3-none-any.whl"
+SDIST = f"controlvar-{PY_VERSION}.tar.gz"
+TGZ = f"controlvar-js-sdk-{JS_VERSION}.tgz"
 #: Made-up package files: what sdk-release.yml built and recorded.
 FILES = {
     WHEEL: b"a made-up wheel",
     SDIST: b"a made-up sdist",
     TGZ: b"a made-up npm tarball",
 }
-PYPI_URL = "https://pypi.org/pypi/experimently/json"
-NPM_URL = "https://registry.npmjs.org/@getexperimently%2fjs-sdk"
+PYPI_URL = "https://pypi.org/pypi/controlvar/json"
+NPM_URL = "https://registry.npmjs.org/@controlvar%2fjs-sdk"
 TARBALL_URL = f"https://registry.npmjs.org/{JS_NAME}/-/js-sdk-{JS_VERSION}.tgz"
 GOOD_DESCRIPTION = {
     "PyPI": (
-        "# experimently\n\nThe Python client. See the"
+        "# controlvar\n\nThe Python client. See the"
         " [guide](https://docs.controlvar.com/sdk/python/).\n\n"
-        f"```bash\npip install experimently=={PY_VERSION}\n```\n\n"
+        f"```bash\npip install controlvar=={PY_VERSION}\n```\n\n"
         "```bash\n# from a clone\npip install -e sdk/python\n```\n"
     ),
     "npm": (
-        "# @getexperimently/js-sdk\n\nSee the"
+        "# @controlvar/js-sdk\n\nSee the"
         " [guide](https://docs.controlvar.com/sdk/javascript/).\n\n"
-        f"```bash\nnpm install @getexperimently/js-sdk@{JS_VERSION}\n```\n"
+        f"```bash\nnpm install @controlvar/js-sdk@{JS_VERSION}\n```\n"
     ),
 }
 TAG_OBJECT = "c3" * 20
@@ -1812,7 +1812,7 @@ def test_a_pypi_file_the_run_did_not_record_fails(world):
             ]
             + [
                 {
-                    "filename": "experimently-0.1.1-py2-none-any.whl",
+                    "filename": "controlvar-0.1.1-py2-none-any.whl",
                     "digests": {"sha256": "0" * 64},
                 }
             ],
@@ -1820,7 +1820,7 @@ def test_a_pypi_file_the_run_did_not_record_fails(world):
     ).encode()
     _fails(
         world,
-        "experimently-0.1.1-py2-none-any.whl: on PyPI; run 3001 did not record it",
+        "controlvar-0.1.1-py2-none-any.whl: on PyPI; run 3001 did not record it",
     )
 
 
@@ -1843,8 +1843,8 @@ def test_an_npm_tarball_that_is_not_the_recorded_one_fails(world):
 @pytest.mark.parametrize(
     "registry, install",
     [
-        ("PyPI", "pip install experimently==0.1.0"),
-        ("npm", "npm install @getexperimently/js-sdk@0.1.0"),
+        ("PyPI", "pip install controlvar==0.1.0"),
+        ("npm", "npm install @controlvar/js-sdk@0.1.0"),
     ],
 )
 def test_a_description_quoting_the_previous_version_fails(world, registry, install):
@@ -1861,7 +1861,7 @@ def test_a_description_quoting_the_previous_version_fails(world, registry, insta
 @pytest.mark.parametrize("registry", ["PyPI", "npm"])
 def test_a_description_with_no_pinned_install_line_fails(world, registry):
     world.descriptions[registry] = (
-        "# A package\n\n```bash\npip install experimently\n```\n"
+        "# A package\n\n```bash\npip install controlvar\n```\n"
     )
     _fails(world, f"the {registry} description has no install line with a version")
 
@@ -2097,16 +2097,16 @@ def test_registry_mode_refuses_staging(world):
 # ---------------------------------------------------------------------------
 def test_the_record_is_read_from_a_log_as_github_writes_it():
     sha = hashlib.sha256(b"x").hexdigest()
-    listing = f"{sha}  experimently-1.0.0.tar.gz\n"
+    listing = f"{sha}  controlvar-1.0.0.tar.gz\n"
     digest = hashlib.sha256(listing.encode()).hexdigest()
     log = (
         "﻿2026-11-01T10:20:00.0000000Z Run set -euo pipefail\n"
-        f"2026-11-01T10:20:01.1234567Z {sha}  experimently-1.0.0.tar.gz\r\n"
+        f"2026-11-01T10:20:01.1234567Z {sha}  controlvar-1.0.0.tar.gz\r\n"
         f"2026-11-01T10:20:01.2234567Z digest {digest}\n"
-        f"not a log line {sha}  experimently-9.tar.gz\n"
+        f"not a log line {sha}  controlvar-9.tar.gz\n"
     )
     files, problems = rc.read_record(rc.PACKAGES["python"], log)
-    assert problems == [] and files == {"experimently-1.0.0.tar.gz": sha}
+    assert problems == [] and files == {"controlvar-1.0.0.tar.gz": sha}
 
 
 @pytest.mark.parametrize(
@@ -2143,7 +2143,7 @@ def test_a_huge_description_is_truncated_before_it_is_read():
     pattern on it is bounded. A planted pin past the cut is not seen."""
     head = "](x" * 20_000 + ("href=" + "a" * 3_000 + " ") * 10 + "```\n" * 1_000
     head += " " * (rc.DESCRIPTION_MAX - len(head))
-    text = head + "pip install experimently==0.1.1\n"
+    text = head + "pip install controlvar==0.1.1\n"
     problems = rc.description_problems(rc.PACKAGES["python"], PY_NAME, PY_VERSION, text)
     assert "the PyPI description has no install line with a version" in problems[0]
 

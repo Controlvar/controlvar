@@ -16,7 +16,7 @@ const REPO_ROOT = path.resolve(__dirname, '../..');
 // else with `./` -- an absolute path there became
 // `./Users/<you>/node_modules/react` and failed to resolve.
 const ALIAS_TARGETS = {
-  '@getexperimently/react-sdk': SDK_ENTRY,
+  '@controlvar/react-sdk': SDK_ENTRY,
   // Force a single React copy. Without this, the SDK source could resolve
   // sdk/react/node_modules/react and hooks would throw "Invalid hook call".
   react: path.resolve(__dirname, 'node_modules/react'),

@@ -255,17 +255,16 @@ def test_thirteen_of_the_sixteen_sdks_run_the_live_contract():
 
 
 def test_the_sdk_package_names():
-    assert json.loads(_text("sdk/js/package.json"))["name"] == "@getexperimently/js-sdk"
+    assert json.loads(_text("sdk/js/package.json"))["name"] == "@controlvar/js-sdk"
     assert (
-        json.loads(_text("sdk/react/package.json"))["name"]
-        == "@getexperimently/react-sdk"
+        json.loads(_text("sdk/react/package.json"))["name"] == "@controlvar/react-sdk"
     )
     python = tomllib.loads(_text("sdk/python/pyproject.toml"))["project"]
-    assert python["name"] == "experimently"
-    assert (ROOT / "sdk/python/experimentation/__init__.py").is_file()
+    assert python["name"] == "controlvar"
+    assert (ROOT / "sdk/python/controlvar/__init__.py").is_file()
     pom = _text("sdk/java/core/pom.xml")
-    assert "<groupId>com.getexperimently</groupId>" in pom
-    assert re.search(r"</parent>\s*<artifactId>experimently-sdk</artifactId>", pom)
+    assert "<groupId>com.controlvar</groupId>" in pom
+    assert re.search(r"</parent>\s*<artifactId>controlvar-sdk</artifactId>", pom)
 
 
 def test_the_java_sdk_has_spring_boot_auto_configuration():

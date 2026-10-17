@@ -1,4 +1,4 @@
-/// Example Flutter application demonstrating the Experimently SDK.
+/// Example Flutter application demonstrating the Controlvar SDK.
 ///
 /// This app shows:
 ///  - SDK initialisation (no network call; flags are decided per user by the server)
@@ -7,7 +7,7 @@
 ///  - Event tracking (never throws; fans out to cached assignments and flags)
 ///  - Offline fallback (SharedPreferences)
 import 'package:flutter/material.dart';
-import 'package:experimently/experimently.dart';
+import 'package:controlvar/controlvar.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

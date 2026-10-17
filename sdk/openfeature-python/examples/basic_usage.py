@@ -1,9 +1,11 @@
 """
-Basic usage example: Experimently OpenFeature Python Provider.
+Basic usage example: Controlvar OpenFeature Python Provider.
 
 Run from the repository root with the virtual environment activated:
     source venv/bin/activate
-    EXPERIMENTLY_API_KEY=<key> python sdk/openfeature-python/examples/basic_usage.py
+    CONTROLVAR_API_KEY=<key> python sdk/openfeature-python/examples/basic_usage.py
+
+(earlier versions of this example read EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY.)
 """
 
 from __future__ import annotations
@@ -20,15 +22,15 @@ for _path in (_HERE.parents[1] / "src", _HERE.parents[2] / "python"):
 from openfeature import api  # noqa: E402
 from openfeature.evaluation_context import EvaluationContext  # noqa: E402
 
-from experimentation_openfeature import ExperimentationProvider  # noqa: E402
+from controlvar_openfeature import ExperimentationProvider  # noqa: E402
 
 
 def main() -> None:
     # 1. Create and register the provider. Flags are evaluated by the server and cached
     #    per user + flag for cache_ttl seconds.
     provider = ExperimentationProvider(
-        api_key=os.environ.get("EXPERIMENTLY_API_KEY", "your-api-key"),
-        base_url=os.environ.get("EXPERIMENTLY_API_URL", "http://localhost:8000"),
+        api_key=os.environ.get("CONTROLVAR_API_KEY", "your-api-key"),
+        base_url=os.environ.get("CONTROLVAR_API_URL", "http://localhost:8000"),
         cache_ttl=300,
         timeout=10,
     )

@@ -63,7 +63,7 @@ PAGE = """# Sample SDK
 ## Installation
 
 ```bash
-npm install @getexperimently/js-sdk@0.1.0
+npm install @controlvar/js-sdk@0.1.0
 ```
 
 To build it yourself:
@@ -75,11 +75,11 @@ npm install /path/to/a.tgz
 ## Quick start
 
 ```typescript
-import { ExperimentationClient } from '@getexperimently/js-sdk';
+import { ExperimentationClient } from '@controlvar/js-sdk';
 
 const client = new ExperimentationClient({
   apiUrl: 'http://localhost:8000',
-  apiKey: process.env.EXPERIMENTLY_API_KEY!,
+  apiKey: process.env.CONTROLVAR_API_KEY!,
 });
 const user = { userId: 'user-123' };
 const variant = await client.getVariant('checkout_flow', user);
@@ -239,12 +239,23 @@ def test_every_sdk_journey_exists_and_holds_two_users():
     assert all(len(users) == 2 for users in seen.values()), seen
 
 
+#: The versions the pages install: each SDK's manifest, not a copy of it here.
+JS_VERSION = json.loads((REPO_ROOT / "sdk" / "js" / "package.json").read_text())[
+    "version"
+]
+PY_VERSION = re.search(
+    r'^__version__ = "([^"]+)"$',
+    (REPO_ROOT / "sdk" / "python" / "controlvar" / "version.py").read_text(),
+    re.M,
+).group(1)
+
+
 @pytest.mark.parametrize(
     "page, language, tool, package, version",
     [
-        ("sdk/javascript.md", "typescript", "npm", "@getexperimently/js-sdk", "0.1.0"),
-        ("sdk/python.md", "python", "pip", "experimently", "0.1.0"),
-        ("sdk/go.md", "go", "go", "github.com/getexperimently/experimently/sdk/go", ""),
+        ("sdk/javascript.md", "typescript", "npm", "@controlvar/js-sdk", JS_VERSION),
+        ("sdk/python.md", "python", "pip", "controlvar", PY_VERSION),
+        ("sdk/go.md", "go", "go", "github.com/controlvar/controlvar/sdk/go", ""),
     ],
 )
 def test_the_pages_install_command_is_read_as_written(
@@ -289,7 +300,7 @@ def test_the_program_run_is_the_pages_block_with_only_its_placeholders_replaced(
                     )
             assert undone == old, (journey.guide, old, new)
         # The key is never in the program: the block reads it from the environment.
-        assert "EXPERIMENTLY_API_KEY" in block
+        assert "CONTROLVAR_API_KEY" in block
         assert "eptk_" not in program
 
 
@@ -418,8 +429,8 @@ PLANTS = [
     pytest.param(
         None,
         PAGE.replace(
-            "npm install @getexperimently/js-sdk@0.1.0",
-            "npm install @getexperimently/js-sdk",
+            "npm install @controlvar/js-sdk@0.1.0",
+            "npm install @controlvar/js-sdk",
         ),
         "a package at one version",
         id="install-without-a-version",
@@ -581,15 +592,15 @@ class FakeCommands:
 
 
 NPM = sdk.Install(
-    line="npm install @getexperimently/js-sdk@0.1.0",
+    line="npm install @controlvar/js-sdk@0.1.0",
     tool="npm",
-    package="@getexperimently/js-sdk",
+    package="@controlvar/js-sdk",
     version="0.1.0",
 )
 PIP = sdk.Install(
-    line="pip install experimently==0.1.0",
+    line="pip install controlvar==0.1.0",
     tool="pip",
-    package="experimently",
+    package="controlvar",
     version="0.1.0",
 )
 
@@ -615,7 +626,7 @@ def test_a_good_run_installs_as_written_and_reads_the_answers():
     assert outcome.installed == "0.1.0"
     assert outcome.answers == {"variant": "control"}
     assert [c["argv"][:3] for c in fake.calls] == [
-        ["npm", "install", "@getexperimently/js-sdk@0.1.0"],
+        ["npm", "install", "@controlvar/js-sdk@0.1.0"],
         ["node", "--experimental-strip-types", "--disable-warning=ExperimentalWarning"],
     ]
     assert outcome.commands[0]["run"] == NPM.line
@@ -630,7 +641,7 @@ def test_a_python_run_makes_a_fresh_environment_and_installs_into_it():
     assert fake.calls[1]["argv"] == [
         f"{venv}/bin/pip",
         "install",
-        "experimently==0.1.0",
+        "controlvar==0.1.0",
     ]
     assert fake.calls[2]["argv"][:2] == [f"{venv}/bin/python", "-c"]
     assert fake.calls[3]["argv"] == [f"{venv}/bin/python", "quick_start.py"]
@@ -641,7 +652,7 @@ def test_a_failed_install_fails_the_step_and_runs_nothing_more():
     fake = FakeCommands(install_status=1)
     outcome = _run(fake)
     assert outcome.problems == [
-        "the page's install, `npm install @getexperimently/js-sdk@0.1.0`, exited 1:"
+        "the page's install, `npm install @controlvar/js-sdk@0.1.0`, exited 1:"
         " npm error code ETARGET / npm error notarget No matching version found for"
         " a@0.0.404."
     ]
@@ -651,11 +662,11 @@ def test_a_failed_install_fails_the_step_and_runs_nothing_more():
 def test_another_version_installed_fails_the_step():
     outcome = _run(FakeCommands(installed="0.1.1"))
     assert outcome.problems == [
-        "`npm install @getexperimently/js-sdk@0.1.0` installed"
-        " @getexperimently/js-sdk 0.1.1, not 0.1.0"
+        "`npm install @controlvar/js-sdk@0.1.0` installed"
+        " @controlvar/js-sdk 0.1.1, not 0.1.0"
     ]
     outcome = _run(FakeCommands(installed="0.2.0"), PIP)
-    assert "installed experimently 0.2.0, not 0.1.0" in outcome.problems[0]
+    assert "installed controlvar 0.2.0, not 0.1.0" in outcome.problems[0]
 
 
 def test_only_the_block_is_given_the_key_and_nothing_else_is_inherited(monkeypatch):
@@ -935,7 +946,7 @@ def test_the_step_passes_when_every_answer_is_the_oracles(
         _sdk_step(ON), running, _ExperimentApi(), "j", 3
     )
     assert observed.startswith(
-        "installed @getexperimently/js-sdk 0.1.0 from https://registry.npmjs.org/;"
+        "installed @controlvar/js-sdk 0.1.0 from https://registry.npmjs.org/;"
     )
     assert "flag on (rollout), as the documented hashes give" in observed
     written = json.loads((tmp_path / snapshot).read_text())
@@ -1041,10 +1052,10 @@ def test_the_page_install_and_block_are_read_at_the_step(
     with pytest.raises(execute_module._Failed) as failed:
         runner._sdk_step(_sdk_step(ON), running, _ExperimentApi(), "j", 3)
     assert failed.value.observed.startswith(
-        "the page's install, `npm install @getexperimently/js-sdk@0.0.404`, exited 1"
+        "the page's install, `npm install @controlvar/js-sdk@0.0.404`, exited 1"
     )
     assert fake.calls[0]["argv"] == [
         "npm",
         "install",
-        "@getexperimently/js-sdk@0.0.404",
+        "@controlvar/js-sdk@0.0.404",
     ]

@@ -155,7 +155,7 @@ MANIFEST_DEPS: dict[str, list[tuple[str, str, str]]] = {
         ("php (ext-json, ext-curl)", ">=8.1", "PHP-3.01 / runtime, not bundled"),
         ("phpunit/phpunit (dev)", "^10.0", "BSD-3-Clause"),
     ],
-    "Ruby SDK (`sdk/ruby/experimently.gemspec`)": [
+    "Ruby SDK (`sdk/ruby/controlvar.gemspec`)": [
         ("(standard library only)", "—", "Ruby / BSD-2-Clause"),
     ],
     "Elixir SDK (`sdk/elixir/mix.exs`)": [
@@ -169,7 +169,7 @@ MANIFEST_DEPS: dict[str, list[tuple[str, str, str]]] = {
         ("coverlet.collector (test)", "6.0.0", "MIT"),
     ],
     "Python SDKs (`sdk/python`, `sdk/openfeature-python`)": [
-        ("(experimently: standard library only)", "—", "—"),
+        ("(controlvar: standard library only)", "—", "—"),
         ("openfeature-sdk", ">=0.9.0", "Apache-2.0"),
     ],
 }
@@ -569,7 +569,7 @@ def _own_package_names() -> set[str]:
 
     `--excludePrivatePackages` only drops `private: true`, which covers the
     dashboard and nothing else -- the SDKs are publishable, so each one
-    reported *itself*, and `@getexperimently/js-sdk` additionally appeared as
+    reported *itself*, and `@controlvar/js-sdk` additionally appeared as
     a dependency of the React Native SDK. The committed file therefore listed
     five of Controlvar's own packages as third-party software. They are
     first-party whichever table they turn up in, so they are excluded by name.
@@ -590,7 +590,7 @@ def _declared_node_dependencies(pkg_dir: str) -> int:
     First-party ones are excluded because `node_rows` excludes them from the
     rows, and comparing a count that includes them against a list that does
     not made a correctly installed tree look uninstalled. `sdk/openfeature`
-    declares one, `@getexperimently/js-sdk`, and takes `@openfeature/server-sdk`
+    declares one, `@controlvar/js-sdk`, and takes `@openfeature/server-sdk`
     as a peer dependency; counting the first-party one could send an operator
     to run an `npm ci` that had already been run.
     """

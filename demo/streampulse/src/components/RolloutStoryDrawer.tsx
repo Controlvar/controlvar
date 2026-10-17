@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { useFeatureFlag } from '@getexperimently/react-sdk';
+import { useFeatureFlag } from '@controlvar/react-sdk';
 import type { Device } from '@/lib/devices';
 import { DASHBOARD_URL, FLAG_KEYS } from '@/lib/env';
 import { flagReasonLabel } from '@/lib/labels';

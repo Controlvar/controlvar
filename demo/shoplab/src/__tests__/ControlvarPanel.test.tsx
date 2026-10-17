@@ -3,7 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import ControlvarPanel, { PANEL_EVENT_LIMIT } from '@/components/ControlvarPanel';
 import { EventLogProvider, useTrack } from '@/lib/eventLog';
 import { DASHBOARD_URL } from '@/lib/env';
-import { __setExperiment, __setFlag, DEFAULT_TEST_USER } from '@/__mocks__/experimently-sdk';
+import { __setExperiment, __setFlag, DEFAULT_TEST_USER } from '@/__mocks__/controlvar-sdk';
 import { resetTestState } from '@/test-utils';
 
 function Emitter({ count }: { count: number }) {

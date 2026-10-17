@@ -55,7 +55,7 @@ from backend.tests.unit.docs.test_docs_journey_sdk import (
     execute_module,
 )
 
-MODULE = "github.com/getexperimently/experimently/sdk/go"
+MODULE = "github.com/controlvar/controlvar/sdk/go"
 PSEUDO = "v0.0.0-20261007170856-0ee808b07642"
 GO_PAGE = REPO_ROOT / "docs" / "sdk" / "go.md"
 GO_MOD = REPO_ROOT / "sdk" / "go" / "go.mod"
@@ -74,7 +74,7 @@ Requires Go GO_DIRECTIVE+.
 
 ```bash
 go mod init example.com/quickstart
-go get github.com/getexperimently/experimently/sdk/go
+go get github.com/controlvar/controlvar/sdk/go
 ```
 
 ## Quick Start
@@ -86,11 +86,11 @@ import (
 	"fmt"
 	"os"
 
-	exp "github.com/getexperimently/experimently/sdk/go"
+	exp "github.com/controlvar/controlvar/sdk/go"
 )
 
 func main() {
-	client, _ := exp.New(exp.WithBaseURL("http://localhost:8000"), exp.WithAPIKey(os.Getenv("EXPERIMENTLY_API_KEY")))
+	client, _ := exp.New(exp.WithBaseURL("http://localhost:8000"), exp.WithAPIKey(os.Getenv("CONTROLVAR_API_KEY")))
 	user := &exp.User{ID: "user-123"}
 	a, _ := client.GetAssignment(nil, "checkout_flow", user)
 	flag, _ := client.EvaluateFlag(nil, "new_search", user)

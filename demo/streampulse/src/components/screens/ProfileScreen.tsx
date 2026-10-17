@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useExperiment } from '@getexperimently/react-sdk';
+import { useExperiment } from '@controlvar/react-sdk';
 import { EXPERIMENT_KEYS } from '@/lib/env';
 import { useScreenView, useTrack } from '@/lib/eventLog';
 import { Binding, ScreenHeader } from '@/components/ui';

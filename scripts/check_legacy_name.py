@@ -15,6 +15,22 @@ sides of that line:
              for), or the entry is dead.
 * COUNT      an entry that matched a different number of times than it pins.
              A count that moves is a reviewed change, not a side effect.
+* RESIDUAL-IMPORT  the Python SDK's former import name, which is not the
+             brand and so is not matched above: a Python import of it, or a
+             quoted dotted path into one of its modules (``mock.patch("<old>.
+             cache._now")``), ``importlib.import_module("<old>")``, ``import
+             os, <old>``, and its source directory named from parts
+             (``"python" / "<old>"``). The SDK now installs and imports under
+             the new name, so such a line no longer runs. No keep-list entry
+             covers it. The database schema of the same spelling, the Go
+             package (``import <old> "github.com/..."``, ``<old>.New``) and
+             the Spring property prefix do not match. Not seen: a bare
+             attribute use with no import on the same line (``<old>.local``
+             in prose), a module name built from a variable, or a path whose
+             parts are on different lines; nor ``Path("python") / "<old>"``,
+             ``__import__("<old>")`` or ``>>> import os, <old>``. A Go alias
+             whose path is a backtick string (``import <old> `...` ``) is
+             reported, though it is not Python.
 
 The keep-list is ``scripts/legacy_name_keep.toml``. Each entry names a path
 (an exact path, or an ``fnmatch`` pattern), an exact case-sensitive literal
@@ -43,7 +59,8 @@ Usage::
 
     python scripts/check_legacy_name.py [--root DIR] [--keep FILE]
 
-Exit status 0 when there is no RESIDUAL, STALE-ALLOW or COUNT line, else 1;
+Exit status 0 when there is no RESIDUAL, RESIDUAL-IMPORT, STALE-ALLOW or COUNT
+line, else 1;
 2 for a usage error (missing keep-list, malformed entry).
 """
 
@@ -52,6 +69,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import os
+import re
 import subprocess
 import sys
 import tomllib
@@ -63,6 +81,33 @@ KEEP_FILE = Path("scripts") / "legacy_name_keep.toml"
 
 # Assembled so this source never contains the word it looks for.
 NEEDLE = ("experi" + "mently").encode("ascii")
+
+# The Python SDK's former import names, assembled for the same reason.
+_MODULE = "experi" + "mentation"
+_SUBMODULES = (
+    "client|cache|evaluator|hashing|local|testing|transport|types|version|provider"
+)
+FORMER_IMPORT = re.compile(
+    (
+        # from <old> import x / from <old>.client import x
+        rf"\bfrom {_MODULE}(?:_openfeature)?(?:\.\w+)* import\b"
+        # import <old>, at a line start or after a quote or `;` (python -c);
+        # not Go's aliased `import <old> "path"`
+        rf"|(?:^|[;\"'])\s*(?:>>> )?import {_MODULE}(?:_openfeature)?\b(?!\s+\")"
+        # import os, <old>
+        rf"|^\s*import [\w.]+(?:\s*,\s*[\w.]+)*\s*,\s*{_MODULE}(?:_openfeature)?\b"
+        # importlib.import_module("<old>...")
+        rf"|import_module\(\s*[\"']{_MODULE}(?:_openfeature)?[\"'.]"
+        # a quoted dotted path into one of its modules (mock.patch targets)
+        rf"|[\"'`]{_MODULE}(?:_openfeature)?\.(?:{_SUBMODULES})\b(?![-\w])"
+        # its source directory named from parts: "python" / "<old>"
+        rf"|[\"']python[\"']\s*[/,]\s*[\"']{_MODULE}[\"']"
+        # the provider's package directory, quoted on its own
+        rf"|[\"']{_MODULE}_openfeature[\"']"
+    ).encode("ascii"),
+    re.M,
+)
+MODULE_NEEDLE = _MODULE.encode("ascii")
 
 GENERATED_DIRS = frozenset(
     {
@@ -225,6 +270,10 @@ def check(root: Path, keep_path: Path) -> tuple[list[str], dict[str, int]]:
             data = full.read_bytes()
         else:
             continue
+        if MODULE_NEEDLE in data:
+            for number, line in enumerate(data.split(b"\n"), start=1):
+                if FORMER_IMPORT.search(line):
+                    problems.append(f"RESIDUAL-IMPORT {rel}:{number}: {snippet(line)}")
         lines = [(0, rel.encode("utf-8", "surrogateescape"))]
         if NEEDLE in data.lower():
             lines += list(enumerate(data.split(b"\n"), start=1))

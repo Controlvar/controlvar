@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ExperimentationProvider } from '@getexperimently/react-sdk';
+import { ExperimentationProvider } from '@controlvar/react-sdk';
 import DevicePanel from '@/components/DevicePanel';
 import ControlvarPanel from '@/components/ControlvarPanel';
 import PhoneFrame from '@/components/PhoneFrame';

@@ -1,14 +1,14 @@
 {
-    "name": "experimently/sdk",
-    "description": "PHP SDK for Experimently A/B testing and feature flag platform",
+    "name": "controlvar/sdk",
+    "description": "PHP SDK for Controlvar A/B testing and feature flag platform",
     "type": "library",
     "license": "MIT",
     "keywords": ["a/b testing", "feature flags", "experimentation", "sdk"],
-    "homepage": "https://github.com/getexperimently/experimently",
+    "homepage": "https://github.com/Controlvar/controlvar",
     "authors": [
         {
-            "name": "Experimently",
-            "email": "hello@getexperimently.com"
+            "name": "Controlvar",
+            "email": "hello@controlvar.com"
         }
     ],
     "require": {
@@ -21,12 +21,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Experimently\\": "src/"
+            "Controlvar\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Experimently\\Tests\\": "tests/"
+            "Controlvar\\Tests\\": "tests/"
         }
     },
     "config": {

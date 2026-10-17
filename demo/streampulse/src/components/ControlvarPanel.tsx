@@ -1,5 +1,5 @@
 import React from 'react';
-import { useExperiment, useExperimentation, useFeatureFlag } from '@getexperimently/react-sdk';
+import { useExperiment, useExperimentation, useFeatureFlag } from '@controlvar/react-sdk';
 import { DASHBOARD_URL, EXPERIMENT_KEYS, FLAG_KEYS } from '@/lib/env';
 import { useEventLog } from '@/lib/eventLog';
 import { assignmentPill, assignmentReasonLabel, flagReasonLabel } from '@/lib/labels';

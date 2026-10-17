@@ -110,7 +110,7 @@ def test_sdk_runs_that_sdk_against_the_seeds_fixtures(monkeypatch, runner):
         "sdk_contract_ab",
         "sdk_contract_flag",
     )
-    assert env["EXPERIMENTLY_API_KEY"] == "contract-key"
+    assert env["CONTROLVAR_API_KEY"] == "contract-key"
     # --strict: no sdk:ruleset key is a failure, so the run fails as a whole.
     assert status == 1
 
@@ -206,8 +206,10 @@ def test_each_setting_is_read_under_its_name_then_its_former_one(
 
 
 def test_the_smokes_are_given_each_setting_under_both_names(monkeypatch, runner):
-    """The smokes under sdk/ read the names before the rename until they move
-    to the new ones: the runner hands them both, equal."""
+    """The smokes read the new names first. The runner gives them the real
+    values under the new names and decoys under the former ones (an address
+    nothing listens on, a key the server refuses), so a smoke that reads a
+    former name first fails instead of passing on the same value."""
     monkeypatch.setenv("CONTROLVAR_LOCAL_API_KEY", "scoped")
     monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
     monkeypatch.setattr(runner, "check_ruleset", lambda *args: ("PASS", "ok"))
@@ -221,7 +223,10 @@ def test_the_smokes_are_given_each_setting_under_both_names(monkeypatch, runner)
     env = ran[0][1]
     for setting in ("url", "key"):
         name, old, _ = SETTINGS[setting]
-        assert env[name] == env[old] and env[name], setting
+        assert env[name] and env[old] and env[name] != env[old], setting
     assert env["CONTROLVAR_API_KEY"] == "contract-key"
+    assert env["EXPERIMENTLY_API_URL"] == runner.DECOY_URL == "http://127.0.0.1:9"
+    assert env["EXPERIMENTLY_API_KEY"] == runner.DECOY_KEY != "contract-key"
     name, old, _ = SETTINGS["local"]
-    assert local and local[0][name] == local[0][old] == "scoped"
+    assert local and local[0][name] == "scoped"
+    assert local[0][old] == runner.DECOY_KEY != "scoped"

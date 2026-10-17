@@ -75,17 +75,17 @@ dashboard shows.
 
 ### What SDKs are available?
 
-The JavaScript SDK is on npm (`npm install @getexperimently/js-sdk`, 0.1.0, beta) and the
-Python SDK is on PyPI (`pip install experimently`, 0.1.0, beta). The Go SDK installs by module
+The JavaScript SDK is on npm (`npm install @controlvar/js-sdk`, 0.1.1, beta) and the
+Python SDK is on PyPI (`pip install controlvar`, 0.1.1, beta). The Go SDK installs by module
 path, and the other SDKs from a clone of this repository: each SDK's page
 ([Go](../sdk/go.md), [Java](../sdk/java.md), [React](../sdk/react.md)) says how.
 
 | SDK | Package |
 |-----|---------|
-| JavaScript / TypeScript | `@getexperimently/js-sdk` (npm) |
-| Python | `experimently` (PyPI) |
-| Java / JVM | `com.getexperimently:experimently-sdk` (Maven/Gradle) |
-| React | `@getexperimently/react-sdk` (npm) |
+| JavaScript / TypeScript | `@controlvar/js-sdk` (npm) |
+| Python | `controlvar` (PyPI) |
+| Java / JVM | `com.controlvar:controlvar-sdk` (Maven/Gradle) |
+| React | `@controlvar/react-sdk` (npm) |
 
 13 of the 16 SDKs run experiment variant assignment, feature flag evaluation and event tracking against a live API in CI, in the SDK Live Contract job of `pr-qa-gate.yml`. The Java SDK includes Spring Boot auto-configuration. The React SDK includes hooks, an HOC, and SSR support for Next.js.
 

@@ -21,7 +21,7 @@ by = [
     "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/assign with the contract headers",
     "test:sdk/python/tests/test_client.py::TestConstruction::test_headers_and_timeout_reach_the_transport",
     "test:sdk/go/client_test.go::TestClient_RequestHeaders",
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::every request carries X-API-Key, Accept and Content-Type",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::every request carries X-API-Key, Accept and Content-Type",
     "test:backend/tests/unit/scripts/test_run_live_contract.py::test_each_sdk_runs_its_own_contract_smoke",
 ]
 
@@ -35,7 +35,7 @@ by = [
     "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/assign with the contract headers",
     "test:sdk/python/tests/test_client.py::TestConstruction::test_headers_and_timeout_reach_the_transport",
     "test:sdk/go/client_test.go::TestClient_RequestHeaders",
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::every request carries X-API-Key, Accept and Content-Type",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::every request carries X-API-Key, Accept and Content-Type",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key",
 ]
 
@@ -347,9 +347,9 @@ text = "Python SDK"
 by = ["exempt:label"]
 
 [[unit]]
-text = "sdk/python — package experimently, stdlib only (no runtime dependencies), Python ≥ 3.9, synchronous."
+text = "sdk/python — package controlvar, stdlib only (no runtime dependencies), Python ≥ 3.9, synchronous."
 by = [
-    "test:sdk/python/tests/test_package.py::test_it_installs_as_experimently_and_imports_as_experimentation",
+    "test:sdk/python/tests/test_package.py::test_it_installs_and_imports_as_controlvar",
     "test:sdk/python/tests/test_package.py::test_it_needs_python_3_9_and_no_other_package",
     "test:sdk/python/tests/test_package.py::test_every_module_imports_only_the_standard_library_and_itself",
     "test:sdk/python/tests/test_package.py::test_the_client_is_synchronous",
@@ -365,7 +365,7 @@ by = ["exempt:label"]
 count = 3
 
 [[unit]]
-text = "The experimently package is on PyPI (0.1.0, beta):"
+text = "The controlvar package is on PyPI (0.1.1, beta):"
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-python#quick-start-user-on",
@@ -473,7 +473,7 @@ text = "The client is thread-safe."
 by = ["test:sdk/python/tests/test_client.py::TestAssignmentsAndCache::test_concurrent_evaluations_are_thread_safe"]
 
 [[unit]]
-text = "Testing: construct the client with transport= (see experimentation.testing.FakeTransport) to assert requests without a network."
+text = "Testing: construct the client with transport= (see controlvar.testing.FakeTransport) to assert requests without a network."
 by = [
     "test:sdk/python/tests/test_client.py::TestConstruction::test_headers_and_timeout_reach_the_transport",
     "test:sdk/python/tests/test_transport.py::test_the_suite_cannot_open_a_real_connection",
@@ -491,7 +491,7 @@ text = "JavaScript / TypeScript SDK"
 by = ["exempt:label"]
 
 [[unit]]
-text = "sdk/js — package @getexperimently/js-sdk, zero runtime dependencies, uses the global fetch (Node ≥ 18 and browsers), CommonJS build with type declarations."
+text = "sdk/js — package @controlvar/js-sdk, zero runtime dependencies, uses the global fetch (Node ≥ 18 and browsers), CommonJS build with type declarations."
 by = [
     "test:sdk/js/__tests__/package.test.ts::runs on Node 18 or later and in browsers: no source imports a module",
     "test:sdk/js/__tests__/package.test.ts::has no runtime dependencies",
@@ -508,7 +508,7 @@ text = "For React apps use the React SDK instead."
 by = ["exempt:advice"]
 
 [[unit]]
-text = "The @getexperimently/js-sdk package is on npm (0.1.0, beta):"
+text = "The @controlvar/js-sdk package is on npm (0.1.1, beta):"
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-javascript#quick-start-user-on",
@@ -519,7 +519,7 @@ text = "To work on the SDK itself, build it from a clone of this repository inst
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "npm pack writes getexperimently-js-sdk-0.1.0.tgz:"
+text = "npm pack writes controlvar-js-sdk-0.1.1.tgz:"
 by = ["mechanism:sdk-doc-versions"]
 
 [[unit]]
@@ -644,50 +644,50 @@ by = ["test:backend/tests/smoke/test_sdk_java_modules.py::test_the_build_has_a_c
 [[unit]]
 text = "getExperimentAssignment(user, experimentKey) | ExperimentAssignment (getExperimentKey, getUserId, getVariantId, getVariantName, isControl, getConfiguration) | throws ExperimentationException (unchecked; 404 when not ACTIVE, network errors)"
 by = [
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::sends POST /api/v1/tracking/assign with experiment_key, user_id and context",
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::throws ExperimentationException(404) when the experiment is not ACTIVE, and does not cache it",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::sends POST /api/v1/tracking/assign with experiment_key, user_id and context",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::throws ExperimentationException(404) when the experiment is not ACTIVE, and does not cache it",
 ]
 
 [[unit]]
 text = "evaluateFeatureFlag(user, flagKey) | FlagEvaluation (getKey, isEnabled, getConfig, getConfigMap) | throws ExperimentationException"
 by = [
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::sends GET /api/v1/feature-flags/evaluate/{key}?user_id= with the key and user encoded",
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::throws ExperimentationException(404) when the flag is unknown or not ACTIVE",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::sends GET /api/v1/feature-flags/evaluate/{key}?user_id= with the key and user encoded",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::throws ExperimentationException(404) when the flag is unknown or not ACTIVE",
 ]
 
 [[unit]]
 text = "isFeatureEnabled(user, flagKey) | boolean | false"
 by = [
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::returns false instead of throwing on 404",
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::returns false instead of throwing when the server is unreachable",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::returns false instead of throwing on 404",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::returns false instead of throwing when the server is unreachable",
 ]
 
 [[unit]]
 text = "trackEvent(userId, eventName, properties[, experimentKey, featureFlagKey, value]), trackEvent(TrackEvent) | void (async) | swallowed"
 by = [
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::neverThrows",
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::withExperimentKey",
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::fanOut",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::neverThrows",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::withExperimentKey",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::fanOut",
 ]
 
 [[unit]]
 text = "trackBatch(List<TrackEvent>), trackEventSync, trackBatchSync | void | swallowed"
 by = [
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::chunksAt100",
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::syncReportsFailures",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::chunksAt100",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::syncReportsFailures",
 ]
 
 [[unit]]
 text = "getCachedAssignments(userId), getCachedFlagKeys(userId), invalidateCache(userId, key), clearCache(), getCacheSize(), close() | cache / lifecycle | —"
 by = [
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::cachedEntries",
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::invalidateCache",
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::clearCache",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::cachedEntries",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::invalidateCache",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::clearCache",
 ]
 
 [[unit]]
 text = "ConsistentHash.hash(userId, flagKey) | compatibility hash utility | —"
-by = ["test:sdk/java/core/src/test/java/com/getexperimently/sdk/ConsistentHashTest.java::matches the cross-SDK golden vectors"]
+by = ["test:sdk/java/core/src/test/java/com/controlvar/sdk/ConsistentHashTest.java::matches the cross-SDK golden vectors"]
 
 [[unit]]
 text = "Spring Boot starter"
@@ -696,8 +696,8 @@ by = ["exempt:label"]
 [[unit]]
 text = "The starter registers an ExperimentationClient bean (@ConditionalOnMissingBean) that you can inject anywhere."
 by = [
-    "test:sdk/java/spring-boot-starter/src/test/java/com/getexperimently/sdk/spring/ExperimentationAutoConfigurationTest.java::clientIsOfCorrectType",
-    "test:sdk/java/spring-boot-starter/src/test/java/com/getexperimently/sdk/spring/ExperimentationAutoConfigurationTest.java::conditionalOnMissingBeanRespected",
+    "test:sdk/java/spring-boot-starter/src/test/java/com/controlvar/sdk/spring/ExperimentationAutoConfigurationTest.java::clientIsOfCorrectType",
+    "test:sdk/java/spring-boot-starter/src/test/java/com/controlvar/sdk/spring/ExperimentationAutoConfigurationTest.java::conditionalOnMissingBeanRespected",
 ]
 
 [[unit]]
@@ -758,7 +758,7 @@ by = ["test:sdk/react/src/__tests__/useTrackEvent.test.tsx::fans out to /api/v1/
 [[unit]]
 text = "ServerClient, exported from the package root, offers the same calls for Node/SSR and never throws."
 by = [
-    "test:sdk/react/src/__tests__/ServerClient.test.ts::exports ServerClient, so Node and SSR code import it from @getexperimently/react-sdk",
+    "test:sdk/react/src/__tests__/ServerClient.test.ts::exports ServerClient, so Node and SSR code import it from @controlvar/react-sdk",
     "test:sdk/react/src/__tests__/ServerClient.test.ts::returns an error evaluation (does not throw) on a non-2xx response",
     "test:sdk/react/src/__tests__/ServerClient.test.ts::returns the control defaults with an error (does not throw) on 404",
 ]
@@ -792,7 +792,7 @@ by = [
     "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/assign with the contract headers",
     "test:sdk/python/tests/test_client.py::TestConstruction::test_headers_and_timeout_reach_the_transport",
     "test:sdk/go/client_test.go::TestClient_RequestHeaders",
-    "test:sdk/java/core/src/test/java/com/getexperimently/sdk/ExperimentationClientTest.java::every request carries X-API-Key, Accept and Content-Type",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::every request carries X-API-Key, Accept and Content-Type",
 ]
 
 [[unit]]

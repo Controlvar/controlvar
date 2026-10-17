@@ -289,7 +289,7 @@ jobs:
               cd sdk/php && composer install --no-interaction --no-progress && vendor/bin/phpunit
               ;;
             dotnet)
-              dotnet test sdk/dotnet/Experimently.sln --nologo --verbosity minimal
+              dotnet test sdk/dotnet/Controlvar.sln --nologo --verbosity minimal
               ;;
             *)
               echo "::error::no test command for sdk '$SDK'"; exit 1 ;;

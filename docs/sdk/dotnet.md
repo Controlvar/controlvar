@@ -1,6 +1,6 @@
 # .NET SDK
 
-`Experimently.SDK` (v0.2) provides feature flag evaluation, experiment assignment and
+`Controlvar.SDK` (v0.2) provides feature flag evaluation, experiment assignment and
 event tracking for .NET applications. It targets `netstandard2.1` and `net6.0`, uses
 `System.Text.Json` and `HttpClient`, and has no other dependencies.
 
@@ -21,24 +21,26 @@ Source: `sdk/dotnet`.
 
 ## Installation
 
-**Not yet published.** `Experimently.SDK` has no release on NuGet, so build it from source: reference
-the project in `sdk/dotnet/src/Experimently` of a clone of this repository from your own project
+**Not yet published.** `Controlvar.SDK` has no release on NuGet, so build it from source: reference
+the project in `sdk/dotnet/src/Controlvar` of a clone of this repository from your own project
 (this is what the SDK's `examples/` and `tests/` do):
 
 ```xml
-<ProjectReference Include="../../sdk/dotnet/src/Experimently/Experimently.csproj" />
+<ProjectReference Include="../../sdk/dotnet/src/Controlvar/Controlvar.csproj" />
 ```
 
 ---
 
 ## Quick Start
 
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
 ```csharp
-using Experimently;
+using Controlvar;
 
 var config = new SdkConfig(
-    baseUrl: Environment.GetEnvironmentVariable("EXPERIMENTLY_API_URL") ?? "http://localhost:8000",
-    apiKey:  Environment.GetEnvironmentVariable("EXPERIMENTLY_API_KEY")!);
+    baseUrl: Environment.GetEnvironmentVariable("CONTROLVAR_API_URL") ?? "http://localhost:8000",
+    apiKey:  Environment.GetEnvironmentVariable("CONTROLVAR_API_KEY")!);
 
 using var client = new ExperimentationClient(config);
 
@@ -235,10 +237,10 @@ low-level `ExperimentationHttpClient` throws:
 
 | Exception | Extends | When |
 |-----------|---------|------|
-| `Experimently.Exceptions.ExperimentationException` | `Exception` | Base class |
-| `Experimently.Exceptions.NetworkException` | `ExperimentationException` | `HttpRequestException`, timeouts (`TaskCanceledException`) |
-| `Experimently.Exceptions.ApiException` (`StatusCode`, `ResponseBody`) | `ExperimentationException` | Other 4xx/5xx (404: an experiment unknown or not ACTIVE, or an unknown flag key; 422 validation; 429 rate limited) or an undecodable body |
-| `Experimently.Exceptions.AuthException` | `ExperimentationException` | HTTP 401 — invalid API key |
+| `Controlvar.Exceptions.ExperimentationException` | `Exception` | Base class |
+| `Controlvar.Exceptions.NetworkException` | `ExperimentationException` | `HttpRequestException`, timeouts (`TaskCanceledException`) |
+| `Controlvar.Exceptions.ApiException` (`StatusCode`, `ResponseBody`) | `ExperimentationException` | Other 4xx/5xx (404: an experiment unknown or not ACTIVE, or an unknown flag key; 422 validation; 429 rate limited) or an undecodable body |
+| `Controlvar.Exceptions.AuthException` | `ExperimentationException` | HTTP 401 — invalid API key |
 
 ---
 
@@ -265,11 +267,11 @@ Register one client as a singleton; the SDK has no DI extension of its own, so u
 
 ```csharp
 // Program.cs
-builder.Services.AddHttpClient("experimently", http => http.Timeout = TimeSpan.FromSeconds(5));
+builder.Services.AddHttpClient("controlvar", http => http.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddSingleton(sp =>
 {
-    var cfg = builder.Configuration.GetSection("Experimently");
-    var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("experimently");
+    var cfg = builder.Configuration.GetSection("Controlvar");
+    var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("controlvar");
     return new ExperimentationClient(
         new SdkConfig(cfg["BaseUrl"]!, cfg["ApiKey"]!) { CacheTtlSeconds = cfg.GetValue("CacheTtlSeconds", 300) },
         http);
@@ -298,7 +300,7 @@ public class CheckoutController : ControllerBase
 
 ```json
 {
-  "Experimently": { "BaseUrl": "https://api.example.com", "ApiKey": "your-api-key", "CacheTtlSeconds": 300 }
+  "Controlvar": { "BaseUrl": "https://api.example.com", "ApiKey": "your-api-key", "CacheTtlSeconds": 300 }
 }
 ```
 
@@ -307,7 +309,7 @@ public class CheckoutController : ControllerBase
 ## Testing your own code
 
 Inject an `HttpClient` built on a fake `HttpMessageHandler` — the SDK's own tests do exactly
-this (`sdk/dotnet/tests/Experimently.Tests/ExperimentationClientTests.cs`):
+this (`sdk/dotnet/tests/Controlvar.Tests/ExperimentationClientTests.cs`):
 
 ```csharp
 sealed class CannedHandler : HttpMessageHandler
@@ -331,7 +333,7 @@ Runs the four contract steps (sticky assignment, flag evaluation, keyed track, k
 plus a 2-event batch) against a live backend and prints one JSON line:
 
 ```bash
-EXPERIMENTLY_API_KEY=<key> dotnet run --project sdk/dotnet/examples/ContractSmoke
+CONTROLVAR_API_KEY=<key> dotnet run --project sdk/dotnet/examples/ContractSmoke
 ```
 
 It prints:
@@ -340,7 +342,7 @@ It prints:
 {"sdk":"dotnet","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<guid>`). The program writes only
 that line to stdout (on first run `dotnet run` may print restore/build messages first; the live
@@ -348,7 +350,7 @@ runner reads the last stdout line) and, on failure, one line to stderr with exit
 the command in `tests/sdk-contract/live/run_live_contract.py`.
 
 CI runs this SDK's contract smoke against a real API: `dotnet` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ---
 
@@ -364,5 +366,5 @@ dotnet run --project examples/BasicUsage
 - `dotnet build`: netstandard2.1 + net6.0
 - `dotnet test`: xUnit (HTTP faked, no network)
 
-CI runs `dotnet test sdk/dotnet/Experimently.sln` on .NET 6 in the SDK Unit Tests workflow
-([sdk-unit-tests.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/sdk-unit-tests.yml)), daily and on a pull request that changes `sdk/dotnet/`.
+CI runs `dotnet test sdk/dotnet/Controlvar.sln` on .NET 6 in the SDK Unit Tests workflow
+([sdk-unit-tests.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/sdk-unit-tests.yml)), daily and on a pull request that changes `sdk/dotnet/`.

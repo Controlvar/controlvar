@@ -1,7 +1,7 @@
 {
-  "name": "@getexperimently/react-sdk",
+  "name": "@controlvar/react-sdk",
   "version": "1.1.0",
-  "description": "React SDK for Experimently",
+  "description": "React SDK for Controlvar",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": ["dist", "README.md"],
@@ -37,7 +37,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/getexperimently/experimently.git",
+    "url": "git+https://github.com/Controlvar/controlvar.git",
     "directory": "sdk/react"
   }
 }

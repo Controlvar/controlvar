@@ -1,6 +1,6 @@
 """`scripts/pin_npm_local_deps.py` -- the published package.json installs from npm.
 
-``sdk/openfeature`` depends on ``@getexperimently/js-sdk`` as ``file:../js``.
+``sdk/openfeature`` depends on ``@controlvar/js-sdk`` as ``file:../js``.
 ``npm pack`` copies that spec into the tarball and ``npm publish`` does not
 resolve it, so the provider as released would install with a dangling link
 (#687). The release job runs this script before packing. These tests run it
@@ -76,12 +76,12 @@ def test_the_provider_is_pinned_to_the_js_sdk_version_on_this_ref(tree: Path) ->
 
     assert result.returncode == 0, result.stderr
     published = json.loads((tree / "openfeature" / "package.json").read_text())
-    assert published["dependencies"]["@getexperimently/js-sdk"] == f"^{js_version}"
-    assert rewrites.read_text() == f"@getexperimently/js-sdk@{js_version}\n"
-    assert f"@getexperimently/js-sdk: file:../js -> ^{js_version}" in result.stdout
+    assert published["dependencies"]["@controlvar/js-sdk"] == f"^{js_version}"
+    assert rewrites.read_text() == f"@controlvar/js-sdk@{js_version}\n"
+    assert f"@controlvar/js-sdk: file:../js -> ^{js_version}" in result.stdout
     # Everything else in the manifest is untouched, in the same order.
     source = json.loads((SDK_DIR / "openfeature" / "package.json").read_text())
-    source["dependencies"]["@getexperimently/js-sdk"] = f"^{js_version}"
+    source["dependencies"]["@controlvar/js-sdk"] = f"^{js_version}"
     assert list(published) == list(source)
     assert published == source
 
@@ -90,14 +90,13 @@ def test_the_unpinned_provider_manifest_fails_the_tarball_check() -> None:
     """The defect #687 shipped: the source manifest, as `npm pack` copies it."""
     result = _run("--check-only", SDK_DIR / "openfeature" / "package.json")
     assert result.returncode == 1
-    assert "@getexperimently/js-sdk = 'file:../js'" in result.stderr
+    assert "@controlvar/js-sdk = 'file:../js'" in result.stderr
 
 
 def test_the_provider_declares_its_repository() -> None:
     data = json.loads((SDK_DIR / "openfeature" / "package.json").read_text())
     assert (
-        data["repository"]["url"]
-        == "git+https://github.com/getexperimently/experimently.git"
+        data["repository"]["url"] == "git+https://github.com/Controlvar/controlvar.git"
     )
     assert data["repository"]["directory"] == "sdk/openfeature"
 
@@ -181,7 +180,7 @@ def _provider(tree: Path, deps: dict, section: str = "dependencies") -> Path:
 
 
 def test_a_missing_target_is_refused(tree: Path) -> None:
-    path = _provider(tree, {"@getexperimently/js-sdk": "file:../nonexistent"})
+    path = _provider(tree, {"@controlvar/js-sdk": "file:../nonexistent"})
     before = path.read_bytes()
     result = _run(tree / "openfeature", "--rewrites-file", tree / "rw.txt")
     assert result.returncode == 1
@@ -193,21 +192,19 @@ def test_a_missing_target_is_refused(tree: Path) -> None:
 def test_a_name_mismatch_is_refused(tree: Path) -> None:
     _write(
         tree / "react" / "package.json",
-        {"name": "@getexperimently/react-sdk", "version": "1.1.0"},
+        {"name": "@controlvar/react-sdk", "version": "1.1.0"},
     )
-    _provider(tree, {"@getexperimently/js-sdk": "file:../react"})
+    _provider(tree, {"@controlvar/js-sdk": "file:../react"})
     result = _run(tree / "openfeature")
     assert result.returncode == 1
-    assert (
-        "'@getexperimently/react-sdk', not '@getexperimently/js-sdk'" in result.stderr
-    )
+    assert "'@controlvar/react-sdk', not '@controlvar/js-sdk'" in result.stderr
 
 
 @pytest.mark.parametrize("version", [None, "", "1.0", "latest", "1.0.0+build"])
 def test_a_target_without_a_plain_version_is_refused(
     tree: Path, version: object
 ) -> None:
-    target = {"name": "@getexperimently/js-sdk"}
+    target = {"name": "@controlvar/js-sdk"}
     if version is not None:
         target["version"] = version
     _write(tree / "js" / "package.json", target)
@@ -218,11 +215,11 @@ def test_a_target_without_a_plain_version_is_refused(
 
 @pytest.mark.parametrize("section", ["optionalDependencies", "peerDependencies"])
 def test_the_other_published_sections_are_rewritten(tree: Path, section: str) -> None:
-    _provider(tree, {"@getexperimently/js-sdk": "file:../js"}, section)
+    _provider(tree, {"@controlvar/js-sdk": "file:../js"}, section)
     result = _run(tree / "openfeature")
     assert result.returncode == 0, result.stderr
     data = json.loads((tree / "openfeature" / "package.json").read_text())
-    assert data[section]["@getexperimently/js-sdk"].startswith("^")
+    assert data[section]["@controlvar/js-sdk"].startswith("^")
 
 
 def test_dev_dependencies_are_left_alone(tree: Path) -> None:
@@ -238,9 +235,9 @@ def test_dev_dependencies_are_left_alone(tree: Path) -> None:
 @pytest.mark.parametrize(
     "spec",
     [
-        "git+https://github.com/getexperimently/experimently.git",
-        "github:getexperimently/experimently",
-        "getexperimently/experimently",
+        "git+https://github.com/Controlvar/controlvar.git",
+        "github:Controlvar/controlvar",
+        "Controlvar/controlvar",
         "workspace:*",
         "link:../js",
         "npm:other@1.0.0",

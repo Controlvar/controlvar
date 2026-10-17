@@ -1,15 +1,15 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# basic_usage.rb — Experimently Ruby SDK usage examples
+# basic_usage.rb — Controlvar Ruby SDK usage examples
 #
 # This file demonstrates the SDK API without making actual HTTP calls.
 # For a runnable end-to-end check against a live backend see contract_smoke.rb.
 
 $LOAD_PATH.unshift File.join(__dir__, '..', 'lib')
-require 'experimently'
+require 'controlvar'
 
-puts "Experimently Ruby SDK — Basic Usage Examples"
+puts "Controlvar Ruby SDK — Basic Usage Examples"
 puts "=" * 55
 puts
 
@@ -20,18 +20,18 @@ puts "1. Creating a client"
 puts "-" * 30
 
 # Option A: keyword arguments
-client = Experimently::Client.new(
-  base_url:  ENV.fetch("EXPERIMENTLY_API_URL", "http://localhost:8000"),  # origin only
-  api_key:   ENV.fetch("EXPERIMENTLY_API_KEY", "sk_live_demo_key"),       # sent as X-API-Key
+client = Controlvar::Client.new(
+  base_url:  ENV.fetch("CONTROLVAR_API_URL", "http://localhost:8000"),  # origin only
+  api_key:   ENV.fetch("CONTROLVAR_API_KEY", "sk_live_demo_key"),       # sent as X-API-Key
   cache_ttl: 300,   # cache evaluations/assignments per user + key for 5 minutes
   timeout:   10     # HTTP timeout in seconds
 )
 puts "   Client created with keyword args"
 
 # Option B: SdkConfig struct
-config = Experimently::SdkConfig.new(
+config = Controlvar::SdkConfig.new(
   base_url:  "http://localhost:8000",
-  api_key:   ENV.fetch("EXPERIMENTLY_API_KEY", "sk_live_demo_key"),
+  api_key:   ENV.fetch("CONTROLVAR_API_KEY", "sk_live_demo_key"),
   cache_ttl: 60,
   timeout:   5
 )
@@ -94,7 +94,7 @@ puts
 puts "5. Consistent hash utility (golden vector; not used for bucketing)"
 puts "-" * 30
 
-bucket = Experimently::FeatureFlagEvaluator.hash_user("user-123", "my-flag")
+bucket = Controlvar::FeatureFlagEvaluator.hash_user("user-123", "my-flag")
 puts "   hash_user('user-123', 'my-flag') = #{bucket}"
 puts "   # Cross-SDK reference value:      0.6927449859213084"
 puts "   # Match: #{(bucket - 0.6927449859213084).abs < 1e-10}"
@@ -108,9 +108,9 @@ puts "-" * 30
 puts "   # evaluate_flag / get_assignment / track never raise on network or HTTP"
 puts "   # errors: they log a warning and return a disabled flag / nil / false."
 puts "   # Only HttpClient raises:"
-puts "   #   Experimently::AuthenticationError (401)"
-puts "   #   Experimently::APIError            (other 4xx/5xx, #status_code)"
-puts "   #   Experimently::NetworkError        (timeout, DNS, refused)"
+puts "   #   Controlvar::AuthenticationError (401)"
+puts "   #   Controlvar::APIError            (other 4xx/5xx, #status_code)"
+puts "   #   Controlvar::NetworkError        (timeout, DNS, refused)"
 puts
 
 # ---------------------------------------------------------------------------

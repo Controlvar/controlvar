@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Experimently\Tests;
+namespace Controlvar\Tests;
 
-use Experimently\HttpClient;
-use Experimently\SdkConfig;
-use Experimently\Errors\ApiException;
-use Experimently\Errors\AuthException;
-use Experimently\Errors\NetworkException;
+use Controlvar\HttpClient;
+use Controlvar\SdkConfig;
+use Controlvar\Errors\ApiException;
+use Controlvar\Errors\AuthException;
+use Controlvar\Errors\NetworkException;
 use PHPUnit\Framework\TestCase;
 
 /**

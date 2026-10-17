@@ -1,12 +1,12 @@
-/// Core data models for the Experimently Flutter SDK.
-library experimently_models;
+/// Core data models for the Controlvar Flutter SDK.
+library controlvar_models;
 
 /// Configuration for the [ExperimentationClient].
 class SdkConfig {
   /// API key sent as `X-API-Key` on every request.
   final String apiKey;
 
-  /// Origin of the Experimently API, e.g. `https://api.example.com`.
+  /// Origin of the Controlvar API, e.g. `https://api.example.com`.
   /// The SDK appends `/api/v1/...` itself.
   final String baseUrl;
 

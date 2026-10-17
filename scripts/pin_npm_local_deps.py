@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Make the package.json an npm SDK publishes install from the registry.
 
-``sdk/openfeature`` depends on ``@getexperimently/js-sdk`` as ``file:../js``,
+``sdk/openfeature`` depends on ``@controlvar/js-sdk`` as ``file:../js``,
 so its tests run against the JS SDK in the same tree. ``npm pack`` copies that
 spec into the tarball unchanged and ``npm publish`` does not resolve it, so a
 release published as-is installs with a dangling link and fails at the first

@@ -1,41 +1,41 @@
-# @getexperimently/react-sdk
+# @controlvar/react-sdk
 
-React hooks and clients for the Experimently public API. Feature flags and
+React hooks and clients for the Controlvar public API. Feature flags and
 experiment assignments are decided **by the server** (sticky per user); the SDK caches the
 answers per user + key and never buckets locally.
 
 ## Install
 
-**Not yet published.** `@getexperimently/react-sdk` is not on npm, so build it from source in a
+**Not yet published.** `@controlvar/react-sdk` is not on npm, so build it from source in a
 clone of this repository and install the packed tarball (the blocks below).
 
 Its peer dependencies are `react` >= 17 and `react-dom` >= 17.
 
 To install from source, clone the repository and build a package; `npm pack` writes
-`getexperimently-react-sdk-1.1.0.tgz`:
+`controlvar-react-sdk-1.1.0.tgz`:
 
 ```bash
-git clone https://github.com/getexperimently/experimently.git
-cd experimently/sdk/react
+git clone https://github.com/Controlvar/controlvar.git
+cd controlvar/sdk/react
 npm ci && npm run build && npm pack
 ```
 
 Then install that file in your app:
 
 ```bash
-npm install /path/to/experimently/sdk/react/getexperimently-react-sdk-1.1.0.tgz
+npm install /path/to/controlvar/sdk/react/controlvar-react-sdk-1.1.0.tgz
 ```
 
-Consuming from source (as the ShopLab demo does): alias `@getexperimently/react-sdk`
+Consuming from source (as the ShopLab demo does): alias `@controlvar/react-sdk`
 to `sdk/react/src` in your bundler and tsconfig.
 
 ## Provider setup
 
 ```tsx
-import { ExperimentationProvider } from '@getexperimently/react-sdk';
+import { ExperimentationProvider } from '@controlvar/react-sdk';
 
 <ExperimentationProvider
-  config={{ apiKey: process.env.NEXT_PUBLIC_EXPERIMENTLY_API_KEY!, baseUrl: 'http://localhost:8000' }}
+  config={{ apiKey: process.env.NEXT_PUBLIC_CONTROLVAR_API_KEY!, baseUrl: 'http://localhost:8000' }}
   user={{ userId: visitorId, attributes: { device: 'mobile', country: 'US', returning: false } }}
 >
   <App />
@@ -132,10 +132,10 @@ HOC that injects `flagEvaluation: FeatureFlagEvaluation` into `Component`.
 `ServerClient` (Node/SSR) — same requests, `(key, user)` argument order, **never throws**:
 
 ```ts
-import { ServerClient } from '@getexperimently/react-sdk';
+import { ServerClient } from '@controlvar/react-sdk';
 
 export async function getServerSideProps({ req }) {
-  const client = new ServerClient({ apiKey: process.env.EXPERIMENTLY_API_KEY!, baseUrl: process.env.EXPERIMENTLY_API_URL! });
+  const client = new ServerClient({ apiKey: process.env.CONTROLVAR_API_KEY!, baseUrl: process.env.CONTROLVAR_API_URL! });
   const user = { userId: req.cookies.visitor_id };
   const flags = await client.getAll(['shoplab_new_search', 'shoplab_free_shipping_banner'], user);
   const hero = await client.assignExperiment('shoplab_hero_banner', user);  // control defaults + error on failure
@@ -167,8 +167,8 @@ It prints:
 ```
 
 Drives the SSR entry point (`ServerClient`) plus `ExperimentationClient` for tracking under plain
-node — no DOM, no React render. Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`),
-`EXPERIMENTLY_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`),
+node — no DOM, no React render. Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`),
+`CONTROLVAR_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`),
 `CONTRACT_FLAG_KEY` (default `sdk_contract_flag`), `CONTRACT_USER_ID` (default random
 `smoke-<uuid>`). Repo-wide runner:
 `python tests/sdk-contract/live/run_live_contract.py --sdk react`.

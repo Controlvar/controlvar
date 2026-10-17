@@ -1,5 +1,6 @@
-// Package main demonstrates the Experimently Go SDK against a
-// running backend (defaults: http://localhost:8000, key from EXPERIMENTLY_API_KEY).
+// Package main demonstrates the Controlvar Go SDK against a
+// running backend (defaults: http://localhost:8000, key from CONTROLVAR_API_KEY;
+// earlier versions of this example read EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY).
 package main
 
 import (
@@ -9,11 +10,11 @@ import (
 	"os"
 	"time"
 
-	exp "github.com/getexperimently/experimently/sdk/go"
+	exp "github.com/controlvar/controlvar/sdk/go"
 )
 
 func main() {
-	baseURL := os.Getenv("EXPERIMENTLY_API_URL")
+	baseURL := os.Getenv("CONTROLVAR_API_URL")
 	if baseURL == "" {
 		baseURL = "http://localhost:8000"
 	}
@@ -21,7 +22,7 @@ func main() {
 	// Create a client with functional options.
 	client, err := exp.New(
 		exp.WithBaseURL(baseURL),
-		exp.WithAPIKey(os.Getenv("EXPERIMENTLY_API_KEY")),
+		exp.WithAPIKey(os.Getenv("CONTROLVAR_API_KEY")),
 		exp.WithCacheSize(500),
 		exp.WithCacheTTL(5*time.Minute),
 		exp.WithTimeout(10*time.Second),

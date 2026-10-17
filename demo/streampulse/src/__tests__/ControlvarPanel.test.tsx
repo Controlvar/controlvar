@@ -4,7 +4,7 @@ import { STORY_STEPS } from '@/components/RolloutStoryDrawer';
 import ControlvarPanel, { PANEL_EVENT_LIMIT } from '@/components/ControlvarPanel';
 import { DASHBOARD_URL, EXPERIMENT_KEYS, FLAG_KEYS } from '@/lib/env';
 import { EventLogProvider, useTrack } from '@/lib/eventLog';
-import { __setExperiment, __setFlag, clearCacheMock, DEFAULT_TEST_USER } from '@/__mocks__/experimently-sdk';
+import { __setExperiment, __setFlag, clearCacheMock, DEFAULT_TEST_USER } from '@/__mocks__/controlvar-sdk';
 import { resetTestState } from '@/test-utils';
 
 function Emitter({ count }: { count: number }) {

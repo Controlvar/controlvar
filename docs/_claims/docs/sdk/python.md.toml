@@ -8,7 +8,7 @@ text = "Python SDK"
 by = ["exempt:label"]
 
 [[unit]]
-text = "experimently (v0.1.0) is a synchronous, dependency-free Python client for the Experimently public API: experiment assignment, feature-flag evaluation and event tracking."
+text = "controlvar (v0.1.1) is a synchronous, dependency-free Python client for the Controlvar public API: experiment assignment, feature-flag evaluation and event tracking."
 by = [
     "mechanism:sdk-doc-versions",
     "test:sdk/python/tests/test_package.py::test_the_client_is_synchronous",
@@ -41,7 +41,7 @@ by = [
 
 [[unit]]
 text = "Source: sdk/python."
-by = ["test:sdk/python/tests/test_package.py::test_it_installs_as_experimently_and_imports_as_experimentation"]
+by = ["test:sdk/python/tests/test_package.py::test_it_installs_and_imports_as_controlvar"]
 
 [[unit]]
 text = "The OpenFeature provider in sdk/openfeature-python is built on top of this client (see openfeature.md)."
@@ -55,14 +55,14 @@ text = "Installation"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The experimently package is on PyPI."
+text = "The controlvar package is on PyPI."
 by = [
     "journey:sdk-python#quick-start-user-on",
     "journey:sdk-python#quick-start-user-off",
 ]
 
 [[unit]]
-text = "0.1.0 is a beta release."
+text = "0.1.1 is a beta release."
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-python#quick-start-user-on",
@@ -459,7 +459,7 @@ text = "Experiments are always assigned by the server."
 by = ["test:sdk/python/tests/test_local.py::test_experiments_are_assigned_by_the_server_in_local_mode"]
 
 [[unit]]
-text = "It needs an Experimently server at 0.11.0 or later and a key with the sdk:ruleset scope, and it is for server-side code only."
+text = "It needs an Controlvar server at 0.11.0 or later and a key with the sdk:ruleset scope, and it is for server-side code only."
 by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these"]
 
 [[unit]]
@@ -494,7 +494,7 @@ text = "Testing your own code"
 by = ["exempt:label"]
 
 [[unit]]
-text = "experimentation.testing.FakeTransport records requests and serves canned responses, so unit tests can assert the exact request without a network:"
+text = "controlvar.testing.FakeTransport records requests and serves canned responses, so unit tests can assert the exact request without a network:"
 by = [
     "test:sdk/python/tests/test_client.py::TestConstruction::test_headers_and_timeout_reach_the_transport",
     "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_url_encodes_key_and_user_id",
@@ -513,7 +513,7 @@ text = "It prints:"
 by = ["test:sdk/python/tests/test_contract_smoke.py::test_it_runs_from_the_source_tree_with_its_defaults"]
 
 [[unit]]
-text = "Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
+text = "Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
 by = [
     "test:sdk/python/tests/test_contract_smoke.py::test_it_runs_from_the_source_tree_with_its_defaults",
     "test:sdk/python/tests/test_contract_smoke.py::test_it_runs_the_four_contract_steps",
@@ -551,3 +551,11 @@ by = [
     "test:sdk/python/tests/test_hashing.py::test_consistent_hash_matches_golden_vector",
     "test:sdk/python/tests/test_hashing.py::test_md5_hex_matches_golden_vector",
 ]
+
+[[unit]]
+text = "If you set EXPERIMENTLY_API_KEY or EXPERIMENTLY_API_URL from an earlier version of these pages, set CONTROLVAR_API_KEY and CONTROLVAR_API_URL instead."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If you installed experimently, the name this package had before the project was renamed, uninstall it and install controlvar."
+by = ["exempt:instruction"]

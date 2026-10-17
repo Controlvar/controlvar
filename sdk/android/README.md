@@ -1,6 +1,6 @@
-# Experimently Android SDK
+# Controlvar Android SDK
 
-Kotlin client for the Experimently A/B testing and feature flag platform. Coroutine-based,
+Kotlin client for the Controlvar A/B testing and feature flag platform. Coroutine-based,
 OkHttp under the hood, an offline fallback (in memory by default, `SharedPreferences` through an
 adapter you pass), `minSdk 21`.
 
@@ -24,7 +24,7 @@ Full reference: [`docs/sdk/android.md`](../../docs/sdk/android.md).
 ```kotlin
 // settings.gradle.kts
 include(":sdk")
-project(":sdk").projectDir = file("../experimently/sdk/android/sdk")
+project(":sdk").projectDir = file("../controlvar/sdk/android/sdk")
 
 // build.gradle.kts (app module)
 dependencies {
@@ -33,20 +33,20 @@ dependencies {
 ```
 
 Requires Kotlin 1.9, coroutines 1.7 and OkHttp 4.12 (declared by the module). Package:
-`com.getexperimently.android`.
+`com.controlvar.android`.
 
 ## Quick Start
 
 ```kotlin
-import com.getexperimently.android.ExperimentationClient
-import com.getexperimently.android.SdkConfig
-import com.getexperimently.android.TrackEvent
-import com.getexperimently.android.User
+import com.controlvar.android.ExperimentationClient
+import com.controlvar.android.SdkConfig
+import com.controlvar.android.TrackEvent
+import com.controlvar.android.User
 
 val client = ExperimentationClient(
     SdkConfig(
         baseUrl = "http://10.0.2.2:8000",   // origin only; 10.0.2.2 = host localhost from the emulator
-        apiKey = BuildConfig.EXPERIMENTLY_API_KEY   // sent as X-API-Key
+        apiKey = BuildConfig.CONTROLVAR_API_KEY   // sent as X-API-Key
     )
 )
 
@@ -163,10 +163,10 @@ It prints:
 {"sdk":"android","assign":{"variant_name":"treatment","is_control":false,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Runs `com.getexperimently.android.examples.ContractSmoke` from the JVM build above
+Runs `com.controlvar.android.examples.ContractSmoke` from the JVM build above
 (`./mvnw -q package -DskipTests` when `jvm/target` is stale, Maven output to stderr; `FORCE_BUILD=1`
-forces a rebuild). Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`),
-`EXPERIMENTLY_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`),
+forces a rebuild). Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`),
+`CONTROLVAR_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`),
 `CONTRACT_FLAG_KEY` (default `sdk_contract_flag`), `CONTRACT_USER_ID` (default random
 `smoke-<uuid>`). Repo-wide runner:
 `python tests/sdk-contract/live/run_live_contract.py --sdk android`.
@@ -177,5 +177,5 @@ every error — so the smoke calls it *and* posts the same `TrackEvent.toJson()`
 serve fails the smoke.
 
 CI runs this SDK's contract smoke against a real API: `android` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml). The smoke
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml). The smoke
 compiles the SDK's Kotlin sources for a plain JVM; the Gradle/AAR build is not part of it.

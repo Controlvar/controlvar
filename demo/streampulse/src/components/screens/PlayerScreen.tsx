@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useFeatureFlag } from '@getexperimently/react-sdk';
+import { useFeatureFlag } from '@controlvar/react-sdk';
 import { formatDuration, TRACKS, TRACKS_BY_ID } from '@/data/tracks';
 import { FLAG_KEYS } from '@/lib/env';
 import { useScreenView, useTrack } from '@/lib/eventLog';

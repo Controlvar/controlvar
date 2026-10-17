@@ -22,7 +22,7 @@
       "@/*": [
         "./src/*"
       ],
-      "@getexperimently/react-sdk": [
+      "@controlvar/react-sdk": [
         "../../sdk/react/src/index.ts"
       ]
     },

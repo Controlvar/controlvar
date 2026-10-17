@@ -9,7 +9,7 @@ from unittest import mock
 
 import pytest
 
-from experimentation import ExperimentationError, Response, TransportError, UrllibTransport
+from controlvar import ExperimentationError, Response, TransportError, UrllibTransport
 
 
 def _http_response(status=200, headers=None, body=b'{"ok":true}'):

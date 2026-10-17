@@ -344,6 +344,12 @@ def run_one(sdk: str, command: str, env: dict[str, str], timeout: int) -> tuple[
     return "PASS", f"{payload['assign']['variant_name']} in {detail}"
 
 
+#: What the smokes get under the settings' former names: an address nothing
+#: listens on and a key the server does not know.
+DECOY_URL = "http://127.0.0.1:9"
+DECOY_KEY = "former-name-decoy-key"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--sdk", action="append", help="run only this SDK (repeatable)")
@@ -365,14 +371,15 @@ def main() -> int:
         return 2
 
     env = dict(os.environ)
-    # Both names: the smokes under sdk/ read the name before the rename until
-    # they move to the new one.
+    # The smokes get the real values under the new names and decoys under the
+    # former ones: a smoke that reads a former name first talks to a port
+    # nothing listens on, with a key the server refuses, and fails.
     env.update(
         {
             "CONTROLVAR_API_URL": args.api_url,
             "CONTROLVAR_API_KEY": api_key,
-            "EXPERIMENTLY_API_URL": args.api_url,
-            "EXPERIMENTLY_API_KEY": api_key,
+            "EXPERIMENTLY_API_URL": DECOY_URL,
+            "EXPERIMENTLY_API_KEY": DECOY_KEY,
         }
     )
     env.setdefault("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab")
@@ -419,7 +426,7 @@ def main() -> int:
         if not local_key:
             results.append((name, "FAIL" if args.strict else "SKIP", "no sdk:ruleset key"))
             continue
-        local_env = dict(env, CONTROLVAR_LOCAL_API_KEY=local_key, EXPERIMENTLY_LOCAL_API_KEY=local_key)
+        local_env = dict(env, CONTROLVAR_LOCAL_API_KEY=local_key, EXPERIMENTLY_LOCAL_API_KEY=DECOY_KEY)
         status, detail = run_local(sdk, command, local_env, args.timeout, env["CONTRACT_FLAG_KEY"])
         results.append((name, status, detail))
         print(f"{status:4} {name:<20} {detail}", flush=True)

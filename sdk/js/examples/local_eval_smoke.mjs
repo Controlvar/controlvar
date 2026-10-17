@@ -10,7 +10,7 @@
  * Run from the repo root:
  *   cd sdk/js && npm run build --silent && node examples/local_eval_smoke.mjs
  *
- * Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_LOCAL_API_KEY (a key
+ * Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_LOCAL_API_KEY (a key
  *      with the sdk:ruleset scope, required; also used for POST /api/v1/tracking/errors),
  *      CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default
  *      local-smoke-<uuid>), LOCAL_EVALUATIONS (default 40), LOCAL_ERRORS (default 2).
@@ -22,8 +22,10 @@ import sdk from '../dist/index.js';
 
 const { ExperimentationClient } = sdk;
 
-const apiUrl = (process.env.EXPERIMENTLY_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
-const localKey = process.env.EXPERIMENTLY_LOCAL_API_KEY;
+const apiUrl = (
+  process.env.CONTROLVAR_API_URL || process.env.EXPERIMENTLY_API_URL || 'http://localhost:8000'
+).replace(/\/+$/, '');
+const localKey = process.env.CONTROLVAR_LOCAL_API_KEY || process.env.EXPERIMENTLY_LOCAL_API_KEY;
 const flagKey = process.env.CONTRACT_FLAG_KEY || 'sdk_contract_flag';
 const userId = process.env.CONTRACT_USER_ID || `local-smoke-${randomUUID()}`;
 const evaluations = Number(process.env.LOCAL_EVALUATIONS || 40);
@@ -34,7 +36,7 @@ function fail(message) {
   process.exit(1);
 }
 
-if (!localKey) fail('EXPERIMENTLY_LOCAL_API_KEY (a key with the sdk:ruleset scope) is required');
+if (!localKey) fail('CONTROLVAR_LOCAL_API_KEY (a key with the sdk:ruleset scope) is required');
 
 const swallowed = [];
 const client = new ExperimentationClient({

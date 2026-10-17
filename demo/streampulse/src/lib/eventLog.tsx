@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { useTrackEvent, type TrackEventOptions } from '@getexperimently/react-sdk';
+import { useTrackEvent, type TrackEventOptions } from '@controlvar/react-sdk';
 
 export type TrackFn = (eventName: string, properties?: Record<string, unknown>, options?: TrackEventOptions) => void;
 

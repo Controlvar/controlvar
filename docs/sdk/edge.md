@@ -1,6 +1,6 @@
 # Edge SDK
 
-`@getexperimently/edge-sdk` (v0.2) is written for edge runtimes, with adapters for Cloudflare
+`@controlvar/edge-sdk` (v0.2) is written for edge runtimes, with adapters for Cloudflare
 Workers, Vercel Edge Middleware and Deno Deploy, and declares Node >= 18. It has zero runtime
 dependencies and uses no Node.js built-ins — only Web-standard `fetch`, `AbortController` and
 `Headers`. Its unit tests and its contract smoke run it under Node; the adapters are tested there
@@ -14,25 +14,25 @@ isolates can reuse it. Nothing is bucketed locally.
 Source: `sdk/edge`.
 
 CI runs this SDK's contract smoke against a real API: `edge` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ---
 
 ## Installation
 
-**Not yet published.** `@getexperimently/edge-sdk` is not on npm, so build it from source in a
-clone of this repository. `npm pack` writes `getexperimently-edge-sdk-0.2.0.tgz`:
+**Not yet published.** `@controlvar/edge-sdk` is not on npm, so build it from source in a
+clone of this repository. `npm pack` writes `controlvar-edge-sdk-0.2.0.tgz`:
 
 ```bash
-git clone https://github.com/getexperimently/experimently.git
-cd experimently/sdk/edge
+git clone https://github.com/Controlvar/controlvar.git
+cd controlvar/sdk/edge
 npm ci && npm run build && npm pack
 ```
 
 Then, in your app, install the packed tarball:
 
 ```bash
-npm install /path/to/experimently/sdk/edge/getexperimently-edge-sdk-0.2.0.tgz
+npm install /path/to/controlvar/sdk/edge/controlvar-edge-sdk-0.2.0.tgz
 ```
 
 Entry points: the package root (`EdgeExperimentationClient`), `/cloudflare`, `/vercel` and `/deno`.
@@ -42,8 +42,10 @@ The build (`npm run build`) emits ESM to `dist/` with type declarations.
 
 ## Quick start
 
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
 ```typescript
-import { EdgeExperimentationClient } from '@getexperimently/edge-sdk';
+import { EdgeExperimentationClient } from '@controlvar/edge-sdk';
 
 const client = new EdgeExperimentationClient({
   apiKey: env.EP_API_KEY,
@@ -93,7 +95,7 @@ A Worker's secrets and bindings arrive in `env` with each request, so build the 
 fetch handler:
 
 ```typescript
-import { CloudflareExperimentationClient } from '@getexperimently/edge-sdk/cloudflare';
+import { CloudflareExperimentationClient } from '@controlvar/edge-sdk/cloudflare';
 
 export default {
   async fetch(request, env, ctx) {
@@ -144,7 +146,7 @@ the in-memory TTL (default 60 s), both in the client's options.
 ## Vercel Edge Middleware
 
 `createEdgeMiddleware({ apiKey, baseUrl, flagKeys?, userIdHeaderName?, userIdCookieName? })` from
-`@getexperimently/edge-sdk/vercel` returns a `(request: Request) => Promise<Response>` that builds
+`@controlvar/edge-sdk/vercel` returns a `(request: Request) => Promise<Response>` that builds
 one client and, on each request:
 
 1. Resolves the user id from the `X-User-Id` header (`userIdHeaderName`) or the `ep_user_id`
@@ -163,7 +165,7 @@ In a Next.js project the adapter's own note says to pass the same headers with
 
 ## Deno Deploy
 
-`createDenoHandler(handler, config)` from `@getexperimently/edge-sdk/deno` returns a
+`createDenoHandler(handler, config)` from `@controlvar/edge-sdk/deno` returns a
 `(request: Request) => Promise<Response>` for `Deno.serve`, and calls `handler(request, client)`.
 `config` takes the client options plus `kv` (a Deno KV instance, optional: share cached results
 across isolates) and `kvTtlMs` (default `cacheTtlMs`).
@@ -211,7 +213,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 ```typescript
 interface EdgeSdkConfig {
   apiKey: string;        // Required. Sent as X-API-Key.
-  baseUrl?: string;      // Backend origin. Set it: the default, https://api.getexperimently.com, serves no API.
+  baseUrl: string;       // Required. Backend origin; the SDK appends /api/v1/... There is no default.
   cacheTtlMs?: number;   // Per user + key cache TTL (default: 60_000 ms).
   timeout?: number;      // Per-request timeout (default: 500 ms).
   store?: EdgeStore;     // Optional shared KV store ({ get(key), put(key, value, ttlMs) }).
@@ -245,7 +247,8 @@ Adapter configs add `kvNamespace` / `kvTtlSeconds` (Cloudflare), `kv` / `kvTtlMs
 | `refreshFlags()` | `Promise<void>` | **Deprecated** no-op (definitions are no longer fetched). |
 | `flagCount` / `experimentCount` | `number` | Size of the in-memory caches (getters). |
 
-No public method throws or rejects: the constructor is the only exception (`apiKey is required`).
+No public method throws or rejects: the constructor is the only exception, when `apiKey` or
+`baseUrl` is missing (`apiKey is required`, `baseUrl is required: ...`).
 There is no `onError` hook and no automatic 429 retry; `trackBatch` surfaces HTTP failures as
 `{ message, status }` entries in `errors` (`EdgeApiError` carries the `status`). Failures are never
 cached, so the next call retries.
@@ -303,7 +306,7 @@ It prints one line:
 {"sdk":"edge","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). Runs under plain Node
 (no adapter) and assigns twice (sticky), evaluates the flag (async and sync), tracks with a key,

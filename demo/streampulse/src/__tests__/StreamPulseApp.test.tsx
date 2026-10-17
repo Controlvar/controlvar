@@ -5,7 +5,7 @@ import { STORY_COMMAND, STORY_STEPS } from '@/components/RolloutStoryDrawer';
 import { DEVICE_PRESETS } from '@/lib/devices';
 import { CACHE_TTL_MS, FLAG_KEYS } from '@/lib/env';
 import { SCREENS } from '@/lib/screens';
-import { __setFlag, providerMounts } from '@/__mocks__/experimently-sdk';
+import { __setFlag, providerMounts } from '@/__mocks__/controlvar-sdk';
 import { resetTestState } from '@/test-utils';
 
 function renderApp(props: Partial<React.ComponentProps<typeof StreamPulseApp>> = {}) {

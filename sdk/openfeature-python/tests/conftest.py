@@ -1,4 +1,4 @@
-"""Make ``experimentation_openfeature`` (src/) and the ``experimentation`` SDK (sdk/python)
+"""Make ``controlvar_openfeature`` (src/) and the ``controlvar`` SDK (sdk/python)
 importable from the source tree without installing either package.
 
 And: no test can reach real AWS credentials or the real ``aws`` binary (below).

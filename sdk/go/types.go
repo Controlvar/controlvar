@@ -1,4 +1,4 @@
-// Package experimentation provides a Go SDK for Experimently.
+// Package experimentation provides a Go SDK for Controlvar.
 //
 // Feature flag evaluation and experiment assignment are decided by the
 // server: every call goes to the public API with your X-API-Key, the server

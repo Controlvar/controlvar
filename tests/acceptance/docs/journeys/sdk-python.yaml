@@ -3,7 +3,7 @@
 # follows them, against the compose stack.
 #
 # Each sdk step makes a fresh virtual environment, runs the page's install
-# command exactly as it is written (`pip install experimently==0.1.0`, read
+# command exactly as it is written (`pip install controlvar==0.1.1`, read
 # from the page) against PyPI, checks the version it installed, and runs the
 # page's Quick start block, also read from the page, with only its placeholders
 # replaced: the experiment's key, the flag's key and the user. The API's

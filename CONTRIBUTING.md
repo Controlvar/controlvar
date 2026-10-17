@@ -292,7 +292,7 @@ in `scripts/check_sdk_version.py`, and tagging one is refused rather than
 quietly publishing nothing. Write a Python version in its PEP 440 spelling
 (`1.0.0rc1`, not `1.0.0-rc.1`), in the manifest and the tag alike; the build
 job refuses any other spelling. Publish `sdk/js` before `sdk/openfeature`: the
-provider's release refuses until the matching `@getexperimently/js-sdk` is on
+provider's release refuses until the matching `@controlvar/js-sdk` is on
 npm. If a publish job fails after approval, use **Re-run failed jobs**, not
 **Re-run all jobs**.
 

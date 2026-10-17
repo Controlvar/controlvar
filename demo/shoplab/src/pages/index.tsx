@@ -1,7 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useExperiment } from '@getexperimently/react-sdk';
+import { useExperiment } from '@controlvar/react-sdk';
 import { EXPERIMENT_KEYS } from '@/lib/env';
 import { usePageView, useTrack } from '@/lib/eventLog';
 import { PRODUCTS } from '@/data/products';

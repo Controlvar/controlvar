@@ -6,7 +6,7 @@
 ///
 /// This file is pure Dart. The SharedPreferences-backed implementation lives
 /// in `shared_preferences_offline_store.dart` (Flutter only).
-library experimently_offline_store;
+library controlvar_offline_store;
 
 import 'models.dart';
 

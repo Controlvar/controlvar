@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-from experimentation import (
+from controlvar import (
     BATCH_LIMIT,
     Assignment,
     BatchResult,
@@ -19,7 +19,7 @@ from experimentation import (
     FlagEvaluation,
     TransportError,
 )
-from experimentation.testing import FakeTransport
+from controlvar.testing import FakeTransport
 
 API_URL = "http://localhost:8000"
 API_KEY = "sk-test"
@@ -83,7 +83,7 @@ class TestConstruction:
         assert request.headers["X-API-Key"] == API_KEY
         assert request.headers["Content-Type"] == "application/json"
         assert request.headers["Accept"] == "application/json"
-        assert request.headers["User-Agent"].startswith("experimently-python/")
+        assert request.headers["User-Agent"].startswith("controlvar-python/")
         assert request.timeout == 1.5
 
 
@@ -293,7 +293,7 @@ class TestGetFeatureFlag:
 
     def test_cache_expires_after_ttl(self, client, transport):
         flag_route(transport)
-        with mock.patch("experimentation.cache._now") as now:
+        with mock.patch("controlvar.cache._now") as now:
             now.return_value = 1000.0
             client.get_feature_flag("new_search", "user-1")
             now.return_value = 1299.0
@@ -306,7 +306,7 @@ class TestGetFeatureFlag:
     def test_custom_cache_ttl(self, transport):
         client = ExperimentationClient(API_URL, API_KEY, cache_ttl_seconds=10, transport=transport)
         flag_route(transport)
-        with mock.patch("experimentation.cache._now") as now:
+        with mock.patch("controlvar.cache._now") as now:
             now.return_value = 0.0
             client.get_feature_flag("new_search", "user-1")
             now.return_value = 9.0
@@ -456,7 +456,7 @@ class TestTrackFanOut:
 
     def test_expired_entries_are_not_fanned_out(self, client, transport):
         flag_route(transport)
-        with mock.patch("experimentation.cache._now") as now:
+        with mock.patch("controlvar.cache._now") as now:
             now.return_value = 0.0
             client.get_feature_flag("new_search", "user-1")
             now.return_value = 400.0

@@ -1,11 +1,11 @@
 /**
- * SSR utilities for the Experimently React SDK.
+ * SSR utilities for the Controlvar React SDK.
  *
  * Use these utilities in server-side rendering contexts (Next.js getServerSideProps,
  * Remix loaders, etc.) where browser APIs are not available. ServerClient never throws.
  *
  * @example
- * import { ServerClient } from '@getexperimently/react-sdk/ssr';
+ * import { ServerClient } from '@controlvar/react-sdk/ssr';
  *
  * export async function getServerSideProps({ req }) {
  *   const client = new ServerClient({ apiKey: process.env.API_KEY, baseUrl: process.env.API_URL });

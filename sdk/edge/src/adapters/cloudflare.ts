@@ -16,6 +16,7 @@
  * Usage:
  *   export default withExperimentation(handler, {
  *     apiKey: env.EP_API_KEY,
+ *     baseUrl: env.EP_BASE_URL,
  *     kvNamespace: env.EP_FLAGS_KV,
  *   });
  */
@@ -130,7 +131,7 @@ export class CloudflareExperimentationClient extends EdgeExperimentationClient {
  *     ctx.waitUntil(client.track('page_view', userId, { path: '/' }));
  *     ...
  *   },
- *   { apiKey: 'key', kvNamespace: env.FLAGS_KV }
+ *   { apiKey: 'key', baseUrl: 'https://api.example.com', kvNamespace: env.FLAGS_KV }
  * );
  * ```
  */

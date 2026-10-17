@@ -2,9 +2,9 @@
 //
 // Run from the repo root against a seeded backend (see backend/scripts/seed_sdk_contract.py):
 //
-//     EXPERIMENTLY_API_KEY=... dotnet run --project sdk/dotnet/examples/ContractSmoke
+//     CONTROLVAR_API_KEY=... dotnet run --project sdk/dotnet/examples/ContractSmoke
 //
-// Environment: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY
+// Environment: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY
 // (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default
 // sdk_contract_flag), CONTRACT_USER_ID (default smoke-<guid>).
 //
@@ -13,8 +13,8 @@
 // messages before the program starts; the live runner reads the last stdout line.)
 
 using System.Text.Json;
-using Experimently;
-using Experimently.Models;
+using Controlvar;
+using Controlvar.Models;
 
 try
 {
@@ -39,10 +39,10 @@ static int Fail(string message)
 
 static async Task<int> RunAsync()
 {
-    var apiUrl = Env("EXPERIMENTLY_API_URL", "http://localhost:8000");
-    var apiKey = Env("EXPERIMENTLY_API_KEY", "");
+    var apiUrl = Env("CONTROLVAR_API_URL", Env("EXPERIMENTLY_API_URL", "http://localhost:8000"));
+    var apiKey = Env("CONTROLVAR_API_KEY", Env("EXPERIMENTLY_API_KEY", ""));
     if (string.IsNullOrWhiteSpace(apiKey))
-        return Fail("EXPERIMENTLY_API_KEY is required");
+        return Fail("CONTROLVAR_API_KEY is required");
     var experimentKey = Env("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab");
     var flagKey = Env("CONTRACT_FLAG_KEY", "sdk_contract_flag");
     var userId = Env("CONTRACT_USER_ID", "smoke-" + Guid.NewGuid().ToString("D"));

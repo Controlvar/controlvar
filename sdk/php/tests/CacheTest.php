@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Experimently\Tests;
+namespace Controlvar\Tests;
 
-use Experimently\Cache;
+use Controlvar\Cache;
 use PHPUnit\Framework\TestCase;
 
 /**

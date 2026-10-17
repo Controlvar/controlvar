@@ -2,7 +2,7 @@
 
 ``pyproject.toml`` is what the build stamps on the wheel and what
 ``scripts/check_sdk_version.py`` compares a release tag against.
-``experimentation_openfeature.__version__`` is a second, hand-written copy.
+``controlvar_openfeature.__version__`` is a second, hand-written copy.
 Nothing derives one from the other, so this test is what keeps them equal
 (the same pin ``sdk/python/tests/test_version.py`` holds for the SDK, #688).
 """
@@ -10,7 +10,7 @@ Nothing derives one from the other, so this test is what keeps them equal
 import re
 from pathlib import Path
 
-from experimentation_openfeature import __version__
+from controlvar_openfeature import __version__
 
 PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
 

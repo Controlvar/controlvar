@@ -1,8 +1,8 @@
-# Experimently Flutter / Dart SDK
+# Controlvar Flutter / Dart SDK
 
-`experimently` (v0.2) provides feature flag evaluation, A/B experiment assignment and event
+`controlvar` (v0.2) provides feature flag evaluation, A/B experiment assignment and event
 tracking for Flutter applications (iOS, Android, Web, macOS, Windows, Linux) and, through the
-Flutter-free `experimently_core.dart` entry point, for plain Dart programs.
+Flutter-free `controlvar_core.dart` entry point, for plain Dart programs.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
@@ -24,14 +24,14 @@ the SDK caches the answer per user + key. Nothing is bucketed on the device.
 
 ## Installation
 
-**Not yet published.** The `experimently` package is not on pub.dev, so build it from source: this
+**Not yet published.** The `controlvar` package is not on pub.dev, so build it from source: this
 dependency takes `sdk/flutter` from this repository.
 
 ```yaml
 dependencies:
-  experimently:
+  controlvar:
     git:
-      url: https://github.com/getexperimently/experimently
+      url: https://github.com/Controlvar/controlvar
       path: sdk/flutter
 ```
 
@@ -42,7 +42,7 @@ flutter pub get
 ## Quick Start
 
 ```dart
-import 'package:experimently/experimently.dart';
+import 'package:controlvar/controlvar.dart';
 
 final client = ExperimentationClient(
   config: const SdkConfig(
@@ -143,7 +143,7 @@ It is exported as a utility only — nothing in the SDK uses it to decide a vari
 
 ```bash
 cd sdk/flutter && flutter pub get
-EXPERIMENTLY_API_KEY=<key> dart run example/contract_smoke.dart
+CONTROLVAR_API_KEY=<key> dart run example/contract_smoke.dart
 ```
 
 It prints:
@@ -152,15 +152,15 @@ It prints:
 {"sdk":"flutter","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). The smoke imports only
-`experimently_core.dart` (no `package:flutter` code is loaded), but dependency resolution
+`controlvar_core.dart` (no `package:flutter` code is loaded), but dependency resolution
 still needs the Flutter SDK because the package depends on `flutter`/`shared_preferences`, so use
 Flutter's bundled `dart` and run `flutter pub get` first.
 
 CI does not run this SDK's contract smoke against a real API: `flutter` is not in the
-`sdks:` list of the SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml). Run
+`sdks:` list of the SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml). Run
 `python tests/sdk-contract/live/run_live_contract.py --sdk flutter --strict` on a machine with the
 Flutter SDK.
 

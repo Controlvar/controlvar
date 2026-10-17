@@ -5,17 +5,17 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>com.getexperimently</groupId>
-        <artifactId>experimently-sdk-parent</artifactId>
+        <groupId>com.controlvar</groupId>
+        <artifactId>controlvar-sdk-parent</artifactId>
         <version>1.0.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>experimently-sdk</artifactId>
+    <artifactId>controlvar-sdk</artifactId>
     <packaging>jar</packaging>
 
-    <name>Experimently Java SDK — Core</name>
-    <description>Core Java/JVM client SDK for Experimently</description>
+    <name>Controlvar Java SDK — Core</name>
+    <description>Core Java/JVM client SDK for Controlvar</description>
 
     <dependencies>
         <!-- HTTP Client -->

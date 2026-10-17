@@ -15,12 +15,14 @@ from pathlib import Path
 
 import pytest
 
-import experimentation.client as client_module
-from experimentation.testing import FakeTransport
+import controlvar.client as client_module
+from controlvar.testing import FakeTransport
 
 SDK_ROOT = Path(__file__).resolve().parents[1]
 SMOKE = SDK_ROOT / "examples" / "contract_smoke.py"
 VARIABLES = (
+    "CONTROLVAR_API_URL",
+    "CONTROLVAR_API_KEY",
     "EXPERIMENTLY_API_URL",
     "EXPERIMENTLY_API_KEY",
     "CONTRACT_EXPERIMENT_KEY",
@@ -68,7 +70,7 @@ def fake_api(experiment_key: str, flag_key: str) -> FakeTransport:
 def environment(monkeypatch):
     for name in VARIABLES:
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("EXPERIMENTLY_API_KEY", "smoke-key")
+    monkeypatch.setenv("CONTROLVAR_API_KEY", "smoke-key")
     return monkeypatch
 
 
@@ -97,7 +99,7 @@ def test_it_runs_from_the_source_tree_with_its_defaults(environment, capsys):
 
 
 def test_it_runs_the_four_contract_steps(environment, capsys):
-    environment.setenv("EXPERIMENTLY_API_URL", "http://api.test")
+    environment.setenv("CONTROLVAR_API_URL", "http://api.test")
     environment.setenv("CONTRACT_EXPERIMENT_KEY", "exp_a")
     environment.setenv("CONTRACT_FLAG_KEY", "flag_a")
     environment.setenv("CONTRACT_USER_ID", "user-a")
@@ -127,11 +129,58 @@ def test_it_runs_the_four_contract_steps(environment, capsys):
 
 
 def test_it_stops_without_a_key(environment, capsys):
-    environment.delenv("EXPERIMENTLY_API_KEY")
+    environment.delenv("CONTROLVAR_API_KEY")
     transport = FakeTransport()
     environment.setattr(client_module, "UrllibTransport", lambda: transport)
     with pytest.raises(SystemExit) as stopped:
         load_smoke(environment).main()
     assert stopped.value.code == 1
-    assert "EXPERIMENTLY_API_KEY is required" in capsys.readouterr().err
+    assert "CONTROLVAR_API_KEY is required" in capsys.readouterr().err
     assert transport.requests == []
+
+
+#: Three distinct values per setting, none of them the default or what CI sets.
+NEW_URL, OLD_URL, DEFAULT_URL = "http://127.0.0.1:9", "http://127.0.0.1:7", "http://localhost:8000"
+
+
+@pytest.mark.parametrize(
+    ("names", "url", "key"),
+    [
+        pytest.param(
+            {"EXPERIMENTLY_API_URL": OLD_URL, "EXPERIMENTLY_API_KEY": "old-key"},
+            OLD_URL,
+            "old-key",
+            id="former-names-only",
+        ),
+        pytest.param(
+            {"CONTROLVAR_API_URL": NEW_URL, "CONTROLVAR_API_KEY": "new-key"},
+            NEW_URL,
+            "new-key",
+            id="new-names-only",
+        ),
+        pytest.param(
+            {
+                "CONTROLVAR_API_URL": NEW_URL,
+                "CONTROLVAR_API_KEY": "new-key",
+                "EXPERIMENTLY_API_URL": OLD_URL,
+                "EXPERIMENTLY_API_KEY": "old-key",
+            },
+            NEW_URL,
+            "new-key",
+            id="both-new-wins",
+        ),
+        pytest.param({"EXPERIMENTLY_API_KEY": "old-key"}, DEFAULT_URL, "old-key", id="no-url"),
+    ],
+)
+def test_the_new_names_win_and_the_former_names_are_still_read(environment, names, url, key):
+    environment.delenv("CONTROLVAR_API_KEY")
+    for name, value in names.items():
+        environment.setenv(name, value)
+    transport = fake_api("sdk_contract_ab", "sdk_contract_flag")
+    environment.setattr(client_module, "UrllibTransport", lambda: transport)
+
+    load_smoke(environment).main()
+
+    assert transport.requests
+    assert {r.url.split("/api/v1/")[0] for r in transport.requests} == {url}
+    assert {r.headers["X-API-Key"] for r in transport.requests} == {key}

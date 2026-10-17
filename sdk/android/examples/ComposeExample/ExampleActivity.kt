@@ -1,4 +1,4 @@
-package com.getexperimently.android.example
+package com.controlvar.android.example
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -24,14 +24,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.getexperimently.android.ExperimentationClient
-import com.getexperimently.android.SdkConfig
-import com.getexperimently.android.TrackEvent
-import com.getexperimently.android.User
+import com.controlvar.android.ExperimentationClient
+import com.controlvar.android.SdkConfig
+import com.controlvar.android.TrackEvent
+import com.controlvar.android.User
 import kotlinx.coroutines.launch
 
 /**
- * Example Activity demonstrating the Experimently Android SDK
+ * Example Activity demonstrating the Controlvar Android SDK
  * with Jetpack Compose.
  *
  * Flags and experiments are evaluated by the server (the SDK sends the API key as

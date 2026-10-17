@@ -712,7 +712,7 @@ class Mechanism:
 
 
 _VERSION = r"\(?v?[0-9]{1,4}(?:\.[0-9]{1,4}){1,2}"
-_TARBALL = r"getexperimently-[A-Za-z0-9-]{1,60}-[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}\.tgz"
+_TARBALL = r"controlvar-[A-Za-z0-9-]{1,60}-[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}\.tgz"
 #: "0.1.0 is a beta release.", after the sentence naming the registry.
 _BETA = r"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4} is a beta release\.$"
 
@@ -746,7 +746,7 @@ MECHANISMS: Dict[str, Mechanism] = {
         "::test_every_claim_about_what_the_platform_does_is_on_the_list",
         quotes=True,
     ),
-    # A quoted package version (a bare `experimently` only on the Python page),
+    # A quoted package version (a bare `controlvar` only on the Python page),
     # and the version after the sentence naming the registry, in the SDK
     # pages, the guide, the FAQ and the READMEs the packages carry.
     "sdk-doc-versions": Mechanism(
@@ -755,12 +755,12 @@ MECHANISMS: Dict[str, Mechanism] = {
         holds=(
             (
                 "docs/sdk/*.md",
-                r"(?:@getexperimently/[A-Za-z0-9_-]{1,60}|experimently-openfeature) "
+                r"(?:@controlvar/[A-Za-z0-9_-]{1,60}|controlvar-openfeature) "
                 + _VERSION,
             ),
             ("docs/sdk/*.md", _TARBALL),
             ("docs/sdk-guide.md", _TARBALL),
-            ("docs/sdk/python.md", r"(?<![\w@/-])experimently " + _VERSION),
+            ("docs/sdk/python.md", r"(?<![\w@/-])controlvar " + _VERSION),
             # The sentence before it names the package: the test reads the two.
             ("docs/sdk/python.md", _BETA),
             ("docs/sdk/javascript.md", _BETA),
@@ -772,8 +772,8 @@ MECHANISMS: Dict[str, Mechanism] = {
             ),
             (
                 "docs/getting-started/faq.md",
-                r"\((?:npm|pip) install (?:@getexperimently/[A-Za-z0-9_-]{1,60}"
-                r"|experimently), [0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}, beta\)",
+                r"\((?:npm|pip) install (?:@controlvar/[A-Za-z0-9_-]{1,60}"
+                r"|controlvar), [0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}, beta\)",
             ),
         ),
     ),
@@ -882,7 +882,7 @@ MECHANISMS: Dict[str, Mechanism] = {
         holds=(
             (
                 "sdk/python/README.md",
-                r"^Set EXPERIMENTLY_API_KEY to an API key, then run the block as it is",
+                r"^Set CONTROLVAR_API_KEY to an API key, then run the block as it is",
             ),
         ),
     ),

@@ -3,9 +3,10 @@
  * (`ServerClient`) so it runs under plain Node with no DOM and no React render.
  *
  * Run from the repo root:
- *   cd sdk/react && npm run build --silent && EXPERIMENTLY_API_KEY=... node examples/contract_smoke.mjs
+ *   cd sdk/react && npm run build --silent && CONTROLVAR_API_KEY=... node examples/contract_smoke.mjs
  *
- * Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required),
+ * Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required),
+ * (the former names EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY are read when these are unset),
  *      CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag),
  *      CONTRACT_USER_ID (default smoke-<uuid>).
  *
@@ -25,8 +26,9 @@ import clientModule from '../dist/client/ExperimentationClient.js';
 const { ServerClient } = ssr;
 const { ExperimentationClient } = clientModule;
 
-const apiUrl = process.env.EXPERIMENTLY_API_URL || 'http://localhost:8000';
-const apiKey = process.env.EXPERIMENTLY_API_KEY;
+const apiUrl =
+  process.env.CONTROLVAR_API_URL || process.env.EXPERIMENTLY_API_URL || 'http://localhost:8000';
+const apiKey = process.env.CONTROLVAR_API_KEY || process.env.EXPERIMENTLY_API_KEY;
 const experimentKey = process.env.CONTRACT_EXPERIMENT_KEY || 'sdk_contract_ab';
 const flagKey = process.env.CONTRACT_FLAG_KEY || 'sdk_contract_flag';
 const userId = process.env.CONTRACT_USER_ID || `smoke-${randomUUID()}`;
@@ -36,7 +38,7 @@ function fail(message) {
   process.exit(1);
 }
 
-if (!apiKey) fail('EXPERIMENTLY_API_KEY is required');
+if (!apiKey) fail('CONTROLVAR_API_KEY is required');
 
 // ── record every request the SDK makes, so fire-and-forget tracking is checkable ──
 const calls = [];

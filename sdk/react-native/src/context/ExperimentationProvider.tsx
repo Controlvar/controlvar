@@ -3,11 +3,11 @@
  *
  * @example
  * ```tsx
- * import { ExperimentationProvider, ExperimentationClient } from '@getexperimently/react-native-sdk';
+ * import { ExperimentationProvider, ExperimentationClient } from '@controlvar/react-native-sdk';
  *
  * const client = new ExperimentationClient({
  *   apiKey: 'YOUR_API_KEY',
- *   baseUrl: 'https://api.getexperimently.com',
+ *   baseUrl: 'https://api.controlvar.example.com',
  * });
  *
  * export default function App() {

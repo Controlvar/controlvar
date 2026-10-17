@@ -91,15 +91,15 @@ machine with the toolchain before relying on them.
 
 ## Python SDK
 
-`sdk/python` — package `experimently`, stdlib only (no runtime dependencies), Python ≥ 3.9,
+`sdk/python` — package `controlvar`, stdlib only (no runtime dependencies), Python ≥ 3.9,
 synchronous. Full reference: [Python SDK](sdk/python.md).
 
 ### Installation
 
-The `experimently` package is on [PyPI](https://pypi.org/project/experimently/) (0.1.0, beta):
+The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/) (0.1.1, beta):
 
 ```bash
-pip install experimently==0.1.0
+pip install controlvar==0.1.1
 ```
 
 To work on the SDK itself, install it from a clone of this repository instead:
@@ -111,7 +111,7 @@ pip install -e ./sdk/python
 ### Quick Start
 
 ```python
-from experimentation import ExperimentationClient
+from controlvar import ExperimentationClient
 
 client = ExperimentationClient(
     api_url="http://localhost:8000",   # origin only; the SDK appends /api/v1/...
@@ -176,7 +176,7 @@ client = ExperimentationClient(
 Successful results are cached per user + key for `cache_ttl_seconds`; failures are never cached. A 429
 is retried once after the server's `Retry-After` (capped at 5 s). The client is thread-safe.
 
-Testing: construct the client with `transport=` (see `experimentation.testing.FakeTransport`) to assert
+Testing: construct the client with `transport=` (see `controlvar.testing.FakeTransport`) to assert
 requests without a network.
 
 Smoke against a live backend: `python sdk/python/examples/contract_smoke.py`.
@@ -185,20 +185,20 @@ Smoke against a live backend: `python sdk/python/examples/contract_smoke.py`.
 
 ## JavaScript / TypeScript SDK
 
-`sdk/js` — package `@getexperimently/js-sdk`, zero runtime dependencies, uses the global
+`sdk/js` — package `@controlvar/js-sdk`, zero runtime dependencies, uses the global
 `fetch` (Node ≥ 18 and browsers), CommonJS build with type declarations. Full reference:
 [JavaScript SDK](sdk/javascript.md). For React apps use the [React SDK](sdk/react.md) instead.
 
 ### Installation
 
-The `@getexperimently/js-sdk` package is on [npm](https://www.npmjs.com/package/@getexperimently/js-sdk) (0.1.0, beta):
+The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk) (0.1.1, beta):
 
 ```bash
-npm install @getexperimently/js-sdk@0.1.0
+npm install @controlvar/js-sdk@0.1.1
 ```
 
 To work on the SDK itself, build it from a clone of this repository instead. `npm pack` writes
-`getexperimently-js-sdk-0.1.0.tgz`:
+`controlvar-js-sdk-0.1.1.tgz`:
 
 ```bash
 cd sdk/js
@@ -208,13 +208,13 @@ npm ci && npm run build && npm pack
 Then, in your app, install the packed tarball:
 
 ```bash
-npm install /path/to/experimently/sdk/js/getexperimently-js-sdk-0.1.0.tgz
+npm install /path/to/controlvar/sdk/js/controlvar-js-sdk-0.1.1.tgz
 ```
 
 ### Quick Start
 
 ```typescript
-import { ExperimentationClient } from '@getexperimently/js-sdk';
+import { ExperimentationClient } from '@controlvar/js-sdk';
 
 const client = new ExperimentationClient({
   apiUrl: 'http://localhost:8000',   // origin only; the SDK appends /api/v1/...
@@ -286,12 +286,12 @@ import {
   useExperiment,
   useFeatureFlag,
   useTrackEvent,
-} from '@getexperimently/react-sdk';
+} from '@controlvar/react-sdk';
 
 function App() {
   return (
     <ExperimentationProvider
-      config={{ apiKey: process.env.NEXT_PUBLIC_EXPERIMENTLY_API_KEY!, baseUrl: 'http://localhost:8000' }}
+      config={{ apiKey: process.env.NEXT_PUBLIC_CONTROLVAR_API_KEY!, baseUrl: 'http://localhost:8000' }}
       user={{ userId: currentUser.id, attributes: { plan: currentUser.plan } }}
     >
       <CheckoutButton />
@@ -330,19 +330,19 @@ installs them into your local `~/.m2`, where the dependency below resolves.
 
 ```xml
 <dependency>
-  <groupId>com.getexperimently</groupId>
-  <artifactId>experimently-sdk</artifactId>
+  <groupId>com.controlvar</groupId>
+  <artifactId>controlvar-sdk</artifactId>
   <version>1.0.0</version>
 </dependency>
-<!-- Spring Boot: use experimently-spring-boot-starter instead -->
+<!-- Spring Boot: use controlvar-spring-boot-starter instead -->
 ```
 
 ### Quick Start
 
 ```java
-import com.getexperimently.sdk.ExperimentationClient;
-import com.getexperimently.sdk.config.SdkConfig;
-import com.getexperimently.sdk.model.*;
+import com.controlvar.sdk.ExperimentationClient;
+import com.controlvar.sdk.config.SdkConfig;
+import com.controlvar.sdk.model.*;
 
 SdkConfig config = SdkConfig.builder("eptk_...", "http://localhost:8000")  // apiKey, baseUrl (origin only)
     .timeoutMs(5000)

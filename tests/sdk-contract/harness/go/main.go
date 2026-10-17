@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 
-	experimentation "github.com/getexperimently/experimently/sdk/go"
+	experimentation "github.com/controlvar/controlvar/sdk/go"
 )
 
 func main() {

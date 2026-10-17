@@ -4,7 +4,7 @@
 document = "sdk/js/README.md"
 
 [[unit]]
-text = "@getexperimently/js-sdk"
+text = "@controlvar/js-sdk"
 by = ["exempt:label"]
 
 [[unit]]
@@ -16,7 +16,7 @@ text = "This is a 0.x release: pin the exact version you test against."
 by = ["test:sdk/js/__tests__/package.test.ts::is a 0.x beta release"]
 
 [[unit]]
-text = "JavaScript/TypeScript client for the Experimently public API."
+text = "JavaScript/TypeScript client for the Controlvar public API."
 by = [
     "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/assign with the contract headers",
     "test:sdk/js/__tests__/client.test.ts::GETs /api/v1/feature-flags/evaluate/{key}?user_id=… with the contract headers and no body",
@@ -60,14 +60,14 @@ text = "Install"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The @getexperimently/js-sdk package is on npm."
+text = "The @controlvar/js-sdk package is on npm."
 by = [
     "journey:sdk-javascript#quick-start-user-on",
     "journey:sdk-javascript#quick-start-user-off",
 ]
 
 [[unit]]
-text = "0.1.0 is a beta release."
+text = "0.1.1 is a beta release."
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-javascript#quick-start-user-on",
@@ -316,7 +316,7 @@ text = "Contract smoke"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (sdk_contract_ab), CONTRACT_FLAG_KEY (sdk_contract_flag), CONTRACT_USER_ID."
+text = "Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (sdk_contract_ab), CONTRACT_FLAG_KEY (sdk_contract_flag), CONTRACT_USER_ID."
 by = [
     "test:sdk/js/__tests__/contract-smoke.test.ts::it reads its settings from the environment, with these defaults",
     "test:sdk/js/__tests__/contract-smoke.test.ts::it assigns twice, evaluates the flag, tracks with and without a key and sends a 2-event batch",
@@ -346,3 +346,7 @@ by = [
 [[unit]]
 text = "npm run build: tsc → dist/ (CommonJS + .d.ts)"
 by = ["test:sdk/js/__tests__/package.test.ts::builds CommonJS with type declarations into dist/"]
+
+[[unit]]
+text = "If you installed @getexperimently/js-sdk, the name this package had before the project was renamed, uninstall it and install @controlvar/js-sdk."
+by = ["exempt:instruction"]

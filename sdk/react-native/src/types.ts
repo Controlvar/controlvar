@@ -1,5 +1,5 @@
 /**
- * Core types for the React Native Experimently SDK.
+ * Core types for the React Native Controlvar SDK.
  *
  * Flag evaluation and experiment assignment are decided by the server; the
  * shapes below mirror the public API (`GET /api/v1/feature-flags/evaluate/…`,
@@ -11,9 +11,9 @@ export type SwallowedOperation = 'evaluateFlag' | 'getAssignment' | 'getAllFlags
 
 /** Configuration for {@link ExperimentationClient}. */
 export interface SdkConfig {
-  /** API key for authenticating with Experimently (sent as `X-API-Key`). */
+  /** API key for authenticating with Controlvar (sent as `X-API-Key`). */
   apiKey: string;
-  /** Backend origin, e.g. `'https://api.getexperimently.com'`; the SDK appends `/api/v1/...`. */
+  /** Backend origin, e.g. `'https://api.controlvar.example.com'`; the SDK appends `/api/v1/...`. */
   baseUrl: string;
   /** HTTP request timeout in milliseconds. Defaults to 5000. */
   timeoutMs?: number;

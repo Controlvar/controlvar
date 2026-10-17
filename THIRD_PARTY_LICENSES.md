@@ -1010,7 +1010,7 @@ These ecosystems have no resolver in this repository, so the list below is read 
 | `php (ext-json, ext-curl)` | >=8.1 | PHP-3.01 / runtime, not bundled |
 | `phpunit/phpunit (dev)` | ^10.0 | BSD-3-Clause |
 
-### Ruby SDK (`sdk/ruby/experimently.gemspec`)
+### Ruby SDK (`sdk/ruby/controlvar.gemspec`)
 
 | Package | Version | Licence |
 |---|---|---|
@@ -1036,6 +1036,6 @@ These ecosystems have no resolver in this repository, so the list below is read 
 
 | Package | Version | Licence |
 |---|---|---|
-| `(experimently: standard library only)` | — | — |
+| `(controlvar: standard library only)` | — | — |
 | `openfeature-sdk` | >=0.9.0 | Apache-2.0 |
 

@@ -1,8 +1,8 @@
 """
 Tests for ExperimentationProvider (OpenFeature Python provider).
 
-The provider delegates to the ``experimentation`` SDK; its HTTP transport is
-replaced with ``experimentation.testing.FakeTransport`` so every test can
+The provider delegates to the ``controlvar`` SDK; its HTTP transport is
+replaced with ``controlvar.testing.FakeTransport`` so every test can
 assert the exact request that would reach the backend.
 
 Coverage:
@@ -33,10 +33,10 @@ from openfeature.flag_evaluation import Reason
 from openfeature.provider import TrackingEventDetails
 from openfeature.provider.no_op_provider import NoOpProvider
 
-from experimentation import ExperimentationClient, TransportError
-from experimentation.testing import FakeTransport
-from experimentation_openfeature import PROVIDER_NAME, ExperimentationProvider, ProviderConfig
-from experimentation_openfeature.evaluator import hash_user
+from controlvar import ExperimentationClient, TransportError
+from controlvar.testing import FakeTransport
+from controlvar_openfeature import PROVIDER_NAME, ExperimentationProvider, ProviderConfig
+from controlvar_openfeature.evaluator import hash_user
 
 EVALUATE = "/api/v1/feature-flags/evaluate"
 CTX = EvaluationContext(targeting_key="user-1")
@@ -71,7 +71,7 @@ class TestConstruction:
 
     def test_metadata_name(self):
         provider, _ = make_provider()
-        assert provider.get_metadata().name == PROVIDER_NAME == "experimently-provider"
+        assert provider.get_metadata().name == PROVIDER_NAME == "controlvar-provider"
 
     def test_get_provider_hooks_returns_empty_list(self):
         provider, _ = make_provider()

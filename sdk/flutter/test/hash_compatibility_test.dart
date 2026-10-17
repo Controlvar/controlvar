@@ -10,7 +10,7 @@
 ///
 /// All other SDKs produce bit-identical output for these vectors.
 import 'package:flutter_test/flutter_test.dart';
-import 'package:experimently/experimently.dart';
+import 'package:controlvar/controlvar.dart';
 
 void main() {
   group('hashUser — cross-SDK parity', () {
