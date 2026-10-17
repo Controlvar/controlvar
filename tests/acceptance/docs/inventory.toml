@@ -371,8 +371,9 @@ journey = "docker-guide"
 reason = "start the stack as written, open the dashboard and sign in; its shell steps run in Doc Examples"
 
 [pages."getting-started/docker-compose-file.md"]
-class = "exec"
-reason = "its blocks run in Doc Examples; the skipped ones start the demo apps or extra images"
+class = "journey"
+journey = "compose-demo"
+reason = "start the demo profile with the page's own command, then its simulators, ShopLab and StreamPulse; its other blocks run in Doc Examples"
 
 [pages."getting-started/environment-setup.md"]
 class = "exec"
@@ -652,10 +653,9 @@ note = "the JavaScript, Python and Go quick starts are journeys, each package in
 
 [[flow]]
 text = "self-hosting guides where they can be rehearsed without AWS"
-journeys = ["docker-guide"]
+journeys = ["docker-guide", "compose-demo"]
 pages = [
     "self-hosting/kubernetes.md",
-    "getting-started/docker-compose-file.md",
     "getting-started/environment-setup.md",
     "self-hosting/migrations.md",
     "self-hosting/releases.md",

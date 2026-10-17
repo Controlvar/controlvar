@@ -41,12 +41,12 @@ YAML, or not a mapping, stops at that. Refused, besides what ``model`` refuses:
   on a guide ``scripts/doc_examples.toml`` does not enrol, or on a document
   (only a page's enrolment under ``docs/`` is read here);
 * an ``api`` step on a stack with no API (every stack but compose-dev,
-  compose-empty, compose-sso and demo-local);
+  compose-empty, compose-sso, compose-demo and demo-local);
 * an oracle not in ``docs_runner.oracles.ORACLES``;
 * a ``not_run`` reason the registry does not let a journey declare;
 * a ``written`` date after today;
-* ``open`` on any stack but compose-dev, compose-empty, compose-sso and
-  demo-local, or of a URL whose origin
+* ``open`` on any stack but compose-dev, compose-empty, compose-sso,
+  compose-demo and demo-local, or of a URL whose origin
   (``http://localhost:<port>``) the guide's text does not contain;
 * a ``fill`` that types a ``secret`` no ``passwords`` entry makes up and no
   earlier ``keep`` step keeps, or that does not say ``snapshot: false``;
@@ -101,7 +101,12 @@ YAML, or not a mapping, stops at that. Refused, besides what ``model`` refuses:
   expecting anything but ``exit`` and ``output``; a background ``run`` with an
   ``expect`` (its ``finish`` checks it); a ``finish`` that names no earlier
   background ``run``, or one already finished; and a background ``run`` no
-  later step finishes.
+  later step finishes;
+* a ``services`` step on any stack but compose-demo (the one started with the
+  demo command, ``model.SERVICE_STACKS``), or with an ``expect`` or a
+  ``snapshot`` setting (its check is the action); or naming a service that
+  ``docker-compose.yml`` does not define, or that the guide's text does not
+  name.
 """
 
 from __future__ import annotations
@@ -140,6 +145,7 @@ from docs_runner.model import (
     RUN_STACKS,
     SCREEN_ACTIONS,
     SEARCH_EXPECTS,
+    SERVICE_STACKS,
     SITE_STACKS,
     STACKS,
     STRUCTURAL_EXPECTS,
@@ -412,6 +418,21 @@ def _expect_problems(label: str, step: Step, stack: Optional[str]) -> List[str]:
         if step.snapshot is not None:
             found.append(f"{label}: {article} {kind} step has no screen to snapshot")
         return found
+    if kind == "services":
+        if stack is not None and stack not in SERVICE_STACKS:
+            found.append(
+                f"{label}: a services step watches the compose services the page's"
+                f" demo command starts ({', '.join(SERVICE_STACKS)}); {stack} is"
+                " not that stack"
+            )
+        if given:
+            found.append(
+                f"{label}: services checks what the action says (each service"
+                " running, unrestarted, and the count growing); it has no expect"
+            )
+        if step.snapshot is not None:
+            found.append(f"{label}: a services step has no screen to snapshot")
+        return found
     if kind in ("run", "finish"):
         if stack is not None and stack not in RUN_STACKS:
             found.append(
@@ -655,6 +676,54 @@ def _step_problems(
             )
     if step.do.sdk is not None and guide is not None:
         found.extend(_sdk_problems(label, step.do.sdk, guide, context.docs_root.parent))
+    if step.do.services is not None:
+        found.extend(
+            _services_problems(label, step.do.services.running, guide, context)
+        )
+    return found
+
+
+#: The compose file whose services a ``services`` step names.
+COMPOSE_FILE = "docker-compose.yml"
+
+
+def compose_services(repo_root: Path) -> Optional[Set[str]]:
+    """The service names ``docker-compose.yml`` defines, or None when it
+    cannot be read as a compose file."""
+    try:
+        data = yaml.safe_load((repo_root / COMPOSE_FILE).read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return None
+    services = data.get("services") if isinstance(data, dict) else None
+    if not isinstance(services, dict):
+        return None
+    return {str(name) for name in services}
+
+
+def _services_problems(
+    label: str,
+    names: Sequence[str],
+    guide: Optional[guides.Guide],
+    context: Context,
+) -> List[str]:
+    """A services step's names against the compose file and the guide's text."""
+    found: List[str] = []
+    defined = compose_services(context.docs_root.parent)
+    if defined is None:
+        found.append(
+            f"{label}: services names compose services, but {COMPOSE_FILE} cannot"
+            " be read as a compose file"
+        )
+    for name in names:
+        if defined is not None and name not in defined:
+            found.append(
+                f"{label}: services: {name!r} is not a service of {COMPOSE_FILE}"
+            )
+        if guide is not None and not guide.contains(name):
+            found.append(
+                f"{label}: services: {name!r} is not in the guide's text; watch the"
+                " services the guide names"
+            )
     return found
 
 

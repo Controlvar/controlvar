@@ -115,6 +115,13 @@ def describe_action(step: Step) -> str:
         )
     if do.finish is not None:
         return f"let the block step {do.finish} started end, within its bound"
+    if do.services is not None:
+        plan = do.services
+        counted = f", counting the {plan.growing}" if plan.growing else ""
+        return (
+            f"watch the compose services {', '.join(plan.running)} for"
+            f" {plan.for_seconds} s{counted}"
+        )
     return "its shell blocks, run by Doc Examples"
 
 
@@ -163,6 +170,15 @@ def describe_expect(step: Step) -> str:
             f" {plan.user} and the flag answer the documented rollout hash gives at"
             f" {plan.rollout}%"
         )
+    if step.do.services is not None:
+        plan = step.do.services
+        held = (
+            "each has one container, running at the start and through the"
+            f" {plan.for_seconds} s, its restart count unchanged"
+        )
+        if plan.growing:
+            held += f"; the {plan.growing} are more at the end than at the start"
+        return held
     if step.do.run is not None and step.do.run.background:
         return (
             "it starts; a later finish step checks how it ended, within"
