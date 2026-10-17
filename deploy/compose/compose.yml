@@ -46,7 +46,7 @@ services:
 
   # ---------------------------------------------------------------------------
   api:
-    image: ghcr.io/controlvar/controlvar:${EXPERIMENTLY_PROFILE:-core}-0.35.0 # x-release-please-version
+    image: ghcr.io/controlvar/controlvar:${EXPERIMENTLY_PROFILE:-core}-0.36.0 # x-release-please-version
     # Published for linux/amd64 only (#181): an arm64 host runs it emulated.
     platform: linux/amd64
     environment:
@@ -91,7 +91,7 @@ services:
 
   # ---------------------------------------------------------------------------
   web:
-    image: ghcr.io/controlvar/controlvar-web:${EXPERIMENTLY_PROFILE:-core}-0.35.0 # x-release-please-version
+    image: ghcr.io/controlvar/controlvar-web:${EXPERIMENTLY_PROFILE:-core}-0.36.0 # x-release-please-version
     platform: linux/amd64
     environment:
       # The dashboard serves the static app and proxies /api, /ws and /health

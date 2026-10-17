@@ -10,6 +10,22 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.36.0](https://github.com/Controlvar/controlvar/compare/v0.35.0...v0.36.0) (2026-10-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **sdk:** the SDK packages are published as `@controlvar/*` on npm and `controlvar` / `controlvar-openfeature` on PyPI, and Python code imports from `controlvar` and `controlvar_openfeature`. The Go module path is `github.com/controlvar/controlvar/sdk/go`; the Java and Android coordinates are `com.controlvar:*`. The edge SDK's `baseUrl` is required.
+
+### Features
+
+* **sdk:** publish the SDKs as Controlvar packages ([#1280](https://github.com/Controlvar/controlvar/issues/1280)) ([ea739ed](https://github.com/Controlvar/controlvar/commit/ea739edace88f9e60cf6f22aeeb5a3a60f8b7b4a))
+
+
+### Documentation
+
+* name the demo apps' addresses on the compose stack page ([#1279](https://github.com/Controlvar/controlvar/issues/1279)) ([1cc19ae](https://github.com/Controlvar/controlvar/commit/1cc19ae2fceb536b01e2ad6e3955206f247f3603))
+
 ## [0.35.0](https://github.com/Controlvar/controlvar/compare/v0.34.4...v0.35.0) (2026-10-17)
 
 
