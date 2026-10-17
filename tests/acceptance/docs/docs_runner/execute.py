@@ -73,7 +73,11 @@ answered, in counts). A ``services`` step (``services.py``) writes
 ``NN-<step>.expected.json`` (the services, the time and the count it holds,
 written before it runs) and ``NN-<step>.services.json`` (each service's state at
 the start and the end, the counts, the problems and, for a service that failed,
-its last log lines). Values an api step saves (``values.py``) are the
+its last log lines). A ``relaunch`` step writes ``NN-<step>.expected.json``
+and ``NN-<step>.relaunch.json`` (each command the stack ran, its exit status
+and time, and the apps' key files between the two starts); the accounts'
+sign-ins are dropped after it, its ``down -v`` having made the accounts anew.
+Values an api step saves (``values.py``) are the
 journey's own, cleared when the next journey starts; a value saved as a secret
 is kept with the journey's other secrets and goes to the redactor.
 
@@ -144,7 +148,16 @@ TITLE_CARD_MS = 1500
 #: The longest line a walkthrough's caption bar draws.
 CAPTION_CHARS = 180
 #: The kinds of step that do nothing on the screen: their caption shows their result.
-OFF_SCREEN = ("api", "traffic", "evaluations", "ref", "run", "finish", "services")
+OFF_SCREEN = (
+    "api",
+    "traffic",
+    "evaluations",
+    "ref",
+    "run",
+    "finish",
+    "services",
+    "relaunch",
+)
 #: Reads what a page draws: its rendered text, each field's placeholder, the
 #: text of every open shadow root, and each field's type and value (in the
 #: document and in those shadow roots). Same-origin frames, closed shadow
@@ -828,6 +841,41 @@ class JourneyRunner:
         if watched.problems:
             raise _Failed(self._line("; ".join(watched.problems)), snapshot)
         return self._line(watched.summary()), snapshot
+
+    def _relaunch_step(
+        self, step: Step, running: Running, journey_id: str, number: int
+    ) -> Tuple[str, str]:
+        """Bring the stack down and up again as the page's recovery note says."""
+        name = self._name(journey_id, number, step, ".relaunch.json")
+        if running.relaunch is None:
+            raise _Failed(
+                f"the {running.name} stack cannot be relaunched",
+                self._write(name, json.dumps({"error": "no relaunch"}) + "\n"),
+            )
+        record = running.relaunch(step.do.relaunch)
+        # down -v made the accounts anew: a token signed in before names a user
+        # the stack no longer has.
+        self.tokens.clear()
+        snapshot = self._write(
+            name, json.dumps(record, indent=2, ensure_ascii=False) + "\n"
+        )
+        if record.get("problem"):
+            raise _Failed(self._line(record["problem"]), snapshot)
+        bare = record.get("without_seeds", {})
+        done = record.get("command", {})
+        ended = (
+            "reached its bound"
+            if bare.get("exit") is None
+            else f"exited {bare.get('exit')}"
+        )
+        return (
+            self._line(
+                f"the start without the seeds {ended} after {bare.get('seconds')} s,"
+                " the apps' key files absent; the page's command then exited 0"
+                f" after {done.get('seconds')} s, with no down -v between"
+            ),
+            snapshot,
+        )
 
     def _evaluations_step(
         self, step: Step, api, journey_id: str, number: int
@@ -1715,6 +1763,19 @@ class JourneyRunner:
                 )
                 + "\n",
             )
+        elif step.do.relaunch is not None:
+            expected_snapshot = self._write(
+                self._name(journey_id, number, step, ".expected.json"),
+                json.dumps(
+                    {
+                        "relaunch": step.do.relaunch,
+                        "does": describe_action(step),
+                        "holds": describe_expect(step),
+                    },
+                    indent=2,
+                )
+                + "\n",
+            )
         elif step.do.traffic is not None:
             chosen = {
                 variant: {"assigned": p.assigned, "converted": p.converted}
@@ -1785,6 +1846,10 @@ class JourneyRunner:
                 observed, snapshot = self._services_step(
                     step, running, journey_id, number
                 )
+            elif step.do.kind == "relaunch":
+                observed, snapshot = self._relaunch_step(
+                    step, running, journey_id, number
+                )
             else:
                 if step.do.kind == "search":
                     observed = self._search_step(step, page, running)
@@ -1811,6 +1876,7 @@ class JourneyRunner:
                     "run": ".run.json",
                     "finish": ".run.json",
                     "services": ".services.json",
+                    "relaunch": ".relaunch.json",
                 }.get(step.do.kind, ".api.json")
                 snapshot = self._write(
                     self._name(journey_id, number, step, suffix),

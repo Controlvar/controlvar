@@ -122,6 +122,12 @@ def describe_action(step: Step) -> str:
             f"watch the compose services {', '.join(plan.running)} for"
             f" {plan.for_seconds} s{counted}"
         )
+    if do.relaunch is not None:
+        return (
+            "bring the stack down with its volumes, start it with the page's demo"
+            " command less its SEED=, then run the page's command once more, with"
+            " no down -v between"
+        )
     return "its shell blocks, run by Doc Examples"
 
 
@@ -179,6 +185,11 @@ def describe_expect(step: Step) -> str:
         if plan.growing:
             held += f"; the {plan.growing} are more at the end than at the start"
         return held
+    if step.do.relaunch is not None:
+        return (
+            "after the start without the seeds the apps' key files are absent; the"
+            " page's command then exits 0 and the API reports the journey's profile"
+        )
     if step.do.run is not None and step.do.run.background:
         return (
             "it starts; a later finish step checks how it ended, within"

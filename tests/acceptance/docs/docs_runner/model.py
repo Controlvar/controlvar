@@ -208,6 +208,16 @@ end of that time than at its start. Its check is the action itself: no
 ``expect``, no screen. The time is the property checked (a simulator that
 loops dies within seconds and is restarted), not a wait for something to
 happen, so it is bounded and named for what it holds.
+
+``relaunch: recovery`` (compose-demo only) walks the page's recovery note, "If
+you already started the profile without them, run the command above once: it
+applies the missing seeds to the existing database, with no down -v"
+(``stacks.ComposeDemo.relaunch``): the stack is brought down with its volumes,
+started with the page's demo command less its ``SEED=`` (the start a reader
+who left the seeds out made; its exit status is not held), checked to be
+without the apps' keys, and then given the page's command as written, which
+must exit 0, with no ``down -v`` between the two. Its check is the action
+itself: no ``expect``, no screen. The steps after it hold the stack it leaves.
 """
 
 from __future__ import annotations
@@ -272,6 +282,11 @@ SERVICE_STACKS = ("compose-demo",)
 #: What a ``services`` step may count, at the start and the end of its time:
 #: the rows of the stack's events table (``services.COUNTS``).
 Countable = Literal["events"]
+#: The stacks a ``relaunch`` step brings down and up again: only the one
+#: started with the page's demo command, whose recovery note it walks.
+RELAUNCH_STACKS = ("compose-demo",)
+#: How a ``relaunch`` step starts the stack again: as the recovery note says.
+Relaunch = Literal["recovery"]
 Profile = Literal["core", "full"]
 
 #: Who an ``api`` step calls as: nobody, or one of the four role accounts the
@@ -729,6 +744,9 @@ class Do(_Strict):
     finish: Optional[StrictStr] = Field(default=None, pattern=SLUG_PATTERN)
     #: compose-demo only: compose services that keep running (``services.py``).
     services: Optional[Services] = None
+    #: compose-demo only: the stack down and up again as the page's recovery
+    #: note says (``stacks.ComposeDemo.relaunch``).
+    relaunch: Optional[Relaunch] = None
 
     @model_validator(mode="after")
     def _exactly_one(self) -> "Do":
@@ -737,7 +755,7 @@ class Do(_Strict):
             raise ValueError(
                 "do must be exactly one of goto, open, click, fill, select, keep,"
                 f" api, traffic, evaluations, sdk, ref, search, crawl, run, finish,"
-                f" services; got {given or 'none'}"
+                f" services, relaunch; got {given or 'none'}"
             )
         return self
 
