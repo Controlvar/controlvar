@@ -1,4 +1,4 @@
-"""The seven stacks a journey runs against. ``conftest.py`` makes each a fixture.
+"""The eight stacks a journey runs against. ``conftest.py`` makes each a fixture.
 
 * ``compose-dev``: the Docker guide's ``docker compose up -d --wait`` at the
   repository root, under its own compose project, with its own host ports, and
@@ -78,6 +78,49 @@
   administrator's address and password). It shares compose-dev's project,
   ports and images, so whichever of the compose stacks comes up brings the
   other down first, and it always starts from an empty database (``down -v``).
+
+* ``compose-demo``: ``docker-compose.yml``'s demo profile, started with the
+  demo command ``docs/getting-started/docker-compose-file.md`` gives (the one
+  shell block of its "Services" section that runs ``docker compose --profile
+  demo ... up``), read from the page at run time and run as the page writes it
+  (``sh -c``, from the repository root), so the command a reader copies is the
+  one that is run. Like compose-dev it runs under a compose project, host
+  ports and image tag of its own, with nothing else of the caller's
+  environment, no ``.env`` file and no AWS configuration, and starts from
+  ``down -v``; unlike it, it adds no ``--build`` and no ``--wait`` the page
+  does not give. Instead the images of its own tag (``<project>-<profile>``,
+  as ``docker compose config --images`` lists them with the demo profile) are
+  removed first and checked gone, so the page's command builds them as on a
+  reader's first start; a compose file that names no image under that tag is
+  refused. Its defaults are apart from compose-dev's, so the two never share a
+  port or a project:
+
+  ======================================  ===========================  =======
+  variable                                compose variable it sets     default
+  ======================================  ===========================  =======
+  ``DOCS_JOURNEY_DEMO_COMPOSE_PROJECT``   the compose project name     ``docs-journeys-demo``
+  ``DOCS_JOURNEY_DEMO_API_PORT``          ``API_HOST_PORT``            28100
+  ``DOCS_JOURNEY_DEMO_DASHBOARD_PORT``    ``FRONTEND_HOST_PORT``       23100
+  ``DOCS_JOURNEY_DEMO_POSTGRES_PORT``     ``POSTGRES_HOST_PORT``       25532
+  ``DOCS_JOURNEY_DEMO_REDIS_PORT``        ``REDIS_HOST_PORT``          26479
+  ``DOCS_JOURNEY_DEMO_SHOPLAB_PORT``      ``SHOPLAB_HOST_PORT``        23200
+  ``DOCS_JOURNEY_DEMO_STREAMPULSE_PORT``  ``STREAMPULSE_HOST_PORT``    23300
+  ======================================  ===========================  =======
+
+  One deviation from a reader's stack, because its ports are moved:
+  ``CORS_ORIGINS`` is set to the dashboard's, ShopLab's and StreamPulse's
+  origins on this stack (``http://localhost:<port>``), as the compose file's
+  default lists them on the default ports; without it the API refuses the
+  apps' calls from the browser. The demo apps are built with the API's and
+  the dashboard's address on this stack (the compose file derives both from
+  ``API_HOST_PORT`` and ``FRONTEND_HOST_PORT``). ``published`` maps each
+  default host port of the four services a browser opens (3000, 8000, 3200,
+  3300) to where it runs here. The command must exit 0; after it the API must
+  report the journey's profile. Its ``Running.compose`` lets a ``services``
+  step watch the project's services (``services.py``). It is brought down
+  (``down -v``, with the demo profile) when the session ends, and the images
+  of its tag are removed then too. ``DOCS_JOURNEY_DEMO_COMPOSE_TIMEOUT``
+  (seconds, default 2400) bounds the page's command.
 
 A command that cannot be started at all (no ``docker``, no ``npm``) is a
 ``StackError`` like one that fails, so the journey is reported FAIL before its
@@ -252,6 +295,9 @@ class Running:
     #: demo-local only: the checkout the script set up, where a ``run`` step's
     #: block runs (``commands.py``).
     checkout: Optional[Path] = None
+    #: compose-demo only: its compose project's services, which a ``services``
+    #: step watches (``services.ComposeServices``).
+    compose: Optional[Any] = None
 
 
 def free_port() -> int:
@@ -746,6 +792,284 @@ class ComposeEmpty(ComposeDev):
         return env
 
 
+#: compose-demo: the page whose demo command the stack runs, and the section
+#: (its anchor) that holds the command.
+DEMO_COMPOSE_GUIDE = "getting-started/docker-compose-file.md"
+DEMO_COMPOSE_SECTION = "services"
+#: The page's demo command: a one-line shell block that runs ``docker compose``
+#: with ``--profile demo`` and ``up``.
+DEMO_COMMAND = re.compile(r"\bdocker compose\b.*\s--profile demo\s.*\bup\b")
+#: (our variable, the compose variable, the default host port) for compose-demo.
+DEMO_COMPOSE_PORTS: Tuple[Tuple[str, str, int], ...] = (
+    ("DOCS_JOURNEY_DEMO_API_PORT", "API_HOST_PORT", 28100),
+    ("DOCS_JOURNEY_DEMO_DASHBOARD_PORT", "FRONTEND_HOST_PORT", 23100),
+    ("DOCS_JOURNEY_DEMO_POSTGRES_PORT", "POSTGRES_HOST_PORT", 25532),
+    ("DOCS_JOURNEY_DEMO_REDIS_PORT", "REDIS_HOST_PORT", 26479),
+    ("DOCS_JOURNEY_DEMO_SHOPLAB_PORT", "SHOPLAB_HOST_PORT", 23200),
+    ("DOCS_JOURNEY_DEMO_STREAMPULSE_PORT", "STREAMPULSE_HOST_PORT", 23300),
+)
+#: The compose variables of the four services a browser opens on compose-demo.
+DEMO_HTTP_PORT_VARIABLES = (
+    "API_HOST_PORT",
+    "FRONTEND_HOST_PORT",
+    "SHOPLAB_HOST_PORT",
+    "STREAMPULSE_HOST_PORT",
+)
+#: The origins the API accepts the browser's calls from on compose-demo: the
+#: compose file's default list (the dashboard, ShopLab, StreamPulse) on its ports.
+DEMO_CORS_VARIABLES = (
+    "FRONTEND_HOST_PORT",
+    "SHOPLAB_HOST_PORT",
+    "STREAMPULSE_HOST_PORT",
+)
+
+
+def demo_command(repo_root: Path) -> str:
+    """The demo command docker-compose-file.md's "Services" section gives, as written."""
+    from docs_runner import commands
+    from docs_runner import guide as guides
+
+    try:
+        page = guides.load(repo_root / "docs", DEMO_COMPOSE_GUIDE)
+    except OSError as error:
+        raise StackError(f"docs/{DEMO_COMPOSE_GUIDE} cannot be read: {error}") from None
+    section = page.section(DEMO_COMPOSE_SECTION)
+    if not section:
+        raise StackError(
+            f"docs/{DEMO_COMPOSE_GUIDE} has no section #{DEMO_COMPOSE_SECTION}"
+        )
+    found = [
+        block for block in commands.shell_blocks(section) if DEMO_COMMAND.search(block)
+    ]
+    where = f"docs/{DEMO_COMPOSE_GUIDE}#{DEMO_COMPOSE_SECTION}"
+    if len(found) != 1:
+        raise StackError(
+            f"{where} gives {len(found)} shell blocks that start the demo profile"
+            " (docker compose --profile demo ... up); the stack runs exactly one"
+        )
+    if "\n" in found[0].strip():
+        raise StackError(f"{where}'s demo command is not one line")
+    return found[0].strip()
+
+
+class ComposeDemo(ComposeDev):
+    """docker-compose.yml's demo profile, started with the page's own demo command."""
+
+    NAME = "compose-demo"
+    #: The address a reader opens the apps at (and the origins the API accepts).
+    HOST = "localhost"
+    #: The compose profile the page's command starts, given to every other
+    #: compose command of the stack so they reach the demo services too.
+    PROFILE_ARGS: Tuple[str, ...] = ("--profile", "demo")
+
+    def __init__(self, repo_root: Path, logs: Path, environ: Mapping[str, str]):
+        super().__init__(repo_root, logs, environ)
+        self.project = environ.get(
+            "DOCS_JOURNEY_DEMO_COMPOSE_PROJECT", "docs-journeys-demo"
+        )
+        self.ports = {
+            compose: _port(environ, ours, default)
+            for ours, compose, default in DEMO_COMPOSE_PORTS
+        }
+        self.timeout = float(environ.get("DOCS_JOURNEY_DEMO_COMPOSE_TIMEOUT", "2400"))
+        #: The page's command, read when the stack comes up.
+        self.command = ""
+
+    def env(self, profile: str) -> Dict[str, str]:
+        env = super().env(profile)
+        env["CORS_ORIGINS"] = ",".join(
+            f"http://{self.HOST}:{self.ports[name]}" for name in DEMO_CORS_VARIABLES
+        )
+        return env
+
+    def image_tag(self, profile: str) -> str:
+        """The tag of the images this stack builds: compose-dev's rule
+        (``<project>-<profile>``, ``ComposeDev.env``) on this stack's project."""
+        return f"{self.project}-{profile}"
+
+    def compose_args(self) -> List[str]:
+        """The start of every compose command of the stack but the page's own."""
+        return ["docker", "compose", "-p", self.project, *self.PROFILE_ARGS]
+
+    def _compose(self, profile: str, *args: str, timeout: float) -> Optional[int]:
+        return _run_logged(
+            [*self.compose_args(), *args],
+            cwd=self.repo_root,
+            env=self.env(profile),
+            log=self.log,
+            timeout=timeout,
+        )
+
+    def own_images(self, profile: str) -> List[str]:
+        """The images of this stack's tag that the compose file names, from
+        ``docker compose config --images`` with the demo profile."""
+        argv = [*self.compose_args(), "config", "--images"]
+        self.log.parent.mkdir(parents=True, exist_ok=True)
+        with self.log.open("a", encoding="utf-8") as handle:
+            handle.write(f"$ {' '.join(argv)}\n")
+            try:
+                done = subprocess.run(
+                    argv,
+                    cwd=self.repo_root,
+                    env=self.env(profile),
+                    stdout=subprocess.PIPE,
+                    stderr=handle,
+                    timeout=120,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                handle.write("(stopped after 120 s)\n")
+                raise StackError(
+                    f"docker compose config --images timed out; see stacks/{self.log.name}"
+                ) from None
+            except OSError as error:
+                handle.write(f"(could not start: {error})\n")
+                raise StackError(
+                    f"docker could not be started ({type(error).__name__});"
+                    f" see stacks/{self.log.name}"
+                ) from None
+            listed = done.stdout.decode("utf-8", errors="replace")
+            handle.write(listed)
+        if done.returncode != 0:
+            raise StackError(
+                f"docker compose config --images exited {done.returncode};"
+                f" see stacks/{self.log.name}"
+            )
+        suffix = f":{self.image_tag(profile)}"
+        images = sorted(
+            {
+                line.strip()
+                for line in listed.splitlines()
+                if line.strip().endswith(suffix)
+            }
+        )
+        if not images:
+            # Fail closed: with no image under this stack's tag, nothing could
+            # make the page's command build rather than reuse what is there.
+            raise StackError(
+                f"docker compose config --images lists no image tagged"
+                f" {suffix[1:]}; see stacks/{self.log.name}"
+            )
+        return images
+
+    def remove_own_images(self, profile: str) -> None:
+        """Remove the images of this stack's tag, and check that none is left."""
+        images = self.own_images(profile)
+        for image in images:
+            _run_logged(
+                ["docker", "image", "rm", "--force", image],
+                cwd=self.repo_root,
+                env=self.env(profile),
+                log=self.log,
+                timeout=120,
+            )
+        left = [
+            image
+            for image in images
+            if _run_logged(
+                ["docker", "image", "inspect", "--format", "{{.Id}}", image],
+                cwd=self.repo_root,
+                env=self.env(profile),
+                log=self.log,
+                timeout=60,
+            )
+            == 0
+        ]
+        if left:
+            raise StackError(
+                f"the images {', '.join(left)} are still there after docker image rm;"
+                f" see stacks/{self.log.name}"
+            )
+
+    def prepare(self, profile: str) -> None:
+        self.command = demo_command(self.repo_root)
+        self.remove_own_images(profile)
+
+    def published(self) -> Dict[int, str]:
+        """The default host ports of the services a browser opens, each mapped here."""
+        defaults = compose_default_ports(self.repo_root / "docker-compose.yml")
+        missing = [name for name in DEMO_HTTP_PORT_VARIABLES if name not in defaults]
+        if missing:
+            raise StackError(
+                f"docker-compose.yml gives no default host port for {missing[0]}"
+            )
+        return {
+            defaults[name]: f"http://{self.HOST}:{self.ports[name]}"
+            for name in DEMO_HTTP_PORT_VARIABLES
+        }
+
+    def services(self, profile: str):
+        from docs_runner.services import ComposeServices
+
+        return ComposeServices(
+            self.compose_args(), self.repo_root, self.env(profile), self.log
+        )
+
+    def up(self, profile: str) -> Running:
+        if self.running is not None and self.running.profile == profile:
+            return self.running
+        published = self.published()
+        self.down()
+        self._clear(profile)
+        try:
+            self.prepare(profile)
+        except StackError:
+            self._clear(profile)
+            raise
+        except OSError as error:
+            self._clear(profile)
+            raise StackError(
+                f"the {self.NAME} stack could not be prepared: {error}"
+            ) from None
+        started = time.monotonic()
+        status = _run_logged(
+            ["sh", "-c", self.command],
+            cwd=self.repo_root,
+            env=self.env(profile),
+            log=self.log,
+            timeout=self.timeout,
+        )
+        if status != 0:
+            self._clear(profile)
+            raise StackError(
+                f"the page's demo command ({self.command}) "
+                + ("timed out" if status is None else f"exited {status}")
+                + f"; its output is in stacks/{self.log.name}"
+            )
+        api_url = f"http://{self.HOST}:{self.ports['API_HOST_PORT']}"
+        self.running = Running(
+            name=self.NAME,
+            base_url=f"http://{self.HOST}:{self.ports['FRONTEND_HOST_PORT']}/",
+            api_url=api_url,
+            profile=profile,
+            accounts=self.ACCOUNTS,
+            published=published,
+            up_seconds=time.monotonic() - started,
+            compose=self.services(profile),
+        )
+        _COMPOSE_UP[self.project] = self
+        try:
+            served = self._served_profile(api_url)
+            if served != profile:
+                raise StackError(
+                    f"the stack serves the {served} profile, not {profile}"
+                )
+        except StackError:
+            self.down()
+            raise
+        return self.running
+
+    def _clear(self, profile: str) -> None:
+        # With the demo profile, so its services are taken down with the rest.
+        self._compose(profile, "down", "-v", "--remove-orphans", timeout=600)
+
+    def down(self) -> None:
+        profile = self.running.profile if self.running is not None else ""
+        super().down()
+        if profile:
+            self.remove_own_images(profile)
+
+
 class DocsLocal:
     def __init__(self, repo_root: Path, logs: Path, environ: Mapping[str, str]):
         self.repo_root = repo_root
@@ -1172,6 +1496,7 @@ STACK_CLASSES = {
     "compose-dev": ComposeDev,
     "compose-empty": ComposeEmpty,
     "compose-sso": ComposeSso,
+    "compose-demo": ComposeDemo,
     "docs-local": DocsLocal,
     "docs-published": DocsPublished,
     "marketing-local": MarketingLocal,

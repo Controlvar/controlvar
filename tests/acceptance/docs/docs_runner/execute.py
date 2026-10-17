@@ -69,7 +69,11 @@ checkout's sdk/go.
 
 A ``traffic`` step writes ``NN-<step>.expected.json`` (the population chosen,
 written before it is sent) and ``NN-<step>.traffic.json`` (what was sent and
-answered, in counts). Values an api step saves (``values.py``) are the
+answered, in counts). A ``services`` step (``services.py``) writes
+``NN-<step>.expected.json`` (the services, the time and the count it holds,
+written before it runs) and ``NN-<step>.services.json`` (each service's state at
+the start and the end, the counts, the problems and, for a service that failed,
+its last log lines). Values an api step saves (``values.py``) are the
 journey's own, cleared when the next journey starts; a value saved as a secret
 is kept with the journey's other secrets and goes to the redactor.
 
@@ -100,6 +104,7 @@ from playwright.sync_api import Error as PlaywrightError
 
 from docs_runner import commands, redaction, registry, sdk, site, values, waiting
 from docs_runner import pacer as pacing
+from docs_runner import services as compose_services
 from docs_runner import traffic as population
 from docs_runner.checks import (
     OBSERVED_CHARS,
@@ -139,7 +144,7 @@ TITLE_CARD_MS = 1500
 #: The longest line a walkthrough's caption bar draws.
 CAPTION_CHARS = 180
 #: The kinds of step that do nothing on the screen: their caption shows their result.
-OFF_SCREEN = ("api", "traffic", "evaluations", "ref", "run", "finish")
+OFF_SCREEN = ("api", "traffic", "evaluations", "ref", "run", "finish", "services")
 #: Reads what a page draws: its rendered text, each field's placeholder, the
 #: text of every open shadow root, and each field's type and value (in the
 #: document and in those shadow roots). Same-origin frames, closed shadow
@@ -798,6 +803,31 @@ class JourneyRunner:
             ),
             snapshot,
         )
+
+    # -- compose services left running (services.py) ------------------------
+    def _services_step(
+        self, step: Step, running: Running, journey_id: str, number: int
+    ) -> Tuple[str, str]:
+        """Watch the step's services for its time; what was seen is written."""
+        plan = step.do.services
+        name = self._name(journey_id, number, step, ".services.json")
+        if running.compose is None:
+            raise _Failed(
+                f"the {running.name} stack has no compose services to watch",
+                self._write(
+                    name,
+                    json.dumps({"error": "no compose services on this stack"}) + "\n",
+                ),
+            )
+        watched = compose_services.watch(
+            running.compose, plan.running, plan.for_seconds, plan.growing
+        )
+        snapshot = self._write(
+            name, json.dumps(watched.record(), indent=2, ensure_ascii=False) + "\n"
+        )
+        if watched.problems:
+            raise _Failed(self._line("; ".join(watched.problems)), snapshot)
+        return self._line(watched.summary()), snapshot
 
     def _evaluations_step(
         self, step: Step, api, journey_id: str, number: int
@@ -1670,6 +1700,21 @@ class JourneyRunner:
                 )
                 + "\n",
             )
+        elif step.do.services is not None:
+            plan = step.do.services
+            expected_snapshot = self._write(
+                self._name(journey_id, number, step, ".expected.json"),
+                json.dumps(
+                    {
+                        "running": list(plan.running),
+                        "for_seconds": plan.for_seconds,
+                        "growing": plan.growing,
+                        "holds": describe_expect(step),
+                    },
+                    indent=2,
+                )
+                + "\n",
+            )
         elif step.do.traffic is not None:
             chosen = {
                 variant: {"assigned": p.assigned, "converted": p.converted}
@@ -1736,6 +1781,10 @@ class JourneyRunner:
                 observed, snapshot = self._run_step(step, running, journey_id, number)
             elif step.do.kind == "finish":
                 observed, snapshot = self._finish_step(step, journey_id, number)
+            elif step.do.kind == "services":
+                observed, snapshot = self._services_step(
+                    step, running, journey_id, number
+                )
             else:
                 if step.do.kind == "search":
                     observed = self._search_step(step, page, running)
@@ -1761,6 +1810,7 @@ class JourneyRunner:
                     "sdk": ".sdk.json",
                     "run": ".run.json",
                     "finish": ".run.json",
+                    "services": ".services.json",
                 }.get(step.do.kind, ".api.json")
                 snapshot = self._write(
                     self._name(journey_id, number, step, suffix),
