@@ -120,7 +120,9 @@
   step watch the project's services (``services.py``). It is brought down
   (``down -v``, with the demo profile) when the session ends, and the images
   of its tag are removed then too. ``DOCS_JOURNEY_DEMO_COMPOSE_TIMEOUT``
-  (seconds, default 2400) bounds the page's command.
+  (seconds, default 1500) bounds the page's command: compose-demo sorts first
+  in a job whose own timeout is 60 minutes, so a build that hangs fails this
+  journey alone and leaves the session time for the others.
 
 A command that cannot be started at all (no ``docker``, no ``npm``) is a
 ``StackError`` like one that fails, so the journey is reported FAIL before its
@@ -808,6 +810,10 @@ DEMO_COMPOSE_PORTS: Tuple[Tuple[str, str, int], ...] = (
     ("DOCS_JOURNEY_DEMO_SHOPLAB_PORT", "SHOPLAB_HOST_PORT", 23200),
     ("DOCS_JOURNEY_DEMO_STREAMPULSE_PORT", "STREAMPULSE_HOST_PORT", 23300),
 )
+#: compose-demo: how long the page's command may take, in seconds, by default.
+#: Under the docs-journeys job's 60 minutes with room for the rest of the
+#: session (about 15 minutes on main), so a hung build fails this journey only.
+DEMO_COMPOSE_TIMEOUT = 1500
 #: The compose variables of the four services a browser opens on compose-demo.
 DEMO_HTTP_PORT_VARIABLES = (
     "API_HOST_PORT",
@@ -871,7 +877,9 @@ class ComposeDemo(ComposeDev):
             compose: _port(environ, ours, default)
             for ours, compose, default in DEMO_COMPOSE_PORTS
         }
-        self.timeout = float(environ.get("DOCS_JOURNEY_DEMO_COMPOSE_TIMEOUT", "2400"))
+        self.timeout = float(
+            environ.get("DOCS_JOURNEY_DEMO_COMPOSE_TIMEOUT", str(DEMO_COMPOSE_TIMEOUT))
+        )
         #: The page's command, read when the stack comes up.
         self.command = ""
 

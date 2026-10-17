@@ -555,6 +555,30 @@ def test_down_clears_the_demo_profile_and_removes_its_images(tree, monkeypatch):
     ]
 
 
+def test_the_page_command_is_bounded_well_inside_the_jobs_hour(tree, monkeypatch):
+    """compose-demo sorts first in a job of 60 minutes (about 15 on main): a
+    hung build must fail this journey, not the job and every verdict in it."""
+    stack = _stack(ComposeDemo, tree, monkeypatch)
+    assert stack.timeout == stacks.DEMO_COMPOSE_TIMEOUT == 1500
+    bounds = []
+    real = stacks._run_logged
+
+    def spy(argv, **kwargs):
+        if argv[:2] == ["sh", "-c"]:
+            bounds.append(kwargs["timeout"])
+        return real(argv, **kwargs)
+
+    monkeypatch.setattr(stacks, "_run_logged", spy)
+    stack.up("core")
+    assert bounds == [1500.0]
+    moved = ComposeDemo(
+        tree,
+        tree.parent / "run",
+        {**_environ(tree), "DOCS_JOURNEY_DEMO_COMPOSE_TIMEOUT": "900"},
+    )
+    assert moved.timeout == 900.0
+
+
 # ---------------------------------------------------------------------------
 # The watch (services.py), against the fake docker
 # ---------------------------------------------------------------------------
