@@ -65,11 +65,11 @@ func fail(format string, args ...interface{}) {
 }
 
 func main() {
-	apiKey := env("CONTROLVAR_API_KEY", os.Getenv("EXPERIMENTLY_API_KEY"))
+	apiKey := env("EXPERIMENTLY_API_KEY", os.Getenv("CONTROLVAR_API_KEY"))
 	if apiKey == "" {
 		fail("CONTROLVAR_API_KEY is required")
 	}
-	baseURL := env("CONTROLVAR_API_URL", env("EXPERIMENTLY_API_URL", "http://localhost:8000"))
+	baseURL := env("EXPERIMENTLY_API_URL", env("CONTROLVAR_API_URL", "http://localhost:8000"))
 	experimentKey := env("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab")
 	flagKey := env("CONTRACT_FLAG_KEY", "sdk_contract_flag")
 	userID := env("CONTRACT_USER_ID", randomUserID())
