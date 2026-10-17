@@ -121,6 +121,10 @@ text = "On 2026-10-02 (UTC) a job of this repository bound to the staging enviro
 by = ["evidence:https://github.com/getexperimently/experimently/actions/runs/36972395116"]
 
 [[unit]]
+text = "On 2026-10-17 (UTC), after the repository moved, a job bound to the staging environment received repo:Controlvar@341280474/controlvar@1367480368:environment:staging (run)."
+by = ["evidence:https://github.com/Controlvar/controlvar/actions/runs/39047349118"]
+
+[[unit]]
 text = "A fork or a copy of this repository has another prefix: the OIDC subject probe below prints yours."
 by = ["exempt:instruction"]
 

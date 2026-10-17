@@ -10,7 +10,7 @@
       "Condition": {
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-          "token.actions.githubusercontent.com:sub": "repo:getexperimently@328439352/experimently@1367480368:environment:<ENVIRONMENT>"
+          "token.actions.githubusercontent.com:sub": "repo:Controlvar@341280474/controlvar@1367480368:environment:<ENVIRONMENT>"
         }
       }
     }

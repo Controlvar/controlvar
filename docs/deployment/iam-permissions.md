@@ -59,7 +59,7 @@ is the template. Replace `<AWS_ACCOUNT_ID>` and `<ENVIRONMENT>` (`staging` or
 exactly -- `StringEquals`, no wildcard:
 
 ```
-repo:getexperimently@328439352/experimently@1367480368:environment:<ENVIRONMENT>
+repo:Controlvar@341280474/controlvar@1367480368:environment:<ENVIRONMENT>
 ```
 
 That is GitHub's **immutable subject**: the owner and the repository by name
@@ -67,6 +67,9 @@ That is GitHub's **immutable subject**: the owner and the repository by name
 `staging` environment received
 `repo:getexperimently@328439352/experimently@1367480368:environment:staging`
 ([run](https://github.com/Controlvar/controlvar/actions/runs/36972395116)).
+On 2026-10-17 (UTC), after the repository moved, a job bound to the `staging`
+environment received `repo:Controlvar@341280474/controlvar@1367480368:environment:staging`
+([run](https://github.com/Controlvar/controlvar/actions/runs/39047349118)).
 A fork or a copy of this repository has another prefix: the OIDC subject probe
 below prints yours. The `:environment:<name>` suffix is what a job that declares
 `environment:` receives, which is the only kind of job in these workflows that

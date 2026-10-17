@@ -36,7 +36,7 @@ SCRIPT = REPO_ROOT / "scripts" / "iam_actions.py"
 POLICY = REPO_ROOT / "infrastructure" / "cdk" / "github-actions-deploy-policy.json"
 TRUST = REPO_ROOT / "infrastructure" / "cdk" / "github-actions-trust-policy.json"
 SUBJECT = (
-    "repo:getexperimently@328439352/experimently@1367480368:environment:<ENVIRONMENT>"
+    "repo:Controlvar@341280474/controlvar@1367480368:environment:<ENVIRONMENT>"
 )
 
 pytestmark = pytest.mark.skipif(

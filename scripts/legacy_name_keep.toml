@@ -2154,18 +2154,6 @@ count = 1
 reason = "C16: the planted case for the former organisation"
 
 [[keep]]
-path = "backend/tests/unit/infrastructure/test_deploy_role_policy.py"
-literal = "getexperimently@328439352/experimently@1367480368"
-count = 2
-reason = "S7/C8: the OIDC subject; replaced by the probed value in the window, never by a predicted one"
-
-[[keep]]
-path = "backend/tests/unit/infrastructure/test_iam_actions.py"
-literal = "getexperimently@328439352/experimently@1367480368"
-count = 2
-reason = "S7/C8: the OIDC subject; replaced by the probed value in the window, never by a predicted one"
-
-[[keep]]
 path = "docs/_claims/docs/deployment/iam-permissions.md.toml"
 literal = "getexperimently@328439352/experimently@1367480368"
 count = 2
@@ -2173,12 +2161,6 @@ reason = "S7/C8: the OIDC subject; replaced by the probed value in the window, n
 
 [[keep]]
 path = "docs/deployment/iam-permissions.md"
-literal = "getexperimently@328439352/experimently@1367480368"
-count = 4
-reason = "S7/C8: the OIDC subject; replaced by the probed value in the window, never by a predicted one"
-
-[[keep]]
-path = "infrastructure/cdk/github-actions-trust-policy.json"
 literal = "getexperimently@328439352/experimently@1367480368"
 count = 2
 reason = "S7/C8: the OIDC subject; replaced by the probed value in the window, never by a predicted one"
