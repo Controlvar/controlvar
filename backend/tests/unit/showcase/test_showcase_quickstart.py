@@ -805,6 +805,16 @@ def test_a_render_of_the_uvicorn_stack_is_refused_at_preflight(tmp_path):
         run.preflight(options, {"HOME": str(tmp_path)})
 
 
+def test_without_a_ref_the_tool_records_v0_36_0_on_the_quickstart_stack(tmp_path):
+    """``make showcase VIDEO=<slug>`` with no REF records v0.36.0 (T174) on the
+    Quick Start stack; an empty ref is refused, never defaulted."""
+    environ = {"HOME": str(tmp_path), "TMPDIR": str(tmp_path)}
+    made = run.parse_args(["01-getting-started"], environ)
+    assert (made.ref, made.stack, made.render) == ("v0.36.0", "quickstart", True)
+    with pytest.raises(guard.Refused, match="an empty ref names no release"):
+        run.parse_args(["01-getting-started", "--ref", ""], environ)
+
+
 @pytest.fixture
 def plenty_of_disk(monkeypatch):
     monkeypatch.setattr(pipeline, "check_disk", lambda paths, floor: {})

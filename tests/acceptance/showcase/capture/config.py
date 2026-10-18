@@ -94,10 +94,10 @@ IMAGE_PROFILE_LABEL = "io.experimently.profile"
 POSTGRES_IMAGE = "postgres:16-alpine"
 #: The Playwright the tool was written against (tests/acceptance/requirements.txt).
 PLAYWRIGHT_VERSION = "1.63.0"
-#: The release the storyboards were last validated against: the default --ref.
-#: Empty until one is: video 1 needs the one-line header (#1069), which no
-#: release carried when it was written, so --ref is required until then.
-DEFAULT_REF = ""
+#: The release recorded when --ref is not given (make showcase without REF):
+#: v0.36.0, the release the launch videos are recorded on (T174). This names
+#: what is recorded; a run on that release is what shows the storyboards pass.
+DEFAULT_REF = "v0.36.0"
 
 # ---------------------------------------------------------------------------
 # The frame

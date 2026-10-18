@@ -1294,8 +1294,8 @@ def parse_args(argv: List[str], environ: Mapping[str, str]) -> Options:
     args = parser.parse_args(argv)
     if not args.ref:
         raise guard.Refused(
-            "give --ref (make showcase REF=<release tag>): no release has been"
-            " validated against the storyboards yet"
+            "give --ref (make showcase REF=<release tag>): an empty ref names no"
+            " release"
         )
     videos = list(config.VIDEOS) if args.video == "all" else [args.video]
     if args.voice not in (contract.SILENT, *contract.VOICES):
