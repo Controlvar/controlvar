@@ -12,6 +12,7 @@ every call it gets (its argv and the names in its environment) to a log.
 from __future__ import annotations
 
 import json
+import re
 import stat
 import sys
 from pathlib import Path
@@ -868,6 +869,49 @@ def make_stack_manifest() -> Dict[str, Any]:
             "frontend": {"image": f"experimently-web:{tag}", "id": WEB_ID},
         },
     }
+
+
+# --- What a video says about the stack it runs on (D84) -------------------------------
+
+#: What only the uvicorn stack made true: the tool's own stack, run without
+#: Redis. A video is rendered from the Quick Start stack alone
+#: (``config.FINAL_STACK``), which runs Redis, so either is false in a video.
+#: Any case, any spacing, whole words only ("unknown stack" is not a hit).
+NOT_THE_QUICKSTART_STACK = re.compile(
+    r"\b(?:without|no)\s+redis\b|\bown\s+stack\b", re.IGNORECASE
+)
+
+
+@pytest.mark.regression
+def test_no_video_says_it_runs_on_the_tools_own_stack_or_without_redis():
+    """Review F1 of #1261: V1's stack card still said the recording ran "on the
+    showcase tool's own stack instead, without Redis" once every video was
+    recorded on the Quick Start's compose stack, Redis included, and no gate
+    saw it (D84's check is that a statement is on screen, not that it is
+    true). Every video's captions, card text and narration are read."""
+    found = [
+        (slug, scene.id, text)
+        for slug in config.VIDEOS
+        for scene in board(slug).scenes
+        for text in storyboard.scene_screen_text(scene)
+        + [sentence for beat in scene.beats for sentence in beat.say]
+        if NOT_THE_QUICKSTART_STACK.search(text)
+    ]
+    assert found == []
+
+
+@pytest.mark.regression
+def test_v1s_stack_card_says_its_stack_runs_in_its_own_project_on_other_ports():
+    """D84(a): the recording's own compose project and its moved ports, stated
+    on screen. No departure rule asks for them (``required_departures`` knows
+    off-camera work and simulated users), so this test does."""
+    card = board("01-getting-started").scenes[0].card
+    assert card.command == "docker compose up -d --wait"
+    for words in (
+        "This recording starts the same stack off camera",
+        "in its own compose project on other ports",
+    ):
+        assert words in card.note
 
 
 # --- V2's traffic at the default limit (EM C8) ----------------------------------------
