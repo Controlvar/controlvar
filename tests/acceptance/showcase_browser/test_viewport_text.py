@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from showcase.capture import director, gates
+from showcase.capture import config, director, gates
 from showcase.capture.storyboard import numbers_in
 
 #: Video 3's two sentences with a number (03-flag-rollout.yaml, beats 5 and 8).
@@ -128,6 +128,41 @@ def test_an_element_between_two_text_nodes_of_one_parent_ends_the_string(page):
 def test_two_elements_side_by_side_are_two_strings(page):
     page.set_content("<body><span>10</span><span>%</span></body>")
     assert read(page) == "10\n%"
+
+
+# --- U4 compares its forbidden text with the same strings ----------------------------------------
+
+
+@pytest.mark.regression
+def test_u4_sees_a_forbidden_string_drawn_across_two_text_nodes(page):
+    # Read one text node at a time, this was "local\nhost:3000", and no
+    # forbidden text was in it.
+    page.set_content("<body><span>local<!-- -->host:3000</span></body>")
+    reading = read(page)
+    assert reading == "localhost:3000"
+    assert [text for text in config.FORBIDDEN_TEXT if text in reading] == ["localhost:"]
+
+
+# --- A string is read when any of its text nodes has a box on screen ------------------------------
+
+
+@pytest.mark.parametrize(
+    ("top", "which"),
+    [
+        (708, "first node on screen, second below the bottom edge"),
+        (-20, "first node above the top edge, second on screen"),
+    ],
+)
+def test_a_string_is_read_when_any_of_its_text_nodes_has_a_box_in_the_viewport(
+    page, top, which
+):
+    # One character a line, so the two text nodes sit on two lines. Letters,
+    # not "10%": a "%" never wraps away from the digit before it.
+    page.set_content(
+        f"<body><div style='position:absolute;left:0;top:{top}px;width:1px;"
+        "word-break:break-all;font:16px/18px sans-serif'>a<!-- -->b</div></body>"
+    )
+    assert read(page) == "ab", which
 
 
 # --- What was never read still is not -----------------------------------------------------------

@@ -11,8 +11,9 @@ in the showcase tool's own environment. Run them from the repository root::
 
 with ``tests/acceptance/requirements.txt`` installed, and Chromium installed
 for Playwright (``python -m playwright install chromium``). No CI job runs
-them, since none has a browser for them. Without Playwright or Chromium they
-fail; they are never skipped.
+them. Without Playwright or Chromium they fail; they are never skipped. A
+run started from the repository root over ``tests/acceptance`` leaves them
+out (``tests/acceptance/conftest.py``).
 
 This directory is its own pytest root (``pytest.ini``), so the repository's
 root ``conftest.py`` is not loaded. As in every other suite,

@@ -362,10 +362,10 @@ def test_a_number_the_page_does_not_show_is_refused():
     assert not gates.spoken_numbers("About 13 days.", "31,234 users", "31,234 users")[0]
 
 
-#: What director.VIEWPORT_TEXT_JS reads, measured in headless Chromium by
-#: tests/acceptance/showcase_browser/test_viewport_text.py (no CI job runs a
-#: browser): React's ``<span>{value}%</span>`` (two text nodes) since the fix,
-#: the same span before it, and "10" and "%" in two elements with one between.
+#: What director.VIEWPORT_TEXT_JS reads, measured in headless Chromium by the
+#: browser tests in tests/acceptance/showcase_browser (no CI job runs them):
+#: React's ``<span>{value}%</span>`` (two text nodes) since the fix, the same
+#: span before it, and "10" and "%" in two elements with one between.
 READ_SPLIT_SPAN = "10%"
 READ_SPLIT_SPAN_BEFORE_THE_FIX = "10\n%"
 READ_TWO_ELEMENTS = "10\nx\n%"
