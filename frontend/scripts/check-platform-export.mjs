@@ -22,6 +22,8 @@ import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const MEDIA_FILE = /\.(mp4|webm|vtt|srt)$/i;
+// A root-relative `/media/` path; Next's own `/_next/static/media/<asset>` is not one.
+const MEDIA_REFERENCE = /(?<![\w.~%/-])\/media\//;
 
 function* walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -40,7 +42,7 @@ export function platformProblems(outDir) {
   if (!html.includes('Sign in to the dashboard')) problems.push('out/index.html does not offer "Sign in to the dashboard": not the platform homepage');
   const videos = (html.match(/<video\b/gi) ?? []).length;
   if (videos) problems.push(`out/index.html has ${videos} <video>: the walkthroughs section rendered in the platform build`);
-  if (html.includes('/media/')) problems.push('out/index.html references /media/');
+  if (MEDIA_REFERENCE.test(html)) problems.push('out/index.html references /media/');
   if (existsSync(join(outDir, 'media'))) problems.push('out/media exists in the platform export');
   for (const path of walk(outDir)) {
     if (MEDIA_FILE.test(path)) problems.push(`the platform export carries ${relative(outDir, path)}`);

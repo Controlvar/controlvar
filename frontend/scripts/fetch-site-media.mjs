@@ -191,10 +191,16 @@ export function toSiteVtt(text) {
   return lines.join('\n');
 }
 
+/**
+ * A root-relative `/media/` path: not one inside another path, so Next's own
+ * `/_next/static/media/<asset>` (fonts, imported images) is not counted.
+ */
+export const MEDIA_PATH = /(?<![\w.~%/-])\/media\/([^"'\s<>)?#]*)/g;
+
 /** Every name the page references as `/media/<name>`. */
 export function mediaReferences(html) {
   const names = new Set();
-  for (const match of html.matchAll(/\/media\/([^"'\s<>)?#]*)/g)) names.add(match[1]);
+  for (const match of html.matchAll(MEDIA_PATH)) names.add(match[1]);
   return names;
 }
 

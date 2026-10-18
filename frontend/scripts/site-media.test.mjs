@@ -215,6 +215,11 @@ describe('the two-way reference check', () => {
     assert.equal(referenceProblems(mediaReferences(html), new Set(['a.mp4', 'a.jpg'])).length, 1);
     assert.equal(referenceProblems(mediaReferences(html), new Set(['a.mp4', 'a.jpg', 'a.site.vtt', 'b.mp4'])).length, 1);
   });
+
+  it("does not count Next's own /_next/static/media/ assets", () => {
+    const html = '<link rel="preload" href="/_next/static/media/font.woff2"/><img src="/_next/static/media/logo.png"/><video src="/media/a.mp4"></video>';
+    assert.deepEqual([...mediaReferences(html)], ['a.mp4']);
+  });
 });
 
 // --- main, end to end against a fake release -------------------------------------------
@@ -473,9 +478,13 @@ describe('platformProblems', () => {
     return dir;
   };
 
-  it('passes a platform export', () => {
+  it('passes a platform export, Next media assets included', () => {
     const dir = platform();
     assert.deepEqual(platformProblems(dir), []);
+    writeFileSync(join(dir, 'index.html'), '<link rel="preload" href="/_next/static/media/font.woff2"/><a href="/login">Sign in to the dashboard</a>');
+    assert.deepEqual(platformProblems(dir), []);
+    writeFileSync(join(dir, 'index.html'), '<a href="/login">Sign in to the dashboard</a><img src="/media/a.jpg"/>');
+    assert.ok(platformProblems(dir).some((p) => /references \/media\//.test(p)));
     rmSync(dir, { recursive: true });
   });
 
