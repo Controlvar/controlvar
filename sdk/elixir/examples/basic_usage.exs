@@ -1,25 +1,26 @@
-# Basic Usage Example — Experimently Elixir SDK
+# Basic Usage Example — Controlvar Elixir SDK
 #
 # Flag evaluation and experiment assignment are decided by the server through
 # the public API; this script shows every public call. Point it at a running
-# backend with EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY.
+# backend with CONTROLVAR_API_URL / CONTROLVAR_API_KEY.
 #
 # Run with:
 #   cd sdk/elixir
 #   mix deps.get
-#   EXPERIMENTLY_API_KEY=<key> mix run examples/basic_usage.exs
+#   CONTROLVAR_API_KEY=<key> mix run examples/basic_usage.exs
+# (earlier versions of this example read EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY.)
 
-alias Experimently.{Assignment, BatchResult, FlagEvaluation}
+alias Controlvar.{Assignment, BatchResult, FlagEvaluation}
 
 # -------------------------------------------------------------------
 # 1. Start the client
 # -------------------------------------------------------------------
-IO.puts("Starting Experimently client...")
+IO.puts("Starting Controlvar client...")
 
 {:ok, client} =
-  Experimently.start(
-    base_url: System.get_env("EXPERIMENTLY_API_URL", "http://localhost:8000"),
-    api_key: System.get_env("EXPERIMENTLY_API_KEY", "your-api-key-here"),
+  Controlvar.start(
+    base_url: System.get_env("CONTROLVAR_API_URL", "http://localhost:8000"),
+    api_key: System.get_env("CONTROLVAR_API_KEY", "your-api-key-here"),
     # Seconds a successful evaluation/assignment is reused
     cache_ttl: 300,
     # HTTP timeout in milliseconds
@@ -37,7 +38,7 @@ user_id = "user-#{System.unique_integer([:positive])}"
 
 IO.puts("Evaluating feature flag 'dark-mode' for user #{user_id}...")
 
-case Experimently.evaluate_flag(client, "dark-mode", user_id) do
+case Controlvar.evaluate_flag(client, "dark-mode", user_id) do
   {:ok, %FlagEvaluation{enabled: true, config: config}} ->
     IO.puts("  => Enabled for this user. Config: #{inspect(config)}")
 
@@ -58,7 +59,7 @@ case Experimently.evaluate_flag(client, "dark-mode", user_id) do
 end
 
 # Boolean shorthand: false on any failure.
-IO.puts("  feature_enabled?: #{Experimently.feature_enabled?(client, "dark-mode", user_id)}\n")
+IO.puts("  feature_enabled?: #{Controlvar.feature_enabled?(client, "dark-mode", user_id)}\n")
 
 # -------------------------------------------------------------------
 # 3. Get an experiment assignment (POST /api/v1/tracking/assign — sticky on the server)
@@ -66,7 +67,7 @@ IO.puts("  feature_enabled?: #{Experimently.feature_enabled?(client, "dark-mode"
 # -------------------------------------------------------------------
 IO.puts("Getting experiment assignment for 'checkout-flow-experiment'...")
 
-case Experimently.get_assignment(client, "checkout-flow-experiment", user_id, %{
+case Controlvar.get_assignment(client, "checkout-flow-experiment", user_id, %{
        plan: "pro",
        country: "US"
      }) do
@@ -92,7 +93,7 @@ IO.puts("Tracking events...")
 
 # With a key: one POST /api/v1/tracking/track attributed to the experiment.
 :ok =
-  Experimently.track(client, "purchase_completed", user_id, %{order_id: "ord-12345"},
+  Controlvar.track(client, "purchase_completed", user_id, %{order_id: "ord-12345"},
     experiment_key: "checkout-flow-experiment",
     value: 99.99
   )
@@ -101,7 +102,7 @@ IO.puts("  => Tracked: purchase_completed (experiment_key + value)")
 
 # With a flag key.
 :ok =
-  Experimently.track(client, "theme_toggled", user_id, %{to: "dark"},
+  Controlvar.track(client, "theme_toggled", user_id, %{to: "dark"},
     feature_flag_key: "dark-mode"
   )
 
@@ -110,11 +111,11 @@ IO.puts("  => Tracked: theme_toggled (feature_flag_key)")
 # Without a key: fanned out through POST /api/v1/tracking/batch to every
 # experiment the user was assigned to and every flag evaluated for the user
 # through this client. Nothing cached -> nothing sent.
-:ok = Experimently.track(client, "page_viewed", user_id, %{page: "checkout"})
+:ok = Controlvar.track(client, "page_viewed", user_id, %{page: "checkout"})
 IO.puts("  => Tracked: page_viewed (fanned out to cached assignments + flags)")
 
 # Several events at once (synchronous, max 100 per request).
-case Experimently.track_batch(client, [
+case Controlvar.track_batch(client, [
        %{event_name: "click", user_id: user_id, experiment_key: "checkout-flow-experiment"},
        %{event_name: "click", user_id: user_id, feature_flag_key: "dark-mode"}
      ]) do
@@ -131,15 +132,15 @@ IO.puts("")
 # 5. Cache helpers
 # -------------------------------------------------------------------
 IO.puts("Cached for #{user_id}:")
-IO.puts("  assignments:     #{inspect(Experimently.assignments(client, user_id))}")
-IO.puts("  evaluated flags: #{inspect(Experimently.evaluated_flags(client, user_id))}")
+IO.puts("  assignments:     #{inspect(Controlvar.assignments(client, user_id))}")
+IO.puts("  evaluated flags: #{inspect(Controlvar.evaluated_flags(client, user_id))}")
 IO.puts("")
 
 # -------------------------------------------------------------------
 # 6. Direct hash inspection (cross-SDK compatibility check; utility only)
 # -------------------------------------------------------------------
 IO.puts("Cross-SDK hash check:")
-h = Experimently.Evaluator.hash_user("user-123", "my-flag")
+h = Controlvar.Evaluator.hash_user("user-123", "my-flag")
 expected = 0.6927449859213084
 diff = abs(h - expected)
 IO.puts("  hash_user(\"user-123\", \"my-flag\") = #{h}")
@@ -152,5 +153,5 @@ IO.puts("")
 # 7. Stop the client (waits for in-flight track requests)
 # -------------------------------------------------------------------
 IO.puts("Stopping client...")
-Experimently.stop(client)
+Controlvar.stop(client)
 IO.puts("Done.")

@@ -4,7 +4,7 @@
 document = "docs/api/api-docs-guide.md"
 
 [[unit]]
-text = "Experimently API Documentation Guide"
+text = "Controlvar API Documentation Guide"
 by = ["exempt:baseline"]
 
 [[unit]]

@@ -5,7 +5,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:experimently/experimently.dart';
+import 'package:controlvar/controlvar.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -1,4 +1,4 @@
-# Experimently Infrastructure
+# Controlvar Infrastructure
 
 This directory contains AWS CDK code for deploying the experimentation platform infrastructure.
 

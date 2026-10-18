@@ -37,19 +37,19 @@ if str(SCRIPTS) not in sys.path:
 import docs_journeys_report as djr
 import qa_render
 
-REPO = "getexperimently/experimently"
-LINK = "https://github.com/getexperimently/experimently/actions/runs/18000000002"
+REPO = "Controlvar/controlvar"
+LINK = "https://github.com/Controlvar/controlvar/actions/runs/18000000002"
 SHA = "c6e0f081d82f1a858e111c86db62aa5d8b8a71d4"
 
 
 def fail_values(step: int = 2) -> Dict[str, str]:
     return {
-        "heading_guide": "Experimently Documentation",
+        "heading_guide": "Controlvar Documentation",
         "guide_path": "README.md",
         "date": "2026-10-06",
         "sha": SHA,
         "step_number": str(step),
-        "heading_step": "Experimently Documentation",
+        "heading_step": "Controlvar Documentation",
         "run_link": LINK,
         "count_steps_pass": str(step - 1),
         "count_steps": "7",
@@ -58,7 +58,7 @@ def fail_values(step: int = 2) -> Dict[str, str]:
 
 def pass_values() -> Dict[str, str]:
     return {
-        "heading_guide": "Experimently Documentation",
+        "heading_guide": "Controlvar Documentation",
         "guide_path": "README.md",
         "date": "2026-10-06",
         "sha": SHA,

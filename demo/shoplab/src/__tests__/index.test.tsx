@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, screen } from '@testing-library/react';
 import HomePage from '@/pages/index';
-import { __setExperiment, trackEventMock } from '@/__mocks__/experimently-sdk';
+import { __setExperiment, trackEventMock } from '@/__mocks__/controlvar-sdk';
 import { mockRouter } from '@/__mocks__/next-router';
 import { callsFor, renderPage, resetTestState } from '@/test-utils';
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, screen } from '@testing-library/react';
 import CheckoutPage, { flowFromConfiguration } from '@/pages/checkout';
 import { readCart, writeCart } from '@/lib/cart';
-import { __setExperiment, trackEventMock } from '@/__mocks__/experimently-sdk';
+import { __setExperiment, trackEventMock } from '@/__mocks__/controlvar-sdk';
 import { callsFor, renderPage, resetTestState } from '@/test-utils';
 
 const CART = [

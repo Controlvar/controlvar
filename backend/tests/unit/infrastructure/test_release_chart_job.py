@@ -53,6 +53,21 @@ def _index(runs: list[str], needle: str) -> int:
 # --- the job graph -----------------------------------------------------------
 
 
+def test_every_site_that_follows_the_chart_name_agrees() -> None:
+    """`helm package` names the archive after Chart.yaml's `name:`; the checker
+    and the upload must expect that file. The chart's directory keeps its
+    former name, so nothing here may be derived from the path."""
+    chart = yaml.safe_load(
+        (ROOT / "charts" / "experimently" / "Chart.yaml").read_text()
+    )
+    assert chart["name"] == "controlvar"
+    checker = CHECKER.read_text(encoding="utf-8")
+    assert f'CHART_NAME = "{chart["name"]}"' in checker
+    release = RELEASE.read_text(encoding="utf-8")
+    assert f'"dist/{chart["name"]}-${{VERSION}}.tgz"' in release
+    assert f'grep -Fx "{chart["name"]}-${{VERSION}}.tgz"' in release
+
+
 def test_chart_job_runs_after_the_release_exists() -> None:
     assert _needs(_jobs()["chart"]) == {"verify", "publish"}
 
@@ -108,15 +123,15 @@ def test_the_check_is_against_the_release_version() -> None:
     job = _jobs()["chart"]
     step = next(s for s in job["steps"] if "check_chart_package.py" in s.get("run", ""))
     assert '--expect "$VERSION"' in step["run"]
-    assert '"dist/experimently-${VERSION}.tgz"' in step["run"]
+    assert '"dist/controlvar-${VERSION}.tgz"' in step["run"]
     assert step["env"]["VERSION"] == "${{ needs.verify.outputs.version }}"
 
 
 def test_the_upload_replaces_on_a_rerun_and_confirms_the_asset() -> None:
     job = _jobs()["chart"]
     step = next(s for s in job["steps"] if "gh release upload" in s.get("run", ""))
-    assert '"dist/experimently-${VERSION}.tgz" --clobber' in step["run"]
-    assert 'grep -Fx "experimently-${VERSION}.tgz"' in step["run"]
+    assert '"dist/controlvar-${VERSION}.tgz" --clobber' in step["run"]
+    assert 'grep -Fx "controlvar-${VERSION}.tgz"' in step["run"]
     assert step["env"]["TAG"] == "${{ needs.verify.outputs.tag }}"
 
 
@@ -154,7 +169,7 @@ annotations:
   licenses: Apache-2.0
 apiVersion: v2
 appVersion: {app}
-description: 'Experimently: the API and the dashboard.'
+description: 'Controlvar: the API and the dashboard.'
 name: {name}
 type: application
 version: {version}
@@ -166,16 +181,16 @@ def _archive(
     *,
     version: str = "1.2.3",
     app: str = "1.2.3",
-    name: str = "experimently",
+    name: str = "controlvar",
     filename: str | None = None,
     extra: dict[str, str] | None = None,
 ) -> Path:
     """A .tgz shaped like `helm package` output (checked against helm 3.19)."""
-    path = tmp_path / (filename or f"experimently-{version}.tgz")
+    path = tmp_path / (filename or f"controlvar-{version}.tgz")
     files = {
-        "experimently/Chart.yaml": PACKAGED.format(app=app, name=name, version=version)
+        "controlvar/Chart.yaml": PACKAGED.format(app=app, name=name, version=version)
     }
-    files["experimently/values.yaml"] = "replicaCount: 1\n"
+    files["controlvar/values.yaml"] = "replicaCount: 1\n"
     files.update(extra or {})
     with tarfile.open(path, "w:gz") as tar:
         for member, text in files.items():
@@ -197,7 +212,7 @@ def _check(archive: Path, expect: str) -> subprocess.CompletedProcess:
 def test_checker_accepts_the_release(tmp_path: Path) -> None:
     result = _check(_archive(tmp_path), "1.2.3")
     assert result.returncode == 0, result.stderr
-    assert "packaged chart is experimently 1.2.3" in result.stdout
+    assert "packaged chart is controlvar 1.2.3" in result.stdout
 
 
 def test_checker_accepts_a_pre_release_and_quoted_values(tmp_path: Path) -> None:
@@ -210,16 +225,16 @@ def test_checker_accepts_a_pre_release_and_quoted_values(tmp_path: Path) -> None
     ("kwargs", "message"),
     [
         (
-            {"version": "1.2.2", "filename": "experimently-1.2.3.tgz"},
+            {"version": "1.2.2", "filename": "controlvar-1.2.3.tgz"},
             "version is '1.2.2'",
         ),
         ({"app": "1.2.2"}, "appVersion is '1.2.2'"),
         ({"app": "v1.2.3"}, "appVersion is 'v1.2.3'"),
-        ({"version": "1.2.3.0", "filename": "experimently-1.2.3.tgz"}, "version is"),
+        ({"version": "1.2.3.0", "filename": "controlvar-1.2.3.tgz"}, "version is"),
         ({"name": "other"}, "name is 'other'"),
         ({"filename": "chart.tgz"}, "file is 'chart.tgz'"),
         (
-            {"extra": {"experimently/charts/sub/Chart.yaml": "name: sub\n"}},
+            {"extra": {"controlvar/charts/sub/Chart.yaml": "name: sub\n"}},
             "expected exactly one Chart.yaml",
         ),
     ],
@@ -231,16 +246,16 @@ def test_checker_rejects(tmp_path: Path, kwargs: dict, message: str) -> None:
 
 
 def test_checker_rejects_a_missing_archive(tmp_path: Path) -> None:
-    result = _check(tmp_path / "experimently-1.2.3.tgz", "1.2.3")
+    result = _check(tmp_path / "controlvar-1.2.3.tgz", "1.2.3")
     assert result.returncode != 0
     assert "No such file" in result.stderr
 
 
 def test_checker_rejects_a_chart_yaml_with_no_app_version(tmp_path: Path) -> None:
-    path = tmp_path / "experimently-1.2.3.tgz"
-    data = b"apiVersion: v2\nname: experimently\nversion: 1.2.3\n"
+    path = tmp_path / "controlvar-1.2.3.tgz"
+    data = b"apiVersion: v2\nname: controlvar\nversion: 1.2.3\n"
     with tarfile.open(path, "w:gz") as tar:
-        info = tarfile.TarInfo("experimently/Chart.yaml")
+        info = tarfile.TarInfo("controlvar/Chart.yaml")
         info.size = len(data)
         tar.addfile(info, io.BytesIO(data))
     result = _check(path, "1.2.3")

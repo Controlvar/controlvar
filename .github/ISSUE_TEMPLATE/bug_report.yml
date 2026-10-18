@@ -1,5 +1,5 @@
 name: 🐛 Bug report
-description: Something in Experimently does not behave as documented.
+description: Something in Controlvar does not behave as documented.
 labels: ["bug", "needs-triage"]
 body:
   - type: markdown

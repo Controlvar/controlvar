@@ -70,7 +70,7 @@ UNMATCHED = {"country": "FR"}
 # standard library, and the integration job does not install the SDK.
 _REPO = Path(__file__).resolve().parents[4]
 _spec = importlib.util.spec_from_file_location(
-    "r629_sdk_evaluator", _REPO / "sdk" / "python" / "experimentation" / "evaluator.py"
+    "r629_sdk_evaluator", _REPO / "sdk" / "python" / "controlvar" / "evaluator.py"
 )
 sdk_evaluator = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(sdk_evaluator)

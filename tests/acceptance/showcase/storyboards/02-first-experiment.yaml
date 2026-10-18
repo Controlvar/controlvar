@@ -19,6 +19,19 @@
 #   estimate asks for, a 12.1% lift, p = 0.0007 (Fisher's exact, the results
 #   API's test). backend/tests/unit/showcase/test_showcase_first_experiment.py
 #   pins these numbers, and gate 10 holds the platform to them.
+# * The Planned sample card plans with the 10% typed in the wizard, saved with
+#   the experiment (#1257), on the control's observed 5.01%: 31,159 a variant,
+#   not the estimate's 31,234 on the typed 5%. It reads "Planned sample:
+#   Reached · 31,309 of 31,159 per variant" over "To detect a 10% lift on the
+#   control's 5.01%. The 10% was set when the experiment was created." Gate 10
+#   holds the sample-size API to mde 0.1 from the experiment, its size to the
+#   oracle's for that rate, and the page to the card for that answer.
+# * D84: each departure is stated in the scene where it happens. The sign-in
+#   before the first scene and the results asked for before the last are off
+#   camera, and say so in a caption; the shoppers are simulated, and the SDK
+#   card says how many and at what rates they are set to buy, the arriving
+#   caption and the time card's caption ("simulated in minutes") that they are
+#   simulated, and the time card's note why the results page reads Duration 0d.
 # * `say` is the narration (#1066 voiceover): the UX draft's spoken script, with
 #   every number in digits as the page prints it, and every number on the page
 #   while it is said. So the first beat names no step count (the wizard's 5
@@ -48,13 +61,19 @@ end_state:
     status: active
     winner: Sticky bar
     shown: recommendation
+    mde: 0.10
+    planned: planned
+    effect: effect
 
 scenes:
   - id: setup
     open: /experiments
     signed_in: true
+    departures:
+      - kind: off-camera setup
+        says: Signed in off camera
     beats:
-      - cue: Create an experiment in five guided steps.
+      - cue: Signed in off camera. Create an experiment in five guided steps.
         focus: {testid: new-experiment-btn}
         say:
           - "Choose New Experiment: a guided setup in short steps."
@@ -164,6 +183,9 @@ scenes:
 
   - id: sdk
     traffic: start
+    departures:
+      - kind: simulated traffic
+        says: the shoppers in this video are simulated
     card:
       label: "From the JavaScript SDK quick start"
       code:
@@ -180,7 +202,9 @@ scenes:
           - "await client.track('user-123', 'purchase', { value: 49.99, experimentKey: 'checkout_button_color' });"
       note: >-
         As the docs give it. Your app passes its own experiment's key; the
-        shoppers in this video are sent the same way.
+        shoppers in this video are simulated and sent the same way: 63,000 of
+        them from a fixed seed, set to buy at 5% in Control and 5.6% with the
+        Sticky bar.
     beats:
       - cue: Your app asks the SDK for a variant, then tracks purchases.
         focus: {css: "#code"}
@@ -190,8 +214,11 @@ scenes:
 
   - id: arriving
     results_of: Sticky add-to-cart bar
+    departures:
+      - kind: simulated traffic
+        says: simulated shoppers arrive
     beats:
-      - cue: Open its results as shoppers arrive.
+      - cue: Open its results as simulated shoppers arrive.
         focus: {role: tab, name: Live}
         say:
           - Open its results as shoppers arrive, then the Live tab.
@@ -218,12 +245,15 @@ scenes:
     departures:
       - kind: simulated traffic
         says: simulated in minutes
+      - kind: time skip
+        says: so the results page reads Duration 0d
     card:
       label: Off camera
       headline: 63,000 shoppers later
       note: >-
         About 2 weeks of traffic at 10,000 visitors a day with half of them in
-        the test, sent by the tool in {traffic_minutes} (measured).
+        the test, sent by the tool in {traffic_minutes} (measured), so the
+        results page reads Duration 0d.
     beats:
       - cue: About two weeks of shoppers, simulated in minutes.
         focus: {css: "#headline"}
@@ -233,14 +263,19 @@ scenes:
   - id: result
     results_of: Sticky add-to-cart bar
     warm_results: [Sticky add-to-cart bar]
+    departures:
+      - kind: off-camera setup
+        says: Computed off camera first
     beats:
-      - cue: "Sticky bar wins: a 12.1% lift, significant at 95%."
+      - cue: "Computed off camera first: Sticky bar wins, 12.1% lift, significant at 95%."
         focus: {testid: experiment-summary}
         say:
           - "Sticky bar wins: a 12.1% lift in purchases, significant at 95% confidence."
           - "The recommendation: ship it."
         record:
           recommendation: {testid: recommendation-reason}
+          planned: {testid: planned-sample}
+          effect: {testid: planned-sample-effect}
         payoff: true
         steps:
           - look: {testid: winner-indicator}

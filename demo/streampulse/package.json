@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "license": "Apache-2.0",
   "private": true,
-  "description": "StreamPulse \u2014 a simulated mobile streaming app showing feature-flag rollouts on the Experimently platform",
+  "description": "StreamPulse \u2014 a simulated mobile streaming app showing feature-flag rollouts on the Controlvar platform",
   "scripts": {
     "dev": "next dev -p 3300 -H 127.0.0.1",
     "build": "next build",

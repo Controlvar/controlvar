@@ -1,5 +1,5 @@
 /// SharedPreferences-backed [OfflineStore] (Flutter only).
-library experimently_shared_preferences_offline_store;
+library controlvar_shared_preferences_offline_store;
 
 import 'dart:convert';
 

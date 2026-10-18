@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useExperiment, useExperimentation } from '@getexperimently/react-sdk';
+import { useExperiment, useExperimentation } from '@controlvar/react-sdk';
 import { EXPERIMENT_KEYS } from '@/lib/env';
 import { usePageView, useTrack } from '@/lib/eventLog';
 import { PRODUCTS } from '@/data/products';

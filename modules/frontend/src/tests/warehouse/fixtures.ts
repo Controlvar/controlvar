@@ -37,7 +37,7 @@ export function connection(overrides: Partial<Connection> = {}): Connection {
     parameters: {
       billing_project: 'acme-billing',
       location: 'EU',
-      client_email: 'experimently@acme-billing.iam.gserviceaccount.com',
+      client_email: 'controlvar@acme-billing.iam.gserviceaccount.com',
     },
     credentials_status: 'ok',
     public_key_fingerprint: null,
@@ -60,7 +60,7 @@ export function snowflakeConnection(overrides: Partial<Connection> = {}): Connec
     id: 'c-sf',
     name: 'Snowflake prod',
     warehouse_type: 'snowflake',
-    parameters: { account: 'MYORG-MYACCOUNT', user: 'EXPERIMENTLY_SVC', role: 'EXPERIMENTLY_READER', warehouse: 'ANALYTICS_XS' },
+    parameters: { account: 'MYORG-MYACCOUNT', user: 'CONTROLVAR_SVC', role: 'CONTROLVAR_READER', warehouse: 'ANALYTICS_XS' },
     public_key_fingerprint: 'SHA256:abc123=',
     max_bytes_per_query: null,
     worst_case_bytes_per_day: null,
@@ -120,7 +120,7 @@ export const SERVICE_ACCOUNT_JSON = JSON.stringify({
   project_id: 'acme-billing',
   private_key_id: 'kid-1',
   private_key: `${PEM[0]}\n${KEY_SENTINEL}\n${PEM[1]}\n`,
-  client_email: 'experimently@acme-billing.iam.gserviceaccount.com',
+  client_email: 'controlvar@acme-billing.iam.gserviceaccount.com',
   token_uri: 'https://oauth2.googleapis.com/token',
 });
 

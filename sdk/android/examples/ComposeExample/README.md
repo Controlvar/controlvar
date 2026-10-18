@@ -1,10 +1,10 @@
 # Compose Example
 
-This example demonstrates using the Experimently Android SDK with Jetpack Compose.
+This example demonstrates using the Controlvar Android SDK with Jetpack Compose.
 
 ## Setup
 
-**Not yet published.** `com.getexperimently:experimently-android` is not on Maven Central, so
+**Not yet published.** `com.controlvar:controlvar-android` is not on Maven Central, so
 build the SDK from source: include `sdk/android/sdk` of this repository in your Gradle build (see
 [`sdk/android/README.md`](../../README.md) for the `settings.gradle.kts` lines) and add the
 dependency to your app module's `build.gradle.kts`:

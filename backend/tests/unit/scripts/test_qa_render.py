@@ -40,7 +40,7 @@ GOOD = {
     "date": "2026-10-06",
     "date_time": "2026-10-06 14:17 UTC",
     "sha": "c6e0f081d82f1a858e111c86db62aa5d8b8a71d4",
-    "run_link": "https://github.com/getexperimently/experimently/actions/runs/37456943504",
+    "run_link": "https://github.com/Controlvar/controlvar/actions/runs/37456943504",
     "check": "staging",
     "step": "4",
     "status": "503",
@@ -72,13 +72,13 @@ BAD = {
     ],
     "run_link": [
         "https://github.com/getexperimently/experimently-other/actions/runs/1",
-        "https://github.com/other/experimently/actions/runs/1",
-        "http://github.com/getexperimently/experimently/actions/runs/1",
-        "https://github.com/getexperimently/experimently/actions/runs/1/attempts/2",
-        "https://github.com/getexperimently/experimently/actions/runs/1?x=y",
-        "https://github.com/getexperimently/experimently/actions/runs/",
-        "https://github.com/getexperimently/experimently/actions/runs/0",
-        "https://example.com/getexperimently/experimently/actions/runs/1",
+        "https://github.com/other/controlvar/actions/runs/1",
+        "http://github.com/Controlvar/controlvar/actions/runs/1",
+        "https://github.com/Controlvar/controlvar/actions/runs/1/attempts/2",
+        "https://github.com/Controlvar/controlvar/actions/runs/1?x=y",
+        "https://github.com/Controlvar/controlvar/actions/runs/",
+        "https://github.com/Controlvar/controlvar/actions/runs/0",
+        "https://example.com/Controlvar/controlvar/actions/runs/1",
     ],
     "check": ["Staging", "prod", "staging ", "", "staging\nx"],
     "step": ["0", "9", "10", "4 ", "four", "-1"],
@@ -194,6 +194,38 @@ def test_a_value_of_the_wrong_kind_is_refused(kind, value):
     assert name in str(refused.value)
     if value.strip():
         assert value not in str(refused.value)
+
+
+#: A repository by another name: what a rename or a transfer makes this one.
+RENAMED = "example-org/example-repo"
+
+
+@pytest.mark.regression
+def test_a_run_link_names_the_repository_the_run_is_in(monkeypatch):
+    """The run link's repository is ``GITHUB_REPOSITORY``, not a written name.
+
+    It used to be this repository's name, written into the script, so after a
+    rename every run link the workflows built was refused and no failure was
+    reported."""
+    monkeypatch.setenv("GITHUB_REPOSITORY", RENAMED)
+    qa_render.check_value(
+        "run_link", f"https://github.com/{RENAMED}/actions/runs/37456943504"
+    )
+    with pytest.raises(qa_render.RenderError):
+        qa_render.check_value("run_link", GOOD["run_link"])
+
+
+@pytest.mark.parametrize(
+    "repository", [None, "", "owner", "a/b/c", "owner/repo\n", "-owner/repo", "o/r?"]
+)
+def test_no_run_link_passes_without_a_repository_name(monkeypatch, repository):
+    if repository is None:
+        monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    else:
+        monkeypatch.setenv("GITHUB_REPOSITORY", repository)
+    assert qa_render.run_link_prefix() is None
+    with pytest.raises(qa_render.RenderError):
+        qa_render.check_value("run_link", GOOD["run_link"])
 
 
 def test_the_mapping_covers_exactly_the_placeholders_the_templates_use():

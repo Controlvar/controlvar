@@ -10,7 +10,7 @@ needs the inventory to classify ``README.md`` as the journey ``docs-site``,
 without ``pending``)::
 
     guide: README.md                         # the nav path, as inventory.toml keys it (a [documents] key for a document)
-    stack: docs-local                        # compose-dev | compose-empty | compose-sso | docs-local | docs-published | marketing-local | demo-local
+    stack: docs-local                        # compose-dev | compose-empty | compose-sso | compose-demo | docs-local | docs-published | marketing-local | demo-local
     profile: core                            # core | full
     video: true
     written: 2026-10-06                      # the day the expectations were written
@@ -22,7 +22,7 @@ without ``pending``)::
         expect:
           status: 200
           aria: |
-            - heading "Experimently Documentation" [level=1]
+            - heading "Controlvar Documentation" [level=1]
         fail: the home page does not answer, or its heading is not the source's first heading
       - id: open-quick-start
         doc: start-here
@@ -74,8 +74,9 @@ docs-local), whose source (``mkdocs.yml`` and ``docs/``) the stack names:
   itself, so a crawl step has no ``expect``.
 
 Three are for following a guide on the compose stack (``compose-dev``, and for
-``open`` also ``compose-sso``, the same stack brought up for SSO sign-in, and
-``demo-local``, the one ``demo/setup-local.sh`` starts) as its reader does:
+``open`` also ``compose-sso``, the same stack brought up for SSO sign-in,
+``compose-demo``, the compose file's demo profile, and ``demo-local``, the one
+``demo/setup-local.sh`` starts) as its reader does:
 
 * ``open: <URL>`` opens an address the guide gives, such as
   ``http://localhost:3000``: the guide's text must contain the URL's origin
@@ -173,7 +174,7 @@ block under the ``snippet`` anchor) with only its placeholders replaced: each
 ``replace`` key is a whole quoted string of the block, and each value one of
 ``{{api-url}}``, ``{{experiment}}`` (the key of the experiment saved as
 ``experiment``), ``{{flag}}`` and ``{{user}}``. The API key saved as ``key`` is
-given as ``EXPERIMENTLY_API_KEY``. ``stubs`` are functions the block calls and
+given as ``CONTROLVAR_API_KEY`` (and its former name). ``stubs`` are functions the block calls and
 the page leaves to the reader; ``answers`` name the block's variables (or
 ``called.<stub>``) whose values must be the oracle's: the variant the
 documented assignment hash gives ``user``, and the flag answer the documented
@@ -195,6 +196,28 @@ does through the API; a later ``finish: <that step's id>`` lets it end within
 its bound and checks ``exit`` and ``output`` there. A block that runs past its
 bound, or is still running when its journey ends, is stopped. What it printed
 is written through the redactor, cut to its end.
+
+The demo profile of the compose file is watched as its reader leaves it
+running (``services.py``; compose-demo only, the stack the page's own demo
+command starts): ``services: {running: [<service>, ...], for_seconds,
+growing}`` checks that each named service of ``docker-compose.yml`` (the
+guide's text must name it) has one container, running, and keeps running for
+``for_seconds`` without a restart (its ``RestartCount`` does not move), and,
+with ``growing: events``, that the stack's events table holds more rows at the
+end of that time than at its start. Its check is the action itself: no
+``expect``, no screen. The time is the property checked (a simulator that
+loops dies within seconds and is restarted), not a wait for something to
+happen, so it is bounded and named for what it holds.
+
+``relaunch: recovery`` (compose-demo only) walks the page's recovery note, "If
+you already started the profile without them, run the command above once: it
+applies the missing seeds to the existing database, with no down -v"
+(``stacks.ComposeDemo.relaunch``): the stack is brought down with its volumes,
+started with the page's demo command less its ``SEED=`` (the start a reader
+who left the seeds out made; its exit status is not held), checked to be
+without the apps' keys, and then given the page's command as written, which
+must exit 0, with no ``down -v`` between the two. Its check is the action
+itself: no ``expect``, no screen. The steps after it hold the stack it leaves.
 """
 
 from __future__ import annotations
@@ -224,6 +247,7 @@ STACKS = (
     "compose-dev",
     "compose-empty",
     "compose-sso",
+    "compose-demo",
     "docs-local",
     "docs-published",
     "marketing-local",
@@ -233,6 +257,7 @@ Stack = Literal[
     "compose-dev",
     "compose-empty",
     "compose-sso",
+    "compose-demo",
     "docs-local",
     "docs-published",
     "marketing-local",
@@ -241,8 +266,27 @@ Stack = Literal[
 #: The stacks with an API and a dashboard: ``api`` and ``open`` steps run on
 #: these. compose-sso is compose-dev's stack brought up for SSO sign-in;
 #: compose-empty is compose-dev's stack with no seed data (``SEED=``);
-#: demo-local is the one ``demo/setup-local.sh`` starts (``stacks.py``).
-COMPOSE_STACKS = ("compose-dev", "compose-empty", "compose-sso", "demo-local")
+#: compose-demo is the compose file's demo profile, started with the demo
+#: command docker-compose-file.md gives; demo-local is the one
+#: ``demo/setup-local.sh`` starts (``stacks.py``).
+COMPOSE_STACKS = (
+    "compose-dev",
+    "compose-empty",
+    "compose-sso",
+    "compose-demo",
+    "demo-local",
+)
+#: The stacks whose compose services a ``services`` step watches: only the one
+#: started with the page's demo command, whose simulators are the services.
+SERVICE_STACKS = ("compose-demo",)
+#: What a ``services`` step may count, at the start and the end of its time:
+#: the rows of the stack's events table (``services.COUNTS``).
+Countable = Literal["events"]
+#: The stacks a ``relaunch`` step brings down and up again: only the one
+#: started with the page's demo command, whose recovery note it walks.
+RELAUNCH_STACKS = ("compose-demo",)
+#: How a ``relaunch`` step starts the stack again: as the recovery note says.
+Relaunch = Literal["recovery"]
 Profile = Literal["core", "full"]
 
 #: Who an ``api`` step calls as: nobody, or one of the four role accounts the
@@ -579,7 +623,7 @@ class Sdk(_Strict):
     install: StrictStr = Field(pattern=r"^[^#\s]+$")
     #: The anchor of the section whose first code block is run.
     snippet: StrictStr = Field(pattern=r"^[^#\s]+$")
-    #: The secret holding the API key, given as ``EXPERIMENTLY_API_KEY``.
+    #: The secret holding the API key, given as ``CONTROLVAR_API_KEY`` (and its former name).
     key: Name
     #: The saved value holding the id of the experiment the block assigns.
     experiment: Name
@@ -658,6 +702,26 @@ class Run(_Strict):
     background: StrictBool = False
 
 
+#: A service of docker-compose.yml, as ``docker compose`` names it.
+ServiceName = Annotated[StrictStr, Field(pattern=r"^[a-z0-9][a-z0-9_.-]{0,62}$")]
+
+
+class Services(_Strict):
+    """Compose services that keep running, unrestarted, for ``for_seconds``
+    (``services.py``); with ``growing``, a count that is higher at the end."""
+
+    running: List[ServiceName] = Field(min_length=1)
+    for_seconds: StrictInt = Field(ge=10, le=600)
+    growing: Optional[Countable] = None
+
+    @model_validator(mode="after")
+    def _each_service_once(self) -> "Services":
+        twice = sorted({name for name in self.running if self.running.count(name) > 1})
+        if twice:
+            raise ValueError(f"service {twice[0]!r} is named twice")
+        return self
+
+
 class Do(_Strict):
     """Exactly one action."""
 
@@ -678,6 +742,11 @@ class Do(_Strict):
     #: The id of an earlier ``run`` step with ``background: true``: this step
     #: lets that block end, within its bound, and checks how it ended.
     finish: Optional[StrictStr] = Field(default=None, pattern=SLUG_PATTERN)
+    #: compose-demo only: compose services that keep running (``services.py``).
+    services: Optional[Services] = None
+    #: compose-demo only: the stack down and up again as the page's recovery
+    #: note says (``stacks.ComposeDemo.relaunch``).
+    relaunch: Optional[Relaunch] = None
 
     @model_validator(mode="after")
     def _exactly_one(self) -> "Do":
@@ -685,8 +754,8 @@ class Do(_Strict):
         if len(given) != 1:
             raise ValueError(
                 "do must be exactly one of goto, open, click, fill, select, keep,"
-                f" api, traffic, evaluations, sdk, ref, search, crawl, run, finish;"
-                f" got {given or 'none'}"
+                f" api, traffic, evaluations, sdk, ref, search, crawl, run, finish,"
+                f" services, relaunch; got {given or 'none'}"
             )
         return self
 

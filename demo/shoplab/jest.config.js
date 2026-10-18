@@ -17,8 +17,8 @@ module.exports = {
   },
   moduleNameMapper: {
     // Tests never talk to the real SDK: this manual mock exposes configurable hook
-    // return values (see src/__mocks__/experimently-sdk.tsx).
-    '^@getexperimently/react-sdk$': '<rootDir>/src/__mocks__/experimently-sdk.tsx',
+    // return values (see src/__mocks__/controlvar-sdk.tsx).
+    '^@controlvar/react-sdk$': '<rootDir>/src/__mocks__/controlvar-sdk.tsx',
     // Pages call useRouter(); Next throws without a mounted router, so use a stub.
     '^next/router$': '<rootDir>/src/__mocks__/next-router.ts',
     '^@/(.*)$': '<rootDir>/src/$1',

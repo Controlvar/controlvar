@@ -221,8 +221,8 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("iOS 14+", "docs/sdk/ios.md"),
         lede("Android applications", "docs/sdk/android.md"),
         lede("for Go services", "docs/sdk/go.md"),
-        says("The @getexperimently/js-sdk package is on npm", "docs/sdk/javascript.md"),
-        says("The experimently package is on PyPI", "docs/sdk/python.md"),
+        says("The @controlvar/js-sdk package is on npm", "docs/sdk/javascript.md"),
+        says("The controlvar package is on PyPI", "docs/sdk/python.md"),
     ),
     "Browser and Node.js": (lede("for Node >= 18 and browsers"),),
     "A synchronous Python client with no dependencies": (
@@ -338,7 +338,7 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         says("## Error Responses"),
     ),
     # Integrations
-    "The AWS services Experimently runs on, the webhooks it receives, and the alerts it sends.": (
+    "The AWS services Controlvar runs on, the webhooks it receives, and the alerts it sends.": (
         lede("how each AWS service is used", "docs/integrations/aws.md"),
         lede("a webhook endpoint for each", "docs/api/integrations.md"),
         lede(
@@ -430,9 +430,9 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         says("Data residency configuration"),
     ),
     # Self-Hosting
-    "Run Experimently yourself: Docker Compose on one machine, Helm on Kubernetes, or a CDK app that deploys to AWS.": (
+    "Run Controlvar yourself: Docker Compose on one machine, Helm on Kubernetes, or a CDK app that deploys to AWS.": (
         lede(
-            "runs Experimently on one Docker host from the published images",
+            "runs Controlvar on one Docker host from the published images",
             "deploy/compose/README.md",
         ),
         lede(
@@ -453,7 +453,7 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
     "The published images on one Docker host: deploy/compose/compose.yml, and a README that says how to run it and lists its settings": (
         lede("Self-hosting with Docker Compose"),
         lede(
-            "compose.yml in this directory runs Experimently on one Docker host from the published images"
+            "compose.yml in this directory runs Controlvar on one Docker host from the published images"
         ),
         says("## Run it"),
         says("## Settings"),

@@ -5,7 +5,7 @@ tools: Read, Glob, Grep, Bash
 model: sonnet
 ---
 
-You are a senior code reviewer for the Experimently experimentation platform — a FastAPI (Python) backend with a Next.js (TypeScript) frontend deployed on AWS.
+You are a senior code reviewer for the Controlvar experimentation platform — a FastAPI (Python) backend with a Next.js (TypeScript) frontend deployed on AWS.
 
 ## What You Review
 

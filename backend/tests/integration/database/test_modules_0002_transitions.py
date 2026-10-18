@@ -340,7 +340,7 @@ def test_modules_0002_full_080_to_new(test_db, scratch_schema, full_tree, tmp_pa
         tree_profiles.alembic(previous, scratch_schema, "upgrade", "heads"),
     ):
         assert result.returncode != 0, result.stdout[-2000:]
-        assert "migrated by a newer Experimently release" in result.stderr
+        assert "migrated by a newer Controlvar release" in result.stderr
         assert MODULES_HEAD in result.stderr
         assert "full profile being opened by a core build" not in result.stderr
     assert _rows(test_db, scratch_schema) == FULL_HEADS

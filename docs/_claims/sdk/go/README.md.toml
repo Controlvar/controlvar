@@ -4,11 +4,11 @@
 document = "sdk/go/README.md"
 
 [[unit]]
-text = "Experimently Go SDK"
+text = "Controlvar Go SDK"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Go client for the Experimently A/B testing and feature flag platform."
+text = "Go client for the Controlvar A/B testing and feature flag platform."
 by = [
     "test:sdk/go/client_test.go::TestClient_EvaluateFlag_RequestAndMapping",
     "test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping",
@@ -46,7 +46,7 @@ text = "Installation"
 by = ["exempt:label"]
 
 [[unit]]
-text = "go get github.com/getexperimently/experimently/sdk/go: Go 1.21+"
+text = "go get github.com/controlvar/controlvar/sdk/go: Go 1.21+"
 by = [
     "test:sdk/go/module_test.go::TestModule_RequiresGo121",
     "journey:sdk-go#quick-start-user-on",
@@ -327,7 +327,7 @@ text = "It prints:"
 by = ["test:sdk/go/examples/contract_smoke/main_test.go::TestContractSmoke_AssignsThreeTimesEvaluatesTracksAndBatches"]
 
 [[unit]]
-text = "Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
+text = "Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
 by = [
     "test:sdk/go/examples/contract_smoke/main_test.go::TestContractSmoke_ReadsTheEnvironmentWithTheseDefaults",
     "test:sdk/go/examples/contract_smoke/main_test.go::TestContractSmoke_AssignsThreeTimesEvaluatesTracksAndBatches",

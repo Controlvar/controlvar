@@ -1,10 +1,10 @@
 # Self-hosting with Docker Compose
 
-`compose.yml` in this directory runs Experimently on one Docker host from the
+`compose.yml` in this directory runs Controlvar on one Docker host from the
 published images. It builds nothing, starts no demo applications and creates
 no demo users. For a development stack built from a checkout, use the
 repository's `docker-compose.yml` and the
-[Docker guide](https://getexperimently.github.io/experimently/getting-started/docker-guide/)
+[Docker guide](https://docs.controlvar.com/getting-started/docker-guide/)
 instead.
 
 ## Run it
@@ -23,7 +23,7 @@ docker compose logs api
 and the first administrator's email:
 
 ```bash
-PUBLIC_BASE_URL=https://experimently.example.com \
+PUBLIC_BASE_URL=https://controlvar.example.com \
 FIRST_SUPERUSER=you@example.com ./generate-env.sh
 ```
 
@@ -43,6 +43,11 @@ database schema and the first administrator: sign in at `PUBLIC_BASE_URL` as
 `FIRST_SUPERUSER` with the `FIRST_SUPERUSER_PASSWORD` from `.env`. That
 password is read only while the database has no users: changing it later does
 nothing.
+
+On a Mac with Apple Silicon and Docker Desktop, the API and the dashboard run
+under amd64 emulation, because their images are published for `linux/amd64`
+only, and PostgreSQL and Redis run natively (measured on an Apple M4 with the
+v0.34.3 images).
 
 Only the dashboard publishes a port, on `127.0.0.1:8080` by default, and it
 passes `/api` to the API. Put your TLS reverse proxy in front of it and pass
@@ -69,9 +74,9 @@ Compose refuses to start while a required one is unset or empty, and names it.
 Run an external PostgreSQL server with its `TimeZone` set to UTC.
 
 The image lines name the images of this file's own release,
-`ghcr.io/getexperimently/experimently:<profile>-X.Y.Z` and
-`ghcr.io/getexperimently/experimently-web:<profile>-X.Y.Z`.
-[Releases, images and verification](https://getexperimently.github.io/experimently/self-hosting/releases/)
+`ghcr.io/controlvar/controlvar:<profile>-X.Y.Z` and
+`ghcr.io/controlvar/controlvar-web:<profile>-X.Y.Z`.
+[Releases, images and verification](https://docs.controlvar.com/self-hosting/releases/)
 shows how to check what you pulled.
 
 ## What CI runs

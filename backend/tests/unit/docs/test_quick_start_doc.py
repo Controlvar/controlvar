@@ -86,7 +86,7 @@ def _step_7() -> list[str]:
 def test_the_page_has_exactly_its_shell_examples():
     # Exact, so a parser that silently stops reading the page cannot pass the
     # comment test below by finding nothing.  Update it with the page.
-    assert len(_shell_blocks()) == 14
+    assert len(_shell_blocks()) == 15
 
 
 def test_no_shell_example_carries_a_comment():

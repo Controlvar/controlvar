@@ -2,9 +2,9 @@
 #
 # Run from the repository root (fetch deps once with `mix deps.get`):
 #
-#     cd sdk/elixir && EXPERIMENTLY_API_KEY=<key> mix run examples/contract_smoke.exs
+#     cd sdk/elixir && CONTROLVAR_API_KEY=<key> mix run examples/contract_smoke.exs
 #
-# Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY
+# Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY
 # (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY
 # (default sdk_contract_flag), CONTRACT_USER_ID (default: random "smoke-<uuid>").
 #
@@ -18,9 +18,9 @@ defmodule ContractSmoke.Http do
   # `:http_client` option: it delegates to the real HTTP client and reports
   # every failed request to the smoke process.
 
-  @behaviour Experimently.HttpBehaviour
+  @behaviour Controlvar.HttpBehaviour
 
-  alias Experimently.HttpClient
+  alias Controlvar.HttpClient
 
   @impl true
   def get(config, path), do: HttpClient.get(config, path)
@@ -48,14 +48,14 @@ end
 defmodule ContractSmoke do
   @moduledoc false
 
-  alias Experimently, as: EP
-  alias Experimently.{Assignment, BatchResult, FlagEvaluation}
+  alias Controlvar, as: EP
+  alias Controlvar.{Assignment, BatchResult, FlagEvaluation}
 
   def run do
-    api_key = System.get_env("EXPERIMENTLY_API_KEY")
-    if api_key in [nil, ""], do: fail("EXPERIMENTLY_API_KEY is required")
+    api_key = env("CONTROLVAR_API_KEY", System.get_env("EXPERIMENTLY_API_KEY"))
+    if api_key in [nil, ""], do: fail("CONTROLVAR_API_KEY is required")
 
-    api_url = env("EXPERIMENTLY_API_URL", "http://localhost:8000")
+    api_url = env("CONTROLVAR_API_URL", env("EXPERIMENTLY_API_URL", "http://localhost:8000"))
     experiment_key = env("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab")
     flag_key = env("CONTRACT_FLAG_KEY", "sdk_contract_flag")
     user_id = env("CONTRACT_USER_ID", random_user_id())

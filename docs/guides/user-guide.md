@@ -1,6 +1,6 @@
 # User Guide
 
-Guide for product managers, experimenters, and analysts using Experimently.
+Guide for product managers, experimenters, and analysts using Controlvar.
 
 ---
 
@@ -130,8 +130,12 @@ whose title shows the current values.
 Then, optionally, the estimate. Enter your baseline conversion rate and the smallest change
 worth detecting — a *relative* change, so 5% on a 12% baseline means 12% → 12.6% — and press
 **Calculate estimate**. At 80% power and 95% confidence that example needs 47,036 users per
-variant. Add your daily users to see roughly how many days that takes. The estimate is
-advisory and is not saved. It plans each comparison at 1 − the confidence level and makes no
+variant. Add your daily users to see roughly how many days that takes. The smallest change
+worth detecting (the minimum detectable effect) is saved with the experiment, and the results
+page's **Planned sample** plans for it; leave it blank and the results page plans for 5%. An
+effect below 0.1%, or of 100% or more, cannot be saved, and **Next** says so. The rest of the
+estimate is a guide and is not saved: the results page plans from the control variant's own
+conversion rate, at 80% power. The estimate plans each comparison at 1 − the confidence level and makes no
 correction for comparing several variants, so with three or more variants and a correction
 the experiment needs more users than it says.
 
@@ -140,6 +144,8 @@ the experiment needs more users than it says.
 Check the summary, including each variant's configuration and the **Analysis** row (for example
 "95% confidence · Benjamini-Hochberg correction", with "· Bayesian analysis on" when it is on),
 use **Edit** to go back to any step, then press **Create Experiment**.
+The **Sample size** row says exactly what is saved: the minimum detectable effect, if you
+entered one, and nothing else from the estimate.
 The experiment is created as a draft and you land on its page.
 
 **Then: start the experiment**
@@ -518,4 +524,4 @@ If high-risk pairs are found, add the experiments to a [Mutual Exclusion Group](
 
 - **API Documentation**: http://localhost:8000/api/v1/docs
 - **Technical Guide**: See [Technical Guide](../architecture/technical-guide.md) for implementation details
-- **Issues**: https://github.com/getexperimently/experimently/issues
+- **Issues**: https://github.com/Controlvar/controlvar/issues

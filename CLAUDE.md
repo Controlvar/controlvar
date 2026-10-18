@@ -1142,7 +1142,7 @@ Release-please also needs the ORGANISATION to allow it. If it fails with
 that is not a repository setting you can fix from here -- the repository API
 answers `409 The organization does not allow GitHub Actions to create or
 approve pull requests`. It is
-`github.com/organizations/getexperimently/settings/actions` -> Workflow
+`github.com/organizations/Controlvar/settings/actions` -> Workflow
 permissions, and it needs an org owner.
 
 ### A release bumps VERSION and leaves the fixtures behind
@@ -1273,6 +1273,8 @@ make format
 #                                      LICENSES/Apache-2.0.txt matches LICENSE
 #   check_requirements_lock.py         both requirements locks match their inputs,
 #                                      and the requirements files share their pins
+#   check_legacy_name.py               the former name only where
+#                                      scripts/legacy_name_keep.toml keeps it
 #   eslint + tsc                       frontend/
 #   hadolint                           the four Dockerfiles
 #   actionlint                         .github/workflows

@@ -285,7 +285,7 @@ def test_a_long_password_setting_does_not_stop_a_database_that_has_users(test_db
             ENVIRONMENT="production",
             SECRET_KEY="bootstrap-test-" + "k" * 40,
             AUDIT_HMAC_KEY="bootstrap-test-" + "a" * 40,
-            PUBLIC_BASE_URL="https://experimently.example.com",
+            PUBLIC_BASE_URL="https://controlvar.example.com",
         )
         assert later.returncode == 0, later.stderr[-2000:]
         assert "users exist; FIRST_SUPERUSER settings ignored" in later.stderr

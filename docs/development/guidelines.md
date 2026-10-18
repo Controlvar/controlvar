@@ -2,9 +2,9 @@
 
 The rules a change to this repository follows. How to set up, run and test the
 stack is in
-[CONTRIBUTING.md](https://github.com/getexperimently/experimently/blob/main/CONTRIBUTING.md),
+[CONTRIBUTING.md](https://github.com/Controlvar/controlvar/blob/main/CONTRIBUTING.md),
 and the conventions, with the reasons for them, are in
-[CLAUDE.md](https://github.com/getexperimently/experimently/blob/main/CLAUDE.md).
+[CLAUDE.md](https://github.com/Controlvar/controlvar/blob/main/CLAUDE.md).
 
 ## Python
 

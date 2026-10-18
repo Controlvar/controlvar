@@ -8,7 +8,7 @@ import ProfileScreen from '@/components/screens/ProfileScreen';
 import OnboardingScreen from '@/components/screens/OnboardingScreen';
 import PaymentsScreen from '@/components/screens/PaymentsScreen';
 import { EXPERIMENT_KEYS, FLAG_KEYS } from '@/lib/env';
-import { __setExperiment, __setFlag, trackEventMock } from '@/__mocks__/experimently-sdk';
+import { __setExperiment, __setFlag, trackEventMock } from '@/__mocks__/controlvar-sdk';
 import { callsFor, renderScreen, resetTestState } from '@/test-utils';
 
 beforeEach(resetTestState);
@@ -175,7 +175,7 @@ describe('Profile (streampulse_wrapped + streampulse_profile_badges)', () => {
     __setExperiment(EXPERIMENT_KEYS.wrapped, { configuration: { wrapped: false }, assigned: false, reason: 'holdout' });
     __setExperiment(EXPERIMENT_KEYS.profileBadges, { configuration: { badges: false }, assigned: false, reason: 'holdout' });
     renderScreen(<ProfileScreen deviceModel="Pixel 7" tier="free" />);
-    expect(screen.getByTestId('profile-plain')).toHaveTextContent('see the Experimently panel for why');
+    expect(screen.getByTestId('profile-plain')).toHaveTextContent('see the Controlvar panel for why');
   });
 });
 

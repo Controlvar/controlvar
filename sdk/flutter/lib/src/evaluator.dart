@@ -13,7 +13,7 @@
 /// 3. Divide by **4294967296.0** (2^32 = 0x100000000) to normalise to `[0.0, 1.0)`.
 ///
 /// The divisor is 2^32 **not** `MaxUInt32` (4294967295).
-library experimently_evaluator;
+library controlvar_evaluator;
 
 import 'dart:convert';
 import 'dart:typed_data';

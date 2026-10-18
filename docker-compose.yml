@@ -1,14 +1,15 @@
 # =============================================================================
-# Experimently — the LOCAL DEVELOPMENT stack, built from this checkout.
+# Controlvar — the LOCAL DEVELOPMENT stack, built from this checkout.
 #
 # It is for one machine: every port below is published on 127.0.0.1 only.
 # ENVIRONMENT=development accepts a short or placeholder SECRET_KEY, and the
 # first start creates a demo administrator with a documented password. To run
-# Experimently on a server, use the published images in
+# Controlvar on a server, use the published images in
 # deploy/compose/compose.yml instead.
 #
 #   docker compose up -d --wait            # postgres + redis + api + dashboard
-#   docker compose --profile demo up -d    # + ShopLab (:3200), StreamPulse (:3300)
+#   SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait
+#                                          # + ShopLab (:3200), StreamPulse (:3300)
 #                                          #   and their traffic simulators
 #   docker compose --profile tools up -d   # + pgAdmin (:5050)
 #   docker compose --profile aws up -d     # + LocalStack (:4566)
@@ -174,8 +175,9 @@ services:
 
   # ===========================================================================
   # profile: demo — ShopLab + StreamPulse demo apps and their simulators.
-  # Add `shoplab,streampulse` to SEED so their experiments, flags and API keys
-  # exist:  SEED=demo,shoplab,streampulse docker compose --profile demo up -d
+  # They need the shoplab and streampulse seeds (their experiments, flags and
+  # API keys), so start the profile with:
+  #   SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait
   # ===========================================================================
   shoplab:
     profiles: ["demo"]
@@ -183,9 +185,9 @@ services:
       context: .
       dockerfile: demo/shoplab/Dockerfile
       args:
-        NEXT_PUBLIC_EXPERIMENTLY_API_URL: ${SHOPLAB_API_URL:-http://localhost:${API_HOST_PORT:-8000}}
-        NEXT_PUBLIC_EXPERIMENTLY_API_KEY: ${SHOPLAB_API_KEY:-eptk_demo_shoplab_0123456789abcdef0123456789abcdef}
-        NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:${FRONTEND_HOST_PORT:-3000}}
+        NEXT_PUBLIC_CONTROLVAR_API_URL: ${SHOPLAB_API_URL:-http://localhost:${API_HOST_PORT:-8000}}
+        NEXT_PUBLIC_CONTROLVAR_API_KEY: ${SHOPLAB_API_KEY:-eptk_demo_shoplab_0123456789abcdef0123456789abcdef}
+        NEXT_PUBLIC_CONTROLVAR_DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:${FRONTEND_HOST_PORT:-3000}}
     image: experimently-shoplab:${EXPERIMENTLY_IMAGE_TAG:-${EXPERIMENTLY_PROFILE:-core}}
     ports:
       - "127.0.0.1:${SHOPLAB_HOST_PORT:-3200}:3200"
@@ -211,7 +213,7 @@ services:
       - -c
       - >-
         test -f /data/demo/shoplab/.api_key
-        || { echo "no /data/demo/shoplab/.api_key — start the api with SEED=demo,shoplab"; exit 1; };
+        || { echo "no /data/demo/shoplab/.api_key: the shoplab seed has not run. Start the stack with: SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait"; exit 1; };
         exec python demo/shoplab/simulator/traffic.py
         --api-url http://api:8000
         --api-key "$$(cat /data/demo/shoplab/.api_key)"
@@ -227,9 +229,9 @@ services:
       context: .
       dockerfile: demo/streampulse/Dockerfile
       args:
-        NEXT_PUBLIC_EXPERIMENTLY_API_URL: ${STREAMPULSE_API_URL:-http://localhost:${API_HOST_PORT:-8000}}
-        NEXT_PUBLIC_EXPERIMENTLY_API_KEY: ${STREAMPULSE_API_KEY:-eptk_demo_streampulse_0123456789abcdef0123456789ab}
-        NEXT_PUBLIC_EXPERIMENTLY_DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:${FRONTEND_HOST_PORT:-3000}}
+        NEXT_PUBLIC_CONTROLVAR_API_URL: ${STREAMPULSE_API_URL:-http://localhost:${API_HOST_PORT:-8000}}
+        NEXT_PUBLIC_CONTROLVAR_API_KEY: ${STREAMPULSE_API_KEY:-eptk_demo_streampulse_0123456789abcdef0123456789ab}
+        NEXT_PUBLIC_CONTROLVAR_DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:${FRONTEND_HOST_PORT:-3000}}
     image: experimently-streampulse:${EXPERIMENTLY_IMAGE_TAG:-${EXPERIMENTLY_PROFILE:-core}}
     ports:
       - "127.0.0.1:${STREAMPULSE_HOST_PORT:-3300}:3300"
@@ -253,7 +255,7 @@ services:
       - -c
       - >-
         test -f /data/demo/streampulse/.api_key
-        || { echo "no /data/demo/streampulse/.api_key — start the api with SEED=demo,streampulse"; exit 1; };
+        || { echo "no /data/demo/streampulse/.api_key: the streampulse seed has not run. Start the stack with: SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait"; exit 1; };
         exec python demo/streampulse/simulator/traffic.py
         --api-url http://api:8000
         --api-key "$$(cat /data/demo/streampulse/.api_key)"

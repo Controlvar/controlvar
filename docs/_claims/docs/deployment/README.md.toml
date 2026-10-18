@@ -8,7 +8,7 @@ text = "Deployment Documentation"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Operational documentation for deploying and operating Experimently in an AWS account."
+text = "Operational documentation for deploying and operating Controlvar in an AWS account."
 by = ["exempt:navigation"]
 
 [[unit]]

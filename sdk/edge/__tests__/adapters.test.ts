@@ -91,7 +91,7 @@ describe('CloudflareExperimentationClient', () => {
   test('serves a flag cached in KV per user + key without calling the API', async () => {
     const cached: FlagEvaluation = { key: 'kv-flag', enabled: true, config: { variant: 'b' } };
     const { kv } = makeKv({ 'ep:flag:user-1:kv-flag': JSON.stringify(cached) });
-    const client = new CloudflareExperimentationClient({ apiKey: 'k', kvNamespace: kv });
+    const client = new CloudflareExperimentationClient({ apiKey: 'k', baseUrl: 'http://api.test', kvNamespace: kv });
 
     expect(await client.evaluateFlag('kv-flag', 'user-1')).toEqual(cached);
     expect(mockFetch).not.toHaveBeenCalled();
@@ -295,7 +295,7 @@ describe('createEdgeMiddleware', () => {
 
   test('uses custom userIdHeaderName', () => {
     const request = new Request('http://localhost/', { headers: { 'X-Custom-User': 'custom-user-id' } });
-    expect(extractUserId(request, { apiKey: 'k', userIdHeaderName: 'X-Custom-User' })).toBe('custom-user-id');
+    expect(extractUserId(request, { apiKey: 'k', baseUrl: 'http://api.test', userIdHeaderName: 'X-Custom-User' })).toBe('custom-user-id');
   });
 
   test('evaluateFlagsForRequest with an explicitly empty list evaluates nothing', async () => {
@@ -358,7 +358,7 @@ describe('DenoExperimentationClient', () => {
   test('serves an assignment cached in Deno KV per user + key without calling the API', async () => {
     const cached: Assignment = { experimentKey: 'exp', userId: 'user-1', variantId: 'v', variantName: 'control', isControl: true, configuration: null };
     const { kv } = makeDenoKv({ '["ep","assign:user-1:exp"]': JSON.stringify(cached) });
-    const client = new DenoExperimentationClient({ apiKey: 'k', kv });
+    const client = new DenoExperimentationClient({ apiKey: 'k', baseUrl: 'http://api.test', kv });
     expect(await client.getAssignment('exp', 'user-1')).toEqual(cached);
     expect(mockFetch).not.toHaveBeenCalled();
     expect(client.getAssignmentSync('exp', 'user-1')).toBe('control');

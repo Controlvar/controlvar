@@ -57,7 +57,7 @@ export default {
     },
     {
       apiKey: Deno.env.get('EP_API_KEY') ?? '',
-      baseUrl: Deno.env.get('EP_BASE_URL') ?? 'https://api.your-platform.com',
+      baseUrl: Deno.env.get('EP_BASE_URL') ?? 'https://api.example.com',
       // kv: await Deno.openKv(), // Uncomment to share cached results across isolates
       cacheTtlMs: 60_000,
       timeout: 500,
@@ -79,7 +79,7 @@ export async function manualHandler(request: Request): Promise<Response> {
 
   const client = new DenoExperimentationClient({
     apiKey: Deno.env.get('EP_API_KEY') ?? '',
-    baseUrl: Deno.env.get('EP_BASE_URL') ?? 'https://api.your-platform.com',
+    baseUrl: Deno.env.get('EP_BASE_URL') ?? 'https://api.example.com',
     // kv, // Uncomment to enable Deno KV caching
     kvTtlMs: 300_000, // 5 minutes
   });

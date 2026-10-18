@@ -87,6 +87,23 @@ def test_the_web_image_is_the_api_image_name_with_web(workflow):
 
 
 @needs_workflows
+def test_the_image_path_and_signing_identity_follow_the_repository(workflow):
+    """Nothing names the repository: the image path and the identity the notes
+    give come from github.repository, so a rename or a transfer moves both."""
+    resolve = workflow["jobs"]["verify"]["steps"][0]
+    assert resolve["env"]["REPOSITORY"] == "${{ github.repository }}"
+    assert (
+        "image=\"${REGISTRY}/$(echo \"$REPOSITORY\" | tr '[:upper:]' '[:lower:]')\""
+        in resolve["run"]
+    )
+    notes = "\n".join(runs(job) for job in workflow["jobs"].values())
+    assert (
+        'identity="^https://github\\\\.com/${REPOSITORY}/\\\\.github/workflows/'
+        in notes
+    )
+
+
+@needs_workflows
 @pytest.mark.parametrize("job", IMAGE_JOBS)
 def test_each_image_is_signed_and_carries_its_sbom_as_an_attestation(workflow, job):
     text = runs(workflow["jobs"][job])

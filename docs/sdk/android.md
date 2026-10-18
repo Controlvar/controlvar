@@ -1,6 +1,6 @@
 # Android Kotlin SDK
 
-The Android SDK (`com.getexperimently.android`) provides feature flag evaluation,
+The Android SDK (`com.controlvar.android`) provides feature flag evaluation,
 experiment assignment and event tracking for Android applications. It is built on Kotlin
 Coroutines and OkHttp, keeps the last successful results in an offline store for fallback (in
 memory by default; persisted to `SharedPreferences` when you pass an adapter, see [Configuration](#configuration)),
@@ -36,7 +36,7 @@ Source: `sdk/android` (module `sdk/android/sdk`, Compose example in `sdk/android
 ```kotlin
 // settings.gradle.kts
 include(":sdk")
-project(":sdk").projectDir = file("../experimently/sdk/android/sdk")
+project(":sdk").projectDir = file("../controlvar/sdk/android/sdk")
 
 // build.gradle.kts (app module)
 dependencies {
@@ -48,16 +48,18 @@ dependencies {
 
 ## Quick Start
 
+If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier version of these pages, set `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` instead.
+
 ```kotlin
-import com.getexperimently.android.ExperimentationClient
-import com.getexperimently.android.SdkConfig
-import com.getexperimently.android.TrackEvent
-import com.getexperimently.android.User
+import com.controlvar.android.ExperimentationClient
+import com.controlvar.android.SdkConfig
+import com.controlvar.android.TrackEvent
+import com.controlvar.android.User
 
 val client = ExperimentationClient(
     SdkConfig(
         baseUrl = "http://10.0.2.2:8000",           // origin only; the SDK appends /api/v1/...
-        apiKey = BuildConfig.EXPERIMENTLY_API_KEY   // sent as X-API-Key
+        apiKey = BuildConfig.CONTROLVAR_API_KEY   // sent as X-API-Key
     )
 )
 
@@ -118,7 +120,7 @@ class PrefsAdapter(private val prefs: SharedPreferences) : OfflineStore.PrefsAda
 
 val client = ExperimentationClient(
     config,
-    offlineStore = OfflineStore(PrefsAdapter(context.getSharedPreferences("experimently", Context.MODE_PRIVATE)))
+    offlineStore = OfflineStore(PrefsAdapter(context.getSharedPreferences("controlvar", Context.MODE_PRIVATE)))
 )
 ```
 
@@ -394,4 +396,4 @@ sources for a plain JVM (`sdk/android/jvm`), so it needs no Android SDK and no e
 live runner runs it with `python tests/sdk-contract/live/run_live_contract.py --sdk android --strict`.
 
 CI runs this SDK's contract smoke against a real API: `android` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).

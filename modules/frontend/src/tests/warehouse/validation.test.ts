@@ -71,7 +71,7 @@ describe('Snowflake', () => {
     expect(checkSnowflakeRole(v)).toBe(SNOWFLAKE_ROLE_REFUSED);
   });
   it('accepts a read-only role', () => {
-    expect(checkSnowflakeRole('EXPERIMENTLY_READER')).toBeNull();
+    expect(checkSnowflakeRole('CONTROLVAR_READER')).toBeNull();
   });
 });
 

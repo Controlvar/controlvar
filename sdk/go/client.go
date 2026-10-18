@@ -13,7 +13,7 @@ import (
 // batchLimit is the maximum number of events per POST /api/v1/tracking/batch.
 const batchLimit = 100
 
-// Client is the main interface for interacting with Experimently.
+// Client is the main interface for interacting with Controlvar.
 // Implementations must be safe for concurrent use by multiple goroutines.
 type Client interface {
 	// EvaluateFlag evaluates a feature flag for the given user via

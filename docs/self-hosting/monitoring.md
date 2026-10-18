@@ -46,7 +46,7 @@ A job for the `scrape_configs` list of `prometheus.yml`, with the token in a fil
   metrics_path: '/metrics'
   scheme: 'https'
   authorization:
-    credentials_file: /etc/prometheus/experimently-metrics-token
+    credentials_file: /etc/prometheus/controlvar-metrics-token
   static_configs:
     - targets: ['app.example.com']
   scrape_interval: 30s

@@ -53,7 +53,7 @@ CORE_STACKS = {
 
 
 #: The ALARM_EMAIL every synth here gets (``_app_environment``).
-TEST_ALARM_EMAIL = "alerts@experimently.test"
+TEST_ALARM_EMAIL = "alerts@controlvar.test"
 
 #: The account and region every synth here deploys to. The account is one of
 #: the documented placeholders the repository's account check accepts, and

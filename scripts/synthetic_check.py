@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Experimently contributors
+# SPDX-FileCopyrightText: 2026 The Controlvar authors
 # SPDX-License-Identifier: Apache-2.0
 """The synthetic staging check: eight steps, in order, each one fatal.
 
@@ -269,7 +269,7 @@ class Client:
             url += "?" + urllib.parse.urlencode(query)
         headers = {
             "Accept": "application/json",
-            "User-Agent": "experimently-synthetic-check",
+            "User-Agent": "controlvar-synthetic-check",
         }
         data = None
         if body is not None:

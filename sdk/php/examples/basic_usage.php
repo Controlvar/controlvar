@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Basic usage example for the Experimently PHP SDK.
+ * Basic usage example for the Controlvar PHP SDK.
  *
  * Demonstrates:
  *  1. Creating a client
@@ -14,24 +14,25 @@ declare(strict_types=1);
  *
  * Run from the sdk/php directory:
  *   composer install
- *   EXPERIMENTLY_API_URL=http://localhost:8000 EXPERIMENTLY_API_KEY=... php examples/basic_usage.php
+ *   CONTROLVAR_API_URL=http://localhost:8000 CONTROLVAR_API_KEY=... php examples/basic_usage.php
+ *   (earlier versions of this example read EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY.)
  *
  * For a runnable end-to-end check against a live backend see contract_smoke.php.
  */
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use Experimently\ExperimentationClient;
-use Experimently\FeatureFlagEvaluator;
-use Experimently\SdkConfig;
+use Controlvar\ExperimentationClient;
+use Controlvar\FeatureFlagEvaluator;
+use Controlvar\SdkConfig;
 
 // ---------------------------------------------------------------------------
 // 1. Configure and create the client
 // ---------------------------------------------------------------------------
 
 $config = new SdkConfig(
-    baseUrl: getenv('EXPERIMENTLY_API_URL') ?: 'http://localhost:8000', // origin only; the SDK appends /api/v1/...
-    apiKey: getenv('EXPERIMENTLY_API_KEY') ?: 'your-api-key-here',       // sent as X-API-Key
+    baseUrl: getenv('CONTROLVAR_API_URL') ?: 'http://localhost:8000', // origin only; the SDK appends /api/v1/...
+    apiKey: getenv('CONTROLVAR_API_KEY') ?: 'your-api-key-here',       // sent as X-API-Key
     cacheTtl: 300,      // reuse a successful evaluation/assignment for 5 minutes
     timeout: 10,        // HTTP timeout in seconds
     maxCacheSize: 1000, // max cached entries

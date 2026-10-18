@@ -294,8 +294,8 @@ def _image_line(text: str, repo: str) -> str:
 @pytest.mark.parametrize(
     "repo",
     [
-        "ghcr.io/getexperimently/experimently",
-        "ghcr.io/getexperimently/experimently-web",
+        "ghcr.io/controlvar/controlvar",
+        "ghcr.io/controlvar/controlvar-web",
     ],
 )
 def test_checker_rejects_a_stale_compose_image_line(tmp_path: Path, repo: str) -> None:
@@ -347,7 +347,7 @@ def test_checker_rejects_a_malformed_compose_image_line(
     copy = _checkable_copy(tmp_path)
     path = copy / COMPOSE
     text = path.read_text(encoding="utf-8")
-    line = _image_line(text, "ghcr.io/getexperimently/experimently")
+    line = _image_line(text, "ghcr.io/controlvar/controlvar")
     path.write_text(text.replace(line, edit(line)), encoding="utf-8")
     assert path.read_text(encoding="utf-8") != text, "the tamper did not apply"
 

@@ -26,7 +26,7 @@
 #
 # The image name comes from `github.repository`, so the private repository
 # rehearses to ghcr.io/amarkanday/experimentation-platform and the public one
-# publishes to ghcr.io/getexperimently/experimently with no edit at the cut.
+# publishes to ghcr.io/controlvar/controlvar with no edit at the cut.
 name: Release
 
 on:
@@ -289,7 +289,7 @@ jobs:
       - name: Scan the image for stored credentials
         env:
           SCAN_IMAGE: release-scan/api:${{ matrix.profile }}
-          LABEL: experimently:${{ matrix.profile }}-${{ needs.verify.outputs.version }} (whole image)
+          LABEL: controlvar:${{ matrix.profile }}-${{ needs.verify.outputs.version }} (whole image)
           TRIVY_CONF: ${{ github.workspace }}/.github/trivy
         run: |
           set -euo pipefail
@@ -313,7 +313,7 @@ jobs:
       - name: Scan the payload with every allow rule off
         env:
           SCAN_IMAGE: release-scan/api:${{ matrix.profile }}
-          LABEL: experimently:${{ matrix.profile }}-${{ needs.verify.outputs.version }} (/app, every allow rule off)
+          LABEL: controlvar:${{ matrix.profile }}-${{ needs.verify.outputs.version }} (/app, every allow rule off)
           TRIVY_CONF: ${{ github.workspace }}/.github/trivy
         run: |
           set -euo pipefail
@@ -933,7 +933,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # The Helm chart, packaged and attached to the GitHub release as
-  # `experimently-X.Y.Z.tgz`, for `helm install ./experimently-X.Y.Z.tgz`.
+  # `controlvar-X.Y.Z.tgz`, for `helm install ./controlvar-X.Y.Z.tgz`.
   #
   # After `publish`, because the release has to exist before an asset can be
   # attached to it, and `publish` is what creates it on the hand-pushed-tag
@@ -1003,7 +1003,7 @@ jobs:
       - name: The packaged chart is this release
         env:
           VERSION: ${{ needs.verify.outputs.version }}
-        run: python scripts/check_chart_package.py "dist/experimently-${VERSION}.tgz" --expect "$VERSION"
+        run: python scripts/check_chart_package.py "dist/controlvar-${VERSION}.tgz" --expect "$VERSION"
 
       # --clobber: re-running this workflow on an existing tag is the documented
       # recovery for a failed release, and must replace the asset, not fail on it.
@@ -1015,6 +1015,6 @@ jobs:
           VERSION: ${{ needs.verify.outputs.version }}
         run: |
           set -euo pipefail
-          gh release upload "$TAG" "dist/experimently-${VERSION}.tgz" --clobber
+          gh release upload "$TAG" "dist/controlvar-${VERSION}.tgz" --clobber
           gh release view "$TAG" --json assets --jq '.assets[].name' > assets.txt
-          grep -Fx "experimently-${VERSION}.tgz" assets.txt
+          grep -Fx "controlvar-${VERSION}.tgz" assets.txt

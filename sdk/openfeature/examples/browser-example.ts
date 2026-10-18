@@ -12,7 +12,7 @@ import { ExperimentationProvider } from '../src/ExperimentationProvider';
 export async function initFeatureFlags(userId: string): Promise<void> {
   const provider = new ExperimentationProvider({
     apiKey: 'your-public-client-api-key',
-    baseUrl: 'https://api.yourplatform.com',
+    baseUrl: 'https://api.example.com',
     cacheTtlMs: 5 * 60_000, // reuse each evaluation for 5 minutes
   });
 

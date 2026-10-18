@@ -43,6 +43,8 @@ def _load():
 rc = _load()
 
 TAG = "v0.30.0"
+#: GITHUB_REPOSITORY, as conftest.py sets it for every test here.
+REPO = "Controlvar/controlvar"
 RC = "a1" * 20
 OLD = "b2" * 20
 COMMIT_TIME = "2026-11-01T10:00:00Z"
@@ -59,36 +61,36 @@ DEMO_JEST = "test:demo/shoplab/src/__tests__/search.test.tsx::flag on: fuzzy eng
 DEMO_SIM = "test:demo/streampulse/simulator/test_story.py::test_the_story_runs"
 SDK_GO = "test:sdk/go/client_test.go::TestClient_Flags"
 SDK_JAVA = "test:sdk/java/core/src/test/java/ClientTest.java"
-JS_NAME, PY_NAME = "@getexperimently/js-sdk", "experimently"
+JS_NAME, PY_NAME = "@controlvar/js-sdk", "controlvar"
 #: The commits the SDK tags name: older than the RC, as a release that
 #: publishes no new SDK version finds them.
 TAG_COMMITS = {"js": "d4" * 20, "python": "e5" * 20}
 #: Made-up git tree ids of sdk/js and sdk/python.
 TREES = {"js": "f6" * 20, "python": "a7" * 20}
 JS_VERSION = PY_VERSION = "0.1.1"
-WHEEL = f"experimently-{PY_VERSION}-py3-none-any.whl"
-SDIST = f"experimently-{PY_VERSION}.tar.gz"
-TGZ = f"getexperimently-js-sdk-{JS_VERSION}.tgz"
+WHEEL = f"controlvar-{PY_VERSION}-py3-none-any.whl"
+SDIST = f"controlvar-{PY_VERSION}.tar.gz"
+TGZ = f"controlvar-js-sdk-{JS_VERSION}.tgz"
 #: Made-up package files: what sdk-release.yml built and recorded.
 FILES = {
     WHEEL: b"a made-up wheel",
     SDIST: b"a made-up sdist",
     TGZ: b"a made-up npm tarball",
 }
-PYPI_URL = "https://pypi.org/pypi/experimently/json"
-NPM_URL = "https://registry.npmjs.org/@getexperimently%2fjs-sdk"
+PYPI_URL = "https://pypi.org/pypi/controlvar/json"
+NPM_URL = "https://registry.npmjs.org/@controlvar%2fjs-sdk"
 TARBALL_URL = f"https://registry.npmjs.org/{JS_NAME}/-/js-sdk-{JS_VERSION}.tgz"
 GOOD_DESCRIPTION = {
     "PyPI": (
-        "# experimently\n\nThe Python client. See the"
-        " [guide](https://getexperimently.github.io/experimently/sdk/python/).\n\n"
-        f"```bash\npip install experimently=={PY_VERSION}\n```\n\n"
+        "# controlvar\n\nThe Python client. See the"
+        " [guide](https://docs.controlvar.com/sdk/python/).\n\n"
+        f"```bash\npip install controlvar=={PY_VERSION}\n```\n\n"
         "```bash\n# from a clone\npip install -e sdk/python\n```\n"
     ),
     "npm": (
-        "# @getexperimently/js-sdk\n\nSee the"
-        " [guide](https://getexperimently.github.io/experimently/sdk/javascript/).\n\n"
-        f"```bash\nnpm install @getexperimently/js-sdk@{JS_VERSION}\n```\n"
+        "# @controlvar/js-sdk\n\nSee the"
+        " [guide](https://docs.controlvar.com/sdk/javascript/).\n\n"
+        f"```bash\nnpm install @controlvar/js-sdk@{JS_VERSION}\n```\n"
     ),
 }
 TAG_OBJECT = "c3" * 20
@@ -120,7 +122,7 @@ def _run(
         "run_attempt": attempt,
         "created_at": created,
         "updated_at": updated or created,
-        "html_url": f"https://github.com/getexperimently/experimently/actions/runs/{run_id}",
+        "html_url": f"https://github.com/Controlvar/controlvar/actions/runs/{run_id}",
         "display_title": title or workflow,
     }
 
@@ -513,7 +515,7 @@ class World:
         self.calls.append(list(args))
         if args[0] == "api":
             assert len(args) == 2, f"only a plain GET is made: {args}"
-            prefix = f"repos/{rc.REPO}/"
+            prefix = f"repos/{REPO}/"
             assert args[1].startswith(prefix)
             path = args[1][len(prefix) :]
             if path.startswith("actions/workflows/") and "/runs?" in path:
@@ -693,7 +695,10 @@ def test_plan_prints_one_dispatch_per_workflow_at_the_tag_and_runs_nothing(capsy
     commands = [line for line in printed if line.startswith("gh workflow run")]
     dispatched = [w.file for w in rc.WORKFLOWS if w.at_tag]
     assert [c.split()[3] for c in commands] == dispatched
-    assert all(f"--ref {TAG} -R {rc.REPO}" in c for c in commands)
+    assert all(f' --ref {TAG} -R "$REPO"' in c for c in commands)
+    assert printed.index(
+        'REPO="$(gh api repositories/1367480368 --jq .full_name)"'
+    ) < printed.index(commands[0])
     assert dispatched[-1] == "rc-evidence.yml" and dispatched[0] == "docs.yml"
     assert dispatched.index("docs.yml") < dispatched.index("docs-journeys.yml")
     checks = [line for line in printed if "--registry" in line]
@@ -702,6 +707,67 @@ def test_plan_prints_one_dispatch_per_workflow_at_the_tag_and_runs_nothing(capsy
         f"python3 scripts/rc_evidence.py {TAG} --registry python --out <dir>",
     ]
     assert printed.index(checks[-1]) < printed.index(commands[0])
+
+
+#: The repository by another name: what a rename or a transfer makes it.
+RENAMED = "example-org/example-repo"
+
+
+@pytest.mark.regression
+def test_the_repository_is_the_run_s_or_the_current_name_of_its_id():
+    """The name used to be written into the script, so after a rename every
+    read went to the old name. A run names its repository; on a machine the
+    API answers the name of the repository's id."""
+    calls = []
+
+    def gh(args):
+        calls.append(args)
+        assert args == ["api", "repositories/1367480368"], args
+        return json.dumps({"id": 1367480368, "full_name": RENAMED})
+
+    assert rc.repository({"GITHUB_REPOSITORY": RENAMED}, gh) == RENAMED
+    assert calls == []
+    assert rc.repository({}, gh) == RENAMED
+    assert len(calls) == 1
+    assert rc.REPOSITORY_ID == "1367480368"
+
+
+@pytest.mark.parametrize(
+    "environ, answer",
+    [
+        ({"GITHUB_REPOSITORY": "a/b/c"}, None),
+        ({"GITHUB_REPOSITORY": "owner/repo\n"}, None),
+        ({}, "{}"),
+        ({}, '{"full_name": "../x"}'),
+        ({}, "not json"),
+        ({}, rc.GhError("gh api failed (exit 1)")),
+    ],
+)
+def test_no_owner_name_for_the_repository_is_a_usage_error(environ, answer):
+    def gh(args):
+        if isinstance(answer, Exception):
+            raise answer
+        assert answer is not None, "a run's own name needs no lookup"
+        return answer
+
+    with pytest.raises(rc.UsageError):
+        rc.repository(environ, gh)
+
+
+def test_main_reads_the_repository_the_id_names(world, monkeypatch):
+    """With no GITHUB_REPOSITORY, every read goes to the id's current name."""
+    monkeypatch.delenv("GITHUB_REPOSITORY")
+    answered = world.gh
+
+    def gh(args):
+        if args == ["api", "repositories/1367480368"]:
+            return json.dumps({"full_name": REPO})
+        return answered(args)
+
+    world.gh = gh
+    code, text = world.main()
+    assert code == 0, text
+    assert world.calls[0] == ["api", f"repos/{REPO}/git/ref/tags/{TAG}"]
 
 
 @pytest.mark.parametrize("tag", ["v0.30", "0.30.0", "v0.30.0-rc.1", "v0.30.0 ", "main"])
@@ -1746,7 +1812,7 @@ def test_a_pypi_file_the_run_did_not_record_fails(world):
             ]
             + [
                 {
-                    "filename": "experimently-0.1.1-py2-none-any.whl",
+                    "filename": "controlvar-0.1.1-py2-none-any.whl",
                     "digests": {"sha256": "0" * 64},
                 }
             ],
@@ -1754,7 +1820,7 @@ def test_a_pypi_file_the_run_did_not_record_fails(world):
     ).encode()
     _fails(
         world,
-        "experimently-0.1.1-py2-none-any.whl: on PyPI; run 3001 did not record it",
+        "controlvar-0.1.1-py2-none-any.whl: on PyPI; run 3001 did not record it",
     )
 
 
@@ -1777,8 +1843,8 @@ def test_an_npm_tarball_that_is_not_the_recorded_one_fails(world):
 @pytest.mark.parametrize(
     "registry, install",
     [
-        ("PyPI", "pip install experimently==0.1.0"),
-        ("npm", "npm install @getexperimently/js-sdk@0.1.0"),
+        ("PyPI", "pip install controlvar==0.1.0"),
+        ("npm", "npm install @controlvar/js-sdk@0.1.0"),
     ],
 )
 def test_a_description_quoting_the_previous_version_fails(world, registry, install):
@@ -1795,7 +1861,7 @@ def test_a_description_quoting_the_previous_version_fails(world, registry, insta
 @pytest.mark.parametrize("registry", ["PyPI", "npm"])
 def test_a_description_with_no_pinned_install_line_fails(world, registry):
     world.descriptions[registry] = (
-        "# A package\n\n```bash\npip install experimently\n```\n"
+        "# A package\n\n```bash\npip install controlvar\n```\n"
     )
     _fails(world, f"the {registry} description has no install line with a version")
 
@@ -2031,16 +2097,16 @@ def test_registry_mode_refuses_staging(world):
 # ---------------------------------------------------------------------------
 def test_the_record_is_read_from_a_log_as_github_writes_it():
     sha = hashlib.sha256(b"x").hexdigest()
-    listing = f"{sha}  experimently-1.0.0.tar.gz\n"
+    listing = f"{sha}  controlvar-1.0.0.tar.gz\n"
     digest = hashlib.sha256(listing.encode()).hexdigest()
     log = (
         "﻿2026-11-01T10:20:00.0000000Z Run set -euo pipefail\n"
-        f"2026-11-01T10:20:01.1234567Z {sha}  experimently-1.0.0.tar.gz\r\n"
+        f"2026-11-01T10:20:01.1234567Z {sha}  controlvar-1.0.0.tar.gz\r\n"
         f"2026-11-01T10:20:01.2234567Z digest {digest}\n"
-        f"not a log line {sha}  experimently-9.tar.gz\n"
+        f"not a log line {sha}  controlvar-9.tar.gz\n"
     )
     files, problems = rc.read_record(rc.PACKAGES["python"], log)
-    assert problems == [] and files == {"experimently-1.0.0.tar.gz": sha}
+    assert problems == [] and files == {"controlvar-1.0.0.tar.gz": sha}
 
 
 @pytest.mark.parametrize(
@@ -2077,7 +2143,7 @@ def test_a_huge_description_is_truncated_before_it_is_read():
     pattern on it is bounded. A planted pin past the cut is not seen."""
     head = "](x" * 20_000 + ("href=" + "a" * 3_000 + " ") * 10 + "```\n" * 1_000
     head += " " * (rc.DESCRIPTION_MAX - len(head))
-    text = head + "pip install experimently==0.1.1\n"
+    text = head + "pip install controlvar==0.1.1\n"
     problems = rc.description_problems(rc.PACKAGES["python"], PY_NAME, PY_VERSION, text)
     assert "the PyPI description has no install line with a version" in problems[0]
 

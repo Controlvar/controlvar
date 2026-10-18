@@ -4,7 +4,7 @@
 # Each sdk step makes a fresh directory and runs the page's own install
 # commands exactly as written and in the page's order, read from the page:
 # `go mod init example.com/quickstart`, then
-# `go get github.com/getexperimently/experimently/sdk/go`, from
+# `go get github.com/controlvar/controlvar/sdk/go`, from
 # proxy.golang.org. The runner never writes go.mod. `go version` must be the
 # line sdk/go/go.mod's `go` directive names (setup-go installs it from that
 # file), and the page's "Requires Go X+" must be that version. The module has
@@ -14,7 +14,7 @@
 # tag run, docs_runner/sdk.py). It then writes the page's Quick Start block, a
 # complete program, to main.go with only its placeholders replaced (the API's
 # address, the experiment's key, the flag's key and the user) and runs
-# `go run .`. The key is given as EXPERIMENTLY_API_KEY, the variable the block
+# `go run .`. The key is given as CONTROLVAR_API_KEY (and its former name), the variable the block
 # reads. The program prints one line, `variant=<name> flag=<true|false>`.
 #
 # The oracle does not use the SDK (docs_runner/traffic.py). The variant must be

@@ -35,7 +35,7 @@ CHECKER = ROOT / "scripts" / "check_image_labels.py"
 RELEASE = ROOT / ".github" / "workflows" / "release.yml"
 PR_GATE = ROOT / ".github" / "workflows" / "pr-qa-gate.yml"
 
-SOURCE = "https://github.com/getexperimently/experimently"
+SOURCE = "https://github.com/Controlvar/controlvar"
 NGINX_SOURCE = "https://github.com/nginx/docker-nginx-unprivileged"
 
 pytestmark = pytest.mark.unit
@@ -43,7 +43,7 @@ pytestmark = pytest.mark.unit
 
 def labels(version: str = "0.1.0", profile: str = "core") -> dict:
     return {
-        "org.opencontainers.image.title": "Experimently API",
+        "org.opencontainers.image.title": "Controlvar API",
         "org.opencontainers.image.licenses": "Apache-2.0",
         "org.opencontainers.image.version": version,
         "org.opencontainers.image.source": SOURCE,
@@ -313,10 +313,10 @@ def _render_release_notes(tmp_path: Path, env_overrides: dict[str, str]) -> str:
     )
     env = {
         "PATH": "/usr/bin:/bin:/usr/local/bin",
-        "IMAGE": "ghcr.io/getexperimently/experimently",
-        "WEB_IMAGE": "ghcr.io/getexperimently/experimently-web",
+        "IMAGE": "ghcr.io/controlvar/controlvar",
+        "WEB_IMAGE": "ghcr.io/controlvar/controlvar-web",
         "VERSION": "1.2.3",
-        "REPOSITORY": "getexperimently/experimently",
+        "REPOSITORY": "Controlvar/controlvar",
     }
     env.update({k: str(v) for k, v in (workflow.get("env") or {}).items()})
     env.update(env_overrides)

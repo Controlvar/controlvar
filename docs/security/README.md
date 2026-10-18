@@ -1,6 +1,6 @@
 # Security Documentation
 
-This directory contains the security compliance documentation for Experimently.
+This directory contains the security compliance documentation for Controlvar.
 
 | Document | Description |
 |----------|-------------|
@@ -10,7 +10,7 @@ This directory contains the security compliance documentation for Experimently.
 
 ## Quick Reference
 
-- Report a security issue: privately, as [SECURITY.md](https://github.com/getexperimently/experimently/blob/main/SECURITY.md) describes
+- Report a security issue: privately, as [SECURITY.md](https://github.com/Controlvar/controlvar/blob/main/SECURITY.md) describes
 - An incident on your deployment: [Responding to an incident on your deployment](incident-response.md)
 
 ## Key Security Controls (Implemented)

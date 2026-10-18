@@ -44,8 +44,8 @@ REQUIRED = (
 #: Secret, but optional: the only default either may have is empty.
 OPTIONAL_SECRETS = ("AUDIT_HMAC_KEY", "METRICS_TOKEN")
 
-API_REPO = "ghcr.io/getexperimently/experimently"
-WEB_REPO = "ghcr.io/getexperimently/experimently-web"
+API_REPO = "ghcr.io/controlvar/controlvar"
+WEB_REPO = "ghcr.io/controlvar/controlvar-web"
 
 
 def _version() -> str:
@@ -60,6 +60,36 @@ def compose() -> Dict[str, Any]:
 @pytest.fixture(scope="module")
 def services(compose) -> Dict[str, Any]:
     return compose["services"]
+
+
+#: The volumes, and the database user, of every install made before the
+#: project was renamed: compose names a volume `<project>_<key>`, and Postgres
+#: applies the user only when it initialises an empty volume.
+VOLUMES_BEFORE_THE_RENAME = {
+    "experimently-selfhost_postgres_data",
+    "experimently-selfhost_redis_data",
+}
+DATABASE_USER_BEFORE_THE_RENAME = "${POSTGRES_USER:-experimently}"
+
+
+@pytest.mark.regression
+def test_compose_upgrade_keeps_the_postgres_volume(compose):
+    """An upgrade with the new file reaches the database it had. Were the
+    project name renamed, `docker compose up -d` would create new, empty
+    volumes, the bootstrap would make a fresh database with the first
+    administrator, and the stack would come up healthy on it."""
+    volumes = {
+        spec.get("name")
+        if isinstance(spec, dict) and spec.get("name")
+        else f"{compose['name']}_{key}"
+        for key, spec in compose["volumes"].items()
+    }
+    assert volumes == VOLUMES_BEFORE_THE_RENAME
+    for service in ("postgres", "api"):
+        assert (
+            compose["services"][service]["environment"]["POSTGRES_USER"]
+            == DATABASE_USER_BEFORE_THE_RENAME
+        ), service
 
 
 class TestShape:
@@ -93,7 +123,7 @@ class TestShape:
         assert "depends_on" not in services["api"]
 
     def test_the_project_name_is_not_the_development_stacks(self, compose):
-        """A checkout in `experimently/` gives docker-compose.yml that project name.
+        """A checkout in `controlvar/` gives docker-compose.yml that project name.
 
         Sharing it, `up` recreates the development containers with this file's
         settings and mounts their volumes -- measured, not hypothetical.
@@ -102,6 +132,57 @@ class TestShape:
 
     def test_the_named_volumes_are_declared(self, compose):
         assert set(compose["volumes"]) == {"postgres_data", "redis_data"}
+
+
+RELEASE = REPO_ROOT / ".github" / "workflows" / "release.yml"
+
+
+@pytest.mark.regression
+@pytest.mark.skipif(not RELEASE.is_file(), reason="this tree has no .github/workflows")
+class TestPlatform:
+    """api and web name the one platform their images are built for (#1268).
+
+    The images are published for ``linux/amd64`` only, so on an arm64 host
+    (Apple Silicon) ``up`` failed with "no matching manifest for
+    linux/arm64/v8". Pinning those two services runs them emulated there;
+    postgres and redis are multi-platform and must stay native.
+    ``DOCKER_DEFAULT_PLATFORM`` is not a fix: it forces them to amd64 too.
+
+    The platform is read from release.yml's ``API_PLATFORMS`` and
+    ``WEB_PLATFORMS``, the one place it is written (#239), so this file cannot
+    name a platform that is not built. Once either lists more than one, the
+    pin would force emulation on hosts that have a native image: remove it.
+    """
+
+    @pytest.fixture(scope="class")
+    def built(self) -> Dict[str, str]:
+        env = yaml.safe_load(RELEASE.read_text(encoding="utf-8"))["env"]
+        built = {}
+        for service, name in (("api", "API_PLATFORMS"), ("web", "WEB_PLATFORMS")):
+            listed = [p.strip() for p in str(env[name]).split(",") if p.strip()]
+            assert len(listed) == 1, (
+                f"release.yml's {name} is {listed}: the {service} image is now "
+                "built for more than one platform, so remove `platform:` from "
+                "the api and web services of deploy/compose/compose.yml (#181), "
+                "and this test with it"
+            )
+            built[service] = listed[0]
+        return built
+
+    def test_exactly_api_and_web_name_a_platform(self, services):
+        pinned = sorted(name for name, svc in services.items() if "platform" in svc)
+        assert pinned == ["api", "web"], (
+            f"services with a platform: key: {pinned}, not exactly api and web: "
+            "those two images are amd64 only, and postgres and redis publish "
+            "arm64 images and must run natively"
+        )
+
+    def test_api_and_web_ask_for_the_one_built_platform(self, services, built):
+        for service, platform in built.items():
+            assert services[service].get("platform") == platform, (
+                f"{service} must carry `platform: {platform}`, the one platform "
+                "release.yml builds its image for"
+            )
 
 
 class TestApiEnvironment:
@@ -218,7 +299,7 @@ class TestGenerator:
         env = {k: v for k, v in os.environ.items() if k not in REQUIRED}
         env.update(
             ENV_FILE=str(env_file),
-            PUBLIC_BASE_URL="https://experimently.example.com",
+            PUBLIC_BASE_URL="https://controlvar.example.com",
             FIRST_SUPERUSER="you@example.com",
             EXPERIMENTLY_PROFILE="full",
         )
@@ -227,7 +308,7 @@ class TestGenerator:
         )
         assert result.returncode == 0, result.stderr
         text = env_file.read_text()
-        assert "PUBLIC_BASE_URL=https://experimently.example.com\n" in text
+        assert "PUBLIC_BASE_URL=https://controlvar.example.com\n" in text
         assert "FIRST_SUPERUSER=you@example.com\n" in text
         assert "EXPERIMENTLY_PROFILE=full\n" in text
 

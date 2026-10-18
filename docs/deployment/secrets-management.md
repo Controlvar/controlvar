@@ -1,4 +1,4 @@
-# Secrets Management — Experimently
+# Secrets Management — Controlvar
 
 **Audience:** DevOps, Security Engineers
 
@@ -380,7 +380,7 @@ aws logs filter-log-events \
 
 The key's owner, or an ADMIN, can instead delete it through the API with `DELETE /api/v1/api-keys/{id}`, or from **Admin → API Keys** in the dashboard. Neither the plaintext nor its `eptk_xxxx` prefix is stored, so identify the key by its name, or get its `id` from the `RETURNING` clause above. `KEY_HASH` is the hex SHA-256 of the key, which is what the platform stores (`hash_api_key` in `backend/app/core/security.py`).
 
-If the key may have been exposed through a vulnerability in Experimently itself, report it privately as [SECURITY.md](https://github.com/getexperimently/experimently/blob/main/SECURITY.md) describes; see [Responding to an incident on your deployment](../security/incident-response.md).
+If the key may have been exposed through a vulnerability in Controlvar itself, report it privately as [SECURITY.md](https://github.com/Controlvar/controlvar/blob/main/SECURITY.md) describes; see [Responding to an incident on your deployment](../security/incident-response.md).
 
 ---
 

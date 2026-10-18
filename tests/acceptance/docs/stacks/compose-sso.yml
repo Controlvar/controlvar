@@ -58,7 +58,7 @@ services:
       FAKE_OIDC_ISSUER: https://localhost:28443/oauth2/default
       # The user info's groups, in this order: role_mapping takes the first
       # one it maps (sso.md, "Group-to-Role Mapping").
-      FAKE_OIDC_GROUPS: Engineering,data-analysts,experimently-admins
+      FAKE_OIDC_GROUPS: Engineering,data-analysts,controlvar-admins
     volumes:
       - ${DOCS_JOURNEY_FAKE_IDP:?}:/fake/fake_oidc_provider.py:ro
       - ${DOCS_JOURNEY_IDP_DIR:?}:/idp:ro

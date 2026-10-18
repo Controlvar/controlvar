@@ -138,6 +138,7 @@ universe = [
     "docs/self-hosting/migrations.md",
     "docs/self-hosting/monitoring.md",
     "docs/self-hosting/releases.md",
+    "docs/self-hosting/upgrading-to-controlvar.md",
     "docs/statistics/fdr-correction.md",
     "docs/statistics/post-stratification.md",
     "docs/statistics/power-analysis.md",
@@ -169,7 +170,7 @@ universe = [
 path = "docs/getting-started/quick-start.md"
 environment = "bare"
 exec = 11
-skip = 3
+skip = 4
 expects = 11
 
 [[document]]
@@ -232,7 +233,7 @@ expects = 6
 path = "docs/getting-started/docker-compose-file.md"
 environment = "bare"
 exec = 5
-skip = 1
+skip = 2
 expects = 5
 
 [[document]]
@@ -289,7 +290,7 @@ path = "docs/guides/experiment-wizard.md"
 environment = "stack"
 exec = 11
 skip = 0
-expects = 18
+expects = 19
 
 [[document]]
 path = "docs/llm-evaluation/quickstart.md"

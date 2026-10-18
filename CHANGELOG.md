@@ -10,6 +10,50 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.36.0](https://github.com/Controlvar/controlvar/compare/v0.35.0...v0.36.0) (2026-10-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **sdk:** the SDK packages are published as `@controlvar/*` on npm and `controlvar` / `controlvar-openfeature` on PyPI, and Python code imports from `controlvar` and `controlvar_openfeature`. The Go module path is `github.com/controlvar/controlvar/sdk/go`; the Java and Android coordinates are `com.controlvar:*`. The edge SDK's `baseUrl` is required.
+
+### Features
+
+* **sdk:** publish the SDKs as Controlvar packages ([#1280](https://github.com/Controlvar/controlvar/issues/1280)) ([ea739ed](https://github.com/Controlvar/controlvar/commit/ea739edace88f9e60cf6f22aeeb5a3a60f8b7b4a))
+
+
+### Documentation
+
+* name the demo apps' addresses on the compose stack page ([#1279](https://github.com/Controlvar/controlvar/issues/1279)) ([1cc19ae](https://github.com/Controlvar/controlvar/commit/1cc19ae2fceb536b01e2ad6e3955206f247f3603))
+
+## [0.35.0](https://github.com/Controlvar/controlvar/compare/v0.34.4...v0.35.0) (2026-10-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* Experimently is now Controlvar. New images are ghcr.io/controlvar/controlvar and ghcr.io/controlvar/controlvar-web. The ghcr.io/getexperimently/... images stay where they are; their floating :core and :full tags stay at 0.34.4 and receive no further releases, including security fixes, so pin the new path. Docker Compose keeps its project name and database user, so an upgrade with the new compose.yml keeps its data. The Helm chart is named controlvar; upgrade with your existing release name and every object, the database volume included, keeps its name. Signatures of new images name github.com/Controlvar/controlvar; releases.md gives the identity for each version. The MCP manifest gives the name controlvar. See docs/self-hosting/upgrading-to-controlvar.md.
+
+### Features
+
+* rename the project to Controlvar ([#1277](https://github.com/Controlvar/controlvar/issues/1277)) ([9217740](https://github.com/Controlvar/controlvar/commit/9217740982ec6c6d9f038caefdfd14b98b50092b))
+
+## [0.34.4](https://github.com/getexperimently/experimently/compare/v0.34.3...v0.34.4) (2026-10-16)
+
+
+### Bug Fixes
+
+* **compose:** the demo-profile command seeds ShopLab and StreamPulse ([#1275](https://github.com/getexperimently/experimently/issues/1275)) ([8da4338](https://github.com/getexperimently/experimently/commit/8da4338ead4449f68d594fd1405f4ef9897b3a53))
+* **compose:** the self-hosting compose file starts on Apple Silicon ([#1269](https://github.com/getexperimently/experimently/issues/1269)) ([ef74e34](https://github.com/getexperimently/experimently/commit/ef74e347e24372e5bbf90b87e4c06bab16940e99))
+* **docker:** docker compose exec commands in the api container work on Apple M4 ([#1271](https://github.com/getexperimently/experimently/issues/1271)) ([5fcc81c](https://github.com/getexperimently/experimently/commit/5fcc81c9f62f8f34f507ae56e7639b85b921e097))
+
+## [0.34.3](https://github.com/getexperimently/experimently/compare/v0.34.2...v0.34.3) (2026-10-16)
+
+
+### Bug Fixes
+
+* **dashboard:** the experiment wizard saves the minimum detectable effect it sized the test with ([#1259](https://github.com/getexperimently/experimently/issues/1259)) ([06a564b](https://github.com/getexperimently/experimently/commit/06a564b9e557e0ca93118fe301ddc4e7b4d3bc5f))
+* **results:** the Planned sample plans with the effect saved with the experiment ([#1260](https://github.com/getexperimently/experimently/issues/1260)) ([0c97732](https://github.com/getexperimently/experimently/commit/0c977325a9aeef0f0a1960a1a93011077cd59d27))
+
 ## [0.34.2](https://github.com/getexperimently/experimently/compare/v0.34.1...v0.34.2) (2026-10-15)
 
 

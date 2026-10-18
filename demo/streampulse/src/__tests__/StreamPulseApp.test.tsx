@@ -5,7 +5,7 @@ import { STORY_COMMAND, STORY_STEPS } from '@/components/RolloutStoryDrawer';
 import { DEVICE_PRESETS } from '@/lib/devices';
 import { CACHE_TTL_MS, FLAG_KEYS } from '@/lib/env';
 import { SCREENS } from '@/lib/screens';
-import { __setFlag, providerMounts } from '@/__mocks__/experimently-sdk';
+import { __setFlag, providerMounts } from '@/__mocks__/controlvar-sdk';
 import { resetTestState } from '@/test-utils';
 
 function renderApp(props: Partial<React.ComponentProps<typeof StreamPulseApp>> = {}) {
@@ -135,7 +135,7 @@ describe('StreamPulseApp', () => {
 
   it('warns when the API key is missing but still renders the app', () => {
     renderApp({ apiKey: '' });
-    expect(screen.getByTestId('missing-key-alert')).toHaveTextContent('NEXT_PUBLIC_EXPERIMENTLY_API_KEY is not set');
+    expect(screen.getByTestId('missing-key-alert')).toHaveTextContent('NEXT_PUBLIC_CONTROLVAR_API_KEY is not set');
     expect(screen.getByTestId('phone')).toBeInTheDocument();
     expect(lastMount().config.apiKey).toBe('missing-api-key');
   });

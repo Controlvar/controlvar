@@ -23,7 +23,7 @@ by = [
 ]
 
 [[unit]]
-text = "It is opt-in, and it is available in the JavaScript SDK (@getexperimently/js-sdk 0.1.0, evaluation: 'local') and the Python SDK (experimently 0.1.0, evaluation=\"local\")."
+text = "It is opt-in, and it is available in the JavaScript SDK (@controlvar/js-sdk 0.1.1, evaluation: 'local') and the Python SDK (controlvar 0.1.1, evaluation=\"local\")."
 by = [
     "mechanism:sdk-doc-versions",
     "test:sdk/js/__tests__/local.test.ts::server mode is unchanged: no ruleset request, no source field",
@@ -108,7 +108,7 @@ text = "Requirements"
 by = ["exempt:label"]
 
 [[unit]]
-text = "An Experimently server that serves GET /api/v1/sdk/ruleset and accepts POST /api/v1/tracking/evaluations (both are beta)."
+text = "An Controlvar server that serves GET /api/v1/sdk/ruleset and accepts POST /api/v1/tracking/evaluations (both are beta)."
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
@@ -677,7 +677,7 @@ text = "The same, with \"This key's owner can no longer change feature flags or 
 by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestOwnerRole::test_a_demoted_owners_key_stops_working"]
 
 [[unit]]
-text = "\"The server has no /api/v1/sdk/ruleset (404). Local evaluation needs Experimently 0.11.0 or later …\" | The server predates the ruleset | Upgrade the server, or leave evaluation at server."
+text = "\"The server has no /api/v1/sdk/ruleset (404). Local evaluation needs Controlvar 0.11.0 or later …\" | The server predates the ruleset | Upgrade the server, or leave evaluation at server."
 by = [
     "test:sdk/js/__tests__/local.test.ts::404 names the minimum server release; after a load it discards",
     "test:sdk/python/tests/test_local.py::test_404_names_the_minimum_server_release_and_discards",
@@ -700,3 +700,7 @@ by = [
     "test:sdk/js/__tests__/local.test.ts::is reported as evaluate, and the call goes to the server",
     "test:sdk/python/tests/test_local.py::test_an_unexpected_failure_in_local_evaluation_is_reported_and_goes_to_the_server",
 ]
+
+[[unit]]
+text = "If you set EXPERIMENTLY_SERVER_KEY or EXPERIMENTLY_API_URL from an earlier version of these pages, set CONTROLVAR_SERVER_KEY and CONTROLVAR_API_URL instead."
+by = ["exempt:instruction"]

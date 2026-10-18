@@ -236,21 +236,21 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-# NOT `experimently`: that name belongs to the Python SDK
-# (`sdk/python/pyproject.toml`), which the launch publishes to PyPI. Both
-# tables carried it until P3.5, so `pip install -e . && pip install -e
-# sdk/python` in one environment produced two distributions with one name --
-# the second silently replacing the first's metadata -- and
-# `importlib.metadata.version("experimently")` could not say which tree it was
+# NOT the Python SDK's name (`controlvar`, in `sdk/python/pyproject.toml`),
+# which is what people install from PyPI. Until P3.5 this table and the SDK's
+# carried the same name (the SDK's name at the time), so `pip install -e . &&
+# pip install -e sdk/python` in one environment produced two distributions
+# with one name -- the second silently replacing the first's metadata -- and
+# `importlib.metadata.version()` of that name could not say which tree it was
 # answering for. The platform is the bigger thing but the smaller audience:
-# the SDK is what people install.
+# the SDK keeps the short name.
 name = "experimently-platform"
 # From the repository-root VERSION file, which release-please maintains: one
 # source for the API's `settings.VERSION`, the image labels and this wheel.
 # `version` is absent on purpose -- a literal here would be a second source,
 # and PEP 621 forbids declaring both.
 dynamic = ["version"]
-description = "Experimently — experimentation platform for A/B testing and feature flags"
+description = "Controlvar — experimentation platform for A/B testing and feature flags"
 requires-python = ">=3.11"
 # Everything in the distribution is Apache-2.0: the core under backend/ and the
 # optional modules under modules/ ship in one wheel under one licence. `sdk/`

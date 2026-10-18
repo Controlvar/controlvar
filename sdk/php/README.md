@@ -1,6 +1,6 @@
-# Experimently PHP SDK
+# Controlvar PHP SDK
 
-PHP 8.1+ SDK for the Experimently A/B testing and feature flag platform.
+PHP 8.1+ SDK for the Controlvar A/B testing and feature flag platform.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
@@ -15,19 +15,19 @@ locally.
 
 ## Installation
 
-**Not yet published.** `experimently/sdk` is not on Packagist, so build it from source: point
+**Not yet published.** `controlvar/sdk` is not on Packagist, so build it from source: point
 Composer at `sdk/php` in a clone of this repository with a path repository (this has not been
 tested here).
 
 ```bash
-git clone https://github.com/getexperimently/experimently.git
+git clone https://github.com/Controlvar/controlvar.git
 ```
 
 Then, in your project, add the path repository and require the package from it:
 
 ```bash
-composer config repositories.experimently path /path/to/experimently/sdk/php
-composer require experimently/sdk:@dev
+composer config repositories.controlvar path /path/to/controlvar/sdk/php
+composer require controlvar/sdk:@dev
 ```
 
 Without composer, `require` the files under `src/` directly (see `examples/contract_smoke.php`).
@@ -35,12 +35,12 @@ Without composer, `require` the files under `src/` directly (see `examples/contr
 ## Quick Start
 
 ```php
-use Experimently\ExperimentationClient;
-use Experimently\SdkConfig;
+use Controlvar\ExperimentationClient;
+use Controlvar\SdkConfig;
 
 $client = new ExperimentationClient(new SdkConfig(
-    baseUrl: getenv('EXPERIMENTLY_API_URL') ?: 'http://localhost:8000',  // origin only
-    apiKey:  getenv('EXPERIMENTLY_API_KEY'),                             // sent as X-API-Key
+    baseUrl: getenv('CONTROLVAR_API_URL') ?: 'http://localhost:8000',  // origin only
+    apiKey:  getenv('CONTROLVAR_API_KEY'),                             // sent as X-API-Key
 ));
 
 // Feature flag (GET /api/v1/feature-flags/evaluate/{key}?user_id=…)
@@ -161,7 +161,7 @@ It is exported as a utility only — nothing in the SDK uses it to decide a vari
 ## Contract smoke
 
 ```bash
-EXPERIMENTLY_API_KEY=<key> php sdk/php/examples/contract_smoke.php
+CONTROLVAR_API_KEY=<key> php sdk/php/examples/contract_smoke.php
 ```
 
 It prints one line:
@@ -170,13 +170,13 @@ It prints one line:
 {"sdk":"php","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). Works without
 `composer install` (it `require`s `src/` directly when `vendor/` is absent).
 
 CI runs this SDK's contract smoke against a real API: `php` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml). Run it
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml). Run it
 yourself with `python tests/sdk-contract/live/run_live_contract.py --sdk php --strict` on a machine
 with PHP 8.1+.
 

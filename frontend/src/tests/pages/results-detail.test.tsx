@@ -44,7 +44,7 @@ const SEQUENTIAL_NOTICE =
   'Beta: the stop/continue decision is mSPRT alone, at the significance ' +
   'level shown by the boundary (1/alpha). alpha_spending is always empty: ' +
   'the planned-looks (alpha-spending) table is not computed yet. ' +
-  'https://github.com/getexperimently/experimently/issues/232';
+  'https://github.com/Controlvar/controlvar/issues/232';
 
 const RESULTS = {
   experiment_id: 'exp-1',
@@ -154,7 +154,7 @@ describe('ResultDetailPage (/results/[id]) sequential tab', () => {
     expect(within(notice).getByText('Beta')).toBeInTheDocument();
     expect(within(notice).getByRole('link', { name: /issue #232/i })).toHaveAttribute(
       'href',
-      'https://github.com/getexperimently/experimently/issues/232'
+      'https://github.com/Controlvar/controlvar/issues/232'
     );
     expect(notice).not.toHaveAttribute('role', 'alert');
   });

@@ -1,6 +1,6 @@
 # Architecture Documentation
 
-This directory contains documentation about the system architecture and design of Experimently.
+This directory contains documentation about the system architecture and design of Controlvar.
 
 ## Files
 

@@ -106,7 +106,7 @@ def test_compose_sets_aws_default_region_from_aws_region_and_helm_leaves_it_to_e
     values = yaml.safe_load((chart / "values.yaml").read_text())
     assert values["api"]["extraEnv"] == []
     template = (chart / "templates" / "api-deployment.yaml").read_text()
-    assert 'include "experimently.extraEnv"' in template
+    assert 'include "controlvar.extraEnv"' in template
     for path in chart.rglob("*"):
         if path.is_file():
             text = path.read_text(errors="ignore")

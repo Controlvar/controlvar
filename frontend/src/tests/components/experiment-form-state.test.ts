@@ -21,6 +21,7 @@ import {
   validateStep,
   VariantFormData,
 } from '@/components/experiments/new/formState';
+import { ESTIMATE_PROBLEMS } from '@/components/experiments/new/estimate';
 
 const apply = (actions: ExperimentFormAction[], start: ExperimentFormState = createInitialFormState()) =>
   actions.reduce(experimentFormReducer, start);
@@ -43,6 +44,7 @@ describe('INITIAL_FORM_STATE', () => {
       confidenceLevel: 0.95,
       correctionMethod: 'benjamini_hochberg',
       bayesianEnabled: false,
+      plannedEffectPct: '',
     });
   });
 
@@ -374,6 +376,58 @@ describe('buildCreatePayload', () => {
     const p = buildCreatePayload(s);
     expect(p.targeting_rules).toBe(rules);
     expect(p.variants[1].traffic_allocation).toBe(0);
+  });
+});
+
+// --- the planned effect (#1257) -------------------------------------------------
+
+describe('the minimum detectable effect from the Estimate step', () => {
+  const twoMetrics = (plannedEffectPct: string) =>
+    apply([
+      { type: 'setName', name: 'Checkout' },
+      { type: 'changeMetric', index: 0, field: 'name', value: 'Purchase' },
+      { type: 'changeMetric', index: 0, field: 'event_name', value: 'purchase' },
+      { type: 'addMetric' },
+      { type: 'changeMetric', index: 1, field: 'name', value: 'Refund' },
+      { type: 'changeMetric', index: 1, field: 'event_name', value: 'refund' },
+      { type: 'setPlannedEffect', plannedEffectPct },
+    ]);
+
+  it('is saved as the primary metric’s expected_effect, as a fraction, and on no other metric', () => {
+    const p = buildCreatePayload(twoMetrics('10'));
+    expect(p.metrics).toStrictEqual([
+      { name: 'Purchase', event_name: 'purchase', metric_type: 'conversion', is_primary: true, expected_effect: 0.1 },
+      { name: 'Refund', event_name: 'refund', metric_type: 'conversion', is_primary: false },
+    ]);
+  });
+
+  it('follows the primary metric when another one is made primary', () => {
+    const s = apply([{ type: 'setPrimary', index: 1 }], twoMetrics('7'));
+    const p = buildCreatePayload(s);
+    expect(p.metrics.map((m) => [m.name, m.is_primary, m.expected_effect])).toEqual([
+      ['Purchase', false, undefined],
+      ['Refund', true, 0.07],
+    ]);
+    expect(Object.keys(p.metrics[0])).not.toContain('expected_effect');
+  });
+
+  it.each(['', '   ', 'abc', '0.05', '-5', '100', '150'])(
+    'sends nothing for %j: the body is byte for byte the one without an effect',
+    (typed) => {
+      const without = JSON.stringify(buildCreatePayload(twoMetrics('')));
+      expect(JSON.stringify(buildCreatePayload(twoMetrics(typed)))).toBe(without);
+      expect(without).not.toContain('expected_effect');
+    },
+  );
+
+  it('the Estimate step refuses an effect that is typed but cannot be saved, and accepts blank', () => {
+    const at = (typed: string) => validateStep('estimate', apply([{ type: 'setPlannedEffect', plannedEffectPct: typed }]));
+    expect(at('')).toBeNull();
+    expect(at('0.1')).toBeNull();
+    expect(at('99.9')).toBeNull();
+    expect(at('abc')).toBe(ESTIMATE_PROBLEMS.mde);
+    expect(at('0.05')).toBe(ESTIMATE_PROBLEMS.mde);
+    expect(at('100')).toBe(ESTIMATE_PROBLEMS.mdeHigh);
   });
 });
 

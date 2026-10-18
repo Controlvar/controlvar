@@ -37,7 +37,7 @@ import { EdgeExperimentationClient } from '../src/client';
  */
 export const middleware = createEdgeMiddleware({
   apiKey: process.env.EP_API_KEY ?? '',
-  baseUrl: process.env.EP_BASE_URL ?? 'https://api.your-platform.com',
+  baseUrl: process.env.EP_BASE_URL ?? 'https://api.example.com',
   flagKeys: ['new-checkout', 'dark-mode', 'beta-search'], // omit to inject every flag the server reports
   userIdCookieName: 'user_id',
   userIdHeaderName: 'X-User-Id',
@@ -68,7 +68,7 @@ export async function featureCheckHandler(request: Request): Promise<Response> {
 
   const client = new EdgeExperimentationClient({
     apiKey: process.env.EP_API_KEY ?? '',
-    baseUrl: process.env.EP_BASE_URL ?? 'https://api.your-platform.com',
+    baseUrl: process.env.EP_BASE_URL ?? 'https://api.example.com',
     cacheTtlMs: 30_000,
     timeout: 500,
   });

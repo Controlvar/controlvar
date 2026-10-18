@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.getexperimently.android"
+    namespace = "com.controlvar.android"
     compileSdk = 34
     defaultConfig {
         minSdk = 21

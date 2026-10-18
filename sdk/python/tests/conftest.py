@@ -1,4 +1,4 @@
-"""Make ``experimentation`` importable from the source tree without installing the package.
+"""Make ``controlvar`` importable from the source tree without installing the package.
 
 And: no test can reach real AWS credentials or the real ``aws`` binary (below).
 """

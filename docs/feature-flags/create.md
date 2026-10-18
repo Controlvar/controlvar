@@ -421,11 +421,11 @@ reach behaves as off.
 ### JavaScript SDK
 
 ```javascript
-import { ExperimentationClient } from '@getexperimently/js-sdk';
+import { ExperimentationClient } from '@controlvar/js-sdk';
 
 const client = new ExperimentationClient({
   apiUrl: 'http://localhost:8000',   // your API origin; the SDK appends /api/v1/...
-  apiKey: process.env.EXPERIMENTLY_API_KEY,
+  apiKey: process.env.CONTROLVAR_API_KEY,
 });
 
 const isEnabled = await client.isFeatureEnabled('new-checkout-flow', {
@@ -445,11 +445,11 @@ if (isEnabled) {
 ```python
 import os
 
-from experimentation import ExperimentationClient
+from controlvar import ExperimentationClient
 
 client = ExperimentationClient(
     api_url="http://localhost:8000",   # your API origin
-    api_key=os.environ["EXPERIMENTLY_API_KEY"],
+    api_key=os.environ["CONTROLVAR_API_KEY"],
 )
 
 is_enabled = client.is_feature_enabled(

@@ -1,0 +1,292 @@
+# The demo profile of the development compose file
+# (docs/getting-started/docker-compose-file.md, "Services"), as its reader
+# starts it (D73, #1265/#1266): the stack is compose-demo
+# (docs_runner/stacks.py), which runs the page's own demo command, read from
+# the page at run time and run as written, under a compose project, host ports
+# and image tag of its own, after removing the images of that tag so the
+# command builds them as on a reader's first start.
+#
+# One deviation from a reader's stack: its host ports are moved off the
+# defaults (3000, 8000, 3200, 3300, 5432, 6379), so CORS_ORIGINS is set to the
+# dashboard's, ShopLab's and StreamPulse's origins on the moved ports, as the
+# compose file's default lists them on the default ones. Without it the API
+# would refuse the apps' calls from the browser. Nothing else is changed.
+#
+# What a reader expects of the profile left running is held first: both
+# traffic simulators keep running, unrestarted, for 60 s (one whose seed has
+# not run exits at start, printing that "the shoplab seed has not run", and is
+# restarted), and the events table grows while they run. Then the two apps at
+# the addresses the page gives: ShopLab's panel shows a variant for each
+# experiment and the free-shipping flag on, which needs the app's built-in
+# key, the shoplab seed that creates it and the API's CORS origins together;
+# StreamPulse's panel gives each of its four flags a reason that is not an
+# error. ShopLab's panel shows a flag's on or off but not its reason, and
+# without the seed shoplab_new_search would show its fallback, off, which the
+# panel cannot tell from the flag's own answer; that the flag exists and is
+# active is read through the API instead. (Its reason through the public
+# evaluate route would need a key made for the run, and a journey of this
+# session making the administrator a key before api-key-first-assignment is
+# refused by test_docs_journey_population.py.)
+#
+# Then the page's recovery note: "If you already started the profile without
+# them, run the command above once: it applies the missing seeds to the
+# existing database, with no down -v." The relaunch step brings the stack down
+# with its volumes and starts it as a reader who left the seeds out did (the
+# page's command less its SEED=; how that start ends is not held), checks that
+# the apps' key files are then absent, so there is something to recover, and
+# runs the page's command once, which must exit 0, with no down -v between.
+# The images are the ones the first start built; neither start builds. The
+# same checks as before follow, on the recovered stack.
+#
+# Expectations written on 2026-10-17 from the page, docker-compose.yml, the
+# seeds (backend/scripts/seed_shoplab.py, seed_streampulse.py) and the two
+# apps' source, before the first run; the recovery leg the same day.
+guide: getting-started/docker-compose-file.md
+stack: compose-demo
+profile: core
+video: false
+written: 2026-10-17
+steps:
+  - id: simulators
+    doc: services
+    do:
+      services:
+        running:
+          - shoplab-simulator
+          - streampulse-simulator
+        for_seconds: 60
+        growing: events
+    fail: a simulator is not running or restarts within 60 s, or the events table does not grow while they run; the shoplab and streampulse seeds have not run, or the simulators' traffic does not reach the API
+  - id: shoplab
+    doc: services
+    do:
+      open: http://localhost:3200
+    expect:
+      status: 200
+      text: Free shipping on every order this week — no minimum.
+      aria: |
+        - complementary "Controlvar panel":
+          - button "Powered by Controlvar"
+    fail: ShopLab does not answer at the address the page gives, or shows no free-shipping banner, as when its key, the seed that creates it or the API's CORS origins are missing
+  - id: shoplab-panel
+    doc: services
+    do:
+      click:
+        role: button
+        name: Powered by Controlvar
+        quote: false
+        reason: ShopLab's own panel button; the page names the app, not its panel
+    expect:
+      aria: |
+        - complementary "Controlvar panel":
+          - button "Powered by Controlvar" [expanded]
+          - heading "Experiments" [level=2]
+          - list:
+            - listitem:
+              - text: Hero banner
+              - code: shoplab_hero_banner
+              - text: /^(control|video_hero)$/
+            - listitem:
+              - text: Product sort (bandit)
+              - code: shoplab_plp_sort
+              - text: /^(relevance|price_low_high|ml_personalized)$/
+            - listitem:
+              - text: Buy button (MVT)
+              - code: shoplab_pdp_buy_button
+              - text: /^(control|green_add|orange_buy_now|green_buy_now)$/
+            - listitem:
+              - text: Checkout flow
+              - code: shoplab_checkout_flow
+              - text: /^(standard|one_page)$/
+          - heading "Feature flags" [level=2]
+          - list:
+            - listitem:
+              - text: New search
+              - code: shoplab_new_search
+              - text: /^(on|off)$/
+            - listitem:
+              - text: Free-shipping banner
+              - code: shoplab_free_shipping_banner
+              - text: "on"
+    fail: ShopLab's panel shows an error, or no variant, for one of its four experiments, or the free-shipping flag off
+  - id: new-search
+    doc: services
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/?search=shoplab_new_search
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: shoplab_new_search
+        items.0.status: active
+    fail: shoplab_new_search is not an active flag, so the on or off ShopLab's panel shows for it is a fallback
+  - id: streampulse
+    doc: services
+    do:
+      open: http://localhost:3300
+    expect:
+      status: 200
+      aria: |
+        - heading "StreamPulse" [level=1]
+    fail: StreamPulse does not answer at the address the page gives
+  - id: streampulse-flags
+    doc: services
+    do:
+      click:
+        role: radio
+        name: iPhone 15 · iOS 17.4 · US · premium
+        quote: false
+        reason: a device preset of StreamPulse's own panel; the page names the app, not its presets
+    expect:
+      aria: |
+        - main:
+          - region "Device":
+            - group "Presets":
+              - radio "iPhone 15 · iOS 17.4 · US · premium" [checked]
+          - region "Powered by Controlvar":
+            - region "Feature flags":
+              - list:
+                - listitem:
+                  - text: Recommendations v2 · kill switch
+                  - code: streampulse_recs_v2
+                  - text: /^(on|off):\s(matched a targeting rule|matched a rule but outside its rollout %|inside the rollout %|outside the rollout %|flag is inactive)\s(on|off)$/
+                - listitem:
+                  - text: Player v2 · gradual rollout + safety
+                  - code: streampulse_player_v2
+                  - text: /^(on|off):\s(matched a targeting rule|matched a rule but outside its rollout %|inside the rollout %|outside the rollout %|flag is inactive)\s(on|off)$/
+                - listitem:
+                  - text: AI search · targeting rules
+                  - code: streampulse_ai_search
+                  - text: /^(on|off):\s(matched a targeting rule|matched a rule but outside its rollout %|inside the rollout %|outside the rollout %|flag is inactive)\s(on|off)$/
+                - listitem:
+                  - text: Offline mode · SDK cache
+                  - code: streampulse_offline_mode
+                  - text: /^(on|off):\s(matched a targeting rule|matched a rule but outside its rollout %|inside the rollout %|outside the rollout %|flag is inactive)\s(on|off)$/
+    fail: one of StreamPulse's four flags shows an error, or no reason, for the iPhone 15 · iOS 17.4 · US · premium device
+  - id: recovery
+    doc: services
+    do:
+      relaunch: recovery
+    fail: the stack started without the shoplab and streampulse seeds already has the apps' keys, or running the page's command on it once, with no down -v, does not exit 0
+  - id: recovered-simulators
+    doc: services
+    do:
+      services:
+        running:
+          - shoplab-simulator
+          - streampulse-simulator
+        for_seconds: 60
+        growing: events
+    fail: after the recovery a simulator is not running or restarts within 60 s, or the events table does not grow; the missing seeds were not applied to the existing database
+  - id: recovered-shoplab
+    doc: services
+    do:
+      open: http://localhost:3200
+    expect:
+      status: 200
+      text: Free shipping on every order this week — no minimum.
+      aria: |
+        - complementary "Controlvar panel":
+          - button "Powered by Controlvar"
+    fail: after the recovery ShopLab shows no free-shipping banner, as when its key still does not exist
+  - id: recovered-shoplab-panel
+    doc: services
+    do:
+      click:
+        role: button
+        name: Powered by Controlvar
+        quote: false
+        reason: ShopLab's own panel button; the page names the app, not its panel
+    expect:
+      aria: |
+        - complementary "Controlvar panel":
+          - button "Powered by Controlvar" [expanded]
+          - heading "Experiments" [level=2]
+          - list:
+            - listitem:
+              - text: Hero banner
+              - code: shoplab_hero_banner
+              - text: /^(control|video_hero)$/
+            - listitem:
+              - text: Product sort (bandit)
+              - code: shoplab_plp_sort
+              - text: /^(relevance|price_low_high|ml_personalized)$/
+            - listitem:
+              - text: Buy button (MVT)
+              - code: shoplab_pdp_buy_button
+              - text: /^(control|green_add|orange_buy_now|green_buy_now)$/
+            - listitem:
+              - text: Checkout flow
+              - code: shoplab_checkout_flow
+              - text: /^(standard|one_page)$/
+          - heading "Feature flags" [level=2]
+          - list:
+            - listitem:
+              - text: New search
+              - code: shoplab_new_search
+              - text: /^(on|off)$/
+            - listitem:
+              - text: Free-shipping banner
+              - code: shoplab_free_shipping_banner
+              - text: "on"
+    fail: after the recovery ShopLab's panel shows an error, or no variant, for one of its four experiments, or the free-shipping flag off
+  - id: recovered-new-search
+    doc: services
+    do:
+      api:
+        method: GET
+        path: /api/v1/feature-flags/?search=shoplab_new_search
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: shoplab_new_search
+        items.0.status: active
+    fail: after the recovery shoplab_new_search is not an active flag; the shoplab seed was not applied to the existing database
+  - id: recovered-streampulse
+    doc: services
+    do:
+      open: http://localhost:3300
+    expect:
+      status: 200
+      aria: |
+        - heading "StreamPulse" [level=1]
+    fail: after the recovery StreamPulse does not answer at the address the page gives
+  - id: recovered-streampulse-flags
+    doc: services
+    do:
+      click:
+        role: radio
+        name: iPhone 15 · iOS 17.4 · US · premium
+        quote: false
+        reason: a device preset of StreamPulse's own panel; the page names the app, not its presets
+    expect:
+      aria: |
+        - main:
+          - region "Device":
+            - group "Presets":
+              - radio "iPhone 15 · iOS 17.4 · US · premium" [checked]
+          - region "Powered by Controlvar":
+            - region "Feature flags":
+              - list:
+                - listitem:
+                  - text: Recommendations v2 · kill switch
+                  - code: streampulse_recs_v2
+                  - text: /^(on|off):\s(matched a targeting rule|matched a rule but outside its rollout %|inside the rollout %|outside the rollout %|flag is inactive)\s(on|off)$/
+                - listitem:
+                  - text: Player v2 · gradual rollout + safety
+                  - code: streampulse_player_v2
+                  - text: /^(on|off):\s(matched a targeting rule|matched a rule but outside its rollout %|inside the rollout %|outside the rollout %|flag is inactive)\s(on|off)$/
+                - listitem:
+                  - text: AI search · targeting rules
+                  - code: streampulse_ai_search
+                  - text: /^(on|off):\s(matched a targeting rule|matched a rule but outside its rollout %|inside the rollout %|outside the rollout %|flag is inactive)\s(on|off)$/
+                - listitem:
+                  - text: Offline mode · SDK cache
+                  - code: streampulse_offline_mode
+                  - text: /^(on|off):\s(matched a targeting rule|matched a rule but outside its rollout %|inside the rollout %|outside the rollout %|flag is inactive)\s(on|off)$/
+    fail: after the recovery one of StreamPulse's four flags shows an error, or no reason, for the iPhone 15 · iOS 17.4 · US · premium device

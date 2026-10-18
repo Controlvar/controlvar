@@ -1,36 +1,36 @@
-{{- $fullname := include "experimently.fullname" . }}
+{{- $fullname := include "controlvar.fullname" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $fullname }}-web
   labels:
-    {{- include "experimently.labels" . | nindent 4 }}
+    {{- include "controlvar.labels" . | nindent 4 }}
     app.kubernetes.io/component: web
 spec:
   replicas: {{ .Values.web.replicaCount }}
   selector:
     matchLabels:
-      {{- include "experimently.selectorLabels" (dict "ctx" . "component" "web") | nindent 6 }}
+      {{- include "controlvar.selectorLabels" (dict "ctx" . "component" "web") | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "experimently.selectorLabels" (dict "ctx" . "component" "web") | nindent 8 }}
+        {{- include "controlvar.selectorLabels" (dict "ctx" . "component" "web") | nindent 8 }}
       {{- with .Values.web.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      serviceAccountName: {{ include "experimently.serviceAccountName" . }}
+      serviceAccountName: {{ include "controlvar.serviceAccountName" . }}
       automountServiceAccountToken: false
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       securityContext:
-        {{- include "experimently.podSecurity" (dict "uid" 101 "gid" 101) | nindent 8 }}
+        {{- include "controlvar.podSecurity" (dict "uid" 101 "gid" 101) | nindent 8 }}
       containers:
         - name: web
-          image: {{ include "experimently.image" (dict "ctx" . "image" .Values.image.web) }}
+          image: {{ include "controlvar.image" (dict "ctx" . "image" .Values.image.web) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
@@ -52,7 +52,7 @@ spec:
               port: http
             periodSeconds: 20
           securityContext:
-            {{- include "experimently.containerSecurity" . | nindent 12 }}
+            {{- include "controlvar.containerSecurity" . | nindent 12 }}
           resources:
             {{- toYaml .Values.web.resources | nindent 12 }}
           # The entrypoint renders /etc/nginx/conf.d/default.conf at start.

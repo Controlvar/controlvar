@@ -8,7 +8,7 @@
  */
 
 import { EdgeExperimentationClient, EdgeApiError } from '../src/client';
-import type { EdgeStore, FlagEvaluation, Assignment } from '../src/types';
+import type { EdgeSdkConfig, EdgeStore, FlagEvaluation, Assignment } from '../src/types';
 
 // ---------------------------------------------------------------------------
 // fetch mock helpers
@@ -88,7 +88,17 @@ beforeEach(() => {
 
 describe('constructor', () => {
   test('throws when apiKey is empty', () => {
-    expect(() => new EdgeExperimentationClient({ apiKey: '' })).toThrow('apiKey is required');
+    expect(() => new EdgeExperimentationClient({ apiKey: '', baseUrl: 'http://api.test' })).toThrow('apiKey is required');
+  });
+
+  test('throws a clear error when baseUrl is missing: there is no default origin', () => {
+    const fetchImpl = jest.fn();
+    for (const config of [{ apiKey: 'k' }, { apiKey: 'k', baseUrl: '' }, { apiKey: 'k', baseUrl: '   ' }]) {
+      expect(() => new EdgeExperimentationClient({ ...config, fetch: fetchImpl } as unknown as EdgeSdkConfig)).toThrow(
+        "baseUrl is required: the origin of your API, such as 'https://api.example.com' (the SDK appends /api/v1/...)"
+      );
+    }
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   test('strips trailing slashes from baseUrl', async () => {

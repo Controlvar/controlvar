@@ -4,11 +4,11 @@
 document = "charts/experimently/README.md"
 
 [[unit]]
-text = "Experimently Helm chart"
+text = "Controlvar Helm chart"
 by = ["exempt:label"]
 
 [[unit]]
-text = "This chart installs Experimently on Kubernetes: the API, the dashboard and, by default, a bundled PostgreSQL and Redis."
+text = "This chart installs Controlvar on Kubernetes: the API, the dashboard and, by default, a bundled PostgreSQL and Redis."
 by = [
     "workflow:chart-kind.yml",
     "test:backend/tests/unit/chart/test_chart_render.py::test_the_bundled_postgres_and_redis_are_one_replica_each_and_never_backed_up",

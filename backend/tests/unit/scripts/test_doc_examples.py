@@ -197,17 +197,17 @@ def test_a_here_document_body_is_data():
         ("cat <<EOF\nhello", "bash -n"),
         ("unset COMPOSE_PROJECT_NAME; docker compose --dry-run down -v", "COMPOSE"),
         (
-            "COMPOSE_PROJECT_NAME=experimently docker compose down -v",
+            "COMPOSE_PROJECT_NAME=controlvar docker compose down -v",
             "COMPOSE_PROJECT_NAME",
         ),
-        ("docker compose -p experimently down -v", "names a compose project"),
+        ("docker compose -p controlvar down -v", "names a compose project"),
         (
-            "docker compose --project-name=experimently down -v",
+            "docker compose --project-name=controlvar down -v",
             "names a compose project",
         ),
         ("env -u HOME docker compose down", "rewrites the environment"),
         ("env -i docker compose down", "rewrites the environment"),
-        ("docker volume rm experimently_postgres_data", "removes Docker resources"),
+        ("docker volume rm controlvar_postgres_data", "removes Docker resources"),
         ("docker system prune -f", "removes Docker resources"),
         ("docker rm -f some-container", "removes containers"),
     ],
@@ -742,21 +742,21 @@ def test_skip_reason_names_a_category(reason, ok):
 @pytest.mark.parametrize(
     "body, tool",
     [
-        ("pip install openfeature-sdk experimently experimently-openfeature", "pip"),
-        ("gem install experimently", "gem"),
-        ("npx @getexperimently/cli init", "npx"),
-        ("uv pip install experimently", "uv"),
+        ("pip install openfeature-sdk controlvar controlvar-openfeature", "pip"),
+        ("gem install controlvar", "gem"),
+        ("npx @controlvar/cli init", "npx"),
+        ("uv pip install controlvar", "uv"),
         ("cd sdk/js && npm ci", "npm"),
-        ("sudo pip3 install experimently", "pip3"),
-        ("python -m pip install experimently", "python -m pip"),
-        ("dotnet add package Experimently.SDK", "dotnet add"),
-        ("composer require experimently/sdk", "composer"),
-        ("go get github.com/getexperimently/go-sdk", "go get"),
-        ("FOO=1 yarn add @getexperimently/js-sdk", "yarn"),
+        ("sudo pip3 install controlvar", "pip3"),
+        ("python -m pip install controlvar", "python -m pip"),
+        ("dotnet add package Controlvar.SDK", "dotnet add"),
+        ("composer require controlvar/sdk", "composer"),
+        ("go get github.com/controlvar/go-sdk", "go get"),
+        ("FOO=1 yarn add @controlvar/js-sdk", "yarn"),
         ("VERSION=$(npm view x version)", "npm"),
         ("if true; then pnpm i; fi", "pnpm"),
-        ("pipx run experimently", "pipx"),
-        ("poetry add experimently", "poetry"),
+        ("pipx run controlvar", "pipx"),
+        ("poetry add controlvar", "poetry"),
     ],
 )
 def test_a_block_that_runs_may_not_install_or_run_a_package(body, tool):
@@ -798,7 +798,7 @@ def test_the_words_alone_are_not_a_package_manager_or_aws(body):
 
 def test_a_registry_skip_must_run_a_package_manager():
     good = page(
-        f'{FENCE}{{.bash skip reason="registry: not published"}}\npip install experimently\n{FENCE}'
+        f'{FENCE}{{.bash skip reason="registry: not published"}}\npip install controlvar\n{FENCE}'
     )
     bad = page(
         f'{FENCE}{{.bash skip reason="registry: not published"}}\ncurl localhost\n{FENCE}'
@@ -1294,9 +1294,9 @@ def test_only_the_stack_start_may_print_without_an_expectation():
     "body, message",
     [
         ("\\aws sts get-caller-identity", "may not call 'aws'"),
-        ("\\pip install experimently", "may not run 'pip'"),
+        ("\\pip install controlvar", "may not run 'pip'"),
         ("/usr/local/bin/aws sts get-caller-identity", "may not call 'aws'"),
-        ("/usr/bin/pip install experimently", "may not run 'pip'"),
+        ("/usr/bin/pip install controlvar", "may not run 'pip'"),
         ('"aws" sts get-caller-identity', "may not call 'aws'"),
         ("'npm' ci", "may not run 'npm'"),
         ("sudo /usr/bin/env FOO=1 \\npx x", "may not run 'npx'"),
@@ -1307,7 +1307,7 @@ def test_only_the_stack_start_may_print_without_an_expectation():
         ("swift build", "may not run 'swift build'"),
         ("dotnet restore", "may not run 'dotnet restore'"),
         ("dotnet build", "may not run 'dotnet build'"),
-        ("dotnet add package Experimently.SDK", "may not run 'dotnet add'"),
+        ("dotnet add package Controlvar.SDK", "may not run 'dotnet add'"),
     ],
 )
 def test_a_command_word_is_normalised_before_it_is_matched(body, message):
@@ -1556,7 +1556,7 @@ def test_a_here_document_body_is_scanned_like_any_other_line(name, line, message
 
 def test_a_registry_skip_counts_an_install_inside_a_here_document():
     """The registry predicate reads the same text the refusal does."""
-    body = "sh <<'EOF'\npip install experimently\nEOF"
+    body = "sh <<'EOF'\npip install controlvar\nEOF"
     (block,) = blocks(
         page(f'{FENCE}{{.bash skip reason="registry: not published"}}\n{body}\n{FENCE}')
     )
@@ -3338,7 +3338,7 @@ AUTHORING_CATEGORIES = [
 @pytest.mark.parametrize("category", AUTHORING_CATEGORIES)
 def test_every_category_the_authoring_page_lists_is_accepted(category):
     body = {
-        "registry": "pip install experimently",
+        "registry": "pip install controlvar",
         "timing": GATE,
     }.get(category, "printf hi")
     (block,) = blocks(

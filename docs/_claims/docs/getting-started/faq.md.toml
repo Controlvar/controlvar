@@ -12,11 +12,11 @@ text = "General"
 by = ["exempt:label"]
 
 [[unit]]
-text = "What is Experimently?"
+text = "What is Controlvar?"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Experimently is a self-hosted experimentation platform for running A/B tests, feature flags, and controlled rollouts."
+text = "Controlvar is a self-hosted experimentation platform for running A/B tests, feature flags, and controlled rollouts."
 by = [
     "docex:docs/getting-started/quick-start.md#\"assigned\": true",
     "docex:docs/getting-started/quick-start.md#\"reason\": \"rollout\"",
@@ -309,7 +309,7 @@ text = "What SDKs are available?"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The JavaScript SDK is on npm (npm install @getexperimently/js-sdk, 0.1.0, beta) and the Python SDK is on PyPI (pip install experimently, 0.1.0, beta)."
+text = "The JavaScript SDK is on npm (npm install @controlvar/js-sdk, 0.1.1, beta) and the Python SDK is on PyPI (pip install controlvar, 0.1.1, beta)."
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-javascript#quick-start-user-on",
@@ -325,19 +325,19 @@ text = "SDK | Package"
 by = ["exempt:label"]
 
 [[unit]]
-text = "JavaScript / TypeScript | @getexperimently/js-sdk (npm)"
+text = "JavaScript / TypeScript | @controlvar/js-sdk (npm)"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]
-text = "Python | experimently (PyPI)"
+text = "Python | controlvar (PyPI)"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]
-text = "Java / JVM | com.getexperimently:experimently-sdk (Maven/Gradle)"
+text = "Java / JVM | com.controlvar:controlvar-sdk (Maven/Gradle)"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]
-text = "React | @getexperimently/react-sdk (npm)"
+text = "React | @controlvar/react-sdk (npm)"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]
@@ -348,7 +348,7 @@ by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_thi
 text = "The Java SDK includes Spring Boot auto-configuration."
 by = [
     "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_java_sdk_has_spring_boot_auto_configuration",
-    "test:sdk/java/spring-boot-starter/src/test/java/com/getexperimently/sdk/spring/ExperimentationStarterRegistrationTest.java::springBootDiscoversTheAutoConfiguration",
+    "test:sdk/java/spring-boot-starter/src/test/java/com/controlvar/sdk/spring/ExperimentationStarterRegistrationTest.java::springBootDiscoversTheAutoConfiguration",
 ]
 
 [[unit]]

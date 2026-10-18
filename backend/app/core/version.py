@@ -32,7 +32,7 @@ from functools import lru_cache
 from importlib import metadata
 from pathlib import Path
 
-#: The distribution built from this tree.  Not ``experimently`` — that name
+#: The distribution built from this tree.  Not ``controlvar`` — that name
 #: belongs to the Python SDK (``sdk/python``), which is a different package
 #: with a different licence and its own release cadence.
 DISTRIBUTION_NAME = "experimently-platform"

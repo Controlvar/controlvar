@@ -8,6 +8,6 @@
     <RollForward>Major</RollForward>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Experimently/Experimently.csproj" />
+    <ProjectReference Include="../../src/Controlvar/Controlvar.csproj" />
   </ItemGroup>
 </Project>

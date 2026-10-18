@@ -6,6 +6,8 @@ They are unit tested on planted inputs (``backend/tests/unit/showcase``).
 
 from __future__ import annotations
 
+import math
+from statistics import NormalDist
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from showcase.capture import config, guard
@@ -319,6 +321,9 @@ def experiment_end(
     report: Mapping[str, Mapping[str, int]],
     oracle_p: Optional[float],
     shown: Optional[str],
+    sample_size: Optional[Mapping[str, Any]],
+    planned_shown: Optional[str],
+    effect_shown: Optional[str],
 ) -> Verdict:
     """Gate 10 for an experiment the video made (``storyboard.ExperimentEnd``).
 
@@ -328,7 +333,8 @@ def experiment_end(
       results API counts them;
     * the results API's p-value is Fisher's exact test on those counts
       (*oracle_p*), and it recommends shipping the storyboard's winner;
-    * the page showed the API's recommendation, word for word.
+    * the page showed the API's recommendation, word for word;
+    * the Planned sample is planned as the wizard sized it (``planned_sample_end``).
     """
     numbers: Dict[str, Any] = {
         "experiments_named": len(named),
@@ -403,6 +409,173 @@ def experiment_end(
             False,
             numbers,
             f"the page showed {on_page!r}; the API says {reason!r}",
+        )
+    ok, numbers["planned_sample"], why = planned_sample_end(
+        end,
+        answer=sample_size,
+        control=counted.get("control") or {},
+        planned_shown=planned_shown,
+        effect_shown=effect_shown,
+    )
+    if not ok:
+        return False, numbers, why
+    return True, numbers, ""
+
+
+#: The plan the oracle sizes: the experiment's 95% confidence (one comparison,
+#: so no correction moves it) and the sample-size API's default 80% power.
+PLAN_ALPHA = 0.05
+PLAN_POWER = 0.80
+
+
+def planned_sample_oracle(
+    baseline: float, mde: float, *, alpha: float = PLAN_ALPHA, power: float = PLAN_POWER
+) -> int:
+    """Users per variant for a two-sided two-proportion z-test (Fleiss): the
+    pooled variance under the null, unpooled under the alternative, rounded
+    up. The standard library's normal quantiles, not the API's code."""
+    treatment = baseline * (1.0 + mde)
+    pooled = (baseline + treatment) / 2.0
+    z_alpha = NormalDist().inv_cdf(1.0 - alpha / 2.0)
+    z_power = NormalDist().inv_cdf(power)
+    root = z_alpha * math.sqrt(2.0 * pooled * (1.0 - pooled)) + z_power * math.sqrt(
+        baseline * (1.0 - baseline) + treatment * (1.0 - treatment)
+    )
+    return math.ceil(root**2 / (treatment - baseline) ** 2)
+
+
+def _pct(value: float) -> str:
+    """The results page's ``pct``: two decimals, trailing zeros dropped."""
+    text = f"{value * 100:.2f}"
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return f"{text}%"
+
+
+def planned_card(answer: Mapping[str, Any]) -> Tuple[str, str, str]:
+    """What the results page draws for a sample-size answer: the Planned sample
+    card's value and detail, and the effect line under it
+    (``plannedSampleStatus`` and ``plannedEffectSentence``,
+    frontend/src/components/results/ResultsDashboard/ExperimentSummary.tsx)."""
+    current = int(answer.get("current_sample_size_per_variant") or 0)
+    required = answer.get("required_sample_size_per_variant")
+    if required is None:
+        value, detail = "Not yet", f"{current:,} per variant, no plan yet"
+    else:
+        detail = f"{current:,} of {int(required):,} per variant"
+        reached = bool(answer.get("is_adequate")) and current >= int(required)
+        value = "Reached" if reached else "Not yet"
+    source = answer.get("mde_source") or "default"
+    effect = _pct(float(answer.get("mde") or 0))
+    rate = answer.get("baseline_rate")
+    baseline = ""
+    if required is not None and rate is not None:
+        if answer.get("baseline_source") == "observed":
+            baseline = f" on the control's {_pct(float(rate))}"
+        else:
+            baseline = f" on a {_pct(float(rate))} baseline"
+    if source == "experiment":
+        line = (
+            f"To detect a {effect} lift{baseline}. The {effect} was set when the"
+            " experiment was created."
+        )
+    elif source == "request":
+        line = f"To detect a {effect} lift{baseline}."
+    else:
+        line = (
+            f"To detect a {effect} lift (the default: no effect was saved with this"
+            f" experiment){baseline}."
+        )
+    return value, detail, line
+
+
+def planned_sample_end(
+    end: Any,
+    *,
+    answer: Optional[Mapping[str, Any]],
+    control: Mapping[str, int],
+    planned_shown: Optional[str],
+    effect_shown: Optional[str],
+) -> Verdict:
+    """Gate 10's Planned sample (#1257): the sample-size API plans with the
+    effect typed in the wizard (``end.mde``, ``mde_source`` "experiment") on
+    the control's observed rate; its size is the oracle's for those two; and
+    the page drew the card and the effect line for that answer, word for word,
+    reading Reached."""
+    numbers: Dict[str, Any] = {"mde_typed": end.mde}
+    if not answer:
+        return False, numbers, "the sample-size API gave no answer"
+    mde, source = answer.get("mde"), answer.get("mde_source")
+    required = answer.get("required_sample_size_per_variant")
+    rate = answer.get("baseline_rate")
+    numbers.update(
+        mde=mde,
+        mde_source=source,
+        required=required,
+        current=answer.get("current_sample_size_per_variant"),
+        baseline_rate=rate,
+        baseline_source=answer.get("baseline_source"),
+    )
+    if source != "experiment" or mde is None or abs(float(mde) - end.mde) > 1e-9:
+        return (
+            False,
+            numbers,
+            f"the Planned sample plans for an effect of {mde} ({source}), not the"
+            f" {end.mde} typed in the wizard and saved with the experiment",
+        )
+    users = int(control.get("users") or 0)
+    observed = control.get("converting_users", 0) / users if users else None
+    numbers["observed_rate"] = observed
+    if (
+        answer.get("baseline_source") != "observed"
+        or observed is None
+        or rate is None
+        or abs(float(rate) - observed) > 1e-12
+    ):
+        return (
+            False,
+            numbers,
+            f"the Planned sample starts from {rate} ({answer.get('baseline_source')}),"
+            f" not the control's observed {observed}",
+        )
+    oracle = planned_sample_oracle(observed, end.mde)
+    numbers["oracle_required"] = oracle
+    if required != oracle:
+        return (
+            False,
+            numbers,
+            f"the API plans {required} users per variant; {oracle} detect a"
+            f" {_pct(end.mde)} lift on the control's {_pct(observed)}",
+        )
+    value, detail, line = planned_card(answer)
+    card = f"Planned sample: {value} · {detail}"
+    numbers.update(card=card, effect=line)
+    lines = [
+        part.strip() for part in (planned_shown or "").splitlines() if part.strip()
+    ]
+    numbers["shown"] = lines
+    drawn = (
+        len(lines) == 3
+        and lines[0].casefold() == "planned sample"
+        and lines[1:] == [value, detail]
+    )
+    if not drawn:
+        return (
+            False,
+            numbers,
+            f"the page's Planned sample read {' · '.join(lines)!r}; for the API's"
+            f" answer it reads {card!r}",
+        )
+    if value != "Reached":
+        return False, numbers, f"the Planned sample reads {card!r}, not Reached"
+    on_page = " ".join((effect_shown or "").split())
+    numbers["effect_shown"] = on_page
+    if on_page != line:
+        return (
+            False,
+            numbers,
+            f"the page's effect line read {on_page!r}; for the API's answer it"
+            f" reads {line!r}",
         )
     return True, numbers, ""
 

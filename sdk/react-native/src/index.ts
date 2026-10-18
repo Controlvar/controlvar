@@ -1,7 +1,7 @@
 /**
- * @getexperimently/react-native-sdk
+ * @controlvar/react-native-sdk
  *
- * React Native SDK for Experimently. Flag evaluation and
+ * React Native SDK for Controlvar. Flag evaluation and
  * experiment assignment are decided by the server; results are cached in
  * memory and (optionally) persisted to AsyncStorage as an offline fallback.
  *

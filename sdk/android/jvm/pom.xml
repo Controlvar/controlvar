@@ -25,12 +25,12 @@
          invisible to it.
          ═══════════════════════════════════════════════════════════════════════ -->
 
-    <groupId>com.getexperimently</groupId>
-    <artifactId>experimently-android-jvm</artifactId>
+    <groupId>com.controlvar</groupId>
+    <artifactId>controlvar-android-jvm</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
-    <name>Experimently Android SDK — JVM variant</name>
+    <name>Controlvar Android SDK — JVM variant</name>
     <description>
         Compiles the Android SDK's Kotlin sources for a plain JVM so its unit tests and
         its live contract smoke can run on a Linux CI runner without the Android SDK.

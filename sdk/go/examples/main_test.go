@@ -33,11 +33,11 @@ func (f *fakeAPI) RoundTrip(req *http.Request) (*http.Response, error) {
 	}, nil
 }
 
-// The walkthrough runs against the backend at EXPERIMENTLY_API_URL, by default
+// The walkthrough runs against the backend at CONTROLVAR_API_URL, by default
 // http://localhost:8000: a flag, an assignment, a keyed track and a fanned-out one.
 func TestWalkthrough_RunsAgainstTheBackend(t *testing.T) {
-	t.Setenv("EXPERIMENTLY_API_URL", "")
-	t.Setenv("EXPERIMENTLY_API_KEY", "walkthrough-key")
+	t.Setenv("CONTROLVAR_API_URL", "")
+	t.Setenv("CONTROLVAR_API_KEY", "walkthrough-key")
 	api := &fakeAPI{}
 	saved := http.DefaultTransport
 	http.DefaultTransport = api

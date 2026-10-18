@@ -28,9 +28,9 @@ if str(SCRIPTS) not in sys.path:
 import fuzz_report
 import qa_render
 
-REPO = "getexperimently/experimently"
+REPO = "Controlvar/controlvar"
 SHA = "0123456789abcdef0123456789abcdef01234567"
-LINK = "https://github.com/getexperimently/experimently/actions/runs/123"
+LINK = "https://github.com/Controlvar/controlvar/actions/runs/123"
 ISSUE_LIST_FLAGS = {
     "--repo": REPO,
     "--state": "open",

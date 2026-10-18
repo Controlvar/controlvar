@@ -3,15 +3,16 @@
 
 Run from the repository root (no install needed; ``openfeature-sdk`` must be importable):
 
-    EXPERIMENTLY_API_KEY=<key> python sdk/openfeature-python/examples/contract_smoke.py
+    CONTROLVAR_API_KEY=<key> python sdk/openfeature-python/examples/contract_smoke.py
 
-Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required),
+Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required;
+the former names EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY are read when these are unset),
 CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag),
 CONTRACT_USER_ID (default: random "smoke-<uuid>").
 
 The flag is resolved through the OpenFeature API (boolean resolution); experiment assignment
 and tracking — which OpenFeature does not model — go through the provider's underlying
-``experimentation`` client. Prints exactly one JSON line on stdout and exits 0; on failure
+``controlvar`` client. Prints exactly one JSON line on stdout and exits 0; on failure
 prints one line to stderr and exits 1.
 """
 
@@ -30,8 +31,8 @@ for _path in (_HERE.parents[1] / "src", _HERE.parents[2] / "python"):
 from openfeature import api  # noqa: E402
 from openfeature.evaluation_context import EvaluationContext  # noqa: E402
 
-from experimentation import ExperimentationError  # noqa: E402
-from experimentation_openfeature import ExperimentationProvider  # noqa: E402
+from controlvar import ExperimentationError  # noqa: E402
+from controlvar_openfeature import ExperimentationProvider  # noqa: E402
 
 
 def fail(message: str) -> None:
@@ -40,10 +41,14 @@ def fail(message: str) -> None:
 
 
 def main() -> None:
-    api_url = os.environ.get("EXPERIMENTLY_API_URL", "http://localhost:8000")
-    api_key = os.environ.get("EXPERIMENTLY_API_KEY")
+    api_url = (
+        os.environ.get("CONTROLVAR_API_URL")
+        or os.environ.get("EXPERIMENTLY_API_URL")
+        or "http://localhost:8000"
+    )
+    api_key = os.environ.get("CONTROLVAR_API_KEY") or os.environ.get("EXPERIMENTLY_API_KEY")
     if not api_key:
-        fail("EXPERIMENTLY_API_KEY is required")
+        fail("CONTROLVAR_API_KEY is required")
     experiment_key = os.environ.get("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab")
     flag_key = os.environ.get("CONTRACT_FLAG_KEY", "sdk_contract_flag")
     user_id = os.environ.get("CONTRACT_USER_ID") or f"smoke-{uuid.uuid4()}"

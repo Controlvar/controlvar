@@ -522,3 +522,12 @@ by = [
     "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_preview_route_returns_501_without_handler",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/wizard/drafts/{draft_id}/submit | #1257 | The experiment it creates carries the draft's mde as its primary metric's expected_effect, which the results page plans the sample for; the mde used to be dropped, leaving expected_effect null. The guardrail metrics carry none, and a draft with no mde creates the experiment as before. The OpenAPI document does not change. See Guided experiment builder."
+by = [
+    "test:backend/tests/integration/api/test_wizard_submit_builds.py::test_a_submitted_draft_creates_the_documented_experiment",
+    "test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardExperimentCreation::test_payload_saves_the_planned_effect_on_the_primary_metric_only",
+    "test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardExperimentCreation::test_payload_without_a_sample_size_step_plans_nothing",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]

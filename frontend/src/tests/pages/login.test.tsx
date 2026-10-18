@@ -76,7 +76,7 @@ beforeEach(() => {
 describe('LoginPage', () => {
   it('renders the wordmark, email/password fields and a submit button', async () => {
     renderLogin();
-    expect(screen.getByText('Experimently')).toBeInTheDocument();
+    expect(screen.getByText('Controlvar')).toBeInTheDocument();
 
     const email = screen.getByLabelText('Email');
     expect(email).toHaveAttribute('type', 'email');
@@ -176,7 +176,7 @@ describe('LoginPage', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(
-      `This Experimently server isn't configured for the address you used (${window.location.host}). ` +
+      `This Controlvar server isn't configured for the address you used (${window.location.host}). ` +
         `An administrator needs to set PUBLIC_BASE_URL to ${window.location.origin} ` +
         `(or add ${window.location.host} to ALLOWED_HOSTS, if that is set).`,
     );
@@ -310,7 +310,7 @@ describe('loginErrorMessage', () => {
     expect(loginErrorMessage(new ApiError({ status: 429 }))).toContain('Too many attempts');
     expect(loginErrorMessage(new ApiError({ status: 500, detail: 'boom' }))).toBe('boom');
     expect(loginErrorMessage(new ApiError({ status: 400, detail: 'Invalid host header' }))).toBe(
-      `This Experimently server isn't configured for the address you used (${window.location.host}). ` +
+      `This Controlvar server isn't configured for the address you used (${window.location.host}). ` +
         `An administrator needs to set PUBLIC_BASE_URL to ${window.location.origin} ` +
         `(or add ${window.location.host} to ALLOWED_HOSTS, if that is set).`,
     );

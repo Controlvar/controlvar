@@ -1,6 +1,6 @@
 # Python Virtual Environment Setup Guide
 
-This guide outlines how to set up and configure a Python virtual environment for the Experimently project.
+This guide outlines how to set up and configure a Python virtual environment for the Controlvar project.
 
 ## The requirements layout
 
@@ -43,7 +43,7 @@ API under gunicorn outside a container.
 
 Packaging is declared in `pyproject.toml`
 (`[project] name = "experimently-platform"`, with a `[build-system]` table). The name is
-not `experimently`: that is the Python SDK under `sdk/python/`.
+not `controlvar`: that is the Python SDK under `sdk/python/`.
 
 ```bash
 pip install -e .

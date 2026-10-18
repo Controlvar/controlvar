@@ -8,7 +8,7 @@ text = "JavaScript SDK"
 by = ["exempt:label"]
 
 [[unit]]
-text = "@getexperimently/js-sdk (v0.1.0) is the JavaScript/TypeScript client for the Experimently public API: experiment assignment, feature flag evaluation and event tracking for Node >= 18 and browsers."
+text = "@controlvar/js-sdk (v0.1.1) is the JavaScript/TypeScript client for the Controlvar public API: experiment assignment, feature flag evaluation and event tracking for Node >= 18 and browsers."
 by = [
     "mechanism:sdk-doc-versions",
     "test:sdk/js/__tests__/package.test.ts::runs on Node 18 or later and in browsers: no source imports a module",
@@ -60,14 +60,14 @@ text = "Installation"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The @getexperimently/js-sdk package is on npm."
+text = "The @controlvar/js-sdk package is on npm."
 by = [
     "journey:sdk-javascript#quick-start-user-on",
     "journey:sdk-javascript#quick-start-user-off",
 ]
 
 [[unit]]
-text = "0.1.0 is a beta release."
+text = "0.1.1 is a beta release."
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-javascript#quick-start-user-on",
@@ -78,7 +78,7 @@ text = "To work on the SDK itself, build it from a clone of this repository inst
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "npm pack writes getexperimently-js-sdk-0.1.0.tgz:"
+text = "npm pack writes controlvar-js-sdk-0.1.1.tgz:"
 by = ["mechanism:sdk-doc-versions"]
 
 [[unit]]
@@ -101,7 +101,7 @@ by = [
 ]
 
 [[unit]]
-text = "To run it as it is, save it as quick-start.mts in the project where you installed the package, set EXPERIMENTLY_API_KEY, and run it with node --experimental-strip-types quick-start.mts (Node 22.6 or later; it may print an ExperimentalWarning)."
+text = "To run it as it is, save it as quick-start.mts in the project where you installed the package, set CONTROLVAR_API_KEY, and run it with node --experimental-strip-types quick-start.mts (Node 22.6 or later; it may print an ExperimentalWarning)."
 by = [
     "journey:sdk-javascript#quick-start-user-on",
     "journey:sdk-javascript#quick-start-user-off",
@@ -112,7 +112,7 @@ text = "As plain JavaScript, delete the !"
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "after process.env.EXPERIMENTLY_API_KEY, save it as quick-start.mjs and run node quick-start.mjs."
+text = "after process.env.CONTROLVAR_API_KEY, save it as quick-start.mjs and run node quick-start.mjs."
 by = ["exempt:instruction"]
 
 [[unit]]
@@ -695,7 +695,7 @@ text = "Experiments are always assigned by the server."
 by = ["test:sdk/js/__tests__/local.test.ts::experiments are assigned by the server in local mode"]
 
 [[unit]]
-text = "It needs an Experimently server at 0.11.0 or later and a key with the sdk:ruleset scope, and it is for server-side code only: the constructor throws in a browser."
+text = "It needs an Controlvar server at 0.11.0 or later and a key with the sdk:ruleset scope, and it is for server-side code only: the constructor throws in a browser."
 by = [
     "test:sdk/js/__tests__/local.test.ts::404 names the minimum server release; after a load it discards",
     "test:sdk/js/__tests__/local.test.ts::local mode refuses to start in a browser",
@@ -750,7 +750,7 @@ text = "It prints one line:"
 by = ["test:sdk/js/__tests__/contract-smoke.test.ts::it assigns twice, evaluates the flag, tracks with and without a key and sends a 2-event batch"]
 
 [[unit]]
-text = "Env: EXPERIMENTLY_API_URL (default http://localhost:8000), EXPERIMENTLY_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
+text = "Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
 by = [
     "test:sdk/js/__tests__/contract-smoke.test.ts::it reads its settings from the environment, with these defaults",
     "test:sdk/js/__tests__/contract-smoke.test.ts::it assigns twice, evaluates the flag, tracks with and without a key and sends a 2-event batch",
@@ -791,3 +791,11 @@ by = [
     "test:sdk/js/__tests__/package.test.ts::npm test runs jest and npm run smoke builds and runs the contract smoke",
     "test:sdk/js/__tests__/package.test.ts::builds CommonJS with type declarations into dist/",
 ]
+
+[[unit]]
+text = "If you set EXPERIMENTLY_API_KEY or EXPERIMENTLY_API_URL from an earlier version of these pages, set CONTROLVAR_API_KEY and CONTROLVAR_API_URL instead."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If you installed @getexperimently/js-sdk, the name this package had before the project was renamed, uninstall it and install @controlvar/js-sdk."
+by = ["exempt:instruction"]

@@ -385,7 +385,7 @@ describe('ServerClient — no browser-specific API usage', () => {
 });
 
 describe('the package root', () => {
-  it('exports ServerClient, so Node and SSR code import it from @getexperimently/react-sdk', () => {
+  it('exports ServerClient, so Node and SSR code import it from @controlvar/react-sdk', () => {
     expect(packageRoot.ServerClient).toBe(ServerClient);
   });
 });

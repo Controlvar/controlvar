@@ -89,7 +89,7 @@ const sections = [
   {
     category: 'Integrations',
     icon: '🔌',
-    description: 'The AWS services Experimently runs on, the webhooks it receives, and the alerts it sends.',
+    description: 'The AWS services Controlvar runs on, the webhooks it receives, and the alerts it sends.',
     links: [
       { label: 'AWS', href: docsUrl('integrations/aws'), desc: 'How the platform uses ECS Fargate, Aurora, ElastiCache and DynamoDB' },
       { label: 'Jira', href: docsUrl('api/integrations'), desc: 'Inbound webhooks, signed or with a shared secret' },
@@ -115,7 +115,7 @@ const sections = [
   {
     category: 'Self-Hosting',
     icon: '🏗️',
-    description: 'Run Experimently yourself: Docker Compose on one machine, Helm on Kubernetes, or a CDK app that deploys to AWS.',
+    description: 'Run Controlvar yourself: Docker Compose on one machine, Helm on Kubernetes, or a CDK app that deploys to AWS.',
     links: [
       { label: 'AWS CDK Deployment', href: docsUrl('self-hosting/cdk'), desc: 'CDK app for ECS Fargate, Aurora and ElastiCache' },
       { label: 'Docker Compose', href: `${DOCS_REPO}/blob/${DOCS_BRANCH}/deploy/compose/README.md`, desc: 'The published images on one Docker host: deploy/compose/compose.yml, and a README that says how to run it and lists its settings' },
@@ -168,7 +168,7 @@ export default function DocsIndex() {
     <>
       <PageTitle
         title="Documentation"
-        description="Experimently documentation: quick start, a guide for every SDK, API reference, integrations, HIPAA controls and self-hosting."
+        description="Controlvar documentation: quick start, a guide for every SDK, API reference, integrations, HIPAA controls and self-hosting."
       />
 
       <div className="flex-1 bg-white">
@@ -177,7 +177,7 @@ export default function DocsIndex() {
         <div className="bg-gray-50 border-b border-gray-100 py-16 px-6">
           <div className="max-w-4xl mx-auto text-center">
             <h1 className="text-4xl font-bold text-gray-900 mb-4">
-              Experimently Documentation
+              Controlvar Documentation
             </h1>
             <p className="text-xl text-gray-600 mb-8">
               Everything you need to build, ship, and measure with confidence.
@@ -245,7 +245,7 @@ export default function DocsIndex() {
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
               <div>
                 <Link href="/" className="text-xl font-semibold text-white">
-                  Experimently
+                  Controlvar
                 </Link>
                 <p className="text-gray-400 text-sm mt-1">Modern experimentation platform</p>
               </div>
@@ -254,12 +254,12 @@ export default function DocsIndex() {
                 <Link href="/docs" className="hover:text-white transition">Docs</Link>
                 <a href={docsUrl('api/endpoints')} className="hover:text-white transition">API Reference</a>
                 <a href={docsUrl('sdk/javascript')} className="hover:text-white transition">SDKs</a>
-                <a href="mailto:hello@getexperimently.com" className="hover:text-white transition">Contact</a>
+                <a href="mailto:hello@controlvar.com" className="hover:text-white transition">Contact</a>
               </div>
             </div>
             <div className="border-t border-gray-800 mt-8 pt-8">
               <p className="text-gray-400 text-sm text-center">
-                © 2024–2026 Experimently. Apache-2.0; SDKs MIT.
+                © 2024–2026 The Controlvar authors. Apache-2.0; SDKs MIT.
               </p>
             </div>
           </div>

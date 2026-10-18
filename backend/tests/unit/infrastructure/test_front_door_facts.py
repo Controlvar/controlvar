@@ -119,15 +119,50 @@ def test_each_host_port_has_its_override(compose, service, variable):
     assert port.startswith("127.0.0.1:${" + variable + ":-"), port
 
 
+#: The one command that starts the demo profile with the seeds its apps need
+#: (#1266). The bare `docker compose --profile demo up -d` starts ShopLab,
+#: StreamPulse and their simulators with no API key in the database: the apps
+#: answer 401 and the simulators exit at start.
+DEMO_COMMAND = (
+    "SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait"
+)
+
+
+def _header() -> str:
+    return _text("docker-compose.yml").split("\n\n", 1)[0]
+
+
 def test_the_header_describes_the_profiles_and_the_port_overrides():
-    header = _text("docker-compose.yml").split("\n\n", 1)[0]
+    header = _header()
     for needle in (
-        "--profile demo",
         "--profile tools",
         "--profile aws",
         "*_HOST_PORT",
     ):
         assert needle in header, needle
+    demo = [line for line in header.split("\n") if "--profile demo" in line]
+    assert [line.lstrip("#").strip() for line in demo] == [DEMO_COMMAND], demo
+
+
+def test_the_demo_banner_and_both_simulators_print_the_demo_command(compose):
+    text = _text("docker-compose.yml")
+    banner = text.split("# profile: demo", 1)[1].split("# ====", 1)[0]
+    assert f"#   {DEMO_COMMAND}\n" in banner, banner
+    for app in ("shoplab", "streampulse"):
+        command = " ".join(compose["services"][f"{app}-simulator"]["command"])
+        assert (
+            f"no /data/demo/{app}/.api_key: the {app} seed has not run. "
+            f"Start the stack with: {DEMO_COMMAND}"
+        ) in command, command
+
+
+def test_make_demo_runs_the_demo_command_with_build():
+    makefile = _text("Makefile")
+    assert "COMPOSE := docker compose\n" in makefile
+    recipe = makefile.split("\ndemo:", 1)[1].split("\n")[1].strip()
+    assert recipe.replace("$(COMPOSE)", "docker compose") == DEMO_COMMAND.replace(
+        "up -d --wait", "up -d --build --wait"
+    ), recipe
 
 
 def test_the_demo_seed_creates_three_experiments_and_two_flags():
@@ -220,17 +255,16 @@ def test_thirteen_of_the_sixteen_sdks_run_the_live_contract():
 
 
 def test_the_sdk_package_names():
-    assert json.loads(_text("sdk/js/package.json"))["name"] == "@getexperimently/js-sdk"
+    assert json.loads(_text("sdk/js/package.json"))["name"] == "@controlvar/js-sdk"
     assert (
-        json.loads(_text("sdk/react/package.json"))["name"]
-        == "@getexperimently/react-sdk"
+        json.loads(_text("sdk/react/package.json"))["name"] == "@controlvar/react-sdk"
     )
     python = tomllib.loads(_text("sdk/python/pyproject.toml"))["project"]
-    assert python["name"] == "experimently"
-    assert (ROOT / "sdk/python/experimentation/__init__.py").is_file()
+    assert python["name"] == "controlvar"
+    assert (ROOT / "sdk/python/controlvar/__init__.py").is_file()
     pom = _text("sdk/java/core/pom.xml")
-    assert "<groupId>com.getexperimently</groupId>" in pom
-    assert re.search(r"</parent>\s*<artifactId>experimently-sdk</artifactId>", pom)
+    assert "<groupId>com.controlvar</groupId>" in pom
+    assert re.search(r"</parent>\s*<artifactId>controlvar-sdk</artifactId>", pom)
 
 
 def test_the_java_sdk_has_spring_boot_auto_configuration():
@@ -309,6 +343,7 @@ def test_make_lint_and_the_lint_job_run_the_same_checks():
         "lint-imports",
         "reuse lint",
         "check_requirements_lock.py",
+        "check_legacy_name.py",
         "npm run lint",
         "npx tsc --noEmit",
         "hadolint",
@@ -320,6 +355,7 @@ def test_make_lint_and_the_lint_job_run_the_same_checks():
         "ruff check",
         "ruff format --check",
         "check_requirements_lock.py",
+        "check_legacy_name.py",
         "npm run lint",
         "npx tsc --noEmit",
         "actionlint",

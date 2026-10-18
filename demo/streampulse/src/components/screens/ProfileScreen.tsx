@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useExperiment } from '@getexperimently/react-sdk';
+import { useExperiment } from '@controlvar/react-sdk';
 import { EXPERIMENT_KEYS } from '@/lib/env';
 import { useScreenView, useTrack } from '@/lib/eventLog';
 import { Binding, ScreenHeader } from '@/components/ui';
@@ -131,7 +131,7 @@ export default function ProfileScreen({ deviceModel, tier }: Props) {
       {!showWrapped && !showBadges && (
         <p className="mt-3 text-xs text-neutral-400" data-testid="profile-plain">
           Standard profile. This device is in neither Profile experiment
-          {wrapped.assigned === false || badges.assigned === false ? ' (see the Experimently panel for why)' : ''}.
+          {wrapped.assigned === false || badges.assigned === false ? ' (see the Controlvar panel for why)' : ''}.
         </p>
       )}
 

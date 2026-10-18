@@ -4,7 +4,7 @@
 document = "demo/DEMO_GUIDE.md"
 
 [[unit]]
-text = "Experimently — Client Demo Guide"
+text = "Controlvar — Client Demo Guide"
 by = ["exempt:label"]
 
 [[unit]]
@@ -12,7 +12,7 @@ text = "Overview"
 by = ["exempt:label"]
 
 [[unit]]
-text = "This guide walks you through a 20-minute live demo of the Experimently experimentation platform."
+text = "This guide walks you through a 20-minute live demo of the Controlvar experimentation platform."
 by = ["exempt:navigation"]
 
 [[unit]]
@@ -134,7 +134,7 @@ by = ["exempt:label"]
 count = 7
 
 [[unit]]
-text = "Open http://localhost:3200 — point at the Experimently panel (bottom-right): the visitor id, the variant this visitor got for each experiment, and the two feature flags."
+text = "Open http://localhost:3200 — point at the Controlvar panel (bottom-right): the visitor id, the variant this visitor got for each experiment, and the two feature flags."
 by = [
     "journey:demo-shoplab#storefront",
     "journey:demo-shoplab#panel",
@@ -305,7 +305,7 @@ by = [
 ]
 
 [[unit]]
-text = "The Experimently panel shows streampulse_ai_search: on (targeting_rule) vs off (rollout)."
+text = "The Controlvar panel shows streampulse_ai_search: on (targeting_rule) vs off (rollout)."
 by = [
     "journey:demo-guide#search-tab",
     "journey:demo-guide#keyword-search",
@@ -960,7 +960,7 @@ by = [
     "journey:sdk-python#quick-start-user-on",
     "journey:sdk-javascript#quick-start-user-on",
     "journey:sdk-go#quick-start-user-on",
-    "test:sdk/java/spring-boot-starter/src/test/java/com/getexperimently/sdk/spring/ExperimentationAutoConfigurationTest.java::beansCreatedWhenApiKeyPresent",
+    "test:sdk/java/spring-boot-starter/src/test/java/com/controlvar/sdk/spring/ExperimentationAutoConfigurationTest.java::beansCreatedWhenApiKeyPresent",
     "test:sdk/react/src/__tests__/ServerClient.test.ts::returns an enabled evaluation with the full structure",
 ]
 
@@ -1023,7 +1023,7 @@ by = [
 [[unit]]
 text = "The Java SDK (with Spring Boot auto-configuration) and the React SDK (with hooks and SSR support) build from the repository's sdk/ directory."
 by = [
-    "test:sdk/java/spring-boot-starter/src/test/java/com/getexperimently/sdk/spring/ExperimentationAutoConfigurationTest.java::beansCreatedWhenApiKeyPresent",
+    "test:sdk/java/spring-boot-starter/src/test/java/com/controlvar/sdk/spring/ExperimentationAutoConfigurationTest.java::beansCreatedWhenApiKeyPresent",
     "test:sdk/react/src/__tests__/ServerClient.test.ts::returns an enabled evaluation with the full structure",
     "test:sdk/react/src/__tests__/useExperiment.test.tsx::reports a control assignment with isControl: true",
 ]

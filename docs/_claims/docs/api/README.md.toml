@@ -8,7 +8,7 @@ text = "API Documentation"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "This directory contains the API documentation for Experimently."
+text = "This directory contains the API documentation for Controlvar."
 by = ["exempt:baseline"]
 
 [[unit]]

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # =========================================================================
-# Experimently dashboard image.
+# Controlvar dashboard image.
 #
 #   docker build -f frontend/Dockerfile -t experimently-web:core .
 #   docker build -f frontend/Dockerfile -t experimently-web:full \
@@ -146,14 +146,14 @@ ARG VERSION=0.0.0+unknown
 # source and url are set explicitly because the base image sets both to its own
 # repository, and a LABEL is inherited unless overridden: without these two
 # lines the dashboard image names nginx's repository as where it came from.
-LABEL org.opencontainers.image.title="Experimently Dashboard" \
-      org.opencontainers.image.description="Static Next.js dashboard served by nginx, proxying /api to the Experimently API" \
+LABEL org.opencontainers.image.title="Controlvar Dashboard" \
+      org.opencontainers.image.description="Static Next.js dashboard served by nginx, proxying /api to the Controlvar API" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.revision="${GIT_COMMIT}" \
       org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.source="https://github.com/getexperimently/experimently" \
-      org.opencontainers.image.url="https://github.com/getexperimently/experimently" \
+      org.opencontainers.image.source="https://github.com/Controlvar/controlvar" \
+      org.opencontainers.image.url="https://github.com/Controlvar/controlvar" \
       io.experimently.profile="${EXPERIMENTLY_PROFILE}"
 
 ENV API_UPSTREAM=http://api:8000
@@ -174,10 +174,10 @@ RUN rm -f /etc/nginx/conf.d/default.conf \
     && mkdir -p /etc/nginx/templates \
     && chown -R nginx:nginx /etc/nginx/conf.d /etc/nginx/templates
 COPY --chown=nginx:nginx frontend/nginx.conf /etc/nginx/templates/default.conf.template
-COPY --chown=nginx:nginx frontend/docker-entrypoint.sh /usr/local/bin/experimently-entrypoint.sh
-COPY --from=builder --chown=nginx:nginx /app/nginx/routes.conf /etc/nginx/experimently-routes.conf
+COPY --chown=nginx:nginx frontend/docker-entrypoint.sh /usr/local/bin/controlvar-entrypoint.sh
+COPY --from=builder --chown=nginx:nginx /app/nginx/routes.conf /etc/nginx/controlvar-routes.conf
 COPY --from=builder --chown=nginx:nginx /app/frontend/out /usr/share/nginx/html
-RUN chmod +x /usr/local/bin/experimently-entrypoint.sh
+RUN chmod +x /usr/local/bin/controlvar-entrypoint.sh
 USER nginx
 
 EXPOSE 8080
@@ -185,5 +185,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || exit 1
 
-ENTRYPOINT ["/usr/local/bin/experimently-entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/controlvar-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]

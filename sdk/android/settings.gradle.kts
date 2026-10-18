@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "experimently-android"
+rootProject.name = "controlvar-android"
 include(":sdk")

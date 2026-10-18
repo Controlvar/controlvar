@@ -427,7 +427,7 @@ describe('refresh failures', () => {
     track(client);
     const result = await client.ready();
     expect(result.ok).toBe(false);
-    expect(errors[0].error.message).toContain(`Experimently ${MIN_SERVER_RELEASE} or later`);
+    expect(errors[0].error.message).toContain(`Controlvar ${MIN_SERVER_RELEASE} or later`);
 
     const later = new FakeServer(ok(), { status: 404 });
     const second = localClient(later);

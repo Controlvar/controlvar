@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Experimently\Tests;
+namespace Controlvar\Tests;
 
-use Experimently\Assignment;
-use Experimently\BatchResult;
-use Experimently\Errors\ApiException;
-use Experimently\Errors\AuthException;
-use Experimently\Errors\NetworkException;
-use Experimently\ExperimentationClient;
-use Experimently\FlagEvaluation;
-use Experimently\SdkConfig;
+use Controlvar\Assignment;
+use Controlvar\BatchResult;
+use Controlvar\Errors\ApiException;
+use Controlvar\Errors\AuthException;
+use Controlvar\Errors\NetworkException;
+use Controlvar\ExperimentationClient;
+use Controlvar\FlagEvaluation;
+use Controlvar\SdkConfig;
 use PHPUnit\Framework\TestCase;
 
 /**

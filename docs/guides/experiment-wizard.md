@@ -14,7 +14,7 @@ experiment in five steps:
 | 1. Type | A/B Test or Multivariate |
 | 2. Details | Name, key, description, hypothesis, and the metrics (each with its own name), one of them primary |
 | 3. Variants | The variants, their traffic split (it must add up to exactly 100%), which one is the control, and optional targeting rules |
-| 4. Estimate | How results will be judged (the confidence level and the correction, saved with the experiment), then, optionally, how many users each variant needs and roughly how many days that takes |
+| 4. Estimate | How results will be judged (the confidence level and the correction, saved with the experiment), then, optionally, the minimum detectable effect (saved with the experiment), how many users each variant needs and roughly how many days that takes |
 | 5. Review | Everything as it will be sent; **Create Experiment** creates it as a draft |
 
 - **Next** checks only the step you are on; **Back** never checks anything. The step
@@ -32,8 +32,15 @@ experiment in five steps:
   experiment as `confidence_level` and `correction_method`, and cannot be changed once
   it leaves draft. The single-page form has them in a collapsed **Analysis settings**
   section. The Review step shows them in its **Analysis** row.
-- The rest of the step, the estimate, is advisory and is not saved. It calls the
-  sample-size endpoint shown [below](#sample-size-guidance) at a significance of
+- The rest of the step is the estimate. Its **minimum detectable effect** is saved with
+  the experiment, as the primary metric's `expected_effect` (10% is saved as `0.1`), and
+  the results page's **Planned sample** plans the sample for it; leave it blank and the
+  results page plans for 5%. An effect below 0.1%, or of 100% or more, cannot be saved:
+  **Next** says so and stays on the step. Nothing else in the estimate is saved: the
+  results page plans from the control variant's own conversion rate, at 80% power. The
+  Review step's **Sample size** row says what is saved, and the single-page form shows a
+  saved effect read-only under the metrics.
+- The estimate calls the sample-size endpoint shown [below](#sample-size-guidance) at a significance of
   1 − the confidence level, treats the minimum detectable effect as a *relative*
   change (5% of a 12% baseline is 12.6%, not 17%), and assumes users are split evenly
   between the variants. It makes no correction for comparing several variants with
@@ -291,16 +298,18 @@ unknown operator or a blank attribute. The error names the condition, for exampl
 and no experiment is created.
 
 The experiment is an ordinary one. An `ab` draft gets two variants, `Control` and
-`Variant A`, at 50% each; its primary metric counts `checkout_completed`:
+`Variant A`, at 50% each; its primary metric counts `checkout_completed`, and carries the
+draft's `mde` as its `expected_effect`, which the results page plans the sample for:
 
 ```{.bash exec}
 curl -s localhost:8000/api/v1/experiments/$EXP_ID \
   -H "Authorization: Bearer $TOKEN" \
-  | jq '{name, status, variants: [.variants[].name], metrics: [.metrics[].event_name]}'
+  | jq '{name, status, variants: [.variants[].name], metrics: [.metrics[] | {event_name, is_primary, expected_effect}]}'
 ```
 <!-- expect: "name": "Checkout CTA Button Color" -->
 <!-- expect: "status": "draft" -->
 <!-- expect: "Variant A" -->
+<!-- expect: "expected_effect": 0.05 -->
 
 ```json
 {
@@ -311,8 +320,16 @@ curl -s localhost:8000/api/v1/experiments/$EXP_ID \
     "Variant A"
   ],
   "metrics": [
-    "checkout_completed",
-    "page_error"
+    {
+      "event_name": "checkout_completed",
+      "is_primary": true,
+      "expected_effect": 0.05
+    },
+    {
+      "event_name": "page_error",
+      "is_primary": false,
+      "expected_effect": null
+    }
   ]
 }
 ```
@@ -325,8 +342,10 @@ at 50% each. Review the experiment and start it when you're ready.
 
 ## Sample Size Guidance
 
-The draft stores `baseline_rate` and `mde`, but the wizard doesn't compute a sample size
-from them. The experiments API does, and the dashboard's guided setup calls it on its
+The draft stores `baseline_rate` and `mde`. Submitting saves `mde` as the primary metric's
+`expected_effect`, and the results page plans the sample for it; `baseline_rate` is not
+saved, because the results page plans from the control variant's own conversion rate. The
+wizard doesn't compute a sample size itself. The experiments API does, and the dashboard's guided setup calls it on its
 Estimate step:
 
 ```{.bash exec}

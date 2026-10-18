@@ -1108,9 +1108,15 @@ class Users:
             return False, {}, "the traffic never finished"
         named = experiments_named(self.api_url, self.token, end.name)
         results = None
+        sample_size = None
         if len(named) == 1:
             results = _api(
                 f"{self.api_url}/api/v1/results/{named[0]['id']}", self.token
+            )
+            # As the results page asks for it: the server's own inputs (#1257).
+            sample_size = _api(
+                f"{self.api_url}/api/v1/results/{named[0]['id']}/sample-size",
+                self.token,
             )
         made = self.sender.plan
         ok, numbers, why = judge.experiment_end(
@@ -1121,6 +1127,9 @@ class Users:
             report=self.report.by_arm,
             oracle_p=traffic.generator().fisher_p_value(self.report.by_arm),
             shown=readings.get(end.shown),
+            sample_size=sample_size,
+            planned_shown=readings.get(end.planned),
+            effect_shown=readings.get(end.effect),
         )
         numbers["traffic"] = self.report.as_numbers()
         numbers["planned_p_value"] = made.p_value

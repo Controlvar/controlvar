@@ -1,14 +1,14 @@
 {
-  "name": "experimently",
+  "name": "controlvar",
   "version": "1.0.0",
   "description": "A scalable, AWS-based platform for A/B testing and feature flags with real-time evaluation capabilities.",
-  "homepage": "https://github.com/getexperimently/experimently#readme",
+  "homepage": "https://github.com/Controlvar/controlvar#readme",
   "bugs": {
-    "url": "https://github.com/getexperimently/experimently/issues"
+    "url": "https://github.com/Controlvar/controlvar/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/getexperimently/experimently.git"
+    "url": "git+https://github.com/Controlvar/controlvar.git"
   },
   "license": "Apache-2.0",
   "author": "",

@@ -8,6 +8,7 @@ name: Lint
 #   reuse lint                         every file carries a licence (REUSE.toml, LICENSES/)
 #   check_requirements_lock.py         backend/requirements/runtime.lock matches runtime.txt,
 #                                      and the requirements files share their pins
+#   check_legacy_name.py               the former name only where the keep-list keeps it
 #   eslint + tsc                       frontend/
 #   hadolint                           the four Dockerfiles
 #   actionlint                         .github/workflows
@@ -83,6 +84,12 @@ jobs:
       # without `make lock` would otherwise ship the old version.
       - name: requirements lock is current
         run: python scripts/check_requirements_lock.py
+
+      # The project's former name, only where scripts/legacy_name_keep.toml
+      # keeps it (an identifier a machine matches, or history), with each
+      # entry's count pinned.
+      - name: former name only where kept
+        run: python scripts/check_legacy_name.py
 
       - name: Set up Node.js
         uses: actions/setup-node@v7

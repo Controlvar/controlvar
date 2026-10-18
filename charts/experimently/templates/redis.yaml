@@ -3,13 +3,13 @@ The bundled Redis: one replica, append-only, on the development compose's
 image. Multi-arch, so no amd64 nodeSelector. ClusterIP only.
 */ -}}
 {{- if and .Values.redis.enabled .Values.redis.bundled }}
-{{- $fullname := include "experimently.fullname" . }}
+{{- $fullname := include "controlvar.fullname" . }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ $fullname }}-redis
   labels:
-    {{- include "experimently.labels" . | nindent 4 }}
+    {{- include "controlvar.labels" . | nindent 4 }}
     app.kubernetes.io/component: redis
 spec:
   type: ClusterIP
@@ -19,14 +19,14 @@ spec:
       targetPort: redis
       protocol: TCP
   selector:
-    {{- include "experimently.selectorLabels" (dict "ctx" . "component" "redis") | nindent 4 }}
+    {{- include "controlvar.selectorLabels" (dict "ctx" . "component" "redis") | nindent 4 }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ $fullname }}-redis
   labels:
-    {{- include "experimently.labels" . | nindent 4 }}
+    {{- include "controlvar.labels" . | nindent 4 }}
     app.kubernetes.io/component: redis
 spec:
   accessModes: ["ReadWriteOnce"]
@@ -42,7 +42,7 @@ kind: Deployment
 metadata:
   name: {{ $fullname }}-redis
   labels:
-    {{- include "experimently.labels" . | nindent 4 }}
+    {{- include "controlvar.labels" . | nindent 4 }}
     app.kubernetes.io/component: redis
 spec:
   replicas: 1
@@ -51,17 +51,17 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      {{- include "experimently.selectorLabels" (dict "ctx" . "component" "redis") | nindent 6 }}
+      {{- include "controlvar.selectorLabels" (dict "ctx" . "component" "redis") | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "experimently.selectorLabels" (dict "ctx" . "component" "redis") | nindent 8 }}
+        {{- include "controlvar.selectorLabels" (dict "ctx" . "component" "redis") | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "experimently.serviceAccountName" . }}
+      serviceAccountName: {{ include "controlvar.serviceAccountName" . }}
       automountServiceAccountToken: false
       # redis:7-alpine's `redis` user.
       securityContext:
-        {{- include "experimently.podSecurity" (dict "uid" 999 "gid" 1000) | nindent 8 }}
+        {{- include "controlvar.podSecurity" (dict "uid" 999 "gid" 1000) | nindent 8 }}
       containers:
         - name: redis
           image: {{ .Values.redis.image }}
@@ -72,7 +72,7 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "experimently.secretName" . }}
+                  name: {{ include "controlvar.secretName" . }}
                   key: REDIS_PASSWORD
                   optional: true
           ports:
@@ -89,7 +89,7 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 20
           securityContext:
-            {{- include "experimently.containerSecurity" . | nindent 12 }}
+            {{- include "controlvar.containerSecurity" . | nindent 12 }}
           {{- with .Values.redis.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

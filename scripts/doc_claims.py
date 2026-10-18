@@ -649,10 +649,28 @@ DATED = re.compile(
     r"\b[Aa]s of v[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}\b"
     r"|\b[Oo]n (?P<y>[0-9]{4})-(?P<m>[0-9]{2})-(?P<d>[0-9]{2})\b"
 )
-EVIDENCE = re.compile(
-    r"https://github\.com/getexperimently/experimently/"
+#: The repository's names: the one dated evidence in the registries was taken
+#: under, and the one it moved to. Evidence is a record of a run and is never
+#: rewritten, so its links keep the name they were taken under (GitHub
+#: redirects them). Nothing is read from the environment: the same registry
+#: holds on a laptop, in core_build's copy and in CI.
+EVIDENCE_REPOSITORY = ("getexperimently/experimently", "Controlvar/controlvar")
+EVIDENCE_PATH = (
     r"(?:actions/runs/[0-9]{1,12}|issues/[0-9]{1,7}#issuecomment-[0-9]{1,12})"
 )
+
+
+def evidence_url(url: str) -> bool:
+    """A run or issue comment URL of one of EVIDENCE_REPOSITORY's names."""
+    return any(
+        re.fullmatch(
+            r"https://github\.com/" + re.escape(name) + "/" + EVIDENCE_PATH, url
+        )
+        is not None
+        for name in EVIDENCE_REPOSITORY
+    )
+
+
 SLUG = r"[a-z0-9]{1,60}(?:-[a-z0-9]{1,60}){0,20}"
 PYTHON_NAME = r"[A-Za-z_][A-Za-z0-9_]{0,200}"
 #: Test files, by name, in every language the repository tests in.
@@ -694,7 +712,7 @@ class Mechanism:
 
 
 _VERSION = r"\(?v?[0-9]{1,4}(?:\.[0-9]{1,4}){1,2}"
-_TARBALL = r"getexperimently-[A-Za-z0-9-]{1,60}-[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}\.tgz"
+_TARBALL = r"controlvar-[A-Za-z0-9-]{1,60}-[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}\.tgz"
 #: "0.1.0 is a beta release.", after the sentence naming the registry.
 _BETA = r"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4} is a beta release\.$"
 
@@ -728,7 +746,7 @@ MECHANISMS: Dict[str, Mechanism] = {
         "::test_every_claim_about_what_the_platform_does_is_on_the_list",
         quotes=True,
     ),
-    # A quoted package version (a bare `experimently` only on the Python page),
+    # A quoted package version (a bare `controlvar` only on the Python page),
     # and the version after the sentence naming the registry, in the SDK
     # pages, the guide, the FAQ and the READMEs the packages carry.
     "sdk-doc-versions": Mechanism(
@@ -737,12 +755,12 @@ MECHANISMS: Dict[str, Mechanism] = {
         holds=(
             (
                 "docs/sdk/*.md",
-                r"(?:@getexperimently/[A-Za-z0-9_-]{1,60}|experimently-openfeature) "
+                r"(?:@controlvar/[A-Za-z0-9_-]{1,60}|controlvar-openfeature) "
                 + _VERSION,
             ),
             ("docs/sdk/*.md", _TARBALL),
             ("docs/sdk-guide.md", _TARBALL),
-            ("docs/sdk/python.md", r"(?<![\w@/-])experimently " + _VERSION),
+            ("docs/sdk/python.md", r"(?<![\w@/-])controlvar " + _VERSION),
             # The sentence before it names the package: the test reads the two.
             ("docs/sdk/python.md", _BETA),
             ("docs/sdk/javascript.md", _BETA),
@@ -754,8 +772,8 @@ MECHANISMS: Dict[str, Mechanism] = {
             ),
             (
                 "docs/getting-started/faq.md",
-                r"\((?:npm|pip) install (?:@getexperimently/[A-Za-z0-9_-]{1,60}"
-                r"|experimently), [0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}, beta\)",
+                r"\((?:npm|pip) install (?:@controlvar/[A-Za-z0-9_-]{1,60}"
+                r"|controlvar), [0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}, beta\)",
             ),
         ),
     ),
@@ -864,7 +882,7 @@ MECHANISMS: Dict[str, Mechanism] = {
         holds=(
             (
                 "sdk/python/README.md",
-                r"^Set EXPERIMENTLY_API_KEY to an API key, then run the block as it is",
+                r"^Set CONTROLVAR_API_KEY to an API key, then run the block as it is",
             ),
         ),
     ),
@@ -2355,7 +2373,7 @@ def target_problem(
             )
         return None
     if kind == "evidence":
-        if not EVIDENCE.fullmatch(target[len("evidence:") :]):
+        if not evidence_url(target[len("evidence:") :]):
             return "not evidence:<a GitHub run or issue comment URL of this repository>"
         if document.cls != "aws":
             return "evidence: is only for a document of class aws"

@@ -4,7 +4,7 @@
 ``release.yml``'s ``chart`` job runs ``helm package charts/experimently`` and
 then this, before the ``.tgz`` goes anywhere:
 
-    python3 scripts/check_chart_package.py dist/experimently-X.Y.Z.tgz --expect X.Y.Z
+    python3 scripts/check_chart_package.py dist/controlvar-X.Y.Z.tgz --expect X.Y.Z
 
 It reads the ``Chart.yaml`` *inside the archive* -- what a user who downloads
 the asset installs -- not the one in the tree, which ``check_version_sources.py``
@@ -15,12 +15,12 @@ checkout holds.
 Checked, each exactly (image tags and chart versions are strings, not PEP 440
 versions, so ``0.1.0rc1`` is not ``0.1.0-rc.1``):
 
-* the archive holds exactly one ``Chart.yaml``, at ``experimently/Chart.yaml``;
-* its ``name`` is ``experimently``;
+* the archive holds exactly one ``Chart.yaml``, at ``controlvar/Chart.yaml``;
+* its ``name`` is ``controlvar``;
 * its ``version`` and ``appVersion`` are both the expected version -- the
   chart's default image tag is ``<profile>-<appVersion>``, so a stale
   ``appVersion`` installs the previous release's images;
-* the file is called ``experimently-<version>.tgz``, the name ``helm package``
+* the file is called ``controlvar-<version>.tgz``, the name ``helm package``
   gives it and the one the release asset is published under.
 
 Standard library only: ``helm package`` rewrites ``Chart.yaml`` as plain
@@ -36,7 +36,7 @@ import sys
 import tarfile
 from pathlib import Path
 
-CHART_NAME = "experimently"
+CHART_NAME = "controlvar"
 CHART_YAML = f"{CHART_NAME}/Chart.yaml"
 
 

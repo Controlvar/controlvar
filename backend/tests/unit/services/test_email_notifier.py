@@ -42,7 +42,7 @@ def _make_notifier(
     smtp_username: str = "user@example.com",
     smtp_password: str = "secret",
     email_from_address: str = "platform@example.com",
-    email_from_name: str = "Experimently",
+    email_from_name: str = "Controlvar",
     notification_admin_emails=None,
 ):
     """Build an EmailNotifier with mocked settings."""

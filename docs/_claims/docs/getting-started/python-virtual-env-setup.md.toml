@@ -8,7 +8,7 @@ text = "Python Virtual Environment Setup Guide"
 by = ["exempt:label"]
 
 [[unit]]
-text = "This guide outlines how to set up and configure a Python virtual environment for the Experimently project."
+text = "This guide outlines how to set up and configure a Python virtual environment for the Controlvar project."
 by = ["exempt:navigation"]
 
 [[unit]]
@@ -76,7 +76,7 @@ text = "Packaging is declared in pyproject.toml ([project] name = \"experimently
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_platform_package_is_declared_in_pyproject_only"]
 
 [[unit]]
-text = "The name is not experimently: that is the Python SDK under sdk/python/."
+text = "The name is not controlvar: that is the Python SDK under sdk/python/."
 by = [
     "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_platform_package_is_declared_in_pyproject_only",
     "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names",

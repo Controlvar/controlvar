@@ -8,7 +8,7 @@ text = "Authentication User Guide"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "This guide explains how to use the authentication features of Experimently, including registration, login, password management, and security best practices."
+text = "This guide explains how to use the authentication features of Controlvar, including registration, login, password management, and security best practices."
 by = ["exempt:baseline"]
 
 [[unit]]
@@ -73,7 +73,7 @@ text = "Registration Requirements"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "To create an account on Experimently, you will need to provide:"
+text = "To create an account on Controlvar, you will need to provide:"
 by = ["exempt:baseline"]
 
 [[unit]]

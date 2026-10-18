@@ -1,6 +1,6 @@
 {{- if .Values.ingress.enabled }}
-{{- $fullname := include "experimently.fullname" . }}
-{{- $host := include "experimently.publicHost" . }}
+{{- $fullname := include "controlvar.fullname" . }}
+{{- $host := include "controlvar.publicHost" . }}
 {{- if or (regexMatch "^[0-9.]+$" $host) (contains ":" (urlParse .Values.publicBaseUrl).host) }}
 {{- fail (printf "publicBaseUrl %q: an Ingress host must be a DNS name without a port. Use a DNS name, or set ingress.enabled=false and route to the Services yourself." .Values.publicBaseUrl) }}
 {{- end }}
@@ -9,7 +9,7 @@ kind: Ingress
 metadata:
   name: {{ $fullname }}
   labels:
-    {{- include "experimently.labels" . | nindent 4 }}
+    {{- include "controlvar.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

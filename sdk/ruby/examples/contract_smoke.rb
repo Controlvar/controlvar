@@ -5,34 +5,36 @@
 # backend and prints exactly one JSON line on stdout.
 #
 # Run from the repository root:
-#   EXPERIMENTLY_API_KEY=$(cat tests/sdk-contract/live/.api_key) \
+#   CONTROLVAR_API_KEY=$(cat tests/sdk-contract/live/.api_key) \
 #     ruby -Isdk/ruby/lib sdk/ruby/examples/contract_smoke.rb
 #
 # Environment:
-#   EXPERIMENTLY_API_URL     backend origin (default http://localhost:8000)
-#   EXPERIMENTLY_API_KEY     API key (required)
+#   CONTROLVAR_API_URL     backend origin (default http://localhost:8000)
+#   CONTROLVAR_API_KEY     API key (required)
 #   CONTRACT_EXPERIMENT_KEY  default sdk_contract_ab
 #   CONTRACT_FLAG_KEY        default sdk_contract_flag
 #   CONTRACT_USER_ID         default smoke-<uuid>
 
 require 'json'
 require 'securerandom'
-require 'experimently'
+require 'controlvar'
 
 def smoke_fail(message)
   $stderr.puts "contract_smoke(ruby): #{message}"
   exit 1
 end
 
-api_url        = ENV.fetch('EXPERIMENTLY_API_URL', 'http://localhost:8000')
-api_key        = ENV['EXPERIMENTLY_API_KEY']
+api_url        = [ENV['CONTROLVAR_API_URL'], ENV['EXPERIMENTLY_API_URL']]
+                 .find { |v| v && !v.empty? } || 'http://localhost:8000'
+api_key        = [ENV['CONTROLVAR_API_KEY'], ENV['EXPERIMENTLY_API_KEY']]
+                 .find { |v| v && !v.empty? }
 experiment_key = ENV.fetch('CONTRACT_EXPERIMENT_KEY', 'sdk_contract_ab')
 flag_key       = ENV.fetch('CONTRACT_FLAG_KEY', 'sdk_contract_flag')
 user_id        = ENV['CONTRACT_USER_ID'] || "smoke-#{SecureRandom.uuid}"
 
-smoke_fail('EXPERIMENTLY_API_KEY is required') if api_key.nil? || api_key.strip.empty?
+smoke_fail('CONTROLVAR_API_KEY is required') if api_key.nil? || api_key.strip.empty?
 
-client = Experimently::Client.new(base_url: api_url, api_key: api_key, timeout: 10)
+client = Controlvar::Client.new(base_url: api_url, api_key: api_key, timeout: 10)
 
 # 1. Sticky assignment: assign twice, dropping the local cache in between so the
 #    second answer really comes from the server.

@@ -12,7 +12,7 @@ text = "Beta: Snowflake and BigQuery are available"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Warehouse analysis runs an experiment's analysis on tables in your own data warehouse instead of on events sent to Experimently."
+text = "Warehouse analysis runs an experiment's analysis on tables in your own data warehouse instead of on events sent to Controlvar."
 by = [
     "test:modules/backend/tests/integration/warehouse/test_runs_api.py",
     "test:modules/backend/tests/integration/warehouse/test_bigquery_run.py",
@@ -52,7 +52,7 @@ text = "What it does"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "You point Experimently at two of your own tables or views:"
+text = "You point Controlvar at two of your own tables or views:"
 by = ["exempt:baseline"]
 
 [[unit]]
@@ -70,7 +70,7 @@ by = [
 ]
 
 [[unit]]
-text = "Experimently writes the SQL itself (there is no field that takes SQL), runs it as the identity you created for it, and computes the results from what comes back."
+text = "Controlvar writes the SQL itself (there is no field that takes SQL), runs it as the identity you created for it, and computes the results from what comes back."
 by = [
     "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_every_request_model_forbids_unknown_fields",
     "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_every_string_field_is_allowlisted_exactly",
@@ -192,7 +192,7 @@ text = "Setting up Snowflake"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Experimently signs in to Snowflake's SQL API as a user in your account, with a key pair it generates."
+text = "Controlvar signs in to Snowflake's SQL API as a user in your account, with a key pair it generates."
 by = [
     "test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_each_request_carries_the_key_pair_jwt",
     "test:modules/backend/tests/unit/warehouse/test_request_schemas.py",
@@ -203,7 +203,7 @@ text = "There is no password field."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "In Snowflake, give Experimently a user and a role of its own."
+text = "In Snowflake, give Controlvar a user and a role of its own."
 by = ["exempt:third-party"]
 
 [[unit]]
@@ -223,7 +223,7 @@ text = "The account is the organisation-account identifier, for example MYORG-MY
 by = ["test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_account_must_be_the_organisation_account_identifier"]
 
 [[unit]]
-text = "Saving generates the key pair and shows the statement that registers its public key, for example ALTER USER EXPERIMENTLY SET RSA_PUBLIC_KEY='…';."
+text = "Saving generates the key pair and shows the statement that registers its public key, for example ALTER USER CONTROLVAR SET RSA_PUBLIC_KEY='…';."
 by = ["test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_only_the_public_key_and_statement_are_shown"]
 
 [[unit]]
@@ -231,7 +231,7 @@ text = "Run it as an administrator."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The private key never leaves Experimently."
+text = "The private key never leaves Controlvar."
 by = [
     "test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_only_the_public_key_and_statement_are_shown",
     "test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_repr_never_shows_the_key",
@@ -276,14 +276,14 @@ text = "Setting up BigQuery"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Experimently signs in to BigQuery with a service-account key you create for it, and runs every query as a job in a project you choose."
+text = "Controlvar signs in to BigQuery with a service-account key you create for it, and runs every query as a job in a project you choose."
 by = [
     "test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_connection_fields_fully_match",
     "test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_run_query_sends_the_limits_and_returns_the_rows",
 ]
 
 [[unit]]
-text = "In Google Cloud, create a service account for Experimently with these two roles only:"
+text = "In Google Cloud, create a service account for Controlvar with these two roles only:"
 by = ["exempt:third-party"]
 
 [[unit]]
@@ -318,7 +318,7 @@ text = "Set the bytes cap (\"Most data a query may read\")."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Before each query Experimently runs a dry run: anything that is not a single SELECT, or that would read more than the cap, is refused before it runs."
+text = "Before each query Controlvar runs a dry run: anything that is not a single SELECT, or that would read more than the cap, is refused before it runs."
 by = [
     "test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_dry_run_uses_jobs_insert_and_requires_select",
     "test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_bytes_over_cap_refused_before_run",

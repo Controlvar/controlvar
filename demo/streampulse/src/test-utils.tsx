@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, type RenderOptions } from '@testing-library/react';
 import { EventLogProvider } from '@/lib/eventLog';
-import { trackEventMock, __reset as resetSdk } from '@/__mocks__/experimently-sdk';
+import { trackEventMock, __reset as resetSdk } from '@/__mocks__/controlvar-sdk';
 import { __resetRouter } from '@/__mocks__/next-router';
 
 /** Render inside the event-log provider, exactly as StreamPulseApp does around the phone. */

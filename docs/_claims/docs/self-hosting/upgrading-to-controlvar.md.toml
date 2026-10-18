@@ -1,0 +1,116 @@
+# What verifies each unit of docs/self-hosting/upgrading-to-controlvar.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/self-hosting/upgrading-to-controlvar.md"
+
+[[unit]]
+text = "Upgrading to Controlvar"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The project called Experimently is now Controlvar."
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_chart_job.py::test_every_site_that_follows_the_chart_name_agrees",
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_the_image_path_and_signing_identity_follow_the_repository",
+]
+
+[[unit]]
+text = "Read this before your next upgrade."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Images"
+by = ["exempt:label"]
+
+[[unit]]
+text = "From 0.35.0 on, the images are ghcr.io/controlvar/controlvar and ghcr.io/controlvar/controlvar-web, with the same tags as before."
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_the_image_path_and_signing_identity_follow_the_repository",
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_both_profiles_tagged_with_the_version_and_amd64_only",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version",
+]
+
+[[unit]]
+text = "Change the image names in your own compose file, manifests or values."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Their signatures name the new repository: Releases, images and verification gives the identity for each version."
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_the_image_path_and_signing_identity_follow_the_repository",
+    "docex:docs/self-hosting/releases.md#https://github.com/getexperimently/experimently/.github/workflows/release.yml@refs/",
+]
+
+[[unit]]
+text = "Docker Compose"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Replace deploy/compose/compose.yml with the file of the new release, then run docker compose pull and docker compose up -d."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The file keeps the project name experimently-selfhost and the database user experimently on purpose: the volumes are named after the project, so your database is the one you had."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::test_compose_upgrade_keeps_the_postgres_volume",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_project_name_is_not_the_development_stacks",
+]
+
+[[unit]]
+text = "Do not change either value."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Helm"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The chart's name is now controlvar; it is still in charts/experimently in the repository."
+by = ["test:backend/tests/unit/infrastructure/test_release_chart_job.py::test_every_site_that_follows_the_chart_name_agrees"]
+
+[[unit]]
+text = "Upgrade with the release name you installed with, as Kubernetes (Helm) shows."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Every object keeps its name, the PostgreSQL StatefulSet and its volume included."
+by = ["test:backend/tests/unit/chart/test_chart_render.py::test_chart_rename_keeps_every_object_name"]
+
+[[unit]]
+text = "Settings and integrations"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The EXPERIMENTLY_PROFILE setting keeps its name."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_an_unknown_profile_is_refused"]
+
+[[unit]]
+text = "Jira and Salesforce senders still authenticate with the X-Experimently-Webhook-Secret header, so nothing changes in their configuration."
+by = [
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_jira_webhook_with_the_shared_secret_header_is_processed",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_salesforce_webhook_with_the_shared_secret_header_is_processed",
+]
+
+[[unit]]
+text = "The MCP server's manifest, GET /api/v1/mcp/manifest, now gives the name controlvar."
+by = ["test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_mcp_manifest_names_the_server_controlvar"]
+
+[[unit]]
+text = "A client that matched the former name on it needs the new one."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The dashboard keeps its sign-in token under the same key and the API keeps the issuer it signs tokens with, so nobody is signed out by the upgrade."
+by = ["test:backend/tests/unit/infrastructure/test_cross_version_identifiers.py::test_cross_version_identifiers_are_literal"]
+
+[[unit]]
+text = "The development stack"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The root docker-compose.yml takes its project name from the directory of the checkout."
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_project_name_follows_the_checkout_directory"]
+
+[[unit]]
+text = "A new clone in a directory named controlvar starts with new, empty volumes; a checkout in a directory still named experimently keeps its data."
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_project_name_follows_the_checkout_directory"]

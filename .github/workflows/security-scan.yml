@@ -526,13 +526,12 @@ jobs:
   # repository, which is why this guard exists rather than a
   # `continue-on-error` (the thing this whole change removes).
   #
-  # The condition is the repository name, matching docs.yml's Pages deploy,
-  # so the check turns itself on at the cut with no edit. Until then the job
-  # is skipped, and P3.8 (#140) carries "dependency-review is now live --
-  # add it to branch protection" on its checklist.
+  # The condition is the repository id (which a rename or a transfer keeps,
+  # unlike the name), matching docs.yml's Pages deploy; pinned by
+  # test_repository_guards.py. On a fork the job is skipped.
   dependency-review:
     name: Dependency Review
-    if: github.event_name == 'pull_request' && github.repository == 'getexperimently/experimently'
+    if: github.event_name == 'pull_request' && github.repository_id == '1367480368'
     runs-on: ubuntu-latest
     permissions:
       contents: read

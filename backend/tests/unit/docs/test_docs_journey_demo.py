@@ -106,7 +106,7 @@ def _executable(path: Path, text: str) -> None:
 def _box(ports: List[int]) -> str:
     dashboard, shoplab, streampulse, api = ports
     return (
-        "printf '\\033[0;32mExperimently Demo — Ready!\\033[0m\\n'\n"
+        "printf '\\033[0;32mControlvar Demo — Ready!\\033[0m\\n'\n"
         f"printf '  Frontend:    http://localhost:{dashboard}\\n'\n"
         f"printf '  ShopLab:     http://localhost:{shoplab}\\n'\n"
         f"printf '  StreamPulse: http://localhost:{streampulse}\\n'\n"

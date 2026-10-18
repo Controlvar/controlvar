@@ -125,7 +125,7 @@ WEAK_SUPERUSER_PASSWORDS: frozenset = frozenset(
 
 #: The example PUBLIC_BASE_URL every message gives: the dashboard's URL, which
 #: is also where the API is served (under /api).  Never an ``api.`` host.
-PUBLIC_BASE_URL_EXAMPLE = "https://experimently.example.com"
+PUBLIC_BASE_URL_EXAMPLE = "https://controlvar.example.com"
 
 
 #: The strings pydantic's ``bool`` reads as False (case-insensitive, exact).

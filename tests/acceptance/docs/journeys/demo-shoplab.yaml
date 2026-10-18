@@ -3,7 +3,7 @@
 # runs on the stack that script starts (demo-local, docs_runner/stacks.py) and
 # walks the storefront, the dashboard it points at, and the kill switch.
 #
-# The storefront's Experimently panel calls the public API with the
+# The storefront's Controlvar panel calls the public API with the
 # storefront's own key (the seed writes it to demo/shoplab/.env.local), so the
 # panel listing a variant for each experiment is the key and the seed working.
 # What the seed made is read through the API: the four experiments, each the
@@ -32,22 +32,22 @@ steps:
       status: 200
       text: Free shipping on every order this week — no minimum.
       aria: |
-        - complementary "Experimently panel":
-          - button "Powered by Experimently"
+        - complementary "Controlvar panel":
+          - button "Powered by Controlvar"
     fail: the storefront does not answer at the address the README gives, or shows no free-shipping banner while its flag is on
   - id: panel
     doc: what-each-page-demonstrates
     do:
       click:
         role: button
-        name: Powered by Experimently
+        name: Powered by Controlvar
     expect:
       visible:
         - role: button
           name: New visitor
       aria: |
-        - complementary "Experimently panel":
-          - button "Powered by Experimently" [expanded]
+        - complementary "Controlvar panel":
+          - button "Powered by Controlvar" [expanded]
           - heading "Visitor" [level=2]
           - heading "Experiments" [level=2]
           - list:
@@ -375,6 +375,6 @@ steps:
       status: 200
       text: Free shipping on every order this week — no minimum.
       aria: |
-        - complementary "Experimently panel":
-          - button "Powered by Experimently"
+        - complementary "Controlvar panel":
+          - button "Powered by Controlvar"
     fail: the reloaded storefront does not show the banner again once its flag is back on

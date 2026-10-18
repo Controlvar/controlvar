@@ -1,5 +1,5 @@
-name: experimently_example
-description: Example Flutter app demonstrating the Experimently SDK.
+name: controlvar_example
+description: Example Flutter app demonstrating the Controlvar SDK.
 version: 1.0.0
 
 environment:
@@ -9,7 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  experimently:
+  controlvar:
     path: ../
 
 dev_dependencies:

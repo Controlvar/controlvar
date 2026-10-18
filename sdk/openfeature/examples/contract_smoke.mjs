@@ -2,7 +2,7 @@
  * Contract smoke for the OpenFeature (JS) provider.
  *
  * Run from the repo root:
- *   cd sdk/openfeature && npm run build --silent && EXPERIMENTLY_API_KEY=... node examples/contract_smoke.mjs
+ *   cd sdk/openfeature && npm run build --silent && CONTROLVAR_API_KEY=... node examples/contract_smoke.mjs
  *
  * Flags go through the OpenFeature API; experiment assignment and tracking go
  * through `provider.client` (the underlying JS SDK client).
@@ -14,8 +14,9 @@ import pkg from '../dist/index.js';
 
 const { ExperimentationProvider, ExperimentationClient } = pkg;
 
-const apiUrl = process.env.EXPERIMENTLY_API_URL || 'http://localhost:8000';
-const apiKey = process.env.EXPERIMENTLY_API_KEY;
+const apiUrl =
+  process.env.CONTROLVAR_API_URL || process.env.EXPERIMENTLY_API_URL || 'http://localhost:8000';
+const apiKey = process.env.CONTROLVAR_API_KEY || process.env.EXPERIMENTLY_API_KEY;
 const experimentKey = process.env.CONTRACT_EXPERIMENT_KEY || 'sdk_contract_ab';
 const flagKey = process.env.CONTRACT_FLAG_KEY || 'sdk_contract_flag';
 const userId = process.env.CONTRACT_USER_ID || `smoke-${randomUUID()}`;
@@ -25,7 +26,7 @@ function fail(message) {
   process.exit(1);
 }
 
-if (!apiKey) fail('EXPERIMENTLY_API_KEY is required');
+if (!apiKey) fail('CONTROLVAR_API_KEY is required');
 
 const trackErrors = [];
 const sdk = new ExperimentationClient({

@@ -50,7 +50,7 @@ REPO_ROOT=$(pwd)
 
 PROFILE=${PROFILE:?PROFILE must be core or full}
 CLUSTER=${KIND_CLUSTER:-chart-kind}
-HOST=${KIND_HOST:-experimently.kind.test}
+HOST=${KIND_HOST:-controlvar.kind.test}
 WORK=${CHART_KIND_WORK:-${RUNNER_TEMP:-/tmp}/chart-kind-$PROFILE}
 GUIDE=docs/self-hosting/kubernetes.md
 GUIDE_BLOCKS=secrets,install,first-admin,upgrade
@@ -61,8 +61,8 @@ RELEASE=experimently
 SECRET=experimently-secrets
 ADMIN=admin@example.com
 DRY_RUN_NS=chart-kind-dry-run
-API_REPO=ghcr.io/getexperimently/experimently
-WEB_REPO=ghcr.io/getexperimently/experimently-web
+API_REPO=ghcr.io/controlvar/controlvar
+WEB_REPO=ghcr.io/controlvar/controlvar-web
 
 mkdir -p "$WORK"
 TIMINGS="$WORK/timings.tsv"
@@ -149,7 +149,7 @@ do_load() {
     api=$(docker image inspect --format '{{.Id}}' "$API_REPO:$tag")
     web=$(docker image inspect --format '{{.Id}}' "$WEB_REPO:$tag")
     : "${api:?no image id for $API_REPO:$tag}" "${web:?no image id for $WEB_REPO:$tag}"
-    printf 'api=%s\nweb=%s\n' "$api" "$web" >"$WORK/images.txt"
+    printf 'api=%s\nweb=%s\napi_repo=%s\nweb_repo=%s\n' "$api" "$web" "$API_REPO" "$WEB_REPO" >"$WORK/images.txt"
     cat "$WORK/images.txt"
 }
 
@@ -191,10 +191,10 @@ do_dry_run() {
         --show-only templates/ingress.yaml >"$WORK/ingress.yaml"
     local bad expect
     for bad in '10.0.0.5|must be a DNS name, not an IP address' \
-        'experimently.example.com:8080|a lowercase RFC 1123 subdomain'; do
+        'controlvar.example.com:8080|a lowercase RFC 1123 subdomain'; do
         expect=${bad#*|}
         bad=${bad%%|*}
-        sed "s/host: \"experimently.example.com\"/host: \"$bad\"/" "$WORK/ingress.yaml" >"$WORK/bad-ingress.yaml"
+        sed "s/host: \"controlvar.example.com\"/host: \"$bad\"/" "$WORK/ingress.yaml" >"$WORK/bad-ingress.yaml"
         grep -qF "host: \"$bad\"" "$WORK/bad-ingress.yaml" ||
             fail "could not plant host $bad in the rendered Ingress"
         if server_dry_run "$WORK/bad-ingress.yaml" "$WORK/bad.log"; then
@@ -222,12 +222,17 @@ run_block() {
 }
 
 # assert_images NS [IMAGES]: the pods running our images run exactly the
-# images this job loaded (IMAGES, default $WORK/images.txt: api=ID, web=ID).
+# images this job loaded (IMAGES, default $WORK/images.txt: api=ID, web=ID,
+# and the repositories they were loaded under, api_repo= and web_repo=; N-1's
+# are the ones its own chart names, which need not be this checkout's).
 assert_images() {
-    local ns=$1 images=${2:-$WORK/images.txt} api web ids
+    local ns=$1 images=${2:-$WORK/images.txt} api web api_repo web_repo ids
     api=$(sed -n 's/^api=//p' "$images")
     web=$(sed -n 's/^web=//p' "$images")
+    api_repo=$(sed -n 's/^api_repo=//p' "$images")
+    web_repo=$(sed -n 's/^web_repo=//p' "$images")
     : "${api:?no api image id in $images}" "${web:?no web image id in $images}"
+    : "${api_repo:?no api repository in $images}" "${web_repo:?no web repository in $images}"
     ids=$(kubectl get pods -n "$ns" -l "app.kubernetes.io/component in (api,web)" \
         -o jsonpath='{range .items[*]}{range .status.initContainerStatuses[*]}{.image}{" "}{.imageID}{"\n"}{end}{range .status.containerStatuses[*]}{.image}{" "}{.imageID}{"\n"}{end}{end}')
     printf '%s\n' "$ids"
@@ -236,8 +241,8 @@ assert_images() {
     while read -r image id; do
         [ -n "$image" ] || continue
         case "$image" in
-            *experimently-web:*) want=$web ;;
-            *experimently:*) want=$api ;;
+            "$web_repo":* | */"$web_repo":*) want=$web ;;
+            "$api_repo":* | */"$api_repo":*) want=$api ;;
             *) fail "unexpected image $image in $ns" ;;
         esac
         [ "$id" = "$want" ] ||
@@ -626,7 +631,7 @@ EOF
     local api web
     api=$(docker image inspect --format '{{.Id}}' "$API_REPO:$next")
     web=$(docker image inspect --format '{{.Id}}' "$WEB_REPO:$next")
-    printf 'api=%s\nweb=%s\n' "$api" "$web" >"$WORK/images-next.txt"
+    printf 'api=%s\nweb=%s\napi_repo=%s\nweb_repo=%s\n' "$api" "$web" "$API_REPO" "$WEB_REPO" >"$WORK/images-next.txt"
     [ "$(revisions "$API_REPO:$next" | grep -cx "$NEXT_REVISION")" = 1 ] ||
         fail "$API_REPO:$next does not carry $NEXT_REVISION"
 
@@ -703,14 +708,60 @@ do_previous() {
     [ -z "${GITHUB_OUTPUT:-}" ] || printf 'version=%s\n' "$prev" >>"$GITHUB_OUTPUT"
 }
 
-# published VERSION: both of this profile's images for VERSION can be read from
-# GHCR anonymously -- a manifest read with an empty client configuration, so
-# no stored credential is sent and nothing is pulled.
+# values_repo VALUES COMPONENT: image.COMPONENT.repository (api or web) from a
+# chart's values.yaml, read by indentation: the chart's own two-space layout.
+values_repo() {
+    awk -v want="$2" '
+        /^[A-Za-z]/ { top = $0; sub(/:.*/, "", top); mid = ""; next }
+        /^  [A-Za-z]/ { mid = $0; sub(/^ */, "", mid); sub(/:.*/, "", mid); next }
+        top == "image" && mid == want && /^    repository:/ {
+            r = $0
+            sub(/^    repository:[ ]*/, "", r)
+            sub(/[ ]+#.*$/, "", r)
+            gsub(/["\047]/, "", r)
+            print r
+            exit
+        }
+    ' "$1"
+}
+
+# tag_images VERSION: the chart release vVERSION ships and the image
+# repositories that chart names, read from that tag's own tree (extracted under
+# $WORK/tags/vVERSION), never from this checkout. Sets TAG_CHART (the chart
+# directory), TAG_API_REPO and TAG_WEB_REPO. A release is resolved, pulled and
+# installed under its own names, so a later change to this checkout's chart
+# directory or image repositories leaves N-1 resolvable.
+tag_images() {
+    local v=$1 dest charts
+    dest="$WORK/tags/v$v"
+    if [ ! -d "$dest/charts" ]; then
+        git fetch --quiet --no-tags --depth 1 origin "+refs/tags/v$v:refs/tags/v$v" ||
+            fail "N-1 cannot be resolved: tag v$v could not be fetched"
+        rm -rf "$dest"
+        mkdir -p "$dest"
+        git archive "v$v" charts | tar -x -C "$dest" ||
+            fail "N-1 cannot be resolved: v$v has no charts/"
+    fi
+    charts=$(ls -d "$dest"/charts/*/Chart.yaml 2>/dev/null || true)
+    [ "$(printf '%s\n' "$charts" | grep -c .)" = 1 ] ||
+        fail "N-1 cannot be resolved: v$v ships $(printf '%s\n' "$charts" | grep -c .) charts/*/Chart.yaml, expected exactly 1"
+    TAG_CHART=$(dirname "$charts")
+    TAG_API_REPO=$(values_repo "$TAG_CHART/values.yaml" api)
+    TAG_WEB_REPO=$(values_repo "$TAG_CHART/values.yaml" web)
+    [ "$(printf '%s\n%s\n' "$TAG_API_REPO" "$TAG_WEB_REPO" | grep -Ecx '[a-z0-9][a-z0-9._/-]*')" = 2 ] ||
+        fail "N-1 cannot be resolved: v$v's values.yaml names no image.api/image.web repository (read [$TAG_API_REPO] [$TAG_WEB_REPO])"
+}
+
+# published VERSION: both of this profile's images for VERSION, under the
+# repositories vVERSION's own chart names, can be read from GHCR anonymously --
+# a manifest read with an empty client configuration, so no stored credential
+# is sent and nothing is pulled.
 published() {
     local v=$1 anon ref rc=0
+    tag_images "$v"
     anon=$(mktemp -d "${TMPDIR:-/tmp}/chart-kind-anon.XXXXXX")
     printf '{}\n' >"$anon/config.json"
-    for ref in "$API_REPO:$PROFILE-$v" "$WEB_REPO:$PROFILE-$v"; do
+    for ref in "$TAG_API_REPO:$PROFILE-$v" "$TAG_WEB_REPO:$PROFILE-$v"; do
         if ! DOCKER_CONFIG=$anon docker manifest inspect "$ref" >/dev/null 2>"$anon/err"; then
             say "not published (or not readable anonymously): $ref: $(head -c 200 "$anon/err" | tr '\n' ' ')"
             rc=1
@@ -740,7 +791,7 @@ pull_anonymously() {
 
 do_upgrade_previous() {
     local prev=${PREVIOUS_VERSION:?PREVIOUS_VERSION: run the previous phase first}
-    local ns=chart-kind-previous release=prev ptag ltag ref this_api
+    local ns=chart-kind-previous release=prev ptag ltag ref this_api papi pweb pchart
     ptag="$PROFILE-$prev"
     # This PR's api image, by the ID `load` recorded, read BEFORE the pull
     # below. When N-1 is the release VERSION names (the usual case), $ptag is
@@ -750,30 +801,29 @@ do_upgrade_previous() {
     this_api=$(sed -n 's/^api=//p' "$WORK/images.txt")
     : "${this_api:?no api image id in $WORK/images.txt: run the load phase first}"
     revisions "$this_api" >"$WORK/revisions-this"
+    # N-1's own chart and the image repositories it names, from its tag: its
+    # images are pulled, tagged and loaded under those names, the ones its
+    # pods will ask for.
+    tag_images "$prev"
+    pchart=$TAG_CHART
+    papi=$TAG_API_REPO
+    pweb=$TAG_WEB_REPO
     # A local tag of its own: N-1 is usually the release VERSION names, whose
     # tag is the one this job gave the PR's images. Same profile prefix, so the
     # chart's tag rule accepts it.
     ltag="$ptag-previous"
-    for ref in "$API_REPO" "$WEB_REPO"; do
+    for ref in "$papi" "$pweb"; do
         pull_anonymously "$ref:$ptag"
         docker tag "$ref:$ptag" "$ref:$ltag"
     done
-    kind load docker-image --name "$CLUSTER" "$API_REPO:$ltag" "$WEB_REPO:$ltag"
+    kind load docker-image --name "$CLUSTER" "$papi:$ltag" "$pweb:$ltag"
     local api web
-    api=$(docker image inspect --format '{{.Id}}' "$API_REPO:$ltag")
-    web=$(docker image inspect --format '{{.Id}}' "$WEB_REPO:$ltag")
-    printf 'api=%s\nweb=%s\n' "$api" "$web" >"$WORK/images-previous.txt"
-
-    # N-1's own chart, from its tag.
-    git fetch --no-tags --depth 1 origin "+refs/tags/v$prev:refs/tags/v$prev"
-    rm -rf "$WORK/previous"
-    mkdir -p "$WORK/previous"
-    git archive "v$prev" "$CHART_DIR" | tar -x -C "$WORK/previous"
-    [ -f "$WORK/previous/$CHART_DIR/Chart.yaml" ] ||
-        fail "N-1 cannot be resolved: v$prev has no $CHART_DIR"
+    api=$(docker image inspect --format '{{.Id}}' "$papi:$ltag")
+    web=$(docker image inspect --format '{{.Id}}' "$pweb:$ltag")
+    printf 'api=%s\nweb=%s\napi_repo=%s\nweb_repo=%s\n' "$api" "$web" "$papi" "$pweb" >"$WORK/images-previous.txt"
 
     # What N adds: revisions in this PR's image (read above) and not in N-1's.
-    revisions "$API_REPO:$ltag" >"$WORK/revisions-previous"
+    revisions "$papi:$ltag" >"$WORK/revisions-previous"
     LC_ALL=C comm -13 "$WORK/revisions-previous" "$WORK/revisions-this" >"$WORK/revisions-delta"
     LC_ALL=C comm -23 "$WORK/revisions-previous" "$WORK/revisions-this" >"$WORK/revisions-only-previous"
     if [ -s "$WORK/revisions-only-previous" ]; then
@@ -782,7 +832,7 @@ do_upgrade_previous() {
     fi
 
     kubectl create namespace "$ns"
-    helm install "$release" "$WORK/previous/$CHART_DIR" -n "$ns" \
+    helm install "$release" "$pchart" -n "$ns" \
         --set profile="$PROFILE" \
         --set image.tag="$ltag" \
         --set publicBaseUrl="http://previous.$HOST" \

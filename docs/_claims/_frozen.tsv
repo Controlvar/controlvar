@@ -13,8 +13,8 @@ exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	e6f1d6fb5d33
 exempt:baseline	docs/api/README.md	1cc77e60fcee
 exempt:baseline	docs/api/README.md	1dd35d99b530
 exempt:baseline	docs/api/README.md	328908a83269
-exempt:baseline	docs/api/README.md	4233bbfbaa82
 exempt:baseline	docs/api/README.md	4b31971e7d79
+exempt:baseline	docs/api/README.md	56e4e3226ef1
 exempt:baseline	docs/api/README.md	8dc9e1a08b3d
 exempt:baseline	docs/api/README.md	abc7e9892806
 exempt:baseline	docs/api/README.md	acc4253df532
@@ -61,10 +61,10 @@ exempt:baseline	docs/api/api-docs-guide.md	66deef58b876
 exempt:baseline	docs/api/api-docs-guide.md	6933d210c295
 exempt:baseline	docs/api/api-docs-guide.md	74dea5e67162
 exempt:baseline	docs/api/api-docs-guide.md	7b3f674b625e
+exempt:baseline	docs/api/api-docs-guide.md	84de07f9bc24
 exempt:baseline	docs/api/api-docs-guide.md	9988c0968a8e
 exempt:baseline	docs/api/api-docs-guide.md	9da8fc9480e1
 exempt:baseline	docs/api/api-docs-guide.md	b0ccbdb1ab78
-exempt:baseline	docs/api/api-docs-guide.md	bf398c75abef
 exempt:baseline	docs/api/api-docs-guide.md	c1a72c41c0bc
 exempt:baseline	docs/api/api-docs-guide.md	cd36dcd8e697
 exempt:baseline	docs/api/api-docs-guide.md	d03bc5ed04a2
@@ -691,12 +691,12 @@ exempt:baseline	docs/api/warehouse-analytics.md	4d4f0efd93ad
 exempt:baseline	docs/api/warehouse-analytics.md	4db91a684716
 exempt:baseline	docs/api/warehouse-analytics.md	4ee0b63c15b3
 exempt:baseline	docs/api/warehouse-analytics.md	56798023a51f
-exempt:baseline	docs/api/warehouse-analytics.md	66827ebb39dd
 exempt:baseline	docs/api/warehouse-analytics.md	73d016352c71
 exempt:baseline	docs/api/warehouse-analytics.md	740e6e30a73e
 exempt:baseline	docs/api/warehouse-analytics.md	76cc276eca87
 exempt:baseline	docs/api/warehouse-analytics.md	7f968cfa5cd9
 exempt:baseline	docs/api/warehouse-analytics.md	7fb988308865
+exempt:baseline	docs/api/warehouse-analytics.md	7fd058939676
 exempt:baseline	docs/api/warehouse-analytics.md	81ba748dd923
 exempt:baseline	docs/api/warehouse-analytics.md	8e492b8d5038
 exempt:baseline	docs/api/warehouse-analytics.md	99805fd531d4
@@ -787,12 +787,12 @@ exempt:baseline	docs/auth/auth-user-guide.md	36575d819a4c
 exempt:baseline	docs/auth/auth-user-guide.md	37de0e210816
 exempt:baseline	docs/auth/auth-user-guide.md	3bbf3de41eb8
 exempt:baseline	docs/auth/auth-user-guide.md	3dd3c26092fa
-exempt:baseline	docs/auth/auth-user-guide.md	3f6c8d0e3b49
 exempt:baseline	docs/auth/auth-user-guide.md	3f8e590fe22e
 exempt:baseline	docs/auth/auth-user-guide.md	44996f3df225
 exempt:baseline	docs/auth/auth-user-guide.md	488cc721995f
 exempt:baseline	docs/auth/auth-user-guide.md	4d3c3e21cc23
 exempt:baseline	docs/auth/auth-user-guide.md	50096c8ac154
+exempt:baseline	docs/auth/auth-user-guide.md	52f5b060b63b
 exempt:baseline	docs/auth/auth-user-guide.md	59e3fc71ecd4
 exempt:baseline	docs/auth/auth-user-guide.md	61e6c5c0e6cd
 exempt:baseline	docs/auth/auth-user-guide.md	656e52f41917
@@ -813,7 +813,6 @@ exempt:baseline	docs/auth/auth-user-guide.md	a4fefaab71fc
 exempt:baseline	docs/auth/auth-user-guide.md	a77c117c373b
 exempt:baseline	docs/auth/auth-user-guide.md	abdd691bf558
 exempt:baseline	docs/auth/auth-user-guide.md	abfcf3038b1a
-exempt:baseline	docs/auth/auth-user-guide.md	b15274cd5072
 exempt:baseline	docs/auth/auth-user-guide.md	ba6169fb4cd4
 exempt:baseline	docs/auth/auth-user-guide.md	be8e7592314a
 exempt:baseline	docs/auth/auth-user-guide.md	c8eac5d80c1d
@@ -821,6 +820,7 @@ exempt:baseline	docs/auth/auth-user-guide.md	cd04a2297f1c
 exempt:baseline	docs/auth/auth-user-guide.md	d25c86ef7fca
 exempt:baseline	docs/auth/auth-user-guide.md	d30db6bcb36b
 exempt:baseline	docs/auth/auth-user-guide.md	d7930f5518b6
+exempt:baseline	docs/auth/auth-user-guide.md	d88fa13745ef
 exempt:baseline	docs/auth/auth-user-guide.md	d9fb696d1c8b
 exempt:baseline	docs/auth/auth-user-guide.md	dd1b3d41cb9c
 exempt:baseline	docs/auth/auth-user-guide.md	e3e06173a8b2
@@ -1210,7 +1210,6 @@ exempt:baseline	docs/guides/user-guide.md	1b42e859bc12
 exempt:baseline	docs/guides/user-guide.md	272c11e34d32
 exempt:baseline	docs/guides/user-guide.md	277ce97b5fbd
 exempt:baseline	docs/guides/user-guide.md	28a1835587e2
-exempt:baseline	docs/guides/user-guide.md	2a7f369b82f9
 exempt:baseline	docs/guides/user-guide.md	2d8aae1dce2e
 exempt:baseline	docs/guides/user-guide.md	2fb5177db9e0
 exempt:baseline	docs/guides/user-guide.md	3071a869d58e
@@ -1239,6 +1238,7 @@ exempt:baseline	docs/guides/user-guide.md	532a91d04c6e
 exempt:baseline	docs/guides/user-guide.md	5373a0a7cc55
 exempt:baseline	docs/guides/user-guide.md	54837db67ff0
 exempt:baseline	docs/guides/user-guide.md	54fa4cb4fef6
+exempt:baseline	docs/guides/user-guide.md	56352549988f
 exempt:baseline	docs/guides/user-guide.md	58fb2c82e55b
 exempt:baseline	docs/guides/user-guide.md	5d3a18fbb0f8
 exempt:baseline	docs/guides/user-guide.md	5ff533437cab
@@ -1253,7 +1253,6 @@ exempt:baseline	docs/guides/user-guide.md	6d248c81a9ea
 exempt:baseline	docs/guides/user-guide.md	6edb2a4bf97f
 exempt:baseline	docs/guides/user-guide.md	716b52c42e95
 exempt:baseline	docs/guides/user-guide.md	71c9126cf96f
-exempt:baseline	docs/guides/user-guide.md	735ab1a12bfd
 exempt:baseline	docs/guides/user-guide.md	7729a3ea7daf
 exempt:baseline	docs/guides/user-guide.md	7bc468f7b3e9
 exempt:baseline	docs/guides/user-guide.md	7d08dcd4f7bb
@@ -1314,6 +1313,7 @@ exempt:baseline	docs/guides/user-guide.md	edb90e83d985
 exempt:baseline	docs/guides/user-guide.md	ee39fd300932
 exempt:baseline	docs/guides/user-guide.md	f4ab6ebe96b9
 exempt:baseline	docs/guides/user-guide.md	f506bd4ed6a0
+exempt:baseline	docs/guides/user-guide.md	f8bd9fecf490
 exempt:baseline	docs/guides/user-guide.md	fcceb0ba1a37
 exempt:baseline	docs/hipaa/overview.md	029080a7a0f6
 exempt:baseline	docs/hipaa/overview.md	0e89f60824d9
@@ -1554,11 +1554,11 @@ exempt:baseline	docs/performance/load-testing.md	58c95a0b6ff4
 exempt:baseline	docs/performance/load-testing.md	5b6beab605dd
 exempt:baseline	docs/performance/load-testing.md	63d8c87675f7
 exempt:baseline	docs/performance/load-testing.md	691c14b114b3
-exempt:baseline	docs/performance/load-testing.md	69983f47117c
 exempt:baseline	docs/performance/load-testing.md	6ed021f7e822
 exempt:baseline	docs/performance/load-testing.md	7b4a4ff34689
 exempt:baseline	docs/performance/load-testing.md	7f2ac3381fc8
 exempt:baseline	docs/performance/load-testing.md	865514682d01
+exempt:baseline	docs/performance/load-testing.md	a86332f70a45
 exempt:baseline	docs/performance/load-testing.md	aa63b0542e92
 exempt:baseline	docs/performance/load-testing.md	adaafd8179db
 exempt:baseline	docs/performance/load-testing.md	c37239f4b3ec
@@ -1593,9 +1593,9 @@ exempt:baseline	docs/rbac/README.md	f02a8ebe5ad7
 exempt:baseline	docs/rbac/README.md	fa9ae61b6b87
 exempt:baseline	docs/rbac/README.md	facb863971d0
 exempt:baseline	docs/rbac/README.md	ff8059dc6752
+exempt:baseline	docs/security/README.md	20a1f8d2766d
 exempt:baseline	docs/security/README.md	2638be843429
 exempt:baseline	docs/security/README.md	3e525f41b414
-exempt:baseline	docs/security/README.md	666bcae5a074
 exempt:baseline	docs/security/README.md	6978ce6743f8
 exempt:baseline	docs/security/README.md	860ca23150fe
 exempt:baseline	docs/security/README.md	8dc01f004f15
@@ -1712,6 +1712,7 @@ exempt:baseline	docs/self-hosting/migrations.md	28d4a4bb8ada
 exempt:baseline	docs/self-hosting/migrations.md	297fc93130ee
 exempt:baseline	docs/self-hosting/migrations.md	2c2ba1754c01
 exempt:baseline	docs/self-hosting/migrations.md	2c6fdae26524
+exempt:baseline	docs/self-hosting/migrations.md	2d27f8f1a808
 exempt:baseline	docs/self-hosting/migrations.md	2ff3805a420d
 exempt:baseline	docs/self-hosting/migrations.md	30094e0bec00
 exempt:baseline	docs/self-hosting/migrations.md	308217315376
@@ -1749,7 +1750,6 @@ exempt:baseline	docs/self-hosting/migrations.md	5cfcad0942fb
 exempt:baseline	docs/self-hosting/migrations.md	5dd5e1f8e5a3
 exempt:baseline	docs/self-hosting/migrations.md	5e6af4f757d4
 exempt:baseline	docs/self-hosting/migrations.md	5f3d2aed78a8
-exempt:baseline	docs/self-hosting/migrations.md	5fba1cdfad0c
 exempt:baseline	docs/self-hosting/migrations.md	5fdf464133fe
 exempt:baseline	docs/self-hosting/migrations.md	6160b5a962e6
 exempt:baseline	docs/self-hosting/migrations.md	61da179955e8

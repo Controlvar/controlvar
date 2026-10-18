@@ -16,7 +16,7 @@ func TestModule_StandardLibraryOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read go.mod: %v", err)
 	}
-	if !strings.HasPrefix(string(data), "module github.com/getexperimently/experimently/sdk/go\n") {
+	if !strings.HasPrefix(string(data), "module github.com/controlvar/controlvar/sdk/go\n") {
 		t.Fatalf("go.mod does not declare the module path the docs give:\n%s", data)
 	}
 	for _, line := range strings.Split(string(data), "\n") {

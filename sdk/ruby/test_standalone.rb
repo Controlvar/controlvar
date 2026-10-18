@@ -6,7 +6,7 @@
 # Run: ruby test_standalone.rb
 
 $LOAD_PATH.unshift File.join(__dir__, 'lib')
-require 'experimently'
+require 'controlvar'
 
 failures = []
 
@@ -51,7 +51,7 @@ def assert_in_range(description, value, min, max, failures)
 end
 
 puts "=" * 60
-puts "Experimently Ruby SDK — Standalone Test Runner"
+puts "Controlvar Ruby SDK — Standalone Test Runner"
 puts "=" * 60
 puts
 
@@ -60,24 +60,24 @@ puts
 # ---------------------------------------------------------------------------
 puts ">>> Hash Parity Tests"
 
-result   = Experimently::FeatureFlagEvaluator.hash_user("user-123", "my-flag")
+result   = Controlvar::FeatureFlagEvaluator.hash_user("user-123", "my-flag")
 expected = 0.6927449859213084
 assert_equal(
   'hash_user("user-123", "my-flag") == 0.6927449859213084  [cross-SDK parity]',
   expected, result, failures
 )
 
-result2 = Experimently::FeatureFlagEvaluator.hash_user("user-123", "my-flag")
+result2 = Controlvar::FeatureFlagEvaluator.hash_user("user-123", "my-flag")
 assert_equal('Determinism: same call twice yields identical result', result, result2, failures)
 
-v1 = Experimently::FeatureFlagEvaluator.hash_user("user-456", "my-flag")
+v1 = Controlvar::FeatureFlagEvaluator.hash_user("user-456", "my-flag")
 assert_in_range('hash_user("user-456", "my-flag") is in [0.0, 1.0)', v1, 0.0, 1.0, failures)
 
-v_empty = Experimently::FeatureFlagEvaluator.hash_user("", "")
+v_empty = Controlvar::FeatureFlagEvaluator.hash_user("", "")
 assert_in_range('hash_user("", "") is in [0.0, 1.0)', v_empty, 0.0, 1.0, failures)
 
 assert_true('Local evaluation was removed (server decides)',
-  !Experimently::FeatureFlagEvaluator.respond_to?(:evaluate), failures)
+  !Controlvar::FeatureFlagEvaluator.respond_to?(:evaluate), failures)
 
 puts
 
@@ -86,18 +86,18 @@ puts
 # ---------------------------------------------------------------------------
 puts ">>> Result Type Tests"
 
-flag = Experimently::FlagEvaluation.new(key: 'dark-mode', enabled: true, config: { 'theme' => 'dark' })
+flag = Controlvar::FlagEvaluation.new(key: 'dark-mode', enabled: true, config: { 'theme' => 'dark' })
 assert_true('FlagEvaluation#enabled? reflects enabled', flag.enabled? == true, failures)
 assert_true('FlagEvaluation#to_h exposes key/enabled/config',
   flag.to_h == { key: 'dark-mode', enabled: true, config: { 'theme' => 'dark' } }, failures)
 
-assignment = Experimently::Assignment.new(
+assignment = Controlvar::Assignment.new(
   experiment_key: 'exp', variant_id: 'v1', variant_name: 'control', is_control: true, configuration: nil
 )
 assert_true('Assignment#control? reflects is_control', assignment.control? == true, failures)
 assert_true('Assignment exposes variant_name', assignment.variant_name == 'control', failures)
 
-batch = Experimently::BatchResult.new(success_count: 2, failure_count: 0, errors: nil)
+batch = Controlvar::BatchResult.new(success_count: 2, failure_count: 0, errors: nil)
 assert_true('BatchResult#ok? is true without failures', batch.ok?, failures)
 
 puts
@@ -107,7 +107,7 @@ puts
 # ---------------------------------------------------------------------------
 puts ">>> Cache Tests"
 
-cache = Experimently::Cache.new(ttl: 60, max_size: 3)
+cache = Controlvar::Cache.new(ttl: 60, max_size: 3)
 assert_nil('Cache: get returns nil for missing key', cache.get('x'), failures)
 cache.set('x', 42)
 val = cache.get('x')
@@ -138,16 +138,16 @@ puts
 puts ">>> Error Hierarchy Tests"
 
 assert_true('NetworkError is-a Error',
-  Experimently::NetworkError.ancestors.include?(Experimently::Error),
+  Controlvar::NetworkError.ancestors.include?(Controlvar::Error),
   failures)
 assert_true('APIError is-a Error',
-  Experimently::APIError.ancestors.include?(Experimently::Error),
+  Controlvar::APIError.ancestors.include?(Controlvar::Error),
   failures)
 assert_true('AuthenticationError is-a APIError',
-  Experimently::AuthenticationError.ancestors.include?(Experimently::APIError),
+  Controlvar::AuthenticationError.ancestors.include?(Controlvar::APIError),
   failures)
 
-err = Experimently::APIError.new("bad request", status_code: 400)
+err = Controlvar::APIError.new("bad request", status_code: 400)
 assert_true('APIError#status_code returns 400', err.status_code == 400, failures)
 
 puts
@@ -158,21 +158,21 @@ puts
 puts ">>> Config Validation Tests"
 
 begin
-  Experimently::SdkConfig.new(api_key: 'key').validate!
+  Controlvar::SdkConfig.new(api_key: 'key').validate!
   failures << "FAIL: should raise for missing base_url"
 rescue ArgumentError
   puts "  PASS: Raises ArgumentError for missing base_url"
 end
 
 begin
-  Experimently::SdkConfig.new(base_url: 'http://example.com').validate!
+  Controlvar::SdkConfig.new(base_url: 'http://example.com').validate!
   failures << "FAIL: should raise for missing api_key"
 rescue ArgumentError
   puts "  PASS: Raises ArgumentError for missing api_key"
 end
 
 begin
-  Experimently::SdkConfig.new(base_url: 'http://example.com', api_key: 'k').validate!
+  Controlvar::SdkConfig.new(base_url: 'http://example.com', api_key: 'k').validate!
   puts "  PASS: Valid config does not raise"
 rescue ArgumentError => e
   failures << "FAIL: Valid config raised: #{e.message}"
@@ -185,7 +185,7 @@ puts
 # ---------------------------------------------------------------------------
 puts ">>> Track Safety Tests"
 
-client = Experimently::Client.new(base_url: 'http://127.0.0.1:9', api_key: 'k', timeout: 1)
+client = Controlvar::Client.new(base_url: 'http://127.0.0.1:9', api_key: 'k', timeout: 1)
 begin
   sent = client.track('page_view', 'user-1')
   assert_true('track without a key and nothing cached sends nothing and returns true', sent == true, failures)
@@ -205,7 +205,7 @@ if failures.empty?
   puts "All standalone tests PASSED"
   puts
   puts "Cross-SDK hash parity CONFIRMED:"
-  puts "  hash_user(\"user-123\", \"my-flag\") = #{Experimently::FeatureFlagEvaluator.hash_user('user-123', 'my-flag')}"
+  puts "  hash_user(\"user-123\", \"my-flag\") = #{Controlvar::FeatureFlagEvaluator.hash_user('user-123', 'my-flag')}"
   puts "  Expected:                          0.6927449859213084"
   puts "=" * 60
   exit 0

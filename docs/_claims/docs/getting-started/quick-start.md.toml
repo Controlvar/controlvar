@@ -326,7 +326,25 @@ text = "Demo applications"
 by = ["exempt:label"]
 
 [[unit]]
-text = "To see the platform drive two sample apps, ShopLab and StreamPulse, follow the demo guide."
+text = "To run the two sample apps, ShopLab (http://localhost:3200) and StreamPulse (http://localhost:3300), and their traffic simulators in Docker as well:"
+by = [
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_profiles_add_what_the_guide_says",
+]
+
+[[unit]]
+text = "The first start builds both apps' images."
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_each_service_has_its_image_host_port_and_profile"]
+
+[[unit]]
+text = "If you already started the demo profile without the seeds and the apps answer 401, run the same command once: it applies the missing seeds to the existing database, with no down -v."
+by = [
+    "test:backend/tests/unit/scripts/test_entrypoint_seed_force_and_workers.py::test_a_recorded_seed_is_skipped_and_seed_force_applies_it_again",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_a_demo_app_is_built_with_the_key_its_seed_creates",
+]
+
+[[unit]]
+text = "The demo guide walks through what to look at, and how to run the apps outside Docker."
 by = ["exempt:navigation"]
 
 [[unit]]
@@ -391,11 +409,11 @@ text = "What's next"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Limitations — what Experimently does not do, and what happens instead"
+text = "Limitations — what Controlvar does not do, and what happens instead"
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "Docker Compose on one host — run Experimently where others can reach it"
+text = "Docker Compose on one host — run Controlvar where others can reach it"
 by = ["exempt:navigation"]
 
 [[unit]]

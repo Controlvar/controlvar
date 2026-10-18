@@ -79,7 +79,7 @@ def _run(
 
 def _harness(*functions: str, assignments: tuple[str, ...] = ()) -> str:
     """The script's own definitions, extracted, under its own shell options."""
-    parts = ["set -euo pipefail", "PROFILE=core"]
+    parts = ["set -euo pipefail", "PROFILE=core", 'WORK="$TMPDIR/work"']
     parts += [_assignment(a) for a in assignments]
     parts += [_function(f) for f in ("say", "fail", *functions)]
     return "\n".join(parts) + "\n"
@@ -128,15 +128,30 @@ def test_the_job_logs_in_to_no_registry():
 def test_previous_resolves_n_minus_1_on_a_pull_request_from_a_fork(sandbox):
     tmp, env = sandbox
     (tmp / "VERSION").write_text("0.16.2\n", encoding="utf-8")
+    chart = tmp / "trees" / "v0.16.2" / "charts" / "experimently"
+    chart.mkdir(parents=True)
+    (chart / "Chart.yaml").write_text('appVersion: "0.16.2"\n', encoding="utf-8")
+    (chart / "values.yaml").write_text(
+        "image:\n  api:\n    repository: ghcr.io/example/api\n"
+        "  web:\n    repository: ghcr.io/example/web\n",
+        encoding="utf-8",
+    )
     _stub(
         tmp / "bin",
         "git",
         """\
-        printf 'aaa\\trefs/tags/v0.16.1\\n'
-        printf 'bbb\\trefs/tags/v0.16.2\\n'
-        printf 'ccc\\trefs/tags/v0.17.0\\n'
+        case "$1" in
+            ls-remote)
+                printf 'aaa\\trefs/tags/v0.16.1\\n'
+                printf 'bbb\\trefs/tags/v0.16.2\\n'
+                printf 'ccc\\trefs/tags/v0.17.0\\n' ;;
+            fetch) ;;
+            archive) tag=$2; shift 2; tar -c -C "$TREES/$tag" "$@" ;;
+            *) exit 64 ;;
+        esac
         """,
     )
+    env["TREES"] = str(tmp / "trees")
     # Every manifest read answers: the images are published.
     _stub(tmp / "bin", "docker", "exit 0\n")
     out = tmp / "github_output"
@@ -144,13 +159,15 @@ def test_previous_resolves_n_minus_1_on_a_pull_request_from_a_fork(sandbox):
     env.update(
         GITHUB_OUTPUT=str(out),
         GITHUB_STEP_SUMMARY=str(summary),
-        GITHUB_REPOSITORY="getexperimently/experimently",
+        GITHUB_REPOSITORY="Controlvar/controlvar",
         # What a fork's pull request looked like to the old skip.
-        HEAD_REPO="someone/experimently",
+        HEAD_REPO="someone/controlvar",
         GITHUB_EVENT_NAME="pull_request",
     )
     result = _run(
         _harness(
+            "values_repo",
+            "tag_images",
             "published",
             "do_previous",
             assignments=("API_REPO", "WEB_REPO", "PULL_FAILED"),
@@ -173,7 +190,7 @@ def test_a_failed_anonymous_pull_fails_with_the_message(sandbox):
     _stub(tmp / "bin", "docker", 'printf "denied\\n" >&2\nexit 1\n')
     result = _run(
         _harness("pull_anonymously", assignments=("PULL_FAILED",))
-        + "pull_anonymously ghcr.io/getexperimently/experimently:core-0.16.2\n"
+        + "pull_anonymously ghcr.io/controlvar/controlvar:core-0.16.2\n"
         + "printf 'still-running\\n'\n",
         tmp,
         env,
@@ -206,12 +223,12 @@ def test_a_successful_pull_sends_no_stored_credential(sandbox):
     )
     result = _run(
         _harness("pull_anonymously", assignments=("PULL_FAILED",))
-        + "pull_anonymously ghcr.io/getexperimently/experimently:core-0.16.2\n",
+        + "pull_anonymously ghcr.io/controlvar/controlvar:core-0.16.2\n",
         tmp,
         env,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     log = (tmp / "docker.log").read_text(encoding="utf-8")
-    assert "args=pull ghcr.io/getexperimently/experimently:core-0.16.2" in log
+    assert "args=pull ghcr.io/controlvar/controlvar:core-0.16.2" in log
     assert f"config={home_cfg}\n" not in log
     assert "auths" not in log, log

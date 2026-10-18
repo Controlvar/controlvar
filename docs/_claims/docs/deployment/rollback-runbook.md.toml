@@ -4,7 +4,7 @@
 document = "docs/deployment/rollback-runbook.md"
 
 [[unit]]
-text = "Rollback Runbook — Experimently"
+text = "Rollback Runbook — Controlvar"
 by = ["exempt:label"]
 
 [[unit]]

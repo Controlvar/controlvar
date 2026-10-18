@@ -9,20 +9,20 @@
 #
 # `strict: true` fails the build on any broken link or anchor, in CI on every
 # pull request (.github/workflows/docs.yml). Fix the link; do not relax it.
-site_name: Experimently
+site_name: Controlvar
 site_description: 'Open-source experimentation platform: A/B testing, feature flags, sequential and Bayesian
   statistics, sixteen SDKs.'
-site_url: https://getexperimently.github.io/experimently/
-repo_url: https://github.com/getexperimently/experimently
-repo_name: getexperimently/experimently
+site_url: https://docs.controlvar.com/
+repo_url: https://github.com/Controlvar/controlvar
+repo_name: Controlvar/controlvar
 edit_uri: edit/main/docs/
-copyright: 'Copyright &copy; 2024-2026 Experimently. Apache-2.0. Built by <a href="https://www.linkedin.com/in/ashish-markanday/"
+copyright: 'Copyright &copy; 2024-2026 The Controlvar authors. Apache-2.0. Built by <a href="https://www.linkedin.com/in/ashish-markanday/"
   target="_blank" rel="noopener noreferrer">Ashish Markanday</a>.'
 extra:
   social:
   - icon: fontawesome/brands/github
-    link: https://github.com/getexperimently/experimently
-    name: Experimently on GitHub
+    link: https://github.com/Controlvar/controlvar
+    name: Controlvar on GitHub
 docs_dir: docs
 site_dir: site
 # _claims/ holds the claims registries (scripts/doc_claims.py): data the
@@ -150,10 +150,11 @@ nav:
 - Self-Hosting:
   - AWS CDK Deployment: self-hosting/cdk.md
   - Kubernetes (Helm): self-hosting/kubernetes.md
-  - Docker Compose (self-hosting stack): https://github.com/getexperimently/experimently/blob/main/deploy/compose/README.md
+  - Docker Compose (self-hosting stack): https://github.com/Controlvar/controlvar/blob/main/deploy/compose/README.md
   - Environment Variables: getting-started/environment-setup.md
   - Database Migrations: self-hosting/migrations.md
   - Releases & Image Verification: self-hosting/releases.md
+  - Upgrading to Controlvar: self-hosting/upgrading-to-controlvar.md
   - Monitoring: self-hosting/monitoring.md
 - Guides & Tutorials:
   - Bayesian Experimentation: api/bayesian.md

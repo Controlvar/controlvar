@@ -14,9 +14,16 @@ import { wizardInputClass } from './fieldStyles';
 import { CorrectionMethod } from '@/types/results';
 import { correctionName } from '@/components/results/shared/analysisSettings';
 
-/** Everything the Estimate step shows, held by the wizard so it survives Back and Next. */
+/** The estimate's inputs other than the effect, which lives in the form state. */
+export type EstimatePanelInputs = Omit<EstimateInputs, 'mdePct'>;
+
+/**
+ * Everything the Estimate step shows except the minimum detectable effect,
+ * held by the wizard so it survives Back and Next. The effect is saved with
+ * the experiment, so it lives in the form state (`plannedEffectPct`).
+ */
 export interface EstimatePanelState {
-  inputs: EstimateInputs;
+  inputs: EstimatePanelInputs;
   /** The last answer, and the exact query it answered (to tell when it is out of date). */
   result: { estimate: EstimateResponse; queryKey: string } | null;
   /** A refused input or a failed request; shown in the panel's own alert region. */
@@ -27,7 +34,12 @@ export interface EstimatePanelState {
 }
 
 export const INITIAL_ESTIMATE_PANEL: EstimatePanelState = {
-  inputs: INITIAL_ESTIMATE_INPUTS,
+  inputs: {
+    baselinePct: INITIAL_ESTIMATE_INPUTS.baselinePct,
+    power: INITIAL_ESTIMATE_INPUTS.power,
+    dailyUsers: INITIAL_ESTIMATE_INPUTS.dailyUsers,
+    sharePct: INITIAL_ESTIMATE_INPUTS.sharePct,
+  },
   result: null,
   problem: null,
   loading: false,
@@ -42,6 +54,9 @@ export const NO_USABLE_ESTIMATE =
 interface SampleSizeEstimateProps {
   value: EstimatePanelState;
   onChange: React.Dispatch<React.SetStateAction<EstimatePanelState>>;
+  /** The minimum detectable effect as typed, in percent; saved with the experiment when usable. */
+  mdePct: string;
+  onMdePctChange: (mdePct: string) => void;
   /** Each variant's share of traffic, in percent, from the Variants step. */
   allocations: number[];
   /** The experiment's confidence level: the estimate plans at 1 minus it. */
@@ -79,23 +94,42 @@ export function noCorrectionInEstimate(
 }
 
 /**
- * An advisory sample-size and duration estimate. It is calculated only when the
- * button is pressed, never blocks creating the experiment, and nothing it holds
- * is sent with the experiment.
+ * The estimate's answer when it answers exactly these inputs, or null when
+ * there is none or the inputs have changed since.
+ */
+export function currentEstimate(
+  value: EstimatePanelState,
+  mdePct: string,
+  variantCount: number,
+  confidenceLevel: number,
+): EstimateResponse | null {
+  if (value.result === null) return null;
+  const current = buildEstimateQuery({ ...value.inputs, mdePct }, variantCount, confidenceLevel);
+  return current.ok && JSON.stringify(current.query) === value.result.queryKey ? value.result.estimate : null;
+}
+
+/**
+ * A sample-size and duration estimate. It is calculated only when the button
+ * is pressed and never blocks creating the experiment. Its minimum detectable
+ * effect, when usable, is saved with the experiment (the wizard refuses Next
+ * on one that is typed but unusable); the rest of what it holds is a guide
+ * and is not sent.
  */
 export function SampleSizeEstimate({
   value,
   onChange,
+  mdePct,
+  onMdePctChange,
   allocations,
   confidenceLevel,
   correctionMethod,
 }: SampleSizeEstimateProps) {
   const variantCount = allocations.length;
-  const { inputs, result, problem, loading } = value;
-  const current = buildEstimateQuery(inputs, variantCount, confidenceLevel);
-  const stale = result !== null && (!current.ok || JSON.stringify(current.query) !== result.queryKey);
+  const { result, problem, loading } = value;
+  const inputs: EstimateInputs = { ...value.inputs, mdePct };
+  const stale = result !== null && currentEstimate(value, mdePct, variantCount, confidenceLevel) === null;
 
-  const setInput = <K extends keyof EstimateInputs>(key: K, next: EstimateInputs[K]) =>
+  const setInput = <K extends keyof EstimatePanelInputs>(key: K, next: EstimatePanelInputs[K]) =>
     onChange((prev) => ({ ...prev, inputs: { ...prev.inputs, [key]: next } }));
 
   const calculate = async () => {
@@ -132,10 +166,11 @@ export function SampleSizeEstimate({
 
   return (
     <div className="space-y-5" data-testid="sample-size-estimate">
-      <p className="text-sm text-slate-600">
-        Advisory only; nothing in this estimate is saved with the experiment or affects how it runs. It
-        plans at {pct(estimateSignificance(confidenceLevel))} significance, from the confidence level
-        above.
+      <p className="text-sm text-slate-600" data-testid="estimate-intro">
+        The minimum detectable effect you enter is saved with the experiment, and its results page plans
+        the sample for it. The rest of this estimate is a guide and is not saved: the results page plans
+        from the control variant&apos;s own conversion rate, at 80% power. This estimate plans at{' '}
+        {pct(estimateSignificance(confidenceLevel))} significance, from the confidence level above.
       </p>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -171,14 +206,15 @@ export function SampleSizeEstimate({
             inputMode="decimal"
             step="any"
             min={0.1}
-            value={inputs.mdePct}
-            onChange={(e) => setInput('mdePct', e.target.value)}
+            value={mdePct}
+            onChange={(e) => onMdePctChange(e.target.value)}
             aria-describedby="estimate-mde-help"
             className={wizardInputClass}
             data-testid="estimate-mde"
           />
           <p id="estimate-mde-help" className="text-xs text-slate-600 mt-1">
-            5% means 12% → 12.6%, not 17%.
+            5% means 12% → 12.6%, not 17%. Saved with the experiment; leave it blank and the results
+            page plans for 5%.
           </p>
         </div>
 

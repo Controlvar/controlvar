@@ -1,8 +1,8 @@
-# Experimently — Client Demo Guide
+# Controlvar — Client Demo Guide
 
 ## Overview
 
-This guide walks you through a 20-minute live demo of the Experimently experimentation platform. The demo environment comes pre-loaded with 100K+ historical events, and a live simulator adds new events in the background while you present.
+This guide walks you through a 20-minute live demo of the Controlvar experimentation platform. The demo environment comes pre-loaded with 100K+ historical events, and a live simulator adds new events in the background while you present.
 
 ---
 
@@ -52,7 +52,7 @@ React SDK and the public tracking API — the same path a customer's app would u
 and runs a traffic simulator against it so the dashboards fill up while you talk.
 
 **What to show:**
-- Open http://localhost:3200 — point at the **Experimently panel** (bottom-right): the visitor id, the variant this visitor
+- Open http://localhost:3200 — point at the **Controlvar panel** (bottom-right): the visitor id, the variant this visitor
   got for each experiment, and the two feature flags.
   - "This is a real storefront calling our API with an API key. Every visitor is bucketed server-side, sticky, in one call."
 - Click **Shop the collection** (or **Watch & shop** if you got the video hero) → the panel logs `hero_cta_click`
@@ -85,7 +85,7 @@ of devices through the same API, and a scripted "rollout story" walks the platfo
 
 **What to show:**
 - Pick **iPhone 15 · iOS 17.4 · US · premium** → the Search tab shows **AI search ✨**. Pick **Pixel 7 · Android 14 · DE**
-  → keyword search. The Experimently panel shows `streampulse_ai_search: on (targeting_rule)` vs `off (rollout)`.
+  → keyword search. The Controlvar panel shows `streampulse_ai_search: on (targeting_rule)` vs `off (rollout)`.
   - "That rule is `os = iOS AND os_version ≥ 17.0.0 AND region = US AND tier = premium`, built in the dashboard's targeting
     editor. Nothing is hard-coded in the app."
 - Pick **Internal tester** → the Player tab shows the redesigned player (`streampulse_player_v2: on (targeting_rule)`,

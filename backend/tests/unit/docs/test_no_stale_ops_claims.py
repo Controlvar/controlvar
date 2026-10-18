@@ -62,7 +62,7 @@ STALE: Tuple[Tuple[str, str], ...] = (
         r"not yet run against a real aws account",
         "the forward Deploy has run to success on staging",
     ),
-    (r"/experimently/discussions", "Discussions are turned off on the repository"),
+    (r"/controlvar/discussions", "Discussions are turned off on the repository"),
     (r"empty means the published site", "empty means the Markdown on GitHub"),
     (r"dashboard links to the mkdocs site", "the default is the Markdown on GitHub"),
     (r"regardless of `?postgres_port", "the conftest reads POSTGRES_PORT"),

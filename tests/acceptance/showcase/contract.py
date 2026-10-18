@@ -650,7 +650,7 @@ PROJECTION_SHARE = 0.97
 SPOKEN: Tuple[Tuple[str, str], ...] = (
     ("SDKs", "S.D.K.s"),
     ("SDK", "S.D.K."),
-    ("getexperimently.com", "get experimently dot com"),
+    ("controlvar.com", "controlvar dot com"),
 )
 
 

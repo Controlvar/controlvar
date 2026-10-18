@@ -11,19 +11,19 @@ from pathlib import Path
 SDK_ROOT = Path(__file__).resolve().parents[3] / "sdk" / "python"
 sys.path.insert(0, str(SDK_ROOT))
 
-import experimentation  # noqa: E402
+import controlvar  # noqa: E402
 
-# An `experimently` wheel installed in this interpreter would also answer to
-# `import experimentation`; make sure the one under test is the checkout's.
-_loaded = Path(experimentation.__file__).resolve()
-if SDK_ROOT / "experimentation" not in _loaded.parents:
+# An `controlvar` wheel installed in this interpreter would also answer to
+# `import controlvar`; make sure the one under test is the checkout's.
+_loaded = Path(controlvar.__file__).resolve()
+if SDK_ROOT / "controlvar" not in _loaded.parents:
     sys.exit(f"imported {_loaded}, not the SDK under {SDK_ROOT}")
 
 inputs = json.load(sys.stdin)["inputs"]
 json.dump(
     {
-        "hashes": [experimentation.consistent_hash(u, f) for u, f in inputs],
-        "md5_hex": [experimentation.md5_hex(u, f) for u, f in inputs],
+        "hashes": [controlvar.consistent_hash(u, f) for u, f in inputs],
+        "md5_hex": [controlvar.md5_hex(u, f) for u, f in inputs],
     },
     sys.stdout,
 )

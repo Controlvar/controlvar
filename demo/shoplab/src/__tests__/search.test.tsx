@@ -3,7 +3,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import SearchPage from '@/pages/search';
 import { PRODUCTS } from '@/data/products';
 import { exactSearch, fuzzySearch, highlightSegments } from '@/lib/search';
-import { __setFlag } from '@/__mocks__/experimently-sdk';
+import { __setFlag } from '@/__mocks__/controlvar-sdk';
 import { callsFor, renderPage, resetTestState } from '@/test-utils';
 
 function submitSearch(query: string) {

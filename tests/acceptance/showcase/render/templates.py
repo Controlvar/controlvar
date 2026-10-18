@@ -13,12 +13,12 @@ from typing import Sequence
 
 from showcase import contract
 
-PRODUCT_NAME = "Experimently"
+PRODUCT_NAME = "Controlvar"
 TAGLINE = "A/B testing and feature flags you run yourself."
 END_LINE = "Open source, Apache-2.0, runs on your own infrastructure"
-SITE = "getexperimently.com"
-REPOSITORY = "github.com/getexperimently/experimently"
-RECORDED_LINE = "Recorded on Experimently {version}, a local stack with demo data"
+SITE = "controlvar.com"
+REPOSITORY = "github.com/Controlvar/controlvar"
+RECORDED_LINE = "Recorded on Controlvar {version}, a local stack with demo data"
 
 #: The caption band: white system-UI semibold on #111827 (17.7:1 contrast).
 CAPTION_BACKGROUND = "#111827"
@@ -49,8 +49,8 @@ MONO_STACK = 'ui-monospace, Menlo, "SF Mono", Consolas, monospace'
 # The dashboard's own mark (frontend/public/favicon.svg).
 MARK_SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="{size}" height="{size}" '
-    'role="img" aria-label="Experimently"><rect width="64" height="64" rx="14" fill="#2563eb"/>'
-    '<path d="M20 16h26v8H29v7h15v8H29v9h17v8H20z" fill="#ffffff"/></svg>'
+    'role="img" aria-label="Controlvar"><rect width="64" height="64" rx="14" fill="#2563eb"/>'
+    '<path d="M46 16H26a6 6 0 0 0-6 6v20a6 6 0 0 0 6 6h20v-8H29V24h17z" fill="#ffffff"/></svg>'
 )
 
 

@@ -85,7 +85,7 @@ def test_an_older_core_build_on_a_newer_database_says_newer_release():
     message = _refusal(_core_config(), {NEWER_CORE_REVISION})
 
     _assert_no_remove_rows_advice(message)
-    assert "migrated by a newer Experimently release" in message
+    assert "migrated by a newer Controlvar release" in message
     assert NEWER_CORE_REVISION in message
     assert get_version() in message
     assert "restore the backup taken before that upgrade" in message
@@ -106,7 +106,7 @@ def test_a_newer_database_with_the_modules_row_too_is_still_a_newer_release(
     message = _refusal(_core_config(), {NEWER_CORE_REVISION, modules_revision})
 
     _assert_no_remove_rows_advice(message)
-    assert "migrated by a newer Experimently release" in message
+    assert "migrated by a newer Controlvar release" in message
     assert NEWER_CORE_REVISION in message
     assert modules_revision in message
 
@@ -162,7 +162,7 @@ def test_the_previous_full_release_on_a_database_at_the_modules_head_says_newer(
     message = _refusal(cfg, {CORE_HEAD, MODULES_HEAD})
 
     _assert_no_remove_rows_advice(message)
-    assert "migrated by a newer Experimently release" in message
+    assert "migrated by a newer Controlvar release" in message
     assert MODULES_HEAD in message
     assert "full profile being opened by a core build" not in message
 
@@ -175,7 +175,7 @@ def test_a_full_build_on_a_newer_modules_revision_says_newer_release():
     message = _refusal(bootstrap.alembic_config(), {CORE_HEAD, newer_modules_revision})
 
     _assert_no_remove_rows_advice(message)
-    assert "migrated by a newer Experimently release" in message
+    assert "migrated by a newer Controlvar release" in message
     assert newer_modules_revision in message
 
 

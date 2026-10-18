@@ -265,7 +265,7 @@ your holdout has its own salt. A new user in the holdout is answered by
 
 ### GET /api/v1/holdout/{holdout_id}/results (beta)
 
-**Beta:** this measures the combined effect of running experiments' treatment arms on users first seen while the holdout was active. Feature flags ignore the holdout: once a winner ships behind a flag, users in the holdout get it too, so shipped features are not part of this comparison. `always_valid_ci_lower` and `always_valid_ci_upper` stay valid however often you check. See [#445](https://github.com/getexperimently/experimently/issues/445).
+**Beta:** this measures the combined effect of running experiments' treatment arms on users first seen while the holdout was active. Feature flags ignore the holdout: once a winner ships behind a flag, users in the holdout get it too, so shipped features are not part of this comparison. `always_valid_ci_lower` and `always_valid_ci_upper` stay valid however often you check. See [#445](https://github.com/Controlvar/controlvar/issues/445).
 
 For one event name (`metric`, required), it compares the share of users who sent at least one matching event in two groups: `in_holdout`, the users the holdout kept out, and `not_in_holdout`, everyone else first seen while it was active. A user is first seen the first time `POST /api/v1/tracking/assign` answers for them while the holdout is active. Every user recorded is in their group, including users the targeting rules or a mutual exclusion group turned away. A user who already had an experiment assignment before they were first seen is in neither group; `excluded_users` counts them, in total and per group.
 

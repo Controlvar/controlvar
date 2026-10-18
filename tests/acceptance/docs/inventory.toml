@@ -371,8 +371,9 @@ journey = "docker-guide"
 reason = "start the stack as written, open the dashboard and sign in; its shell steps run in Doc Examples"
 
 [pages."getting-started/docker-compose-file.md"]
-class = "exec"
-reason = "its blocks run in Doc Examples; the skipped ones start the demo apps or extra images"
+class = "journey"
+journey = "compose-demo"
+reason = "start the demo profile with the page's own command, then its simulators, ShopLab and StreamPulse, then its recovery note; its other blocks run in Doc Examples"
 
 [pages."getting-started/environment-setup.md"]
 class = "exec"
@@ -385,6 +386,10 @@ reason = "its compose commands run in Doc Examples in the API container of a fre
 [pages."self-hosting/releases.md"]
 class = "exec"
 reason = "its verification steps run in Doc Examples: cosign checks the newest final release's signature and SBOM on ghcr.io with no login, and its labels are read from the registry"
+
+[pages."self-hosting/upgrading-to-controlvar.md"]
+class = "reference"
+reason = "what a rename changes for a running install; its claims are held by the compose, chart and release tests its registry names, and the steps it gives are the ones the compose README and the Kubernetes page run"
 
 [pages."self-hosting/monitoring.md"]
 class = "aws"
@@ -648,10 +653,9 @@ note = "the JavaScript, Python and Go quick starts are journeys, each package in
 
 [[flow]]
 text = "self-hosting guides where they can be rehearsed without AWS"
-journeys = ["docker-guide"]
+journeys = ["docker-guide", "compose-demo"]
 pages = [
     "self-hosting/kubernetes.md",
-    "getting-started/docker-compose-file.md",
     "getting-started/environment-setup.md",
     "self-hosting/migrations.md",
     "self-hosting/releases.md",
@@ -669,7 +673,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 148
+walked = 149
 
 # The front door, and the policy beside it.
 

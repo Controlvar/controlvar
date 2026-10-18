@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Experimently contributors
+# SPDX-FileCopyrightText: 2026 The Controlvar authors
 # SPDX-License-Identifier: Apache-2.0
 """Render a QA template from ``.github/qa-templates/``: the only reader of it.
 
@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import os
 import re
 import sys
 from pathlib import Path
@@ -37,8 +38,12 @@ from typing import Callable, Dict, List, Mapping, NamedTuple, Optional, Sequence
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[1] / ".github" / "qa-templates"
 
-#: This repository's workflow runs; a run link is exactly one of them.
-RUN_LINK_PREFIX = "https://github.com/getexperimently/experimently/actions/runs/"
+#: A workflow run of the repository the workflow runs in, which Actions names
+#: in ``GITHUB_REPOSITORY``; a run link is exactly one of them. The name is read
+#: when a value is checked, never written here, so a renamed or transferred
+#: repository needs no edit. With no ``GITHUB_REPOSITORY`` no run link passes.
+RUN_LINK_SERVER = "https://github.com"
+REPOSITORY_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}")
 
 #: Check names: the synthetic targets and the fuzzing passes.
 CHECKS = frozenset({"staging", "production", "superuser", "viewer", "sdk"})
@@ -76,6 +81,22 @@ _HEADING_REFUSED = frozenset("@<>${}`\\")
 _URL_SHAPE = re.compile(r"[a-z][a-z0-9+.-]*://|www\.", re.I)
 
 
+def run_link_prefix(environ: Optional[Mapping[str, str]] = None) -> Optional[str]:
+    """``https://github.com/<GITHUB_REPOSITORY>/actions/runs/``, or None."""
+    environ = os.environ if environ is None else environ
+    repository = environ.get("GITHUB_REPOSITORY", "")
+    if REPOSITORY_NAME.fullmatch(repository) is None:
+        return None
+    return f"{RUN_LINK_SERVER}/{repository}/actions/runs/"
+
+
+def _is_run_link(value: str) -> bool:
+    prefix = run_link_prefix()
+    if prefix is None or not value.startswith(prefix):
+        return False
+    return re.fullmatch(r"[1-9][0-9]{0,19}", value[len(prefix) :]) is not None
+
+
 def _is_heading(value: str) -> bool:
     if not 1 <= len(value) <= 120 or value != value.strip():
         return False
@@ -91,7 +112,7 @@ KINDS: Dict[str, Callable[[str], bool]] = {
     "date": _is_date,
     "date_time": _is_date_time,
     "sha": _fullmatch(r"[0-9a-f]{7,40}"),
-    "run_link": _fullmatch(re.escape(RUN_LINK_PREFIX) + r"[1-9][0-9]{0,19}"),
+    "run_link": _is_run_link,
     "check": lambda value: value in CHECKS,
     "step": _fullmatch(r"[1-8]"),
     "status": lambda value: (

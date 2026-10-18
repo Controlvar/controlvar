@@ -66,7 +66,7 @@ class Runner:
 
 RUNNERS: dict[str, Runner] = {
     "python": Runner(
-        function="experimentation.consistent_hash / md5_hex (sdk/python source)",
+        function="controlvar.consistent_hash / md5_hex (sdk/python source)",
         command=[sys.executable, str(HARNESS / "python_sdk.py")],
     ),
     "js": Runner(

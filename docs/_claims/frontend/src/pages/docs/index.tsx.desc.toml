@@ -189,7 +189,7 @@ text = "Endpoint reference, with example requests and error responses"
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "The AWS services Experimently runs on, the webhooks it receives, and the alerts it sends."
+text = "The AWS services Controlvar runs on, the webhooks it receives, and the alerts it sends."
 by = ["mechanism:docs-hub"]
 
 [[unit]]
@@ -245,7 +245,7 @@ text = "Full profile: PHI encryption (Fernet), a 6-year retention marker on PHI 
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Run Experimently yourself: Docker Compose on one machine, Helm on Kubernetes, or a CDK app that deploys to AWS."
+text = "Run Controlvar yourself: Docker Compose on one machine, Helm on Kubernetes, or a CDK app that deploys to AWS."
 by = ["mechanism:docs-hub"]
 
 [[unit]]

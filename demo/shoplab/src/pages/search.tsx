@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/router';
-import { useFeatureFlag } from '@getexperimently/react-sdk';
+import { useFeatureFlag } from '@controlvar/react-sdk';
 import { FLAG_KEYS } from '@/lib/env';
 import { usePageView, useTrack } from '@/lib/eventLog';
 import { PRODUCTS } from '@/data/products';

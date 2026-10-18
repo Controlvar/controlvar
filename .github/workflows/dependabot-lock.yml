@@ -54,7 +54,7 @@ jobs:
   refresh:
     name: Regenerate the locks on Dependabot branches
     runs-on: ubuntu-latest
-    if: github.repository == 'amarkanday/experimentation-platform' || github.repository == 'getexperimently/experimently'
+    if: github.repository_id == '1367480368'
     steps:
       - name: Check out the default branch
         uses: actions/checkout@v7

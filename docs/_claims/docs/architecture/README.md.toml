@@ -8,7 +8,7 @@ text = "Architecture Documentation"
 by = ["exempt:label"]
 
 [[unit]]
-text = "This directory contains documentation about the system architecture and design of Experimently."
+text = "This directory contains documentation about the system architecture and design of Controlvar."
 by = ["exempt:navigation"]
 
 [[unit]]

@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Experimently;
+namespace Controlvar;
 
-use Experimently\Errors\ApiException;
-use Experimently\Errors\AuthException;
-use Experimently\Errors\ExperimentationException;
-use Experimently\Errors\NetworkException;
+use Controlvar\Errors\ApiException;
+use Controlvar\Errors\AuthException;
+use Controlvar\Errors\ExperimentationException;
+use Controlvar\Errors\NetworkException;
 
 /**
- * Thin cURL wrapper for communicating with the Experimently API.
+ * Thin cURL wrapper for communicating with the Controlvar API.
  *
  * Every request carries the configured API key in the X-API-Key header plus
  * Content-Type/Accept: application/json. No external dependencies — uses only

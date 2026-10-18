@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =========================================================================
-# scripts/core_build.sh — prove that one profile of Experimently builds,
+# scripts/core_build.sh — prove that one profile of Controlvar builds,
 # boots and passes its tests on its own.
 #
 #   scripts/core_build.sh                 # core profile: delete modules/, rebuild
@@ -403,7 +403,7 @@ PY
 # -------------------------------------------------------------------------
 step_copy() {
     if [ -z "$BUILD_DIR" ]; then
-        BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/experimently-${PROFILE}-build.XXXXXX")"
+        BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/controlvar-${PROFILE}-build.XXXXXX")"
     else
         mkdir -p "$BUILD_DIR"
     fi
@@ -421,7 +421,7 @@ step_copy() {
     # output, caches) never come along.  A file deleted in the working tree
     # but still in the index is skipped rather than failing the copy.
     local listing
-    listing="$(mktemp "${TMPDIR:-/tmp}/experimently-files.XXXXXX")"
+    listing="$(mktemp "${TMPDIR:-/tmp}/controlvar-files.XXXXXX")"
     git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard --deduplicate > "$listing"
     SRC="$REPO_ROOT" DST="$COPY" LISTING="$listing" "$PYTHON" - <<'PY'
 import os
@@ -804,7 +804,7 @@ LICENCE_ALLOW_LIST='MIT;MIT License;MIT-0;MIT No Attribution License (MIT-0);MIT
 
 step_licences() {
     local packages_file packages
-    packages_file="$(mktemp "${TMPDIR:-/tmp}/experimently-packages.XXXXXX")"
+    packages_file="$(mktemp "${TMPDIR:-/tmp}/controlvar-packages.XXXXXX")"
     (cd "$COPY" && PROFILE="$PROFILE" "$PYTHON" - > "$packages_file" <<'PY'
 import os
 import sys

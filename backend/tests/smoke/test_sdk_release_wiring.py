@@ -337,8 +337,8 @@ def test_the_npm_job_pins_checks_and_publishes_the_checked_tarball() -> None:
 # --------------------------------------------------------------------------
 
 # The form npm itself writes: `npm publish` rewrites any other form, with a warning
-# (it did for @getexperimently/js-sdk 0.1.0).
-REPOSITORY_URL = "git+https://github.com/getexperimently/experimently.git"
+# (it did for @controlvar/js-sdk 0.1.0).
+REPOSITORY_URL = "git+https://github.com/Controlvar/controlvar.git"
 
 
 def npm_sdks() -> list[str]:
@@ -690,7 +690,7 @@ def _check(
     )
 
 
-@pytest.mark.parametrize("project", ["experimently", "experimently-openfeature"])
+@pytest.mark.parametrize("project", ["controlvar", "controlvar-openfeature"])
 def test_the_check_accepts_what_the_build_job_recorded(
     project: str, tmp_path: Path
 ) -> None:
@@ -701,7 +701,7 @@ def test_the_check_accepts_what_the_build_job_recorded(
     assert f"2 file(s) for {project} 0.1.0" in result.stdout
 
 
-SIBLING_WHEEL = "experimently_openfeature-0.1.0-py3-none-any.whl"
+SIBLING_WHEEL = "controlvar_openfeature-0.1.0-py3-none-any.whl"
 
 
 #: Each case is checked twice over: the build job recording a digest of the
@@ -711,16 +711,16 @@ REFUSALS = [
     (
         "a same-version wheel of the sibling project",
         lambda f: {**f, SIBLING_WHEEL: b"sibling"},
-        f"{SIBLING_WHEEL} is for 'experimently_openfeature', not 'experimently'",
+        f"{SIBLING_WHEEL} is for 'controlvar_openfeature', not 'controlvar'",
     ),
     (
         "a same-version sdist of the sibling project",
-        lambda f: {**f, "experimently_openfeature-0.1.0.tar.gz": b"sibling"},
-        "is for 'experimently_openfeature', not 'experimently'",
+        lambda f: {**f, "controlvar_openfeature-0.1.0.tar.gz": b"sibling"},
+        "is for 'controlvar_openfeature', not 'controlvar'",
     ),
     (
         "a wheel at another version",
-        lambda f: {**f, "experimently-0.0.9-py3-none-any.whl": b"old"},
+        lambda f: {**f, "controlvar-0.0.9-py3-none-any.whl": b"old"},
         "is version '0.0.9', not '0.1.0'",
     ),
     (
@@ -747,12 +747,12 @@ def test_the_check_refuses(
 ) -> None:
     """Condition 4: each of these must stop the upload, whichever set the
     build job's digest describes."""
-    files = _dist_files("experimently", "0.1.0")
+    files = _dist_files("controlvar", "0.1.0")
     changed = change(files)
     digest = _record(
         tmp_path / "build", changed if recorded == "the changed set" else files
     )
-    result = _check(tmp_path / "publish", changed, "experimently", "0.1.0", digest)
+    result = _check(tmp_path / "publish", changed, "controlvar", "0.1.0", digest)
     assert result.returncode == 1, (case, result.stdout, result.stderr)
     assert refusal in result.stdout, (case, result.stdout)
 
@@ -761,13 +761,13 @@ def test_the_check_refuses_a_byte_changed_after_the_digest_was_recorded(
     tmp_path: Path,
 ) -> None:
     """B4: the harness flips one byte of the wheel between the two jobs."""
-    files = _dist_files("experimently", "0.1.0")
+    files = _dist_files("controlvar", "0.1.0")
     digest = _record(tmp_path / "build", files)
     flipped = {
         name: (data[:-1] + bytes([data[-1] ^ 1]) if name.endswith(".whl") else data)
         for name, data in files.items()
     }
-    result = _check(tmp_path / "publish", flipped, "experimently", "0.1.0", digest)
+    result = _check(tmp_path / "publish", flipped, "controlvar", "0.1.0", digest)
     assert result.returncode == 1, result.stdout
     assert "the downloaded files have digest" in result.stdout, result.stdout
     assert f"the build job recorded {digest}" in result.stdout, result.stdout
@@ -775,30 +775,30 @@ def test_the_check_refuses_a_byte_changed_after_the_digest_was_recorded(
 
 def test_the_check_refuses_an_empty_download(tmp_path: Path) -> None:
     """B5: no files is a refusal, not a vacuous pass."""
-    digest = _record(tmp_path / "build", _dist_files("experimently", "0.1.0"))
-    result = _check(tmp_path / "publish", {}, "experimently", "0.1.0", digest)
+    digest = _record(tmp_path / "build", _dist_files("controlvar", "0.1.0"))
+    result = _check(tmp_path / "publish", {}, "controlvar", "0.1.0", digest)
     assert result.returncode == 1, result.stdout
     assert "nothing was downloaded into" in result.stdout, result.stdout
 
 
 def test_the_check_refuses_a_missing_digest(tmp_path: Path) -> None:
-    files = _dist_files("experimently", "0.1.0")
-    result = _check(tmp_path, files, "experimently", "0.1.0", "")
+    files = _dist_files("controlvar", "0.1.0")
+    result = _check(tmp_path, files, "controlvar", "0.1.0", "")
     assert result.returncode == 1, result.stdout
     assert "the build job recorded no usable digest" in result.stdout
 
 
 def test_the_check_compares_the_whole_normalised_name(tmp_path: Path) -> None:
-    """`Experimently.OpenFeature` and `experimently_openfeature` are one
-    project under PEP 503; `experimently` is a different one."""
-    files = _dist_files("experimently-openfeature", "0.1.0")
+    """`Controlvar.OpenFeature` and `controlvar_openfeature` are one
+    project under PEP 503; `controlvar` is a different one."""
+    files = _dist_files("controlvar-openfeature", "0.1.0")
     digest = _record(tmp_path, files)
-    result = _check(tmp_path, files, "Experimently.OpenFeature", "0.1.0", digest)
+    result = _check(tmp_path, files, "Controlvar.OpenFeature", "0.1.0", digest)
     assert result.returncode == 0, result.stdout + result.stderr
 
     other = tmp_path / "other"
     other.mkdir()
-    result = _check(other, files, "experimently", "0.1.0", digest)
+    result = _check(other, files, "controlvar", "0.1.0", digest)
     assert result.returncode == 1, result.stdout
 
 
@@ -817,7 +817,7 @@ def test_the_build_job_refuses_a_version_not_in_its_pep_440_spelling(
     build job refuses a tag it would only refuse after approval."""
     sdk = tmp_path / "sdk"
     (sdk / "dist").mkdir(parents=True)
-    (sdk / "dist" / f"experimently-{wheel_version}-py3-none-any.whl").write_bytes(b"w")
+    (sdk / "dist" / f"controlvar-{wheel_version}-py3-none-any.whl").write_bytes(b"w")
     result = _run_step(
         _step("pypi-build", "Built version matches the tag"),
         {"needs.resolve.outputs.version": tag},
@@ -833,8 +833,8 @@ def test_the_build_job_refuses_a_version_not_in_its_pep_440_spelling(
 # publishes it, a prerelease under `next` and a stable version with no --tag
 # --------------------------------------------------------------------------
 
-NPM_NAME = "@getexperimently/js-sdk"
-NPM_FILE = "getexperimently-js-sdk-0.1.0.tgz"
+NPM_NAME = "@controlvar/js-sdk"
+NPM_FILE = "controlvar-js-sdk-0.1.0.tgz"
 
 
 def test_the_npm_build_and_publish_jobs_are_a_pair() -> None:
@@ -1249,9 +1249,9 @@ NPM_MANIFEST_REFUSALS = [
     ),
     (
         "another SDK's name",
-        {"name": "@getexperimently/openfeature-provider", "version": "0.1.0"},
+        {"name": "@controlvar/openfeature-provider", "version": "0.1.0"},
         "0.1.0",
-        f"the tarball is '@getexperimently/openfeature-provider', not '{NPM_NAME}'",
+        f"the tarball is '@controlvar/openfeature-provider', not '{NPM_NAME}'",
     ),
     (
         "another version",

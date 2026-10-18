@@ -49,12 +49,13 @@ from docs_runner.model import Step
 
 from backend.tests.unit.docs.test_docs_journey_sdk import (
     KEY,
+    SECRETS_ENV,
     TODAY,
     _ExperimentApi,
     execute_module,
 )
 
-MODULE = "github.com/getexperimently/experimently/sdk/go"
+MODULE = "github.com/controlvar/controlvar/sdk/go"
 PSEUDO = "v0.0.0-20261007170856-0ee808b07642"
 GO_PAGE = REPO_ROOT / "docs" / "sdk" / "go.md"
 GO_MOD = REPO_ROOT / "sdk" / "go" / "go.mod"
@@ -73,7 +74,7 @@ Requires Go GO_DIRECTIVE+.
 
 ```bash
 go mod init example.com/quickstart
-go get github.com/getexperimently/experimently/sdk/go
+go get github.com/controlvar/controlvar/sdk/go
 ```
 
 ## Quick Start
@@ -85,11 +86,11 @@ import (
 	"fmt"
 	"os"
 
-	exp "github.com/getexperimently/experimently/sdk/go"
+	exp "github.com/controlvar/controlvar/sdk/go"
 )
 
 func main() {
-	client, _ := exp.New(exp.WithBaseURL("http://localhost:8000"), exp.WithAPIKey(os.Getenv("EXPERIMENTLY_API_KEY")))
+	client, _ := exp.New(exp.WithBaseURL("http://localhost:8000"), exp.WithAPIKey(os.Getenv("CONTROLVAR_API_KEY")))
 	user := &exp.User{ID: "user-123"}
 	a, _ := client.GetAssignment(nil, "checkout_flow", user)
 	flag, _ := client.EvaluateFlag(nil, "new_search", user)
@@ -570,7 +571,7 @@ def _run(
         language="go",
         install=install,
         source="package main\n",
-        secrets_env={"EXPERIMENTLY_API_URL": "http://api", "EXPERIMENTLY_API_KEY": KEY},
+        secrets_env=SECRETS_ENV,
         redact=redactor.redact,
         run_command=fake,
         go=sdk.GoCheck(directive=DIRECTIVE, checkout=checkout, ref=ref),
@@ -629,8 +630,10 @@ def test_the_go_commands_use_the_public_proxy_and_nothing_inherited(
         assert Path(env["HOME"]) == home
         assert Path(env["GOMODCACHE"]).is_relative_to(home)
         assert Path(env["GOCACHE"]).is_relative_to(home)
-    keyed = [c for c in fake.calls if "EXPERIMENTLY_API_KEY" in c["env"]]
+    keyed = [c for c in fake.calls if set(SECRETS_ENV) & set(c["env"])]
     assert [c["argv"] for c in keyed] == [["go", "run", "."]]
+    for name, value in SECRETS_ENV.items():
+        assert keyed[0]["env"][name] == value, name
 
 
 def test_the_directory_and_its_read_only_module_cache_are_removed(checkout):
@@ -948,7 +951,8 @@ def test_the_go_step_holds_the_real_go_mod_and_compares_the_real_checkout(
     assert '"http://api"' in written["program"]
     assert KEY not in (tmp_path / snapshot).read_text()
     run_env = fake.calls[-1]["env"]
-    assert run_env["EXPERIMENTLY_API_KEY"] == KEY
+    for name in ("CONTROLVAR_API_KEY", "EXPERIMENTLY_API_KEY"):
+        assert run_env[name] == KEY, name
 
 
 def test_a_go_step_on_a_page_that_requires_another_version_stops_before_running(

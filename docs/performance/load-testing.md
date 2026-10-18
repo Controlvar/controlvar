@@ -1,4 +1,4 @@
-# Load Testing — Experimently
+# Load Testing — Controlvar
 
 ## Overview
 

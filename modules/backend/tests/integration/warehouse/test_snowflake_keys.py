@@ -19,7 +19,7 @@ BODY = {
     "warehouse_type": "snowflake",
     "name": "Snow",
     "account": "MYORG-MYACCOUNT",
-    "user": "EXPERIMENTLY_READER",
+    "user": "CONTROLVAR_READER",
     "role": "ANALYSIS_READER",
     "warehouse": "ANALYSIS_WH",
 }
@@ -44,14 +44,14 @@ def test_snowflake_key_pair_lifecycle(wh):
     body = created.json()
     assert body["parameters"] == {
         "account": "MYORG-MYACCOUNT",
-        "user": "EXPERIMENTLY_READER",
+        "user": "CONTROLVAR_READER",
         "role": "ANALYSIS_READER",
         "warehouse": "ANALYSIS_WH",
     }
     assert body["worst_case_seconds_per_day"] == 20 * 11 * 300
     shown = body["public_key"]
     assert shown["statement"] == (
-        f"ALTER USER EXPERIMENTLY_READER SET RSA_PUBLIC_KEY='{shown['public_key']}';"
+        f"ALTER USER CONTROLVAR_READER SET RSA_PUBLIC_KEY='{shown['public_key']}';"
     )
     assert shown["public_key_fingerprint"] == body["public_key_fingerprint"]
     assert shown["public_key_fingerprint"].startswith("SHA256:")
@@ -68,7 +68,7 @@ def test_snowflake_key_pair_lifecycle(wh):
     assert pending["credentials_status"] == "pending_key"
     assert pending["public_key_fingerprint"] == body["public_key_fingerprint"]
     assert pending["public_key"]["statement"].startswith(
-        "ALTER USER EXPERIMENTLY_READER SET RSA_PUBLIC_KEY_2='"
+        "ALTER USER CONTROLVAR_READER SET RSA_PUBLIC_KEY_2='"
     )
     new_fingerprint = pending["pending_public_key_fingerprint"]
     assert new_fingerprint == pending["public_key"]["public_key_fingerprint"]
@@ -89,7 +89,7 @@ def test_snowflake_key_pair_lifecycle(wh):
     # The next key goes back into the first slot.
     third = admin.post(f"{WA}/connections/{body['id']}/regenerate-key").json()
     assert third["public_key"]["statement"].startswith(
-        "ALTER USER EXPERIMENTLY_READER SET RSA_PUBLIC_KEY='"
+        "ALTER USER CONTROLVAR_READER SET RSA_PUBLIC_KEY='"
     )
 
     # No response carried a private key, in any of its encodings.

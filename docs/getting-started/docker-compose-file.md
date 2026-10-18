@@ -3,8 +3,8 @@
 The repository ships one development compose file, `docker-compose.yml` at the repository root.
 This page lists its services, profiles and the settings you are most likely to change.
 Every host port below is published on `127.0.0.1` only. For a server, use
-[`deploy/compose/compose.yml`](https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml):
-the [README](https://github.com/getexperimently/experimently/blob/main/deploy/compose/README.md)
+[`deploy/compose/compose.yml`](https://github.com/Controlvar/controlvar/blob/main/deploy/compose/compose.yml):
+the [README](https://github.com/Controlvar/controlvar/blob/main/deploy/compose/README.md)
 beside it says how to run it and lists its settings; see
 [Releases, images and verification](../self-hosting/releases.md) for the versions and
 how to verify the images.
@@ -42,10 +42,20 @@ docker compose ps --services --status running | sort
 
 It prints `api`, `frontend`, `postgres` and `redis`, one per line.
 
-The `demo` profile's applications also need the `shoplab` and `streampulse` seeds:
-without them, both simulators exit at start. To run the demo, use
-`./demo/setup-local.sh`, which the
-[Demo guide](https://github.com/getexperimently/experimently/blob/main/demo/DEMO_GUIDE.md)
+The `demo` profile adds ShopLab, StreamPulse and their traffic simulators. Start it
+with the seeds the apps need:
+
+```{.bash skip reason="demo: builds both demo app images and starts their simulators"}
+SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait
+```
+
+ShopLab then answers at http://localhost:3200 and StreamPulse at http://localhost:3300.
+`make demo` runs the same command with `--build`. Without the `shoplab` and
+`streampulse` seeds the API key built into the apps does not exist: they load, but
+every flag shows its fallback, and both simulators exit at start. If you already started the profile without them, run the
+command above once: it applies the missing seeds to the existing database, with no
+`down -v`. To run the apps outside Docker, use `./demo/setup-local.sh`, which the
+[Demo guide](https://github.com/Controlvar/controlvar/blob/main/demo/DEMO_GUIDE.md)
 walks through.
 
 Add pgAdmin and LocalStack with the `tools` and `aws` profiles:

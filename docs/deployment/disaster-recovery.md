@@ -1,4 +1,4 @@
-# Disaster Recovery Plan — Experimently
+# Disaster Recovery Plan — Controlvar
 
 This page describes what the AWS CDK app in `infrastructure/cdk` actually creates, and how to
 recover each part of it. Where the CDK does not create something a recovery would need (a
@@ -215,7 +215,7 @@ If the failover has not completed within 5 minutes, or no instance is available:
 
 **Detection:** `aws rds describe-db-clusters` returns status `failed`, and every database call in the application logs fails.
 **RTO:** in the staging rehearsal on 2026-10-11 (UTC), on a database holding little data, the restore
-took 11 min 41 s and the cutover took the API down for 12 min 45 s ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)). A larger
+took 11 min 41 s and the cutover took the API down for 12 min 45 s ([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399822)). A larger
 database restores more slowly.
 **RPO:** 5 minutes (PITR), and only within the backup retention period (35 days in prod and
 staging, 1 elsewhere; see Backup Strategy). Beyond that, the
@@ -248,7 +248,7 @@ aws rds describe-db-cluster-snapshots \
 
 ### Restore from PITR (preferred)
 
-**Rehearsed on a staging account on 2026-10-11 (UTC)** ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)): `read`, `restore`, `cutover`,
+**Rehearsed on a staging account on 2026-10-11 (UTC)** ([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399822)): `read`, `restore`, `cutover`,
 and the cutover undone with `rollback`; `readers`, `keep` and `start-api` were not run. Prod's `readers` step has run only against the fake
 AWS in the test suite (`backend/tests/unit/infrastructure/test_restore_repoint.py`), on a
 two-instance cluster: staging runs one instance.
@@ -312,7 +312,7 @@ It must equal the migration heads of the release the API runs. If it does not, t
 ([Rollback Runbook](rollback-runbook.md)).
 
 Step 4: Point the stack's names at the restored cluster. **The API is down from the start of this step to its end: 12 min 45 s in the
-staging rehearsal on 2026-10-11 (UTC), on a database holding little data ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)).**
+staging rehearsal on 2026-10-11 (UTC), on a database holding little data ([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399822)).**
 
 ```bash
 scripts/restore_repoint.sh cutover "$EVID"
@@ -327,7 +327,7 @@ reached the marked database through that endpoint. The API gets back the task co
 Step 1 recorded.
 
 During the cutover of the staging rehearsal on 2026-10-11 (UTC), `/health` answered 503 for 11 min
-40 s ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)). The composite alarm `experimentation-api-no-healthy-task-$ENV` is expected
+40 s ([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399822)). The composite alarm `experimentation-api-no-healthy-task-$ENV` is expected
 to email `ALARM_EMAIL` after about three minutes, then clear; that has not been rehearsed on AWS
 as of v0.31.1. A green `/health` afterwards does not show which cluster answered, because it runs
 `SELECT 1`; the probes do. Writes made to the original between the restore time and the cutover
@@ -354,7 +354,7 @@ Before the cutover the restored cluster is not watched by `AuroraHighCPU-$ENV` e
 reads the cluster identifier from the database stack's parameter
 `/experimentation/$ENV/database/aurora-cluster-identifier`, which names the stack's own cluster.
 The cutover gives the restored cluster that identifier, so from then on the alarm watches it with
-no redeploy, as it did in the staging rehearsal on 2026-10-11 (UTC) ([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)). The original, once
+no redeploy, as it did in the staging rehearsal on 2026-10-11 (UTC) ([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399822)). The original, once
 renamed, is watched by no alarm.
 
 #### Undo a cutover
@@ -500,7 +500,7 @@ A second region needs all of the following, and the CDK creates none of them:
 
 **Detection:** AWS GuardDuty alert, CloudWatch anomaly, or customer report.
 
-See [Responding to an incident on your deployment](../security/incident-response.md). If the cause may be a vulnerability in Experimently itself, report it privately as [SECURITY.md](https://github.com/getexperimently/experimently/blob/main/SECURITY.md) describes.
+See [Responding to an incident on your deployment](../security/incident-response.md). If the cause may be a vulnerability in Controlvar itself, report it privately as [SECURITY.md](https://github.com/Controlvar/controlvar/blob/main/SECURITY.md) describes.
 
 Key immediate actions:
 
@@ -543,7 +543,7 @@ period (35 days in prod and staging, 1 elsewhere). After that, the newest manual
 The restore is the one in [Restore from PITR](#restore-from-pitr-preferred) (Scenario 4). Its
 rehearsal on a staging account on 2026-10-11 (UTC) restored beside the running API, which was down
 only for the cutover
-([#295](https://github.com/getexperimently/experimently/issues/295#issuecomment-6157399822)).
+([#295](https://github.com/Controlvar/controlvar/issues/295#issuecomment-6157399822)).
 Here the API is stopped from the start instead, so that nothing more is written to the damaged
 data, and the outage lasts from Step 2 until the cutover ends, restore included.
 

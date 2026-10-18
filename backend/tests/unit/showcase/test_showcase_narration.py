@@ -195,9 +195,9 @@ def narrated(sentence: str, beat: int = 0) -> dict:
         ("Unlike LaunchDarkly, it runs here.", "says 'LaunchDarkly'"),
         (
             "Visit example.com to read more.",
-            "names an address other than getexperimently.com",
+            "names an address other than controlvar.com",
         ),
-        ("See https: for the rest.", "names an address other than getexperimently.com"),
+        ("See https: for the rest.", "names an address other than controlvar.com"),
         ("Mail admin@demo.com about it.", "names an email address"),
         ("Paste eptk_demo here.", "holds an API key's prefix"),
         ("Fill in {name} here.", "a caption is fixed text: no template"),
@@ -224,7 +224,7 @@ def test_a_sentence_the_rules_refuse(sentence, reason):
     "sentence",
     [
         "Open the completed one.",
-        "Try Experimently at getexperimently.com.",
+        "Try Controlvar at controlvar.com.",
         "Choose the Live tab, then Refresh.",
         "Each stage raises the share: 10%, then 25%, now 50%.",
         "Sign in as the demo admin.",
@@ -377,7 +377,7 @@ def test_the_table_is_the_plans_and_keeps_letters_and_digits():
     assert contract.SPOKEN == (
         ("SDKs", "S.D.K.s"),
         ("SDK", "S.D.K."),
-        ("getexperimently.com", "get experimently dot com"),
+        ("controlvar.com", "controlvar dot com"),
     )
     assert contract.spoken_problems() == []
 
@@ -405,8 +405,8 @@ def test_a_table_entry_that_changes_what_is_said_is_refused(entry, problem):
         ),
         ("Both SDKs do it.", "Both S.D.K.s do it."),
         (
-            "Try Experimently at getexperimently.com.",
-            "Try Experimently at get experimently dot com.",
+            "Try Controlvar at controlvar.com.",
+            "Try Controlvar at controlvar dot com.",
         ),
         ("The SDKfoo stays.", "The SDKfoo stays."),
         ("No change here.", "No change here."),

@@ -1,6 +1,6 @@
 # Kubernetes (Helm)
 
-Experimently installs on Kubernetes with the Helm chart in `charts/experimently`: a
+Controlvar installs on Kubernetes with the Helm chart in `charts/experimently`: a
 one-time secret step, then one install command.
 
 The four blocks on this page are tested as written on kind with ingress-nginx: the
@@ -11,7 +11,7 @@ variables that you set first:
 | Variable | Value |
 |---|---|
 | `CHART` | the chart: a path to `charts/experimently`, or a packaged chart |
-| `PUBLIC_BASE_URL` | the origin people open, such as `https://experimently.example.com`: a DNS name, no port, no path |
+| `PUBLIC_BASE_URL` | the origin people open, such as `https://controlvar.example.com`: a DNS name, no port, no path |
 | `ADMIN_EMAIL` | the email of the first administrator |
 | `PROFILE` | `core` or `full` |
 

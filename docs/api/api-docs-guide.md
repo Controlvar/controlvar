@@ -1,4 +1,4 @@
-# Experimently API Documentation Guide
+# Controlvar API Documentation Guide
 
 This guide explains how to access and use the API documentation for the experimentation platform.
 

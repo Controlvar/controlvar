@@ -1,6 +1,6 @@
 # React SDK
 
-`@getexperimently/react-sdk` (v1.1) provides a context provider, hooks, a higher-order
+`@controlvar/react-sdk` (v1.1) provides a context provider, hooks, a higher-order
 component and an SSR client for using experiments and feature flags from React and Next.js.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
@@ -11,49 +11,51 @@ Source: `sdk/react`. A complete working integration is the ShopLab demo storefro
 `demo/shoplab`.
 
 CI runs this SDK's contract smoke against a real API: `react` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ---
 
 ## Installation
 
-**Not yet published.** `@getexperimently/react-sdk` is not on npm, so build it from source in a
+**Not yet published.** `@controlvar/react-sdk` is not on npm, so build it from source in a
 clone of this repository and install the packed tarball (the blocks below).
 
 Its peer dependencies are `react` >= 17 and `react-dom` >= 17.
 
 To install from source, clone the repository and build a package; `npm pack` writes
-`getexperimently-react-sdk-1.1.0.tgz`:
+`controlvar-react-sdk-1.1.0.tgz`:
 
 ```bash
-git clone https://github.com/getexperimently/experimently.git
-cd experimently/sdk/react
+git clone https://github.com/Controlvar/controlvar.git
+cd controlvar/sdk/react
 npm ci && npm run build && npm pack
 ```
 
 Then install that file in your app:
 
 ```bash
-npm install /path/to/experimently/sdk/react/getexperimently-react-sdk-1.1.0.tgz
+npm install /path/to/controlvar/sdk/react/controlvar-react-sdk-1.1.0.tgz
 ```
 
 To consume the SDK from source inside this monorepo (what `demo/shoplab` does), alias
-`@getexperimently/react-sdk` to `sdk/react/src` in `tsconfig.json` `paths` and in
+`@controlvar/react-sdk` to `sdk/react/src` in `tsconfig.json` `paths` and in
 your bundler, and alias `react`/`react-dom` to your app's copies to avoid a duplicate React.
 
 ---
 
 ## Provider Setup
 
+If you set `NEXT_PUBLIC_EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_KEY` from an earlier version of these pages, set `NEXT_PUBLIC_CONTROLVAR_API_KEY` and `CONTROLVAR_API_KEY` instead.
+
 ```tsx
-import { ExperimentationProvider } from '@getexperimently/react-sdk';
+import { ExperimentationProvider } from '@controlvar/react-sdk';
 
 function App() {
   return (
     <ExperimentationProvider
       config={{
-        apiKey: process.env.NEXT_PUBLIC_EXPERIMENTLY_API_KEY!,
-        baseUrl: process.env.NEXT_PUBLIC_EXPERIMENTLY_API_URL ?? 'http://localhost:8000',
+        apiKey: process.env.NEXT_PUBLIC_CONTROLVAR_API_KEY!,
+        baseUrl: process.env.NEXT_PUBLIC_CONTROLVAR_API_URL ?? 'http://localhost:8000',
       }}
       user={{ userId: currentUser.id, attributes: { country: currentUser.country, plan: currentUser.plan } }}
     >
@@ -106,7 +108,7 @@ Evaluates one flag for the current user via
 (`context` is `user.attributes`, omitted when empty).
 
 ```tsx
-import { useFeatureFlag } from '@getexperimently/react-sdk';
+import { useFeatureFlag } from '@controlvar/react-sdk';
 
 function SearchPage() {
   const { isEnabled, variant, config, loading, error } = useFeatureFlag('new_search');
@@ -144,7 +146,7 @@ Assigns the current user via `POST /api/v1/tracking/assign` (sticky on the serve
 variant plus its configuration.
 
 ```tsx
-import { useExperiment } from '@getexperimently/react-sdk';
+import { useExperiment } from '@controlvar/react-sdk';
 
 function HeroBanner() {
   const { variantKey, configuration, isControl, loading } = useExperiment('hero_banner');
@@ -205,7 +207,7 @@ to build a debug overlay). `useExperimentationContext` is an alias.
 Injects `flagEvaluation: FeatureFlagEvaluation` for one flag into a component.
 
 ```tsx
-import { withExperimentation, type FeatureFlagEvaluation } from '@getexperimently/react-sdk';
+import { withExperimentation, type FeatureFlagEvaluation } from '@controlvar/react-sdk';
 
 interface Props { flagEvaluation: FeatureFlagEvaluation | null; title: string }
 
@@ -226,13 +228,13 @@ disabled evaluation or the control defaults with `error` set.
 
 ```tsx
 // pages/checkout.tsx
-import { ServerClient } from '@getexperimently/react-sdk';
+import { ServerClient } from '@controlvar/react-sdk';
 import type { GetServerSideProps } from 'next';
 
 export const getServerSideProps: GetServerSideProps = async ({ req }) => {
   const client = new ServerClient({
-    apiKey: process.env.EXPERIMENTLY_API_KEY!,
-    baseUrl: process.env.EXPERIMENTLY_API_URL!,
+    apiKey: process.env.CONTROLVAR_API_KEY!,
+    baseUrl: process.env.CONTROLVAR_API_URL!,
   });
   const user = { userId: req.cookies['visitor_id'] ?? 'anonymous' };
 
@@ -283,7 +285,7 @@ import type {
   FeatureFlagEvaluation,
   ExperimentAssignment,
   TrackEventOptions,
-} from '@getexperimently/react-sdk';
+} from '@controlvar/react-sdk';
 
 interface FeatureFlagEvaluation {
   flagKey: string;

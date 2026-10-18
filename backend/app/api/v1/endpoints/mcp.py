@@ -102,7 +102,7 @@ MCP_TOOLS = [
 def get_mcp_manifest() -> MCPManifestResponse:
     """Return the MCP tool manifest for AI agent discovery."""
     return MCPManifestResponse(
-        name="experimently",
+        name="controlvar",
         version="1.0.0",
         tools=MCP_TOOLS,
     )

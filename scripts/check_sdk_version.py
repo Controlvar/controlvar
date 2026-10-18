@@ -102,8 +102,8 @@ def main() -> int:
         action="store_true",
         help=(
             "Print the registry name from the manifest. The directory name is "
-            "not it: sdk/openfeature is @getexperimently/openfeature-provider "
-            "and sdk/js is @getexperimently/js-sdk, so anything that builds a "
+            "not it: sdk/openfeature is @controlvar/openfeature-provider "
+            "and sdk/js is @controlvar/js-sdk, so anything that builds a "
             "package name by pattern is wrong for at least one of them."
         ),
     )

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from experimentation import consistent_hash, md5_hex
+from controlvar import consistent_hash, md5_hex
 
 GOLDEN = Path(__file__).resolve().parents[3] / "tests" / "sdk-contract" / "golden-vectors.json"
 TOLERANCE = 1e-10

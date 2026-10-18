@@ -4,7 +4,7 @@
 document = "docs/README.md"
 
 [[unit]]
-text = "Experimently Documentation"
+text = "Controlvar Documentation"
 by = ["exempt:label"]
 
 [[unit]]
@@ -35,7 +35,7 @@ text = "Demo guide | ShopLab and StreamPulse, two sample apps that ./demo/setup-
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "Limitations | What Experimently does not do, and what happens instead"
+text = "Limitations | What Controlvar does not do, and what happens instead"
 by = ["exempt:navigation"]
 
 [[unit]]

@@ -176,7 +176,7 @@ def test_a_mechanism_holds_only_the_sentences_it_checks(real_context):
     quoted = [
         u.text
         for u in dc.units((REPO_ROOT / page.path).read_text(encoding="utf-8"))
-        if u.text.startswith("experimently (v")
+        if u.text.startswith("controlvar (v")
     ]
     assert quoted, "docs/sdk/python.md no longer quotes its version this way"
     assert dc.target_problem(ctx, page, {"text": quoted[0]}, target) is None
@@ -1001,6 +1001,15 @@ PLANTED = [
         "not evidence:",
     ),
     (
+        "evidence from another repository",
+        retarget(
+            "docs/ops.md",
+            "Restore was rehearsed on 2026-10-01.",
+            "evidence:https://github.com/example-org/other-repo/actions/runs/1",
+        ),
+        "not evidence:",
+    ),
+    (
         "evidence, undated",
         lambda t: (
             edit(t, "docs/ops.md", "on 2026-10-01", "last week"),
@@ -1235,6 +1244,46 @@ def test_each_refusal_fires(tmp_path, plant, refusal):
     plant(tree)
     problems = build(tmp_path, tree).problems
     assert any(refusal in p for p in problems), "\n".join(problems) or "no problem"
+
+
+OLD_RUN = "https://github.com/getexperimently/experimently/actions/runs/123"
+OLD_COMMENT = (
+    "https://github.com/getexperimently/experimently/issues/12#issuecomment-345"
+)
+NEW_RUN = "https://github.com/Controlvar/controlvar/actions/runs/9"
+
+
+@pytest.mark.regression
+def test_evidence_keeps_its_recorded_name_and_takes_the_new_one(monkeypatch):
+    """Evidence accepted only the name written into the script, so after the
+    rename a new run's link was refused. The recorded links stay valid (they
+    are dated records, never rewritten), the new name is the other, and the
+    environment decides nothing: GITHUB_REPOSITORY is set only in CI."""
+    for current in (None, "example-org/example-repo"):
+        if current is None:
+            monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+        else:
+            monkeypatch.setenv("GITHUB_REPOSITORY", current)
+        for url in (OLD_RUN, OLD_COMMENT, NEW_RUN):
+            assert dc.evidence_url(url), url
+        assert not dc.evidence_url(
+            "https://github.com/example-org/example-repo/actions/runs/9"
+        )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://github.com/example-org/other-repo/actions/runs/1",
+        "https://github.com/getexperimently/experimently-other/actions/runs/1",
+        "https://github.com/Controlvar/controlvar-other/actions/runs/1",
+        "https://github.com/Controlvar/controlvar/actions/runs/1/x",
+        "http://github.com/Controlvar/controlvar/actions/runs/1",
+        "https://github.com/getexperimently/experimently/issues/1",
+    ],
+)
+def test_evidence_from_a_third_repository_or_shape_is_refused(url):
+    assert not dc.evidence_url(url)
 
 
 #: QA's planted claims (#1142): each is refused as an unregistered unit.

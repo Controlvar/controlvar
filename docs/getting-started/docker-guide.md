@@ -1,10 +1,10 @@
 # Docker Local Development
 
-**This guide runs the local development stack, for your own machine. It is not for a server.** The stack publishes its ports on `127.0.0.1` only, `ENVIRONMENT=development` accepts a short `SECRET_KEY`, and the first start creates the demo administrator `admin@demo.com` with the demo password shown in this guide. To run Experimently on a server, use the published images in [`deploy/compose/compose.yml`](https://github.com/getexperimently/experimently/blob/main/deploy/compose/compose.yml): the [README](https://github.com/getexperimently/experimently/blob/main/deploy/compose/README.md) beside it says how to run it and lists its settings, and [Releases, images and verification](../self-hosting/releases.md) covers the versions and how to verify the images.
+**This guide runs the local development stack, for your own machine. It is not for a server.** The stack publishes its ports on `127.0.0.1` only, `ENVIRONMENT=development` accepts a short `SECRET_KEY`, and the first start creates the demo administrator `admin@demo.com` with the demo password shown in this guide. To run Controlvar on a server, use the published images in [`deploy/compose/compose.yml`](https://github.com/Controlvar/controlvar/blob/main/deploy/compose/compose.yml): the [README](https://github.com/Controlvar/controlvar/blob/main/deploy/compose/README.md) beside it says how to run it and lists its settings, and [Releases, images and verification](../self-hosting/releases.md) covers the versions and how to verify the images.
 
 ## Overview
 
-This guide runs Experimently locally with Docker Compose and shows how to reach each
+This guide runs Controlvar locally with Docker Compose and shows how to reach each
 service. By default the compose file at the repository root starts PostgreSQL, Redis, the
 API and the dashboard. Three optional profiles add more: `tools` (pgAdmin), `aws`
 (LocalStack, for developing the optional AWS integrations) and `demo` (the ShopLab and
@@ -22,7 +22,7 @@ every service with its host port and profile.
 The commands below run from the root of a clone of the repository, which contains:
 
 ```text
-experimently/
+controlvar/
 ├── backend/
 ├── frontend/
 ├── localstack/

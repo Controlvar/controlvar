@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Experimently — Local Demo Teardown
+# Controlvar — Local Demo Teardown
 # Usage: ./demo/teardown-local.sh
 # =============================================================================
 set -euo pipefail
@@ -18,7 +18,7 @@ ok()   { echo -e "${GREEN}[demo]${NC} $*"; }
 warn() { echo -e "${YELLOW}[demo]${NC} $*"; }
 
 echo ""
-log "Stopping Experimently demo environment..."
+log "Stopping Controlvar demo environment..."
 
 # ---------------------------------------------------------------------------
 # 1. Kill tracked processes

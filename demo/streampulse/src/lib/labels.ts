@@ -1,4 +1,4 @@
-import type { ExperimentAssignment, FeatureFlagEvaluation } from '@getexperimently/react-sdk';
+import type { ExperimentAssignment, FeatureFlagEvaluation } from '@controlvar/react-sdk';
 import { HOLDOUT_NAME, PROFILE_MEG_NAME } from '@/lib/env';
 
 /**

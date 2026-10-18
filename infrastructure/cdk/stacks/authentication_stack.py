@@ -43,7 +43,7 @@ class AuthenticationStack(Stack):
             account_recovery=cognito.AccountRecovery.EMAIL_ONLY,
             # Email settings
             email=cognito.UserPoolEmail.with_cognito(
-                reply_to="support@getexperimently.com",
+                reply_to="support@controlvar.com",
             ),
             # User attributes
             standard_attributes=cognito.StandardAttributes(

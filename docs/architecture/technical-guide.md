@@ -1,6 +1,6 @@
 # Technical Guide
 
-Implementation reference for Experimently: authentication, targeting rules, assignment,
+Implementation reference for Controlvar: authentication, targeting rules, assignment,
 results, the background schedulers and caching. The components, and where each request
 goes, are in the [Architecture Overview](../getting-started/architecture.md), and the
 data models in [Data Models](models.md).
@@ -374,7 +374,7 @@ What decides throughput today:
   in the image, both compose files and the Helm chart; the AWS task definition does not set it).
 - In that process, most SDK routes (a single assignment, event tracking and flag evaluation)
   do their database work one request at a time
-  ([#823](https://github.com/getexperimently/experimently/issues/823)).
+  ([#823](https://github.com/Controlvar/controlvar/issues/823)).
 - So throughput grows with the number of API tasks or replicas, not with the number of
   requests sent at once to one of them: on AWS the service's task count (its floor is
   `API_DESIRED_COUNT` in `infrastructure/cdk/app.py`), with the Helm chart `api.replicaCount`.

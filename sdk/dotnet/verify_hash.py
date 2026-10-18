@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Cross-SDK hash parity verification for the Experimently .NET SDK.
+Cross-SDK hash parity verification for the Controlvar .NET SDK.
 
 This script verifies that the hash formula used by the .NET SDK matches the
 reference implementation used across all other SDKs (JavaScript, Python, Java, Go, etc.).
@@ -22,7 +22,7 @@ import sys
 
 def hash_user(user_id: str, flag_key: str) -> float:
     """
-    Compute the consistent bucket hash used by all Experimently SDKs.
+    Compute the consistent bucket hash used by all Controlvar SDKs.
 
     Args:
         user_id:  The user identifier.
@@ -83,7 +83,7 @@ def run_tests() -> None:
 
 
 if __name__ == "__main__":
-    print("Experimently — .NET SDK cross-SDK hash parity verification")
+    print("Controlvar — .NET SDK cross-SDK hash parity verification")
     print("=" * 72)
     print()
 

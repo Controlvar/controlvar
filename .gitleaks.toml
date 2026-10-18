@@ -1,4 +1,4 @@
-title = "Experimently gitleaks config"
+title = "Controlvar gitleaks config"
 
 # A config that defines no rules and does not extend the defaults scans with
 # NO RULES -- which is what this file did from the day it was added (EP-018)

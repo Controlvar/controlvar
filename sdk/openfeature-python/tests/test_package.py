@@ -9,8 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict
 
-import experimentation
-import experimentation_openfeature
+import controlvar
+import controlvar_openfeature
 
 PROVIDER_ROOT = Path(__file__).resolve().parents[1]
 SDK_ROOT = PROVIDER_ROOT.parent / "python"
@@ -38,12 +38,12 @@ def test_it_needs_python_3_9_and_openfeature_sdk_0_10():
 
 def test_its_only_other_dependency_is_the_python_sdk_which_has_none():
     names = [d.split(">")[0].split("=")[0].split("<")[0].strip() for d in project(PROVIDER_ROOT)["dependencies"]]
-    assert sorted(names) == ["experimently", "openfeature-sdk"]
+    assert sorted(names) == ["controlvar", "openfeature-sdk"]
     assert project(SDK_ROOT)["dependencies"] == []
 
 
 def test_the_tests_import_both_packages_from_the_source_tree():
-    assert Path(experimentation.__file__).resolve().is_relative_to(SDK_ROOT.resolve())
-    assert Path(experimentation_openfeature.__file__).resolve().is_relative_to(
+    assert Path(controlvar.__file__).resolve().is_relative_to(SDK_ROOT.resolve())
+    assert Path(controlvar_openfeature.__file__).resolve().is_relative_to(
         (PROVIDER_ROOT / "src").resolve()
     )

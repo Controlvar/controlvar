@@ -1,32 +1,32 @@
-# Experimently Go SDK
+# Controlvar Go SDK
 
-Go client for the Experimently A/B testing and feature flag platform. Zero dependencies outside
+Go client for the Controlvar A/B testing and feature flag platform. Zero dependencies outside
 the standard library, safe for concurrent use.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key for a TTL. Nothing is bucketed locally.
 
-Full reference: [`docs/sdk/go.md`](https://github.com/getexperimently/experimently/blob/main/docs/sdk/go.md).
+Full reference: [`docs/sdk/go.md`](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/go.md).
 
 ## Installation
 
 ```bash
-go get github.com/getexperimently/experimently/sdk/go
+go get github.com/controlvar/controlvar/sdk/go
 ```
 
-- `go get github.com/getexperimently/experimently/sdk/go`: Go 1.21+
+- `go get github.com/controlvar/controlvar/sdk/go`: Go 1.21+
 
 ```go
-import exp "github.com/getexperimently/experimently/sdk/go"
+import exp "github.com/controlvar/controlvar/sdk/go"
 ```
 
 ## Quick Start
 
 ```go
 client, err := exp.New(
-    exp.WithBaseURL(os.Getenv("EXPERIMENTLY_API_URL")), // origin only, e.g. http://localhost:8000
-    exp.WithAPIKey(os.Getenv("EXPERIMENTLY_API_KEY")),  // sent as X-API-Key
+    exp.WithBaseURL(os.Getenv("CONTROLVAR_API_URL")), // origin only, e.g. http://localhost:8000
+    exp.WithAPIKey(os.Getenv("CONTROLVAR_API_KEY")),  // sent as X-API-Key
 )
 if err != nil {
     log.Fatal(err)
@@ -143,14 +143,14 @@ It prints:
 {"sdk":"go","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
 ```
 
-Env: `EXPERIMENTLY_API_URL` (default `http://localhost:8000`), `EXPERIMENTLY_API_KEY` (required),
+Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). Seed the fixtures with
 `backend/scripts/seed_sdk_contract.py`; the repo-wide runner is
 `python tests/sdk-contract/live/run_live_contract.py --sdk go --strict`.
 
 CI runs this SDK's contract smoke against a real API: `go` is in the `sdks:` list of the
-SDK Live Contract job in [pr-qa-gate.yml](https://github.com/getexperimently/experimently/blob/main/.github/workflows/pr-qa-gate.yml).
+SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
 
 ## Tests
 

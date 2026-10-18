@@ -380,7 +380,7 @@ export function AppShell({ children }: AppShellProps) {
 
             {status === 'anonymous' && marketing && (
               <a
-                href="https://github.com/getexperimently/experimently"
+                href="https://github.com/Controlvar/controlvar"
                 data-testid="nav-source"
                 className="px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700"
               >
