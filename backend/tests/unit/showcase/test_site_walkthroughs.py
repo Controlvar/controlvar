@@ -53,6 +53,26 @@ C8 and C9 of the plan are here as well: each title is its storyboard's
 ``title:``, and each description's claims are facts of its storyboard
 (``DESCRIPTION_FACTS``). Reads files only (no git, no network), so it runs the
 same in core-build's copy of the tree.
+
+ANIMATIONS (T178 condition 2). A transcript that says ``"kind": "animation"`` is
+a silent animation with captions of its own text. It has no storyboard and no
+title or end card, so the rule above does not apply to it. Instead this test
+refuses:
+
+* a storyboard at ``tests/acceptance/showcase/storyboards/<slug>.yaml``. A stub
+  storyboard would pass the recording rule for the wrong reason;
+* any item that is not ``on_screen`` with exactly one fragment;
+* ``{version}`` or "Recorded on" anywhere in the transcript;
+* a description whose facts (``in_transcript``) are not each found, verbatim,
+  in the transcript's lines.
+
+Any other ``kind`` is refused, and no ``kind`` is a recording.
+
+What else CI checks for an animation: ``frontend/scripts/check-site-media.mjs``
+holds its mp4 to having no audio track and its transcript to the pinned
+captions, one caption per cue, in order. CI does not compare those captions
+with the animation's source. The reviewer does that by re-running the
+extractor that wrote them (T178 condition 2(g)).
 """
 
 from __future__ import annotations
@@ -233,24 +253,78 @@ def transcript_problems(items: list[dict], storyboard: dict) -> list[str]:
     return problems
 
 
+ANIMATION = "animation"
+#: What an animation's transcript may not say anywhere (T178 condition 2(d)).
+NOT_IN_AN_ANIMATION = (re.compile(r"recorded on", re.I), re.compile(r"\{version\}"))
+
+
+def kind_of(transcript: dict) -> str:
+    """``recording`` when the transcript declares no ``kind``; ``animation``; nothing else."""
+    if "kind" not in transcript:
+        return "recording"
+    if transcript["kind"] == ANIMATION:
+        return ANIMATION
+    raise AssertionError(
+        f"{transcript.get('slug')}: transcript kind {transcript['kind']!r}; the "
+        "only kind is 'animation', and a recording declares none"
+    )
+
+
+def animation_problems(transcript: dict, boards: Path = BOARDS) -> list[str]:
+    """Every way an animation's transcript breaks T178 condition 2(d)."""
+    slug = transcript["slug"]
+    problems = []
+    if (boards / f"{slug}.yaml").exists():
+        problems.append(
+            f"{slug} is an animation but has a storyboard ({slug}.yaml): an animation "
+            "is not recorded, and a stub storyboard passes the recording rule for "
+            "the wrong reason"
+        )
+    for i, item in enumerate(transcript["items"], start=1):
+        if list(item) != ["on_screen"] or len(item["on_screen"]) != 1:
+            problems.append(
+                f"item {i} is {item!r}: an animation's transcript is on-screen items "
+                "of one caption each"
+            )
+    text = json.dumps(transcript["items"])
+    problems += [
+        f"the transcript says {pattern.pattern!r}, which no animation may"
+        for pattern in NOT_IN_AN_ANIMATION
+        if pattern.search(text)
+    ]
+    return problems
+
+
 MANIFEST_ENTRIES = load_json(MANIFEST)["videos"]
 SLUGS = [entry["slug"] for entry in MANIFEST_ENTRIES]
 
 
+def transcript_of(entry: dict) -> dict:
+    return load_json(TRANSCRIPTS / f"{entry['slug']}.json")
+
+
 @pytest.mark.parametrize("entry", MANIFEST_ENTRIES, ids=SLUGS)
 def test_the_transcript_quotes_its_video(entry):
-    transcript = load_json(TRANSCRIPTS / f"{entry['slug']}.json")
+    transcript = transcript_of(entry)
     assert transcript["slug"] == entry["slug"]
     assert transcript["mp4"] == entry["mp4"]["name"], (
         f"the transcript is of {transcript['mp4']}, the manifest lists "
         f"{entry['mp4']['name']}: assemble it from that video's approved review page"
     )
+    if kind_of(transcript) == ANIMATION:
+        problems = animation_problems(transcript)
+        assert not problems, "\n".join(problems)
+        return
     problems = transcript_problems(transcript["items"], board(entry["slug"]))
     assert not problems, "\n".join([*problems[:12], FIX])
 
 
 @pytest.mark.parametrize("entry", MANIFEST_ENTRIES, ids=SLUGS)
 def test_the_title_is_the_storyboards(entry):
+    if kind_of(transcript_of(entry)) == ANIMATION:
+        # An animation has no storyboard, so no title card to equal.
+        assert not (BOARDS / f"{entry['slug']}.yaml").exists()
+        return
     # C8: the section's h3 (the manifest title) is the video's own title card.
     assert entry["title"] == board(entry["slug"])["title"]
 
@@ -268,6 +342,10 @@ def test_the_title_is_the_storyboards(entry):
 #:   departures    departure kinds the storyboard states
 #:   traffic       the storyboard sends simulated users (a ``traffic`` block)
 #:   end_state     a part of the storyboard's ``end_state`` the capture checks
+#: An animation has no storyboard. Its row has one fact kind, the only one it may
+#: have:
+#:   in_transcript phrases each found, verbatim, in the transcript's lines (its
+#:                 captions)
 DESCRIPTION_FACTS: dict[str, dict[str, Any]] = {
     "01-getting-started": {
         "description": (
@@ -342,6 +420,22 @@ DESCRIPTION_FACTS: dict[str, dict[str, Any]] = {
             }
         },
     },
+    "08-warehouse-explainer": {
+        "description": (
+            "Your own SQL selects users in your warehouse, a script you write sends "
+            "them to the batch assign API (beta), targeting admits some, and a "
+            "deterministic hash splits them."
+        ),
+        # An animation: each clause is one of its own captions, verbatim.
+        "in_transcript": [
+            "Your users already live in Snowflake or BigQuery",
+            "Your own SQL query picks the eligible users",
+            "A short sync script you write sends them",
+            "POST /api/v1/tracking/assign/batch (beta)",
+            "The experiment's targeting rules admit some users",
+            "Admitted users are split by a deterministic hash",
+        ],
+    },
 }
 
 VERBS = ("click", "look", "type", "choose", "slide", "move")
@@ -402,6 +496,24 @@ def fact_problems(storyboard: dict, facts: dict[str, Any]) -> list[str]:
     return problems
 
 
+def animation_fact_problems(transcript: dict, facts: dict[str, Any]) -> list[str]:
+    """An animation's row may hold only ``in_transcript``, each phrase found in a line."""
+    problems = [
+        f"an animation's facts are in_transcript only, not {key!r}"
+        for key in facts
+        if key not in ("description", "in_transcript")
+    ]
+    if not facts.get("in_transcript"):
+        problems.append("no in_transcript facts")
+    lines = [line for item in transcript["items"] for line in item.get("on_screen", [])]
+    problems += [
+        f"no line of the transcript says {phrase!r}"
+        for phrase in facts.get("in_transcript", [])
+        if not any(phrase in line for line in lines)
+    ]
+    return problems
+
+
 def test_every_listed_video_has_its_facts_and_no_other_does():
     assert sorted(DESCRIPTION_FACTS) == sorted(SLUGS)
 
@@ -412,6 +524,10 @@ def test_the_description_is_true_of_the_storyboard(entry):
     assert entry["description"] == facts["description"], (
         "the description changed: write its facts again in DESCRIPTION_FACTS"
     )
+    transcript = transcript_of(entry)
+    if kind_of(transcript) == ANIMATION:
+        assert not animation_fact_problems(transcript, facts)
+        return
     assert not fact_problems(board(entry["slug"]), facts)
 
 
@@ -579,3 +695,92 @@ def test_a_wrong_fact_fails():
         ["click", {"testid": "no-such-button"}],
     ]
     assert fact_problems(board(SLUGS[0]), facts)
+
+
+# --- the animation rule, on a made-up animation (T178 condition 2(f)) -----------------
+
+TOY_ANIMATION = {
+    "slug": "09-toy-animation",
+    "kind": "animation",
+    "mp4": "09-toy-animation-000000000000.mp4",
+    "items": [
+        {"on_screen": ["Rows go out in chunks."]},
+        {"on_screen": ["Then a hash."]},
+    ],
+}
+
+
+def toy_animation(change=None) -> dict:
+    transcript = copy.deepcopy(TOY_ANIMATION)
+    if change:
+        change(transcript)
+    return transcript
+
+
+def test_the_toy_animation_passes(tmp_path):
+    assert animation_problems(toy_animation(), boards=tmp_path) == []
+    assert kind_of(toy_animation()) == ANIMATION
+    assert kind_of({"slug": "x"}) == "recording"
+
+
+def test_an_animation_with_a_storyboard_fails(tmp_path):
+    (tmp_path / "09-toy-animation.yaml").write_text("title: A stub\n", encoding="utf-8")
+    assert any(
+        "has a storyboard" in p
+        for p in animation_problems(toy_animation(), boards=tmp_path)
+    )
+
+
+def test_an_animation_with_a_said_item_or_two_captions_in_one_item_fails(tmp_path):
+    def said(t):
+        t["items"][1] = {"said": ["Then a hash."]}
+
+    def joined(t):
+        t["items"] = [{"on_screen": ["Rows go out in chunks.", "Then a hash."]}]
+
+    for change in (said, joined):
+        assert any(
+            "on-screen items of one caption each" in p
+            for p in animation_problems(toy_animation(change), boards=tmp_path)
+        )
+
+
+def test_an_animation_saying_recorded_on_or_holding_a_version_fails(tmp_path):
+    def recorded(t):
+        t["items"].append(
+            {
+                "on_screen": [
+                    "Recorded on Controlvar v0.36.0, a local stack with demo data"
+                ]
+            }
+        )
+
+    def version(t):
+        t["items"].append({"on_screen": ["Made with Controlvar {version}"]})
+
+    assert any(
+        "recorded on" in p
+        for p in animation_problems(toy_animation(recorded), boards=tmp_path)
+    )
+    assert any(
+        "version" in p
+        for p in animation_problems(toy_animation(version), boards=tmp_path)
+    )
+
+
+def test_a_kind_other_than_animation_fails():
+    with pytest.raises(AssertionError, match="transcript kind 'silent'"):
+        kind_of({**TOY_ANIMATION, "kind": "silent"})
+
+
+def test_an_animation_fact_not_in_its_captions_fails():
+    facts = {"description": "A toy.", "in_transcript": ["Rows go out in chunks"]}
+    assert animation_fact_problems(toy_animation(), facts) == []
+    missing = {**facts, "in_transcript": ["Rows go out in batches"]}
+    assert animation_fact_problems(toy_animation(), missing) == [
+        "no line of the transcript says 'Rows go out in batches'"
+    ]
+    storyboard_fact = {**facts, "seed": "demo"}
+    assert animation_fact_problems(toy_animation(), storyboard_fact) == [
+        "an animation's facts are in_transcript only, not 'seed'"
+    ]

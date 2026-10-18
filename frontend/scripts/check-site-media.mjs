@@ -14,7 +14,7 @@
  *   mp4      the pinned bytes; `ftyp` first and `moov` before `mdat`
  *            (faststart, so playback starts before the whole file arrives);
  *            a video track and an AAC audio track lasting the video (every
- *            listed video is narrated); `duration_seconds` is the movie's
+ *            listed recording is narrated); `duration_seconds` is the movie's
  *            length rounded to the nearest second
  *   captions `<stem>.site.vtt` has ` line:-5` on every cue timing line, and
  *            without it is the pinned `.vtt`, byte for byte; WebVTT, cues in
@@ -23,6 +23,13 @@
  *            <slug>.json`) are the cues' text, in order; it names this mp4
  *   poster   the pinned bytes; a JPEG of 1280x720, at most 64 KiB
  *   all      the project's former name in none of the downloaded bytes
+ *
+ * That is a recording: a transcript with no `kind`. An ANIMATION (the
+ * transcript says `"kind": "animation"`, T178 condition 2) gets every check
+ * above but two: its mp4 has no audio track at all, and its transcript is only
+ * on-screen items of one caption each, equal to the cues' text in order. Any
+ * other `kind` is refused. Whether the captions are the animation's own text
+ * is checked outside CI, by re-running the extractor that wrote them.
  *
  * and in `out/index.html`: one `<video>` per entry, wired as the section
  * renders it (`src/components/Walkthroughs.tsx`), its one caption track not
@@ -223,6 +230,15 @@ export function entryProblems(entry, mediaDir, transcriptDir = TRANSCRIPTS) {
     else if (sha256(bytes) !== file.sha256) problems.push(`${where}: ${file.name} sha256 ${sha256(bytes).slice(0, 12)}, pinned ${file.sha256.slice(0, 12)}`);
   };
 
+  // The transcript first: its `kind` decides the sound rule. No `kind` is a
+  // recording, checked as before; "animation" is the only other kind.
+  const transcriptPath = join(transcriptDir, `${entry.slug}.json`);
+  const transcript = existsSync(transcriptPath) ? JSON.parse(readFileSync(transcriptPath, 'utf8')) : null;
+  const animation = transcript !== null && transcript.kind === 'animation';
+  if (transcript !== null && 'kind' in transcript && !animation) {
+    problems.push(`${where}: the transcript's kind is ${JSON.stringify(transcript.kind)}; the only kind is "animation", and a recording declares none`);
+  }
+
   const mp4 = read(entry.mp4.name);
   let duration = null;
   if (mp4) {
@@ -236,7 +252,9 @@ export function entryProblems(entry, mediaDir, transcriptDir = TRANSCRIPTS) {
     }
     if (!facts.tracks.some((t) => t.handler === 'vide')) problems.push(`${where}: ${entry.mp4.name} has no video track`);
     const audio = facts.tracks.filter((t) => t.handler === 'soun');
-    if (audio.length !== 1 || audio[0].sampleEntry !== 'mp4a') {
+    if (animation) {
+      if (audio.length) problems.push(`${where}: ${entry.mp4.name} has ${audio.length} audio track(s); an animation has no sound`);
+    } else if (audio.length !== 1 || audio[0].sampleEntry !== 'mp4a') {
       problems.push(`${where}: ${entry.mp4.name} has ${audio.length} audio track(s) (${audio.map((t) => t.sampleEntry).join(', ') || 'none'}); every listed video is narrated, in AAC`);
     } else if (duration !== null && Math.abs(audio[0].duration - duration) > 0.5) {
       problems.push(`${where}: the narration lasts ${audio[0].duration.toFixed(3)} s of a ${duration.toFixed(3)} s video`);
@@ -273,11 +291,29 @@ export function entryProblems(entry, mediaDir, transcriptDir = TRANSCRIPTS) {
     }
   }
 
-  const transcriptPath = join(transcriptDir, `${entry.slug}.json`);
-  if (!existsSync(transcriptPath)) {
+  if (transcript === null) {
     problems.push(`${where}: no transcript at src/content/walkthroughs/${entry.slug}.json`);
+  } else if (animation) {
+    if (transcript.slug !== entry.slug) problems.push(`${where}: the transcript says slug ${JSON.stringify(transcript.slug)}`);
+    if (transcript.mp4 !== entry.mp4.name) {
+      problems.push(`${where}: the transcript is of ${JSON.stringify(transcript.mp4)}, the manifest lists ${entry.mp4.name}. Write it from the listed video's captions`);
+    }
+    const items = Array.isArray(transcript.items) ? transcript.items : [];
+    const other = items.filter((item) => Object.keys(item).length !== 1 || !Array.isArray(item.on_screen) || item.on_screen.length !== 1);
+    if (other.length) {
+      problems.push(`${where}: an animation's transcript is on-screen items of one caption each; it has ${other.length} other item(s), the first ${JSON.stringify(other[0])}`);
+    }
+    const shown = items.flatMap((item) => item.on_screen ?? []);
+    const captions = cues.map((c) => c.text);
+    if (site && JSON.stringify(shown) !== JSON.stringify(captions)) {
+      const at = shown.findIndex((s, i) => s !== captions[i]);
+      const i = at < 0 ? Math.min(shown.length, captions.length) : at;
+      problems.push(
+        `${where}: the animation's transcript is not its captions (${shown.length} lines, ${captions.length} cues; ` +
+          `first difference at ${i + 1}: ${JSON.stringify(shown[i] ?? null)} vs ${JSON.stringify(captions[i] ?? null)})`,
+      );
+    }
   } else {
-    const transcript = JSON.parse(readFileSync(transcriptPath, 'utf8'));
     if (transcript.slug !== entry.slug) problems.push(`${where}: the transcript says slug ${JSON.stringify(transcript.slug)}`);
     if (transcript.mp4 !== entry.mp4.name) {
       problems.push(`${where}: the transcript is of ${JSON.stringify(transcript.mp4)}, the manifest lists ${entry.mp4.name}. Assemble it from the approved review page of the listed video`);
@@ -337,6 +373,6 @@ if (invokedAsScript()) {
     process.exitCode = 1;
   } else {
     const count = parseManifest(readFileSync(MANIFEST, 'utf8')).length;
-    console.log(`check-site-media: ${count} video(s): pinned bytes, faststart, AAC narration, captions = pinned .vtt + line:-5, transcript = cues, poster 1280x720, page wiring: all hold`);
+    console.log(`check-site-media: ${count} video(s): pinned bytes, faststart, sound as declared (recordings: AAC narration; animations: none), captions = pinned .vtt + line:-5, transcript = cues, poster 1280x720, page wiring: all hold`);
   }
 }

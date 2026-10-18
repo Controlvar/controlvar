@@ -62,6 +62,27 @@
         "bytes": 27501,
         "sha256": "5763d75a50de509500018a638b63d7361d04148d6e2a027dbad74b1d037543c8"
       }
+    },
+    {
+      "slug": "08-warehouse-explainer",
+      "title": "Assign users from your warehouse",
+      "description": "Your own SQL selects users in your warehouse, a script you write sends them to the batch assign API (beta), targeting admits some, and a deterministic hash splits them.",
+      "duration_seconds": 73,
+      "mp4": {
+        "name": "08-warehouse-explainer-9d4ba8aa6fa8.mp4",
+        "bytes": 5690065,
+        "sha256": "9d4ba8aa6fa8e1d027da010cfb0adb4efd0185cdf47184e7242dafc61a4b5c90"
+      },
+      "vtt": {
+        "name": "08-warehouse-explainer-9d4ba8aa6fa8.vtt",
+        "bytes": 1358,
+        "sha256": "36cec5188afadb077ccdb623032b2535c941167dcd8d097451365a8676d61656"
+      },
+      "poster": {
+        "name": "08-warehouse-explainer-9d4ba8aa6fa8-poster-705c2c487bc1.jpg",
+        "bytes": 56326,
+        "sha256": "705c2c487bc1f29a437170b1efc5fd7639bcb9b0fb1f254b0c11115d6e5feb54"
+      }
     }
   ]
 }
