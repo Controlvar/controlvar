@@ -790,6 +790,18 @@ count = 1
 reason = "K12: the image label main's deploy reads off every tag's image"
 
 [[keep]]
+path = "tests/acceptance/showcase/capture/compose.py"
+literal = "io.experimently.profile"
+count = 1
+reason = "K12: the image label main's deploy reads off every tag's image"
+
+[[keep]]
+path = "tests/acceptance/showcase/capture/config.py"
+literal = "io.experimently.profile"
+count = 1
+reason = "K12: the image label main's deploy reads off every tag's image"
+
+[[keep]]
 path = ".github/workflows/_platform.yml"
 literal = "EXPERIMENTLY_PROFILE"
 count = 2
@@ -1204,9 +1216,15 @@ count = 2
 reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
 
 [[keep]]
+path = "tests/acceptance/showcase/capture/compose.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
 path = "tests/acceptance/showcase/capture/guard.py"
 literal = "EXPERIMENTLY_PROFILE"
-count = 2
+count = 3
 reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
 
 [[keep]]
@@ -1378,6 +1396,12 @@ count = 2
 reason = "K18: compose interpolation (env-inventory.md)"
 
 [[keep]]
+path = "backend/tests/unit/showcase/test_showcase_quickstart.py"
+literal = "EXPERIMENTLY_IMAGE_TAG"
+count = 1
+reason = "K18: compose interpolation (env-inventory.md)"
+
+[[keep]]
 path = "docker-compose.yml"
 literal = "EXPERIMENTLY_IMAGE_TAG"
 count = 5
@@ -1397,6 +1421,18 @@ reason = "K18: compose interpolation (env-inventory.md)"
 
 [[keep]]
 path = "tests/acceptance/docs/stacks/compose-sso.yml"
+literal = "EXPERIMENTLY_IMAGE_TAG"
+count = 1
+reason = "K18: compose interpolation (env-inventory.md)"
+
+[[keep]]
+path = "tests/acceptance/showcase/capture/compose.py"
+literal = "EXPERIMENTLY_IMAGE_TAG"
+count = 4
+reason = "K18: compose interpolation (env-inventory.md)"
+
+[[keep]]
+path = "tests/acceptance/showcase/capture/guard.py"
 literal = "EXPERIMENTLY_IMAGE_TAG"
 count = 1
 reason = "K18: compose interpolation (env-inventory.md)"
@@ -1630,6 +1666,18 @@ count = 1
 reason = "K18: local image tag"
 
 [[keep]]
+path = "backend/tests/unit/showcase/capture_dirs.py"
+literal = "experimently-api"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/tests/unit/showcase/test_showcase_quickstart.py"
+literal = "experimently-api"
+count = 6
+reason = "K18: local image tag"
+
+[[keep]]
 path = "charts/experimently/README.md"
 literal = "experimently-api"
 count = 2
@@ -1691,6 +1739,18 @@ reason = "K18: local image tag"
 
 [[keep]]
 path = "tests/acceptance/docs/stacks/compose-sso.yml"
+literal = "experimently-api"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "tests/acceptance/showcase/capture/compose.py"
+literal = "experimently-api"
+count = 2
+reason = "K18: local image tag"
+
+[[keep]]
+path = "tests/acceptance/showcase/render/synthetic.py"
 literal = "experimently-api"
 count = 1
 reason = "K18: local image tag"
@@ -1774,6 +1834,18 @@ count = 5
 reason = "K18: local image tag"
 
 [[keep]]
+path = "backend/tests/unit/showcase/capture_dirs.py"
+literal = "experimently-web"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "backend/tests/unit/showcase/test_showcase_quickstart.py"
+literal = "experimently-web"
+count = 4
+reason = "K18: local image tag"
+
+[[keep]]
 path = "charts/experimently/README.md"
 literal = "experimently-web"
 count = 2
@@ -1835,6 +1907,18 @@ reason = "K18: local image tag"
 
 [[keep]]
 path = "tests/acceptance/docs/docs_runner/stacks.py"
+literal = "experimently-web"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "tests/acceptance/showcase/capture/compose.py"
+literal = "experimently-web"
+count = 1
+reason = "K18: local image tag"
+
+[[keep]]
+path = "tests/acceptance/showcase/render/synthetic.py"
 literal = "experimently-web"
 count = 1
 reason = "K18: local image tag"
