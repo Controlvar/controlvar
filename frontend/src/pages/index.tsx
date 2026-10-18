@@ -7,6 +7,7 @@ import { Wordmark } from '@/components/Wordmark';
 import { LOGIN_PATH } from '@/services/api';
 import { CONTACT_EMAIL, isMarketingSite } from '@/utils/site-mode';
 import { docsUrl } from '@/services/docs';
+import { Walkthroughs } from '@/components/Walkthroughs';
 
 export const HOME_AFTER_LOGIN = '/experiments';
 
@@ -126,6 +127,7 @@ export default function HomePage() {
             </p>
           </section>
 
+          {marketing && <Walkthroughs />}
           <section className="border-t border-slate-200 bg-slate-50">
             <div className="mx-auto grid max-w-5xl gap-8 px-6 py-14 sm:grid-cols-2 lg:grid-cols-3">
               {[
