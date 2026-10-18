@@ -1,0 +1,38 @@
+{
+  "slug": "03-flag-rollout",
+  "mp4": "03-flag-rollout-130574a2e973.mp4",
+  "items": [
+    { "on_screen": ["Controlvar", "Roll out a feature flag", "A/B testing and feature flags you run yourself."] },
+    { "on_screen": ["Signed in off camera. Wrap a new feature in a flag."] },
+    { "said": ["Wrap a new feature in a flag to decide who gets it.", "Choose New Flag."] },
+    { "on_screen": ["Name it. Your code checks this key."] },
+    { "said": ["Name it, and the key your code uses fills itself in.", "Then describe what it controls."] },
+    { "on_screen": ["Add a rule for the Beta testers segment, made off camera."] },
+    { "said": ["Under Targeting Rules, add a rule for users in a segment.", "Here, the Beta testers segment, made off camera."] },
+    { "on_screen": ["They get it at any rollout percentage."] },
+    { "said": ["Beta testers get it at any rollout percentage."] },
+    { "on_screen": ["Everyone else starts at 10%."] },
+    { "said": ["The slider sets the share for everyone else: here, 10%.", "Choose Create Feature Flag."] },
+    { "on_screen": ["It starts off: not serving anyone yet."] },
+    { "said": ["It's created switched off, so no one gets it yet."] },
+    { "on_screen": ["Switch it on when your code ships."] },
+    { "said": ["Switch it on when your code ships, and the page reads Serving."] },
+    { "on_screen": ["Going well? Raise the rollout and save."] },
+    { "said": ["If it's going well, raise the rollout to 50%, and save."] },
+    { "on_screen": ["Or schedule the stages through the API."] },
+    { "said": ["Or raise it in stages with a schedule, created through the API."] },
+    { "on_screen": ["Problem? Switch it off in one click."] },
+    { "said": ["Switch it off in one click if there's a problem.", "It's off again."] },
+    { "on_screen": ["Every change is logged: who, what, when."] },
+    { "said": ["Every change to the flag is in the audit log.", "Who made it, what it was, and when."] },
+    {
+      "on_screen": [
+        "Controlvar",
+        "Open source, Apache-2.0, runs on your own infrastructure",
+        "controlvar.com",
+        "github.com/Controlvar/controlvar",
+        "Recorded on Controlvar v0.36.0, a local stack with demo data"
+      ]
+    }
+  ]
+}
