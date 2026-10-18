@@ -14,9 +14,11 @@
 # `python -m showcase.voice` (make showcase-voice) makes its clips, and the
 # capture holds each beat for them (showcase.capture.voiced).
 #
-# D84: the card says what the Quick Start's command starts, and what this
-# recording runs instead, on screen: the tool's own stack (no Redis), results
-# computed before they are opened, and the waits for a page cut.
+# D84: the card says what the Quick Start's command starts, and how this
+# recording differs, on screen: the same stack, started off camera from the
+# release's compose file in its own compose project on other ports (D84(a);
+# showcase.capture.compose), results computed before they are opened, and the
+# waits for a page cut.
 slug: 01-getting-started
 title: Get started
 seed: demo
@@ -32,9 +34,9 @@ scenes:
       command: "docker compose up -d --wait"
       note: >-
         It starts Postgres 16, Redis 7, the API and the dashboard, with the demo
-        seed: 3 experiments, 2 flags. This recording runs the same release on
-        the showcase tool's own stack instead, without Redis; results are
-        computed before they are opened, and waits for a page are cut.
+        seed: 3 experiments, 2 flags. This recording starts the same stack off
+        camera, in its own compose project on other ports; results are computed
+        before they are opened, and waits for a page are cut.
     beats:
       - cue: One command starts the whole stack on your machine.
         focus: {css: "#command"}

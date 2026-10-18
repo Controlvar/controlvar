@@ -1508,3 +1508,44 @@ def validate_capture_dir(root: Path) -> Capture:
         needle_count=needle_count,
         narration=narration,
     )
+
+
+# --- The stack a video was recorded on (EM C1, C5 of T166) --------------------
+
+#: The only stack a video is rendered from: the Quick Start's compose stack.
+FINAL_STACK = "quickstart"
+_PROJECT = re.compile(r"^showcase-[a-z0-9][a-z0-9-]{0,60}$")
+_IMAGE_ID = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+def stack_problems(manifest: Manifest) -> List[str]:
+    """Why the render will not make a video of this capture's stack; empty when it will.
+
+    The manifest's ``stack`` must be the Quick Start's, with the compose
+    project, the image tag (``showcase-<profile>-<commit's first 12>``) and
+    both image IDs the approval record names.
+    """
+    stack = manifest.raw.get("stack")
+    if not isinstance(stack, dict):
+        return ["the manifest names no stack"]
+    name = stack.get("name")
+    if name != FINAL_STACK:
+        return [
+            f"the capture was made on the {name!r} stack; a video is made only"
+            f" from the {FINAL_STACK} stack"
+        ]
+    problems = []
+    if not _PROJECT.match(str(stack.get("project"))):
+        problems.append(f"stack project {stack.get('project')!r} is not showcase-...")
+    tag = f"showcase-{manifest.profile}-{manifest.commit[:12]}"
+    if stack.get("image_tag") != tag:
+        problems.append(f"stack image tag {stack.get('image_tag')!r} is not {tag!r}")
+    images = stack.get("images")
+    if not isinstance(images, dict) or images.get("tag") != tag:
+        problems.append("stack images do not name the image tag")
+        return problems
+    for service in ("api", "frontend"):
+        entry = images.get(service)
+        if not isinstance(entry, dict) or not _IMAGE_ID.match(str(entry.get("id"))):
+            problems.append(f"stack images: no {service} image ID")
+    return problems

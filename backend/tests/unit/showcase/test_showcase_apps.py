@@ -547,6 +547,64 @@ def test_an_app_scenes_unanswered_request_fails_it_through_scene(tmp_path):
         made.scene(scene(id="player", app="streampulse", open="/"))
 
 
+def sign_in_page(page, fetch_url):
+    """The login form and the page a sign-in lands on, which starts fetching
+    its own data when the browser next runs. If the director waits, the fetch
+    starts and is answered; if it navigates instead, the fetch starts and the
+    navigation cuts it off, with no answer and no failure event (as Playwright
+    reported it on the Quick Start stack at v0.36.0)."""
+    queued = []
+
+    class Field:
+        def fill(self, value):
+            pass
+
+        def click(self):
+            queued.append(Request(fetch_url))
+
+    page.get_by_label = lambda label: Field()
+    page.get_by_role = lambda role, name=None, exact=None: Field()
+    page.wait_for_url = lambda pattern, timeout=None: None
+    waited, went = page.wait_for_timeout, page.goto
+
+    def wait_for_timeout(ms):
+        waited(ms)
+        while queued:
+            request = queued.pop()
+            page.fire("request", request)
+            page.fire("requestfinished", request)
+
+    def goto(url):
+        while queued:
+            page.fire("request", queued.pop())
+        went(url)
+
+    page.wait_for_timeout = wait_for_timeout
+    page.goto = goto
+
+
+@pytest.mark.regression
+def test_the_sign_ins_landing_page_finishes_its_fetch_before_the_scene_counts(
+    tmp_path,
+):
+    """90-app-probe on the Quick Start stack (v0.36.0): the off-camera sign-in
+    returned as the URL became /experiments; that page's own fetch of
+    /api/v1/experiments began after the scene started counting, and the
+    scene's navigation cut it off: "P2: dashboard: unanswered:
+    /api/v1/experiments: no response". The sign-in now lets the page it lands
+    on settle, off camera."""
+    made, page, _ = stage(tmp_path)
+    sign_in_page(page, f"{DASH}/api/v1/experiments")
+    made.scene(scene(signed_in=True))
+    assert made.signed_in
+    assert page.visits == [f"{DASH}/login", f"{DASH}/experiments"]
+    assert made.tally.apps["dashboard"] == {
+        "answers_400": [],
+        "failed": [],
+        "unanswered": [],
+    }
+
+
 def test_a_clean_dashboard_scene_passes_through_scene(tmp_path):
     made, _, _ = stage(
         tmp_path,

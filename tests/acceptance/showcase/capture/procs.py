@@ -29,7 +29,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Mapping, Optional, Sequence
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from showcase.capture import guard
 
@@ -151,6 +151,44 @@ class Children:
                 self.current = None
                 if process.poll() is None:
                     _stop_group(process)
+
+    def capture(
+        self,
+        name: str,
+        argv: Sequence[str],
+        *,
+        cwd: Path,
+        env: Mapping[str, str],
+        log: Path,
+        kind: str,
+        timeout: float = 300,
+        private: bool = False,
+    ) -> Tuple[int, str]:
+        """Run to completion; ``(exit status, standard output)``, the output
+        held in this process. The log gets the command and its standard error,
+        and, unless *private* (a key file read, PE C7 of T166), its output."""
+        self._record(name, argv, env, kind)
+        log.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            done = subprocess.run(
+                [str(a) for a in argv],
+                cwd=cwd,
+                env=dict(env),
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                start_new_session=True,
+            )
+        except subprocess.TimeoutExpired:
+            status, stdout, stderr = 124, "", f"(stopped after {timeout:.0f} s)\n"
+        else:
+            status, stdout, stderr = done.returncode, done.stdout, done.stderr
+        with log.open("a", encoding="utf-8") as handle:
+            handle.write(f"$ {' '.join(str(a) for a in argv)}\n")
+            handle.write("(output held in memory, not logged)\n" if private else stdout)
+            handle.write(stderr)
+            handle.write(f"(exit {status})\n")
+        return status, stdout
 
     def python(
         self, name: str, module: str, args: Sequence[str], *, cwd: Path, **kw

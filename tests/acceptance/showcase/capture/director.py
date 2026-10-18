@@ -297,6 +297,8 @@ class Tally:
     server_errors: List[str] = field(default_factory=list)
     page_errors: List[str] = field(default_factory=list)
     refused: List[str] = field(default_factory=list)
+    #: EM C8 of T166: 429 answers from the stack, counted scene or not.
+    rate_limited: List[str] = field(default_factory=list)
     #: JSON answers from the stack whose body could not be read (gate 6).
     unread: List[str] = field(default_factory=list)
     frames_bad_size: int = 0
@@ -587,6 +589,8 @@ class Director:
         if request is not None:
             self.answered[id(request)] = response.status
         path = urlparse(response.url).path
+        if self.stack_origin(response.url) is not None and response.status == 429:
+            self.tally.rate_limited.append(f"429 from {path} ({self.where})")
         if self.stack_origin(response.url) is not None and response.status >= 500:
             self.tally.server_errors.append(
                 f"{response.status} from {path} ({self.where})"
@@ -705,7 +709,16 @@ class Director:
         started = set(self.pending.setdefault(app, set()))
         deadline = _now_ms() + timeout_ms
         while started & self.pending[app] and _now_ms() < deadline:
-            self.page.wait_for_timeout(DRAIN_POLL_MS)
+            try:
+                self.page.wait_for_timeout(DRAIN_POLL_MS)
+            except PlaywrightError as error:
+                # The page closed (or the browser went) while the scene's
+                # requests were still out: the scene failed, said as one.
+                raise CaptureFailed(
+                    "P2",
+                    f"{self.where}: the page went while {len(started & self.pending[app])}"
+                    f" requests were out ({(str(error).splitlines() or [''])[0]})",
+                ) from None
         left = started & self.pending.pop(app, set())
         counts = self.tally.apps.setdefault(
             app, {"answers_400": [], "failed": [], "unanswered": []}
@@ -1308,6 +1321,13 @@ class Director:
                 "gate 12",
                 f"{self.where}: signing in off camera failed ({str(error).splitlines()[0]})",
             ) from None
+        # The URL changes as the page it lands on starts to load, and that
+        # page then fetches its own data. Let it finish here, off camera: a
+        # scene that began counting and then navigated would cut the fetch
+        # off, and on the Quick Start stack (v0.36.0, 90-app-probe) Playwright
+        # then reported neither an answer nor a failure for it, so P2 counted
+        # it unanswered.
+        self.settle()
         self.signed_in = True
 
     def scene(self, scene: Scene) -> None:

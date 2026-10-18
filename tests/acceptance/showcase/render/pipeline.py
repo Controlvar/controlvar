@@ -6,7 +6,9 @@ The order matters, and each step is a gate that refuses rather than warns:
    the output go (checked again before the OCR decode).
 2. ``capture``: ``contract.validate_capture_dir`` accepts the directory, which
    includes gate 3 (every frame is a real 1920x940 page, never one the encode
-   would scale up) and every capture gate ok.
+   would scale up) and every capture gate ok. ``stack``: it was captured on
+   the Quick Start stack, with its project and image IDs named
+   (``contract.stack_problems``).
 3. ``7`` (text): no caption or card text holds a needle.
 4. ``17``: every caption, as Chromium draws it, is at least 36 px, on at
    most two lines, none wider than the band allows.
@@ -321,6 +323,10 @@ def render(
             capture = contract.validate_capture_dir(capture_dir)
         except contract.CaptureRefused as exc:
             raise Refused("capture", exc.problems) from exc
+        # EM C5 of T166: only a Quick Start capture becomes a video.
+        stack_problems = contract.stack_problems(capture.manifest)
+        if stack_problems:
+            raise Refused("stack", stack_problems)
         sheet = capture.sheet
         spoken = capture.narration
         log.passed(
