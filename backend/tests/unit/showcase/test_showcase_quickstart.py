@@ -525,6 +525,26 @@ def test_down_refuses_when_something_labelled_is_left(tmp_path, served):
 
 
 @pytest.mark.regression
+def test_down_after_a_refused_up_removes_nothing(tmp_path, served):
+    """Review F5 of #1261: up() refused a project compose already lists, and
+    down(), which capture_video's ``finally`` calls next, then ran ``down -v``
+    on that project and swept its label. It was never this run's."""
+    fake = Fake(tmp_path)
+    project = "showcase-20261015120000-abc123"
+    fake.answers = [
+        ["compose ls -a", {"out": json.dumps([{"Name": project, "ConfigFiles": "/x"}])}]
+    ]
+    fake.write()
+    stack, _ = make_stack(tmp_path, fake)
+    with pytest.raises(guard.Refused, match="exists already"):
+        stack.up()
+    stack.down()
+    # The listing up() refused on, and nothing after it: no down -v, no sweep.
+    assert fake.said() == ["compose ls -a --format json"]
+    assert "left" not in stack.facts
+
+
+@pytest.mark.regression
 def test_recovery_removes_a_killed_runs_project_from_this_work_root(tmp_path):
     fake = Fake(tmp_path)
     work = guard.WorkRoot(tmp_path / "work")
