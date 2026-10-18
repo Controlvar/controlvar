@@ -80,7 +80,9 @@ def test_video_3_registers_in_the_tool():
 
 
 def test_no_caption_claims_a_change_reaches_users_at_once_or_a_schedule_builder():
-    said = [cue["text"] for cue in storyboard.compile_cues(board())]
+    made = board()
+    said = [cue["text"] for cue in storyboard.compile_cues(made)]
+    said += [text for *_where, text in storyboard.narration_lines(made)]
     assert [c for c in said if CLAIMS.search(c)] == []
     # The page's own words may say what the captions do not: the schedule card.
     assert "/api/v1/rollout-schedules" in source("pages/feature-flags/[id].tsx")
