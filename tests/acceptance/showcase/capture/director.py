@@ -1321,6 +1321,13 @@ class Director:
                 "gate 12",
                 f"{self.where}: signing in off camera failed ({str(error).splitlines()[0]})",
             ) from None
+        # The URL changes as the page it lands on starts to load, and that
+        # page then fetches its own data. Let it finish here, off camera: a
+        # scene that began counting and then navigated would cut the fetch
+        # off, and on the Quick Start stack (v0.36.0, 90-app-probe) Playwright
+        # then reported neither an answer nor a failure for it, so P2 counted
+        # it unanswered.
+        self.settle()
         self.signed_in = True
 
     def scene(self, scene: Scene) -> None:
