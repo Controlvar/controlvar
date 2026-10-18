@@ -124,15 +124,17 @@ export function Walkthroughs() {
           Narrated recordings, made on a local stack with demo data. Turn captions on in the player; the transcript is
           below each video.
         </p>
-        <ol role="list" className="mt-10 flex flex-col gap-12">
+        {/* Only Tailwind classes the dashboard already uses: a new one would change the CSS that
+            every page of the platform build loads (measured), though nothing there renders this. */}
+        <ol role="list" className="mt-10 flex flex-col gap-8">
           {WALKTHROUGHS.map((video) => {
             const id = anchorFor(video.slug);
             const length = lengthLabel(video.duration_seconds);
             const transcript = transcriptFor(video.slug);
             return (
               <li key={video.slug} id={id}>
-                <div className="grid gap-4 lg:grid-cols-12 lg:items-start lg:gap-8">
-                  <div className="lg:col-span-4">
+                <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
+                  <div>
                     <h3 id={`${id}-title`} className="text-lg font-semibold">
                       {video.title}
                     </h3>
@@ -145,7 +147,7 @@ export function Walkthroughs() {
                     </p>
                   </div>
                   <video
-                    className="block h-auto w-full rounded-lg bg-slate-900 lg:col-span-8"
+                    className="block w-full rounded-lg bg-slate-900 lg:col-span-2"
                     controls
                     preload="none"
                     poster={`/media/${video.poster.name}`}
