@@ -436,6 +436,11 @@ def drop_recording(error: Exception, frames_dir: Path, work: guard.WorkRoot) -> 
         work.remove(frames_dir)
 
 
+#: What the Quick Start stack's ``down()`` says is left of its project, by
+#: compose's label (``compose.remove_project``): each kind, empty or not.
+PROJECT_LEFT_KINDS = ("containers", "volumes", "networks")
+
+
 def capture_video(
     slug: str,
     *,
@@ -564,7 +569,19 @@ def capture_video(
             stack.down()
             TEARDOWN.remove(stack.down)
         left = labelled_containers(children, stack.docker_env, work.path)
-        project_left = stack.facts.get("left") or {}
+        project_left: Dict[str, Any] = {}
+        if options.stack == "quickstart":
+            # What down() found still labelled with the project, read strictly:
+            # a fact that is missing or empty would pass the gate on nothing.
+            project_left = stack.facts.get("left")
+            if not isinstance(project_left, dict) or set(project_left) != set(
+                PROJECT_LEFT_KINDS
+            ):
+                raise StackError(
+                    f"{stack.project}: the stack came down without saying what it"
+                    f" left (left = {project_left!r}); the teardown gate is not"
+                    " passed on nothing"
+                )
         gates["teardown"] = gate(
             not left and not any(project_left.values()),
             labelled_containers_left=left,

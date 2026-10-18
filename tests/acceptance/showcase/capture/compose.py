@@ -629,6 +629,15 @@ class QuickstartStack:
             )
 
     def down(self) -> None:
+        """Remove the project ``up`` recorded, then what still carries its label.
+
+        Does nothing when ``up`` refused before writing the record, as when
+        ``compose ls`` already lists the project: that one is not this run's,
+        and like ``recover`` this removes only a recorded project. Nothing is
+        started before the record is written.
+        """
+        if self.record is None:
+            return
         for app in self.apps:
             self.children.stop(f"app-{app}")
         left = remove_project(self.docker, self.project, self.files, self.children.work)

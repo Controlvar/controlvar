@@ -12,6 +12,7 @@ every call it gets (its argv and the names in its environment) to a log.
 from __future__ import annotations
 
 import json
+import re
 import stat
 import sys
 from pathlib import Path
@@ -20,6 +21,7 @@ from typing import Any, Dict, List
 import pytest
 from showcase import contract
 from showcase.capture import (
+    build,
     compose,
     config,
     director,
@@ -523,6 +525,26 @@ def test_down_refuses_when_something_labelled_is_left(tmp_path, served):
 
 
 @pytest.mark.regression
+def test_down_after_a_refused_up_removes_nothing(tmp_path, served):
+    """Review F5 of #1261: up() refused a project compose already lists, and
+    down(), which capture_video's ``finally`` calls next, then ran ``down -v``
+    on that project and swept its label. It was never this run's."""
+    fake = Fake(tmp_path)
+    project = "showcase-20261015120000-abc123"
+    fake.answers = [
+        ["compose ls -a", {"out": json.dumps([{"Name": project, "ConfigFiles": "/x"}])}]
+    ]
+    fake.write()
+    stack, _ = make_stack(tmp_path, fake)
+    with pytest.raises(guard.Refused, match="exists already"):
+        stack.up()
+    stack.down()
+    # The listing up() refused on, and nothing after it: no down -v, no sweep.
+    assert fake.said() == ["compose ls -a --format json"]
+    assert "left" not in stack.facts
+
+
+@pytest.mark.regression
 def test_recovery_removes_a_killed_runs_project_from_this_work_root(tmp_path):
     fake = Fake(tmp_path)
     work = guard.WorkRoot(tmp_path / "work")
@@ -605,6 +627,148 @@ def test_a_record_naming_a_developers_project_is_refused(tmp_path):
     with pytest.raises(guard.Refused, match="is not one of the tool's"):
         compose.recover(docker, work)
     assert fake.said() == ["compose ls -a --format json"]
+
+
+# --- capture_video on the Quick Start stack: gates 15b, C3 and teardown ---------------
+
+
+def capture_v1(tmp_path: Path, monkeypatch, fake: Fake) -> Dict[str, Any]:
+    """``run.capture_video`` for V1 on the Quick Start stack, the stand-in docker
+    behind it; the browser part (``record``) and the capture directory
+    (``write_capture``) stood in for. What ``write_capture`` was given."""
+    v1 = board("01-getting-started")
+    monkeypatch.setattr(run, "_api", lambda *a, **k: {"access_token": "x" * 40})
+    monkeypatch.setattr(run, "seed_counts", lambda *a: v1.seed_counts.model_dump())
+    monkeypatch.setattr(run, "record", lambda *a, **k: {})
+    written: Dict[str, Any] = {}
+    monkeypatch.setattr(run, "write_capture", lambda capture, **kw: written.update(kw))
+    fake.answers = healthy_answers("showcase-x")
+    fake.write()
+    work = guard.WorkRoot(tmp_path / "work")
+    work.path.mkdir(parents=True)
+    tree = work.path / "tree-core"
+    tree.mkdir()
+    (tree / "docker-compose.yml").write_text(
+        (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    options = run.Options(
+        videos=["01-getting-started"],
+        ref="v0.36.0",
+        repo=tmp_path,
+        work_dir=work.path,
+        profile="core",
+        ports=PORTS,
+        out=tmp_path / "videos",
+        floor=0,
+    )
+    assert options.stack == "quickstart"
+    run.capture_video(
+        "01-getting-started",
+        options=options,
+        source=build.Source(ref="v0.36.0", commit=COMMIT, version="0.36.0"),
+        tree=tree,
+        work=work,
+        children=Children(work, fake.parent()),
+        versions={},
+        environ=fake.parent(),
+        log=lambda line: None,
+    )
+    return written
+
+
+@pytest.mark.regression
+def test_capture_video_records_the_quick_start_stacks_gates(
+    tmp_path, monkeypatch, served
+):
+    """Review F3 of #1261: no test reached capture_video's quickstart branches."""
+    fake = Fake(tmp_path)
+    written = capture_v1(tmp_path, monkeypatch, fake)
+    gates, project = written["gates"], written["stack"]["project"]
+    assert compose.PROJECT.match(project)
+    four = {
+        "postgres": [["127.0.0.1", 28402]],
+        "redis": [["127.0.0.1", 28405]],
+        "api": [["127.0.0.1", 28400]],
+        "frontend": [["127.0.0.1", 28401]],
+    }
+    assert gates["15b"] == {"ok": True, "numbers": {"published": four, "wanted": four}}
+    tag = f"showcase-core-{COMMIT[:12]}"
+    api, web = (f"{compose.IMAGES[s]}:{tag}" for s in ("api", "frontend"))
+    assert gates["C3"] == {
+        "ok": True,
+        "numbers": {
+            "images": {
+                "tag": tag,
+                "commit": COMMIT,
+                "api": {"image": api, "id": API_ID},
+                "frontend": {"image": web, "id": WEB_ID},
+            },
+            "served_profile": "core",
+        },
+    }
+    assert gates["teardown"] == {
+        "ok": True,
+        "numbers": {
+            "labelled_containers_left": [],
+            "project": project,
+            "project_left": {"containers": [], "volumes": [], "networks": []},
+        },
+    }
+    # Both teardown readings came from the stand-in docker.
+    said = fake.said()
+    assert f"compose -p {project} -f" in " ".join(said)
+    root = tmp_path / "work"
+    assert (
+        f"ps -a --filter label={config.CONTAINER_LABEL}={root} --format {{{{.Names}}}}"
+        in said
+    )
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "said, why",
+    [
+        ({"containers": [], "volumes": ["{p}_postgres_data"], "networks": []}, None),
+        (None, "came down without saying what it left"),
+        ({}, "came down without saying what it left"),
+    ],
+    ids=["a-volume-left", "nothing-said", "an-empty-answer"],
+)
+def test_the_teardown_gate_reads_what_down_says_it_left(
+    tmp_path, monkeypatch, served, said, why
+):
+    """Review F3 of #1261: the gate passed whatever ``down()`` left unsaid. The
+    real ``down()`` refuses a leftover itself; here it only says what it left
+    (or nothing), so the gate is what must see it."""
+
+    def down(self):
+        if said is not None:
+            self.facts["left"] = {
+                kind: [name.format(p=self.project) for name in names]
+                for kind, names in said.items()
+            }
+
+    monkeypatch.setattr(compose.QuickstartStack, "down", down)
+    fake = Fake(tmp_path)
+    if why is not None:
+        with pytest.raises(StackError, match=why):
+            capture_v1(tmp_path, monkeypatch, fake)
+        return
+    written = capture_v1(tmp_path, monkeypatch, fake)
+    project = written["stack"]["project"]
+    assert written["gates"]["teardown"] == {
+        "ok": False,
+        "numbers": {
+            "labelled_containers_left": [],
+            "project": project,
+            "project_left": {
+                "containers": [],
+                "volumes": [f"{project}_postgres_data"],
+                "networks": [],
+            },
+        },
+    }
 
 
 # --- The override list (PE C5) --------------------------------------------------------
@@ -868,6 +1032,49 @@ def make_stack_manifest() -> Dict[str, Any]:
             "frontend": {"image": f"experimently-web:{tag}", "id": WEB_ID},
         },
     }
+
+
+# --- What a video says about the stack it runs on (D84) -------------------------------
+
+#: What only the uvicorn stack made true: the tool's own stack, run without
+#: Redis. A video is rendered from the Quick Start stack alone
+#: (``config.FINAL_STACK``), which runs Redis, so either is false in a video.
+#: Any case, any spacing, whole words only ("unknown stack" is not a hit).
+NOT_THE_QUICKSTART_STACK = re.compile(
+    r"\b(?:without|no)\s+redis\b|\bown\s+stack\b", re.IGNORECASE
+)
+
+
+@pytest.mark.regression
+def test_no_video_says_it_runs_on_the_tools_own_stack_or_without_redis():
+    """Review F1 of #1261: V1's stack card still said the recording ran "on the
+    showcase tool's own stack instead, without Redis" once every video was
+    recorded on the Quick Start's compose stack, Redis included, and no gate
+    saw it (D84's check is that a statement is on screen, not that it is
+    true). Every video's captions, card text and narration are read."""
+    found = [
+        (slug, scene.id, text)
+        for slug in config.VIDEOS
+        for scene in board(slug).scenes
+        for text in storyboard.scene_screen_text(scene)
+        + [sentence for beat in scene.beats for sentence in beat.say]
+        if NOT_THE_QUICKSTART_STACK.search(text)
+    ]
+    assert found == []
+
+
+@pytest.mark.regression
+def test_v1s_stack_card_says_its_stack_runs_in_its_own_project_on_other_ports():
+    """D84(a): the recording's own compose project and its moved ports, stated
+    on screen. No departure rule asks for them (``required_departures`` knows
+    off-camera work and simulated users), so this test does."""
+    card = board("01-getting-started").scenes[0].card
+    assert card.command == "docker compose up -d --wait"
+    for words in (
+        "This recording starts the same stack off camera",
+        "in its own compose project on other ports",
+    ):
+        assert words in card.note
 
 
 # --- V2's traffic at the default limit (EM C8) ----------------------------------------
