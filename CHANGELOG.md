@@ -10,6 +10,13 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.36.1](https://github.com/Controlvar/controlvar/compare/v0.36.0...v0.36.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **docs:** name every compose profile in the getting-started teardown ([#1286](https://github.com/Controlvar/controlvar/issues/1286)) ([f2d64f4](https://github.com/Controlvar/controlvar/commit/f2d64f4b8f07bf38e7853f4f965e7971d970e1f0))
+
 ## [0.36.0](https://github.com/Controlvar/controlvar/compare/v0.35.0...v0.36.0) (2026-10-17)
 
 
