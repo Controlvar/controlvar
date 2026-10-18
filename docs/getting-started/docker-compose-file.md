@@ -67,8 +67,11 @@ docker compose --profile tools --profile aws up -d
 Stop everything and drop the volumes, which deletes the database:
 
 ```{.bash exec}
-docker compose down -v
+docker compose --profile demo --profile tools --profile aws down -v
 ```
+
+The command names all three profiles: without them, `down` leaves the demo apps,
+pgAdmin and LocalStack running.
 
 ## First start
 

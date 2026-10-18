@@ -394,6 +394,10 @@ by = [
 ]
 
 [[unit]]
+text = "The command names all three profiles: without them, down leaves the demo apps, pgAdmin and LocalStack running."
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_profiles_add_what_the_guide_says"]
+
+[[unit]]
 text = "Events are not counted as conversions"
 by = ["exempt:label"]
 
