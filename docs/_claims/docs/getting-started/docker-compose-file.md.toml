@@ -140,6 +140,10 @@ text = "Stop everything and drop the volumes, which deletes the database:"
 by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_database_is_the_postgres_data_volume"]
 
 [[unit]]
+text = "It also deletes pgAdmin's and LocalStack's stored data."
+by = ["exempt:third-party"]
+
+[[unit]]
 text = "The command names all three profiles: without them, down leaves the demo apps, pgAdmin and LocalStack running."
 by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_profiles_add_what_the_guide_says"]
 

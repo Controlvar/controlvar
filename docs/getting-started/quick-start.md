@@ -264,9 +264,9 @@ Set `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`, `API_HOST_PORT` or `FRONTEND_HOST_P
 docker compose --profile demo --profile tools --profile aws down -v
 ```
 
-This drops the database volume; the seeds run again on the next start.
-The command names all three profiles: without them, `down` leaves the demo apps,
-pgAdmin and LocalStack running.
+This drops the database volume; the seeds run again on the next start. It also
+deletes pgAdmin's and LocalStack's stored data. The command names all three profiles:
+without them, `down` leaves the demo apps, pgAdmin and LocalStack running.
 
 **Events are not counted as conversions**
 
