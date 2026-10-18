@@ -122,6 +122,10 @@ _ROOTS = [
     # The docs-journey runner: its own pytest root (tests/acceptance/docs/
     # pytest.ini), loading backend/tests/no_real_aws.py from its conftest.
     ("tests/acceptance/docs", []),
+    # The showcase tool's browser checks: their own pytest root, the same way.
+    # Run by hand (no CI job has a browser for them); loading their conftest,
+    # as here, needs no browser.
+    ("tests/acceptance/showcase_browser", []),
 ]
 
 
