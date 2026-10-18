@@ -20,6 +20,48 @@
         "bytes": 24156,
         "sha256": "ceebfc002e1cf6c6bd06617e266f1498ab3c70d13818bfe32e6894f441f296d6"
       }
+    },
+    {
+      "slug": "02-first-experiment",
+      "title": "Your first experiment",
+      "description": "Create an experiment in the guided setup, work out how many users it needs, start it, and read its result once simulated shoppers have arrived.",
+      "duration_seconds": 87,
+      "mp4": {
+        "name": "02-first-experiment-03d296e58df0.mp4",
+        "bytes": 4415031,
+        "sha256": "03d296e58df02e711a2990fb2877f46c7678069efb104c4e99111470ab98a079"
+      },
+      "vtt": {
+        "name": "02-first-experiment-03d296e58df0.vtt",
+        "bytes": 1368,
+        "sha256": "d3975ed37b93a84a49458da7039ade017e36c003b5eb9799336204dc7a296015"
+      },
+      "poster": {
+        "name": "02-first-experiment-03d296e58df0-poster-f8d86ce208c9.jpg",
+        "bytes": 27410,
+        "sha256": "f8d86ce208c9101c0a3e1568f1b7c84a4033ecf788c4c742d6ffa637971d3eca"
+      }
+    },
+    {
+      "slug": "03-flag-rollout",
+      "title": "Roll out a feature flag",
+      "description": "Create a flag, target a segment, set a rollout percentage for everyone else, switch it on and off, and find each change in the audit log.",
+      "duration_seconds": 86,
+      "mp4": {
+        "name": "03-flag-rollout-130574a2e973.mp4",
+        "bytes": 3009294,
+        "sha256": "130574a2e973c1bb79026c424fef2ae3b7722a25005511e79da514a360ec6b37"
+      },
+      "vtt": {
+        "name": "03-flag-rollout-130574a2e973.vtt",
+        "bytes": 1348,
+        "sha256": "cc8cfef1dfb58e34f8cd7e16dfdb1618f43430d5be10a9b8efc9ba422a8dc457"
+      },
+      "poster": {
+        "name": "03-flag-rollout-130574a2e973-poster-5763d75a50de.jpg",
+        "bytes": 27501,
+        "sha256": "5763d75a50de509500018a638b63d7361d04148d6e2a027dbad74b1d037543c8"
+      }
     }
   ]
 }
