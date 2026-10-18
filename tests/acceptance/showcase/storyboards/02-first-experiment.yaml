@@ -32,12 +32,13 @@
 #   card says how many and at what rates they are set to buy, the arriving
 #   caption and the time card's caption ("simulated in minutes") that they are
 #   simulated, and the time card's note why the results page reads Duration 0d.
-# * `say` is the narration (#1066 voiceover): the UX draft's spoken script, with
-#   every number in digits as the page prints it, and every number on the page
-#   while it is said. So the first beat names no step count (the wizard's 5
-#   steps open only in its exit), and the time card's note says "About 2 weeks"
-#   in digits. `python -m showcase.voice` makes its clips; the capture does not
-#   use it yet.
+# * `say` is the narration (#1066 voiceover): the UX draft's spoken script, less
+#   the first two lines of its cut list ("The recommendation: ship it." and "No
+#   winner yet.", D102), with every number in digits as the page prints it, and
+#   every number on the page while it is said. So the first beat names no step
+#   count (the wizard's 5 steps open only in its exit), and the time card's note
+#   says "About 2 weeks" in digits. `python -m showcase.voice` makes its clips,
+#   and the capture holds each beat for them (showcase.capture.voiced).
 slug: 02-first-experiment
 title: Your first experiment
 seed: demo
@@ -232,7 +233,6 @@ scenes:
         focus: {testid: live-results-panel}
         say:
           - Each Refresh shows more shoppers, split about evenly.
-          - No winner yet.
         steps:
           - look: {testid: variants-table}
             ms: 1000
@@ -271,7 +271,6 @@ scenes:
         focus: {testid: experiment-summary}
         say:
           - "Sticky bar wins: a 12.1% lift in purchases, significant at 95% confidence."
-          - "The recommendation: ship it."
         record:
           recommendation: {testid: recommendation-reason}
           planned: {testid: planned-sample}
