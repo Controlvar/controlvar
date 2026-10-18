@@ -462,7 +462,7 @@ def test_the_redis_port_is_apart_from_the_apps_ports():
 
 @pytest.mark.regression
 @pytest.mark.parametrize(
-    "name", ["experimently", "experimently-local", "acc905", "Showcase-x"]
+    "name", ["controlvar", "controlvar-local", "acc905", "Showcase-x"]
 )
 def test_a_project_that_is_not_the_tools_is_refused(name):
     with pytest.raises(guard.Refused, match="is not one of the tool's"):
@@ -572,7 +572,7 @@ def test_recovery_refuses_a_project_started_from_outside_the_work_root(tmp_path)
                     [
                         {
                             "Name": project,
-                            "ConfigFiles": "/Users/someone/experimently/docker-compose.yml",
+                            "ConfigFiles": "/Users/someone/controlvar/docker-compose.yml",
                         }
                     ]
                 )
@@ -596,8 +596,8 @@ def test_a_record_naming_a_developers_project_is_refused(tmp_path):
     work = guard.WorkRoot(tmp_path / "work")
     folder = work.path / compose.PROJECTS_DIR
     folder.mkdir(parents=True)
-    (folder / "experimently.json").write_text(
-        json.dumps({"project": "experimently", "files": []})
+    (folder / "controlvar.json").write_text(
+        json.dumps({"project": "controlvar", "files": []})
     )
     docker = compose.Docker(
         Children(work, fake.parent()), fake.parent(), work.path / "logs"
@@ -834,7 +834,7 @@ def plenty_of_disk(monkeypatch):
             lambda m: m["stack"]["images"]["api"].update(id=None),
             "no api image ID",
         ),
-        (lambda m: m["stack"].update(project="experimently"), "is not showcase-"),
+        (lambda m: m["stack"].update(project="controlvar"), "is not showcase-"),
     ],
 )
 def test_the_render_refuses_a_capture_not_made_on_the_quickstart_stack(
