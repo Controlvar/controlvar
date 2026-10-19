@@ -739,11 +739,17 @@ def board(**changes):
                 ],
                 "open": "/",
                 "beats": [
+                    # S2: a storyboard with app scenes says the apps are the
+                    # tool's own build (EM C6 of T166).
+                    {
+                        "cue": f"{storyboard.OWN_BUILD}.",
+                        "focus": {"role": "heading", "name": "Player"},
+                    },
                     {
                         "cue": "Its flags were seeded off camera.",
                         "focus": {"role": "heading", "name": "Player"},
                         "payoff": True,
-                    }
+                    },
                 ],
             }
         ],
@@ -1044,6 +1050,8 @@ def test_simulated_traffic_is_stated_in_every_scene_it_runs_through():
         ("sdk", "simulated traffic"),
         ("arriving", "simulated traffic"),
         ("later", "simulated traffic"),
+        # The scene that finishes the traffic, after its measured minutes.
+        ("later", "time skip"),
         ("result", "off-camera setup"),
     ]
     assert storyboard.departure_problems(v2) == []
@@ -1054,6 +1062,7 @@ def test_simulated_traffic_is_stated_in_every_scene_it_runs_through():
         "scene sdk: simulated traffic is not stated on screen (departures)",
         "scene arriving: simulated traffic is not stated on screen (departures)",
         "scene later: simulated traffic is not stated on screen (departures)",
+        "scene later: time skip is not stated on screen (departures)",
         "scene result: off-camera setup is not stated on screen (departures)",
     ]
 

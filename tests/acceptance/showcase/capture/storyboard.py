@@ -30,15 +30,26 @@ A scene opens a page (``open``), an experiment's results page by the
 experiment's name (``results_of``, its id looked up off camera), or draws a
 card: one documented command, lines quoted from a page of the docs (``code``,
 checked against the recorded tree), or one headline. ``traffic`` starts or
-finishes the storyboard's simulated users off camera before the scene.
+finishes the storyboard's simulated users off camera before the scene, or
+``run``s them, start to finish, before it (one card that both follows them and
+says how long they took).
 ``setup`` makes what the video uses but does not film being made (a segment),
 through the API, off camera, after gate 14 and before the first scene.
 
 A scene is recorded in the dashboard or in a demo app (``app``: ``shoplab``,
 ``streampulse``); ``open`` is a path on that app's origin. ``off_camera`` is a
-closed list of what runs before the scene is opened: today one kind, ``seed``,
-an app's own seed (``history`` off unless asked for). An app's scenes come
-after its seed, which runs once.
+closed list of what runs before the scene is opened: ``seed``, an app's own
+seed (``history`` off unless asked for), and ``visitor``, the app's own
+localStorage keys the scene is filmed with (T178 condition 5: one browser
+context, so the visitor is set, never a second context made). An app's scenes
+come after its seed, which runs once. An app's first ``visitor`` is set by an
+init script before the app first loads (so its first load, the off-camera
+arming, is that visitor's); a later one is a declared off-camera switch,
+which clears the origin's storage and sets its keys before the scene's page
+opens, and so must follow a scene of the same app (the page is on its origin).
+In a storyboard whose end state counts an experiment's users, every app with
+a visitor key (``config.APP_VISITOR_KEY``) declares its visitors, from its
+first scene: no page of it loads under an id the storyboard does not name.
 
 Two steps work a form control the way a person would be seen to: ``choose``
 changes a native <select> to one of its options without opening it (a
@@ -277,8 +288,43 @@ class SeedApp(_Strict):
     history: bool = False
 
 
+#: A visitor's storage: at most this many keys, each value at most this long.
+VISITOR_KEYS_MAX = 4
+VISITOR_VALUE_MAX = 200
+#: ShopLab's own test for a visitor id (demo/shoplab/src/lib/visitor.ts,
+#: ``UUID_V4``): an id it fails is silently replaced by a random one, so the
+#: page would load as a visitor nobody declared. A unit test keeps the two equal.
+UUID_V4 = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
+
+class Visitor(_Strict):
+    """Off camera: the localStorage a demo app's scene is filmed with (T178
+    condition 5). Its keys are the app's own (``<app>.``), and one of them is
+    the app's visitor id (``config.APP_VISITOR_KEY``), a UUID v4."""
+
+    visitor: Dict[str, str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _shape(self) -> "Visitor":
+        if len(self.visitor) > VISITOR_KEYS_MAX:
+            raise ValueError(
+                f"a visitor sets at most {VISITOR_KEYS_MAX} keys, not {len(self.visitor)}"
+            )
+        for key, value in self.visitor.items():
+            if "token" in key.lower():
+                raise ValueError(f"a visitor never sets a token ({key!r})")
+            if len(value) > VISITOR_VALUE_MAX:
+                raise ValueError(
+                    f"the visitor's {key!r} is over {VISITOR_VALUE_MAX} characters"
+                )
+        return self
+
+
 #: What may run off camera before a scene: a closed list.
-OffCamera = SeedApp
+OffCamera = Union[SeedApp, Visitor]
 
 #: A departure from a new user's path (D84), each stated on screen where it
 #: happens: users the tool simulates, a scheduler interval shortened, a time
@@ -320,8 +366,8 @@ class Scene(_Strict):
     #: Results to load off camera first, so no skeleton is filmed (by experiment name).
     warm_results: List[str] = Field(default_factory=list)
     #: Off camera, before the scene: start the storyboard's simulated users
-    #: (and wait for the first of them), or wait for the last.
-    traffic: Optional[Literal["start", "finish"]] = None
+    #: (and wait for the first of them), wait for the last, or both (``run``).
+    traffic: Optional[Literal["start", "finish", "run"]] = None
     beats: List[Beat] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -338,13 +384,60 @@ class Scene(_Strict):
                 f"a {self.app} scene opens a page of the app; results, cards,"
                 " signing in and warm results are the dashboard's"
             )
+        visitors = [item for item in self.off_camera if isinstance(item, Visitor)]
+        if visitors:
+            visitor_problem(self.app, visitors)
         return self
+
+    @property
+    def visitor(self) -> Optional[Dict[str, str]]:
+        """The storage this scene is filmed with (its ``visitor``), or None."""
+        found = [item.visitor for item in self.off_camera if isinstance(item, Visitor)]
+        return found[0] if found else None
+
+
+def visitor_problem(app: str, visitors: List[Visitor]) -> None:
+    """Raises (ValueError) when a scene's ``visitor`` items are not one visitor
+    of an app that has visitors, with the app's own keys and a UUID v4 id."""
+    key = config.APP_VISITOR_KEY.get(app)
+    if key is None:
+        raise ValueError(f"a visitor is set only in an app with visitors, not {app}")
+    if len(visitors) != 1:
+        raise ValueError("a scene is filmed with one visitor")
+    storage = visitors[0].visitor
+    foreign = [k for k in storage if not k.startswith(f"{app}.")]
+    if foreign:
+        raise ValueError(
+            f"a {app} visitor sets only {app}'s own keys, not {foreign[0]!r}"
+        )
+    if key not in storage:
+        raise ValueError(f"a {app} visitor names its id ({key})")
+    if not UUID_V4.match(storage[key]):
+        raise ValueError(
+            f"{key} {storage[key]!r} is not a UUID v4: {app} would replace it with"
+            " a random one, and the scene would be filmed as a visitor nobody declared"
+        )
 
 
 class SeedCounts(_Strict):
     experiments: int
     feature_flags: int
     users: int
+
+
+class Shopper(_Strict):
+    """A visitor filmed in a demo app, counted in the experiment (S8b of plan
+    v2.2): the arm the storyboard declares for them, the testid the page draws
+    for that arm, and whether they buy on camera."""
+
+    #: The visitor id a scene's ``visitor`` sets.
+    visitor: str
+    #: The variant's name, as the API names it.
+    arm: str = Field(min_length=1)
+    #: The ``data-testid`` the page draws for that arm (never read from the app).
+    drawn: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,60}$")
+    #: The shopper sends the experiment's event (the traffic's) on camera.
+    buys: bool
 
 
 class ExperimentEnd(_Strict):
@@ -364,6 +457,9 @@ class ExperimentEnd(_Strict):
     #: The ``record`` names of the Planned sample card and of its effect line.
     planned: str
     effect: str
+    #: The visitors filmed in a demo app, each counted with the traffic (S8b):
+    #: every visitor a scene declares, and no other.
+    on_camera_shoppers: List[Shopper] = Field(default_factory=list)
 
 
 #: The audit action types a flag's end state may name.
@@ -466,13 +562,17 @@ class Storyboard(_Strict):
         moves = [s.traffic for s in self.scenes if s.traffic]
         if moves and self.traffic is None:
             raise ValueError("a scene moves traffic, but the storyboard has none")
-        if self.traffic is not None and moves != ["start", "finish"]:
+        if self.traffic is not None and moves not in (["start", "finish"], ["run"]):
             raise ValueError(
-                f"traffic is started once and then finished once, not {moves}"
+                "traffic is started once and then finished once, or run once,"
+                f" not {moves}"
             )
+        self._visitors_in_order()
         seeded: List[str] = []
         for scene in self.scenes:
             for item in scene.off_camera:
+                if not isinstance(item, SeedApp):
+                    continue
                 if item.seed in seeded:
                     raise ValueError(f"the {item.seed} seed runs twice")
                 seeded.append(item.seed)
@@ -504,6 +604,61 @@ class Storyboard(_Strict):
                     f"the flag's end state compares {flag.shown!r}, which no beat records"
                 )
         return self
+
+    def _visitors_in_order(self) -> None:
+        """T178 condition 5 and PE condition 3: the visitors an app is filmed as.
+
+        An app with visitors declares one on its first scene (its init-script
+        visitor, under whom it first loads) or on none; a later one switches,
+        right after a scene of the same app; each id once. A storyboard that
+        counts an experiment's users declares a visitor for every app it
+        records that has visitors, and its shoppers are exactly those visitors.
+        """
+        first: Dict[str, str] = {}
+        seen: List[str] = []
+        previous: Optional[Scene] = None
+        for scene in self.scenes:
+            storage = scene.visitor
+            if scene.app != "dashboard" and scene.app not in first:
+                first[scene.app] = scene.id
+                if storage is None and any(
+                    s.app == scene.app and s.visitor is not None for s in self.scenes
+                ):
+                    raise ValueError(
+                        f"scene {scene.id} is {scene.app}'s first, and a later one"
+                        " sets a visitor: the first sets one too, or the app first"
+                        " loads as a visitor nobody declared"
+                    )
+            elif storage is not None and (
+                previous is None or previous.app != scene.app
+            ):
+                raise ValueError(
+                    f"scene {scene.id} switches the {scene.app} visitor off camera,"
+                    f" so it follows a {scene.app} scene (the page is on its origin)"
+                )
+            if storage is not None:
+                ident = storage[config.APP_VISITOR_KEY[scene.app]]
+                if ident in seen:
+                    raise ValueError(f"the visitor {ident} is set twice")
+                seen.append(ident)
+            previous = scene
+        made = self.end_state.experiment
+        if made is None:
+            return
+        for app in self.apps:
+            if app in config.APP_VISITOR_KEY and not any(
+                s.app == app and s.visitor is not None for s in self.scenes
+            ):
+                raise ValueError(
+                    f"the experiment's users are counted, and {app} would load as a"
+                    " random visitor: declare its visitors (off_camera: visitor)"
+                )
+        shoppers = [shopper.visitor for shopper in made.on_camera_shoppers]
+        if sorted(shoppers) != sorted(seen) or len(set(shoppers)) != len(shoppers):
+            raise ValueError(
+                f"the experiment's on-camera shoppers {shoppers} are not, each once,"
+                f" the visitors the scenes set {seen}"
+            )
 
     @property
     def apps(self) -> List[str]:
@@ -695,7 +850,10 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
       signs in before, off camera (the first ``signed_in`` one); a scene
       whose results are loaded off camera first (``warm_results``);
     * ``simulated traffic``: every scene from the one that starts the
-      simulated users to the one that finishes them, both included.
+      simulated users to the one that finishes them, both included (one that
+      runs them, start to finish, is both);
+    * ``time skip``: the scene that finishes them, after the minutes they took
+      off camera (its card says how many, measured: ``{traffic_minutes}``).
     """
     needed: List[Tuple[str, str]] = []
     running = False
@@ -710,13 +868,39 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
             or scene.warm_results
         ):
             needed.append((scene.id, "off-camera setup"))
-        if scene.traffic == "start":
+        if scene.traffic in ("start", "run"):
             running = True
         if running:
             needed.append((scene.id, "simulated traffic"))
-        if scene.traffic == "finish":
+        if scene.traffic in ("finish", "run"):
+            needed.append((scene.id, "time skip"))
             running = False
     return needed
+
+
+#: EM condition 6 of T166 (S2 of plan v2.2): a storyboard that records a demo
+#: app says so, word for word, in a caption or a card of one of its scenes.
+OWN_BUILD = "The demo apps run from their own build in this recording"
+
+
+def own_build_problems(board: Storyboard) -> List[str]:
+    """S2: the own-build sentence, drawn in some scene of a storyboard with app
+    scenes; nothing for one without (videos 1-3)."""
+    if not board.apps:
+        return []
+    if any(OWN_BUILD in text for s in board.scenes for text in scene_screen_text(s)):
+        return []
+    return [
+        f"the demo apps are recorded, and no scene draws {OWN_BUILD!r} (EM C6 of T166)"
+    ]
+
+
+def own_build_scene(board: Storyboard) -> Optional[str]:
+    """The first scene that draws the own-build sentence, or None."""
+    for scene in board.scenes:
+        if any(OWN_BUILD in text for text in scene_screen_text(scene)):
+            return scene.id
+    return None
 
 
 def scene_screen_text(scene: Scene) -> List[str]:
@@ -728,9 +912,10 @@ def scene_screen_text(scene: Scene) -> List[str]:
 
 
 def departure_problems(board: Storyboard) -> List[str]:
-    """D84: each departure the tool makes is declared on its scene, and every
-    declared departure's words are on screen in that scene. Empty when none."""
-    problems: List[str] = []
+    """D84: each departure the tool makes is declared on its scene, every
+    declared departure's words are on screen in that scene, and a storyboard
+    with app scenes says the apps are the tool's own build (S2). Empty when none."""
+    problems: List[str] = own_build_problems(board)
     by_id = {scene.id: scene for scene in board.scenes}
     for scene_id, kind in required_departures(board):
         if not any(d.kind == kind for d in by_id[scene_id].departures):

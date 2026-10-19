@@ -21,8 +21,18 @@ scenes:
     departures:
       - kind: off-camera setup
         says: seeded off camera
+      - kind: off-camera setup
+        says: The demo apps run from their own build in this recording
     open: /
     beats:
+      # S2 (EM C6 of T166, PE condition 9 of plan v2.2): a storyboard with app
+      # scenes says the apps are the tool's own build; the probe is no exception.
+      - cue: The demo apps run from their own build in this recording.
+        focus: {role: link, name: ShopLab home, exact: true}
+        steps:
+          - look: {role: link, name: ShopLab home, exact: true}
+            ms: 1500
+
       - cue: The storefront's experiments were seeded off camera.
         focus: {role: button, name: Powered by Controlvar, exact: true}
         steps:

@@ -60,6 +60,20 @@ stand-in pages where Playwright is not installed. What it does, in order:
   answer >= 400 from the API or the app, a failed request, or a request still
   unanswered when the scene ends fails the video. A dashboard scene is counted
   the same way (#1251), from its page load (after any off-camera sign-in).
+* One browser context, whatever the visitors (T178 condition 5). An app the
+  storyboard films as declared visitors gets its first visitor's storage from
+  an init script (``visitor_init``: on its origin only, and only while its
+  visitor key is absent), so its first load is that visitor's; a later
+  visitor is switched off camera (``set_visitor``): the origin's storage is
+  cleared and the visitor's set, on a page at that origin, before the scene
+  opens its page. From the first visitor on, any request the app makes (its
+  X-API-Key is the app's key) that names a user other than the current
+  visitor fails the video: a page loaded as a visitor nobody declared, or the
+  previous visitor's request after the switch. Each scene's page is checked
+  to hold the visitor after it loads. The assign answers, the events the app
+  sends and the testids the page draws (``marks``) are kept for gate 10.
+* The cursor, the rings and the click pulse are drawn only while recording:
+  a step in ``before`` (a cut) moves and clicks with nothing drawn.
 
 A failure raises ``CaptureFailed`` naming the scene, the beat and the gate.
 """
@@ -74,7 +88,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import numpy as np
 
@@ -255,6 +269,39 @@ ON_TOP_JS = """(el, point) => {
   return !!top && (top === el || el.contains(top));
 }"""
 
+#: T178 condition 5: the init script that gives an app's origin its first
+#: visitor. On that origin only, and only while its visitor key is absent;
+#: then each of the visitor's keys that is absent. ``%(...)s`` are JSON.
+VISITOR_INIT = """(() => {
+  if (location.origin !== %(origin)s) return;
+  try {
+    if (localStorage.getItem(%(key)s) !== null) return;
+    const items = %(items)s;
+    for (const name of Object.keys(items)) {
+      if (localStorage.getItem(name) === null) localStorage.setItem(name, items[name]);
+    }
+  } catch (error) {}
+})()"""
+#: The declared off-camera visitor switch: the origin's storage cleared, the
+#: next visitor's keys set; what the origin then holds, sorted.
+SWITCH_JS = """(items) => {
+  localStorage.clear();
+  sessionStorage.clear();
+  for (const name of Object.keys(items)) localStorage.setItem(name, items[name]);
+  return Object.keys(localStorage).sort();
+}"""
+#: The visitor id the page's origin holds.
+STORAGE_JS = "key => localStorage.getItem(key)"
+#: Gate 10's page reading for a visitor: which of the declared testids the
+#: page draws (an element with a box inside the viewport).
+MARKS_JS = """(ids) => ids.filter((id) => Array.from(
+  document.querySelectorAll('[data-testid]')).some((el) => {
+    if (el.getAttribute('data-testid') !== id) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.right > 0 && r.bottom > 0
+      && r.left < innerWidth && r.top < innerHeight;
+  }))"""
+
 #: The drawn cursor: a 28 px black arrow with a white outline, tip at (3, 2).
 #: Plain HTML and CSS: an overlay does not draw SVG (measured).
 CURSOR_POLYGON = "polygon(3px 2px, 3px 23px, 9px 17.5px, 13px 26px, 17px 24.2px, 13px 15.8px, 21px 15.8px)"
@@ -337,6 +384,16 @@ class Tally:
     spoken: List[Dict[str, Any]] = field(default_factory=list)
     #: G20: each narrated beat's slots, its recorded cue and its exit's floor.
     voiced_beats: List[Dict[str, Any]] = field(default_factory=list)
+    #: T178 condition 5: requests that named a user other than the app's
+    #: current visitor (each fails the video), and how many were checked.
+    visitor_refusals: List[str] = field(default_factory=list)
+    visitor_checks: int = 0
+    #: Gate 10/6: every assign answer the page got, by (user, experiment key).
+    assigns: Dict[Tuple[str, str], List[Dict[str, Any]]] = field(default_factory=dict)
+    #: ...every event a page sent for a user and an experiment, with its answer.
+    events: List[Dict[str, Any]] = field(default_factory=list)
+    #: ...and the declared testids the page drew, by visitor.
+    marks: Dict[str, List[str]] = field(default_factory=dict)
 
 
 def decode_rgb(jpeg: bytes, width: int, height: int) -> np.ndarray:
@@ -464,10 +521,19 @@ class Director:
         pacing: Optional[Pacing] = None,
         apps: Optional[Dict[str, int]] = None,
         app_ready: Optional[Callable[[str], Dict[str, Any]]] = None,
+        visitor_apps: Tuple[str, ...] = (),
+        marks: Tuple[str, ...] = (),
     ):
         self.context = context
         self.page = page
         self.dashboard = dashboard.rstrip("/")
+        #: The apps the storyboard films as declared visitors, each one's
+        #: current visitor id, and every visitor set (for the manifest).
+        self.visitor_apps: Tuple[str, ...] = tuple(visitor_apps)
+        self.visitor: Dict[str, str] = {}
+        self.visitors_set: List[Dict[str, Any]] = []
+        #: The testids gate 10/6 reads at each cue start of a visitor's scene.
+        self.marks: Tuple[str, ...] = tuple(marks)
         #: The video's apps and their ports; their origins are the stack's too.
         self.app_ports: Dict[str, int] = dict(apps or {})
         self.allowed_ports = {api_port, dashboard_port, *self.app_ports.values()}
@@ -618,6 +684,7 @@ class Director:
             self.tally.apps[app]["answers_400"].append(
                 f"{response.status} from {path} (started {began})"
             )
+        self.record_events(request, response.status, began)
         kind = (response.headers or {}).get("content-type", "")
         if "json" not in kind:
             return
@@ -632,6 +699,7 @@ class Director:
                 )
             return
         redaction.register_credentials(body, self.redactor)
+        self.record_assign(path, body)
 
     def _on_request(self, request: Any) -> None:
         app = self._counted(request.url)
@@ -641,12 +709,153 @@ class Director:
         if app is not None:
             self.pending.setdefault(app, set()).add(request)
         self.check_key_header(request)
-        try:
-            body = request.post_data_json
-        except Exception:  # a body that is not JSON: the dashboard sends none
-            return
+        body = request_body(request)
+        self.check_visitor(request, body)
         if body is not None:
             redaction.register_credentials(body, self.redactor)
+
+    # -- the visitors an app is filmed as (T178 condition 5) ----------------------
+
+    def app_of(self, request: Any) -> Optional[str]:
+        """The demo app a request comes from: its X-API-Key is that app's key."""
+        key = header(request, "x-api-key")
+        for app, value in config.APP_STATIC_KEY.items():
+            if key is not None and key == value:
+                return app
+        return None
+
+    def check_visitor(self, request: Any, body: Any) -> None:
+        """Every user a declared-visitor app's request names is its current visitor."""
+        app = self.app_of(request)
+        if app is None or app not in self.visitor_apps:
+            return
+        self.tally.visitor_checks += 1
+        current = self.visitor.get(app)
+        wrong = [user for user in users_named(request.url, body) if user != current]
+        if wrong:
+            self.tally.visitor_refusals.append(
+                f"{urlparse(request.url).path} names visitor {wrong[0]} ({self.where});"
+                f" {app}'s visitor is {current or 'not set yet'}"
+            )
+
+    def record_assign(self, path: str, body: Any) -> None:
+        """Gate 10/6: an assign answer the page got, by (user, experiment key)."""
+        if not path.endswith("/api/v1/tracking/assign") or not isinstance(body, dict):
+            return
+        user, key = body.get("user_id"), body.get("experiment_key")
+        if isinstance(user, str) and isinstance(key, str):
+            self.tally.assigns.setdefault((user, key), []).append(
+                {
+                    name: body.get(name)
+                    for name in (
+                        "variant_name",
+                        "is_control",
+                        "assigned",
+                        "configuration",
+                    )
+                }
+            )
+
+    def record_events(self, request: Any, status: int, began: str) -> None:
+        """Gate 10/6: each event a track or batch request sent, with its answer."""
+        if request is None or not urlparse(request.url).path.endswith(EVENT_PATHS):
+            return
+        for user, key, event in events_named(request.url, request_body(request)):
+            self.tally.events.append(
+                {
+                    "user_id": user,
+                    "experiment_key": key,
+                    "event_name": event,
+                    "status": status,
+                    "where": began,
+                }
+            )
+
+    def set_visitor(self, app: str, storage: Dict[str, str]) -> Dict[str, Any]:
+        """Off camera, before *app*'s scene: the visitor it is filmed as.
+
+        The app's first visitor is its init script's (before its first load,
+        so the arming load is that visitor's); a later one is switched on a
+        page at the app's origin. Refused when the app is not one the
+        storyboard films as visitors, or loaded before its first visitor.
+        """
+        if app not in self.visitor_apps or app not in self.origins:
+            raise CaptureFailed(
+                "S1", f"{self.where}: {app} is not filmed as declared visitors"
+            )
+        key = config.APP_VISITOR_KEY[app]
+        ident = storage[key]
+        if app not in self.visitor:
+            if app in self.armed:
+                raise CaptureFailed(
+                    "S1",
+                    f"{self.where}: {app} loaded before its first visitor was set,"
+                    " so as a visitor nobody declared",
+                )
+            self.context.add_init_script(visitor_init(self.origins[app], key, storage))
+            how = "init script"
+        else:
+            self.switch_visitor(app, storage)
+            how = "switch"
+        self.visitor[app] = ident
+        made = {"app": app, "visitor": ident, "how": how, "where": self.where}
+        self.visitors_set.append(made)
+        return made
+
+    def switch_visitor(self, app: str, storage: Dict[str, str]) -> None:
+        """The declared off-camera switch: on a page at the app's origin, its
+        storage cleared and the next visitor's keys set, exactly."""
+        parsed = urlparse(str(self.page.url))
+        here = f"{parsed.scheme}://{parsed.netloc}"
+        if here != self.origins[app]:
+            raise CaptureFailed(
+                "S1",
+                f"{self.where}: the {app} visitor is switched on {app}'s origin,"
+                f" and the page is at {here}",
+            )
+        try:
+            held = self.page.evaluate(SWITCH_JS, dict(storage))
+        except PlaywrightError as error:
+            raise CaptureFailed(
+                "S1", f"{self.where}: the visitor switch failed ({error})"
+            ) from None
+        if list(held) != sorted(storage):
+            raise CaptureFailed(
+                "S1",
+                f"{self.where}: after the switch {app} holds {held},"
+                f" not the visitor's {sorted(storage)}",
+            )
+
+    def check_visitor_storage(self, app: str) -> None:
+        """After an app's page loads: it holds the current visitor's id."""
+        if app not in self.visitor:
+            return
+        held = self.page.evaluate(STORAGE_JS, config.APP_VISITOR_KEY[app])
+        if held != self.visitor[app]:
+            raise CaptureFailed(
+                "S1",
+                f"{self.where}: {app} holds visitor {held!r}, not the declared"
+                f" {self.visitor[app]}",
+            )
+
+    def read_marks(self, app: str) -> None:
+        """Gate 10/6: the declared testids the page draws, for the scene's visitor."""
+        visitor = self.visitor.get(app)
+        if visitor is None or not self.marks:
+            return
+        seen = self.tally.marks.setdefault(visitor, [])
+        for mark in self.page.evaluate(MARKS_JS, list(self.marks)):
+            if mark not in seen:
+                seen.append(mark)
+
+    def visitor_numbers(self) -> Dict[str, Any]:
+        """For the manifest (P2): the visitors set, and what was checked."""
+        return {
+            "set": list(self.visitors_set),
+            "requests_checked": self.tally.visitor_checks,
+            "refused": list(self.tally.visitor_refusals),
+            "marks": {k: list(v) for k, v in self.tally.marks.items()},
+        }
 
     def check_key_header(self, request: Any) -> None:
         """PE 5: an ``X-API-Key`` the page sends must already be a needle."""
@@ -696,6 +905,13 @@ class Director:
         try:
             self.page.goto(self.origins[app] + "/")
             self.settle()
+            if app in self.visitor_apps and app not in self.visitor:
+                raise CaptureFailed(
+                    "S1",
+                    f"{self.where}: {app} first loaded with no visitor set, so as"
+                    " a visitor nobody declared",
+                )
+            self.check_visitor_storage(app)
             zoom = self.measure_zoom(config.ORIGIN_ZOOM[app])
             overlay = self.self_test_overlay(
                 storyboard.Locator(**config.APP_SELF_TEST[app])  # type: ignore[arg-type]
@@ -814,6 +1030,9 @@ class Director:
         )
 
     def draw_cursor(self) -> None:
+        # Off camera (a step in ``before``) nothing is drawn: nothing records it.
+        if not self.recorder.recording:
+            return
         new = self._show(self._cursor_html(*self.cursor))
         self._dispose(self._cursor_overlay)
         self._cursor_overlay = new
@@ -834,9 +1053,10 @@ class Director:
             self.page.wait_for_timeout(15)
 
     def ring(self, box: Optional[Box], colour: str = config.RING_COLOUR) -> None:
-        """One ring at a time: draw the new one, then remove the old."""
+        """One ring at a time: draw the new one, then remove the old (only
+        while recording: off camera a ring is never drawn)."""
         new = None
-        if box is not None:
+        if box is not None and self.recorder.recording:
             o = config.RING_OFFSET_PX + config.RING_WIDTH_PX
             new = self._show(
                 f'<div style="position:fixed;box-sizing:border-box;left:{box.x - o:.1f}px;'
@@ -848,6 +1068,10 @@ class Director:
         self._ring_overlay = new
 
     def click_pulse(self, x: float, y: float) -> None:
+        if not self.recorder.recording:
+            # Off camera: the same wait, nothing drawn.
+            self.page.wait_for_timeout(config.CLICK_RING_MS)
+            return
         handle = self._show(
             f'<div style="position:fixed;box-sizing:border-box;left:{x - 18:.1f}px;top:{y - 18:.1f}px;'
             f"width:36px;height:36px;border-radius:50%;border:3px solid {config.RING_COLOUR};"
@@ -1044,6 +1268,12 @@ class Director:
                 "gate 6",
                 "an app request carried an X-API-Key that is not a needle"
                 f" ({self.tally.unknown_keys[0]})",
+            )
+        if self.tally.visitor_refusals:
+            raise CaptureFailed(
+                "S1",
+                "a request named a visitor the storyboard does not film there:"
+                f" {self.tally.visitor_refusals[0]}",
             )
         ok, _numbers, why = judge.app_answers(self.tally.apps)
         if not ok:
@@ -1250,6 +1480,7 @@ class Director:
         found, focus = self._visible_box(beat.focus)
         self.check_needles()
         self.check_page(focus, found, beat.cue)
+        self.read_marks(scene.app)
         self.check_events()
         for name, spec in beat.record.items():
             self.readings[name] = self.locate(spec).inner_text()
@@ -1379,6 +1610,7 @@ class Director:
             assert scene.open is not None
             self.page.goto(self.origins[scene.app] + scene.open)
             self.settle()
+            self.check_visitor_storage(scene.app)
         self.check_needles()
         self.check_events()
         began = self.recorder.now()
@@ -1396,6 +1628,67 @@ class Director:
         if scene.card is not None:
             self.still_spans.append((began, self.recorder.now()))
         self.tally.scenes_run.append(scene.id)
+
+
+def header(request: Any, name: str) -> Optional[str]:
+    """A request header's value, by name in any case, or None."""
+    headers = getattr(request, "headers", None) or {}
+    return next((v for k, v in headers.items() if str(k).lower() == name), None)
+
+
+def request_body(request: Any) -> Any:
+    """A request's JSON body, or None (no body, or one that is not JSON)."""
+    try:
+        return request.post_data_json
+    except Exception:  # a body that is not JSON: the dashboard sends none
+        return None
+
+
+#: The tracking paths whose bodies carry events.
+EVENT_PATHS = ("/api/v1/tracking/track", "/api/v1/tracking/batch")
+
+
+def users_named(url: str, body: Any) -> List[str]:
+    """Every user id a request names: ``user_id`` in its query (a flag's
+    evaluation), in its JSON body (an assign, a track), and in each of its
+    body's ``events`` (a batch)."""
+    found = list(parse_qs(urlparse(url).query).get("user_id", []))
+    if isinstance(body, dict):
+        if isinstance(body.get("user_id"), str):
+            found.append(body["user_id"])
+        for event in body.get("events") or []:
+            if isinstance(event, dict) and isinstance(event.get("user_id"), str):
+                found.append(event["user_id"])
+    return found
+
+
+def events_named(url: str, body: Any) -> List[Tuple[str, str, str]]:
+    """``(user, experiment key, event name)`` for each event a track or batch
+    request sends for an experiment; nothing for any other request."""
+    path = urlparse(url).path
+    if not path.endswith(EVENT_PATHS) or not isinstance(body, dict):
+        return []
+    items = body.get("events") if path.endswith("/batch") else [body]
+    found = []
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        user, key = item.get("user_id"), item.get("experiment_key")
+        event = item.get("event_name") or item.get("event_type")
+        if isinstance(user, str) and isinstance(key, str) and isinstance(event, str):
+            found.append((user, key, event))
+    return found
+
+
+def visitor_init(origin: str, key: str, storage: Dict[str, str]) -> str:
+    """The init script that gives *origin* its first visitor (``VISITOR_INIT``)."""
+    import json
+
+    return VISITOR_INIT % {
+        "origin": json.dumps(origin),
+        "key": json.dumps(key),
+        "items": json.dumps(dict(storage), sort_keys=True),
+    }
 
 
 def zoom_init(origins: Dict[str, str], target: str = ZOOM_TARGET) -> str:

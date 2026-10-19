@@ -27,6 +27,14 @@ that the bundle names the tool's API and no developer address. It is served
 by ``next start -p <port> -H 127.0.0.1`` (``app_start_argv``); ``next dev``
 and ``npm start`` are refused (``refuse_app_argv``).
 
+Those ``node_modules`` are the checkout's, so before they are copied the app
+is refused (T178 condition 6, ``app_dependencies``) unless the checkout's
+``demo/<app>/package-lock.json`` is byte for byte the recorded ref's (the
+archived tree holds the ref's: ``git archive`` writes the blob as it is, with
+no attribute in this repository to convert it), and the installed next, react
+and react-dom (``node_modules/<package>/package.json``) are the versions that
+lockfile pins. The manifest records both (``apps``).
+
 Nothing here needs ``.git`` in the tree it builds: ``backend/tests/unit/showcase``
 builds a tree from a plain tar stream in a directory with none.
 """
@@ -348,6 +356,76 @@ def app_bundle_check(tree: Path, app: str, api_url: str) -> str:
     return f"{app} bundle: names {api_url}, no developer address"
 
 
+#: The packages whose installed versions must be the ref's lockfile's (T178
+#: condition 6): what the app is built and drawn with.
+APP_PINNED_PACKAGES = ("next", "react", "react-dom")
+
+
+def _lock_packages(lock: Path) -> Dict[str, Any]:
+    try:
+        packages = json.loads(lock.read_text(encoding="utf-8")).get("packages")
+    except (OSError, ValueError) as error:
+        raise guard.Refused(f"{lock} cannot be read as a lockfile ({error})") from None
+    if not isinstance(packages, dict):
+        raise guard.Refused(f"{lock} lists no packages")
+    return packages
+
+
+def app_dependencies(repo: Path, tree: Path, app: str, ref: str) -> Dict[str, Any]:
+    """T178 condition 6: the app is built from the recorded ref's dependencies.
+
+    *tree* holds the ref's ``git archive`` of ``demo/<app>``. Refused
+    (``guard.Refused``) when the checkout's lockfile is not the ref's, byte for
+    byte, or an installed next, react or react-dom is not the version the ref's
+    lockfile pins. The numbers, for the manifest, when they agree.
+    """
+    import hashlib
+
+    ours = repo / "demo" / app / "package-lock.json"
+    theirs = app_dir(tree, app) / "package-lock.json"
+    if not theirs.is_file():
+        raise guard.Refused(f"{ref} has no demo/{app}/package-lock.json")
+    if not ours.is_file():
+        raise guard.Refused(
+            f"the checkout has no demo/{app}/package-lock.json; check out the"
+            f" lockfile {ref} has, and run `npm ci` in demo/{app}"
+        )
+    ours_bytes, theirs_bytes = ours.read_bytes(), theirs.read_bytes()
+    if ours_bytes != theirs_bytes:
+        pinned_ours = _lock_packages(ours)
+        moved = [
+            f"{name} {(pinned_ours.get(f'node_modules/{name}') or {}).get('version')}"
+            for name in APP_PINNED_PACKAGES
+        ]
+        raise guard.Refused(
+            f"demo/{app}/package-lock.json in the checkout is not {ref}'s (it pins"
+            f" {', '.join(moved)}): the app would be built from other dependencies"
+            f" than the release's. Check out {ref}'s lockfile and run `npm ci` in"
+            f" demo/{app}"
+        )
+    pinned = _lock_packages(theirs)
+    packages: Dict[str, Dict[str, Optional[str]]] = {}
+    for name in APP_PINNED_PACKAGES:
+        want = (pinned.get(f"node_modules/{name}") or {}).get("version")
+        manifest = repo / "demo" / app / "node_modules" / name / "package.json"
+        try:
+            have = json.loads(manifest.read_text(encoding="utf-8")).get("version")
+        except (OSError, ValueError):
+            have = None
+        packages[name] = {"lockfile": want, "installed": have}
+        if want is None or have != want:
+            installed = f"{name} {have} installed" if have else f"no {name} installed"
+            raise guard.Refused(
+                f"demo/{app} has {installed}, and {ref}'s lockfile pins {want}:"
+                f" run `npm ci` in demo/{app}"
+            )
+    return {
+        "lockfile_sha256": hashlib.sha256(theirs_bytes).hexdigest(),
+        "lockfile_is_the_refs": True,
+        "packages": packages,
+    }
+
+
 def build_app(
     repo: Path,
     commit: str,
@@ -357,14 +435,20 @@ def build_app(
     log: Path,
     *,
     spawn: Callable[..., int],
-) -> str:
-    """One app's tree, built; the bundle check's line."""
+    ref: Optional[str] = None,
+) -> Dict[str, Any]:
+    """One app's tree, built: the bundle check's line, and its dependencies
+    as checked against the ref's lockfile (``app_dependencies``)."""
     archive(repo, commit, tree, app_paths(app))
     if not (app_dir(tree, app) / "package.json").is_file():
         raise BuildError(f"the ref has no demo/{app}")
     refuse_env_files(tree, app)
+    dependencies = app_dependencies(repo, tree, app, ref or commit[:12])
     clone_app_node_modules(repo, tree, app)
     status = spawn(app_build_argv(tree, app), cwd=app_dir(tree, app), env=env, log=log)
     if status != 0:
         raise BuildError(f"next build of {app} exited {status}; see {log}")
-    return app_bundle_check(tree, app, env["NEXT_PUBLIC_CONTROLVAR_API_URL"])
+    return {
+        "bundle": app_bundle_check(tree, app, env["NEXT_PUBLIC_CONTROLVAR_API_URL"]),
+        "dependencies": dependencies,
+    }
