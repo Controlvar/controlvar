@@ -39,19 +39,25 @@
 #   and the demo apps' own build (EM C6 of T166).
 # * `say` is the narration (D102), in videos 1-3's voice; every number it says
 #   is on the page as it is said (G2). Three sentences are video 2's word for
-#   word, so their clips are made already. The UX code card (B6) is cut, the
-#   first cut T178 condition 11 names: a code card quotes a page of the docs
-#   (C10), not ShopLab's source, and the typed estimate takes its time.
-#   The `later` card holds still after its narration (payoff, 2.5 s): its note
-#   states three departures in about 45 words. Projected with clip lengths
-#   fitted on the 34 real Ruth clips: 81.4 s, or 84.1 s with each new clip at
-#   the 90th-percentile under-prediction (cap 87.3 s); 92.7 s with each at the
-#   worst. If the voice step projects it over the cap, cut in this order,
-#   neither needing a new clip: (1) shopper-b beat 1's "Its panel says so: One
-#   page." (about 1.2 s at the 90th percentile, 2.9 s at the worst: that
-#   beat's narration runs over its exit); (2) the result's "Significant at 95%
-#   confidence." with "significant at 95%" taken off its headline (about 3.9 s
-#   more at the 90th percentile; with both cuts the worst case is 85.0 s).
+#   word. The UX code card (B6) is cut, the first cut T178 condition 11 names:
+#   a code card quotes a page of the docs (C10), not ShopLab's source, and the
+#   typed estimate takes its time. The `later` card holds still after its
+#   narration (payoff, 2.5 s): its note states three departures in about 45
+#   words. The 13 sentences' clips are all in the voice cache already (made
+#   for the earlier 15-sentence narration; the two sentences about the demo
+#   panel are dropped, below), and the voice step projects 75.7 s with them
+#   (cap 87.3 s). Were a later projection over the cap, the cut left needs no
+#   new clip: the result's "Significant at 95% confidence." with "significant
+#   at 95%" taken off its headline.
+# * ShopLab's demo panel ("Powered by Controlvar") is never opened, and no
+#   headline in a ShopLab scene names ShopLab. The render's gate 7 reads every
+#   frame with OCR and refuses any stretch within 3 edits of a 12-character
+#   piece of ShopLab's demo API key, and the piece "demo_shoplab_0" is mostly
+#   the app's own name. In the first narrated takes, the band's "In ShopLab"
+#   under the form's "Postal code", and the panel's "video_hero" badge above
+#   its "shoplab_hero_banner", were each read as that piece: a false positive,
+#   and the matcher is unchanged. The page still shows each shopper's arm (3
+#   steps, or everything on one page), and gate 10 checks it three ways.
 slug: 06-shoplab-ab-test
 title: An A/B test, from setup to winner
 seed: demo
@@ -203,23 +209,14 @@ scenes:
         says: set up off camera
     open: /checkout
     beats:
-      - cue: In ShopLab, set up off camera, this shopper gets 3 steps.
+      # The headline does not name ShopLab, and the demo panel stays closed
+      # (the header says why).
+      - cue: This shopper, set up off camera, gets 3 steps.
         focus: {role: list, name: Checkout steps, exact: true}
         say:
           - In ShopLab, a demo storefront, this shopper gets 3 steps.
         steps:
           - look: {role: list, name: Checkout steps, exact: true}
-            ms: 1500
-          - move: {role: button, name: Powered by Controlvar, exact: true}
-        exit:
-          - click: {role: button, name: Powered by Controlvar, exact: true}
-
-      - cue: "Its panel names the test, and the variant: Control."
-        focus: {testid: panel-exp-shoplab_checkout_flow}
-        say:
-          - "Its panel shows the test's key, and the variant: Control."
-        steps:
-          - look: {testid: panel-exp-shoplab_checkout_flow}
             ms: 1500
 
   # Off camera, before this scene: the ShopLab origin's storage cleared and
@@ -254,12 +251,8 @@ scenes:
         focus: {role: group, name: Delivery address, exact: true}
         say:
           - A second shopper gets everything on one page.
-          - "Its panel says so: One page."
         steps:
           - look: {role: group, name: Delivery address, exact: true}
-            ms: 1200
-          - click: {role: button, name: Powered by Controlvar, exact: true}
-          - look: {testid: panel-exp-shoplab_checkout_flow}
             ms: 1200
         exit:
           - click: {role: button, name: Place order}
@@ -267,15 +260,12 @@ scenes:
       - before:
           - wait_for: {testid: order-confirmation}
         cue: Order placed. The purchase is tracked for the test.
-        # The panel's events, newest first: "purchase $79 ...".
-        focus: {testid: panel-events}
+        focus: {testid: order-confirmation}
         say:
           - They buy, and the purchase is tracked for the test.
         steps:
           - look: {testid: order-confirmation}
-            ms: 1200
-          - look: {testid: panel-events}
-            ms: 1500
+            ms: 2500
 
   - id: later
     traffic: run
