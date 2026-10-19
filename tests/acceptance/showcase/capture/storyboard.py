@@ -54,8 +54,16 @@ first scene: no page of it loads under an id the storyboard does not name.
 Two steps work a form control the way a person would be seen to: ``choose``
 changes a native <select> to one of its options without opening it (a
 screencast never draws a native list, so an open one would film a select
-changing by itself; C9), and ``slide`` moves a range input to a value, the
-drawn cursor on its thumb.
+changing by itself; C9), and ``slide`` moves a range input to a value on its
+own steps (the power calculator's are 0.05 apart), the drawn cursor on its
+thumb.
+
+A scene that films a credential the product shows (the invite dialog's
+one-time password) names it under ``masks``, a closed list: the capture hides
+it before it is painted (C4 of T149, S6 of plan v2.2) and the scene states the
+"masked value" departure (D84). An end state may name the power calculator's
+sample sizes the video shows (``calculations``) and the teammates it invites
+(``team``), each held by gate 10 (S8c).
 
 Refused at load (``StoryboardError``), before any stack starts: an unknown key,
 a cue with no focus, a caption ``contract.caption_problems`` refuses, a caption
@@ -181,10 +189,14 @@ class Choose(_Strict):
 
 
 class Slide(_Strict):
-    """A range input moved to ``value``, the drawn cursor on its thumb."""
+    """A range input moved to ``value``, the drawn cursor on its thumb.
+
+    The value is the input's own (the power calculator's allocation runs from
+    0.05 to 1.00 in steps of 0.05), and must be one of its steps.
+    """
 
     slide: Locator
-    value: int = Field(ge=0, le=100_000)
+    value: float = Field(ge=0, le=100_000)
 
 
 Step = Union[Click, Move, Type, Look, ScrollTo, WaitFor, Choose, Slide]
@@ -358,6 +370,14 @@ class Departure(_Strict):
     says: str = Field(min_length=8, max_length=200)
 
 
+#: What a scene may mask (C4 of T149, S6 of plan v2.2), by the element's
+#: ``data-testid``: a closed list of credentials the product draws, so no other
+#: product text is ever hidden by the tool (D84 rule 3). The invite dialog's
+#: one-time password (frontend/src/components/admin/users/InviteUserModal.tsx;
+#: a unit test keeps the two equal, and ``config.INVITE_PASSWORD_TESTID``).
+MaskedValue = Literal["invite-temp-password"]
+
+
 class Scene(_Strict):
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,40}$")
     #: The origin the scene is recorded on: the dashboard, or a demo app.
@@ -366,6 +386,9 @@ class Scene(_Strict):
     off_camera: List[OffCamera] = Field(default_factory=list)
     #: Every departure from a new user's path in this scene, stated on screen (D84).
     departures: List[Departure] = Field(default_factory=list)
+    #: Credentials this scene films, each hidden by the tool before it is
+    #: painted (C4, S6): the scene states the "masked value" departure.
+    masks: List[MaskedValue] = Field(default_factory=list)
     open: Optional[str] = Field(default=None, pattern=r"^/[A-Za-z0-9/_?=&.-]*$")
     #: Open this experiment's results page; the id is looked up off camera.
     results_of: Optional[str] = None
@@ -495,6 +518,43 @@ class FlagEnd(_Strict):
     shown: str
 
 
+class Calculation(_Strict):
+    """Gate 10/5: a sample size the power calculator drew, with its inputs.
+
+    The inputs are the calculator's: ``baseline`` and ``mde`` as fractions, the
+    number of variants (control included), and its own 95% confidence and 80%
+    power. ``per_variant`` is what the page draws, and must be the textbook
+    formula's for those inputs (``gates.calculation_end``)."""
+
+    #: The ``record`` name of the element that drew it.
+    shown: str
+    baseline: float = Field(gt=0, lt=1)
+    mde: float = Field(gt=0, lt=1)
+    variants: int = Field(ge=2, le=5)
+    per_variant: int = Field(gt=0)
+
+
+#: The roles the invite dialog offers, as the API names them.
+Role = Literal["ADMIN", "DEVELOPER", "ANALYST", "VIEWER"]
+
+
+class Invitee(_Strict):
+    """A teammate the video invites (S8c of plan v2.2)."""
+
+    #: At example.com, never a real address (the UX rules).
+    email: str = Field(pattern=r"^[a-z][a-z0-9._-]{0,40}@example\.com$")
+    role: Role
+
+
+class Team(_Strict):
+    """Gate 10/5 (S8c): the teammates the video invites, in the order it
+    invites them, and the users table that shows them."""
+
+    invitees: List[Invitee] = Field(min_length=1)
+    #: The ``record`` name of the users table's body as the page showed it.
+    shown: str
+
+
 class EndState(_Strict):
     """Gate 10: what is true after the last scene, checked through the API."""
 
@@ -503,6 +563,10 @@ class EndState(_Strict):
     experiments_listed: Optional[int] = None
     experiment: Optional[ExperimentEnd] = None
     flag: Optional[FlagEnd] = None
+    #: The power calculator's sample sizes the video showed.
+    calculations: List[Calculation] = Field(default_factory=list)
+    #: The teammates the video invited (their one-time passwords masked).
+    team: Optional[Team] = None
 
     @model_validator(mode="after")
     def _something(self) -> "EndState":
@@ -510,9 +574,12 @@ class EndState(_Strict):
             self.experiments_listed is None
             and self.experiment is None
             and self.flag is None
+            and not self.calculations
+            and self.team is None
         ):
             raise ValueError(
-                "an end state names experiments_listed, an experiment or a flag"
+                "an end state names experiments_listed, an experiment, a flag,"
+                " calculations or a team"
             )
         return self
 
@@ -612,6 +679,36 @@ class Storyboard(_Strict):
                 raise ValueError(
                     f"the flag's end state compares {flag.shown!r}, which no beat records"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _team_and_calculations(self) -> "Storyboard":
+        """Gate 10/5's readings are recorded by some beat; each invitee is
+        invited once; and a storyboard that invites anyone masks the invite's
+        one-time password in some scene (C4, S6): the dialog always shows it."""
+        recorded = [name for s in self.scenes for b in s.beats for name in b.record]
+        for made in self.end_state.calculations:
+            if made.shown not in recorded:
+                raise ValueError(
+                    f"the calculation's end state compares {made.shown!r}, which no"
+                    " beat records"
+                )
+        team = self.end_state.team
+        if team is None:
+            return self
+        if team.shown not in recorded:
+            raise ValueError(
+                f"the team's end state compares {team.shown!r}, which no beat records"
+            )
+        emails = [invitee.email for invitee in team.invitees]
+        if len(set(emails)) != len(emails):
+            raise ValueError(f"an invitee is listed twice: {emails}")
+        if not any(config.INVITE_PASSWORD_TESTID in s.masks for s in self.scenes):
+            raise ValueError(
+                f"the video invites {len(emails)} teammates, and no scene masks"
+                f" {config.INVITE_PASSWORD_TESTID}: each one-time password would be"
+                " filmed (masks)"
+            )
         return self
 
     def _visitors_in_order(self) -> None:
@@ -866,7 +963,9 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
       simulated users to the one that finishes them, both included (one that
       runs them, start to finish, is both);
     * ``time skip``: the scene that finishes them, after the minutes they took
-      off camera (its card says how many, measured: ``{traffic_minutes}``).
+      off camera (its card says how many, measured: ``{traffic_minutes}``);
+    * ``masked value``: a scene that masks a credential the product draws
+      (``masks``; S7 of plan v2.2): the tool replaces what the page draws.
     """
     needed: List[Tuple[str, str]] = []
     running = False
@@ -894,6 +993,8 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
         if scene.traffic in ("finish", "run"):
             needed.append((scene.id, "time skip"))
             running = False
+        if scene.masks:
+            needed.append((scene.id, "masked value"))
     return needed
 
 

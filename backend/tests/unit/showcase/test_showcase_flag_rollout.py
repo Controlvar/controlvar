@@ -471,6 +471,8 @@ class Select(Element):
 
 
 class Range(Element):
+    """The flag page's slider: 0-100 and no step attribute (``RANGE_JS`` reads "")."""
+
     def __init__(self, value=0, *, high=100, kind="range", sticks=False):
         self.value = value
         self.high = high
@@ -485,7 +487,7 @@ class Range(Element):
 
     def answer(self, script):
         if script == director.RANGE_JS:
-            return ["INPUT", self.kind, 0, self.high, self.value]
+            return ["INPUT", self.kind, 0, self.high, self.value, ""]
         assert script == "el => Number(el.value)"
         return self.value
 

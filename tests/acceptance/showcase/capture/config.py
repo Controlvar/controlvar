@@ -206,6 +206,22 @@ APP_STATIC_KEY: Dict[str, str] = {
 #: The demo seed's administrator, whom every video signs in as.
 DEMO_ADMIN = ("admin@demo.com", "Demo1234!")
 
+# ---------------------------------------------------------------------------
+# The invite dialog's one-time password (C4 of T149, S6 of plan v2.2)
+# ---------------------------------------------------------------------------
+
+#: The element that draws it (InviteUserModal.tsx), the one value a storyboard
+#: may mask (``storyboard.MaskedValue``; a unit test keeps the three equal).
+INVITE_PASSWORD_TESTID = "invite-temp-password"
+#: The dashboard's invite: ``POST /api/v1/users/`` with the password the browser
+#: made up in its JSON body (``AdminService.createUser``); the answer never holds it.
+INVITE_PATH = "/api/v1/users"
+#: What the mask draws over the element instead: a solid block (never a blur),
+#: in the UX draft's colour, with these words.
+MASK_TEXT = "hidden for this video"
+MASK_FILL = "#E2E8F0"
+MASK_INK = "#334155"
+
 #: The SDK paths' rate limit on the uvicorn stack's API. Video 2's traffic sends
 #: about 180 users a second through them unpaced (measured on a local stack),
 #: and the default 6,000 a minute would answer 429 from the 101st in a second.
@@ -224,6 +240,7 @@ VIDEOS: Dict[str, str] = {
     "01-getting-started": "storyboards/01-getting-started.yaml",
     "02-first-experiment": "storyboards/02-first-experiment.yaml",
     "03-flag-rollout": "storyboards/03-flag-rollout.yaml",
+    "05-plan-and-team": "storyboards/05-plan-and-team.yaml",
     "06-shoplab-ab-test": "storyboards/06-shoplab-ab-test.yaml",
 }
 #: Storyboards that prove the tool and are never a video: capture only, never

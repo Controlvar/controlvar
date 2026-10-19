@@ -428,13 +428,20 @@ def narration_clips(
 # ---------------------------------------------------------------------------
 
 
+#: The refusals that mean a kept value may be in a frame: gate 6 (one drawn on
+#: the page), and C4 (an invite's one-time password not captured, or an invite
+#: with none: a mask that failed would then have passed gate 6).
+DROPS_RECORDING = ("gate 6", "C4")
+
+
 def drop_recording(error: Exception, frames_dir: Path, work: guard.WorkRoot) -> None:
-    """After a gate-6 refusal (a kept value on screen), delete every frame.
+    """After a refusal that may leave a kept value in a frame
+    (``DROPS_RECORDING``), delete every frame.
 
     Through ``WorkRoot.remove``, like every deletion the tool makes; the
     refusal says "recording dropped", and this is what makes that true.
     """
-    if getattr(error, "gate", None) == "gate 6" and frames_dir.exists():
+    if getattr(error, "gate", None) in DROPS_RECORDING and frames_dir.exists():
         work.remove(frames_dir)
 
 
@@ -728,6 +735,11 @@ def record(
                     if counted
                     else ()
                 ),
+                # C4 (S6): the invites the video makes, and what it masks.
+                invites=len(board.end_state.team.invitees)
+                if board.end_state.team
+                else 0,
+                masks=masked(board),
             )
             director.install()
             # Gate 3: the page is the frame's size at scale 1, before anything is recorded.
@@ -767,6 +779,13 @@ def record(
                 ),
             )
             TEARDOWN.append(users.stop)
+            # Gate 10/5 (S8c): the users before the first scene, off camera,
+            # so the end state can tell which ones the video added.
+            team_before = (
+                users_listed(stack.api_url, token)
+                if board.end_state.team is not None
+                else []
+            )
             try:
                 for scene in board.scenes:
                     before_scene(
@@ -785,6 +804,8 @@ def record(
                 users.stop()
                 TEARDOWN.remove(users.stop)
             director.check_events()
+            # C4 (S6): the positive count, before anything is judged on screen.
+            invites = director.check_invites()
             gates["12"] = gate(
                 director.tally.scenes_run == [s.id for s in board.scenes],
                 ran=director.tally.scenes_run,
@@ -818,6 +839,23 @@ def record(
                     end.flag, stack.api_url, token, director.readings
                 )
                 numbers["flag"] = made
+                if not ok:
+                    why.append(reason)
+            for made_end in end.calculations:
+                ok, made, reason = judge.calculation_end(
+                    made_end, shown=director.readings.get(made_end.shown)
+                )
+                numbers.setdefault("calculations", []).append(made)
+                if not ok:
+                    why.append(reason)
+            if end.team is not None:
+                ok, made, reason = judge.team_end(
+                    end.team,
+                    before=team_before,
+                    after=users_listed(stack.api_url, token),
+                    shown=director.readings.get(end.team.shown),
+                )
+                numbers["team"] = made
                 if not ok:
                     why.append(reason)
             gates["10"] = gate(not why, **numbers)
@@ -887,6 +925,10 @@ def record(
             {"rate_limited": tally.rate_limited},
             "a page request was answered 429",
         ),
+        # C4 of T149 (S6 of plan v2.2): the invites the video made, each one's
+        # password captured, and the masks; ``check_invites`` refused above
+        # when they were not, so this records what it counted.
+        "C4": (True, invites, ""),
         # P2 (PE 6): the whole context's listeners; per app, armed and counted.
         "P2": _merge(
             judge.app_answers(tally.apps),
@@ -1054,6 +1096,29 @@ def app_ready(
                 )
             found["made_on_camera"] = made.key
     return found
+
+
+def masked(board: storyboard.Storyboard) -> Tuple[str, ...]:
+    """Every element a scene of the storyboard masks (C4), each once, in order.
+
+    The capture masks them for the whole video: the dashboard moves between
+    pages without loading a new document, so the masks must be in the one the
+    scene's page was loaded as, before it was."""
+    found: List[str] = []
+    for scene in board.scenes:
+        for testid in scene.masks:
+            if testid not in found:
+                found.append(testid)
+    return tuple(found)
+
+
+def users_listed(api_url: str, token: str) -> List[Dict[str, Any]]:
+    """Every account, through the API (gate 10/5): one page, or refused."""
+    answer = _api(f"{api_url}/api/v1/users/?limit=100", token)
+    items = answer.get("items") or []
+    if int(answer.get("total", len(items))) > len(items):
+        raise StackError("more users than one page of the API holds")
+    return list(items)
 
 
 def visitor_apps(board: storyboard.Storyboard) -> Tuple[str, ...]:

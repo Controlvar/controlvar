@@ -12,7 +12,24 @@ stand-in pages where Playwright is not installed. What it does, in order:
   ``measure_zoom`` reads back what Chromium computed before any scene (C1).
 * Every JSON response and every JSON request body the page sends or receives
   goes through ``redaction.register_credentials``: a token the page is handed
-  is a needle from then on.
+  is a needle from then on. The request's half (``capture_request``) is what
+  makes the invite dialog's one-time password a needle: the dashboard makes
+  it up in the browser and sends it in the invite (``POST /api/v1/users``),
+  and the answer never holds it.
+* The invites (C4 of T149, S6 of plan v2.2): every invite request must carry
+  a password field, already a needle when its request is seen
+  (``note_invite``), and an invite answered before its request was seen is
+  refused. After the last scene, ``check_invites`` is the positive count: the
+  storyboard's invites, each seen once with its password captured. It is what
+  refuses a mask that failed while the capture also failed, which gate 6
+  alone passes (it has no needle to look for). Each refusal drops the
+  recording, as gate 6's does.
+* The masks (C4, S6): before the first navigation an init script puts a
+  stylesheet in the dashboard origin's <head> as soon as it exists (as the
+  zoom's), so a masked element (``Scene.masks``) is never painted with its
+  own text: its text is hidden (``visibility: hidden``, which also keeps it
+  out of the page's ``innerText`` that gate 6 reads) and a solid block saying
+  ``config.MASK_TEXT`` is drawn over its box.
 * ``self_test_overlay``: before any scene, a ring drawn around a known element
   must land within ``OVERLAY_TOLERANCE_PX`` of the element in a real frame
   (Playwright's overlay layer is a child of <html>, outside the zoom; a zoom on
@@ -148,6 +165,28 @@ ZOOM_INIT = """(() => {
   }
 })()"""
 ZOOM_TARGET = "body"
+
+#: C4 (S6 of plan v2.2): the masks' stylesheet, put in <head> at document
+#: start on the dashboard's origin only, the way ``ZOOM_INIT`` puts the zoom
+#: (a stylesheet appended to <html> from an init script is dropped: PE C4 of
+#: T149, measured). ``%(...)s`` are JSON.
+MASK_INIT = """(() => {
+  if (location.origin !== %(origin)s) return;
+  const css = %(css)s;
+  const add = () => {
+    if (document.getElementById('showcase-mask')) return true;
+    if (!document.head) return false;
+    const style = document.createElement('style');
+    style.id = 'showcase-mask';
+    style.textContent = css;
+    document.head.appendChild(style);
+    return true;
+  };
+  if (!add()) {
+    const watch = new MutationObserver(() => { if (add()) watch.disconnect(); });
+    watch.observe(document, {childList: true, subtree: true});
+  }
+})()"""
 #: What zoom Chromium computed for <html> and <body>.
 ZOOM_JS = """() => ({
   html: parseFloat(getComputedStyle(document.documentElement).zoom),
@@ -259,9 +298,10 @@ BROKEN_JS = """() => {
 SELECTED_TEXT_JS = "el => el.selectedIndex < 0 ? '' : el.options[el.selectedIndex].text"
 #: Where a closed <select>'s arrow is, from its right edge (frame px).
 SELECT_ARROW_PX = 22
-#: A range input's kind and numbers, for ``slide``.
+#: A range input's kind and numbers, for ``slide``: its step as written ("" when
+#: it has none, which is 1 for a range).
 RANGE_JS = """el => [el.tagName, String(el.type || '').toLowerCase(),
-  Number(el.min || 0), Number(el.max || 100), Number(el.value)]"""
+  Number(el.min || 0), Number(el.max || 100), Number(el.value), String(el.step || '')]"""
 
 #: Gate 9: is the element on top at this point (or something inside it)?
 ON_TOP_JS = """(el, point) => {
@@ -388,6 +428,10 @@ class Tally:
     #: current visitor (each fails the video), and how many were checked.
     visitor_refusals: List[str] = field(default_factory=list)
     visitor_checks: int = 0
+    #: C4 (S6): each invite request seen, where, and whether its password was
+    #: already a needle (never the value); and what refused one.
+    invites: List[Dict[str, Any]] = field(default_factory=list)
+    invite_refusals: List[str] = field(default_factory=list)
     #: Gate 10/6: every assign answer the page got, by (user, experiment key).
     assigns: Dict[Tuple[str, str], List[Dict[str, Any]]] = field(default_factory=dict)
     #: ...every event a page sent for a user and an experiment, with its answer.
@@ -523,10 +567,17 @@ class Director:
         app_ready: Optional[Callable[[str], Dict[str, Any]]] = None,
         visitor_apps: Tuple[str, ...] = (),
         marks: Tuple[str, ...] = (),
+        invites: int = 0,
+        masks: Tuple[str, ...] = (),
     ):
         self.context = context
         self.page = page
         self.dashboard = dashboard.rstrip("/")
+        #: C4 (S6): the invites the storyboard makes (its team's invitees), the
+        #: elements it masks, and each invite request the listener saw.
+        self.invites_expected = int(invites)
+        self.masks: Tuple[str, ...] = tuple(masks)
+        self.invites_seen: set = set()
         #: The apps the storyboard films as declared visitors, each one's
         #: current visitor id, and every visitor set (for the manifest).
         self.visitor_apps: Tuple[str, ...] = tuple(visitor_apps)
@@ -624,6 +675,10 @@ class Director:
         self.context.route("**/*", http)
         self.context.route_web_socket(re.compile(".*"), socket)
         self.context.add_init_script(zoom_init(self.origins))
+        # C4 (S6): before the first navigation, so every dashboard document
+        # (the dashboard moves between pages without a new one) has the masks.
+        if self.masks:
+            self.context.add_init_script(mask_init(self.dashboard, self.masks))
         # The whole context's (P2): the first page now, every later one as it opens.
         self.listen(self.page)
         self.context.on("page", self._on_page)
@@ -671,6 +726,13 @@ class Director:
         request = getattr(response, "request", None)
         if request is not None:
             self.answered[id(request)] = response.status
+            if self.is_invite(request) and id(request) not in self.invites_seen:
+                # S6: the password is captured from the request, before the
+                # answer is read; an answer to an invite no listener saw is not.
+                self.tally.invite_refusals.append(
+                    f"an invite was answered ({self.where}) before its request was"
+                    " seen, so its one-time password was never captured"
+                )
         path = urlparse(response.url).path
         if self.stack_origin(response.url) is not None and response.status == 429:
             self.tally.rate_limited.append(f"429 from {path} ({self.where})")
@@ -712,7 +774,72 @@ class Director:
         body = request_body(request)
         self.check_visitor(request, body)
         if body is not None:
-            redaction.register_credentials(body, self.redactor)
+            self.capture_request(body)
+        if self.is_invite(request):
+            self.note_invite(body)
+            self.invites_seen.add(id(request))
+
+    def capture_request(self, body: Any) -> None:
+        """Every credential in a request's JSON body is a needle from now on:
+        the invite dialog's one-time password is only ever here (C4)."""
+        redaction.register_credentials(body, self.redactor)
+
+    # -- the invites and their one-time passwords (C4 of T149, S6) --------------------
+
+    def is_invite(self, request: Any) -> bool:
+        """``POST /api/v1/users``, to the stack: the dashboard's invite."""
+        if str(getattr(request, "method", "")).upper() != "POST":
+            return False
+        if self.stack_origin(request.url) not in ("api", "dashboard"):
+            return False
+        return urlparse(request.url).path.rstrip("/") == config.INVITE_PATH
+
+    def note_invite(self, body: Any) -> None:
+        """An invite request, as its listener sees it, after ``capture_request``:
+        its password field must be there (refused otherwise), and is counted as
+        captured only when it is already a needle. Never the value."""
+        password = body.get("password") if isinstance(body, dict) else None
+        if not isinstance(password, str) or not password:
+            self.tally.invite_refusals.append(
+                f"an invite request ({self.where}) has no password field: the"
+                " one-time password the dialog shows could not be kept off screen"
+            )
+            return
+        self.tally.invites.append(
+            {"where": self.where, "captured": password in self.redactor.values}
+        )
+
+    def check_invites(self) -> Dict[str, Any]:
+        """S6's positive count, after the last scene: every invite's password
+        was captured as a needle, and the invites are the storyboard's, in number.
+
+        Gate 6 cannot see a password it was never given: with the mask gone
+        and the capture gone it passes a password drawn in clear. This count
+        is what refuses that. The numbers for the manifest, or raises."""
+        made = len(self.tally.invites)
+        captured = sum(1 for invite in self.tally.invites if invite["captured"])
+        numbers: Dict[str, Any] = {
+            "invites": self.invites_expected,
+            "requests": made,
+            "passwords_captured": captured,
+            "masks": list(self.masks),
+        }
+        self.check_events()
+        if captured != made:
+            raise CaptureFailed(
+                "C4",
+                f"{captured} of {made} invite password(s) were captured as needles"
+                " before their answers: a password drawn on screen would pass"
+                " gate 6; recording dropped",
+            )
+        if made != self.invites_expected:
+            raise CaptureFailed(
+                "C4",
+                f"the dashboard sent {made} invite(s); the storyboard invites"
+                f" {self.invites_expected}, each with its password captured;"
+                " recording dropped",
+            )
+        return numbers
 
     # -- the visitors an app is filmed as (T178 condition 5) ----------------------
 
@@ -1258,6 +1385,10 @@ class Director:
         return box
 
     def check_events(self) -> None:
+        if self.tally.invite_refusals:
+            raise CaptureFailed(
+                "C4", f"{self.tally.invite_refusals[0]}; recording dropped"
+            )
         if self.tally.new_pages:
             raise CaptureFailed(
                 "P2",
@@ -1402,16 +1533,25 @@ class Director:
         if not ok:
             raise CaptureFailed("C9", f"{self.where}: {what}: {why}")
 
-    def slide(self, found: Locator, box: Box, value: int, what: str) -> None:
-        """Move a range input to *value*: the drawn cursor rides the thumb, eased
-        over ``config.SLIDE_MS``, and the value follows it a step at a time."""
-        tag, kind, low, high, start = found.evaluate(RANGE_JS)
+    def slide(self, found: Locator, box: Box, value: float, what: str) -> None:
+        """Move a range input to *value*, one of its steps: the drawn cursor
+        rides the thumb, eased over ``config.SLIDE_MS``, and the value follows
+        it a step at a time (``range_step``: 1 for a range with no step, as
+        video 3's; the power calculator's allocation moves 0.05 at a time)."""
+        tag, kind, low, high, start, step_text = found.evaluate(RANGE_JS)
         if str(tag).upper() != "INPUT" or kind != "range":
             raise CaptureFailed("gate 12", f"{self.where}: {what} is not a slider")
         if not low <= value <= high or high <= low:
             raise CaptureFailed(
                 "gate 12",
-                f"{self.where}: {what} runs from {low:g} to {high:g}, not to {value}",
+                f"{self.where}: {what} runs from {low:g} to {high:g}, not to {value:g}",
+            )
+        step, places = range_step(step_text)
+        if not on_step(value, low, step):
+            raise CaptureFailed(
+                "gate 12",
+                f"{self.where}: {what} moves in steps of {step:g} from {low:g};"
+                f" {value:g} is not one of them",
             )
         thumb = config.RANGE_THUMB_CSS_PX * config.ZOOM
 
@@ -1422,13 +1562,14 @@ class Director:
         self.move_to(x_at(start), y)
         self.page.wait_for_timeout(config.POINTER_REST_MS)
         began = _now_ms()
-        current = int(start)
+        current = range_text(start, places)
         while True:
             t = min(1.0, (_now_ms() - began) / config.SLIDE_MS)
-            now = int(round(start + (value - start) * ease(t)))
-            if now != current:
-                found.fill(str(now))
-                current = now
+            now = low + round((start - low + (value - start) * ease(t)) / step) * step
+            text = range_text(now, places)
+            if text != current:
+                found.fill(text)
+                current = text
             self.cursor = (x_at(now), y)
             self.draw_cursor()
             if t >= 1.0:
@@ -1437,7 +1578,8 @@ class Director:
         landed = found.evaluate("el => Number(el.value)")
         if landed != value:
             raise CaptureFailed(
-                "gate 12", f"{self.where}: {what} stopped at {landed:g}, not {value}"
+                "gate 12",
+                f"{self.where}: {what} stopped at {landed:g}, not {value:g}",
             )
         self.page.wait_for_timeout(config.SETTLE_MS)
 
@@ -1688,6 +1830,70 @@ def visitor_init(origin: str, key: str, storage: Dict[str, str]) -> str:
         "origin": json.dumps(origin),
         "key": json.dumps(key),
         "items": json.dumps(dict(storage), sort_keys=True),
+    }
+
+
+def range_step(step_text: Any) -> Tuple[float, int]:
+    """A range input's step, as ``RANGE_JS`` reads it, and its decimal places.
+
+    An input with no step (``""``) moves by 1, the HTML default for a range;
+    so does one whose step cannot be read (``any``), which then refuses any
+    value off the whole numbers rather than guess."""
+    text = str(step_text or "").strip()
+    try:
+        step = float(text) if text else 1.0
+    except ValueError:
+        step = 1.0
+    if not (math.isfinite(step) and step > 0):
+        step, text = 1.0, ""
+    places = len(text.split(".", 1)[1]) if "." in text else 0
+    return step, places
+
+
+def on_step(value: float, low: float, step: float) -> bool:
+    """Whether *value* is one of a range's values: its minimum plus whole steps."""
+    count = (value - low) / step
+    return abs(count - round(count)) < 1e-6
+
+
+def range_text(value: float, places: int) -> str:
+    """A range value as it is typed into the input: whole for a whole step
+    (video 3's ``50``), else rounded to the step's decimals and written as the
+    browser writes a number (``0.5``, not ``0.50``): Chromium keeps a range's
+    value in that form, and Playwright's fill refuses one that comes back
+    different ("Malformed value", measured on the calculator's allocation)."""
+    if not places:
+        return str(int(round(value)))
+    return f"{value:.{places}f}".rstrip("0").rstrip(".")
+
+
+def mask_css(testids: Tuple[str, ...]) -> str:
+    """The masks' stylesheet: each element's own text hidden (and so out of the
+    page's ``innerText``), a solid block saying ``config.MASK_TEXT`` drawn over
+    its box instead. Never a blur, and never magenta (the docs runner's masks)."""
+    rules = []
+    for testid in testids:
+        selector = f'[data-testid="{testid}"]'
+        rules.append(
+            f"{selector}{{visibility:hidden !important;position:relative !important}}"
+        )
+        rules.append(
+            f'{selector}::after{{content:"{config.MASK_TEXT}";visibility:visible;'
+            "position:absolute;inset:0;display:flex;align-items:center;"
+            "box-sizing:border-box;padding:0 12px;overflow:hidden;white-space:nowrap;"
+            f"border-radius:4px;background:{config.MASK_FILL};color:{config.MASK_INK};"
+            "font:600 14px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}"
+        )
+    return "".join(rules)
+
+
+def mask_init(origin: str, testids: Tuple[str, ...]) -> str:
+    """The init script that masks *testids* on *origin* (``MASK_INIT``)."""
+    import json
+
+    return MASK_INIT % {
+        "origin": json.dumps(origin),
+        "css": json.dumps(mask_css(tuple(testids))),
     }
 
 
