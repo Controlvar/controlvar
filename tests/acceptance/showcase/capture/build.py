@@ -2,9 +2,10 @@
 
 1. ``git archive <commit> | tar -x`` into ``<work root>/tree-<profile>``: only
    what the ref tracks, so a developer's uncommitted or untracked files do not
-   reach the video. The only git commands the tool runs are ``rev-parse`` and
-   ``archive``; neither writes. A ref that is not here is refused with the
-   fetch command to run, which the tool does not run itself.
+   reach the video. The only git commands the tool runs are ``rev-parse``,
+   ``archive`` and ``status`` (``tool_checkout``, with ``--no-optional-locks``,
+   so it does not rewrite the index); none writes. A ref that is not here is
+   refused with the fetch command to run, which the tool does not run itself.
 2. Core: ``modules/`` is deleted (through ``WorkRoot.remove``).
 3. ``frontend/node_modules`` is cloned from the checkout the tool runs from
    (``cp -c``: copy-on-write on APFS, so it costs no space, and a build tool
@@ -100,6 +101,102 @@ def resolve_ref(repo: Path, ref: str, *, run=subprocess.run) -> str:
             f" fetch it first: git -C {repo} fetch --tags origin"
         )
     return commit
+
+
+#: How many of a dirty checkout's changes the manifest lists; it counts them all.
+TOOL_CHANGES_SHOWN = 20
+
+
+def tool_checkout(repo: Path, *, run=subprocess.run) -> Dict[str, Any]:
+    """The checkout the tool itself runs from: its HEAD, and what is uncommitted.
+
+    ``commit`` is ``git rev-parse HEAD``, or None unless *repo* is the top of a
+    git checkout of its own (core_build.sh's copy has no ``.git``, and a copy
+    inside another checkout must not report that one's HEAD). ``changes``
+    counts the lines of ``git status --porcelain``: modified, staged and
+    untracked files, whatever git's configuration says about untracked ones;
+    ignored files (``node_modules``) are not changes. ``first_changes`` lists
+    the first ``TOOL_CHANGES_SHOWN``. ``clean`` is true only for a known commit
+    with no change, and anything git could not answer is not clean. Read only:
+    ``--no-optional-locks`` keeps ``git status`` from rewriting the index.
+    """
+
+    def git(*args: str) -> Optional["subprocess.CompletedProcess[str]"]:
+        try:
+            return run(
+                ["git", "--no-optional-locks", "-C", str(repo), *args],
+                capture_output=True,
+                text=True,
+                errors="replace",
+                check=False,
+                env=guard.tool_env(),
+            )
+        except OSError:  # no git at all
+            return None
+
+    unknown: Dict[str, Any] = {
+        "commit": None,
+        "clean": False,
+        "changes": None,
+        "first_changes": [],
+    }
+    top = git("rev-parse", "--show-toplevel")
+    if top is None or top.returncode != 0 or not top.stdout.strip():
+        return unknown
+    if Path(top.stdout.strip()).resolve() != Path(repo).resolve():
+        return unknown
+    head = git("rev-parse", "--verify", "--quiet", "HEAD^{commit}")
+    commit = head.stdout.strip() if head is not None and head.returncode == 0 else ""
+    if not _SHA.match(commit):
+        return unknown
+    status = git("status", "--porcelain=v1", "--untracked-files=normal")
+    if status is None or status.returncode != 0:
+        return {**unknown, "commit": commit}
+    lines = [line for line in status.stdout.splitlines() if line.strip()]
+    return {
+        "commit": commit,
+        "clean": not lines,
+        "changes": len(lines),
+        "first_changes": lines[:TOOL_CHANGES_SHOWN],
+    }
+
+
+def tool_record(
+    start: Optional[Mapping[str, Any]], end: Mapping[str, Any]
+) -> Dict[str, Any]:
+    """The manifest's ``tool``: the commit the run started from, and ``clean``.
+
+    ``clean`` is true only when the checkout was clean at the run's start and
+    again when this video's capture was written, at the same commit: a file
+    changed, or a commit made, while a take ran is not that commit's take. A
+    dirty checkout is recorded, not refused (a development take); the approval
+    record of a final checks ``clean`` at the reviewed commit.
+    """
+    clean = bool(
+        start is not None
+        and start.get("clean") is True
+        and end.get("clean") is True
+        and start.get("commit") is not None
+        and start.get("commit") == end.get("commit")
+    )
+    return {
+        "commit": start.get("commit") if start is not None else None,
+        "clean": clean,
+        "start": dict(start) if start is not None else None,
+        "end": dict(end),
+    }
+
+
+def tool_line(checkout: Mapping[str, Any]) -> str:
+    """The run log's line for ``tool_checkout``'s answer."""
+    commit = checkout.get("commit")
+    if commit is None:
+        return "tool checkout: no commit of its own (recorded as not clean)"
+    if checkout.get("clean") is True:
+        return f"tool checkout {commit[:12]}, clean"
+    changes = checkout.get("changes")
+    said = "status unknown" if changes is None else f"{changes} uncommitted change(s)"
+    return f"tool checkout {commit[:12]}, {said} (recorded as not clean)"
 
 
 def extract(stream: IO[bytes], tree: Path) -> None:

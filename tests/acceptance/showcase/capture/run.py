@@ -31,8 +31,10 @@ Order, and what must be true before each step:
 The capture directory is ``<work root>/<slug>/capture/`` (contract.py):
 ``frames/`` and ``frames.jsonl``, ``cues.json``, ``needles.txt`` (mode 0600,
 for the render side's OCR scan, which deletes it) and ``manifest.json`` with
-every capture gate's verdict and numbers; a narrated one adds ``voice.json``
-and ``voice/NNN.wav`` (``voiced.write_voice``).
+every capture gate's verdict and numbers, and the tool's own checkout
+(``tool``: its commit at the run's start, and ``clean`` only when it was clean
+then and when the capture was written, at that commit; ``build.tool_record``);
+a narrated one adds ``voice.json`` and ``voice/NNN.wav`` (``voiced.write_voice``).
 """
 
 from __future__ import annotations
@@ -1381,6 +1383,12 @@ def write_capture(
         # T178 condition 6: each demo app's lockfile and installed versions,
         # checked against the ref's before it was built (none for videos 1-3).
         "apps": {app: versions.get("apps", {}).get(app) for app in board.apps},
+        # The tool's own checkout: the commit the run started from, and clean
+        # only if it was clean then and now, at that commit. A dirty tree is
+        # recorded, not refused; a final's approval record checks clean.
+        "tool": build.tool_record(
+            versions.get("tool"), build.tool_checkout(options.repo)
+        ),
     }
     (capture / "manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
@@ -1496,6 +1504,11 @@ def run(
     options: Options, environ: Mapping[str, str], log: Callable[[str], None]
 ) -> Dict[str, Any]:
     """Capture every video asked for; ``{slug: capture path or the refusal}``."""
+    # The tool's own commit, and whether its tree is clean, before the
+    # preflight reads a storyboard or anything is built; each capture reads it
+    # again when it is written, and ``clean`` needs both (build.tool_record).
+    tool = build.tool_checkout(options.repo)
+    log(build.tool_line(tool))
     preflight(options, environ)
     work = guard.WorkRoot(options.work_dir)
     commit = build.resolve_ref(options.repo, options.ref)
@@ -1567,7 +1580,7 @@ def run(
             # T178 condition 6: the lockfile and the installed versions, as checked.
             app_versions[app] = built["dependencies"]
             app_trees[app] = app_tree
-        versions = {**versions, "apps": app_versions}
+        versions = {**versions, "apps": app_versions, "tool": tool}
         for slug in options.videos:
             try:
                 results[slug] = capture_video(
