@@ -426,7 +426,7 @@ def test_three_sentences_are_video_2s_word_for_word():
 STATEMENTS = [
     ("setup", "off-camera setup", "Signed in off camera"),
     ("shopper-a", "off-camera setup", "set up off camera"),
-    ("shopper-b", "off-camera setup", "set up off camera"),
+    ("shopper-b", "off-camera setup", "set up and form filled off camera"),
     ("later", "simulated traffic", "Simulated by the tool"),
     ("later", "time skip", "so the results page reads Duration 0d"),
     ("result", "off-camera setup", "Computed off camera first"),
@@ -462,6 +462,64 @@ def test_each_statement_taken_off_the_screen_is_refused(scene_id, kind, says):
         f"scene {scene_id}: the {kind} statement {says!r} is not in a caption or the card"
         in problems
     )
+
+
+def test_shopper_bs_form_filled_in_a_cut_is_what_its_scene_states():
+    """D84: shopper B's details are typed in the first beat's ``before`` (a cut,
+    off camera); the scene's statement names the form, on screen in that beat."""
+    shopper_b = scene("shopper-b")
+    typed_off_camera = [
+        step.type.label
+        for step in shopper_b.beats[0].before
+        if isinstance(step, storyboard.Type)
+    ]
+    assert typed_off_camera == [
+        "Full name",
+        "Email",
+        "Street address",
+        "City",
+        "Postal code",
+        "Card number",
+    ]
+    says = [d.says for d in shopper_b.departures if d.kind == "off-camera setup"]
+    assert says == ["set up and form filled off camera"]
+    assert says[0] in shopper_b.beats[0].cue
+
+
+@pytest.mark.regression
+def test_a_scene_that_types_in_a_cut_must_state_off_camera_setup():
+    """A step in ``before`` runs while recording is paused: what it types is
+    entered off camera, and the scene must say so (D84). A click in a cut is
+    not counted (video 2 opens its Live tab that way, unchanged)."""
+    raw = yaml.safe_load(
+        (
+            ACCEPTANCE / "showcase" / "storyboards" / "02-first-experiment.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    arriving = next(s for s in raw["scenes"] if s["id"] == "arriving")
+    assert ("arriving", "off-camera setup") not in storyboard.required_departures(
+        storyboard.parse(raw)
+    )
+    arriving["beats"][0]["before"] = [
+        {"type": {"testid": "search-input"}, "text": "purchase"}
+    ]
+    assert ("arriving", "off-camera setup") in storyboard.required_departures(
+        storyboard.parse(raw)
+    )
+    assert storyboard.departure_problems(storyboard.parse(raw)) == [
+        "scene arriving: off-camera setup is not stated on screen (departures)"
+    ]
+    # Video 2 as committed clicks in a cut (its Live tab) and needs nothing more.
+    v2 = storyboard.load(
+        ACCEPTANCE / "showcase" / "storyboards" / "02-first-experiment.yaml"
+    )
+    assert any(
+        isinstance(step, storyboard.Click)
+        for s in v2.scenes
+        for beat in s.beats
+        for step in beat.before
+    )
+    assert storyboard.departure_problems(v2) == []
 
 
 @pytest.mark.regression

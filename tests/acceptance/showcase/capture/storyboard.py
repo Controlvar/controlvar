@@ -848,7 +848,11 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
     * ``off-camera setup``: a scene with ``off_camera`` work before it; the
       first scene of a storyboard with a ``setup``; the scene the director
       signs in before, off camera (the first ``signed_in`` one); a scene
-      whose results are loaded off camera first (``warm_results``);
+      whose results are loaded off camera first (``warm_results``); a scene
+      with a beat that types in its ``before`` (a cut: what is entered there
+      is entered off camera, as video 6's second shopper's form). A click in
+      a cut is not counted: video 2 opens its Live tab that way, the cursor
+      on the tab before the cut;
     * ``simulated traffic``: every scene from the one that starts the
       simulated users to the one that finishes them, both included (one that
       runs them, start to finish, is both);
@@ -861,11 +865,15 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
     for index, scene in enumerate(board.scenes):
         signs_in = scene.signed_in and not signed_in
         signed_in = signed_in or scene.signed_in
+        types_in_a_cut = any(
+            isinstance(step, Type) for beat in scene.beats for step in beat.before
+        )
         if (
             scene.off_camera
             or (index == 0 and board.setup is not None)
             or signs_in
             or scene.warm_results
+            or types_in_a_cut
         ):
             needed.append((scene.id, "off-camera setup"))
         if scene.traffic in ("start", "run"):

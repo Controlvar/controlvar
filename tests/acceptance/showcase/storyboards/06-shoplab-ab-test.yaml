@@ -228,8 +228,9 @@ scenes:
           shoplab.visitor_id: 2e01ea31-e519-4791-aae4-88cc29e105a1
           shoplab.cart: '[{"productId":"p007","price":79,"quantity":1}]'
     departures:
+      # The visitor and cart switched, and the form's details typed in a cut.
       - kind: off-camera setup
-        says: set up off camera
+        says: set up and form filled off camera
     open: /checkout
     beats:
       - before:
@@ -246,7 +247,7 @@ scenes:
           - type: {label: Card number, exact: false}
             text: 4242 4242 4242 4242
           - scroll_to: {role: group, name: Delivery address, exact: true}
-        cue: A second shopper, set up off camera, gets one page.
+        cue: "Second shopper, set up and form filled off camera: one page."
         focus: {role: group, name: Delivery address, exact: true}
         say:
           - A second shopper gets everything on one page.
