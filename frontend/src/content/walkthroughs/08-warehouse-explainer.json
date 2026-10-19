@@ -1,7 +1,7 @@
 {
   "slug": "08-warehouse-explainer",
   "kind": "animation",
-  "mp4": "08-warehouse-explainer-9d4ba8aa6fa8.mp4",
+  "mp4": "08-warehouse-explainer-8495d45e4d7f.mp4",
   "items": [
     { "on_screen": ["Your users already live in Snowflake or BigQuery, with attributes like country, age band, plan, device and app version."] },
     { "on_screen": ["Your own SQL query picks the eligible users and the attributes your targeting rules need."] },
