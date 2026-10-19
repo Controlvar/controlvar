@@ -1,0 +1,25 @@
+{
+  "videos": [
+    {
+      "slug": "01-getting-started",
+      "title": "Get started",
+      "description": "The Quick Start's command, then a tour of the dashboard: a completed experiment's results and a flag's rollout schedule.",
+      "duration_seconds": 84,
+      "mp4": {
+        "name": "01-getting-started-9cb480bae881.mp4",
+        "bytes": 2695836,
+        "sha256": "9cb480bae8819f30b4571f016780a81216bb573e7c8bab697c486318a1600cec"
+      },
+      "vtt": {
+        "name": "01-getting-started-9cb480bae881.vtt",
+        "bytes": 1387,
+        "sha256": "263886ca60e8ad2dddad93cc99361440fb8b3cefc1f195bb76017e9ae5689077"
+      },
+      "poster": {
+        "name": "01-getting-started-9cb480bae881-poster-ceebfc002e1c.jpg",
+        "bytes": 24156,
+        "sha256": "ceebfc002e1cf6c6bd06617e266f1498ab3c70d13818bfe32e6894f441f296d6"
+      }
+    }
+  ]
+}
