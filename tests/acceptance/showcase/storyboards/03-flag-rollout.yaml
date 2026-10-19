@@ -20,6 +20,18 @@
 #   rollout percentage below applies immediately": it is product copy
 #   (frontend/src/pages/feature-flags/[id].tsx), on screen in cues 6-10 and
 #   ringed in cue 9, and this video shows it as the page draws it.
+# * `say` is the narration (#1066 voiceover, D102): fuller than the captions,
+#   in video 1 and 2's voice. Its two numbers are in digits and on the page as
+#   they are said (G2): 10% in the rollout section at beat 5's start, 50% at
+#   beat 8's end, after the save. The segment's making off camera is said as
+#   well as shown. No sentence says a change reaches users at once, and none
+#   repeats the schedule card's "applies immediately". Beat 2's first sentence
+#   is video 2's, word for word, so its clip is the one already made. Beat 4
+#   says one sentence: its exit is a slide, which the capture's hold does not
+#   overlap (voiced.exit_floor_ms counts it 0), so a second sentence would be
+#   said before the slider moves.
+#   `python -m showcase.voice` makes the clips, and the capture holds each beat
+#   for them (showcase.capture.voiced).
 slug: 03-flag-rollout
 title: Roll out a feature flag
 seed: demo
@@ -57,6 +69,9 @@ scenes:
     beats:
       - cue: Signed in off camera. Wrap a new feature in a flag.
         focus: {testid: new-flag-btn}
+        say:
+          - Wrap a new feature in a flag to decide who gets it.
+          - Choose New Flag.
         steps:
           - move: {testid: new-flag-btn}
         exit:
@@ -66,6 +81,9 @@ scenes:
           - wait_for: {testid: flag-name-input}
         cue: Name it. Your code checks this key.
         focus: {testid: flag-key-input}
+        say:
+          - Name it, and the key your code uses fills itself in.
+          - Then describe what it controls.
         steps:
           - type: {testid: flag-name-input}
             text: Express checkout
@@ -76,6 +94,9 @@ scenes:
 
       - cue: Add a rule for the Beta testers segment, made off camera.
         focus: {testid: flag-targeting-section}
+        say:
+          - Under Targeting Rules, add a rule for users in a segment.
+          - Here, the Beta testers segment, made off camera.
         steps:
           - scroll_to: {testid: flag-targeting-section}
           - click: {testid: add-group}
@@ -88,6 +109,8 @@ scenes:
 
       - cue: They get it at any rollout percentage.
         focus: {testid: condition-row}
+        say:
+          - Beta testers get it at any rollout percentage.
         steps:
           - look: {testid: condition-row}
             ms: 1500
@@ -97,6 +120,9 @@ scenes:
 
       - cue: Everyone else starts at 10%.
         focus: {css: "section:has(#rollout-percentage)"}
+        say:
+          - "The slider sets the share for everyone else: here, 10%."
+          - Choose Create Feature Flag.
         steps:
           - look: {css: "section:has(#rollout-percentage)"}
             ms: 1500
@@ -107,12 +133,16 @@ scenes:
           - wait_for: {testid: flag-toggle}
         cue: "It starts off: not serving anyone yet."
         focus: {testid: flag-status}
+        say:
+          - It's created switched off, so no one gets it yet.
         steps:
           - look: {testid: flag-status}
             ms: 1500
 
       - cue: Switch it on when your code ships.
         focus: {testid: flag-toggle}
+        say:
+          - Switch it on when your code ships, and the page reads Serving.
         steps:
           - click: {testid: flag-toggle}
           - wait_for: {css: "[data-testid=flag-status][data-status=active]"}
@@ -121,6 +151,8 @@ scenes:
 
       - cue: Going well? Raise the rollout and save.
         focus: {css: "section:has(#rollout-percentage)"}
+        say:
+          - If it's going well, raise the rollout to 50%, and save.
         steps:
           - slide: {testid: rollout-percentage}
             value: 50
@@ -131,12 +163,17 @@ scenes:
 
       - cue: Or schedule the stages through the API.
         focus: {testid: rollout-schedule-section}
+        say:
+          - Or raise it in stages with a schedule, created through the API.
         steps:
           - look: {testid: rollout-schedule-empty}
             ms: 2000
 
       - cue: Problem? Switch it off in one click.
         focus: {testid: flag-toggle}
+        say:
+          - Switch it off in one click if there's a problem.
+          - It's off again.
         payoff: true
         steps:
           - click: {testid: flag-toggle}
@@ -151,6 +188,9 @@ scenes:
           - wait_for: {css: "[data-testid=audit-log-table] tbody tr"}
         cue: "Every change is logged: who, what, when."
         focus: {css: "[data-testid=audit-log-table] tbody tr"}
+        say:
+          - Every change to the flag is in the audit log.
+          - Who made it, what it was, and when.
         record:
           audit: {css: "[data-testid=audit-log-table] tbody"}
         payoff: true

@@ -181,23 +181,40 @@ HEADER_JS = """() => {
   return {links: items.length, wrapped, cut};
 }"""
 
-#: U4: the text drawn inside the viewport (a text node with a box on screen).
+#: U4 and G2: the text drawn inside the viewport, then the field values. A text
+#: node is read together with the text-node siblings next to it, as the one
+#: string the page draws: React draws ``{rolloutPercentage}%`` as the two text
+#: nodes "10" and "%", with an empty comment between them when the page was
+#: rendered on the server, and the page shows "10%". Comments between them do
+#: not count; an element between them always ends the string, and text in two
+#: elements is never joined. A string is read when any of its text nodes has a
+#: box on screen. (tests/acceptance/showcase_browser runs this in Chromium.)
 VIEWPORT_TEXT_JS = """() => {
   const out = [];
   const w = innerWidth, h = innerHeight;
-  const walker = document.createTreeWalker(document.body || document, NodeFilter.SHOW_TEXT);
-  let node;
-  while ((node = walker.nextNode())) {
-    const text = node.textContent;
-    if (!text || !text.trim()) continue;
+  const drawn = (node) => {
     const range = document.createRange();
     range.selectNodeContents(node);
     for (const r of range.getClientRects()) {
-      if (r.right > 0 && r.bottom > 0 && r.left < w && r.top < h && r.width > 0) {
-        out.push(text);
-        break;
-      }
+      if (r.right > 0 && r.bottom > 0 && r.left < w && r.top < h && r.width > 0) return true;
     }
+    return false;
+  };
+  const walker = document.createTreeWalker(document.body || document, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walker.nextNode())) {
+    let before = node.previousSibling;
+    while (before && before.nodeType !== Node.TEXT_NODE && before.nodeType !== Node.ELEMENT_NODE) {
+      before = before.previousSibling;
+    }
+    if (before && before.nodeType === Node.TEXT_NODE) continue;
+    const run = [];
+    for (let next = node; next && next.nodeType !== Node.ELEMENT_NODE; next = next.nextSibling) {
+      if (next.nodeType === Node.TEXT_NODE) run.push(next);
+    }
+    const text = run.map((n) => n.textContent).join('');
+    if (!text.trim()) continue;
+    if (run.some(drawn)) out.push(text);
   }
   for (const el of document.querySelectorAll('input, textarea')) {
     const r = el.getBoundingClientRect();

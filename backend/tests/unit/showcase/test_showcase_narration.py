@@ -23,6 +23,7 @@ REPO = Path(__file__).resolve().parents[4]
 BOARDS = REPO / "tests" / "acceptance" / "showcase" / "storyboards"
 V1 = BOARDS / "01-getting-started.yaml"
 V2 = BOARDS / "02-first-experiment.yaml"
+V3 = BOARDS / "03-flag-rollout.yaml"
 
 
 def data(path: Path) -> dict:
@@ -44,10 +45,10 @@ def refusal(raw: dict) -> str:
     return str(caught.value)
 
 
-# --- The two narrated storyboards ------------------------------------------------------------
+# --- The narrated storyboards ----------------------------------------------------------------
 
 
-@pytest.mark.parametrize("path", [V1, V2], ids=["v1", "v2"])
+@pytest.mark.parametrize("path", [V1, V2, V3], ids=["v1", "v2", "v3"])
 def test_every_beat_is_narrated_and_the_lints_report_nothing(path):
     board = storyboard.load(path)
     assert all(beat.say for scene in board.scenes for beat in scene.beats)
@@ -70,10 +71,14 @@ SPOKEN_NUMBERS = {
         ("later", 1, 1): ["63,000", "2"],
         ("result", 1, 1): ["12.1%", "95%"],
     },
+    "03-flag-rollout": {
+        ("flag", 5, 1): ["10%"],
+        ("flag", 8, 1): ["50%"],
+    },
 }
 
 
-@pytest.mark.parametrize("path", [V1, V2], ids=["v1", "v2"])
+@pytest.mark.parametrize("path", [V1, V2, V3], ids=["v1", "v2", "v3"])
 def test_the_spoken_numbers_are_the_ones_listed(path):
     board = storyboard.load(path)
     said = {
@@ -98,7 +103,7 @@ def test_the_cards_state_the_numbers_their_narration_says_in_digits():
         )
 
 
-@pytest.mark.parametrize("path", [V1, V2], ids=["v1", "v2"])
+@pytest.mark.parametrize("path", [V1, V2, V3], ids=["v1", "v2", "v3"])
 def test_narration_changes_nothing_the_capture_records(path):
     """EM condition 5: the silent path stays as it is. The cue list, and so the
     capture directory and its gate 4 meaning, are the same with or without ``say``."""
@@ -355,6 +360,38 @@ def test_a_number_the_page_does_not_show_is_refused():
     )
     # 13 is not found inside 31,234.
     assert not gates.spoken_numbers("About 13 days.", "31,234 users", "31,234 users")[0]
+
+
+#: What director.VIEWPORT_TEXT_JS reads, measured in headless Chromium by the
+#: browser tests in tests/acceptance/showcase_browser (no CI job runs them):
+#: React's ``<span>{value}%</span>`` (two text nodes) since the fix, the same
+#: span before it, and "10" and "%" in two elements with one between.
+READ_SPLIT_SPAN = "10%"
+READ_SPLIT_SPAN_BEFORE_THE_FIX = "10\n%"
+READ_TWO_ELEMENTS = "10\nx\n%"
+SAYS_10 = "The slider sets the share for everyone else: here, 10%."
+
+
+def test_g2_takes_a_percentage_the_reader_reads_as_drawn():
+    ok, numbers, why = gates.spoken_numbers(SAYS_10, READ_SPLIT_SPAN, READ_SPLIT_SPAN)
+    assert (ok, why) == (True, "")
+    assert numbers["shown_at"] == {"10%": "start and end"}
+    # Before the fix the reader split it, and G2 refused what the page drew.
+    reading = READ_SPLIT_SPAN_BEFORE_THE_FIX
+    assert not gates.spoken_numbers(SAYS_10, reading, reading)[0]
+
+
+def test_g2_still_refuses_a_percentage_drawn_in_two_elements():
+    """number_key is not widened: "10" and "%" apart are not 10%."""
+    ok, numbers, why = gates.spoken_numbers(
+        SAYS_10, READ_TWO_ELEMENTS, READ_TWO_ELEMENTS
+    )
+    assert not ok
+    assert numbers == {"said": ["10%"], "shown_at": {}}
+    assert why == (
+        "the narration says 10%; the page shows 10 at the beat's start and 10 before"
+        " its exit"
+    )
 
 
 def test_the_tally_is_one_check_per_sentence_exactly():

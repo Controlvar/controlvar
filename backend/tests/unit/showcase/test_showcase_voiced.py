@@ -149,8 +149,8 @@ def test_a_cache_inside_a_git_checkout_is_refused(cache, tmp_path):
 
 def test_a_silent_capture_or_a_storyboard_without_narration_needs_no_clip(tmp_path):
     assert voiced.find_clips(board(), contract.SILENT, tmp_path / "nowhere") == []
-    v3 = board("03-flag-rollout")
-    assert voiced.voice_for(v3, "Ruth") == contract.SILENT
+    probe = board("90-app-probe")
+    assert voiced.voice_for(probe, "Ruth") == contract.SILENT
     assert voiced.voice_for(board(), "Ruth") == "Ruth"
     assert voiced.voice_for(board(), contract.SILENT) == contract.SILENT
     with pytest.raises(voiced.VoiceRefused, match="'Joanna' is not one of"):
