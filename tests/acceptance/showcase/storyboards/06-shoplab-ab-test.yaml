@@ -42,13 +42,16 @@
 #   word, so their clips are made already. The UX code card (B6) is cut, the
 #   first cut T178 condition 11 names: a code card quotes a page of the docs
 #   (C10), not ShopLab's source, and the typed estimate takes its time.
-#   Projected with clip lengths fitted on the 34 real Ruth clips: 78.9 s, or
-#   81.5 s with each new clip at the 90th-percentile under-prediction (cap
-#   87.3 s). If the voice step projects it over the cap, cut in this order,
+#   The `later` card holds still after its narration (payoff, 2.5 s): its note
+#   states three departures in about 45 words. Projected with clip lengths
+#   fitted on the 34 real Ruth clips: 81.4 s, or 84.1 s with each new clip at
+#   the 90th-percentile under-prediction (cap 87.3 s); 92.7 s with each at the
+#   worst. If the voice step projects it over the cap, cut in this order,
 #   neither needing a new clip: (1) shopper-b beat 1's "Its panel says so: One
-#   page." (about 1.5 s: that beat's narration runs over its exit); (2) the
-#   result's "Significant at 95% confidence." with "significant at 95%" taken
-#   off its headline (about 3.9 s).
+#   page." (about 1.2 s at the 90th percentile, 2.9 s at the worst: that
+#   beat's narration runs over its exit); (2) the result's "Significant at 95%
+#   confidence." with "significant at 95%" taken off its headline (about 3.9 s
+#   more at the 90th percentile; with both cuts the worst case is 85.0 s).
 slug: 06-shoplab-ab-test
 title: An A/B test, from setup to winner
 seed: demo
@@ -290,10 +293,13 @@ scenes:
         the results page reads Duration 0d. The demo apps run from their own
         build in this recording.
     beats:
+      # Held still after its narration (payoff): the note states three
+      # departures in about 45 words.
       - cue: 8,000 shoppers later, simulated in minutes.
         focus: {css: "#headline"}
         say:
           - 8,000 shoppers later, simulated for this video.
+        payoff: true
 
   - id: result
     results_of: ShopLab checkout flow

@@ -1385,7 +1385,9 @@ def write_capture(
         "apps": {app: versions.get("apps", {}).get(app) for app in board.apps},
         # The tool's own checkout: the commit the run started from, and clean
         # only if it was clean then and now, at that commit. A dirty tree is
-        # recorded, not refused; a final's approval record checks clean.
+        # recorded, not refused. Intent, not enforced here: a final's approval
+        # step, kept outside this repository, checks commit and clean against
+        # the reviewed commit (build.tool_record).
         "tool": build.tool_record(
             versions.get("tool"), build.tool_checkout(options.repo)
         ),

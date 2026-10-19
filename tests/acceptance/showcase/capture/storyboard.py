@@ -188,6 +188,13 @@ class Slide(_Strict):
 
 
 Step = Union[Click, Move, Type, Look, ScrollTo, WaitFor, Choose, Slide]
+#: The steps that enter data. In a cut (a beat's ``before``) what they enter is
+#: entered off camera, so the scene states off-camera setup (D84,
+#: ``required_departures``). A click is not one: video 2 clicks its Live tab in
+#: a cut, the cursor on the tab before it. The load refuses a choose or a slide
+#: in a cut outright (``parse``), so today the row is met by a type; the other
+#: two are in it for the day that refusal is lifted.
+ENTERS_DATA = (Type, Choose, Slide)
 
 
 class Claim(_Strict):
@@ -294,6 +301,8 @@ VISITOR_VALUE_MAX = 200
 #: ShopLab's own test for a visitor id (demo/shoplab/src/lib/visitor.ts,
 #: ``UUID_V4``): an id it fails is silently replaced by a random one, so the
 #: page would load as a visitor nobody declared. A unit test keeps the two equal.
+#: Applied with ``fullmatch``: Python's ``$`` also matches before a trailing
+#: newline, which the JavaScript one (no ``m`` flag) does not.
 UUID_V4 = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     re.IGNORECASE,
@@ -412,7 +421,7 @@ def visitor_problem(app: str, visitors: List[Visitor]) -> None:
         )
     if key not in storage:
         raise ValueError(f"a {app} visitor names its id ({key})")
-    if not UUID_V4.match(storage[key]):
+    if not UUID_V4.fullmatch(storage[key]):
         raise ValueError(
             f"{key} {storage[key]!r} is not a UUID v4: {app} would replace it with"
             " a random one, and the scene would be filmed as a visitor nobody declared"
@@ -849,10 +858,10 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
       first scene of a storyboard with a ``setup``; the scene the director
       signs in before, off camera (the first ``signed_in`` one); a scene
       whose results are loaded off camera first (``warm_results``); a scene
-      with a beat that types in its ``before`` (a cut: what is entered there
-      is entered off camera, as video 6's second shopper's form). A click in
-      a cut is not counted: video 2 opens its Live tab that way, the cursor
-      on the tab before the cut;
+      with a beat whose ``before`` types, chooses or slides (``ENTERS_DATA``;
+      a cut: what is entered there is entered off camera, as video 6's second
+      shopper's form). A click in a cut is not counted: video 2 opens its
+      Live tab that way, the cursor on the tab before the cut;
     * ``simulated traffic``: every scene from the one that starts the
       simulated users to the one that finishes them, both included (one that
       runs them, start to finish, is both);
@@ -865,15 +874,17 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
     for index, scene in enumerate(board.scenes):
         signs_in = scene.signed_in and not signed_in
         signed_in = signed_in or scene.signed_in
-        types_in_a_cut = any(
-            isinstance(step, Type) for beat in scene.beats for step in beat.before
+        enters_data_in_a_cut = any(
+            isinstance(step, ENTERS_DATA)
+            for beat in scene.beats
+            for step in beat.before
         )
         if (
             scene.off_camera
             or (index == 0 and board.setup is not None)
             or signs_in
             or scene.warm_results
-            or types_in_a_cut
+            or enters_data_in_a_cut
         ):
             needed.append((scene.id, "off-camera setup"))
         if scene.traffic in ("start", "run"):

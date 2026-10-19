@@ -114,6 +114,20 @@ def test_the_storyboard_loads_and_its_captions_are_fixed_and_fit_the_video():
     assert contract.MIN_VIDEO_MS + 5_000 <= length <= contract.MAX_VIDEO_MS - 5_000
 
 
+def test_the_off_camera_card_and_the_result_are_held_still():
+    """The ``later`` card's note states three departures in about 45 words, so
+    it holds still after its narration (``config.PAYOFF_MS``), as the result
+    does; its wording is the D84 statements' (round 1 review, S7)."""
+    made = board()
+    held = [
+        (scene.id, number)
+        for scene in made.scenes
+        for number, beat in enumerate(scene.beats, start=1)
+        if beat.payoff
+    ]
+    assert held == [("later", 1), ("result", 1)]
+
+
 def test_video_6_registers_in_the_tool_and_records_shoplab_only():
     assert config.VIDEOS["06-shoplab-ab-test"] == "storyboards/06-shoplab-ab-test.yaml"
     assert board().apps == ["shoplab"]
@@ -332,7 +346,7 @@ def test_each_shoppers_visitor_id_is_a_uuid_v4_in_its_arm_by_the_servers_hash(pl
     assert [s.visitor for s in end.on_camera_shoppers] == [SHOPPER_A, SHOPPER_B]
     generated = {user.user_id for user in plan.users}
     for shopper in end.on_camera_shoppers:
-        assert storyboard.UUID_V4.match(shopper.visitor)
+        assert storyboard.UUID_V4.fullmatch(shopper.visitor)
         assert uuid.UUID(shopper.visitor).version == 4
         control = bucket_of(shopper.visitor, KEY) < 50
         assert control == (shopper.arm == "Control"), shopper
@@ -486,27 +500,49 @@ def test_shopper_bs_form_filled_in_a_cut_is_what_its_scene_states():
     assert says[0] in shopper_b.beats[0].cue
 
 
-@pytest.mark.regression
-def test_a_scene_that_types_in_a_cut_must_state_off_camera_setup():
-    """A step in ``before`` runs while recording is paused: what it types is
-    entered off camera, and the scene must say so (D84). A click in a cut is
-    not counted (video 2 opens its Live tab that way, unchanged)."""
+#: A step that enters data, as a beat's ``before`` would hold it.
+ENTERED_IN_A_CUT = {
+    "type": {"type": {"testid": "search-input"}, "text": "purchase"},
+    "choose": {"choose": {"testid": "search-input"}, "option": "purchase"},
+    "slide": {"slide": {"testid": "search-input"}, "value": 5},
+}
+
+
+def test_the_steps_that_enter_data_are_type_choose_and_slide():
+    assert sorted(ENTERED_IN_A_CUT) == sorted(
+        step.__name__.lower() for step in storyboard.ENTERS_DATA
+    )
+
+
+def v2_with_a_cut(steps=None):
+    """Video 2's storyboard, its arriving scene's first ``before`` replaced."""
     raw = yaml.safe_load(
         (
             ACCEPTANCE / "showcase" / "storyboards" / "02-first-experiment.yaml"
         ).read_text(encoding="utf-8")
     )
-    arriving = next(s for s in raw["scenes"] if s["id"] == "arriving")
-    assert ("arriving", "off-camera setup") not in storyboard.required_departures(
-        storyboard.parse(raw)
+    if steps is not None:
+        arriving = next(s for s in raw["scenes"] if s["id"] == "arriving")
+        arriving["beats"][0]["before"] = steps
+    return raw
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("kind", sorted(ENTERED_IN_A_CUT))
+def test_a_scene_that_enters_data_in_a_cut_must_state_off_camera_setup(kind):
+    """A step in ``before`` runs while recording is paused: what it types,
+    chooses or slides to is entered off camera, and the scene must say so
+    (D84). A click in a cut is not counted (video 2 opens its Live tab that
+    way, unchanged). The load refuses a choose or a slide in a cut outright
+    (the test below), so the row is read on the validated storyboard, as it
+    would be if that refusal were ever lifted."""
+    plain = storyboard.Storyboard.model_validate(v2_with_a_cut(), strict=False)
+    assert ("arriving", "off-camera setup") not in storyboard.required_departures(plain)
+    made = storyboard.Storyboard.model_validate(
+        v2_with_a_cut([ENTERED_IN_A_CUT[kind]]), strict=False
     )
-    arriving["beats"][0]["before"] = [
-        {"type": {"testid": "search-input"}, "text": "purchase"}
-    ]
-    assert ("arriving", "off-camera setup") in storyboard.required_departures(
-        storyboard.parse(raw)
-    )
-    assert storyboard.departure_problems(storyboard.parse(raw)) == [
+    assert ("arriving", "off-camera setup") in storyboard.required_departures(made)
+    assert storyboard.departure_problems(made) == [
         "scene arriving: off-camera setup is not stated on screen (departures)"
     ]
     # Video 2 as committed clicks in a cut (its Live tab) and needs nothing more.
@@ -520,6 +556,18 @@ def test_a_scene_that_types_in_a_cut_must_state_off_camera_setup():
         for step in beat.before
     )
     assert storyboard.departure_problems(v2) == []
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("kind", ["choose", "slide"])
+def test_a_choose_or_a_slide_in_a_cut_is_refused_at_load(kind):
+    """A choose or a slide is filmed or not done (C9): the load refuses either
+    in a ``before``, so no storyboard reaches the row above with one; a type
+    in a cut loads and needs only its statement."""
+    with pytest.raises(storyboard.StoryboardError, match="is cut from the video"):
+        storyboard.parse(v2_with_a_cut([ENTERED_IN_A_CUT[kind]]))
+    typed = storyboard.parse(v2_with_a_cut([ENTERED_IN_A_CUT["type"]]))
+    assert ("arriving", "off-camera setup") in storyboard.required_departures(typed)
 
 
 @pytest.mark.regression
@@ -595,6 +643,8 @@ A_CART = '[{"productId":"p003","price":59,"quantity":1}]'
             "is not a UUID v4",
         ),
         ({"shoplab.visitor_id": "shopper-a"}, "is not a UUID v4"),
+        # Python's `$` matches before a trailing newline; visitor.ts's does not.
+        ({"shoplab.visitor_id": SHOPPER_A + "\n"}, "is not a UUID v4"),
         ({"shoplab.cart": A_CART}, "names its id (shoplab.visitor_id)"),
         (
             {"shoplab.visitor_id": SHOPPER_A, "shoplab.session_token": "x"},
@@ -869,7 +919,7 @@ def shoplab_load(page, url):
         return
     store = page.local.setdefault(SHOP, {})
     ident = store.get(VISITOR_KEY)
-    if not (ident and storyboard.UUID_V4.match(ident)):
+    if not (ident and storyboard.UUID_V4.fullmatch(ident)):
         ident = str(uuid.uuid4())
         store[VISITOR_KEY] = ident
     control = bucket_of(ident, KEY) < 50

@@ -4,9 +4,10 @@ A take records the capture checkout's HEAD, and ``clean`` only when that
 checkout had no uncommitted change (modified, staged or untracked; ignored
 files such as ``node_modules`` are not changes) when the run started and again
 when the capture was written, at the same commit. A dirty tree is recorded, not
-refused: a development take is allowed one. The approval record of a final
-checks ``clean`` at the reviewed commit, so a dirty tree recorded as clean is
-the defect these tests plant.
+refused: a development take is allowed one. The intent, enforced outside this
+repository by a final's approval step, is that ``clean`` is checked at the
+reviewed commit, so a dirty tree recorded as clean is the defect these tests
+plant.
 
 Each test makes its own git repository in a temporary directory, so they run
 as well in core_build.sh's copy, which has no ``.git``.
@@ -112,7 +113,7 @@ DIRTY = {
 @pytest.mark.parametrize("how", sorted(DIRTY))
 def test_a_dirty_checkout_is_never_recorded_as_clean(checkout, how):
     """The plant: a dirty tree recorded as clean would let a final pass the
-    approval record's check at a commit it was not recorded from."""
+    approval step's check at a commit it was not recorded from."""
     head = git(checkout, "rev-parse", "HEAD")
     DIRTY[how](checkout)
     found = build.tool_checkout(checkout)

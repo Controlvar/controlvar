@@ -169,8 +169,11 @@ def tool_record(
     ``clean`` is true only when the checkout was clean at the run's start and
     again when this video's capture was written, at the same commit: a file
     changed, or a commit made, while a take ran is not that commit's take. A
-    dirty checkout is recorded, not refused (a development take); the approval
-    record of a final checks ``clean`` at the reviewed commit.
+    dirty checkout is recorded, not refused (a development take). Intent, not
+    enforced here: a final's approval step, kept outside this repository,
+    checks that ``commit`` and both readings name the reviewed commit and a
+    clean tree; nothing in this repository refuses a dirty tree, the render
+    included.
     """
     clean = bool(
         start is not None
