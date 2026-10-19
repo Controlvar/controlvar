@@ -290,6 +290,58 @@ DESCRIPTION_FACTS: dict[str, dict[str, Any]] = {
         ],
         "said": ["Open the completed one."],
     },
+    "02-first-experiment": {
+        "description": (
+            "Create an experiment in the guided setup, work out how many users it "
+            "needs, start it, and read its result once simulated shoppers have "
+            "arrived."
+        ),
+        "seed": "demo",
+        # The guided setup (New Experiment), the size estimate, Start; the Live
+        # tab as shoppers arrive, then the recommendation.
+        "actions": [
+            ["click", {"testid": "new-experiment-btn"}],
+            ["click", {"testid": "estimate-calculate"}],
+            ["click", {"testid": "action-start"}],
+            ["click", {"role": "tab", "name": "Live"}],
+            ["look", {"testid": "recommendation-reason"}],
+        ],
+        # "simulated shoppers have arrived": a traffic block, stated on screen.
+        "departures": ["simulated traffic"],
+        "traffic": True,
+        "end_state": {"experiment": {"status": "active", "winner": "Sticky bar"}},
+    },
+    "03-flag-rollout": {
+        "description": (
+            "Create a flag, target a segment, set a rollout percentage for everyone "
+            "else, switch it on and off, and find each change in the audit log."
+        ),
+        "seed": "demo",
+        # New Flag; the segment condition; the slider for everyone else; Create;
+        # the toggle on, then off; the audit log.
+        "actions": [
+            ["click", {"testid": "new-flag-btn"}],
+            ["choose", {"testid": "condition-segment"}],
+            ["slide", {"testid": "rollout-percentage"}],
+            ["click", {"testid": "submit-flag"}],
+            ["click", {"testid": "flag-toggle"}],
+            ["click", {"testid": "flag-toggle"}],
+            ["click", {"testid": "nav-audit-log"}],
+        ],
+        # "each change in the audit log": the four changes the capture checks
+        # the log for, in order.
+        "end_state": {
+            "flag": {
+                "segment": "Beta testers",
+                "audit": [
+                    "feature_flag_create",
+                    "toggle_enable",
+                    "feature_flag_update",
+                    "toggle_disable",
+                ],
+            }
+        },
+    },
 }
 
 VERBS = ("click", "look", "type", "choose", "slide", "move")

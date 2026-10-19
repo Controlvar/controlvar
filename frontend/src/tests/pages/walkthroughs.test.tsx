@@ -53,7 +53,7 @@ jest.mock('next/router', () => ({ useRouter: () => ({ pathname: '/', asPath: '/'
  * fails here until it is added to this list too, and dropping one fails
  * however consistent everything else stays.
  */
-const PINNED = ['01-getting-started'];
+const PINNED = ['01-getting-started', '02-first-experiment', '03-flag-rollout'];
 
 const CONTENT = path.join(__dirname, '..', '..', 'content');
 const mode = isMarketingSite as jest.Mock;
