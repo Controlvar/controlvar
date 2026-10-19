@@ -226,7 +226,7 @@ scenes:
 
       - before:
           - wait_for: {text: marcus@example.com}
-        cue: Analysts see every experiment and flag, and change neither.
+        cue: Analysts see every experiment and flag, and edit neither.
         focus: {css: "[data-testid=user-table] table"}
         record:
           team: {css: "[data-testid=user-table] tbody"}
