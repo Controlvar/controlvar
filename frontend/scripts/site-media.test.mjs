@@ -348,7 +348,7 @@ function jpeg(width = 1280, height = 720) {
 }
 
 /** An entry with real-shaped files in `out/media` and a transcript, ready to plant defects in. */
-function contentFixture({ mp4Bytes = mp4(), jpgBytes = jpeg(), vtt = VTT, said = ['One line and another.', 'Two.'] } = {}) {
+function contentFixture({ mp4Bytes = mp4(), jpgBytes = jpeg(), vtt = VTT, said = ['One line and another.', 'Two.'], transcriptOf = null } = {}) {
   const dir = scratch();
   const media = join(dir, 'media');
   const transcripts = join(dir, 'walkthroughs');
@@ -368,9 +368,41 @@ function contentFixture({ mp4Bytes = mp4(), jpgBytes = jpeg(), vtt = VTT, said =
   writeFileSync(join(media, entry.mp4.name), mp4Bytes);
   writeFileSync(join(media, entry.poster.name), jpgBytes);
   writeFileSync(join(media, `${stem}.site.vtt`), toSiteVtt(vtt));
-  writeFileSync(join(transcripts, `${slug}.json`), JSON.stringify({ slug, mp4: entry.mp4.name, items: [{ on_screen: ['x'] }, { said }] }));
+  const transcript = transcriptOf ? transcriptOf(entry) : { slug, mp4: entry.mp4.name, items: [{ on_screen: ['x'] }, { said }] };
+  writeFileSync(join(transcripts, `${slug}.json`), JSON.stringify(transcript));
   return { dir, media, transcripts, entry, stem, problems: () => entryProblems(entry, media, transcripts) };
 }
+
+/** An animation's transcript (T178 condition 2): one on-screen caption per cue of VTT, unless `items` says otherwise. */
+const animationOf = (items = [{ on_screen: ['One line and another.'] }, { on_screen: ['Two.'] }], kind = 'animation') =>
+  (entry) => ({ slug: entry.slug, kind, mp4: entry.mp4.name, items });
+
+describe('entryProblems for an animation (T178 condition 2)', () => {
+  it('passes a silent animation whose transcript is its captions', () => {
+    const f = contentFixture({ mp4Bytes: mp4({ audio: null }), transcriptOf: animationOf() });
+    assert.deepEqual(f.problems(), []);
+    rmSync(f.dir, { recursive: true });
+  });
+
+  // 2(f): each plant must be refused.
+  const plants = [
+    ['an animation whose mp4 has an AAC track', { transcriptOf: animationOf() }, /an animation has no sound/],
+    ['a recording whose mp4 has no audio track (the recordings\' rule is unchanged)', { mp4Bytes: mp4({ audio: null }) }, /0 audio track/],
+    ['an animation transcript with a said item', { mp4Bytes: mp4({ audio: null }), transcriptOf: animationOf([{ on_screen: ['One line and another.'] }, { said: ['Two.'] }]) }, /on-screen items of one caption each; it has 1 other item/],
+    ['one word changed in an animation transcript', { mp4Bytes: mp4({ audio: null }), transcriptOf: animationOf([{ on_screen: ['One line and other.'] }, { on_screen: ['Two.'] }]) }, /is not its captions .* first difference at 1/],
+    ['two captions joined in one on-screen item', { mp4Bytes: mp4({ audio: null }), transcriptOf: animationOf([{ on_screen: ['One line and another.', 'Two.'] }]) }, /it has 1 other item/],
+    ['"kind": "silent"', { mp4Bytes: mp4({ audio: null }), transcriptOf: animationOf(undefined, 'silent') }, /kind is "silent"; the only kind is "animation"/],
+    ['an animation transcript with the recordings\' end-card line', { mp4Bytes: mp4({ audio: null }), transcriptOf: animationOf([{ on_screen: ['One line and another.'] }, { on_screen: ['Two.'] }, { on_screen: ['Recorded on Controlvar v0.36.0, a local stack with demo data'] }]) }, /is not its captions \(3 lines, 2 cues/],
+  ];
+  for (const [what, options, pattern] of plants) {
+    it(`fails ${what}`, () => {
+      const f = contentFixture(options);
+      const problems = f.problems();
+      assert.ok(problems.some((p) => pattern.test(p)), problems.join('\n') || 'no problem reported');
+      rmSync(f.dir, { recursive: true });
+    });
+  }
+});
 
 describe('entryProblems', () => {
   it('passes a faststart, narrated video with matching captions, transcript and poster', () => {

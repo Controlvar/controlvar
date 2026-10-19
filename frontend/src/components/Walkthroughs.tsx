@@ -12,26 +12,36 @@ import manifest from '@/content/videos.json';
  * `out/media/`. A self-hoster's dashboard has neither the section nor the
  * files.
  *
+ * Two kinds of video, declared by the transcript's `kind`:
+ *   - a recording (no `kind`): the dashboard filmed on a local stack with demo
+ *     data, narrated, with a burned-in headline band;
+ *   - an animation (`"kind": "animation"`): no sound, with captions of its
+ *     own text only.
+ * Each row says which it is, in visible text.
+ *
  * What a visitor gets, and why (the UX plan):
  *   - the browser's own player: no autoplay, nothing muted or looped, and
  *     `preload="none"` with a poster, so no video bytes load before Play;
- *   - no `playsinline`, so an iPhone plays fullscreen, where the burned-in
- *     headline is readable;
- *   - a caption track that is NOT `default`: the burned-in band is a
- *     headline, the captions are the narration, and an enabled track drawn
- *     over the band makes both unreadable. The site serves `<stem>.site.vtt`,
- *     the approved captions with ` line:-5` on every cue, which lifts them
- *     above the band;
- *   - a closed descriptive transcript under each video: every card and
- *     headline ("On screen:") and the sentences said over each, because some
- *     of what a video states is only on screen.
+ *   - no `playsinline`, meant to let an iPhone play fullscreen, where the
+ *     burned-in text is readable (expected WebKit behaviour, not verified);
+ *   - a caption track that is NOT `default`. An enabled track is drawn over
+ *     the text a video burns in at the bottom of its frame, and both become
+ *     unreadable. The site serves `<stem>.site.vtt`, the approved captions
+ *     with ` line:-5` on every cue, which lifts them above a recording's
+ *     headline band (measured in three engines). An animation's captions
+ *     repeat the text it already shows;
+ *   - a closed transcript under each video. For a recording it is
+ *     descriptive: every card and headline ("On screen:") and the sentences
+ *     said over each, because some of what a recording states is only on
+ *     screen. For an animation it is the text of its captions.
  *
  * EVERY SENTENCE HERE IS CHECKED. The section's own copy is the plan's WORDS
- * table; a transcript is a quotation of its video, held to the storyboard and
- * the render's templates by
- * `backend/tests/unit/showcase/test_site_walkthroughs.py` and to the pinned
- * captions by `scripts/check-site-media.mjs`. Never edit the transcript of an
- * unchanged video: re-render it (a new file name) or revert the change.
+ * table. A recording's transcript is a quotation of the video, held to the
+ * storyboard and the render's templates by
+ * `backend/tests/unit/showcase/test_site_walkthroughs.py`. Every transcript
+ * is held to the pinned captions by `scripts/check-site-media.mjs`. Never
+ * edit the transcript of an unchanged video: re-render it (a new file name)
+ * or revert the change.
  *
  * Adding a video changes no code: an entry in `content/videos.json`, its
  * transcript in `content/walkthroughs/<slug>.json`, and the per-video rows of
@@ -54,7 +64,15 @@ export type WalkthroughVideo = {
 /** One paragraph of a transcript, in the order the video shows it. */
 export type TranscriptItem = { on_screen: string[] } | { said: string[] } | { code: string[] };
 
-export type Transcript = { slug: string; mp4: string; items: TranscriptItem[] };
+export type Transcript = { slug: string; kind?: 'animation'; mp4: string; items: TranscriptItem[] };
+
+export type WalkthroughKind = 'recording' | 'animation';
+
+/** What each row says it is, in visible text. */
+export const KIND_LABEL: Readonly<Record<WalkthroughKind, string>> = {
+  recording: 'Narrated recording',
+  animation: 'Animation without sound',
+};
 
 export const WALKTHROUGHS: readonly WalkthroughVideo[] = (manifest as { videos: WalkthroughVideo[] }).videos;
 
@@ -96,6 +114,13 @@ export function transcriptFor(slug: string): Transcript {
   return require(`../content/walkthroughs/${slug}.json`) as Transcript;
 }
 
+/** A recording unless the transcript says `"kind": "animation"`; any other `kind` fails the export. */
+export function kindOf(transcript: Transcript): WalkthroughKind {
+  if (!('kind' in transcript)) return 'recording';
+  if (transcript.kind === 'animation') return 'animation';
+  throw new Error(`${transcript.slug}: unknown transcript kind ${JSON.stringify(transcript.kind)}`);
+}
+
 function TranscriptItemView({ item }: { item: TranscriptItem }) {
   if ('on_screen' in item) {
     return <p className="text-slate-500">{onScreenLine(item.on_screen)}</p>;
@@ -121,7 +146,7 @@ export function Walkthroughs() {
           Walkthroughs
         </h2>
         <p className="mt-3 max-w-2xl text-slate-600">
-          Narrated recordings, made on a local stack with demo data. Turn captions on in the player; the transcript is
+          The recordings were made on a local stack with demo data. Turn captions on in the player; the transcript is
           below each video.
         </p>
         {/* Only Tailwind classes the dashboard already uses: a new one would change the CSS that
@@ -131,6 +156,7 @@ export function Walkthroughs() {
             const id = anchorFor(video.slug);
             const length = lengthLabel(video.duration_seconds);
             const transcript = transcriptFor(video.slug);
+            const kind = kindOf(transcript);
             return (
               <li key={video.slug} id={id}>
                 <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
@@ -140,6 +166,9 @@ export function Walkthroughs() {
                     </h3>
                     <p id={`${id}-description`} className="mt-2 text-sm leading-relaxed text-slate-600">
                       {video.description}
+                    </p>
+                    <p className="mt-2 text-sm text-slate-500" data-kind={kind}>
+                      {KIND_LABEL[kind]}
                     </p>
                     <p className="mt-2 text-sm text-slate-500">
                       <span aria-hidden="true">{length.shown}</span>

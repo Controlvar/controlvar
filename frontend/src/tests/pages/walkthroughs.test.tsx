@@ -19,6 +19,13 @@
  * to the videos by `backend/tests/unit/showcase/test_site_walkthroughs.py`
  * (the storyboards) and `scripts/check-site-media.mjs` (the captions).
  *
+ * Two kinds of video (T178 condition 2). A recording has no `kind`, and its
+ * transcript opens with the title card and ends with the "Recorded on" line.
+ * An animation (`"kind": "animation"`) has neither: only on-screen items, one
+ * caption each. Its title, description and label say nothing of narration,
+ * recording or a local stack, and its row says in visible text that it is an
+ * animation without sound. Any other `kind` is refused.
+ *
  * The flag is mocked, as in `index.site-mode.test.tsx`: SITE_MODE is read at
  * module load, and `isolateModules` would load a second React.
  */
@@ -32,9 +39,13 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import HomePage from '@/pages/index';
 import { isMarketingSite } from '@/utils/site-mode';
 import {
+  KIND_LABEL,
+  Transcript,
   WALKTHROUGHS,
+  WalkthroughVideo,
   Walkthroughs,
   anchorFor,
+  kindOf,
   lengthLabel,
   onScreenLine,
   siteCaptionsFor,
@@ -53,9 +64,32 @@ jest.mock('next/router', () => ({ useRouter: () => ({ pathname: '/', asPath: '/'
  * fails here until it is added to this list too, and dropping one fails
  * however consistent everything else stays.
  */
-const PINNED = ['01-getting-started', '02-first-experiment', '03-flag-rollout'];
+const PINNED = ['01-getting-started', '02-first-experiment', '03-flag-rollout', '08-warehouse-explainer'];
 
 const CONTENT = path.join(__dirname, '..', '..', 'content');
+
+/**
+ * T178 condition 2(e): what an animation's title, description and label may
+ * not say. A function, so the plants below prove it fires.
+ */
+const NOT_FOR_AN_ANIMATION = [/narrat/i, /\brecord(ed|ing)\b/i, /local stack/i];
+const animationCopyProblems = (video: WalkthroughVideo, label: string): string[] =>
+  [video.title, video.description, label].flatMap((text) =>
+    NOT_FOR_AN_ANIMATION.filter((p) => p.test(text)).map((p) => `${JSON.stringify(text)} matches ${p}`),
+  );
+
+/** T178 condition 2(c)/(d): an animation's transcript is its captions, one on-screen fragment each, and nothing else. */
+const animationTranscriptProblems = (transcript: Transcript): string[] => {
+  const problems: string[] = [];
+  for (const item of transcript.items) {
+    if (!('on_screen' in item) || Object.keys(item).length !== 1) problems.push(`not an on-screen item: ${JSON.stringify(item)}`);
+    else if (item.on_screen.length !== 1) problems.push(`${item.on_screen.length} fragments, want 1: ${JSON.stringify(item)}`);
+  }
+  const text = JSON.stringify(transcript.items);
+  if (/recorded on/i.test(text)) problems.push('says "Recorded on"');
+  if (text.includes('{version}')) problems.push('has a {version} placeholder');
+  return problems;
+};
 const mode = isMarketingSite as jest.Mock;
 const renderHome = () => render(<AuthProvider><HomePage /></AuthProvider>);
 
@@ -83,7 +117,8 @@ describe('the manifest and the transcripts', () => {
 
   it('builds every transcript from on-screen, said and code items only', () => {
     for (const video of WALKTHROUGHS) {
-      const { items } = transcriptFor(video.slug);
+      const transcript = transcriptFor(video.slug);
+      const { items } = transcript;
       expect(items.length).toBeGreaterThan(2);
       for (const item of items) {
         const keys = Object.keys(item);
@@ -94,11 +129,48 @@ describe('the manifest and the transcripts', () => {
         for (const line of lines) expect(typeof line).toBe('string');
         if (!('code' in item)) for (const line of lines) expect((line as string).trim()).not.toBe('');
       }
-      // The title card opens every video and the end card closes it.
-      expect(items[0]).toEqual({ on_screen: ['Controlvar', video.title, 'A/B testing and feature flags you run yourself.'] });
-      const end = items[items.length - 1] as { on_screen: string[] };
-      expect(end.on_screen[end.on_screen.length - 1]).toMatch(/^Recorded on Controlvar v\d+\.\d+\.\d+, a local stack with demo data$/);
+      if (kindOf(transcript) === 'recording') {
+        // The title card opens every recording and the end card closes it.
+        expect(items[0]).toEqual({ on_screen: ['Controlvar', video.title, 'A/B testing and feature flags you run yourself.'] });
+        const end = items[items.length - 1] as { on_screen: string[] };
+        expect(end.on_screen[end.on_screen.length - 1]).toMatch(/^Recorded on Controlvar v\d+\.\d+\.\d+, a local stack with demo data$/);
+      } else {
+        expect(animationTranscriptProblems(transcript)).toEqual([]);
+      }
     }
+  });
+
+  it('declares no kind but "animation", and a recording by declaring none', () => {
+    for (const video of WALKTHROUGHS) {
+      const transcript = transcriptFor(video.slug);
+      const keys = Object.keys(transcript).sort();
+      expect(keys).toEqual('kind' in transcript ? ['items', 'kind', 'mp4', 'slug'] : ['items', 'mp4', 'slug']);
+      expect(['recording', 'animation']).toContain(kindOf(transcript));
+    }
+  });
+
+  // T178 condition 2(f): each planted defect is refused.
+  const planted: Transcript = { slug: '09-toy', kind: 'animation', mp4: '09-toy-000000000000.mp4', items: [{ on_screen: ['A caption.'] }] };
+
+  it('refuses a kind that is neither absent nor "animation"', () => {
+    expect(() => kindOf({ ...planted, kind: 'silent' } as unknown as Transcript)).toThrow(/unknown transcript kind "silent"/);
+  });
+
+  it('refuses an animation transcript with a said item, or with the recordings\' end-card line', () => {
+    expect(animationTranscriptProblems(planted)).toEqual([]);
+    expect(animationTranscriptProblems({ ...planted, items: [...planted.items, { said: ['A caption.'] }] })).toEqual([
+      'not an on-screen item: {"said":["A caption."]}',
+    ]);
+    const endCard = { on_screen: ['Recorded on Controlvar v0.36.0, a local stack with demo data'] };
+    expect(animationTranscriptProblems({ ...planted, items: [...planted.items, endCard] })).toEqual(['says "Recorded on"']);
+  });
+
+  it('refuses an animation whose title, description or label says "Narrated"', () => {
+    const video = WALKTHROUGHS[0];
+    expect(animationCopyProblems({ ...video, title: 'A title', description: 'A description.' }, KIND_LABEL.animation)).toEqual([]);
+    expect(animationCopyProblems({ ...video, title: 'A title', description: 'Narrated, with captions.' }, KIND_LABEL.animation)).toEqual([
+      '"Narrated, with captions." matches /narrat/i',
+    ]);
   });
 });
 
@@ -137,14 +209,34 @@ describe('marketing build (G3)', () => {
     const { container } = renderHome();
     const walk = section(container);
     expect(within(walk).getByRole('heading', { level: 2 })).toHaveTextContent(/^Walkthroughs$/);
+    // Sentence 1 covers the recordings only; each row says which kind it is.
     expect(walk.querySelector('h2 + p')?.textContent).toBe(
-      'Narrated recordings, made on a local stack with demo data. Turn captions on in the player; the transcript is below each video.',
+      'The recordings were made on a local stack with demo data. Turn captions on in the player; the transcript is below each video.',
     );
     for (const video of WALKTHROUGHS) {
       const id = anchorFor(video.slug);
       expect(walk.querySelector(`#${id}-title`)?.textContent).toBe(video.title);
       expect(walk.querySelector(`#${id}-description`)?.textContent).toBe(video.description);
     }
+  });
+
+  it('says on each row, in visible text, whether it is a narrated recording or an animation without sound', () => {
+    const { container } = renderHome();
+    for (const video of WALKTHROUGHS) {
+      const kind = kindOf(transcriptFor(video.slug));
+      const label = section(container).querySelector(`#${anchorFor(video.slug)} [data-kind]`) as HTMLElement;
+      expect(label).toHaveAttribute('data-kind', kind);
+      expect(label.textContent).toBe(KIND_LABEL[kind]);
+      expect(label).not.toHaveAttribute('aria-hidden');
+      expect(label).not.toHaveClass('sr-only');
+    }
+    expect(KIND_LABEL).toEqual({ recording: 'Narrated recording', animation: 'Animation without sound' });
+  });
+
+  it("keeps narration, recording and a local stack out of an animation's title, description and label", () => {
+    const animations = WALKTHROUGHS.filter((v) => kindOf(transcriptFor(v.slug)) === 'animation');
+    expect(animations.map((v) => v.slug)).toEqual(['08-warehouse-explainer']);
+    for (const video of animations) expect(animationCopyProblems(video, KIND_LABEL.animation)).toEqual([]);
   });
 
   it('wires each player as the plan says', () => {
@@ -164,7 +256,7 @@ describe('marketing build (G3)', () => {
       expect(tracks[0]).toHaveAttribute('srclang', 'en');
       expect(tracks[0]).toHaveAttribute('label', 'English');
       expect(tracks[0]).toHaveAttribute('src', `/media/${siteCaptionsFor(video)}`);
-      // On by default it would be drawn over the burned-in headline band.
+      // On by default it would be drawn over the text the video burns in.
       expect(tracks[0]).not.toHaveAttribute('default');
     }
   });
@@ -246,10 +338,9 @@ describe('marketing build (G3)', () => {
 
   /**
    * C13: nothing about videos that do not exist yet, no YouTube (it would
-   * need a line on /privacy), and no accessibility claim: the transcripts meet
-   * WCAG 1.2.3 and the audio-description gap (1.2.5) is accepted for launch,
-   * so the site claims neither (T176 condition 13). Fragments, so the words
-   * this forbids never appear whole in this file.
+   * need a line on /privacy), and no accessibility claim: the site claims no
+   * accessibility standard (T176 condition 13). Fragments, so the words this
+   * forbids never appear whole in this file.
    */
   const promises: Array<[string, string]> = [
     ['coming\\s+' + 'soon', 'no video is promised'],
