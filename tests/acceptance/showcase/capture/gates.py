@@ -6,6 +6,7 @@ They are unit tested on planted inputs (``backend/tests/unit/showcase``).
 
 from __future__ import annotations
 
+import json
 import math
 from statistics import NormalDist
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
@@ -898,6 +899,274 @@ def audit_rows(text: str) -> List[List[str]]:
         for line in text.splitlines()
         if line.strip()
     ]
+
+
+#: How the audit log page names the safety monitor and its rollback
+#: (frontend/src/components/admin/audit/actionLabels.ts; a unit test keeps
+#: them equal), and the user the API records for it.
+SAFETY_MONITOR = "system:safety-monitor"
+SAFETY_MONITOR_LABEL = "Safety monitor"
+ROLLBACK_LABEL = "Safety rollback"
+#: How the safety card and the schedule's badge read (frontend/src/pages/
+#: feature-flags/[id].tsx: the badge's text, ``humanize`` of the status).
+UNHEALTHY_LABEL = "Unhealthy"
+PAUSED_LABEL = "Paused"
+#: The start of the reason the safety monitor writes for an error-rate breach
+#: (backend/app/core/safety_scheduler.py).
+ROLLBACK_REASON = "Automatic rollback due to error_rate"
+
+
+def panel_says(text: Optional[str]) -> Optional[bool]:
+    """What StreamPulse's panel row says of a flag (its reason line,
+    demo/streampulse/src/lib/labels.ts): on, off, or None for anything else
+    (loading, an error)."""
+    line = (text or "").strip()
+    if line.startswith("on:") or line == "on":
+        return True
+    if line.startswith("off:") or line == "off":
+        return False
+    return None
+
+
+def phone_says(text: Optional[str]) -> Optional[bool]:
+    """What StreamPulse's phone draws on its Player screen
+    (demo/streampulse/src/components/screens/PlayerScreen.tsx): Player v2
+    ("Now playing", "Player v2") is on, the classic player off; None for
+    anything else."""
+    drawn = " ".join((text or "").split())
+    v2 = "Now playing" in drawn and "Player v2" in drawn
+    classic = "Classic player" in drawn
+    if v2 == classic:
+        return None
+    return v2
+
+
+def agreement(
+    agree: Any,
+    *,
+    panel: Optional[str],
+    phone: Optional[str],
+    api: Optional[Mapping[str, Any]],
+) -> Verdict:
+    """Gate 10/4 at a beat's start (plan v2 C1): the app's panel row, its phone
+    and the API's answer for the device all say the storyboard's on or off."""
+    said = {
+        "panel": panel_says(panel),
+        "phone": phone_says(phone),
+        "api": None if not api else bool(api.get("enabled")),
+    }
+    numbers = {
+        "at": f"scene {agree.scene} beat {agree.beat}",
+        "device": agree.device,
+        "wanted": agree.enabled,
+        "said": said,
+        "api_reason": None if not api else api.get("reason"),
+    }
+    if any(value != agree.enabled for value in said.values()):
+        return (
+            False,
+            numbers,
+            f"panel/phone/API disagree at cue {agree.scene} beat {agree.beat}:"
+            f" panel {said['panel']}, phone {said['phone']}, API {said['api']};"
+            f" the storyboard says {'on' if agree.enabled else 'off'}",
+        )
+    return True, numbers, ""
+
+
+def rollback_end(
+    end: Any,
+    *,
+    named: Sequence[Mapping[str, Any]],
+    schedules: Sequence[Mapping[str, Any]],
+    audit: Sequence[Mapping[str, Any]],
+    actor: Mapping[str, Any],
+    kill_named: Sequence[Mapping[str, Any]],
+    kill_audit: Sequence[Mapping[str, Any]],
+    readings: Mapping[str, str],
+    api_at_agreement: Optional[Mapping[str, Any]],
+    rollback_posts: Sequence[str],
+    log: Mapping[str, int],
+) -> Verdict:
+    """Gate 10/4 (S8a of plan v2.2, ``storyboard.RollbackEnd``): the safety
+    monitor rolled the flag back by itself, and every reading agrees.
+
+    * one flag has the name, with the key, at ``end.percentage``, active; its
+      one rollout schedule is paused;
+    * its audit entries, oldest first (*audit* is newest first, as the API
+      lists them), are exactly ``end.audit``: each by the signed-in user
+      (*actor*) but the last, one ``safety_rollback`` by the safety monitor
+      with no user, automatic, to the percentage, for an error-rate breach;
+    * the API's log (*log*: counts of its lines) holds exactly one rollback of
+      the flag, automatic, none manual; and no page asked for a rollback
+      (*rollback_posts*, from the capture's listener);
+    * the page drew it: "Unhealthy" at B9, "Paused" and the percentage after,
+      the audit log's top row the monitor's rollback of the flag, and the
+      rollback's reason, word for word; and the agreement at ``end.agree``;
+    * the kill switch is one flag, inactive, with exactly its audit entries,
+      each by the signed-in user.
+    """
+    numbers: Dict[str, Any] = {"flags_named": len(named)}
+    if len(named) != 1 or named[0].get("key") != end.key:
+        return (
+            False,
+            numbers,
+            f"{len(named)} flags are named {end.name!r} with key {end.key}",
+        )
+    flag = named[0]
+    numbers.update(
+        rollout_percentage=flag.get("rollout_percentage"),
+        status=flag.get("status"),
+        schedules=[str(s.get("status")).lower() for s in schedules],
+    )
+    if flag.get("rollout_percentage") != end.percentage:
+        return (
+            False,
+            numbers,
+            f"the flag is at {flag.get('rollout_percentage')}%, not {end.percentage}%",
+        )
+    if str(flag.get("status")).lower() != end.status:
+        return False, numbers, f"the flag is {flag.get('status')!r}, not {end.status!r}"
+    if numbers["schedules"] != [end.schedule]:
+        return (
+            False,
+            numbers,
+            f"the flag's rollout schedules are {numbers['schedules']}, not one {end.schedule}",
+        )
+    oldest_first = list(reversed(list(audit)))
+    actions = [str(e.get("action_type")) for e in oldest_first]
+    numbers["audit"] = actions
+    if actions != list(end.audit):
+        return (
+            False,
+            numbers,
+            f"the flag's audit entries are {actions}, not {list(end.audit)}",
+        )
+    email, ident = actor.get("email"), str(actor.get("id"))
+    others = [
+        f"{e.get('action_type')} by {e.get('user_email')!r}"
+        for e in oldest_first[:-1]
+        if e.get("user_email") != email or str(e.get("user_id")) != ident
+    ]
+    if others:
+        return (
+            False,
+            numbers,
+            f"not every change is by the signed-in {email!r}: {others[0]}",
+        )
+    rollback = oldest_first[-1]
+    try:
+        after = json.loads(rollback.get("new_value") or "{}")
+    except ValueError:
+        after = {}
+    reason = str(rollback.get("reason") or "")
+    numbers["rollback"] = {
+        "by": rollback.get("user_email"),
+        "user_id": rollback.get("user_id"),
+        "trigger_type": after.get("trigger_type"),
+        "new_percentage": after.get("new_percentage"),
+        "reason": reason,
+    }
+    if rollback.get("user_email") != SAFETY_MONITOR or rollback.get("user_id"):
+        return (
+            False,
+            numbers,
+            f"the rollback was made by {rollback.get('user_email')!r}; the storyboard"
+            " claims the safety monitor",
+        )
+    if (
+        after.get("trigger_type") != "automatic"
+        or after.get("new_percentage") != end.percentage
+    ):
+        return (
+            False,
+            numbers,
+            f"the rollback is {after.get('trigger_type')!r} to"
+            f" {after.get('new_percentage')}%, not automatic to {end.percentage}%",
+        )
+    if not reason.startswith(ROLLBACK_REASON):
+        return (
+            False,
+            numbers,
+            f"the rollback's reason is {reason!r}, not an error-rate breach",
+        )
+    numbers["log"] = dict(log)
+    if (log.get("rolled_back"), log.get("automatic"), log.get("manual")) != (1, 1, 0):
+        return (
+            False,
+            numbers,
+            f"the API's log holds {log.get('rolled_back')} rollback(s) of the flag,"
+            f" {log.get('automatic')} automatic and {log.get('manual')} manual; one"
+            " automatic and no other",
+        )
+    numbers["rollback_posts"] = list(rollback_posts)
+    if rollback_posts:
+        return False, numbers, f"a page asked for a rollback: {rollback_posts[0]}"
+    drawn = {
+        name: " ".join((readings.get(name) or "").split())
+        for name in (end.unhealthy, end.paused, end.rolled_back)
+    }
+    numbers["drawn"] = drawn
+    for name, wanted in (
+        (end.unhealthy, UNHEALTHY_LABEL),
+        (end.paused, PAUSED_LABEL),
+        (end.rolled_back, f"{end.percentage}%"),
+    ):
+        if drawn[name] != wanted:
+            return (
+                False,
+                numbers,
+                f"the page's {name} read {drawn[name]!r}, not {wanted!r}",
+            )
+    rows = audit_rows(readings.get(end.shown) or "")
+    top = rows[0][1:5] if rows else []
+    numbers["top_row"] = top
+    wanted_row = [SAFETY_MONITOR_LABEL, ROLLBACK_LABEL, FLAG_ENTITY_LABEL, end.name]
+    if top != wanted_row:
+        return False, numbers, f"the audit log's top row showed {top}, not {wanted_row}"
+    detail = " ".join((readings.get(end.reason) or "").split())
+    if " ".join(reason.split()) not in detail:
+        return (
+            False,
+            numbers,
+            f"the rollback's details did not show the API's reason {reason!r}",
+        )
+    ok, numbers["agreement"], why = agreement(
+        end.agree,
+        panel=readings.get(end.agree.panel),
+        phone=readings.get(end.agree.phone),
+        api=api_at_agreement,
+    )
+    if not ok:
+        return False, numbers, why
+    kill = end.kill_switch
+    kill_oldest = [str(e.get("action_type")) for e in reversed(list(kill_audit))]
+    numbers["kill_switch"] = {
+        "flags_named": len(kill_named),
+        "status": kill_named[0].get("status") if len(kill_named) == 1 else None,
+        "audit": kill_oldest,
+    }
+    if len(kill_named) != 1 or kill_named[0].get("key") != kill.key:
+        return (
+            False,
+            numbers,
+            f"{len(kill_named)} flags are named {kill.name!r} with key {kill.key}",
+        )
+    if str(kill_named[0].get("status")).lower() != "inactive":
+        return False, numbers, f"the kill switch {kill.name!r} is not off"
+    if kill_oldest != list(kill.audit):
+        return (
+            False,
+            numbers,
+            f"the kill switch's audit entries are {kill_oldest}, not {list(kill.audit)}",
+        )
+    strangers = [
+        e.get("user_email")
+        for e in kill_audit
+        if e.get("user_email") != email or str(e.get("user_id")) != ident
+    ]
+    if strangers:
+        return False, numbers, f"the kill switch was changed by {strangers[0]!r}"
+    return True, numbers, ""
 
 
 def flag_end(

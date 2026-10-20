@@ -272,6 +272,15 @@ def app_settings(*, app: str, api_port: int, dashboard_port: int) -> Dict[str, s
     }
 
 
+def story_settings() -> Dict[str, str]:
+    """What the StreamPulse demo's rollout script runs with (``off_camera:
+    story``, S4 of plan v2.2): Python's two output settings and the closed AWS
+    endpoint every child gets. Nothing else: no proxy (its HTTP calls honour
+    one), no product setting, nothing of the caller's. It reads no variable;
+    every address it uses is on its argv (``incident.story_argv``)."""
+    return {"PYTHONDONTWRITEBYTECODE": "1", "PYTHONUNBUFFERED": "1", **NO_AWS}
+
+
 #: The kinds of child the tool starts, each with its own allow-list.
 KINDS: Tuple[str, ...] = (
     "docker",
@@ -281,6 +290,7 @@ KINDS: Tuple[str, ...] = (
     "seed-streampulse",
     "dashboard",
     "app",
+    "story",
 )
 
 
@@ -305,6 +315,8 @@ def allowed_env_keys(kind: str) -> frozenset:
         keys = passed | set(
             app_settings(app=config.APPS[0], api_port=1, dashboard_port=1)
         )
+    elif kind == "story":
+        keys = passed | set(story_settings())
     else:
         raise Refused(f"no child kind {kind!r}; one of {', '.join(KINDS)}")
     return frozenset(keys)
