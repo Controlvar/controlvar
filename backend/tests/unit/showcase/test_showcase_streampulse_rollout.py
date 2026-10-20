@@ -6,7 +6,7 @@ buckets for Player v2 by the server's own rollout function, the crash's counts
 and b, and the panel's and the audit log's words. Each contract it adds is
 shown refusing its planted defect: the incident's three off-camera steps (the
 rollout script's exact argv, the crash sender and its anchor, the wait), B9's
-gate and fit, S5's measured card, C6's read-back, gate 10/4, the departures,
+gate, rate and fit, S5's measured card, C6's read-back, gate 10/4, the departures,
 A5 and A6, and the apps' dependencies for StreamPulse. No browser, Docker,
 network or database: stand-in pages, APIs and sessions.
 """
@@ -1431,25 +1431,99 @@ def test_sends_that_begin_more_than_5_s_after_the_run_are_refused():
         incident.check_sends_after(anchor, {"first_send": 1005.2})
 
 
+@pytest.mark.regression
+def test_sends_that_begin_before_the_safety_run_completed_are_refused():
+    """T165 C5's "within 5 s of its completed_at" has a lower side too: the
+    crashes follow a completed run (plan v2 C3's plant: sends started on the
+    run's start or its log line). The host's clock and the API's may be
+    ``CLOCK_SKEW_MAX_S`` apart, so a send that early is still after it."""
+    anchor = {"completed_at_s": 1000.0}
+    assert incident.check_sends_after(anchor, {"first_send": 999.2}) == pytest.approx(
+        -0.8
+    )
+    with pytest.raises(
+        director.CaptureFailed,
+        match="B9: the crashes began 1.5 s before the safety run completed",
+    ):
+        incident.check_sends_after(anchor, {"first_send": 998.5})
+
+
 # --- b, the browser's own asks (plan v2 C13) --------------------------------------------
 
 
-def check_answer(total: int, errors: int = 40, healthy=False, left_out: int = 0):
+def check_answer(
+    total: int, errors: int = 40, healthy=False, left_out: int = 0, metrics=None
+):
+    """A flag's safety check as the API answers it (``SafetyCheckResponse``):
+    the error rate is its ``error_rate`` metric, the seed's one (critical
+    0.05), and ``details`` holds only the counts behind it."""
+    rate = 0.0 if total == 0 else errors / total
     return {
+        "feature_flag_id": "00000000-0000-4000-8000-000000000001",
         "is_healthy": healthy,
+        "metrics": [
+            {
+                "name": "error_rate",
+                "current_value": rate,
+                "threshold": 0.05,
+                "is_healthy": rate <= 0.05,
+                "details": {
+                    "comparison_type": "greater_than",
+                    "warning_threshold": 0.02,
+                    "critical_threshold": 0.05,
+                    "warning": rate > 0.02,
+                    "measured": True,
+                },
+            }
+        ]
+        if metrics is None
+        else metrics,
+        "last_checked": "2026-10-20T10:02:00",
         "details": {
-            "total_evaluations": total,
+            "feature_flag_key": FLAG,
             "error_count": errors,
             "uncounted_error_count": left_out,
-            "error_rate": errors / max(total, 1),
+            "total_evaluations": total,
+            "timeframe_minutes": 15,
         },
     }
+
+
+def test_the_stand_in_safety_check_is_the_apis_answer():
+    """``check_answer`` is what ``GET .../check`` answers at the recorded
+    release: the schema accepts it, ``details`` is ``_error_window``'s counts
+    with no rate in them, and the flag page draws the ``error_rate`` metric's
+    ``current_value`` (the number B9's rate check compares)."""
+    from backend.app.schemas.safety import SafetyCheckResponse
+
+    answer = check_answer(240)
+    SafetyCheckResponse.model_validate(answer)
+    source = (REPO / "backend" / "app" / "services" / "safety_service.py").read_text(
+        encoding="utf-8"
+    )
+    window = source[source.index("    def _error_window(") :]
+    window = window[: window.index("\n    def ", 1)]
+    assert set(re.findall(r'"(\w+)": metrics\["\w+"\]', window)) == (
+        set(answer["details"]) - {"feature_flag_key"}
+    )
+    assert '"error_rate"' not in window
+    assert (
+        'details: Dict[str, Any] = {"feature_flag_key": feature_flag.key, **window}'
+        in (source)
+    )
+    page = (
+        REPO / "frontend" / "src" / "pages" / "feature-flags" / "[id].tsx"
+    ).read_text(encoding="utf-8")
+    row = page[page.index('data-testid="safety-metric"') :]
+    assert "{m.current_value}" in row[: row.index("</li>")]
 
 
 def test_b_is_the_apis_count_less_the_senders():
     api = FakeApi([("/api/v1/safety/feature-flags/f-player/check", check_answer(212))])
     found = incident.browser_evaluations(api, "f-player", crash_plan())
     assert found["browser_evaluations"] == 12 and found["crashes_counted"] == 40
+    # The rate as the page draws it: the error_rate metric's, 40 of 212.
+    assert found["error_rate"] == pytest.approx(40 / 212)
 
 
 @pytest.mark.regression
@@ -1462,6 +1536,29 @@ def test_b_is_the_apis_count_less_the_senders():
         (check_answer(212, errors=0), "the API counts 0 crashes; 40 were sent"),
         (check_answer(212, left_out=40), "leaves out of the flag's error rate"),
         (check_answer(212, healthy=True), "still reads healthy"),
+        # No error rate in the answer: B9 says the error rate passes its limit.
+        (check_answer(212, metrics=[]), "does not answer its error rate above"),
+        # Unhealthy by another metric, the error rate under its limit.
+        (
+            check_answer(
+                212,
+                metrics=[
+                    {
+                        "name": "error_rate",
+                        "current_value": 0.04,
+                        "threshold": 0.05,
+                        "is_healthy": True,
+                    },
+                    {
+                        "name": "latency_p95",
+                        "current_value": 900.0,
+                        "threshold": 500.0,
+                        "is_healthy": False,
+                    },
+                ],
+            ),
+            "does not answer its error rate above",
+        ),
     ],
 )
 def test_a_crash_the_api_does_not_count_as_planned_is_refused(answer, words):
@@ -1765,23 +1862,44 @@ def b9_director(end_s: float, checks):
     )
 
 
+#: The crash's rate as the API counts it, 40 crashes in 240 evaluations (b 40):
+#: the rate ROLLBACK_REASON gives, "16.67%".
+CRASH_RATE = 40 / 240
+
+
+def b9_check(where: str = "scene unhealthy", healthy=False, rate=CRASH_RATE):
+    """One safety check answer B9's page got, as the director keeps it."""
+    return {"where": where, "is_healthy": healthy, "error_rate": rate}
+
+
+def crashed_incident(entries, wall, counted=CRASH_RATE):
+    """The incident after its crash step: the anchor run, and the rate the API
+    counted after the crashes (``browser_evaluations``)."""
+    made, _ = an_incident(api=rollback_api(entries), wall=wall)
+    made.anchor = {"lag_s": 0.3, "completed_at_s": wall.at - 60}
+    made.numbers["crashes"] = {} if counted is None else {"error_rate": counted}
+    return made
+
+
 def test_the_wait_and_the_b9_gate_pass_when_the_rollback_follows_b9():
     wall = Wall()
     entries = [audit_entry("safety_rollback", at=wall.at - 2, reason=ROLLBACK_REASON)]
-    made, _ = an_incident(api=rollback_api(entries), wall=wall)
-    made.anchor = {"lag_s": 0.3, "completed_at_s": wall.at - 60}
+    made = crashed_incident(entries, wall)
     made.wait(
         wait_item(),
         b9_director(
             wall.at - 30,
-            [
-                {"where": "scene unhealthy", "is_healthy": False},
-                {"where": "scene unhealthy beat 1", "is_healthy": False},
-            ],
+            [b9_check("scene unhealthy"), b9_check("scene unhealthy beat 1")],
         ),
     )
     assert made.numbers["b9"]["page_checks"] == [False, False]
     assert made.numbers["b9"]["rollback_after_b9_s"] > 25
+    # Plan v2 C13: the rate on screen is the API's, and the reason's.
+    assert made.numbers["b9"]["rates"] == {
+        "page": ["16.67%", "16.67%"],
+        "counted": "16.67%",
+        "reason": "16.67%",
+    }
 
 
 @pytest.mark.regression
@@ -1789,17 +1907,62 @@ def test_the_wait_and_the_b9_gate_pass_when_the_rollback_follows_b9():
     "checks, words",
     [
         ([], "asked for the flag's safety check 0 time"),
-        ([{"where": "scene unhealthy", "is_healthy": True}], "must show it unhealthy"),
+        ([b9_check(healthy=True)], "must show it unhealthy"),
         # Another scene's check does not count for B9.
-        ([{"where": "scene unhealthy-2 beat 1", "is_healthy": False}], "0 time"),
+        ([b9_check("scene unhealthy-2 beat 1")], "0 time"),
     ],
 )
 def test_a_b9_page_that_was_not_answered_unhealthy_is_refused(checks, words):
     wall = Wall()
     entries = [audit_entry("safety_rollback", at=wall.at - 2, reason=ROLLBACK_REASON)]
-    made, _ = an_incident(api=rollback_api(entries), wall=wall)
-    made.anchor = {"lag_s": 0.3, "completed_at_s": wall.at - 60}
+    made = crashed_incident(entries, wall)
     with pytest.raises(director.CaptureFailed, match=words):
+        made.wait(wait_item(), b9_director(wall.at - 30, checks))
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "checks, reason, counted, words",
+    [
+        # B9's page drew another rate than the API counted after the crashes.
+        ([b9_check(rate=40 / 300)], ROLLBACK_REASON, CRASH_RATE, r"as \['13.33%'\]"),
+        # One of B9's answers drew no rate.
+        (
+            [b9_check(), b9_check("scene unhealthy beat 1", rate=None)],
+            ROLLBACK_REASON,
+            CRASH_RATE,
+            r"as \['16.67%', None\]",
+        ),
+        # The rollback's reason gives another rate.
+        (
+            [b9_check()],
+            ROLLBACK_REASON.replace("16.67%", "13.33%"),
+            CRASH_RATE,
+            "the rollback's reason says 13.33%",
+        ),
+        # A reason that gives no rate.
+        (
+            [b9_check()],
+            "Automatic rollback due to safety issues",
+            CRASH_RATE,
+            "the rollback's reason says None",
+        ),
+        # The API's own count, read after the crashes, is another rate.
+        ([b9_check()], ROLLBACK_REASON, 40 / 212, "the API counted 18.87%"),
+        # ...or was never read.
+        ([b9_check()], ROLLBACK_REASON, None, "never read from the API"),
+    ],
+)
+def test_b9_draws_the_error_rate_the_api_counted_and_the_reason_gives(
+    checks, reason, counted, words
+):
+    """Plan v2 C13 (PE 13 of plan v1, "read on-screen rate from the API"): the
+    rate B9's page drew is the API's after the crashes and the rate the safety
+    monitor rolled back for, as the platform writes it."""
+    wall = Wall()
+    entries = [audit_entry("safety_rollback", at=wall.at - 2, reason=reason)]
+    made = crashed_incident(entries, wall, counted=counted)
+    with pytest.raises(director.CaptureFailed, match=f"B9: .*{words}"):
         made.wait(wait_item(), b9_director(wall.at - 30, checks))
 
 
@@ -1807,17 +1970,48 @@ def test_a_b9_page_that_was_not_answered_unhealthy_is_refused(checks, words):
 def test_the_wait_refuses_a_rollback_that_came_before_b9_ended():
     wall = Wall()
     entries = [audit_entry("safety_rollback", at=wall.at - 40, reason=ROLLBACK_REASON)]
-    made, _ = an_incident(api=rollback_api(entries), wall=wall)
-    made.anchor = {"lag_s": 0.3, "completed_at_s": wall.at - 60}
+    made = crashed_incident(entries, wall)
     with pytest.raises(
         director.CaptureFailed, match="B9: the safety monitor rolled back"
     ):
-        made.wait(
-            wait_item(),
-            b9_director(
-                wall.at - 30, [{"where": "scene unhealthy", "is_healthy": False}]
-            ),
-        )
+        made.wait(wait_item(), b9_director(wall.at - 30, [b9_check()]))
+
+
+@pytest.mark.parametrize(
+    "value", [40 / 240, 40 / 236, 40 / 300, 40 / 212, 1 / 14, 0.05, 0.2, 0.123456]
+)
+def test_the_rate_reads_as_the_rollback_reason_writes_it(value):
+    """``gates.rate_reading`` is the platform's own ``format_metric_reading``
+    for an error rate, and ``reason_rate`` reads it back out of the reason the
+    safety scheduler writes (``describe_breach``)."""
+    from backend.app.services.safety_service import (
+        describe_breach,
+        format_metric_reading,
+    )
+
+    assert gates.rate_reading(value) == format_metric_reading("error_rate", value)
+    breach = SimpleNamespace(
+        name="error_rate",
+        current_value=value,
+        threshold=0.05,
+        details={"comparison_type": "greater_than"},
+    )
+    reason = f"Automatic rollback due to error_rate {describe_breach(breach)}"
+    assert gates.reason_rate(reason) == gates.rate_reading(value)
+
+
+def test_the_test_reason_is_the_one_the_scheduler_writes_for_the_crash():
+    from backend.app.services.safety_service import describe_breach
+
+    breach = SimpleNamespace(
+        name="error_rate",
+        current_value=CRASH_RATE,
+        threshold=0.05,
+        details={"comparison_type": "greater_than"},
+    )
+    assert ROLLBACK_REASON == (
+        f"Automatic rollback due to error_rate {describe_breach(breach)}"
+    )
 
 
 def test_the_agreement_is_read_off_camera_at_its_beat_only():
@@ -2620,12 +2814,13 @@ def test_each_safety_check_the_page_gets_is_kept_with_where(tmp_path, stand_in_c
     url = f"{DASH}/api/v1/safety/feature-flags/f-1/check"
     request = Request(url, key=None)
     page.fire("request", request)
-    page.fire(
-        "response", Response(url, 200, request, {"is_healthy": False, "metrics": []})
-    )
+    page.fire("response", Response(url, 200, request, check_answer(240)))
+    # The answer's error_rate metric: the rate the page draws, kept for B9.
     assert made.tally.safety_checks == [
-        {"where": "scene unhealthy", "is_healthy": False}
+        {"where": "scene unhealthy", "is_healthy": False, "error_rate": CRASH_RATE}
     ]
+    page.fire("response", Response(url, 200, request, check_answer(240, metrics=[])))
+    assert made.tally.safety_checks[-1]["error_rate"] is None
 
 
 def test_a_flag_page_scene_opens_the_flag_by_its_id_and_times_its_recording(

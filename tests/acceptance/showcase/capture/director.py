@@ -450,7 +450,8 @@ class Tally:
     marks: Dict[str, List[str]] = field(default_factory=dict)
     #: Gate 10/4: every request that asked for a flag's rollback (none may).
     rollback_posts: List[str] = field(default_factory=list)
-    #: ...and each answer a page got from a flag's safety check: where, healthy.
+    #: ...and each answer a page got from a flag's safety check: where, healthy,
+    #: and the error rate it drew.
     safety_checks: List[Dict[str, Any]] = field(default_factory=list)
     #: A6: each check that the app's frame held its fit element whole, and the
     #: least room it had to the viewport's edge (frame px).
@@ -799,8 +800,14 @@ class Director:
         redaction.register_credentials(body, self.redactor)
         self.record_assign(path, body)
         if SAFETY_CHECK_PATH.search(path) and isinstance(body, dict):
+            # The rate is the answer's error_rate metric, which the flag page
+            # draws as it is (B9 compares it with the API's and the reason's).
             self.tally.safety_checks.append(
-                {"where": self.where, "is_healthy": body.get("is_healthy")}
+                {
+                    "where": self.where,
+                    "is_healthy": body.get("is_healthy"),
+                    "error_rate": judge.safety_error_rate(body),
+                }
             )
 
     def _on_request(self, request: Any) -> None:

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import math
+import re
+from decimal import Decimal
 from statistics import NormalDist
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
@@ -914,6 +916,49 @@ PAUSED_LABEL = "Paused"
 #: The start of the reason the safety monitor writes for an error-rate breach
 #: (backend/app/core/safety_scheduler.py).
 ROLLBACK_REASON = "Automatic rollback due to error_rate"
+
+
+def error_rate_metric(check: Any) -> Optional[Mapping[str, Any]]:
+    """A flag's safety check answer's ``error_rate`` metric, or None.
+
+    Its ``current_value`` is the rate the flag page draws in its safety card's
+    metric row (``safety-metric``: the value, then "/" and the threshold). The
+    answer's ``details`` hold the counts behind the rate, not the rate
+    (``SafetyService._error_window``)."""
+    if not isinstance(check, Mapping):
+        return None
+    for metric in check.get("metrics") or []:
+        if isinstance(metric, Mapping) and metric.get("name") == "error_rate":
+            return metric
+    return None
+
+
+def safety_error_rate(check: Any) -> Optional[float]:
+    """The error rate a safety check answered (``error_rate_metric``), or None."""
+    metric = error_rate_metric(check)
+    value = None if metric is None else metric.get("current_value")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def rate_reading(value: float) -> str:
+    """An error rate as the platform writes it in a rollback reason: four
+    significant figures as a percentage, never in exponent form, 40/240 reads
+    ``16.67%`` (``format_metric_reading`` in backend/app/services/
+    safety_service.py; a unit test keeps the two equal)."""
+    return f"{format(Decimal(f'{value * 100:.4g}'), 'f')}%"
+
+
+#: The rate a safety rollback's reason gives for its breach, "...above
+#: threshold (16.67% > 5%)" (``describe_breach``).
+_REASON_RATE = re.compile(r"\(([0-9][0-9.]*%) [<>=] [0-9][0-9.]*%\)")
+
+
+def reason_rate(reason: Optional[str]) -> Optional[str]:
+    """The one rate a rollback's reason gives, as written; None for none or several."""
+    found = _REASON_RATE.findall(reason or "")
+    return found[0] if len(found) == 1 else None
 
 
 def panel_says(text: Optional[str]) -> Optional[bool]:

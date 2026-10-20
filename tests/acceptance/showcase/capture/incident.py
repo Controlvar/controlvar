@@ -17,8 +17,8 @@ when it does not go as the storyboard says:
   first successful run that was not there then; a run that was there never
   counts. With none within three intervals the video is refused ("no safety
   run completed"); a log line or the health endpoint's ``last_run_at`` is
-  never used instead. The sends begin at most ``config.SEND_AFTER_TICK_MAX_S``
-  after that run completed. They run in this process
+  never used instead. The sends begin after that run completed, and at most
+  ``config.SEND_AFTER_TICK_MAX_S`` after it. They run in this process
   (``traffic.direct_session``: no proxy) and go to the stack's API origin
   only, refused before any request otherwise (PE 7). Android 12 devices ask
   for the flag with the app's key, and each crashing device's crashes are
@@ -28,13 +28,17 @@ when it does not go as the storyboard says:
   crashing device must have been answered "on". Then the API's count: b, the
   flag's evaluations in the monitor's window less the sender's, is the
   browser's, and is at most ``config.BROWSER_EVALUATIONS_MAX``; the crashes
-  the API counts are the ones sent.
+  the API counts are the ones sent; and the flag's error rate (the safety
+  check's ``error_rate`` metric) is above its limit.
 * ``wait_for_rollback``: the flag's audit log is read until the safety
   monitor's rollback is there and the flag is at the percentage, refused
   after ``within_s``; a rollback by anyone else is refused at once. Nothing
-  here asks for a rollback. Then the B9 gate: the rollback came after B9's
-  last frame, comparing the host's clock with the API's, which may differ by at
-  most ``config.CLOCK_SKEW_MAX_S`` (measured at the anchor).
+  here asks for a rollback. Then the B9 gate: B9's page showed the flag
+  unhealthy, with the error rate the API counted after the crashes and the
+  rollback's reason gives (plan v2 C13: the rate on screen is the API's), and
+  the rollback came after B9's last frame, comparing the host's clock with the
+  API's, which may differ by at most ``config.CLOCK_SKEW_MAX_S`` (measured at
+  the anchor).
 
 S5: the card after the wait says the gap the cut hides, from B9's last frame
 to the card, on the wall clock (``time.time``): the recording's own clock does
@@ -57,6 +61,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from showcase.capture import config, guard, storyboard, traffic
+from showcase.capture import gates as judge
 from showcase.capture.director import CaptureFailed
 
 #: How long the rollout script may take: it signs in, reads, and moves a stage.
@@ -497,9 +502,19 @@ def wait_for_anchor(
 
 
 def check_sends_after(anchor: Mapping[str, Any], sent: Mapping[str, Any]) -> float:
-    """The sends began at most ``SEND_AFTER_TICK_MAX_S`` after the anchor run
-    completed (T165 C5); the delay, or refused."""
+    """The sends began after the anchor run completed, and at most
+    ``SEND_AFTER_TICK_MAX_S`` after it (T165 C5: within 5 s of its
+    ``completed_at``); the delay, or refused. The first send is on the host's
+    clock and the completion on the API's, which the anchor found at most
+    ``CLOCK_SKEW_MAX_S`` apart: a send earlier than that began before the run
+    completed (plan v2 C3: never on the run's start or its log line)."""
     delay = float(sent["first_send"]) - float(anchor["completed_at_s"])
+    if delay < -config.CLOCK_SKEW_MAX_S:
+        raise CaptureFailed(
+            "B9",
+            f"the crashes began {-delay:.1f} s before the safety run completed;"
+            " they are sent after a completed run",
+        )
     if delay > config.SEND_AFTER_TICK_MAX_S:
         raise CaptureFailed(
             "B9",
@@ -515,19 +530,23 @@ def browser_evaluations(
     """After the sends, through the flag's safety check (which only evaluates):
     b, the browser's own evaluations of the flag in the window, at most
     ``BROWSER_EVALUATIONS_MAX``; the crashes counted are the ones sent; and the
-    check reads unhealthy. The numbers, or refused."""
+    check reads unhealthy, its error rate above its limit. The numbers, or
+    refused. The rate is the answer's ``error_rate`` metric, the number the
+    flag page draws; the answer's ``details`` hold only the counts behind it."""
     check = api.get(f"/api/v1/safety/feature-flags/{flag_id}/check")
     details = check.get("details") or {}
     total = int(details.get("total_evaluations") or 0)
     errors = int(details.get("error_count") or 0)
     left_out = int(details.get("uncounted_error_count") or 0)
     browser = total - plan.evaluations
+    metric = judge.error_rate_metric(check)
+    rate = judge.safety_error_rate(check)
     numbers = {
         "total_evaluations": total,
         "browser_evaluations": browser,
         "crashes_counted": errors,
         "reports_left_out": left_out,
-        "error_rate": details.get("error_rate"),
+        "error_rate": rate,
         "is_healthy": check.get("is_healthy"),
     }
     if left_out:
@@ -555,6 +574,13 @@ def browser_evaluations(
     if check.get("is_healthy") is not False:
         raise CaptureFailed(
             "S4", "after the crashes the flag's safety check still reads healthy"
+        )
+    if rate is None or metric is None or metric.get("is_healthy") is not False:
+        # B9 says the error rate passes its limit: that metric, not another.
+        raise CaptureFailed(
+            "S4",
+            "after the crashes the flag's safety check does not answer its error"
+            f" rate above its limit (error_rate: {metric!r})",
         )
     return numbers
 
@@ -608,6 +634,34 @@ def wait_for_rollback(
                 f" {wait.percentage}% within {wait.within_s} s",
             )
         sleep(poll_s)
+
+
+def rate_problem(
+    page: Sequence[Optional[float]],
+    counted: Optional[float],
+    reason: Optional[str],
+) -> Optional[str]:
+    """Plan v2 C13, the error rate on screen is the API's: each rate B9's page
+    got from the flag's safety check and drew, the rate the API counted right
+    after the crashes, and the rate the safety monitor's rollback reason gives
+    are one reading, as the platform writes it (``gates.rate_reading``); or
+    why not. In video 4 nothing evaluates the flag from the crashes to the
+    rollback: the StreamPulse page the crashes are sent under fetches only when
+    a device is picked or Refresh now is pressed (it has no timer), the crash
+    card replaces it, and the dashboard evaluates no flag; so in a good take
+    the three are the same counts."""
+    if counted is None:
+        return "the crashes' error rate was never read from the API"
+    wanted = judge.rate_reading(counted)
+    drawn = [None if r is None else judge.rate_reading(r) for r in page]
+    said = judge.reason_rate(reason)
+    if not drawn or any(d != wanted for d in drawn) or said != wanted:
+        return (
+            f"B9's page drew the error rate as {drawn}, the API counted {wanted}"
+            f" after the crashes, and the rollback's reason says {said}: the rate"
+            " on screen is the API's and the reason's"
+        )
+    return None
 
 
 def b9_problem(
@@ -864,6 +918,16 @@ class Incident:
                 f"B9's page asked for the flag's safety check {len(checks)} time(s),"
                 f" answered {[c['is_healthy'] for c in checks]}: it must show it unhealthy",
             )
+        page = [c.get("error_rate") for c in checks]
+        counted = (self.numbers.get("crashes") or {}).get("error_rate")
+        self.numbers["b9"]["rates"] = {
+            "page": [None if r is None else judge.rate_reading(r) for r in page],
+            "counted": None if counted is None else judge.rate_reading(counted),
+            "reason": judge.reason_rate(found["reason"]),
+        }
+        problem = rate_problem(page, counted, found["reason"])
+        if problem:
+            raise CaptureFailed("B9", problem)
         problem = b9_problem(
             b9_end, found["rollback_at_s"], float(self.anchor["lag_s"])
         )
@@ -923,8 +987,6 @@ class Incident:
         log_counts: Mapping[str, int],
     ) -> Any:
         """Gate 10/4's half: the API's answers, judged (``gates.rollback_end``)."""
-        from showcase.capture import gates as judge
-
         end = self.end
 
         def named(name: str) -> List[Dict[str, Any]]:
