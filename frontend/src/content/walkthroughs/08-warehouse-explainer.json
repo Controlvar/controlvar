@@ -1,0 +1,15 @@
+{
+  "slug": "08-warehouse-explainer",
+  "kind": "animation",
+  "mp4": "08-warehouse-explainer-8495d45e4d7f.mp4",
+  "items": [
+    { "on_screen": ["Your users already live in Snowflake or BigQuery, with attributes like country, age band, plan, device and app version."] },
+    { "on_screen": ["Your own SQL query picks the eligible users and the attributes your targeting rules need."] },
+    { "on_screen": ["A short sync script you write sends them in chunks of up to 1,000 users to POST /api/v1/tracking/assign/batch (beta), each user's attributes as context, with an API key."] },
+    { "on_screen": ["60 requests a minute per address. Over that, the API answers 429 with Retry-After; wait and resend. Resending is safe because assignments are sticky."] },
+    { "on_screen": ["The experiment's targeting rules admit some users. The rest get assigned: false, reason: \"targeting\": they see the control and nothing is recorded."] },
+    { "on_screen": ["Admitted users are split by a deterministic hash: the same user always lands in the same bucket, and an assigned user keeps their variant."] },
+    { "on_screen": ["The response lists every user in request order, with counts for each reason. Enrolled users count in results from the moment they are assigned."] },
+    { "on_screen": ["The experiment is in the dashboard. When a user arrives, the SDK's assign call returns the same variant and records the view."] }
+  ]
+}

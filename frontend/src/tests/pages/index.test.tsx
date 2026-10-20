@@ -4,6 +4,15 @@ import HomePage from '@/pages/index';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { TOKEN_STORAGE_KEY, UserMe } from '@/services/api';
 import { routeKind } from '@/utils/routes';
+import { isMarketingSite } from '@/utils/site-mode';
+
+// The platform build unless a block says otherwise: the claims sweeps below
+// render both builds.
+jest.mock('@/utils/site-mode', () => ({
+  ...jest.requireActual('@/utils/site-mode'),
+  isMarketingSite: jest.fn(),
+}));
+const mode = isMarketingSite as jest.Mock;
 
 const mockReplace = jest.fn().mockResolvedValue(true);
 
@@ -42,6 +51,7 @@ beforeEach(() => {
   mockFetch.mockReset();
   mockReplace.mockClear();
   localStorage.clear();
+  mode.mockReset().mockReturnValue(false);
 });
 
 describe('HomePage (/)', () => {
@@ -139,16 +149,6 @@ describe('HomePage (/)', () => {
     [['pricing'], 'there is no price'],
   ];
 
-  it.each(forbidden)('makes no claim matching %s (%s)', (parts) => {
-    const pattern = new RegExp((parts as string[]).join('\\s+'), 'i');
-    const { container } = render(
-      <AuthProvider>
-        <HomePage />
-      </AuthProvider>,
-    );
-    expect(container.textContent ?? '').not.toMatch(pattern);
-  });
-
   /**
    * Claims this page used to make that were not true (T86): an SDK count that
    * `sdk/` had outgrown, local bucketing that matched the server exactly (the
@@ -169,14 +169,52 @@ describe('HomePage (/)', () => {
     [['asserted\\s+on\\s+every', '\\s+local\\s+run'], 'the benchmarks run nightly, not locally'],
   ];
 
-  it.each(retired)('no longer says %s (%s)', (parts) => {
-    const pattern = new RegExp((parts as string[]).join(''), 'i');
-    const { container } = render(
-      <AuthProvider>
-        <HomePage />
-      </AuthProvider>,
-    );
-    expect(container.textContent ?? '').not.toMatch(pattern);
+  /**
+   * No accessibility claim (T176 condition 13): the walkthrough transcripts
+   * meet WCAG 1.2.3, and the audio-description gap (1.2.5) is accepted for
+   * launch, so the site names no standard it would then have to meet. Not
+   * leak-guard rules; concatenated like `retired`.
+   */
+  const unclaimed: Array<[string[], string]> = [
+    [['accessi', 'b'], 'the site makes no accessibility claim'],
+    [['WC', 'AG'], 'the same'],
+  ];
+
+  /**
+   * Both builds. The marketing build renders text the platform build does
+   * not -- the walkthroughs section (#1290) -- and these sweeps used to render
+   * the platform build only, so a claim planted in marketing-only text passed
+   * all of them (measured: 47 of 47 green). `index.site-mode.test.tsx` and
+   * `walkthroughs.test.tsx` pin the rest of the marketing page.
+   */
+  describe.each([
+    ['platform build', false],
+    ['marketing build', true],
+  ])('%s', (_build, marketing) => {
+    beforeEach(() => mode.mockReturnValue(marketing));
+
+    const text = () =>
+      render(
+        <AuthProvider>
+          <HomePage />
+        </AuthProvider>,
+      ).container.textContent ?? '';
+
+    it.each(forbidden)('makes no claim matching %s (%s)', (parts) => {
+      expect(text()).not.toMatch(new RegExp((parts as string[]).join('\\s+'), 'i'));
+    });
+
+    it.each(retired)('no longer says %s (%s)', (parts) => {
+      expect(text()).not.toMatch(new RegExp((parts as string[]).join(''), 'i'));
+    });
+
+    it.each(unclaimed)('claims no accessibility standard: %s (%s)', (parts) => {
+      expect(text()).not.toMatch(new RegExp((parts as string[]).join(''), 'i'));
+    });
+
+    it('renders the marketing section only in the marketing build', () => {
+      expect(text().includes('Walkthroughs')).toBe(marketing);
+    });
   });
 
   it('renders nothing but the title once authenticated, so there is no flash', async () => {

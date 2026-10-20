@@ -1,0 +1,67 @@
+{
+  "slug": "02-first-experiment",
+  "mp4": "02-first-experiment-03d296e58df0.mp4",
+  "items": [
+    { "on_screen": ["Controlvar", "Your first experiment", "A/B testing and feature flags you run yourself."] },
+    { "on_screen": ["Signed in off camera. Create an experiment in five guided steps."] },
+    { "said": ["Choose New Experiment: a guided setup in short steps."] },
+    { "on_screen": ["Name it, and say what you expect to happen."] },
+    { "said": ["Name it, and the key your code uses fills itself in.", "Then say what you expect to happen."] },
+    { "on_screen": ["Pick the event that counts as a win."] },
+    { "said": ["Pick the event that counts as a win: here, a purchase."] },
+    { "on_screen": ["Two variants, split evenly between users."] },
+    { "said": ["Control and Sticky bar, split evenly between users."] },
+    { "on_screen": ["Size it first: how many users do you need?"] },
+    { "said": ["Size it first.", "Enter today's conversion rate, the lift worth catching, and your traffic."] },
+    { "on_screen": ["31,234 users per variant, about 13 days here."] },
+    { "said": ["That's 31,234 users per variant: about 13 days."] },
+    { "on_screen": ["Review it, then create it."] },
+    { "said": ["Review it all on one page, then create it."] },
+    { "on_screen": ["Start it, and it is ready for shoppers."] },
+    { "said": ["Choose Start, and it's ready for shoppers."] },
+    { "on_screen": ["From the JavaScript SDK quick start"] },
+    {
+      "code": [
+        "const user = { userId: 'user-123', attributes: { country: 'US', plan: 'pro' } };",
+        "",
+        "// Sticky experiment assignment (POST /api/v1/tracking/assign); attributes are sent as `context`",
+        "const assignment = await client.getAssignment('checkout_button_color', user);",
+        "assignment.variantName;     // 'control' | 'treatment'",
+        "",
+        "// Track a conversion for one experiment (POST /api/v1/tracking/track)",
+        "await client.track('user-123', 'purchase', { value: 49.99, experimentKey: 'checkout_button_color' });"
+      ]
+    },
+    {
+      "on_screen": [
+        "As the docs give it. Your app passes its own experiment's key; the shoppers in this video are simulated and sent the same way: 63,000 of them from a fixed seed, set to buy at 5% in Control and 5.6% with the Sticky bar."
+      ]
+    },
+    { "on_screen": ["Your app asks the SDK for a variant, then tracks purchases."] },
+    { "said": ["In your app, the JavaScript SDK asks for each shopper's variant.", "Then it tracks their purchases."] },
+    { "on_screen": ["Open its results as simulated shoppers arrive."] },
+    { "said": ["Open its results as shoppers arrive, then the Live tab."] },
+    { "on_screen": ["Each refresh shows more shoppers, split about evenly."] },
+    { "said": ["Each Refresh shows more shoppers, split about evenly."] },
+    {
+      "on_screen": [
+        "Off camera",
+        "63,000 shoppers later",
+        "About 2 weeks of traffic at 10,000 visitors a day with half of them in the test, sent by the tool in 13 minutes (measured), so the results page reads Duration 0d."
+      ]
+    },
+    { "on_screen": ["About two weeks of shoppers, simulated in minutes."] },
+    { "said": ["63,000 shoppers later: about 2 weeks of traffic, simulated in minutes."] },
+    { "on_screen": ["Computed off camera first: Sticky bar wins, 12.1% lift, significant at 95%."] },
+    { "said": ["Sticky bar wins: a 12.1% lift in purchases, significant at 95% confidence."] },
+    {
+      "on_screen": [
+        "Controlvar",
+        "Open source, Apache-2.0, runs on your own infrastructure",
+        "controlvar.com",
+        "github.com/Controlvar/controlvar",
+        "Recorded on Controlvar v0.36.0, a local stack with demo data"
+      ]
+    }
+  ]
+}

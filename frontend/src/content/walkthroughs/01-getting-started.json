@@ -1,0 +1,45 @@
+{
+  "slug": "01-getting-started",
+  "mp4": "01-getting-started-9cb480bae881.mp4",
+  "items": [
+    { "on_screen": ["Controlvar", "Get started", "A/B testing and feature flags you run yourself."] },
+    {
+      "on_screen": [
+        "The Quick Start's command: shown here, not run",
+        "docker compose up -d --wait",
+        "It starts Postgres 16, Redis 7, the API and the dashboard, with the demo seed: 3 experiments, 2 flags. This recording starts the same stack off camera, in its own compose project on other ports; results are computed before they are opened, and waits for a page are cut."
+      ]
+    },
+    { "on_screen": ["One command starts the whole stack on your machine."] },
+    { "said": ["One command starts the whole stack on your machine: docker compose up."] },
+    { "on_screen": ["Postgres, Redis, the API and the dashboard, with demo data."] },
+    { "said": ["Postgres, Redis, the API and the dashboard all come up.", "With demo data: 3 experiments and 2 flags."] },
+    { "on_screen": ["Open the dashboard in your browser."] },
+    { "said": ["Open the dashboard in your browser, and choose Sign in."] },
+    { "on_screen": ["Sign in with the demo admin account from the Quick Start."] },
+    { "said": ["Sign in as the demo admin.", "The email and password are in the Quick Start."] },
+    { "on_screen": ["Your experiments, each with its status at a glance."] },
+    { "said": ["Here are your experiments, each with its status at a glance.", "Open the completed one."] },
+    { "on_screen": ["Each one has its variants, its metric and a hypothesis."] },
+    { "said": ["It shows the variants, the metric it's judged on, and the hypothesis."] },
+    { "on_screen": ["Its results, computed off camera first: lift, p-value, winner."] },
+    { "said": ["Its results show the lift, the p-value, and a recommended winner.", "Here, the new copy wins: a 15% lift in sign-ups."] },
+    { "on_screen": ["Feature flags turn a feature on for some users, or all."] },
+    { "said": ["Feature flags turn a feature on for some users, or for everyone."] },
+    { "on_screen": ["Flags roll out in stages, with a safety check alongside."] },
+    { "said": ["This flag rolls out in stages, with a safety check alongside."] },
+    { "on_screen": ["Each stage raises the share of users who get the flag."] },
+    { "said": ["Each stage raises the share of users: 10%, then 25%, now 50%."] },
+    { "on_screen": ["The safety check watches the error rate as it rolls out."] },
+    { "said": ["And the safety check watches the error rate as it rolls out.", "Right now, it's healthy."] },
+    {
+      "on_screen": [
+        "Controlvar",
+        "Open source, Apache-2.0, runs on your own infrastructure",
+        "controlvar.com",
+        "github.com/Controlvar/controlvar",
+        "Recorded on Controlvar v0.36.0, a local stack with demo data"
+      ]
+    }
+  ]
+}

@@ -11,6 +11,10 @@
 # `build:marketing` builds the homepage, the docs hub and the power calculator
 # (which computes in the browser), then prunes the dashboard from the export.
 # See frontend/src/utils/site-mode.ts.
+#
+# Its last step downloads the walkthrough videos from the public repository's
+# `media` release and fails the build when one is missing or differs from its
+# pin in frontend/src/content/videos.json (frontend/scripts/fetch-site-media.mjs).
 version: 1
 frontend:
   phases:

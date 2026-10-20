@@ -128,6 +128,128 @@ def test_the_off_camera_card_and_the_result_are_held_still():
     assert held == [("later", 1), ("result", 1)]
 
 
+# --- Gate 7: ShopLab's name next to letters it reads as part of the demo key ----------
+
+#: ShopLab's demo panel (demo/shoplab/src/components/ControlvarPanel.tsx): the
+#: button that opens it, and the prefix of every testid it draws.
+PANEL_TOGGLE = "Powered by Controlvar"
+PANEL_TESTID_PREFIX = "panel-"
+
+
+def _locators(beat: storyboard.Beat) -> list:
+    """Every element a beat finds: its focus, its records and each step's target."""
+    found = [beat.focus, *beat.record.values()]
+    for step in [*beat.before, *beat.steps, *beat.exit]:
+        for field in (
+            "click",
+            "move",
+            "type",
+            "look",
+            "scroll_to",
+            "wait_for",
+            "choose",
+            "slide",
+        ):
+            target = getattr(step, field, None)
+            if isinstance(target, storyboard.Locator):
+                found.append(target)
+    return found
+
+
+def _opens_or_shows_the_panel(locator: storyboard.Locator) -> bool:
+    return bool(
+        (locator.testid or "").startswith(PANEL_TESTID_PREFIX)
+        or PANEL_TOGGLE in (locator.name or "")
+        or PANEL_TOGGLE in (locator.text or "")
+        or PANEL_TESTID_PREFIX in (locator.css or "")
+    )
+
+
+def test_the_panel_names_are_shoplabs_own():
+    source = (SHOPLAB / "components" / "ControlvarPanel.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert PANEL_TOGGLE in source
+    for testid in (
+        "panel-visitor-id",
+        "panel-exp-${row.key}",
+        "panel-flag-${row.key}",
+        "panel-events",
+    ):
+        assert (
+            f"data-testid={{`{testid}`}}" in source
+            or f'data-testid="{testid}"' in source
+        )
+
+
+@pytest.mark.regression
+def test_the_demo_panel_is_never_opened_or_looked_at():
+    """In the first narrated takes the render's gate 7 read the panel's
+    "video_hero" badge above its "shoplab_hero_banner" key as a 12-character
+    piece of ShopLab's demo API key ("demo_shoplab_0", within 3 edits) and
+    refused the video: a false positive of a matcher that stays as it is. So
+    no beat opens the panel or points at anything in it."""
+    found = [
+        (s.id, number, locator.describe())
+        for s in board().scenes
+        for number, beat in enumerate(s.beats, start=1)
+        for locator in _locators(beat)
+        if _opens_or_shows_the_panel(locator)
+    ]
+    assert found == []
+
+
+@pytest.mark.regression
+def test_no_headline_in_a_shoplab_scene_names_shoplab():
+    """The other false positive: the band's "In ShopLab" under the form's
+    "Postal code" was read as "de-n-shoplab", 3 edits from the same piece. The
+    narration may still say ShopLab: it is spoken, not drawn."""
+    named = [
+        (s.id, beat.cue)
+        for s in board().scenes
+        if s.app == "shoplab"
+        for beat in s.beats
+        if "shoplab" in beat.cue.lower()
+    ]
+    assert named == []
+
+
+def test_shopper_b_ends_on_the_order_confirmation():
+    last = scene("shopper-b").beats[-1]
+    assert last.focus.testid == "order-confirmation"
+    assert [loc.testid for loc in _locators(last)] == ["order-confirmation"] * 3
+
+
+#: The narration, sentence by sentence: 13, each with its clip in the voice
+#: cache already (made for the earlier 15; the two about the panel are gone).
+NARRATION = [
+    "Set up a checkout test: choose New Experiment.",
+    "Name it, and the key your code uses fills itself in.",
+    "Pick the event that counts as a win: here, a purchase.",
+    "Call the other variant One page, with a configuration for the store.",
+    "Enter today's rate, and the smallest lift worth catching.",
+    "Review it, with the 5% lift saved, then create it.",
+    "Choose Start, and it's ready for shoppers.",
+    "In ShopLab, a demo storefront, this shopper gets 3 steps.",
+    "A second shopper gets everything on one page.",
+    "They buy, and the purchase is tracked for the test.",
+    "8,000 shoppers later, simulated for this video.",
+    "In the dashboard, One page wins: a 9.4% lift in purchases.",
+    "Significant at 95% confidence.",
+]
+
+
+def test_the_narration_is_these_13_sentences():
+    assert [text for *_where, text in storyboard.narration_lines(board())] == NARRATION
+    assert [(s.id, len(s.beats)) for s in board().scenes] == [
+        ("setup", 7),
+        ("shopper-a", 1),
+        ("shopper-b", 2),
+        ("later", 1),
+        ("result", 1),
+    ]
+
+
 def test_video_6_registers_in_the_tool_and_records_shoplab_only():
     assert config.VIDEOS["06-shoplab-ab-test"] == "storyboards/06-shoplab-ab-test.yaml"
     assert board().apps == ["shoplab"]

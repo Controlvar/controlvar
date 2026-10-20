@@ -368,6 +368,12 @@ jobs:
       - name: Build
         run: cd frontend && npm run build
 
+      # The walkthrough videos are the public site's only (#1290): the platform
+      # export a dashboard image is built from has no section, no <video> and
+      # no media file. Run on both profiles' exports.
+      - name: Platform export has no walkthrough (full)
+        run: cd frontend && node scripts/check-platform-export.mjs out
+
       # The core seam, exercised the way a core build resolves it:
       # `@modules/*` to the stub tree only. Without these three steps a
       # stub-shape drift -- an `@modules/x` import with no stub, a method added
@@ -400,6 +406,26 @@ jobs:
           if ! grep -rl 'Separate teams into workspaces' out/_next/static >/dev/null; then
             echo "::error::core bundle has no workspaces stub page (its description is in no chunk)"; exit 1
           fi
+
+      - name: Platform export has no walkthrough (core)
+        run: cd frontend && node scripts/check-platform-export.mjs out
+
+      # controlvar.com (#1290). Amplify builds the public site with `npm run
+      # build:marketing`, which downloads the walkthrough videos from the
+      # `media` release and refuses any file whose size or sha256 is not its
+      # pin in frontend/src/content/videos.json. Nothing else builds that
+      # export before merge, and branch protection is not strict, so a bad pin
+      # would otherwise first fail in Amplify, on main, and then fail every
+      # later site build until the manifest changed. check-site-media.mjs
+      # checks what the pinned files contain: here, never in Amplify.
+      - name: Marketing site export, with the walkthrough media
+        run: |
+          set -euo pipefail
+          cd frontend
+          node --test scripts/site-media.test.mjs
+          rm -rf .next out
+          npm run build:marketing
+          node scripts/check-site-media.mjs out
 
   # Each SDK's OWN exported hash function against golden-vectors.json: the
   # Python SDK's source, the JS and edge packages as built, the React Native
