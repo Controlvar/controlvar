@@ -1729,8 +1729,30 @@ def test_the_card_says_the_wall_clock_gap_even_when_the_recording_saw_none():
     )
     assert filled.card.headline == "3 minutes later"
     assert storyboard.ROLLBACK_MINUTES not in filled.card.note
+    # What U3 reads back: the text that held the placeholder, not the note.
+    assert made.card_said == "3 minutes later"
     # Only the card after the wait is filled.
     assert made.with_minutes(scene("crashes"), Walls({})) == scene("crashes")
+
+
+@pytest.mark.regression
+def test_the_real_card_after_the_wait_passes_u3_beside_its_interval_note():
+    """The card's note states the interval's default, "every 5 minutes": a
+    second duration, which U3 once read as the card saying two gaps, so every
+    take refused at the card. U3 reads only the text that held the measured
+    value; filled and checked here as a take does both."""
+    made, wall = an_incident()
+    b9_end_ms = 1000.0 * (wall.at - 100.0)
+    walls = Walls({"unhealthy": {"start": b9_end_ms - 5000, "end": b9_end_ms}})
+    filled = made.with_minutes(scene("later"), walls)
+    assert "every 5 minutes" in filled.card.note
+    walls.scene_walls["later"] = {
+        "start": 1000.0 * wall.at,
+        "end": 1000.0 * wall.at + 6000,
+    }
+    made.after_scene(scene("later"), walls)
+    assert made.numbers["card"]["said"] == "2 minutes"
+    assert made.numbers["card"]["gap_s"] == 100.0
 
 
 @pytest.mark.regression
@@ -1754,9 +1776,8 @@ def test_a_card_whose_minutes_are_not_the_gap_within_30_s_is_refused(
 @pytest.mark.regression
 def test_after_the_card_the_gap_to_its_first_frame_is_checked():
     made, wall = an_incident()
-    made.card_said = (
-        "Off camera 1 minute later Waited off camera; the time above is measured."
-    )
+    # What with_minutes keeps for a card that said 1 minute (its headline).
+    made.card_said = "1 minute later"
     walls = Walls(
         {
             "unhealthy": {"start": 0.0, "end": 1_000_000.0},

@@ -949,7 +949,14 @@ class Incident:
             if getattr(card, name)
         }
         filled = card.model_copy(update=update)
-        self.card_said = " ".join(storyboard.card_texts(filled))
+        # U3 reads back what the card says the gap was: the text that held the
+        # placeholder. The rest of the card has durations of its own (video
+        # 4's note states the interval's default, "every 5 minutes").
+        self.card_said = " ".join(
+            update[name]
+            for name in ("headline", "note")
+            if storyboard.ROLLBACK_MINUTES in (getattr(card, name) or "")
+        )
         self.numbers["card"] = {"said": said, "gap_at_fill_s": round(gap, 1)}
         return scene.model_copy(update={"card": filled})
 
