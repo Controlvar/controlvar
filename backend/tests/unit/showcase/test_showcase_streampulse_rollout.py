@@ -2324,11 +2324,14 @@ def test_the_rollback_lines_are_counted_by_kind():
 ME = {"email": "admin@demo.com", "id": "u-admin"}
 AUDIT_SHOWN = "\n".join(
     [
-        "Oct 20, 10:03\tSafety monitor\tSafety rollback\tFeature flag\tStreamPulse: Player v2",
+        "Oct 20, 10:03\tSafety monitor (automatic)\tSafety rollback\tFeature flag"
+        "\tStreamPulse: Player v2",
         "Oct 20, 10:01\tadmin@demo.com\tFlag changed\tFeature flag\tStreamPulse: Player v2",
     ]
 )
-DETAILS = f"User Safety monitor Action Safety rollback Reason {ROLLBACK_REASON}"
+DETAILS = (
+    f"User Safety monitor (automatic) Action Safety rollback Reason {ROLLBACK_REASON}"
+)
 
 
 def judged(drawn=None, **changes):
@@ -2561,6 +2564,29 @@ def test_gate_10_4_refuses_each_reading_that_disagrees(changes, words):
     assert not ok and words in why, why
 
 
+@pytest.mark.regression
+def test_the_monitors_audit_row_is_read_as_the_table_draws_it():
+    """The audit table's User cell is ``actorLabel(log)``: for the safety
+    monitor's rollback (it has no user id) the monitor's name, then
+    "(automatic)". Gate 10/4 once wanted the bare name, which no page draws,
+    so every take would have refused at the audit's top row; the stand-in
+    table carried the bare name too. Here the row is built from the page's
+    own code."""
+    audit = REPO / "frontend" / "src" / "components" / "admin" / "audit"
+    labels = (audit / "actionLabels.ts").read_text(encoding="utf-8")
+    name = re.search(r"'system:safety-monitor': '([^']+)'", labels).group(1)
+    assert "return `${name} (automatic)`;" in labels
+    table = (audit / "AuditLogTable.tsx").read_text(encoding="utf-8")
+    assert "{actorLabel(log)}" in table
+    drawn = (
+        f"Oct 20, 10:03\t{name} (automatic)\tSafety rollback\tFeature flag"
+        "\tStreamPulse: Player v2"
+    )
+    ok, numbers, why = judged(drawn={"audit": drawn})
+    assert ok, why
+    assert numbers["top_row"][0] == f"{name} (automatic)"
+
+
 def test_gate_10_4_reads_the_dashboards_and_the_apps_own_words():
     """The labels gate 10/4 compares are the product's, at the recorded release."""
     labels = (
@@ -2568,6 +2594,8 @@ def test_gate_10_4_reads_the_dashboards_and_the_apps_own_words():
     ).read_text(encoding="utf-8")
     assert "safety_rollback: { label: 'Safety rollback'" in labels
     assert "'system:safety-monitor': 'Safety monitor'" in labels
+    # The User cell of an entry with no user: the actor's name, "(automatic)".
+    assert "return `${name} (automatic)`;" in labels
     page = (
         REPO / "frontend" / "src" / "pages" / "feature-flags" / "[id].tsx"
     ).read_text(encoding="utf-8")

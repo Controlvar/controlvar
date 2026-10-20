@@ -905,9 +905,11 @@ def audit_rows(text: str) -> List[List[str]]:
 
 #: How the audit log page names the safety monitor and its rollback
 #: (frontend/src/components/admin/audit/actionLabels.ts; a unit test keeps
-#: them equal), and the user the API records for it.
+#: them equal), and the user the API records for it. The page draws a system
+#: actor's entry, one with no user, as its name and "(automatic)"
+#: (``actorLabel``): the User cell of the monitor's rollback.
 SAFETY_MONITOR = "system:safety-monitor"
-SAFETY_MONITOR_LABEL = "Safety monitor"
+SAFETY_MONITOR_LABEL = "Safety monitor (automatic)"
 ROLLBACK_LABEL = "Safety rollback"
 #: How the safety card and the schedule's badge read (frontend/src/pages/
 #: feature-flags/[id].tsx: the badge's text, ``humanize`` of the status).
