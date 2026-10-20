@@ -1,3 +1,5 @@
+import re
+
 from aws_cdk import (
     Stack,
     Duration,
@@ -65,6 +67,118 @@ API_PATH_RULES = (
     (10, ("/api/*",)),
     (11, ("/health", "/health/*", "/metrics")),
 )
+
+#: The API task's optional settings for a trial install that serves the local
+#: demo apps (#1299): the browser origins it allows, and how often its three
+#: schedulers run. Each is CDK context (`-c <name>=<value>`), read the way
+#: `backend_image_tag` is, and never the process environment: a shell that
+#: exported CORS_ORIGINS for a local run (.env.example sets it) must not carry
+#: it into a hand-run `cdk deploy`. A value reaches the API task under its
+#: setting's name, and no other task. Unset, the task gets nothing, so every
+#: template is the one it was before these existed.
+CORS_ORIGINS_CONTEXT = "cors_origins"
+SCHEDULER_CADENCE_CONTEXTS = {
+    "safety_check_interval_minutes": "SAFETY_CHECK_INTERVAL_MINUTES",
+    "rollout_check_interval_minutes": "ROLLOUT_CHECK_INTERVAL_MINUTES",
+    "bandit_update_interval_minutes": "BANDIT_UPDATE_INTERVAL_MINUTES",
+}
+
+#: One origin as a browser sends it in `Origin`: lower case, no path, no
+#: trailing slash. Quantifiers are bounded; labels and the port are checked
+#: after the match.
+_ORIGIN = re.compile(r"(https?)://([a-z0-9.-]{1,253})(?::([1-9][0-9]{0,4}))?")
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+_ORIGINS_RULE = (
+    "Give comma-separated origins with no spaces, each scheme://host[:port] "
+    "exactly as a browser sends it (http or https, lower case, no path or "
+    "trailing slash, no default port), e.g. "
+    "-c cors_origins=http://localhost:3200,http://localhost:3300"
+)
+
+
+def _origin_problem(entry: str) -> str | None:
+    """Why ``entry`` is not an origin the backend would keep as written."""
+    if not entry:
+        return "is an empty entry"
+    if entry == "*":
+        return (
+            "would let every website call the API from a browser; list the "
+            "origins that need it instead"
+        )
+    match = _ORIGIN.fullmatch(entry)
+    if match is None:
+        return "is not an origin"
+    scheme, host, port = match.groups()
+    if any(
+        not label or len(label) > 63 or label[0] == "-" or label[-1] == "-"
+        for label in host.split(".")
+    ):
+        return "has no valid host name"
+    if port is not None and int(port) > 65535:
+        return "has a port above 65535"
+    if port is not None and int(port) == _DEFAULT_PORTS[scheme]:
+        return f"names {scheme}'s default port, which a browser leaves out"
+    return None
+
+
+def cors_origins_from_context(value) -> str:
+    """The ``cors_origins`` context value, checked, for the API's CORS_ORIGINS.
+
+    It is passed on verbatim, so it is refused here, at synth, wherever the
+    backend would accept it differently from how it is written: it accepts
+    ``*`` with a warning, drops an entry that is not an origin (a bare
+    ``localhost:3300``) with an error log, and rewrites a trailing slash.
+    """
+    if not isinstance(value, str):
+        raise ValueError(
+            f"{CORS_ORIGINS_CONTEXT} context must be a string; got {value!r}. "
+            f"{_ORIGINS_RULE}."
+        )
+    seen = set()
+    for entry in value.split(","):
+        problem = _origin_problem(entry)
+        if problem is None and entry in seen:
+            problem = "is listed twice"
+        if problem is not None:
+            raise ValueError(
+                f"{CORS_ORIGINS_CONTEXT} context: {entry!r} {problem}. "
+                f"{_ORIGINS_RULE}."
+            )
+        seen.add(entry)
+    return value
+
+
+def cadence_from_context(name: str, value) -> str:
+    """A scheduler cadence context value, checked: whole minutes, at least 1.
+
+    The settings it sets have no lower bound, and the API service has no
+    deployment circuit breaker, so a value they would refuse or misread is
+    refused here, at synth.
+    """
+    if not isinstance(value, str) or re.fullmatch(r"[1-9][0-9]*", value) is None:
+        raise ValueError(
+            f"{name} context must be a whole number of minutes, at least 1, in "
+            f"decimal digits with no sign, point or unit (e.g. -c {name}=1); "
+            f"got {value!r}."
+        )
+    return value
+
+
+def api_context_environment(try_get_context) -> dict[str, str]:
+    """The API task's environment entries from the optional context inputs.
+
+    ``try_get_context`` is ``node.try_get_context``. An input that is not set
+    gives no entry at all; one that is set is checked and passed on verbatim.
+    """
+    environment = {}
+    origins = try_get_context(CORS_ORIGINS_CONTEXT)
+    if origins is not None:
+        environment["CORS_ORIGINS"] = cors_origins_from_context(origins)
+    for name, variable in SCHEDULER_CADENCE_CONTEXTS.items():
+        minutes = try_get_context(name)
+        if minutes is not None:
+            environment[variable] = cadence_from_context(name, minutes)
+    return environment
 
 
 class FargateServiceStack(Stack):
@@ -455,6 +569,16 @@ class FargateServiceStack(Stack):
             ),
             essential=True,
         )
+
+        # The demo apps' optional inputs (#1299): CDK context only, added here
+        # and to no other container. Not in `environment=` above, whose keys
+        # are the ones every API task gets
+        # (backend/tests/unit/infrastructure/test_deployment_secrets.py reads
+        # them there).
+        for variable, value in api_context_environment(
+            self.node.try_get_context
+        ).items():
+            self.container.add_environment(variable, value)
 
         self.container.add_port_mappings(
             ecs.PortMapping(container_port=8000, protocol=ecs.Protocol.TCP)
