@@ -191,12 +191,12 @@ FORBIDDEN_TEXT: Tuple[str, ...] = (
 # ---------------------------------------------------------------------------
 
 #: The values every stack carries and no frame may show: the demo accounts'
-#: password, docker-compose.yml's two demo API keys and its SECRET_KEY default.
+#: password, then docker-compose.yml's two demo API keys and its SECRET_KEY
+#: default, which ``contract.PUBLIC_VALUES`` holds in two parts (the render's
+#: OCR scan looks for those three only through their random part).
 STATIC_NEEDLES: Tuple[str, ...] = (
     "Demo1234!",
-    "eptk_demo_shoplab_0123456789abcdef0123456789abcdef",
-    "eptk_demo_streampulse_0123456789abcdef0123456789ab",
-    "dev-only-change-me-9f1c7b2e4a6d8e0f1a2b3c4d5e6f7a8b",
+    *(readable + random_part for readable, random_part in contract.PUBLIC_VALUES),
 )
 #: The compose demo key each app's bundle is built with, and its seed registers.
 APP_STATIC_KEY: Dict[str, str] = {
