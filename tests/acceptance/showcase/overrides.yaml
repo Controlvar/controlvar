@@ -15,6 +15,7 @@
 01-getting-started: {}
 02-first-experiment: {}
 03-flag-rollout: {}
+05-plan-and-team: {}
 
 06-shoplab-ab-test:
   CORS_ORIGINS:

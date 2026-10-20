@@ -732,6 +732,134 @@ def planned_sample_end(
     return True, numbers, ""
 
 
+def calculation_end(made: Any, *, shown: Optional[str]) -> Verdict:
+    """Gate 10/5: a sample size the power calculator drew (``storyboard.Calculation``).
+
+    * the storyboard's ``per_variant`` is the textbook formula's for its inputs
+      (``planned_sample_oracle``: two-sided, the calculator's own 80% power and
+      95% confidence, with its Bonferroni correction over the ``variants - 1``
+      comparisons), so a number the video says is computed, not copied;
+    * the page drew that number, word for word, where the beat recorded it.
+    """
+    alpha = PLAN_ALPHA / (made.variants - 1)
+    oracle = planned_sample_oracle(made.baseline, made.mde, alpha=alpha)
+    drawn = " ".join((shown or "").split())
+    numbers: Dict[str, Any] = {
+        "inputs": {
+            "baseline": made.baseline,
+            "mde": made.mde,
+            "variants": made.variants,
+            "alpha": alpha,
+            "power": PLAN_POWER,
+        },
+        "storyboard": made.per_variant,
+        "oracle": oracle,
+        "shown": drawn,
+    }
+    if oracle != made.per_variant:
+        return (
+            False,
+            numbers,
+            f"the storyboard says {made.per_variant:,} users per variant for"
+            f" {made.variants} variants; the formula gives {oracle:,}",
+        )
+    if drawn != f"{made.per_variant:,}":
+        return (
+            False,
+            numbers,
+            f"the calculator drew {drawn!r}; for {made.variants} variants it draws"
+            f" {made.per_variant:,}",
+        )
+    return True, numbers, ""
+
+
+#: How the users table names each role (frontend/src/types/admin.ts
+#: ``USER_ROLE_LABELS``; a unit test keeps them equal).
+ROLE_LABELS: Dict[str, str] = {
+    "ADMIN": "Admin",
+    "DEVELOPER": "Developer",
+    "ANALYST": "Analyst",
+    "VIEWER": "Viewer",
+}
+
+
+def _who(user: Mapping[str, Any]) -> Tuple[Any, ...]:
+    """What gate 10/5 compares of an account: role, superuser, active."""
+    return (user.get("role"), bool(user.get("is_superuser")), user.get("is_active"))
+
+
+def team_end(
+    team: Any,
+    *,
+    before: Sequence[Mapping[str, Any]],
+    after: Sequence[Mapping[str, Any]],
+    shown: Optional[str],
+) -> Verdict:
+    """Gate 10/5 (S8c of plan v2.2): the video invited exactly these teammates.
+
+    * every account there before the video is there after it, unchanged;
+    * the accounts added are the invitees, each once by email: none missing
+      and none other;
+    * each has the role it was invited with, is active, and is a superuser
+      only when invited as an Admin (the dialog makes an Admin one);
+    * the users table showed them: its top rows, newest first, each with the
+      invitee's email and role, as the API lists them.
+    """
+    by_email = {str(u.get("email")): u for u in after}
+    old = {str(u.get("email")): u for u in before}
+    added = [u for u in after if str(u.get("email")) not in old]
+    wanted = [invitee.email for invitee in team.invitees]
+    numbers: Dict[str, Any] = {
+        "users_before": len(before),
+        "users_after": len(after),
+        "added": sorted(str(u.get("email")) for u in added),
+        "invitees": wanted,
+    }
+    changed = sorted(
+        email
+        for email, user in old.items()
+        if email not in by_email or _who(by_email[email]) != _who(user)
+    )
+    if changed:
+        return False, numbers, f"accounts there before the video changed: {changed}"
+    if sorted(numbers["added"]) != sorted(wanted) or len(added) != len(wanted):
+        return (
+            False,
+            numbers,
+            f"the video added {numbers['added']}; the storyboard invites {wanted}",
+        )
+    roles = []
+    for invitee in team.invitees:
+        user = by_email[invitee.email]
+        got = _who(user)
+        roles.append({"email": invitee.email, "role": got[0], "superuser": got[1]})
+        want = (invitee.role, invitee.role == "ADMIN", True)
+        if got != want:
+            numbers["roles"] = roles
+            return (
+                False,
+                numbers,
+                f"{invitee.email} is {got[0]!r} (superuser {got[1]}, active"
+                f" {got[2]}); the storyboard invites them as {invitee.role!r}",
+            )
+    numbers["roles"] = roles
+    rows = audit_rows(shown or "")
+    expected = [
+        [invitee.email, ROLE_LABELS[invitee.role]]
+        for invitee in reversed(list(team.invitees))
+    ]
+    drawn = [row[1:3] for row in rows[: len(expected)]]
+    numbers["shown_rows"] = drawn
+    if drawn != expected:
+        return (
+            False,
+            numbers,
+            f"the users table's top rows showed {drawn}; the API lists {expected},"
+            " newest first",
+        )
+    return True, numbers, ""
+
+
 def select_hold(option: str, shown: str, held: str, held_ms: int) -> Verdict:
     """C9: a ``choose`` step's closed select showed the option at once, and still
     showed it ``config.SETTLE_MS`` later."""

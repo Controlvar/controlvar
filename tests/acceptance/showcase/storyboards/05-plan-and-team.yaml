@@ -1,0 +1,240 @@
+# Video 5, Plan a test, bring your team: size an A/B test in the power
+# calculator before anyone signs in, then sign in and invite two teammates with
+# roles. Plan v2.2 (T178) on plan v1's V5 table (rows 2-10), on the `demo` seed,
+# the core profile and no demo app.
+#
+# * The calculator opens on the power-analysis guide's own example: a 5%
+#   baseline and a 10% lift are its defaults, so they are pointed at, not set.
+#   10,000 users a day are typed and the share in the test slid to 50%: 31,234
+#   users per variant, drawn "1.8 weeks (12 days)" (the guide's 12.5 days,
+#   rounded by the page). A third variant raises it to 37,824 (Bonferroni over
+#   2 comparisons). Gate 10 holds both numbers to the textbook formula
+#   (gates.calculation_end), and the unit tests to the server's own service.
+#   Beat 2's caption states no number: U2 reads its focus's text, where the
+#   card draws "Rate" and "5.0%" with nothing between them; the narration says
+#   both numbers, which G2 reads as drawn.
+# * The sign-in is on camera, as in video 1: the calculator's Sign in, the demo
+#   admin from the Quick Start, back to the calculator, then Admin, Users and
+#   Invite User.
+# * The invite dialog shows each new account's one-time password once. The
+#   tool masks it (C4, S6 of plan v2.2): the dashboard makes the password up in
+#   the browser and sends it in the invite request, where the capture registers
+#   it as a needle before the answer is read; a stylesheet put in at document
+#   start hides the element's text before it is painted and draws a solid
+#   block reading "hidden for this video" over it. D84: the scene says so in
+#   the caption of the beat that shows it ("masked value"). The ring goes
+#   round the masked password's row: the element itself is hidden, which a
+#   locator never finds visible.
+# * C4's positive count: the capture saw exactly two invite requests, each
+#   one's password captured before its answer was read. Gate 10 (S8c):
+#   exactly the two invitees, with these roles, added to the seed's four
+#   users, and the users table shows them, newest first.
+# * Shown as drawn (D84 rule 1): in a core build the Analyst role chip has no
+#   colour (measured on the release's dashboard export): Tailwind's content
+#   globs do not read src/types/admin.ts, where ROLE_COLORS keeps its only
+#   purple classes.
+# * Every native select is set closed and held (C9): the variants and each
+#   role. No slide or choose is in an exit, so each narrated beat's hold is
+#   what the projection counts (e0 follow-ups, UX item 4).
+# * `say` is the narration (D102): every number in digits as the page draws
+#   it, and on the page while it is said (G2): 5% ("5.0%") and 10% in the
+#   parameters, 10,000 (the field's "e.g. 10000", then its value) and 50% (the
+#   allocation, after the slide), 31,234 and 12 ("1.8 weeks (12 days)"), and
+#   37,824 after the third variant. Beat 7's sentences are video 1's, word for
+#   word, so their clips are the ones already made. Cut list, if the voiced
+#   projection passes 87.3 s: 1. beat 7's second sentence (about 1 s, no new
+#   clip); 2. beat 2 said as "Today 5% buy; you want a 10% lift." (about 1 s,
+#   one new clip). Beats 9 and 11 are held by their typing, so cutting their
+#   narration saves nothing.
+slug: 05-plan-and-team
+title: Plan a test, bring your team
+seed: demo
+seed_counts: {experiments: 3, feature_flags: 2, users: 4}
+end_state:
+  signed_in_as: admin@demo.com
+  calculations:
+    - shown: two-variants
+      baseline: 0.05
+      mde: 0.10
+      variants: 2
+      per_variant: 31234
+    - shown: three-variants
+      baseline: 0.05
+      mde: 0.10
+      variants: 3
+      per_variant: 37824
+  team:
+    invitees:
+      - {email: priya@example.com, role: DEVELOPER}
+      - {email: marcus@example.com, role: ANALYST}
+    shown: team
+
+scenes:
+  - id: plan-and-team
+    open: /power-calculator
+    masks: [invite-temp-password]
+    departures:
+      - kind: masked value
+        says: hidden for this video
+    beats:
+      - cue: "Plan first: the calculator needs no account."
+        focus: {role: heading, name: Pre-Experiment Power Calculator}
+        say:
+          - "Plan a test first: the power calculator needs no account."
+        steps:
+          - look: {text: "No account required."}
+            ms: 1500
+
+      - cue: Start from today's rate and the lift worth catching.
+        focus: {css: "div.rounded-xl:has(#power-baseline)"}
+        say:
+          - "Today 5% of visitors buy; you want to catch a 10% lift."
+        steps:
+          - look: {css: "label[for=power-baseline]"}
+            ms: 1200
+          - look: {css: "label[for=power-mde]"}
+            ms: 1200
+
+      - cue: Add your traffic, and the share of it in the test.
+        focus: {css: "div.rounded-xl:has(#power-daily-users)"}
+        say:
+          - Add 10,000 users a day, with 50% of them in the test.
+        steps:
+          - type: {css: "#power-daily-users"}
+            text: "10000"
+          - slide: {css: "#power-allocation"}
+            value: 0.5
+
+      - cue: "31,234 users per variant: about 12 days here."
+        focus: {css: "div.grid:has(> div > output)"}
+        record:
+          two-variants: {css: "output[aria-labelledby=power-per-variant-name]"}
+        say:
+          - "That's 31,234 users per variant: about 12 days."
+        steps:
+          - look: {css: "output[aria-labelledby=power-per-variant-name]"}
+            ms: 1200
+          - look: {css: "output[aria-labelledby=power-runtime-name]"}
+            ms: 1200
+
+      - cue: A third variant needs more users in each one.
+        focus: {css: "div.grid:has(> div > output)"}
+        say:
+          - A third variant needs 37,824 users in each.
+        steps:
+          - choose: {css: "#power-variants"}
+            option: 3 (A/B/C test)
+          - look: {css: "output[aria-labelledby=power-per-variant-name]"}
+            ms: 1500
+
+      - cue: Now bring in your team.
+        focus: {testid: nav-sign-in}
+        record:
+          three-variants: {css: "output[aria-labelledby=power-per-variant-name]"}
+        say:
+          - Now bring in your team.
+        steps:
+          - move: {testid: nav-sign-in}
+        exit:
+          - click: {testid: nav-sign-in}
+
+      - before:
+          - url: "**/login?**"
+          - wait_for: {role: button, name: Sign in, exact: true}
+        cue: Sign in as the demo admin from the Quick Start.
+        focus: {css: form}
+        say:
+          - Sign in as the demo admin.
+          - The email and password are in the Quick Start.
+        steps:
+          - type: {label: Email}
+            text: admin@demo.com
+          - type: {role: textbox, name: Password}
+            text: "Demo1234!"
+            secret: true
+          - move: {role: button, name: Sign in, exact: true}
+        exit:
+          - click: {role: button, name: Sign in, exact: true}
+
+      - before:
+          - url: "**/power-calculator"
+          - wait_for: {testid: nav-admin}
+        cue: Admin, then Users, then Invite User.
+        focus: {testid: nav-admin}
+        say:
+          - Open Admin, then Users, and choose Invite User.
+        steps:
+          - move: {testid: nav-admin}
+        exit:
+          - click: {testid: nav-admin}
+          - wait_for: {testid: nav-item-users}
+          - click: {testid: nav-item-users}
+          - wait_for: {testid: invite-user-button}
+          - click: {testid: invite-user-button}
+
+      - before:
+          - wait_for: {testid: invite-email-input}
+        cue: Invite Priya as a Developer.
+        focus: {css: "[data-testid=invite-user-modal] form"}
+        say:
+          - "Invite Priya as a Developer: she can build experiments and flags."
+        steps:
+          - type: {testid: invite-email-input}
+            text: priya@example.com
+          - type: {testid: invite-full-name-input}
+            text: Priya Shah
+          - choose: {testid: invite-role-select}
+            option: Developer
+        exit:
+          - click: {testid: invite-submit-button}
+
+      - before:
+          - wait_for: {testid: invite-created}
+        cue: Her password shows once; hidden for this video.
+        focus: {testid: invite-created}
+        say:
+          - Her one-time password shows once; this video hides it.
+        steps:
+          - look: {text: once, exact: true}
+            ms: 1000
+          # The row the masked password is in: the masked element itself is
+          # visibility: hidden, which a locator never finds visible.
+          - look: {css: "[data-testid=invite-created] div:has(> [data-testid=invite-temp-password])"}
+            ms: 1500
+        exit:
+          - click: {testid: invite-done-button}
+          - click: {testid: invite-user-button}
+
+      - before:
+          - wait_for: {testid: invite-email-input}
+        cue: "Four roles: Admin, Developer, Analyst and Viewer."
+        focus: {css: "[data-testid=invite-user-modal] form"}
+        say:
+          - "Pick a role: Admin, Developer, Analyst or Viewer."
+          - Marcus joins as an Analyst.
+        steps:
+          - type: {testid: invite-email-input}
+            text: marcus@example.com
+          - type: {testid: invite-full-name-input}
+            text: Marcus Lee
+          - choose: {testid: invite-role-select}
+            option: Analyst
+        exit:
+          - click: {testid: invite-submit-button}
+          - wait_for: {testid: invite-created}
+          - click: {testid: invite-done-button}
+
+      - before:
+          - wait_for: {text: marcus@example.com}
+        cue: Analysts see every experiment and flag, and edit neither.
+        focus: {css: "[data-testid=user-table] table"}
+        record:
+          team: {css: "[data-testid=user-table] tbody"}
+        say:
+          - An analyst sees every experiment and flag, and changes neither.
+        payoff: true
+        steps:
+          - look: {css: "[data-testid=user-table] tbody tr:nth-child(1) td:nth-child(3) span"}
+            ms: 1200
+          - look: {css: "[data-testid=user-table] tbody tr:nth-child(2) td:nth-child(3) span"}
+            ms: 1200
