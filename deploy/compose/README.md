@@ -50,9 +50,17 @@ only, and PostgreSQL and Redis run natively (measured on an Apple M4 with the
 v0.34.3 images).
 
 Only the dashboard publishes a port, on `127.0.0.1:8080` by default, and it
-passes `/api` to the API. Put your TLS reverse proxy in front of it and pass
-the Host header unchanged: the API answers only for the host name of
-`PUBLIC_BASE_URL`.
+passes `/api` to the API. Open it at your `PUBLIC_BASE_URL`,
+`http://localhost:8080` by default (with your `HTTP_PORT`, if you changed it),
+not at `http://127.0.0.1:8080`: the API refuses the sign-in there with `400`.
+Put your TLS reverse proxy in front of it and pass the Host header unchanged:
+the API answers only for the host name of `PUBLIC_BASE_URL`.
+
+Point an SDK's base URL at the dashboard's address (`http://localhost:8080` by
+default), because this stack does not publish the API on port 8000. The
+`localhost:8000` on the SDK pages is the
+[Quick Start](https://docs.controlvar.com/getting-started/quick-start/)'s
+address.
 
 ## Settings
 
