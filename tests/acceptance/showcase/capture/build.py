@@ -2,9 +2,10 @@
 
 1. ``git archive <commit> | tar -x`` into ``<work root>/tree-<profile>``: only
    what the ref tracks, so a developer's uncommitted or untracked files do not
-   reach the video. The only git commands the tool runs are ``rev-parse`` and
-   ``archive``; neither writes. A ref that is not here is refused with the
-   fetch command to run, which the tool does not run itself.
+   reach the video. The only git commands the tool runs are ``rev-parse``,
+   ``archive`` and ``status`` (``tool_checkout``, with ``--no-optional-locks``,
+   so it does not rewrite the index); none writes. A ref that is not here is
+   refused with the fetch command to run, which the tool does not run itself.
 2. Core: ``modules/`` is deleted (through ``WorkRoot.remove``).
 3. ``frontend/node_modules`` is cloned from the checkout the tool runs from
    (``cp -c``: copy-on-write on APFS, so it costs no space, and a build tool
@@ -26,6 +27,14 @@ own ``next``, never an npm script) with ``guard.app_settings``, and a check
 that the bundle names the tool's API and no developer address. It is served
 by ``next start -p <port> -H 127.0.0.1`` (``app_start_argv``); ``next dev``
 and ``npm start`` are refused (``refuse_app_argv``).
+
+Those ``node_modules`` are the checkout's, so before they are copied the app
+is refused (T178 condition 6, ``app_dependencies``) unless the checkout's
+``demo/<app>/package-lock.json`` is byte for byte the recorded ref's (the
+archived tree holds the ref's: ``git archive`` writes the blob as it is, with
+no attribute in this repository to convert it), and the installed next, react
+and react-dom (``node_modules/<package>/package.json``) are the versions that
+lockfile pins. The manifest records both (``apps``).
 
 Nothing here needs ``.git`` in the tree it builds: ``backend/tests/unit/showcase``
 builds a tree from a plain tar stream in a directory with none.
@@ -92,6 +101,105 @@ def resolve_ref(repo: Path, ref: str, *, run=subprocess.run) -> str:
             f" fetch it first: git -C {repo} fetch --tags origin"
         )
     return commit
+
+
+#: How many of a dirty checkout's changes the manifest lists; it counts them all.
+TOOL_CHANGES_SHOWN = 20
+
+
+def tool_checkout(repo: Path, *, run=subprocess.run) -> Dict[str, Any]:
+    """The checkout the tool itself runs from: its HEAD, and what is uncommitted.
+
+    ``commit`` is ``git rev-parse HEAD``, or None unless *repo* is the top of a
+    git checkout of its own (core_build.sh's copy has no ``.git``, and a copy
+    inside another checkout must not report that one's HEAD). ``changes``
+    counts the lines of ``git status --porcelain``: modified, staged and
+    untracked files, whatever git's configuration says about untracked ones;
+    ignored files (``node_modules``) are not changes. ``first_changes`` lists
+    the first ``TOOL_CHANGES_SHOWN``. ``clean`` is true only for a known commit
+    with no change, and anything git could not answer is not clean. Read only:
+    ``--no-optional-locks`` keeps ``git status`` from rewriting the index.
+    """
+
+    def git(*args: str) -> Optional["subprocess.CompletedProcess[str]"]:
+        try:
+            return run(
+                ["git", "--no-optional-locks", "-C", str(repo), *args],
+                capture_output=True,
+                text=True,
+                errors="replace",
+                check=False,
+                env=guard.tool_env(),
+            )
+        except OSError:  # no git at all
+            return None
+
+    unknown: Dict[str, Any] = {
+        "commit": None,
+        "clean": False,
+        "changes": None,
+        "first_changes": [],
+    }
+    top = git("rev-parse", "--show-toplevel")
+    if top is None or top.returncode != 0 or not top.stdout.strip():
+        return unknown
+    if Path(top.stdout.strip()).resolve() != Path(repo).resolve():
+        return unknown
+    head = git("rev-parse", "--verify", "--quiet", "HEAD^{commit}")
+    commit = head.stdout.strip() if head is not None and head.returncode == 0 else ""
+    if not _SHA.match(commit):
+        return unknown
+    status = git("status", "--porcelain=v1", "--untracked-files=normal")
+    if status is None or status.returncode != 0:
+        return {**unknown, "commit": commit}
+    lines = [line for line in status.stdout.splitlines() if line.strip()]
+    return {
+        "commit": commit,
+        "clean": not lines,
+        "changes": len(lines),
+        "first_changes": lines[:TOOL_CHANGES_SHOWN],
+    }
+
+
+def tool_record(
+    start: Optional[Mapping[str, Any]], end: Mapping[str, Any]
+) -> Dict[str, Any]:
+    """The manifest's ``tool``: the commit the run started from, and ``clean``.
+
+    ``clean`` is true only when the checkout was clean at the run's start and
+    again when this video's capture was written, at the same commit: a file
+    changed, or a commit made, while a take ran is not that commit's take. A
+    dirty checkout is recorded, not refused (a development take). Intent, not
+    enforced here: a final's approval step, kept outside this repository,
+    checks that ``commit`` and both readings name the reviewed commit and a
+    clean tree; nothing in this repository refuses a dirty tree, the render
+    included.
+    """
+    clean = bool(
+        start is not None
+        and start.get("clean") is True
+        and end.get("clean") is True
+        and start.get("commit") is not None
+        and start.get("commit") == end.get("commit")
+    )
+    return {
+        "commit": start.get("commit") if start is not None else None,
+        "clean": clean,
+        "start": dict(start) if start is not None else None,
+        "end": dict(end),
+    }
+
+
+def tool_line(checkout: Mapping[str, Any]) -> str:
+    """The run log's line for ``tool_checkout``'s answer."""
+    commit = checkout.get("commit")
+    if commit is None:
+        return "tool checkout: no commit of its own (recorded as not clean)"
+    if checkout.get("clean") is True:
+        return f"tool checkout {commit[:12]}, clean"
+    changes = checkout.get("changes")
+    said = "status unknown" if changes is None else f"{changes} uncommitted change(s)"
+    return f"tool checkout {commit[:12]}, {said} (recorded as not clean)"
 
 
 def extract(stream: IO[bytes], tree: Path) -> None:
@@ -348,6 +456,76 @@ def app_bundle_check(tree: Path, app: str, api_url: str) -> str:
     return f"{app} bundle: names {api_url}, no developer address"
 
 
+#: The packages whose installed versions must be the ref's lockfile's (T178
+#: condition 6): what the app is built and drawn with.
+APP_PINNED_PACKAGES = ("next", "react", "react-dom")
+
+
+def _lock_packages(lock: Path) -> Dict[str, Any]:
+    try:
+        packages = json.loads(lock.read_text(encoding="utf-8")).get("packages")
+    except (OSError, ValueError) as error:
+        raise guard.Refused(f"{lock} cannot be read as a lockfile ({error})") from None
+    if not isinstance(packages, dict):
+        raise guard.Refused(f"{lock} lists no packages")
+    return packages
+
+
+def app_dependencies(repo: Path, tree: Path, app: str, ref: str) -> Dict[str, Any]:
+    """T178 condition 6: the app is built from the recorded ref's dependencies.
+
+    *tree* holds the ref's ``git archive`` of ``demo/<app>``. Refused
+    (``guard.Refused``) when the checkout's lockfile is not the ref's, byte for
+    byte, or an installed next, react or react-dom is not the version the ref's
+    lockfile pins. The numbers, for the manifest, when they agree.
+    """
+    import hashlib
+
+    ours = repo / "demo" / app / "package-lock.json"
+    theirs = app_dir(tree, app) / "package-lock.json"
+    if not theirs.is_file():
+        raise guard.Refused(f"{ref} has no demo/{app}/package-lock.json")
+    if not ours.is_file():
+        raise guard.Refused(
+            f"the checkout has no demo/{app}/package-lock.json; check out the"
+            f" lockfile {ref} has, and run `npm ci` in demo/{app}"
+        )
+    ours_bytes, theirs_bytes = ours.read_bytes(), theirs.read_bytes()
+    if ours_bytes != theirs_bytes:
+        pinned_ours = _lock_packages(ours)
+        moved = [
+            f"{name} {(pinned_ours.get(f'node_modules/{name}') or {}).get('version')}"
+            for name in APP_PINNED_PACKAGES
+        ]
+        raise guard.Refused(
+            f"demo/{app}/package-lock.json in the checkout is not {ref}'s (it pins"
+            f" {', '.join(moved)}): the app would be built from other dependencies"
+            f" than the release's. Check out {ref}'s lockfile and run `npm ci` in"
+            f" demo/{app}"
+        )
+    pinned = _lock_packages(theirs)
+    packages: Dict[str, Dict[str, Optional[str]]] = {}
+    for name in APP_PINNED_PACKAGES:
+        want = (pinned.get(f"node_modules/{name}") or {}).get("version")
+        manifest = repo / "demo" / app / "node_modules" / name / "package.json"
+        try:
+            have = json.loads(manifest.read_text(encoding="utf-8")).get("version")
+        except (OSError, ValueError):
+            have = None
+        packages[name] = {"lockfile": want, "installed": have}
+        if want is None or have != want:
+            installed = f"{name} {have} installed" if have else f"no {name} installed"
+            raise guard.Refused(
+                f"demo/{app} has {installed}, and {ref}'s lockfile pins {want}:"
+                f" run `npm ci` in demo/{app}"
+            )
+    return {
+        "lockfile_sha256": hashlib.sha256(theirs_bytes).hexdigest(),
+        "lockfile_is_the_refs": True,
+        "packages": packages,
+    }
+
+
 def build_app(
     repo: Path,
     commit: str,
@@ -357,14 +535,20 @@ def build_app(
     log: Path,
     *,
     spawn: Callable[..., int],
-) -> str:
-    """One app's tree, built; the bundle check's line."""
+    ref: Optional[str] = None,
+) -> Dict[str, Any]:
+    """One app's tree, built: the bundle check's line, and its dependencies
+    as checked against the ref's lockfile (``app_dependencies``)."""
     archive(repo, commit, tree, app_paths(app))
     if not (app_dir(tree, app) / "package.json").is_file():
         raise BuildError(f"the ref has no demo/{app}")
     refuse_env_files(tree, app)
+    dependencies = app_dependencies(repo, tree, app, ref or commit[:12])
     clone_app_node_modules(repo, tree, app)
     status = spawn(app_build_argv(tree, app), cwd=app_dir(tree, app), env=env, log=log)
     if status != 0:
         raise BuildError(f"next build of {app} exited {status}; see {log}")
-    return app_bundle_check(tree, app, env["NEXT_PUBLIC_CONTROLVAR_API_URL"])
+    return {
+        "bundle": app_bundle_check(tree, app, env["NEXT_PUBLIC_CONTROLVAR_API_URL"]),
+        "dependencies": dependencies,
+    }

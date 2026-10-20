@@ -1,0 +1,315 @@
+# Video 6, An A/B test, from setup to winner: a checkout test made in the
+# dashboard, two shoppers in ShopLab (the demo storefront) who get its two
+# versions, one of them buying, simulated shoppers off camera, and the result.
+# The UX draft's V6 journey (apps/drafts/v1-ux-designer.md), as plan v2.2 and
+# T178 amend it, on the `demo` seed.
+#
+# * The experiment is made on camera with the key the wizard gives its name
+#   (shoplab_checkout_flow, the key ShopLab's checkout asks for), Control and
+#   One page with the configuration {"steps": 1} (one page only when steps is
+#   1), the event purchase, and on the Estimate step a 62% baseline and a 5%
+#   lift typed in (N1): the 5% is saved with the experiment, so the results
+#   page plans its sample for it and gate 10 can hold it to the oracle.
+# * ShopLab first loads after the experiment is made and started on camera
+#   and after `seed: shoplab` (which skips the key the video made), off camera,
+#   as shopper A (PE condition 3 of T178 14): the arming load runs under A's
+#   visitor id. One browser context throughout (T178 condition 5): an init
+#   script gives the ShopLab origin shopper A's visitor id and cart when they
+#   are absent, and before shopper B's scene a declared off-camera step clears
+#   that origin's storage and sets B's. No ShopLab page loads under any other
+#   id; a request naming one refuses the take. Each visitor id was picked with
+#   the server's own hash (bucket_of) to land in its arm, and a unit test
+#   pins that (test_showcase_shoplab_ab_test.py).
+# * Shopper B's details are typed in before the scene is filmed (a cut, with
+#   the drawn cursor off), and the scene says so.
+# * The traffic: 8,000 shoppers from the data generator (#1064) at seed 34,
+#   buying at 62% in Control and 68% with One page, sent off camera before the
+#   time card, paced under the API's default SDK limit (EM C8 of T166). With
+#   the two shoppers on camera (one Control non-buyer, one One page buyer) the
+#   server's hash puts 4,032 users in Control (2,524 buy) and 3,970 in One page
+#   (2,719 buy): a 9.4% lift, p = 3.21e-08 (Fisher's exact). The Planned
+#   sample plans with the typed 5% on the control's observed 62.6%: 3,684 a
+#   variant, so it reads "Reached · 3,970 of 3,684 per variant". Gate 10 holds
+#   the platform to these numbers, and each shopper's arm three ways: the
+#   network's assign answer, GET /tracking/assignments and the page's testid.
+# * D84: every departure is stated in the scene where it happens: the sign-in
+#   off camera, ShopLab seeded off camera, each shopper set before filming,
+#   the simulated shoppers with their count and rates, the time skip (the
+#   measured {traffic_minutes} and Duration 0d), the results computed first,
+#   and the demo apps' own build (EM C6 of T166).
+# * `say` is the narration (D102), in videos 1-3's voice; every number it says
+#   is on the page as it is said (G2). Three sentences are video 2's word for
+#   word. The UX code card (B6) is cut, the first cut T178 condition 11 names:
+#   a code card quotes a page of the docs (C10), not ShopLab's source, and the
+#   typed estimate takes its time. The `later` card holds still after its
+#   narration (payoff, 2.5 s): its note states three departures in about 45
+#   words. The 13 sentences' clips are all in the voice cache already (made
+#   for the earlier 15-sentence narration; the two sentences about the demo
+#   panel are dropped, below), and the voice step projects 75.7 s with them
+#   (cap 87.3 s). Were a later projection over the cap, the cut left needs no
+#   new clip: the result's "Significant at 95% confidence." with "significant
+#   at 95%" taken off its headline.
+# * ShopLab's demo panel ("Powered by Controlvar") is never opened, and no
+#   headline in a ShopLab scene names ShopLab. The render's gate 7 reads every
+#   frame with OCR and refuses any stretch within 3 edits of a 12-character
+#   piece of ShopLab's demo API key, and the piece "demo_shoplab_0" is mostly
+#   the app's own name. In the first narrated takes, the band's "In ShopLab"
+#   under the form's "Postal code", and the panel's "video_hero" badge above
+#   its "shoplab_hero_banner", were each read as that piece: a false positive,
+#   and the matcher is unchanged. The page still shows each shopper's arm (3
+#   steps, or everything on one page), and gate 10 checks it three ways.
+slug: 06-shoplab-ab-test
+title: An A/B test, from setup to winner
+seed: demo
+seed_counts: {experiments: 3, feature_flags: 2, users: 4}
+never_show:
+  - Assign a user from your app
+  - Your cart is empty
+  - loading…
+traffic:
+  experiment: ShopLab checkout flow
+  users: 8000
+  seed: 34
+  control_rate: 0.62
+  treatment_rate: 0.68
+  event: purchase
+  workers: 2
+end_state:
+  signed_in_as: admin@demo.com
+  experiment:
+    name: ShopLab checkout flow
+    key: shoplab_checkout_flow
+    status: active
+    winner: One page
+    shown: recommendation
+    mde: 0.05
+    planned: planned
+    effect: effect
+    on_camera_shoppers:
+      - visitor: 5ccec58f-0e70-4378-a129-7842bc337b8d
+        arm: Control
+        drawn: checkout-standard
+        buys: false
+      - visitor: 2e01ea31-e519-4791-aae4-88cc29e105a1
+        arm: One page
+        drawn: checkout-one-page
+        buys: true
+
+scenes:
+  - id: setup
+    open: /experiments
+    signed_in: true
+    departures:
+      - kind: off-camera setup
+        says: Signed in off camera
+    beats:
+      - cue: Signed in off camera. Set up a checkout test.
+        focus: {testid: new-experiment-btn}
+        say:
+          - "Set up a checkout test: choose New Experiment."
+        steps:
+          - move: {testid: new-experiment-btn}
+        exit:
+          - click: {testid: new-experiment-btn}
+          - wait_for: {testid: wizard-step-heading}
+          - click: {testid: wizard-next}
+
+      - before:
+          - wait_for: {role: heading, name: Name it and choose what to measure}
+        cue: Name it, and the key fills itself in.
+        focus: {testid: experiment-name}
+        say:
+          - Name it, and the key your code uses fills itself in.
+        steps:
+          - type: {testid: experiment-name}
+            text: ShopLab checkout flow
+          - look: {testid: experiment-key}
+            ms: 1000
+
+      - cue: Pick the event that counts as a win.
+        focus: {testid: metric-row-0}
+        say:
+          - "Pick the event that counts as a win: here, a purchase."
+        steps:
+          - type: {testid: metric-event-0}
+            text: purchase
+            clear: true
+        exit:
+          - click: {testid: wizard-next}
+
+      - before:
+          - wait_for: {role: heading, name: Set up the versions users will see}
+        cue: "Two variants: Control, and One page."
+        # The name field, not the row: the row grows as its configuration
+        # opens, and the focus is held inside the page area at the cue's end.
+        focus: {testid: variant-name-1}
+        say:
+          - Call the other variant One page, with a configuration for the store.
+        steps:
+          - type: {testid: variant-name-1}
+            text: One page
+            clear: true
+          - click: {testid: variant-configuration-toggle-1}
+          - type: {testid: variant-configuration-1}
+            text: '{"steps": 1}'
+        exit:
+          - click: {testid: wizard-next}
+
+      - before:
+          - wait_for: {testid: estimate-baseline}
+        cue: Size it with today's rate and the lift worth catching.
+        focus: {testid: estimate-baseline}
+        say:
+          - Enter today's rate, and the smallest lift worth catching.
+        steps:
+          - type: {testid: estimate-baseline}
+            text: "62"
+          - type: {testid: estimate-mde}
+            text: "5"
+        exit:
+          - click: {testid: wizard-next}
+
+      - before:
+          - wait_for: {testid: wizard-review}
+        cue: "Review it: the 5% lift is saved with it."
+        # The Sample size row: "Minimum detectable effect: 5% (saved)."
+        focus: {testid: review-estimate}
+        say:
+          - Review it, with the 5% lift saved, then create it.
+        steps:
+          - look: {testid: review-estimate}
+            ms: 1000
+        exit:
+          - click: {testid: wizard-create}
+
+      - before:
+          - wait_for: {testid: action-start}
+        cue: Start it, and it is ready for shoppers.
+        focus: {testid: experiment-status}
+        say:
+          - Choose Start, and it's ready for shoppers.
+        steps:
+          - click: {testid: action-start}
+          - wait_for: {css: "[data-testid=experiment-status][data-status=active]"}
+          - move: {testid: experiment-status}
+          - look: {testid: experiment-status}
+            ms: 1000
+
+  # ShopLab first loads here, off camera, after the experiment above was made
+  # and started and after its own seed: as shopper A (the init script).
+  - id: shopper-a
+    app: shoplab
+    off_camera:
+      - seed: shoplab
+      - visitor:
+          shoplab.visitor_id: 5ccec58f-0e70-4378-a129-7842bc337b8d
+          shoplab.cart: '[{"productId":"p003","price":59,"quantity":1}]'
+    departures:
+      - kind: off-camera setup
+        says: set up off camera
+    open: /checkout
+    beats:
+      # The headline does not name ShopLab, and the demo panel stays closed
+      # (the header says why).
+      - cue: This shopper, set up off camera, gets 3 steps.
+        focus: {role: list, name: Checkout steps, exact: true}
+        say:
+          - In ShopLab, a demo storefront, this shopper gets 3 steps.
+        steps:
+          - look: {role: list, name: Checkout steps, exact: true}
+            ms: 1500
+
+  # Off camera, before this scene: the ShopLab origin's storage cleared and
+  # shopper B's set (the declared visitor switch), then the page opened as B.
+  - id: shopper-b
+    app: shoplab
+    off_camera:
+      - visitor:
+          shoplab.visitor_id: 2e01ea31-e519-4791-aae4-88cc29e105a1
+          shoplab.cart: '[{"productId":"p007","price":79,"quantity":1}]'
+    departures:
+      # The visitor and cart switched, and the form's details typed in a cut.
+      - kind: off-camera setup
+        says: set up and form filled off camera
+    open: /checkout
+    beats:
+      - before:
+          - type: {label: Full name, exact: true}
+            text: Sam Shopper
+          - type: {label: Email, exact: true}
+            text: sam@example.com
+          - type: {label: Street address, exact: true}
+            text: 1 Trail Way
+          - type: {label: City, exact: true}
+            text: Portland
+          - type: {label: Postal code, exact: true}
+            text: "97201"
+          - type: {label: Card number, exact: false}
+            text: 4242 4242 4242 4242
+          - scroll_to: {role: group, name: Delivery address, exact: true}
+        cue: "Second shopper, set up and form filled off camera: one page."
+        focus: {role: group, name: Delivery address, exact: true}
+        say:
+          - A second shopper gets everything on one page.
+        steps:
+          - look: {role: group, name: Delivery address, exact: true}
+            ms: 1200
+        exit:
+          - click: {role: button, name: Place order}
+
+      - before:
+          - wait_for: {testid: order-confirmation}
+        cue: Order placed. The purchase is tracked for the test.
+        focus: {testid: order-confirmation}
+        say:
+          - They buy, and the purchase is tracked for the test.
+        steps:
+          - look: {testid: order-confirmation}
+            ms: 2500
+
+  - id: later
+    traffic: run
+    departures:
+      - kind: simulated traffic
+        says: Simulated by the tool
+      - kind: time skip
+        says: so the results page reads Duration 0d
+    card:
+      label: Off camera
+      headline: 8,000 shoppers later
+      note: >-
+        Simulated by the tool: 8,000 shoppers at checkout, set to buy at 62% in
+        Control and 68% with One page, sent in {traffic_minutes} (measured), so
+        the results page reads Duration 0d. The demo apps run from their own
+        build in this recording.
+    beats:
+      # Held still after its narration (payoff): the note states three
+      # departures in about 45 words.
+      - cue: 8,000 shoppers later, simulated in minutes.
+        focus: {css: "#headline"}
+        say:
+          - 8,000 shoppers later, simulated for this video.
+        payoff: true
+
+  - id: result
+    results_of: ShopLab checkout flow
+    warm_results: [ShopLab checkout flow]
+    departures:
+      - kind: off-camera setup
+        says: Computed off camera first
+    beats:
+      - cue: "Computed off camera first: One page wins, 9.4% lift, significant at 95%."
+        focus: {testid: experiment-summary}
+        say:
+          - "In the dashboard, One page wins: a 9.4% lift in purchases."
+          - Significant at 95% confidence.
+        record:
+          recommendation: {testid: recommendation-reason}
+          planned: {testid: planned-sample}
+          effect: {testid: planned-sample-effect}
+        payoff: true
+        steps:
+          - look: {testid: winner-indicator}
+            ms: 1200
+          - look: {testid: recommendation-reason}
+            ms: 1800

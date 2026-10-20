@@ -16,6 +16,17 @@
 02-first-experiment: {}
 03-flag-rollout: {}
 
+06-shoplab-ab-test:
+  CORS_ORIGINS:
+    value: "{dashboard},{shoplab}"
+    why: >-
+      The Quick Start's default allows the dashboard at localhost:3000 and
+      localhost:3100, and ShopLab at localhost:3200. The tool serves the
+      dashboard and ShopLab on its own ports instead, so their origins are named
+      here, and only theirs (the video records no other app); ShopLab's calls to
+      the API then succeed as they do on the default port. Nothing on screen
+      changes.
+
 90-app-probe:
   CORS_ORIGINS:
     value: "{dashboard},{shoplab},{streampulse}"

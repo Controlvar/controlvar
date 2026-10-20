@@ -312,6 +312,144 @@ def _arms(variants: Sequence[Mapping[str, Any]]) -> Dict[str, Dict[str, int]]:
     return arms
 
 
+Split = Mapping[str, Mapping[str, int]]
+
+
+def no_shoppers() -> Dict[str, Dict[str, int]]:
+    return {
+        "control": {"users": 0, "converting_users": 0},
+        "treatment": {"users": 0, "converting_users": 0},
+    }
+
+
+def with_shoppers(split: Split, added: Split) -> Dict[str, Dict[str, int]]:
+    """*split* plus the on-camera shoppers' users and converting users, per arm."""
+    out: Dict[str, Dict[str, int]] = {
+        arm: dict(counts) for arm, counts in split.items()
+    }
+    for arm, counts in added.items():
+        if not counts.get("users"):
+            continue
+        mine = out.setdefault(arm, {"users": 0, "converting_users": 0})
+        mine["users"] = mine.get("users", 0) + counts["users"]
+        mine["converting_users"] = mine.get("converting_users", 0) + counts.get(
+            "converting_users", 0
+        )
+    return out
+
+
+def shoppers_end(
+    end: Any,
+    *,
+    event: str,
+    assigns: Mapping[Tuple[str, str], Sequence[Mapping[str, Any]]],
+    api_assignments: Mapping[str, Optional[Sequence[Mapping[str, Any]]]],
+    marks: Mapping[str, Sequence[str]],
+    events: Sequence[Mapping[str, Any]],
+) -> Tuple[bool, Dict[str, Any], str, Dict[str, Dict[str, int]]]:
+    """Gate 10/6 (S8b of plan v2.2): each on-camera shopper's arm, four ways.
+
+    For every shopper the storyboard declares (``ExperimentEnd.on_camera_shoppers``):
+
+    * the page's assign answers for the experiment's key (the network: every
+      one ``assigned``, the declared arm, never another);
+    * ``GET /tracking/assignments/<visitor>`` (P24): one row for the
+      experiment, the declared arm;
+    * the page: of the declared testids, it drew the arm's, and no other;
+    * the purchase: a shopper who buys sent the experiment's *event* for the
+      key, answered 2xx; one who does not sent none.
+
+    The declared arm is the oracle's, never read from the app's own text, so
+    a page that agrees with itself and not with the server is refused.
+    Returns the verdict, its numbers, why, and the shoppers' users and
+    converting users per arm, which gate 10 adds to the generator's.
+    """
+    added = no_shoppers()
+    seen_all = {shopper.drawn for shopper in end.on_camera_shoppers}
+    numbers: Dict[str, Any] = {"shoppers": []}
+    for shopper in end.on_camera_shoppers:
+        who = f"shopper {shopper.visitor}"
+        arm = "treatment" if shopper.arm == end.winner else "control"
+        answers = list(assigns.get((shopper.visitor, end.key)) or [])
+        rows = [
+            row
+            for row in api_assignments.get(shopper.visitor) or []
+            if row.get("experiment_name") == end.name
+        ]
+        drawn = [m for m in marks.get(shopper.visitor) or [] if m in seen_all]
+        sent = [
+            e
+            for e in events
+            if e.get("user_id") == shopper.visitor
+            and e.get("experiment_key") == end.key
+            and e.get("event_name") == event
+        ]
+        entry = {
+            "visitor": shopper.visitor,
+            "declared": shopper.arm,
+            "network": sorted({str(a.get("variant_name")) for a in answers}),
+            "api": [row.get("variant_name") for row in rows],
+            "drawn": drawn,
+            "events": [e.get("status") for e in sent],
+        }
+        numbers["shoppers"].append(entry)
+        if not answers:
+            return (
+                False,
+                numbers,
+                f"{who}: the storefront never asked for {end.key} (no assign answer)",
+                added,
+            )
+        if (
+            entry["network"] != [shopper.arm]
+            or not all(a.get("assigned") is True for a in answers)
+            or any(bool(a.get("is_control")) != (arm == "control") for a in answers)
+        ):
+            return (
+                False,
+                numbers,
+                f"{who}: the storefront was assigned {entry['network']} (POST"
+                f" /tracking/assign); the storyboard declares {shopper.arm!r}",
+                added,
+            )
+        if entry["api"] != [shopper.arm]:
+            return (
+                False,
+                numbers,
+                f"{who}: GET /tracking/assignments says {entry['api']} for"
+                f" {end.name!r}; the storyboard declares {shopper.arm!r}",
+                added,
+            )
+        if drawn != [shopper.drawn]:
+            return (
+                False,
+                numbers,
+                f"{who}: the page drew {drawn}; the storyboard draws"
+                f" {shopper.drawn!r} for {shopper.arm!r}",
+                added,
+            )
+        answered = [e for e in sent if 200 <= int(e.get("status") or 0) < 300]
+        if shopper.buys and not answered:
+            return (
+                False,
+                numbers,
+                f"{who} buys on camera, and no {event!r} for {end.key} was answered"
+                f" 2xx ({entry['events'] or 'none sent'})",
+                added,
+            )
+        if not shopper.buys and sent:
+            return (
+                False,
+                numbers,
+                f"{who} does not buy, and sent {len(sent)} {event!r} for {end.key}",
+                added,
+            )
+        added[arm]["users"] += 1
+        added[arm]["converting_users"] += 1 if shopper.buys else 0
+    numbers["added"] = added
+    return True, numbers, "", added
+
+
 def experiment_end(
     end: Any,
     *,
@@ -324,23 +462,37 @@ def experiment_end(
     sample_size: Optional[Mapping[str, Any]],
     planned_shown: Optional[str],
     effect_shown: Optional[str],
+    shoppers: Optional[Tuple[bool, Dict[str, Any], str, Split]] = None,
 ) -> Verdict:
     """Gate 10 for an experiment the video made (``storyboard.ExperimentEnd``).
 
     * exactly one experiment has the name, with the storyboard's key, running;
+    * its on-camera shoppers, if it has any, are each in their declared arm
+      every way it can be read (``shoppers_end``, given as *shoppers*);
     * its users and converting users per variant are the same three times:
       as planned from the seed, as the server answered the traffic, and as the
-      results API counts them;
+      results API counts them, the first two with the shoppers added;
     * the results API's p-value is Fisher's exact test on those counts
       (*oracle_p*), and it recommends shipping the storyboard's winner;
     * the page showed the API's recommendation, word for word;
     * the Planned sample is planned as the wizard sized it (``planned_sample_end``).
     """
+    added = no_shoppers()
+    if end.on_camera_shoppers or shoppers is not None:
+        if shoppers is None:
+            return False, {}, "the on-camera shoppers were never checked"
+        if not shoppers[0]:
+            return False, {"shoppers": shoppers[1]}, shoppers[2]
+        added = dict(shoppers[3])
+    planned = with_shoppers(planned, added)
+    report = with_shoppers(report, added)
     numbers: Dict[str, Any] = {
         "experiments_named": len(named),
         "planned": dict(planned),
         "answered": dict(report),
     }
+    if shoppers is not None:
+        numbers["shoppers"] = shoppers[1]
     if len(named) != 1:
         return False, numbers, f"{len(named)} experiments are named {end.name!r}"
     found = named[0]

@@ -31,8 +31,10 @@ Order, and what must be true before each step:
 The capture directory is ``<work root>/<slug>/capture/`` (contract.py):
 ``frames/`` and ``frames.jsonl``, ``cues.json``, ``needles.txt`` (mode 0600,
 for the render side's OCR scan, which deletes it) and ``manifest.json`` with
-every capture gate's verdict and numbers; a narrated one adds ``voice.json``
-and ``voice/NNN.wav`` (``voiced.write_voice``).
+every capture gate's verdict and numbers, and the tool's own checkout
+(``tool``: its commit at the run's start, and ``clean`` only when it was clean
+then and when the capture was written, at that commit; ``build.tool_record``);
+a narrated one adds ``voice.json`` and ``voice/NNN.wav`` (``voiced.write_voice``).
 """
 
 from __future__ import annotations
@@ -536,6 +538,8 @@ def capture_video(
                     for s in board.scenes
                     for d in s.departures
                 ],
+                # S2 (EM C6 of T166): where the apps' own build is said, if any.
+                own_build=storyboard.own_build_scene(board),
             )
             if counts != wanted:
                 raise directing.CaptureFailed(
@@ -701,6 +705,7 @@ def record(
                 service_workers="block",
             )
             page = context.new_page()
+            counted = board.end_state.experiment
             director = directing.Director(
                 context=context,
                 page=page,
@@ -714,7 +719,15 @@ def record(
                 resolve=lambda name: experiment_id(stack.api_url, token, name),
                 pacing=pacing,
                 apps={app: ports.app(app) for app in board.apps},
-                app_ready=lambda app: app_ready(stack.api_url, token, app),
+                app_ready=lambda app: app_ready(
+                    stack.api_url, token, app, made=counted
+                ),
+                visitor_apps=visitor_apps(board),
+                marks=(
+                    tuple(s.drawn for s in counted.on_camera_shoppers)
+                    if counted
+                    else ()
+                ),
             )
             director.install()
             # Gate 3: the page is the frame's size at scale 1, before anything is recorded.
@@ -756,17 +769,16 @@ def record(
             TEARDOWN.append(users.stop)
             try:
                 for scene in board.scenes:
-                    if scene.traffic == "start":
-                        users.start()
-                    elif scene.traffic == "finish":
-                        users.finish()
-                    for name in scene.warm_results:
-                        warm_results(stack.api_url, token, name)
-                    for item in scene.off_camera:
-                        log(f"seed {item.seed}, off camera")
-                        server = stack.seed_app(item.seed, history=item.history)
-                        if server is not None:
-                            keep_private(server, redactor, stack.children, read_keys)
+                    before_scene(
+                        scene,
+                        users=users,
+                        warm=lambda name: warm_results(stack.api_url, token, name),
+                        stack=stack,
+                        director=director,
+                        redactor=redactor,
+                        read_keys=read_keys,
+                        log=log,
+                    )
                     log(f"scene {scene.id}")
                     director.scene(with_traffic_minutes(scene, users.report))
             finally:
@@ -795,7 +807,9 @@ def record(
                 if not listed == total == end.experiments_listed:
                     why.append(f"{listed} experiments listed, {total} in the API")
             if end.experiment is not None:
-                ok, made, reason = users.end_state(end.experiment, director.readings)
+                ok, made, reason = users.end_state(
+                    end.experiment, director.readings, observed=director.tally
+                )
                 numbers["experiment"] = made
                 if not ok:
                     why.append(reason)
@@ -812,6 +826,8 @@ def record(
                     "gate 10",
                     "; ".join(why) + f"; the storyboard ends with {end.model_dump()}",
                 )
+            # T178 condition 5: one context, the capture's own, at teardown.
+            contexts = refuse_other_contexts(browser, context)
         finally:
             browser.close()
     tally = director.tally
@@ -879,13 +895,21 @@ def record(
                 "new_pages": tally.new_pages,
                 "unknown_keys": tally.unknown_keys,
                 "failed_requests": tally.failed_events,
+                # T178 condition 5: the visitors set, and the one context.
+                "visitors": director.visitor_numbers(),
+                "contexts_at_teardown": contexts,
             },
         )
-        if not (tally.new_pages or tally.unknown_keys)
+        if not (tally.new_pages or tally.unknown_keys or tally.visitor_refusals)
         else (
             False,
-            {"new_pages": tally.new_pages, "unknown_keys": tally.unknown_keys},
-            "a page outside the storyboard, or a key that is not a needle",
+            {
+                "new_pages": tally.new_pages,
+                "unknown_keys": tally.unknown_keys,
+                "visitors_refused": tally.visitor_refusals,
+            },
+            "a page outside the storyboard, a key that is not a needle, or a"
+            " visitor the storyboard does not declare",
         ),
         # C9: a click on a select and a choice not held are refused at the
         # step; this is their count, and the choices as held.
@@ -922,6 +946,42 @@ def record(
     }
 
 
+def before_scene(
+    scene: storyboard.Scene,
+    *,
+    users: Any,
+    warm: Callable[[str], None],
+    stack: Any,
+    director: Any,
+    redactor: Any,
+    read_keys: List[str],
+    log: Callable[[str], None],
+) -> None:
+    """Everything that runs off camera before *scene*, in this order: the
+    storyboard's traffic (started, finished, or run: both), its results asked
+    for, then its ``off_camera`` list: an app's seed, or the visitor the scene
+    is filmed as (``Director.set_visitor``: the app's init script the first
+    time, the declared switch after)."""
+    if scene.traffic in ("start", "run"):
+        users.start()
+    if scene.traffic in ("finish", "run"):
+        users.finish()
+    for name in scene.warm_results:
+        warm(name)
+    for item in scene.off_camera:
+        if isinstance(item, storyboard.Visitor):
+            director.where = f"scene {scene.id}, off camera"
+            set_as = director.set_visitor(scene.app, item.visitor)
+            log(
+                f"{scene.app} visitor {set_as['visitor']}, off camera ({set_as['how']})"
+            )
+            continue
+        log(f"seed {item.seed}, off camera")
+        server = stack.seed_app(item.seed, history=item.history)
+        if server is not None:
+            keep_private(server, redactor, stack.children, read_keys)
+
+
 def voiced_checks(director: Any, board: storyboard.Storyboard) -> Dict[str, Any]:
     """A narrated capture's own gates: G2's count and G20's beats."""
     from showcase.capture import gates as judge
@@ -952,11 +1012,20 @@ def keep_private(
         read_keys.append(value)
 
 
-def app_ready(api_url: str, token: str, app: str) -> Dict[str, Any]:
+def app_ready(
+    api_url: str,
+    token: str,
+    app: str,
+    *,
+    made: Optional[storyboard.ExperimentEnd] = None,
+) -> Dict[str, Any]:
     """Off camera, before an app is first loaded: every experiment and flag the
     app's seed (or the video) made is ACTIVE, through the API; the numbers.
 
-    Refused (``StackError``) when there are none, or when one is not active.
+    Refused (``StackError``) when there are none, or when one is not active;
+    and, when the video makes an experiment with the app's key (*made*), unless
+    exactly that one, by its name, holds the key: the app would otherwise
+    assign against an experiment the video did not make (its seed's own).
     """
     prefix = config.APP_KEY_PREFIX[app]
     found: Dict[str, Any] = {}
@@ -975,7 +1044,49 @@ def app_ready(api_url: str, token: str, app: str) -> Dict[str, Any]:
         if idle:
             raise StackError(f"{app}: {kind} not active before its first load: {idle}")
         found[kind] = len(mine)
+        if kind == "experiments" and made is not None and made.key.startswith(prefix):
+            ours = [i for i in mine if i.get("key") == made.key]
+            if len(ours) != 1 or ours[0].get("name") != made.name:
+                raise StackError(
+                    f"{app}: {made.key} is held by {[i.get('name') for i in ours]}"
+                    f" before its first load, not by {made.name!r}, the experiment"
+                    " the video made: the app would assign against another one"
+                )
+            found["made_on_camera"] = made.key
     return found
+
+
+def visitor_apps(board: storyboard.Storyboard) -> Tuple[str, ...]:
+    """The apps the storyboard films as declared visitors (T178 condition 5)."""
+    return tuple(
+        app
+        for app in board.apps
+        if any(s.app == app and s.visitor is not None for s in board.scenes)
+    )
+
+
+def refuse_other_contexts(browser: Any, made: Any) -> int:
+    """T178 condition 5: the capture makes one browser context. At teardown,
+    any other in ``browser.contexts`` refuses the take; the count, or raises."""
+    from showcase.capture import director as directing
+
+    found = list(browser.contexts)
+    others = [context for context in found if context is not made]
+    if others or made not in found:
+        raise directing.CaptureFailed(
+            "S1",
+            f"the browser holds {len(found)} contexts at teardown, {len(others)} of"
+            " them not the capture's one: a second context watched by none of its"
+            " guards or listeners",
+        )
+    return len(found)
+
+
+def _api_with_key(url: str, api_key: str) -> Any:
+    """A GET with an API key (``X-API-Key``), as an app or the SDKs make it."""
+    request = urllib.request.Request(url, headers={"X-API-Key": api_key})
+    with guard.http_opener().open(request, timeout=60) as answer:
+        return json.load(answer)
 
 
 def eleven(broken, frozen, dark):
@@ -1029,14 +1140,15 @@ def with_traffic_minutes(
 ) -> storyboard.Scene:
     """*scene*, its card saying how long the traffic took, as measured.
 
-    Only a scene that finishes the traffic may name it; refused elsewhere.
+    Only a scene that finishes the traffic (``finish``, or ``run``: started
+    and finished before it) may name it; refused elsewhere.
     """
     card = scene.card
     if card is None or not any(
         TRAFFIC_MINUTES in (text or "") for text in (card.headline, card.note)
     ):
         return scene
-    if scene.traffic != "finish" or report is None:
+    if scene.traffic not in ("finish", "run") or report is None:
         raise StackError(
             f"scene {scene.id} names {TRAFFIC_MINUTES} before the traffic finished"
         )
@@ -1117,8 +1229,14 @@ class Users:
             self.sender.stop()
 
     def end_state(
-        self, end: storyboard.ExperimentEnd, readings: Mapping[str, str]
+        self,
+        end: storyboard.ExperimentEnd,
+        readings: Mapping[str, str],
+        observed: Any = None,
     ) -> Tuple[bool, Dict[str, Any], str]:
+        """Gate 10's half for the experiment; *observed* is the director's tally
+        (its assign answers, events and drawn testids) when the storyboard
+        films shoppers (S8b)."""
         from showcase.capture import gates as judge
 
         if self.sender is None or self.report is None:
@@ -1135,6 +1253,27 @@ class Users:
                 f"{self.api_url}/api/v1/results/{named[0]['id']}/sample-size",
                 self.token,
             )
+        shoppers = None
+        added: Mapping[str, Mapping[str, int]] = judge.no_shoppers()
+        if end.on_camera_shoppers:
+            if observed is None:
+                return False, {}, "the on-camera shoppers were never observed"
+            shoppers = judge.shoppers_end(
+                end,
+                event=self.sender.plan.event,
+                assigns=observed.assigns,
+                # P24: read with the traffic's API key, as an app would.
+                api_assignments={
+                    s.visitor: _api_with_key(
+                        f"{self.api_url}/api/v1/tracking/assignments/{s.visitor}",
+                        self.sender.api_key,
+                    )
+                    for s in end.on_camera_shoppers
+                },
+                marks=observed.marks,
+                events=observed.events,
+            )
+            added = shoppers[3]
         made = self.sender.plan
         ok, numbers, why = judge.experiment_end(
             end,
@@ -1142,11 +1281,16 @@ class Users:
             results=results,
             planned=made.split,
             report=self.report.by_arm,
-            oracle_p=traffic.generator().fisher_p_value(self.report.by_arm),
+            # Fisher's exact test on what the platform must count: the
+            # traffic's answered users and the shoppers on camera together.
+            oracle_p=traffic.generator().fisher_p_value(
+                judge.with_shoppers(self.report.by_arm, added)
+            ),
             shown=readings.get(end.shown),
             sample_size=sample_size,
             planned_shown=readings.get(end.planned),
             effect_shown=readings.get(end.effect),
+            shoppers=shoppers,
         )
         numbers["traffic"] = self.report.as_numbers()
         numbers["planned_p_value"] = made.p_value
@@ -1236,6 +1380,17 @@ def write_capture(
         # What the approval record names: the stack, its project and images
         # (EM C1, C5 of T166). The render refuses any stack but quickstart.
         "stack": dict(stack or {"name": "uvicorn"}),
+        # T178 condition 6: each demo app's lockfile and installed versions,
+        # checked against the ref's before it was built (none for videos 1-3).
+        "apps": {app: versions.get("apps", {}).get(app) for app in board.apps},
+        # The tool's own checkout: the commit the run started from, and clean
+        # only if it was clean then and now, at that commit. A dirty tree is
+        # recorded, not refused. Intent, not enforced here: a final's approval
+        # step, kept outside this repository, checks commit and clean against
+        # the reviewed commit (build.tool_record).
+        "tool": build.tool_record(
+            versions.get("tool"), build.tool_checkout(options.repo)
+        ),
     }
     (capture / "manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
@@ -1351,6 +1506,11 @@ def run(
     options: Options, environ: Mapping[str, str], log: Callable[[str], None]
 ) -> Dict[str, Any]:
     """Capture every video asked for; ``{slug: capture path or the refusal}``."""
+    # The tool's own commit, and whether its tree is clean, before the
+    # preflight reads a storyboard or anything is built; each capture reads it
+    # again when it is written, and ``clean`` needs both (build.tool_record).
+    tool = build.tool_checkout(options.repo)
+    log(build.tool_line(tool))
     preflight(options, environ)
     work = guard.WorkRoot(options.work_dir)
     commit = build.resolve_ref(options.repo, options.ref)
@@ -1393,32 +1553,36 @@ def run(
         else:
             versions = build_uvicorn_tree(options, tree, work, children, environ, log)
         app_trees: Dict[str, Path] = {}
+        app_versions: Dict[str, Any] = {}
         for app in apps_recorded(options.videos):
             app_tree = work.path / f"app-{app}"
             if app_tree.exists():
                 work.remove(app_tree)
             log(f"building {app} from {options.ref}")
-            log(
-                build.build_app(
-                    options.repo,
-                    commit,
-                    app_tree,
-                    app,
-                    guard.child_env(
-                        guard.app_settings(
-                            app=app,
-                            api_port=options.ports.api,
-                            dashboard_port=options.ports.dashboard,
-                        ),
-                        parent=environ,
+            built = build.build_app(
+                options.repo,
+                commit,
+                app_tree,
+                app,
+                guard.child_env(
+                    guard.app_settings(
+                        app=app,
+                        api_port=options.ports.api,
+                        dashboard_port=options.ports.dashboard,
                     ),
-                    work.path / f"build-{app}.log",
-                    spawn=lambda argv, cwd, env, log, app=app: children.run(
-                        f"next-build-{app}", argv, cwd=cwd, env=env, log=log, kind="app"
-                    ),
-                )
+                    parent=environ,
+                ),
+                work.path / f"build-{app}.log",
+                spawn=lambda argv, cwd, env, log, app=app: children.run(
+                    f"next-build-{app}", argv, cwd=cwd, env=env, log=log, kind="app"
+                ),
+                ref=options.ref,
             )
+            log(built["bundle"])
+            # T178 condition 6: the lockfile and the installed versions, as checked.
+            app_versions[app] = built["dependencies"]
             app_trees[app] = app_tree
+        versions = {**versions, "apps": app_versions, "tool": tool}
         for slug in options.videos:
             try:
                 results[slug] = capture_video(

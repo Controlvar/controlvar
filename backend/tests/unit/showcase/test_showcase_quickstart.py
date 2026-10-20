@@ -783,8 +783,15 @@ def test_every_video_and_probe_has_a_checked_override_list():
     listed = override_lists.load()
     for slug in list(config.VIDEOS) + list(config.PROBES):
         made = override_lists.override_list(board(slug), PORTS, listed)
-        if slug in config.VIDEOS:
+        # A video that records no app runs on the Quick Start's own settings.
+        if slug in config.VIDEOS and not board(slug).apps:
             assert made == [], slug
+    # Video 6 records ShopLab: the dashboard's and ShopLab's origins, and only those.
+    assert override_lists.override_list(board("06-shoplab-ab-test"), PORTS, listed) == [
+        compose.Override(
+            "CORS_ORIGINS", "http://127.0.0.1:28401,http://127.0.0.1:28403"
+        )
+    ]
     probe = override_lists.override_list(board("90-app-probe"), PORTS, listed)
     assert probe == [
         compose.Override(

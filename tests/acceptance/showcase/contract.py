@@ -200,9 +200,12 @@ PROFILES = ("core", "full")
 
 #: The capture gates every video reports in its manifest. The names follow the
 #: approved plan (#1066): the QA gate numbers, C1 and C3 from the principal
-#: engineer's conditions, U1, U2, U4 and U5 from the UX checks, and the machine
+#: engineer's conditions, U1, U2, U4 and U5 from the UX checks, the machine
 #: checks (the child environment's allow-list, the disk floor readings, and
-#: the teardown that leaves no labelled container).
+#: the teardown that leaves no labelled container), and (S3 of plan v2.2,
+#: T178 condition 7) P2, the whole context's listeners, C8, no 429 on a page
+#: request, and D84, every departure stated on screen: a capture that never
+#: evaluated one of these is refused, not rendered.
 REQUIRED_CAPTURE_GATES = (
     "3",
     "6",
@@ -223,6 +226,9 @@ REQUIRED_CAPTURE_GATES = (
     "env",
     "disk",
     "teardown",
+    "P2",
+    "C8",
+    "D84",
 )
 
 #: And a narrated capture's (voice PR C2): G2, every number a sentence says on

@@ -62,6 +62,11 @@ APP_SEED: Dict[str, Tuple[str, str]] = {
 #: The StreamPulse seed's server key file (``sdk:ruleset``): read, stripped,
 #: kept as a needle; never put on an argv or in an environment.
 SERVER_KEY_FILE = ".api_key_server"
+#: The localStorage key an app keeps its visitor's id under, for the apps a
+#: storyboard can film as a declared visitor (``off_camera: visitor``; T178
+#: condition 5). ShopLab's (demo/shoplab/src/lib/visitor.ts, ``VISITOR_ID_KEY``);
+#: StreamPulse names its users by device, and has none.
+APP_VISITOR_KEY: Dict[str, str] = {"shoplab": "shoplab.visitor_id"}
 #: An element each app always draws, for its origin's overlay self-test (C1).
 APP_SELF_TEST: Dict[str, Dict[str, object]] = {
     "shoplab": {"role": "button", "name": "Powered by Controlvar", "exact": True},
@@ -219,6 +224,7 @@ VIDEOS: Dict[str, str] = {
     "01-getting-started": "storyboards/01-getting-started.yaml",
     "02-first-experiment": "storyboards/02-first-experiment.yaml",
     "03-flag-rollout": "storyboards/03-flag-rollout.yaml",
+    "06-shoplab-ab-test": "storyboards/06-shoplab-ab-test.yaml",
 }
 #: Storyboards that prove the tool and are never a video: capture only, never
 #: rendered, and not part of ``all``.
