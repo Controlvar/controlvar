@@ -1,0 +1,42 @@
+{
+  "slug": "05-plan-and-team",
+  "mp4": "05-plan-and-team-5446fa6cdb04.mp4",
+  "items": [
+    {
+      "on_screen": ["Controlvar", "Plan a test, bring your team", "A/B testing and feature flags you run yourself."]
+    },
+    { "on_screen": ["Plan first: the calculator needs no account."] },
+    { "said": ["Plan a test first: the power calculator needs no account."] },
+    { "on_screen": ["Start from today's rate and the lift worth catching."] },
+    { "said": ["Today 5% of visitors buy; you want to catch a 10% lift."] },
+    { "on_screen": ["Add your traffic, and the share of it in the test."] },
+    { "said": ["Add 10,000 users a day, with 50% of them in the test."] },
+    { "on_screen": ["31,234 users per variant: about 12 days here."] },
+    { "said": ["That's 31,234 users per variant: about 12 days."] },
+    { "on_screen": ["A third variant needs more users in each one."] },
+    { "said": ["A third variant needs 37,824 users in each."] },
+    { "on_screen": ["Now bring in your team."] },
+    { "said": ["Now bring in your team."] },
+    { "on_screen": ["Sign in as the demo admin from the Quick Start."] },
+    { "said": ["Sign in as the demo admin.", "The email and password are in the Quick Start."] },
+    { "on_screen": ["Admin, then Users, then Invite User."] },
+    { "said": ["Open Admin, then Users, and choose Invite User."] },
+    { "on_screen": ["Invite Priya as a Developer."] },
+    { "said": ["Invite Priya as a Developer: she can build experiments and flags."] },
+    { "on_screen": ["Her password shows once; hidden for this video."] },
+    { "said": ["Her one-time password shows once; this video hides it."] },
+    { "on_screen": ["Four roles: Admin, Developer, Analyst and Viewer."] },
+    { "said": ["Pick a role: Admin, Developer, Analyst or Viewer.", "Marcus joins as an Analyst."] },
+    { "on_screen": ["Analysts see every experiment and flag, and edit neither."] },
+    { "said": ["An analyst sees every experiment and flag, and changes neither."] },
+    {
+      "on_screen": [
+        "Controlvar",
+        "Open source, Apache-2.0, runs on your own infrastructure",
+        "controlvar.com",
+        "github.com/Controlvar/controlvar",
+        "Recorded on Controlvar v0.36.0, a local stack with demo data"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "slug": "06-shoplab-ab-test",
+  "mp4": "06-shoplab-ab-test-3c36550c491d.mp4",
+  "items": [
+    {
+      "on_screen": ["Controlvar", "An A/B test, from setup to winner", "A/B testing and feature flags you run yourself."]
+    },
+    { "on_screen": ["Signed in off camera. Set up a checkout test."] },
+    { "said": ["Set up a checkout test: choose New Experiment."] },
+    { "on_screen": ["Name it, and the key fills itself in."] },
+    { "said": ["Name it, and the key your code uses fills itself in."] },
+    { "on_screen": ["Pick the event that counts as a win."] },
+    { "said": ["Pick the event that counts as a win: here, a purchase."] },
+    { "on_screen": ["Two variants: Control, and One page."] },
+    { "said": ["Call the other variant One page, with a configuration for the store."] },
+    { "on_screen": ["Size it with today's rate and the lift worth catching."] },
+    { "said": ["Enter today's rate, and the smallest lift worth catching."] },
+    { "on_screen": ["Review it: the 5% lift is saved with it."] },
+    { "said": ["Review it, with the 5% lift saved, then create it."] },
+    { "on_screen": ["Start it, and it is ready for shoppers."] },
+    { "said": ["Choose Start, and it's ready for shoppers."] },
+    { "on_screen": ["This shopper, set up off camera, gets 3 steps."] },
+    { "said": ["In ShopLab, a demo storefront, this shopper gets 3 steps."] },
+    { "on_screen": ["Second shopper, set up and form filled off camera: one page."] },
+    { "said": ["A second shopper gets everything on one page."] },
+    { "on_screen": ["Order placed. The purchase is tracked for the test."] },
+    { "said": ["They buy, and the purchase is tracked for the test."] },
+    {
+      "on_screen": [
+        "Off camera",
+        "8,000 shoppers later",
+        "Simulated by the tool: 8,000 shoppers at checkout, set to buy at 62% in Control and 68% with One page, sent in 3 minutes (measured), so the results page reads Duration 0d. The demo apps run from their own build in this recording."
+      ]
+    },
+    { "on_screen": ["8,000 shoppers later, simulated in minutes."] },
+    { "said": ["8,000 shoppers later, simulated for this video."] },
+    { "on_screen": ["Computed off camera first: One page wins, 9.4% lift, significant at 95%."] },
+    { "said": ["In the dashboard, One page wins: a 9.4% lift in purchases.", "Significant at 95% confidence."] },
+    {
+      "on_screen": [
+        "Controlvar",
+        "Open source, Apache-2.0, runs on your own infrastructure",
+        "controlvar.com",
+        "github.com/Controlvar/controlvar",
+        "Recorded on Controlvar v0.36.0, a local stack with demo data"
+      ]
+    }
+  ]
+}
