@@ -64,6 +64,48 @@
       }
     },
     {
+      "slug": "05-plan-and-team",
+      "title": "Plan a test, bring your team",
+      "description": "Work out a test's sample size in the power calculator, which needs no account, then sign in and invite teammates, each with a role.",
+      "duration_seconds": 82,
+      "mp4": {
+        "name": "05-plan-and-team-5446fa6cdb04.mp4",
+        "bytes": 3544083,
+        "sha256": "5446fa6cdb042a32991f8ca52acf9e88d4c89db83f7dcd45c9fdde8fee519e6c"
+      },
+      "vtt": {
+        "name": "05-plan-and-team-5446fa6cdb04.vtt",
+        "bytes": 1143,
+        "sha256": "b940eadbd7cbe9bdb985fc843c527cc5cc0fc7089f3d2fb08b75200e1fd118cf"
+      },
+      "poster": {
+        "name": "05-plan-and-team-5446fa6cdb04-poster-184862dd9bf0.jpg",
+        "bytes": 29584,
+        "sha256": "184862dd9bf0db363954ddc261d284ef7b7ac709257fb20d85394ffd7566de65"
+      }
+    },
+    {
+      "slug": "06-shoplab-ab-test",
+      "title": "An A/B test, from setup to winner",
+      "description": "Create a checkout test in the guided setup, see each version's checkout in the ShopLab demo storefront, and read the winner once simulated shoppers have arrived.",
+      "duration_seconds": 79,
+      "mp4": {
+        "name": "06-shoplab-ab-test-3c36550c491d.mp4",
+        "bytes": 4173703,
+        "sha256": "3c36550c491d7791e56399eae0a88de44b2bd1f1c9119f68ded3257428336420"
+      },
+      "vtt": {
+        "name": "06-shoplab-ab-test-3c36550c491d.vtt",
+        "bytes": 1110,
+        "sha256": "e11f49ddd2bf31fbf89127f4e1f8131869f53e0bb7479c666356ed7c370b5e21"
+      },
+      "poster": {
+        "name": "06-shoplab-ab-test-3c36550c491d-poster-1f411f8637cc.jpg",
+        "bytes": 31093,
+        "sha256": "1f411f8637cc4a4d065577b4b49929f68b46e8f3a0da944616271b7afa2a406f"
+      }
+    },
+    {
       "slug": "08-warehouse-explainer",
       "title": "Assign users from your warehouse",
       "description": "Your own SQL selects users in your warehouse, a script you write sends them to the batch assign API (beta), targeting admits some, and a deterministic hash splits them.",

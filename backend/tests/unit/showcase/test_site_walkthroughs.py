@@ -420,6 +420,102 @@ DESCRIPTION_FACTS: dict[str, dict[str, Any]] = {
             }
         },
     },
+    "05-plan-and-team": {
+        "description": (
+            "Work out a test's sample size in the power calculator, which needs no "
+            "account, then sign in and invite teammates, each with a role."
+        ),
+        "seed": "demo",
+        # The calculator's "No account required." and its sample size per
+        # variant, all before Sign in; then the sign-in, and two invites, each
+        # with its role chosen before Create User.
+        "actions": [
+            ["look", {"text": "No account required."}],
+            ["look", {"css": "output[aria-labelledby=power-per-variant-name]"}],
+            ["click", {"testid": "nav-sign-in"}],
+            ["click", {"role": "button", "name": "Sign in", "exact": True}],
+            ["click", {"testid": "invite-user-button"}],
+            ["choose", {"testid": "invite-role-select"}],
+            ["click", {"testid": "invite-submit-button"}],
+            ["choose", {"testid": "invite-role-select"}],
+            ["click", {"testid": "invite-submit-button"}],
+        ],
+        "said": ["Plan a test first: the power calculator needs no account."],
+        # "sample size": the two the capture holds to the formula; "each with a
+        # role": the invitees and their roles, which the capture checks.
+        "end_state": {
+            "signed_in_as": "admin@demo.com",
+            "calculations": [
+                {
+                    "shown": "two-variants",
+                    "baseline": 0.05,
+                    "mde": 0.10,
+                    "variants": 2,
+                    "per_variant": 31234,
+                },
+                {
+                    "shown": "three-variants",
+                    "baseline": 0.05,
+                    "mde": 0.10,
+                    "variants": 3,
+                    "per_variant": 37824,
+                },
+            ],
+            "team": {
+                "invitees": [
+                    {"email": "priya@example.com", "role": "DEVELOPER"},
+                    {"email": "marcus@example.com", "role": "ANALYST"},
+                ]
+            },
+        },
+    },
+    "06-shoplab-ab-test": {
+        "description": (
+            "Create a checkout test in the guided setup, see each version's "
+            "checkout in the ShopLab demo storefront, and read the winner once "
+            "simulated shoppers have arrived."
+        ),
+        "seed": "demo",
+        # The guided setup (New Experiment) to Create and Start; the 3-step
+        # checkout, then the one-page checkout; the winner.
+        "actions": [
+            ["click", {"testid": "new-experiment-btn"}],
+            ["click", {"testid": "wizard-create"}],
+            ["click", {"testid": "action-start"}],
+            ["look", {"role": "list", "name": "Checkout steps", "exact": True}],
+            ["look", {"role": "group", "name": "Delivery address", "exact": True}],
+            ["look", {"testid": "winner-indicator"}],
+        ],
+        "said": [
+            "Set up a checkout test: choose New Experiment.",
+            "In ShopLab, a demo storefront, this shopper gets 3 steps.",
+        ],
+        # "simulated shoppers have arrived": a traffic block, stated on screen.
+        "departures": ["simulated traffic"],
+        "traffic": True,
+        # "each version's checkout": one shopper on camera in each arm, each
+        # drawn its arm's checkout, which the capture checks three ways.
+        "end_state": {
+            "experiment": {
+                "status": "active",
+                "winner": "One page",
+                "on_camera_shoppers": [
+                    {
+                        "visitor": "5ccec58f-0e70-4378-a129-7842bc337b8d",
+                        "arm": "Control",
+                        "drawn": "checkout-standard",
+                        "buys": False,
+                    },
+                    {
+                        "visitor": "2e01ea31-e519-4791-aae4-88cc29e105a1",
+                        "arm": "One page",
+                        "drawn": "checkout-one-page",
+                        "buys": True,
+                    },
+                ],
+            }
+        },
+    },
     "08-warehouse-explainer": {
         "description": (
             "Your own SQL selects users in your warehouse, a script you write sends "
