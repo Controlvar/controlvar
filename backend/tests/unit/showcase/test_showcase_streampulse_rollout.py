@@ -1295,7 +1295,12 @@ def test_a_crash_sender_aimed_anywhere_but_the_stacks_api_refuses_before_any_req
 
 
 @pytest.mark.regression
-@pytest.mark.parametrize("server_key", [None, "", APP_KEY])
+@pytest.mark.parametrize(
+    # Named ids: a key's value never goes into a test's id, and so a log.
+    "server_key",
+    [None, "", APP_KEY],
+    ids=["none read", "empty", "the app's key"],
+)
 def test_a_crash_without_the_server_key_refuses_before_any_request(server_key):
     with pytest.raises(
         director.CaptureFailed, match="no StreamPulse server key was read"
