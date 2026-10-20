@@ -44,8 +44,10 @@ built here, and tesseract. A frame is refused when its text holds:
   disconnected live view, a test leftover.
 
 Before any of that, a canary frame with made-up values is put through the
-same encode: a value at 16 px and a key at 14 px, both #0F172A, which every
-engine must read, and a value in the faint small style
+same encode: a value at 16 px, and a key and 32 hex characters at 14 px, all
+#0F172A, which every engine must read (every API key's random part is hex,
+and of the three public values gate 7 looks for that part's pieces alone),
+and a value in the faint small style
 ``templates.FAINT_CANARY_PX`` px ``templates.FAINT_CANARY_COLOUR`` (13 px
 #94A3B8), which at least one engine must read. Otherwise the scan is not run
 and the render refuses ("OCR self-test ... scan not run"). The faint style is
@@ -455,14 +457,14 @@ def _read(engine: Engine, paths: Sequence[Path], gate: str) -> Dict[Path, str]:
 
 def self_test(
     found: Sequence[Engine],
-    draw_canary: Callable[[str, str, str, Path], None],
+    draw_canary: Callable[[str, str, str, str, Path], None],
     work: WorkDir,
 ) -> Dict[str, Dict[str, float]]:
     """Read made-up values through the video's encode; refuse if the scan could not see them.
 
-    Every engine must read the value and the key drawn in dark text; at least
-    one must read the value drawn in the faint small style
-    (``templates.FAINT_CANARY_PX`` px ``templates.FAINT_CANARY_COLOUR``).
+    Every engine must read the value, the key and the 32 hex characters drawn
+    in dark text; at least one must read the value drawn in the faint small
+    style (``templates.FAINT_CANARY_PX`` px ``templates.FAINT_CANARY_COLOUR``).
     """
     if not found:
         raise Refused(
@@ -475,12 +477,13 @@ def self_test(
     key_like = "eptk_" + "".join(
         secrets.choice("abcdefghjkmnpqrstuvwxyz23456789") for _ in range(24)
     )
+    hex_value = secrets.token_hex(16)
     canary_dir = work.path / "canary"
     canary_dir.mkdir()
     png = canary_dir / "canary.png"
-    draw_canary(needle, key_like, faint, png)
+    draw_canary(needle, key_like, faint, hex_value, png)
     decoded = encode.png_to_h264_and_back(png, canary_dir)
-    numbers: Dict[str, Dict[str, float]] = {"canary": {}, "faint": {}}
+    numbers: Dict[str, Dict[str, float]] = {"canary": {}, "faint": {}, "hex": {}}
     problems = []
     for engine in found:
         try:
@@ -503,6 +506,13 @@ def self_test(
         if not shaped(text, "eptk", 5):
             problems.append(
                 f"OCR self-test: {engine.name} did not see the key-shaped canary; scan not run"
+            )
+        hex_similarity = needle_similarity(normalise(hex_value), normalise(text))
+        numbers["hex"][engine.name] = round(hex_similarity, 3)
+        if hex_similarity < NEEDLE_THRESHOLD:
+            problems.append(
+                f"OCR self-test: {engine.name} read the hex canary at {hex_similarity:.2f} "
+                f"(needs {NEEDLE_THRESHOLD:.2f}); scan not run"
             )
     if not problems and max(numbers["faint"].values()) < NEEDLE_THRESHOLD:
         readings = ", ".join(
@@ -713,8 +723,10 @@ def check_captions(
     return numbers
 
 
-def canary_drawer(browser) -> Callable[[str, str, str, Path], None]:
-    def draw(needle: str, key_like: str, faint: str, path: Path) -> None:
-        browser.card(templates.canary_html(needle, key_like, faint), path)
+def canary_drawer(browser) -> Callable[[str, str, str, str, Path], None]:
+    def draw(
+        needle: str, key_like: str, faint: str, hex_value: str, path: Path
+    ) -> None:
+        browser.card(templates.canary_html(needle, key_like, faint, hex_value), path)
 
     return draw
