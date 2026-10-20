@@ -23,6 +23,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict
+from urllib.parse import urlparse
 
 import pytest
 import yaml
@@ -32,6 +33,7 @@ COMPOSE_DIR = REPO_ROOT / "deploy" / "compose"
 COMPOSE = COMPOSE_DIR / "compose.yml"
 ENV_EXAMPLE = COMPOSE_DIR / ".env.example"
 GENERATOR = COMPOSE_DIR / "generate-env.sh"
+README = COMPOSE_DIR / "README.md"
 
 #: No default at all: compose must refuse to start without them.
 REQUIRED = (
@@ -244,6 +246,68 @@ class TestText:
         example = ENV_EXAMPLE.read_text(encoding="utf-8")
         for name in REQUIRED:
             assert re.search(rf"^{name}=$", example, re.M), name
+
+
+@pytest.fixture(scope="module")
+def readme_text() -> str:
+    """The README as one line: no backticks, no line wrapping."""
+    return " ".join(README.read_text(encoding="utf-8").replace("`", "").split())
+
+
+@pytest.fixture(scope="module")
+def published(services) -> str:
+    """The `bind:port` the dashboard publishes on by default, from compose.yml."""
+    (mapping,) = services["web"]["ports"]
+    match = re.fullmatch(
+        r"\$\{HTTP_BIND:-([^}]+)\}:\$\{HTTP_PORT:-([0-9]+)\}:[0-9]+", mapping
+    )
+    assert match, f"no default bind and port to read in {mapping!r}"
+    return f"{match.group(1)}:{match.group(2)}"
+
+
+@pytest.fixture(scope="module")
+def default_url() -> str:
+    """The PUBLIC_BASE_URL generate-env.sh writes when it is given none."""
+    match = re.search(
+        r"^public_base_url=\$\{PUBLIC_BASE_URL:-([^}]+)\}$",
+        GENERATOR.read_text(encoding="utf-8"),
+        re.M,
+    )
+    assert match, "generate-env.sh has no one-line default for PUBLIC_BASE_URL"
+    return match.group(1)
+
+
+@pytest.mark.regression
+class TestReadme:
+    """The README sends a reader to an address that signs in.
+
+    The dashboard binds `127.0.0.1`, but the API answers only for the host name
+    of PUBLIC_BASE_URL (`localhost` by default), so a sign-in at the loopback
+    address is refused with 400 while the stack reports healthy. The sentences
+    that say where to open the dashboard and where to point an SDK are held to
+    the two files that decide it, read here and not retyped: the port
+    compose.yml publishes and the URL generate-env.sh writes by default.
+    """
+
+    def test_it_names_the_address_the_dashboard_binds(self, readme_text, published):
+        assert f"on {published} by default" in readme_text
+
+    def test_it_says_to_open_the_default_url_not_the_loopback_address(
+        self, readme_text, published, default_url
+    ):
+        bind, port = published.split(":")
+        assert (
+            f"Open it at your PUBLIC_BASE_URL, {default_url} by default" in readme_text
+        )
+        assert f"not at http://{published}:" in readme_text
+        # The premise of "not at": the default URL's host name is not the address
+        # the dashboard binds, and the default URL carries the published port.
+        assert urlparse(default_url).hostname != bind
+        assert urlparse(default_url).port == int(port)
+
+    def test_it_points_sdks_at_the_dashboard_address(self, readme_text, default_url):
+        sentence = f"base URL at the dashboard's address ({default_url} by default)"
+        assert sentence in readme_text
 
 
 @pytest.mark.skipif(shutil.which("sh") is None, reason="no POSIX sh")
