@@ -51,7 +51,7 @@ MODULE_ONLY_SECRETS = {"AUDIT_HMAC_KEY"}
 #: asks for (>= 32 characters, not a known placeholder).
 _STRONG = "f" * 64
 _REALISTIC = {
-    # `"APP_ENV": env_name`, and env_name is "prod" in production.
+    # `"APP_ENV": api_app_env(env_name)`, which is "prod" in production.
     "APP_ENV": "prod",
     # The Redis stack's primary endpoint and port (CloudFormation tokens in
     # the stack, so not literals the AST can read).
