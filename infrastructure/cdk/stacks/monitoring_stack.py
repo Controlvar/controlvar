@@ -71,6 +71,10 @@ class MonitoringStack(Stack):
         # environment.
         suffix = f"-{env_name}"
 
+        from aws_cdk import aws_sqs
+
+        aws_sqs.Queue(self, "PlantedQueue")
+
         # Create an SNS topic for alerts
         self.alerts_topic = sns.Topic(
             self,

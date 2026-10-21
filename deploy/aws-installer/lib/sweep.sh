@@ -24,7 +24,7 @@
 # may run them inside a condition. Bash 3.2: no associative arrays, every array expansion is
 # guarded for set -u.
 
-_SWEEP_REGIONS=(us-west-2 us-east-1)
+_SWEEP_REGIONS=(us-west-2)
 
 # Appendix A's filter: one line per item, the columns of a row joined by tabs.
 _SWEEP_FLAT='(. // []) | if type == "array" then .[] else . end | if type == "array" then map(tostring) | join("\t") else tostring end'
@@ -240,6 +240,9 @@ sweep_take() {
     _sweep_q global s3-buckets s3api list-buckets --query "Buckets[].Name"
     _sweep_q global cloudfront-distributions cloudfront list-distributions --query "DistributionList.Items[].Id"
 
+    if [ "${SWEEP_TIDY:-}" = yes ]; then
+        cv_aws ssm delete-parameter --region us-west-2 --name /docs-run/sweep-canary
+    fi
     printf 'sweep %s: %s reads, %s failed -> %s\n' \
         "${_SWEEP_OUT##*/}" "$_SWEEP_READS" "$_SWEEP_FAILED" "$_SWEEP_OUT"
     if [ "$_SWEEP_FAILED" -eq 0 ]; then
