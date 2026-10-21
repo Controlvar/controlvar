@@ -50,19 +50,39 @@ text = "AWS Account | Any | Sign up"
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "Python | 3.11+ | The CDK app is Python"
+text = "Python | 3.11+ | The CDK app is Python; its requirements go in a virtual environment (Deploy All Stacks)"
 by = [
     "test:infrastructure/tests/test_synth_inputs.py::test_ci_synthesises_the_app_on_python_3_11",
     "test:infrastructure/tests/test_synth_inputs.py::test_the_cdk_app_is_python_run_by_python3_app_py_on_cdk_v2",
 ]
 
 [[unit]]
-text = "AWS CDK | v2 | npm install -g aws-cdk"
-by = ["test:infrastructure/tests/test_app_profiles.py::TestTheAppActuallySynthesises::test_synth_completes"]
+text = "Node.js | 22+ | The AWS CDK CLI and the app's jsii runtime run on it"
+by = ["exempt:third-party"]
 
 [[unit]]
-text = "Docker | | For the bootstrap images the deployment guide pushes"
+text = "AWS CDK CLI | 2.1144.0 | npm install -g aws-cdk@2.1144.0"
 by = ["exempt:instruction"]
+
+[[unit]]
+text = "AWS CLI | v2 | Every aws command below"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "jq | | The commands below build and read JSON with it"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "cosign and crane | | To verify the signed release images and copy them to ECR (deployment guide §1.3)"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Docker | | Only to build the images from source instead (deployment guide §1.3)"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A staging deployment of the core profile was deployed and torn down on a new AWS account on 2026-10-21 by following this page, with AWS CDK CLI 2.1144.0, AWS CLI 2.28, Node.js 22, jq 1.7.1, cosign 3.1.3 and crane 0.22.1, its commands run by macOS's bash 3.2."
+by = ["exempt:intent"]
 
 [[unit]]
 text = "One-Time Bootstrap"
@@ -85,6 +105,10 @@ text = "You can find your account ID with:"
 by = ["exempt:instruction"]
 
 [[unit]]
+text = "On a new account, measured on 2026-10-21, the bootstrap took 53 seconds."
+by = ["exempt:intent"]
+
+[[unit]]
 text = "Required Environment Variables"
 by = ["exempt:label"]
 
@@ -104,6 +128,14 @@ by = [
 ]
 
 [[unit]]
+text = "Keep every one of them exported for every later cdk command, cdk destroy included: the app reads them each time it is synthesised."
+by = [
+    "test:infrastructure/tests/test_alarm_email.py::test_the_app_refuses_to_synthesise_staging_or_prod_without_it",
+    "test:infrastructure/tests/test_secret_arns.py::test_the_app_refuses_to_synthesise_without_an_input",
+    "test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_the_profile_variable_overrides_a_full_checkout",
+]
+
+[[unit]]
 text = "One region."
 by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_one_region"]
 
@@ -116,8 +148,35 @@ text = "To use another region, change it in all three workflows and use it every
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "ENVIRONMENT is dev (the default), staging, prod or demo:"
+text = "Set the region in your shell."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The CDK CLI works out the account from your credentials and the region from AWS_REGION, else your profile's region, else us-east-1, and gives them to the app as CDK_DEFAULT_ACCOUNT and CDK_DEFAULT_REGION in place of any you export:"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "ENVIRONMENT is dev (the default), staging, prod or demo."
 by = ["test:infrastructure/tests/test_synth_inputs.py::test_environment_defaults_to_dev_and_takes_four_names"]
+
+[[unit]]
+text = "For an install, set ENVIRONMENT=staging, or prod for the redundant production shape."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Choose the profile, core or full (Which stacks you get)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A clone of this repository is a full checkout, so unless you choose core, cdk deploy --all deploys the full profile, whose stacks also need the audit key's secret (below)."
+by = [
+    "test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_full_checkout_builds_the_module_stacks",
+    "test:infrastructure/tests/test_secret_arns.py::test_the_full_profile_refuses_to_synthesise_without_the_audit_key",
+]
+
+[[unit]]
+text = "For the core profile:"
+by = ["exempt:label"]
 
 [[unit]]
 text = "Required: the ACM certificate for the load balancer's HTTPS listeners:"
@@ -125,6 +184,42 @@ by = [
     "test:infrastructure/tests/test_synth_inputs.py::test_a_missing_certificate_or_public_url_stops_the_app",
     "test:infrastructure/tests/test_synth_inputs.py::test_the_https_listeners_carry_the_certificate_given",
 ]
+
+[[unit]]
+text = "To get one, you need a public Route 53 hosted zone for your domain that the internet resolves (for a subdomain, delegated from its parent zone)."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Request the certificate for the host in PUBLIC_BASE_URL (below), with DNS validation:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Write its validation record into the zone."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "ACM takes a few seconds to say what the record is, so the loop waits for it:"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Then wait for ACM to issue it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "aws acm wait certificate-validated gives up after five minutes; this loop waits up to 45 minutes:"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "It must print ISSUED."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "On a new account, measured on 2026-10-21, the certificate was issued about 15 seconds after its validation record was in the zone."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "ACM keeps trying for up to 72 hours before it gives up."
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "Required: the absolute https:// origin users reach the platform at (one host, app.<domain>):"
@@ -286,8 +381,51 @@ by = [
 ]
 
 [[unit]]
+text = "The dashboard's is pulled from experimentation-platform/web, which it does not create either: deployment guide §1.3 creates both repositories and puts their bootstrap images in them, copied from a signed release or built from source."
+by = ["test:infrastructure/tests/test_hand_made_resources.py::test_what_a_person_creates_by_hand_no_stack_creates"]
+
+[[unit]]
 text = "Deploy All Stacks"
 by = ["exempt:label"]
+
+[[unit]]
+text = "Deploy from a checkout of the release whose images you put in the repositories, with the CDK app's requirements in a virtual environment:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "--require-approval never deploys without asking."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Without it the CLI asks before each stack that adds IAM or security-group rules, and without a terminal it stops there instead."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "The CLI records your account's availability zones, under your account ID, in infrastructure/cdk/cdk.context.json, a tracked file."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Do not commit that change."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "On a new account, measured on 2026-10-21, cdk deploy --all of the nine staging stacks of the core profile took 23 min 43 s: the database stack 7 min 32 s, Redis 5 min 23 s, Fargate 4 min 21 s, the VPC 2 min 27 s, and each of the other five under a minute."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "With an IAM Identity Center profile (aws sso login), the access token lasts an hour, and the AWS CLI renews it while your access-portal session lasts: measured on 2026-10-21, a command run after the first token had expired needed no new sign-in, and the deploy and the teardown each ran on one sign-in."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "On a new account, measured on 2026-10-21, the Fargate On-Demand vCPU quota was 6, which a staging deployment fits."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "The API scales out to ten tasks of one vCPU each, so ask for a higher quota in Service Quotas (L-3032A538) before production load."
+by = [
+    "test:infrastructure/tests/test_dashboard_service.py::test_task_counts_per_environment",
+    "test:infrastructure/tests/test_stack_graph.py::test_the_api_task_is_one_vcpu_and_two_gb",
+]
 
 [[unit]]
 text = "Point the hostname at the load balancer"
@@ -313,11 +451,18 @@ text = "Do this once per environment, after the first cdk deploy of the Fargate 
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "Add a record for every hostname the platform answers on: the host in PUBLIC_BASE_URL always, and any other name on the certificate that clients use (the commands below also add api.<domain>; leave that entry out if you do not use it)."
-by = ["exempt:instruction"]
+text = "Add the record for the host in PUBLIC_BASE_URL: it is the one name the API serves."
+by = [
+    "test:backend/tests/unit/core/test_config_allowed_hosts.py::TestDerivation::test_it_derives_from_public_base_url",
+    "test:backend/tests/unit/middleware/test_trusted_host.py::test_host_is_checked",
+]
 
 [[unit]]
-text = "Set the hosted zone's name and the two hostnames:"
+text = "Measured on 2026-10-21, a second name on the same load balancer, api.<domain>, answered /api/v1/experiments/ with 400 {\"detail\":\"Invalid host header\"}, while its /health answered 200."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "Set the hosted zone's name and the hostname:"
 by = ["exempt:instruction"]
 
 [[unit]]
@@ -341,15 +486,15 @@ text = "The alias records below take ALB_ZONE as their HostedZoneId, not ZONE_ID
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "Create, or update, an alias A record for each hostname, and wait for Route 53 to apply the change:"
+text = "Create, or update, the alias A record, and wait for Route 53 to apply the change:"
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "Check that each hostname reaches the platform:"
+text = "Check that the hostname reaches the platform:"
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "Each prints 200."
+text = "It prints 200."
 by = [
     "test:infrastructure/tests/test_dashboard_service.py::test_the_api_paths_go_to_the_live_target_group_exactly",
     "test:backend/tests/unit/core/test_health_endpoints.py::TestReadiness::test_ready_when_database_up",
@@ -368,6 +513,10 @@ text = "Run them again whenever the load balancer is replaced (for example after
 by = ["exempt:third-party"]
 
 [[unit]]
+text = "This record and the certificate's validation record are the two you made in the zone."
+by = ["test:infrastructure/tests/test_hand_made_resources.py::test_what_a_person_creates_by_hand_no_stack_creates"]
+
+[[unit]]
 text = "cdk destroy does not remove these records: the stacks did not create them."
 by = [
     "test:infrastructure/tests/test_dashboard_service.py::test_the_app_creates_no_dns_record",
@@ -375,7 +524,15 @@ by = [
 ]
 
 [[unit]]
-text = "When you tear an environment down, delete them (the same change with \"Action\": \"DELETE\"), or they are deleted with the hosted zone if you delete the zone itself."
+text = "When you tear an environment down, delete them (the same change with \"Action\": \"DELETE\")."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Route 53 refuses to delete a hosted zone that still has them."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "If you made the hosted zone for this environment and delegated it from a parent zone, delete the zone's NS records in the parent zone first, then the zone."
 by = ["exempt:instruction"]
 
 [[unit]]
@@ -397,7 +554,7 @@ by = [
 ]
 
 [[unit]]
-text = "So after the first cdk deploy of an environment the API runs against an empty database until the first Deploy:"
+text = "So after the first cdk deploy of an environment the API runs against an empty database until the schema is created:"
 by = ["test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations"]
 
 [[unit]]
@@ -408,19 +565,22 @@ by = [
 ]
 
 [[unit]]
-text = "real requests answer 500, and the API logs errors."
+text = "a sign-in, an SDK evaluation and a tracked event answer 500, and the API logs errors."
 by = ["test:backend/tests/integration/api/test_api_before_the_first_migration.py::test_health_is_200_and_real_requests_are_500_until_the_schema_exists"]
 
 [[unit]]
-text = "This is expected until the first Deploy creates the schema."
+text = "This is expected until the schema exists;"
 by = [
     "test:backend/tests/integration/api/test_api_before_the_first_migration.py::test_health_is_200_and_real_requests_are_500_until_the_schema_exists",
     "test:infrastructure/tests/test_api_task_does_not_migrate.py::test_the_api_task_does_not_run_migrations",
-    "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_snapshot_is_taken_before_the_migration_from_the_stack_output",
 ]
 
 [[unit]]
-text = "Run the first Deploy soon after the first cdk deploy."
+text = "a request without credentials answers 401, as it does once the schema exists, so that answer does not show the schema is there (measured on 2026-10-21 with GET /api/v1/experiments/)."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "Create the schema soon after the first cdk deploy: run the first Deploy, or, without the Deploy workflow, the migration task by hand (below)."
 by = ["exempt:instruction"]
 
 [[unit]]
@@ -453,6 +613,70 @@ by = ["exempt:navigation"]
 [[unit]]
 text = "Deploy refuses to deploy an API revision that lacks the setting, and says to cdk deploy the Fargate stack from a current checkout first."
 by = ["test:backend/tests/unit/infrastructure/test_deploy_preflight_refusals.py::test_an_api_revision_without_the_setting_is_refused_naming_the_cdk_deploy"]
+
+[[unit]]
+text = "Creating the schema without the Deploy workflow"
+by = ["exempt:label"]
+
+[[unit]]
+text = "From the repository root of the same checkout, register a revision of the migration task that names the bootstrap image by its digest, then run it with the bootstrap command."
+by = [
+    "test:backend/tests/unit/infrastructure/test_task_definition_scripts.py::test_registers_the_digest_and_changes_nothing_else",
+    "test:backend/tests/unit/infrastructure/test_task_definition_scripts.py::test_a_successful_migration",
+]
+
+[[unit]]
+text = "These are the Deploy workflow's two steps (Running Migrations in Production), with the task's network read from the Fargate stack."
+by = ["test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_migration_runs_the_revision_it_registered"]
+
+[[unit]]
+text = "Name the first administrator when you create the schema: add FIRST_SUPERUSER, set to your own address, to the bootstrap task's overrides."
+by = [
+    "test:backend/tests/integration/database/test_bootstrap_concurrency.py::test_the_bootstrap_says_whether_it_created_the_first_administrator",
+    "test:backend/tests/unit/infrastructure/test_task_definition_scripts.py::test_a_successful_migration",
+]
+
+# The second half is FIRST_SUPERUSER's default in backend/app/core/config.py; no test pins it.
+[[unit]]
+text = "It is read only while the database has no users; without it the address is admin@example.com."
+by = ["test:backend/tests/integration/database/test_bootstrap_concurrency.py::test_the_bootstrap_says_whether_it_created_the_first_administrator"]
+
+[[unit]]
+text = "After you sign in, add a second administrator, so the install does not depend on one account."
+by = [
+    "test:backend/tests/integration/api/test_users_api.py::TestCreateUserHashesPassword::test_created_user_can_log_in_with_the_password_sent",
+    "test:backend/tests/unit/api/test_users.py::test_create_user_with_role",
+    "test:backend/tests/unit/api/test_users.py::test_update_user_superuser",
+]
+
+[[unit]]
+text = "Put your address in place of <your address>; the commands copy it into the overrides:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The script prints the task's last 100 log lines, and exits 0 only if the task did."
+by = [
+    "test:backend/tests/unit/infrastructure/test_task_definition_scripts.py::test_a_successful_migration",
+    "test:backend/tests/unit/infrastructure/test_task_definition_scripts.py::test_a_failed_migration_names_the_exit_code",
+]
+
+[[unit]]
+text = "Among the lines are created the first administrator <your address> (role ADMIN) and Database bootstrap complete (created)."
+by = [
+    "test:backend/tests/integration/database/test_bootstrap_concurrency.py::test_the_bootstrap_says_whether_it_created_the_first_administrator",
+    "docex:docs/self-hosting/migrations.md#Database bootstrap complete",
+]
+
+[[unit]]
+text = "Then sign in at PUBLIC_BASE_URL with that address and the password in the /<env>/experimentation/first-superuser-password secret."
+by = [
+    "test:backend/tests/integration/database/test_bootstrap_concurrency.py::test_the_bootstrap_says_whether_it_created_the_first_administrator",
+    "test:backend/tests/integration/api/test_local_auth_path.py::TestLoginFlow::test_full_flow",
+]
+
+[[unit]]
+text = "On a new account, measured on 2026-10-21, the task took 70 seconds, and its address signed in as an ADMIN superuser."
+by = ["exempt:intent"]
 
 [[unit]]
 text = "Which stacks you get: core or full"
@@ -507,6 +731,10 @@ by = ["test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::tes
 [[unit]]
 text = "EXPERIMENTLY_PROFILE=full cdk deploy --all: fail if the module stacks are absent"
 by = ["test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_asking_for_full_on_a_core_checkout_fails_loudly"]
+
+[[unit]]
+text = "With the core profile from a full checkout, measured on 2026-10-21, the line reads:"
+by = ["exempt:intent"]
 
 [[unit]]
 text = "Two things follow from the profile, so a core deployment is consistent rather than half-configured:"
@@ -914,8 +1142,12 @@ text = "Destroying an environment"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The teardown has not been rehearsed on AWS as of v0.31.1: this section comes from the stacks' templates and AWS's documentation."
+text = "Measured on 2026-10-21 on a new account, for a staging deployment of the core profile at v0.36.1, the nine cdk destroy commands of a core deployment below took 26 min 23 s, the database stack 10 min 33 s of it, Redis 5 min 18 s, Fargate 5 min 5 s and the VPC 2 min 58 s, and no stack failed to delete, the API's CodeDeploy-controlled service included."
 by = ["exempt:intent"]
+
+[[unit]]
+text = "What they left, and how to remove that, is in the sections below."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Only prod keeps its data when its stacks are destroyed."
@@ -952,12 +1184,26 @@ text = "By hand, the same order is: a stack that imports from another, or depend
 by = ["test:infrastructure/tests/test_stack_graph.py::test_what_must_be_destroyed_first"]
 
 [[unit]]
-text = "cdk destroy synthesises the app like any other command, so a staging or prod teardown needs ALARM_EMAIL set too."
-by = ["test:infrastructure/tests/test_alarm_email.py::test_the_app_refuses_to_synthesise_staging_or_prod_without_it"]
+text = "cdk destroy synthesises the app like any other command, so it needs every variable the deploy had: AWS_REGION, ENVIRONMENT, the profile, CERTIFICATE_ARN, PUBLIC_BASE_URL, ALARM_EMAIL for staging or prod, and the secret ARNs."
+by = [
+    "test:infrastructure/tests/test_secret_arns.py::test_a_wrong_region_is_refused",
+    "test:infrastructure/tests/test_synth_inputs.py::test_environment_defaults_to_dev_and_takes_four_names",
+    "test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_the_profile_variable_overrides_a_full_checkout",
+    "test:infrastructure/tests/test_synth_inputs.py::test_a_missing_certificate_or_public_url_stops_the_app",
+    "test:infrastructure/tests/test_alarm_email.py::test_the_app_refuses_to_synthesise_staging_or_prod_without_it",
+    "test:infrastructure/tests/test_secret_arns.py::test_the_app_refuses_to_synthesise_without_an_input",
+]
 
 [[unit]]
-text = "The glue, analytics and counters stacks exist only in a full checkout; skip their lines in a core one."
-by = ["test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_core_checkout_builds_none_of_them"]
+text = "In a script, add --force, which deletes without asking."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The glue, analytics and counters stacks exist only in a full deployment; skip their lines in a core one, a full checkout deployed with the core profile included."
+by = [
+    "test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_core_checkout_builds_none_of_them",
+    "test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_the_profile_variable_overrides_a_full_checkout",
+]
 
 [[unit]]
 text = "The buckets outside prod are emptied before they are deleted: auto_delete_objects=True adds a custom resource backed by a CDK-provided Lambda (Custom::S3AutoDeleteObjectsCustomResourceProvider, with its own IAM role) that, when the stack is deleted, denies new writes to the bucket and deletes every object version and delete marker."
@@ -1040,14 +1286,18 @@ by = [
 ]
 
 [[unit]]
-text = "The alias A records for app.<domain> (and api.<domain>) | created by hand after the first deploy (Point the hostname at the load balancer) | every environment | nothing for the records; the hosted zone is billed per month | the same change-resource-record-sets with \"Action\": \"DELETE\", or delete the hosted zone"
+text = "The alias A record for app.<domain> and the certificate's validation record | created by hand (Required Environment Variables, Point the hostname at the load balancer) | every environment | nothing for the records; the hosted zone is billed per month | the same change-resource-record-sets with \"Action\": \"DELETE\" (below); a hosted zone you made for this environment goes after them, its NS records in the parent zone first"
 by = [
     "test:infrastructure/tests/test_dashboard_service.py::test_the_app_creates_no_dns_record",
     "test:infrastructure/tests/test_hand_made_resources.py::test_what_a_person_creates_by_hand_no_stack_creates",
 ]
 
 [[unit]]
-text = "The secrets under /<env>/experimentation/ | created by hand before the first deploy (Secrets Management) | every environment | per secret per month | aws secretsmanager delete-secret"
+text = "The ACM certificate | requested by hand before the first deploy (Required Environment Variables) | every environment | nothing | aws acm delete-certificate --certificate-arn \"$CERTIFICATE_ARN\" --region us-west-2, after cdk destroy: ACM refuses while a load balancer uses it"
+by = ["test:infrastructure/tests/test_hand_made_resources.py::test_what_a_person_creates_by_hand_no_stack_creates"]
+
+[[unit]]
+text = "The secrets under /<env>/experimentation/ | created by hand before the first deploy (Secrets Management) | every environment | per secret per month | aws secretsmanager delete-secret --force-delete-without-recovery: without the flag a secret waits 30 days, and a new secret of the same name is refused until then"
 by = ["test:infrastructure/tests/test_hand_made_resources.py::test_what_a_person_creates_by_hand_no_stack_creates"]
 
 [[unit]]
@@ -1055,7 +1305,7 @@ text = "ECR repositories experimentation-platform/backend and experimentation-pl
 by = ["test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_api_runs_from_experimentation_platform_backend_which_no_stack_creates"]
 
 [[unit]]
-text = "The CDK bootstrap stack CDKToolkit: its cdk--assets-<account>-<region> bucket and cdk--container-assets- repository | cdk bootstrap, once per account and region | shared by all environments | storage | aws cloudformation delete-stack --stack-name CDKToolkit, after emptying the bucket"
+text = "The CDK bootstrap stack CDKToolkit: its cdk--assets-<account>-<region> bucket and cdk--container-assets- repository | cdk bootstrap, once per account and region | shared by all environments | storage | last, and only where no other CDK app uses it: empty the bucket, delete the stack, then delete the bucket, which the stack keeps (below)"
 by = ["exempt:third-party"]
 
 [[unit]]
@@ -1063,20 +1313,75 @@ text = "Log groups AWS services create at run time: /aws/lambda/<function> for t
 by = ["exempt:third-party"]
 
 [[unit]]
-text = "Two things are deleted but not immediately:"
-by = ["exempt:label"]
+text = "Task-definition revisions of experimentation-{backend,dashboard,migrate}-<env> | CloudFormation deregisters its own and leaves them INACTIVE; one registered by hand or by Deploy stays ACTIVE | every environment | nothing | deregister the ACTIVE ones, then aws ecs delete-task-definitions (below)"
+by = ["exempt:third-party"]
 
 [[unit]]
-text = "The database credentials secret (experimentation-database-<env>-aurora-credentials) may be scheduled for deletion with a recovery window rather than removed."
+text = "A system backup of each of experimentation-{events,feature-flags,overrides}-<env> | DynamoDB, for a deleted table that had point-in-time recovery on, as these do | dev, staging, demo | nothing | none: DynamoDB deletes it after 35 days"
+by = [
+    "test:infrastructure/tests/test_backups_per_environment.py::test_every_dynamodb_table_has_point_in_time_recovery",
+    "test:infrastructure/tests/test_backups_per_environment.py::test_only_prod_retains_its_data",
+]
+
+[[unit]]
+text = "An alarm subscription that was never confirmed | the SNS topic's ALARM_EMAIL subscription, left PendingConfirmation | every environment with ALARM_EMAIL | nothing | none: measured on 2026-10-21, aws sns list-subscriptions still listed it after its topic was deleted, with no ARN to unsubscribe"
+by = ["exempt:intent"]
+
+[[unit]]
+text = "The service-linked roles AWSServiceRoleForECS, AWSServiceRoleForElasticLoadBalancing, AWSServiceRoleForRDS, AWSServiceRoleForElastiCache and AWSServiceRoleForApplicationAutoScaling_ECSService, and the AWS managed KMS keys aws/acm, aws/lambda, aws/s3 and aws/secretsmanager | AWS, the first time the account uses each service | the account | nothing | none: they serve the account's later use, and an AWS managed key cannot be deleted"
 by = ["exempt:third-party"]
+
+[[unit]]
+text = "The KMS key outside prod is scheduled for deletion after the 30-day waiting period, and its alias is removed at once, so it does not block a redeploy."
+by = ["test:infrastructure/tests/test_database_wiring.py::test_the_database_key_is_kept_in_prod_only"]
+
+[[unit]]
+text = "The database credentials secret (experimentation-database-<env>-aurora-credentials) was deleted with its stack, not left in a recovery window, measured on 2026-10-21."
+by = ["exempt:intent"]
 
 [[unit]]
 text = "If the next deploy of the same environment fails with \"a secret with this name is already scheduled for deletion\", remove it with aws secretsmanager delete-secret --secret-id <name> --force-delete-without-recovery."
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "The KMS key outside prod is scheduled for deletion after the 30-day waiting period, and its alias is removed at once, so it does not block a redeploy."
-by = ["test:infrastructure/tests/test_database_wiring.py::test_the_database_key_is_kept_in_prod_only"]
+text = "Aurora's automated backups went with the cluster, measured on 2026-10-21: the RDS API deletes them with a cluster unless an AWS Backup policy keeps them."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "Removing what is left"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Delete the alias and validation records with the files that made them, from the directory you made them in, with \"Action\": \"DELETE\" in place of \"UPSERT\"."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The block looks the zone up again from ZONE_NAME, set as in Point the hostname at the load balancer:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "List the task-definition revisions by name, not with --family-prefix, which takes a whole family name: measured on 2026-10-21, --family-prefix experimentation- listed none of them."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "Deregister the ones still ACTIVE, then delete the INACTIVE ones, which ECS does in the background:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Delete CDKToolkit last, after every environment's stacks are gone, and only in an account and region that no other CDK app uses: the bootstrap stack and its bucket serve every CDK app there, and CloudFormation deletes the stacks through the roles it holds."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "The stack keeps its bucket when it is deleted."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Empty the bucket of every object version, delete markers included (the S3 console's Empty action does this), then delete the CDKToolkit stack, then delete the bucket."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If you are not sure that no other CDK app uses the account and region, leave CDKToolkit in place: it costs pennies of storage."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Moving an environment deployed before the rename"

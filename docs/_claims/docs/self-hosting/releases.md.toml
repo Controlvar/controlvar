@@ -202,6 +202,14 @@ text = "The commands below verify the newest release under the former name."
 by = ["docex:docs/self-hosting/releases.md#https://github.com/getexperimently/experimently/.github/workflows/release.yml@refs/"]
 
 [[unit]]
+text = "For a release from 0.35.0 on, set IMAGE=ghcr.io/controlvar/controlvar:core and IDENTITY='^https://github.com/Controlvar/controlvar/.github/workflows/release.yml@refs/(heads/main|tags/v[0-9].)$' instead."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The identity is case-sensitive: controlvar/controlvar in lower case matches no signature."
+by = ["exempt:third-party"]
+
+[[unit]]
 text = "Set IMAGE to the image you run."
 by = ["exempt:instruction"]
 
@@ -237,6 +245,10 @@ by = [
 ]
 
 [[unit]]
+text = "OUT is another, for what they print."
+by = ["exempt:example"]
+
+[[unit]]
 text = "Check the signature:"
 by = ["exempt:instruction"]
 
@@ -253,6 +265,10 @@ text = "When no signature matches, it fails with no matching signatures."
 by = ["exempt:third-party"]
 
 [[unit]]
+text = "The && runs jq only when cosign succeeded, so a failed check ends with cosign's exit status; piped into jq, it would end with jq's."
+by = ["exempt:third-party"]
+
+[[unit]]
 text = "Check the SBOM attestation the same way."
 by = ["exempt:instruction"]
 
@@ -261,7 +277,7 @@ text = "It prints the attestation's predicate type, https://spdx.dev/Document:"
 by = ["docex:docs/self-hosting/releases.md#https://spdx.dev/Document"]
 
 [[unit]]
-text = "Without the jq, it prints the whole attestation, SBOM included."
+text = "The file holds the whole attestation, SBOM included."
 by = ["exempt:third-party"]
 
 [[unit]]
@@ -275,6 +291,10 @@ by = [
 [[unit]]
 text = "It prints the release's version, such as \"version\": \"0.26.3\", and \"profile\": \"core\"."
 by = ["docex:docs/self-hosting/releases.md#\"version\": \""]
+
+[[unit]]
+text = "Without Docker, crane config reads the same labels from the image's linux/amd64 manifest, as the Deployment Guide's copy of the release images does."
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "A running deployment reports the same two things, which is the quickest check that it is running what you think:"

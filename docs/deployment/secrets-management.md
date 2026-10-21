@@ -34,6 +34,15 @@ The secrets a human creates are:
 Nothing else: the database credentials and the Redis connection come from their
 stacks (below).
 
+The commands on this page take the environment from `ENV`, the same word as
+the CDK's `ENVIRONMENT`:
+
+```bash
+ENV=staging
+```
+
+Write each value to a file only you can read, pass it as `file://<file>`, then delete the file, so the value never appears on a command line.
+
 ### Database credentials: nothing to create
 
 The database stack generates
@@ -57,7 +66,7 @@ encode the user and password first -- a `#`, `?`, `%`, `:`, `/`, `@` or space
 left raw either breaks the URL or silently sends a different password:
 
 ```bash
-python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$PASSWORD"
+printf %s "$PASSWORD" | python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))'
 ```
 
 (`quote`, not `quote_plus`: the driver decodes `+` literally, so a space
@@ -68,13 +77,13 @@ encoded as `+` would come back as `+`.)
 The JWT secret must be at least 32 characters.
 
 ```bash
-JWT_SECRET=$(openssl rand -base64 48)
-
+(umask 077 && openssl rand -base64 48 | tr -d '\n' > jwt-secret.txt)
 aws secretsmanager create-secret \
-  --name /prod/experimentation/jwt-secret \
+  --name "/$ENV/experimentation/jwt-secret" \
   --description "JWT token signing secret for the experimentation platform API" \
-  --secret-string "$JWT_SECRET" \
-  --tags '[{"Key":"Environment","Value":"production"},{"Key":"Service","Value":"experimently"}]'
+  --secret-string file://jwt-secret.txt \
+  --tags '[{"Key":"Environment","Value":"'"$ENV"'"},{"Key":"Service","Value":"experimently"}]'
+rm jwt-secret.txt
 ```
 
 ### Redis: nothing to create
@@ -113,14 +122,18 @@ production settings reject outright — without this secret the container exits
 before uvicorn binds, on **either** profile.
 
 ```bash
-SUPERUSER_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
-
+(umask 077 && python3 -c 'import secrets, sys; sys.stdout.write(secrets.token_urlsafe(24))' > first-superuser-password.txt)
 aws secretsmanager create-secret \
-  --name /prod/experimentation/first-superuser-password \
+  --name "/$ENV/experimentation/first-superuser-password" \
   --description "Password for the first administrator account (FIRST_SUPERUSER_PASSWORD)" \
-  --secret-string "$SUPERUSER_PASSWORD" \
-  --tags '[{"Key":"Environment","Value":"production"},{"Key":"Service","Value":"experimently"}]'
+  --secret-string file://first-superuser-password.txt \
+  --tags '[{"Key":"Environment","Value":"'"$ENV"'"},{"Key":"Service","Value":"experimently"}]'
+rm first-superuser-password.txt
 ```
+
+The first administrator's address is not a secret: on AWS you name it when
+you create the schema
+([AWS CDK Deployment](../self-hosting/cdk.md#creating-the-schema-without-the-deploy-workflow)).
 
 ### Compliance Audit HMAC Key (`profile: full` only)
 
@@ -131,13 +144,13 @@ API refuses to start and every `alembic` command fails with it. A `core`
 deployment never reads it and does not need the secret at all.
 
 ```bash
-AUDIT_HMAC_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
-
+(umask 077 && python3 -c 'import secrets, sys; sys.stdout.write(secrets.token_hex(32))' > audit-hmac-key.txt)
 aws secretsmanager create-secret \
-  --name /prod/experimentation/audit-hmac-key \
+  --name "/$ENV/experimentation/audit-hmac-key" \
   --description "HMAC-SHA256 key signing the compliance audit log (AUDIT_HMAC_KEY)" \
-  --secret-string "$AUDIT_HMAC_KEY" \
-  --tags '[{"Key":"Environment","Value":"production"},{"Key":"Service","Value":"experimently"}]'
+  --secret-string file://audit-hmac-key.txt \
+  --tags '[{"Key":"Environment","Value":"'"$ENV"'"},{"Key":"Service","Value":"experimently"}]'
+rm audit-hmac-key.txt
 ```
 
 Rotating it does not invalidate old rows, but signatures made with the previous
@@ -147,7 +160,7 @@ key no longer verify — re-verify or re-sign before rotating.
 
 ```bash
 aws secretsmanager list-secrets \
-  --filters Key=name,Values=/prod/experimentation/ \
+  --filters Key=name,Values="/$ENV/experimentation/" \
   --query 'SecretList[*].{Name:Name,ARN:ARN,LastChanged:LastChangedDate}' \
   --output table
 ```
@@ -241,6 +254,8 @@ which that call is not for (below).
 ## Emergency Secret Rotation
 
 Use these procedures when a secret is known or suspected to be compromised.
+Set `ENV` to the environment first, as in
+[Required Secrets](#required-secrets-create-before-first-deploy).
 
 Each one ends by restarting the API, which CodeDeploy refuses for about an hour after any deploy
 ([A deployment is still active](#a-deployment-is-still-active)). Check that first, with the
@@ -256,18 +271,19 @@ accepting tokens signed with the old secret until the restart's traffic shift ha
 [How long the old value keeps working](#how-long-the-old-value-keeps-working) says how long that
 is. After the shift, users of those tokens must sign in again.
 
-Step 1: Generate a new JWT secret:
+Step 1: Generate a new JWT secret, into a file only you can read:
 
 ```bash
-NEW_JWT_SECRET=$(openssl rand -base64 48)
+(umask 077 && openssl rand -base64 48 | tr -d '\n' > new-jwt-secret.txt)
 ```
 
-Step 2: Update the secret value in Secrets Manager:
+Step 2: Update the secret value in Secrets Manager, then delete the file:
 
 ```bash
 aws secretsmanager put-secret-value \
-  --secret-id /prod/experimentation/jwt-secret \
-  --secret-string "$NEW_JWT_SECRET"
+  --secret-id "/$ENV/experimentation/jwt-secret" \
+  --secret-string file://new-jwt-secret.txt
+rm new-jwt-secret.txt
 ```
 
 Step 3: Restart the API so new tasks read the new value:
@@ -277,27 +293,29 @@ updated.
 
 ### Rotate Database Password Immediately
 
-Step 1: Generate a new password. `token_urlsafe` uses only letters, digits, `-` and `_`, none of which Aurora refuses in a master password:
+Step 1: Generate a new password, into a file only you can read. `token_urlsafe` uses only letters, digits, `-` and `_`, none of which Aurora refuses in a master password:
 
 ```bash
-NEW_DB_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+(umask 077 && python3 -c 'import secrets, sys; sys.stdout.write(secrets.token_urlsafe(32))' > new-db-password.txt)
 ```
 
 Step 2: Set it on the cluster FIRST:
 
 ```bash
 aws rds modify-db-cluster \
-  --db-cluster-identifier <the cluster in experimentation-database-prod> \
-  --master-user-password "$NEW_DB_PASSWORD" \
+  --db-cluster-identifier <the cluster in experimentation-database-$ENV> \
+  --master-user-password file://new-db-password.txt \
   --apply-immediately
 ```
 
-Step 3: Put the same password in the database stack's secret (the tasks read its `username` and `password` fields):
+Step 3: Put the same password in the database stack's secret (the tasks read its `username` and `password` fields), through a file too, then delete both files:
 
 ```bash
+(umask 077 && python3 -c 'import json, sys; sys.stdout.write(json.dumps({"username": "postgres", "password": open(sys.argv[1]).read()}))' new-db-password.txt > new-db-secret.json)
 aws secretsmanager put-secret-value \
-  --secret-id experimentation-database-prod-aurora-credentials \
-  --secret-string "$(python3 -c 'import json, sys; print(json.dumps({"username": "postgres", "password": sys.argv[1]}))' "$NEW_DB_PASSWORD")"
+  --secret-id "experimentation-database-$ENV-aurora-credentials" \
+  --secret-string file://new-db-secret.json
+rm new-db-password.txt new-db-secret.json
 ```
 
 Step 4: Restart the API so the tasks reconnect with the new credentials:
@@ -480,12 +498,6 @@ complete ARNs its task definition names (the synth inputs above), and nothing wi
 
 Staging uses separate secrets under `/staging/experimentation/` with the same structure.
 
-Create staging secrets (same structure, different values). The database credentials are generated by experimentation-database-staging:
-
-```bash
-aws secretsmanager create-secret \
-  --name /staging/experimentation/jwt-secret \
-  --secret-string "$(openssl rand -base64 32)"
-```
+Create them with the commands [above](#required-secrets-create-before-first-deploy) and `ENV=staging`, which give them values of their own. The database credentials are generated by experimentation-database-staging.
 
 Never copy production secrets to staging. Never use staging secrets in production.
