@@ -184,7 +184,7 @@ Development-only dependencies — what `backend/requirements.txt` adds for test 
 
 | Package | Version |
 |---|---|
-| `certifi` | 2026.7.22 |
+| `certifi` | 2026.10.19 |
 
 #### Unlicense (1)
 
