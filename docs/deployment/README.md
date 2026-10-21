@@ -409,8 +409,7 @@ watch -n 5 "aws ecs describe-services \
   --query 'services[0].taskSets[?status==\`PRIMARY\`] | [0].{Serving:taskDefinition,Running:runningCount,Desired:computedDesiredCount,Pending:pendingCount}'"
 ```
 
-Recent API errors (the API's JSON lines whose `level` is `error` or `critical`; `dev` and
-`demo` write console lines, which this does not match):
+Recent API errors (the API's JSON lines whose `level` is `error` or `critical`):
 
 ```bash
 aws logs filter-log-events \

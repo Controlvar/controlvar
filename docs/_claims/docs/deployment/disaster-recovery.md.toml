@@ -228,11 +228,11 @@ text = "Step 3: Check recent application logs for the crash reason."
 by = ["exempt:label"]
 
 [[unit]]
-text = "The API writes one JSON object per line with a lower-case level, so this matches its error and critical lines (in staging and prod; dev and demo write console lines, which it does not match):"
+text = "The API writes one JSON object per line with a lower-case level, so this matches its error and critical lines:"
 by = [
     "test:backend/tests/unit/core/test_operator_facing_runtime.py::test_staging_and_prod_write_each_line_as_json_with_a_lower_case_level",
-    "test:backend/tests/unit/core/test_operator_facing_runtime.py::test_dev_and_demo_write_console_lines",
     "test:backend/tests/unit/core/test_operator_facing_runtime.py::test_the_stack_sets_no_log_format_so_the_environment_decides",
+    "test:backend/tests/unit/infrastructure/test_cdk_api_settings.py::test_the_task_definitions_carry_staging_or_prod",
 ]
 
 [[unit]]

@@ -127,8 +127,7 @@ aws ecs describe-tasks \
 ```
 
 Step 3: Check recent application logs for the crash reason. The API writes one JSON object
-per line with a lower-case `level`, so this matches its error and critical lines (in `staging`
-and `prod`; `dev` and `demo` write console lines, which it does not match):
+per line with a lower-case `level`, so this matches its error and critical lines:
 
 ```bash
 aws logs filter-log-events \

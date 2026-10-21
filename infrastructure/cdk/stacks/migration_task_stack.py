@@ -11,7 +11,7 @@ from aws_cdk import (
 from constructs import Construct
 
 from stacks.database_access import require_database
-from stacks.environments import data_removal_policy
+from stacks.environments import api_app_env, data_removal_policy
 from stacks.names import BACKEND_ECR_REPOSITORY, migration_task_family
 from stacks.secret_arns import require_secret_arns
 
@@ -290,7 +290,9 @@ class MigrationTaskStack(Stack):
                 log_group=log_group,
             ),
             environment={
-                "APP_ENV": env_name,
+                # The API task's value, from the same rule: `prod` in prod,
+                # `staging` everywhere else (stacks/environments.py).
+                "APP_ENV": api_app_env(env_name),
                 # The migration task builds the SAME settings the API does, so
                 # it refuses to start without this for the same reason -- and a
                 # migration that cannot import its settings is a deployment that

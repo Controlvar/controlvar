@@ -1,6 +1,6 @@
 """What differs between environments, decided in one place (#139, #142).
 
-Two rules live here, and every stack asks this module rather than comparing
+Three rules live here, and every stack asks this module rather than comparing
 ``env_name`` itself. Before this file each stack had its own spelling --
 ``RETAIN if env != "dev"`` in four places, ``SNAPSHOT`` everywhere in one,
 ``RETAIN`` unconditionally in six -- so a staging teardown left sixteen billed
@@ -15,6 +15,13 @@ with the named resources its previous incarnation retained.
 **Sizing.** ``prod`` gets the redundant shape (two NAT gateways, a writer and a
 reader); every other environment gets one of each (DECISIONS D7 for the NAT
 gateway, T24 for staging's single Aurora instance).
+
+**The API's settings.** No environment runs the API with development
+settings, which are for a local trial: the API and migration task definitions
+carry ``APP_ENV=prod`` in ``prod`` and ``APP_ENV=staging`` everywhere else,
+``dev`` and ``demo`` included.
+``backend/tests/unit/infrastructure/test_cdk_api_settings.py`` builds the
+application's settings from each environment's synthesized task definitions.
 
 ``infrastructure/tests/test_environments_do_not_collide.py`` asserts the
 consequences on a real synth: the exact DeletionPolicy of every resource that
@@ -93,3 +100,14 @@ def redis_node_count(env_name: str) -> int:
     I-1d; pinned by ``infrastructure/tests/test_redis_sizing.py``).
     """
     return 3 if env_name == "prod" else 1
+
+
+def api_app_env(env_name: str) -> str:
+    """The ``APP_ENV`` of the API and migration task definitions.
+
+    ``prod`` in prod and ``staging`` in every other environment, so ``dev`` and
+    ``demo`` run the API with staging settings. The application reads ``prod``
+    as production and ``staging`` as staging, and both refuse placeholder
+    secrets (``backend/app/core/config.py``).
+    """
+    return "prod" if env_name == "prod" else "staging"

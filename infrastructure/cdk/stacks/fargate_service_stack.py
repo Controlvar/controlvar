@@ -18,7 +18,7 @@ from constructs import Construct
 
 from stacks.dashboard_service import DashboardService
 from stacks.database_access import require_database
-from stacks.environments import data_removal_policy
+from stacks.environments import api_app_env, data_removal_policy
 from stacks.names import (
     API_LIVE_TARGET_GROUP_CONTEXT,
     API_LIVE_TARGET_GROUP_DEFAULT,
@@ -382,7 +382,9 @@ class FargateServiceStack(Stack):
                 log_group=log_group,
             ),
             environment={
-                "APP_ENV": env_name,
+                # `prod` in prod, `staging` everywhere else: no environment runs
+                # the API with development settings (stacks/environments.py).
+                "APP_ENV": api_app_env(env_name),
                 "PUBLIC_BASE_URL": public_base_url,
                 "LOG_LEVEL": "INFO",
                 "PYTHONUNBUFFERED": "1",
