@@ -11,9 +11,18 @@ The platform's AWS infrastructure is defined as code using **AWS CDK v2**, in **
 | Tool | Version | Install |
 |------|---------|---------|
 | AWS Account | Any | [Sign up](https://aws.amazon.com/) |
-| Python | 3.11+ | The CDK app is Python |
-| AWS CDK | v2 | `npm install -g aws-cdk` |
-| Docker | | For the bootstrap images the [deployment guide](../deployment/deployment-guide.md) pushes |
+| Python | 3.11+ | The CDK app is Python; its requirements go in a virtual environment ([Deploy All Stacks](#deploy-all-stacks)) |
+| Node.js | 22+ | The AWS CDK CLI and the app's `jsii` runtime run on it |
+| AWS CDK CLI | 2.1144.0 | `npm install -g aws-cdk@2.1144.0` |
+| AWS CLI | v2 | Every `aws` command below |
+| jq | | The commands below build and read JSON with it |
+| cosign and crane | | To verify the signed release images and copy them to ECR ([deployment guide §1.3](../deployment/deployment-guide.md#13-ecr-repositories-and-the-bootstrap-images)) |
+| Docker | | Only to build the images from source instead ([deployment guide §1.3](../deployment/deployment-guide.md#13-ecr-repositories-and-the-bootstrap-images)) |
+
+A `staging` deployment of the core profile was deployed and torn down on a
+new AWS account on 2026-10-21 by following this page, with AWS CDK CLI
+2.1144.0, AWS CLI 2.28, Node.js 22, jq 1.7.1, cosign 3.1.3 and crane 0.22.1,
+its commands run by macOS's bash 3.2.
 
 ---
 
@@ -37,26 +46,42 @@ You can find your account ID with:
 aws sts get-caller-identity --query Account --output text
 ```
 
+On a new account, measured on 2026-10-21, the bootstrap took 53 seconds.
+
 ---
 
 ## Required Environment Variables
 
-`infrastructure/cdk/app.py` reads these from the environment. `cdk synth`, `cdk diff`, `cdk deploy` and `cdk destroy` fail without the ones marked required, `ALARM_EMAIL` is required for `staging` and `prod`, and the three secret ARNs are required in every environment (below).
+`infrastructure/cdk/app.py` reads these from the environment. `cdk synth`, `cdk diff`, `cdk deploy` and `cdk destroy` fail without the ones marked required, `ALARM_EMAIL` is required for `staging` and `prod`, and the three secret ARNs are required in every environment (below). Keep every one of them exported for every later `cdk` command, `cdk destroy` included: the app reads them each time it is synthesised.
 
 **One region.** The Deploy, Rollback and Database Migration workflows act in
 `us-west-2` (`AWS_REGION` at the top of each), so deploy the stacks, the ECR
 repositories, the secrets and the certificate there too. To use another region,
 change it in all three workflows and use it everywhere below.
 
+Set the region in your shell. The CDK CLI works out the account from your
+credentials and the region from `AWS_REGION`, else your profile's region, else
+`us-east-1`, and gives them to the app as `CDK_DEFAULT_ACCOUNT` and
+`CDK_DEFAULT_REGION` in place of any you export:
+
 ```bash
-export CDK_DEFAULT_ACCOUNT=123456789012
-export CDK_DEFAULT_REGION=us-west-2
+export AWS_REGION=us-west-2
 ```
 
-`ENVIRONMENT` is `dev` (the default), `staging`, `prod` or `demo`:
+`ENVIRONMENT` is `dev` (the default), `staging`, `prod` or `demo`. For an install, set `ENVIRONMENT=staging`, or `prod` for the redundant production shape.
 
 ```bash
-export ENVIRONMENT=prod
+export ENVIRONMENT=staging
+```
+
+Choose the profile, `core` or `full`
+([Which stacks you get](#which-stacks-you-get-core-or-full)). A clone of this
+repository is a full checkout, so unless you choose `core`, `cdk deploy --all`
+deploys the full profile, whose stacks also need the audit key's secret
+(below). For the core profile:
+
+```bash
+export EXPERIMENTLY_PROFILE=core
 ```
 
 Required: the ACM certificate for the load balancer's HTTPS listeners:
@@ -64,6 +89,58 @@ Required: the ACM certificate for the load balancer's HTTPS listeners:
 ```bash
 export CERTIFICATE_ARN=arn:aws:acm:us-west-2:123456789012:certificate/your-certificate-id
 ```
+
+To get one, you need a public Route 53 hosted zone for your domain that the
+internet resolves (for a subdomain, delegated from its parent zone). Request
+the certificate for the host in `PUBLIC_BASE_URL` (below), with DNS
+validation:
+
+```bash
+ZONE_NAME=example.com
+APP_HOST=app.example.com
+CERTIFICATE_ARN=$(aws acm request-certificate --region us-west-2 \
+  --domain-name "$APP_HOST" --validation-method DNS \
+  --query CertificateArn --output text)
+export CERTIFICATE_ARN
+```
+
+Write its validation record into the zone. ACM takes a few seconds to say
+what the record is, so the loop waits for it:
+
+```bash
+ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$ZONE_NAME" \
+  --query "HostedZones[?Name=='$ZONE_NAME.' && Config.PrivateZone==\`false\`].Id" --output text)
+ZONE_ID=${ZONE_ID#/hostedzone/}
+for i in $(seq 1 30); do
+  aws acm describe-certificate --certificate-arn "$CERTIFICATE_ARN" --region us-west-2 \
+    --query 'Certificate.DomainValidationOptions' --output json > cert-validation.json
+  if jq -e 'length > 0 and all(.[]; .ResourceRecord != null)' cert-validation.json > /dev/null; then break; fi
+  sleep 10
+done
+jq '{Changes: [map(.ResourceRecord) | unique_by(.Name)[] | {Action: "UPSERT",
+    ResourceRecordSet: {Name: .Name, Type: "CNAME", TTL: 300, ResourceRecords: [{Value: .Value}]}}]}' \
+  cert-validation.json > cert-validation-change.json
+CHANGE_ID=$(aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" \
+  --change-batch file://cert-validation-change.json --query ChangeInfo.Id --output text)
+aws route53 wait resource-record-sets-changed --id "$CHANGE_ID"
+```
+
+Then wait for ACM to issue it. `aws acm wait certificate-validated` gives up
+after five minutes; this loop waits up to 45 minutes:
+
+```bash
+for i in $(seq 1 90); do
+  CERTIFICATE_STATUS=$(aws acm describe-certificate --certificate-arn "$CERTIFICATE_ARN" \
+    --region us-west-2 --query Certificate.Status --output text)
+  if [ "$CERTIFICATE_STATUS" != PENDING_VALIDATION ]; then break; fi
+  sleep 30
+done
+echo "$CERTIFICATE_STATUS"
+```
+
+It must print `ISSUED`. On a new account, measured on 2026-10-21, the
+certificate was issued about 15 seconds after its validation record was in
+the zone. ACM keeps trying for up to 72 hours before it gives up.
 
 Required: the absolute `https://` origin users reach the platform at (one host, `app.<domain>`):
 
@@ -145,17 +222,52 @@ rest) are not read from your shell. The task definition takes them from Secrets
 Manager when each task starts; see the list in the
 [Deployment README](../deployment/README.md). The API image is pulled from
 the ECR repository `experimentation-platform/backend`, which the CDK does not
-create.
+create. The dashboard's is pulled from `experimentation-platform/web`, which
+it does not create either:
+[deployment guide §1.3](../deployment/deployment-guide.md#13-ecr-repositories-and-the-bootstrap-images)
+creates both repositories and puts their `bootstrap` images in them, copied
+from a signed release or built from source.
 
 ---
 
 ## Deploy All Stacks
 
+Deploy from a checkout of the release whose images you put in the
+repositories, with the CDK app's requirements in a virtual environment:
+
 ```bash
+git clone https://github.com/Controlvar/controlvar.git
+cd controlvar
+git switch --detach vX.Y.Z
 cd infrastructure/cdk
-pip install -r requirements.txt
-cdk deploy --all
+python3 -m venv venv
+. venv/bin/activate
+python3 -m pip install -r requirements.txt
+cdk deploy --all --require-approval never
 ```
+
+- **`--require-approval never`** deploys without asking. Without it the CLI
+  asks before each stack that adds IAM or security-group rules, and without a
+  terminal it stops there instead.
+- **The CLI records your account's availability zones, under your account ID,
+  in `infrastructure/cdk/cdk.context.json`**, a tracked file. Do not commit
+  that change.
+
+On a new account, measured on 2026-10-21, `cdk deploy --all` of the nine
+`staging` stacks of the core profile took 23 min 43 s: the database stack
+7 min 32 s, Redis 5 min 23 s, Fargate 4 min 21 s, the VPC 2 min 27 s, and each
+of the other five under a minute.
+
+With an IAM Identity Center profile (`aws sso login`), the access token lasts
+an hour, and the AWS CLI renews it while your access-portal session lasts:
+measured on 2026-10-21, a command run after the first token had expired
+needed no new sign-in, and the deploy and the teardown each ran on one
+sign-in.
+
+On a new account, measured on 2026-10-21, the Fargate On-Demand vCPU quota
+was 6, which a `staging` deployment fits. The API scales out to ten tasks of
+one vCPU each, so ask for a higher quota in Service Quotas (`L-3032A538`)
+before production load.
 
 ### Point the hostname at the load balancer
 
@@ -165,17 +277,16 @@ add an alias record for it in your Route 53 hosted zone. Until then `curl`
 reports `000`, and the Deploy workflow's smoke test cannot reach the platform.
 Do this once per environment, after the first `cdk deploy` of the Fargate stack.
 
-Add a record for every hostname the platform answers on: the host in
-`PUBLIC_BASE_URL` always, and any other name on the certificate that clients
-use (the commands below also add `api.<domain>`; leave that entry out if you
-do not use it).
+Add the record for the host in `PUBLIC_BASE_URL`: it is the one name the API
+serves. Measured on 2026-10-21, a second name on the same load balancer,
+`api.<domain>`, answered `/api/v1/experiments/` with
+`400 {"detail":"Invalid host header"}`, while its `/health` answered `200`.
 
-Set the hosted zone's name and the two hostnames:
+Set the hosted zone's name and the hostname:
 
 ```{.bash skip reason="aws: reads the hosted zone and the load balancer of a deployed environment"}
 ZONE_NAME=example.com
 APP_HOST=${PUBLIC_BASE_URL#https://}
-API_HOST=api.example.com
 ```
 
 Look up the zone, and the load balancer by its name. The Fargate stack names
@@ -197,15 +308,13 @@ printf 'zone %s\nalb  %s %s\n' "$ZONE_ID" "$ALB_DNS" "$ALB_ZONE"
 The alias records below take `ALB_ZONE` as their `HostedZoneId`, not
 `ZONE_ID`.
 
-Create, or update, an alias A record for each hostname, and wait for Route 53
-to apply the change:
+Create, or update, the alias A record, and wait for Route 53 to apply the
+change:
 
 ```{.bash skip reason="aws: changes records in the hosted zone"}
 cat > alias.json <<EOF
 {"Changes": [
   {"Action": "UPSERT", "ResourceRecordSet": {"Name": "$APP_HOST", "Type": "A",
-    "AliasTarget": {"HostedZoneId": "$ALB_ZONE", "DNSName": "$ALB_DNS", "EvaluateTargetHealth": false}}},
-  {"Action": "UPSERT", "ResourceRecordSet": {"Name": "$API_HOST", "Type": "A",
     "AliasTarget": {"HostedZoneId": "$ALB_ZONE", "DNSName": "$ALB_DNS", "EvaluateTargetHealth": false}}}
 ]}
 EOF
@@ -214,14 +323,13 @@ CHANGE_ID=$(aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" 
 aws route53 wait resource-record-sets-changed --id "$CHANGE_ID"
 ```
 
-Check that each hostname reaches the platform:
+Check that the hostname reaches the platform:
 
 ```{.bash skip reason="aws: needs a deployed environment and its DNS records"}
 curl -s -o /dev/null -w '%{http_code}\n' "https://$APP_HOST/health"
-curl -s -o /dev/null -w '%{http_code}\n' "https://$API_HOST/health"
 ```
 
-Each prints `200`. `000` means the name does not resolve yet, or resolves to
+It prints `200`. `000` means the name does not resolve yet, or resolves to
 something other than this load balancer: check the record and the zone id, and
 allow for DNS caches that still hold an earlier answer.
 
@@ -229,10 +337,8 @@ allow for DNS caches that still hold an earlier answer.
 balancer is replaced (for example after destroying and redeploying the Fargate
 stack), because its DNS name changes with it.
 
-`cdk destroy` does not remove these records: the stacks did not create them.
-When you tear an environment down, delete them (the same change with
-`"Action": "DELETE"`), or they are deleted with the hosted zone if you delete
-the zone itself.
+This record and the certificate's validation record are the two you made in
+the zone. `cdk destroy` does not remove these records: the stacks did not create them. When you tear an environment down, delete them (the same change with `"Action": "DELETE"`). Route 53 refuses to delete a hosted zone that still has them. If you made the hosted zone for this environment and delegated it from a parent zone, delete the zone's NS records in the parent zone first, then the zone.
 
 ### `cdk deploy` does not create the schema
 
@@ -241,15 +347,20 @@ The API tasks never run database migrations: their task definition sets
 migration task, which the **Deploy** workflow runs before it shifts traffic
 (and the **Database Migration** workflow when run by hand). So after the first
 `cdk deploy` of an environment the API runs against an empty database until the
-first Deploy:
+schema is created:
 
 - `/health` answers 200 through the hostname once its alias record exists
   (above), because it checks that the database answers, and the load
   balancer's health checks pass;
-- real requests answer 500, and the API logs errors. This is expected until
-  the first Deploy creates the schema.
+- a sign-in, an SDK evaluation and a tracked event answer 500, and the API
+  logs errors. This is expected until the schema exists;
+- a request without credentials answers 401, as it does once the schema
+  exists, so that answer does not show the schema is there (measured on
+  2026-10-21 with `GET /api/v1/experiments/`).
 
-Run the first Deploy soon after the first `cdk deploy`. Requests that reach the
+Create the schema soon after the first `cdk deploy`: run the first Deploy, or,
+without the Deploy workflow, the migration task by hand
+([below](#creating-the-schema-without-the-deploy-workflow)). Requests that reach the
 API in between, from scanners as much as from people, can put one of the API's
 5xx alarms into ALARM, and Deploy refuses to start while one is. The way
 through is Deploy's existing break-glass
@@ -269,6 +380,49 @@ for why, and for an environment whose Fargate stack was deployed before this
 setting existed. Deploy refuses to deploy an API revision that lacks the
 setting, and says to `cdk deploy` the Fargate stack from a current checkout
 first.
+
+### Creating the schema without the Deploy workflow
+
+From the repository root of the same checkout, register a revision of the
+migration task that names the `bootstrap` image by its digest, then run it
+with the bootstrap command. These are the Deploy workflow's two steps
+([Running Migrations in Production](migrations.md#running-migrations-in-production)),
+with the task's network read from the Fargate stack.
+
+Name the first administrator when you create the schema: add `FIRST_SUPERUSER`, set to your own address, to the bootstrap task's overrides. It is read only while the database has no users; without it the address is `admin@example.com`. After you sign in, add a second administrator, so the install does not depend on one account.
+
+Put your address in place of `<your address>`; the commands copy it into the
+overrides:
+
+```bash
+FIRST_ADMIN_EMAIL='<your address>'
+DIGEST=$(aws ecr describe-images --repository-name experimentation-platform/backend \
+  --image-ids imageTag=bootstrap --query 'imageDetails[0].imageDigest' --output text)
+REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-west-2.amazonaws.com
+ARN=$(bash scripts/register_task_definition.sh "experimentation-migrate-$ENVIRONMENT" \
+  "$REGISTRY/experimentation-platform/backend@$DIGEST")
+SUBNETS=$(aws cloudformation describe-stacks --stack-name "experimentation-fargate-$ENVIRONMENT" \
+  --query "Stacks[0].Outputs[?OutputKey=='TaskSubnets'].OutputValue" --output text)
+SG=$(aws cloudformation describe-stacks --stack-name "experimentation-fargate-$ENVIRONMENT" \
+  --query "Stacks[0].Outputs[?OutputKey=='TaskSecurityGroup'].OutputValue" --output text)
+NETWORK=$(jq -cn --arg subnets "$SUBNETS" --arg sg "$SG" \
+  '{awsvpcConfiguration: {subnets: ($subnets | split(",")), securityGroups: [$sg], assignPublicIp: "DISABLED"}}')
+OVERRIDES=$(jq -cn --arg admin "$FIRST_ADMIN_EMAIL" \
+  '{containerOverrides: [{name: "backend", command: ["python", "-m", "backend.app.db.bootstrap"],
+    environment: [{name: "FIRST_SUPERUSER", value: $admin}]}]}')
+bash scripts/run_migration_task.sh "experimentation-$ENVIRONMENT" "$ARN" "$NETWORK" "$OVERRIDES" \
+  "/ecs/experimentation-migrate-$ENVIRONMENT"
+```
+
+The script prints the task's last 100 log lines, and exits 0 only if the task
+did. Among the lines are
+`created the first administrator <your address> (role ADMIN)` and
+`Database bootstrap complete (created)`.
+
+Then sign in at `PUBLIC_BASE_URL` with that address and the password in the
+`/<env>/experimentation/first-superuser-password` secret. On a new account,
+measured on 2026-10-21, the task took 70 seconds, and its address signed in
+as an `ADMIN` superuser.
 
 ### Which stacks you get: core or full
 
@@ -293,13 +447,15 @@ The first line the app prints says which profile it picked:
 `EXPERIMENTLY_PROFILE` — the same variable the container images and the API
 use — overrides the choice:
 
-```bash
-EXPERIMENTLY_PROFILE=core cdk deploy --all
-EXPERIMENTLY_PROFILE=full cdk deploy --all
-```
-
 - `EXPERIMENTLY_PROFILE=core cdk deploy --all`: core stacks only, from a full checkout
 - `EXPERIMENTLY_PROFILE=full cdk deploy --all`: fail if the module stacks are absent
+
+With the core profile from a full checkout, measured on 2026-10-21, the line
+reads:
+
+```text
+[cdk] profile: core (modules/infrastructure/cdk/stacks present, EXPERIMENTLY_PROFILE=core)
+```
 
 Two things follow from the profile, so a core deployment is consistent rather
 than half-configured:
@@ -496,8 +652,12 @@ Do not deploy a diff with any line that names
 
 ## Destroying an environment
 
-The teardown has not been rehearsed on AWS as of v0.31.1: this section comes
-from the stacks' templates and AWS's documentation.
+Measured on 2026-10-21 on a new account, for a `staging` deployment of the
+core profile at v0.36.1, the nine `cdk destroy` commands of a core deployment
+below took 26 min 23 s, the database stack 10 min 33 s of it, Redis
+5 min 18 s, Fargate 5 min 5 s and the VPC 2 min 58 s, and no stack failed to
+delete, the API's CodeDeploy-controlled service included. What they left, and
+how to remove that, is in the sections below.
 
 Only `prod` keeps its data when its stacks are destroyed. Every other
 environment (`dev`, `staging`, `demo`) is disposable: its database, tables,
@@ -517,7 +677,10 @@ below do not already keep: `pg_dump` the database, export audit logs
 order is: a stack that imports from another, or depends on it, goes first --
 so monitoring and the Glue stack go before analytics, and fargate before
 compute and monitoring. `cdk destroy` synthesises the app like any other
-command, so a `staging` or `prod` teardown needs `ALARM_EMAIL` set too.
+command, so it needs every variable the deploy had: `AWS_REGION`,
+`ENVIRONMENT`, the profile, `CERTIFICATE_ARN`, `PUBLIC_BASE_URL`,
+`ALARM_EMAIL` for `staging` or `prod`, and the secret ARNs. In a script, add
+`--force`, which deletes without asking.
 
 ```bash
 cdk destroy experimentation-migrations-<env>
@@ -534,8 +697,9 @@ cdk destroy experimentation-auth-<env>
 cdk destroy experimentation-vpc-<env>
 ```
 
-The glue, analytics and counters stacks exist only in a full checkout; skip
-their lines in a core one.
+The glue, analytics and counters stacks exist only in a full deployment; skip
+their lines in a core one, a full checkout deployed with the core profile
+included.
 
 The buckets outside `prod` are emptied before they are deleted:
 `auto_delete_objects=True` adds a custom resource backed by a CDK-provided
@@ -561,22 +725,73 @@ is yours to remove.
 | Data-lake, Athena-results and Glue-scripts buckets | RETAIN | prod (full) | storage, every object version | empty (all versions), then `aws s3 rb` |
 | Kinesis stream and OpenSearch domain | RETAIN | prod (full) | per shard-hour; per instance-hour | `aws kinesis delete-stream`; `aws opensearch delete-domain` |
 | `pre-migration-*` and `pre-deploy-*` Aurora cluster snapshots | taken by the deploy and migrate workflows, not by CloudFormation | every environment they ran against | snapshot storage | `aws rds delete-db-cluster-snapshot`. Outside prod the KMS key they are encrypted with is deleted with the stack, so they cannot be restored afterwards |
-| The alias A records for `app.<domain>` (and `api.<domain>`) | created by hand after the first deploy ([Point the hostname at the load balancer](#point-the-hostname-at-the-load-balancer)) | every environment | nothing for the records; the hosted zone is billed per month | the same `change-resource-record-sets` with `"Action": "DELETE"`, or delete the hosted zone |
-| The secrets under `/<env>/experimentation/` | created by hand before the first deploy ([Secrets Management](../deployment/secrets-management.md)) | every environment | per secret per month | `aws secretsmanager delete-secret` |
+| The alias A record for `app.<domain>` and the certificate's validation record | created by hand ([Required Environment Variables](#required-environment-variables), [Point the hostname at the load balancer](#point-the-hostname-at-the-load-balancer)) | every environment | nothing for the records; the hosted zone is billed per month | the same `change-resource-record-sets` with `"Action": "DELETE"` ([below](#removing-what-is-left)); a hosted zone you made for this environment goes after them, its NS records in the parent zone first |
+| The ACM certificate | requested by hand before the first deploy ([Required Environment Variables](#required-environment-variables)) | every environment | nothing | `aws acm delete-certificate --certificate-arn "$CERTIFICATE_ARN" --region us-west-2`, after `cdk destroy`: ACM refuses while a load balancer uses it |
+| The secrets under `/<env>/experimentation/` | created by hand before the first deploy ([Secrets Management](../deployment/secrets-management.md)) | every environment | per secret per month | `aws secretsmanager delete-secret --force-delete-without-recovery`: without the flag a secret waits 30 days, and a new secret of the same name is refused until then |
 | ECR repositories `experimentation-platform/backend` and `experimentation-platform/web`, and their images | created by hand once per account ([Deployment Guide](../deployment/deployment-guide.md)) | shared by all environments | image storage | `aws ecr delete-repository --force`, once no environment needs them |
-| The CDK bootstrap stack `CDKToolkit`: its `cdk-*-assets-<account>-<region>` bucket and `cdk-*-container-assets-*` repository | `cdk bootstrap`, once per account and region | shared by all environments | storage | `aws cloudformation delete-stack --stack-name CDKToolkit`, after emptying the bucket |
+| The CDK bootstrap stack `CDKToolkit`: its `cdk-*-assets-<account>-<region>` bucket and `cdk-*-container-assets-*` repository | `cdk bootstrap`, once per account and region | shared by all environments | storage | last, and only where no other CDK app uses it: empty the bucket, delete the stack, then delete the bucket, which the stack keeps ([below](#removing-what-is-left)) |
 | Log groups AWS services create at run time: `/aws/lambda/<function>` for the functions without a managed log group, `/aws/ecs/containerinsights/<cluster>/performance`, `/aws-glue/*` | the services themselves, not CloudFormation | every environment | log storage | `aws logs delete-log-group` |
+| Task-definition revisions of `experimentation-{backend,dashboard,migrate}-<env>` | CloudFormation deregisters its own and leaves them INACTIVE; one registered by hand or by Deploy stays ACTIVE | every environment | nothing | deregister the ACTIVE ones, then `aws ecs delete-task-definitions` ([below](#removing-what-is-left)) |
+| A system backup of each of `experimentation-{events,feature-flags,overrides}-<env>` | DynamoDB, for a deleted table that had point-in-time recovery on, as these do | dev, staging, demo | nothing | none: DynamoDB deletes it after 35 days |
+| An alarm subscription that was never confirmed | the SNS topic's `ALARM_EMAIL` subscription, left `PendingConfirmation` | every environment with `ALARM_EMAIL` | nothing | none: measured on 2026-10-21, `aws sns list-subscriptions` still listed it after its topic was deleted, with no ARN to unsubscribe |
+| The service-linked roles `AWSServiceRoleForECS`, `AWSServiceRoleForElasticLoadBalancing`, `AWSServiceRoleForRDS`, `AWSServiceRoleForElastiCache` and `AWSServiceRoleForApplicationAutoScaling_ECSService`, and the AWS managed KMS keys `aws/acm`, `aws/lambda`, `aws/s3` and `aws/secretsmanager` | AWS, the first time the account uses each service | the account | nothing | none: they serve the account's later use, and an AWS managed key cannot be deleted |
 
-Two things are deleted but not immediately:
+The KMS key outside prod is scheduled for deletion after the 30-day waiting
+period, and its alias is removed at once, so it does not block a redeploy.
 
-- **The database credentials secret** (`experimentation-database-<env>-aurora-credentials`)
-  may be scheduled for deletion with a recovery window rather than removed. If
-  the next deploy of the same environment fails with "a secret with this name is
-  already scheduled for deletion", remove it with
-  `aws secretsmanager delete-secret --secret-id <name> --force-delete-without-recovery`.
-- **The KMS key outside prod** is scheduled for deletion after the 30-day
-  waiting period, and its alias is removed at once, so it does not block a
-  redeploy.
+The database credentials secret
+(`experimentation-database-<env>-aurora-credentials`) was deleted with its
+stack, not left in a recovery window, measured on 2026-10-21. If the next
+deploy of the same environment fails with "a secret with this name is already
+scheduled for deletion", remove it with
+`aws secretsmanager delete-secret --secret-id <name> --force-delete-without-recovery`.
+
+Aurora's automated backups went with the cluster, measured on 2026-10-21: the
+RDS API deletes them with a cluster unless an AWS Backup policy keeps them.
+
+### Removing what is left
+
+Delete the alias and validation records with the files that made them, from
+the directory you made them in, with `"Action": "DELETE"` in place of
+`"UPSERT"`. The block looks the zone up again from `ZONE_NAME`, set as in
+[Point the hostname at the load balancer](#point-the-hostname-at-the-load-balancer):
+
+```bash
+ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$ZONE_NAME" \
+  --query "HostedZones[?Name=='$ZONE_NAME.' && Config.PrivateZone==\`false\`].Id" --output text)
+ZONE_ID=${ZONE_ID#/hostedzone/}
+sed 's/"UPSERT"/"DELETE"/' alias.json > alias-delete.json
+sed 's/"UPSERT"/"DELETE"/' cert-validation-change.json > cert-validation-delete.json
+for CHANGE in alias-delete.json cert-validation-delete.json; do
+  CHANGE_ID=$(aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" \
+    --change-batch "file://$CHANGE" --query ChangeInfo.Id --output text)
+  aws route53 wait resource-record-sets-changed --id "$CHANGE_ID"
+done
+```
+
+List the task-definition revisions by name, not with `--family-prefix`, which
+takes a whole family name: measured on 2026-10-21,
+`--family-prefix experimentation-` listed none of them. Deregister the ones
+still ACTIVE, then delete the INACTIVE ones, which ECS does in the background:
+
+```bash
+QUERY="taskDefinitionArns[?contains(@, ':task-definition/experimentation-') && contains(@, '-$ENVIRONMENT:')]"
+for TD in $(aws ecs list-task-definitions --status ACTIVE --query "$QUERY" --output text); do
+  aws ecs deregister-task-definition --task-definition "$TD" --query taskDefinition.taskDefinitionArn --output text
+done
+for TD in $(aws ecs list-task-definitions --status INACTIVE --query "$QUERY" --output text); do
+  aws ecs delete-task-definitions --task-definitions "$TD" --query failures --output text
+done
+```
+
+Delete `CDKToolkit` last, after every environment's stacks are gone, and only in
+an account and region that no other CDK app uses: the bootstrap stack and its
+bucket serve every CDK app there, and CloudFormation deletes the stacks through
+the roles it holds. The stack keeps its bucket when it is deleted. Empty the
+bucket of every object version, delete markers included (the S3 console's Empty
+action does this), then delete the `CDKToolkit` stack, then delete the bucket.
+If you are not sure that no other CDK app uses the account and region, leave
+`CDKToolkit` in place: it costs pennies of storage.
 
 ### Moving an environment deployed before the rename
 

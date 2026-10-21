@@ -120,6 +120,10 @@ text = "PUBLIC_BASE_URL=https://app.<domain>."
 by = ["exempt:example"]
 
 [[unit]]
+text = "AWS CDK Deployment, \"Required Environment Variables\" requests one with DNS validation and waits for it to be issued."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "It must print \"ISSUED\"."
 by = ["exempt:instruction"]
 
@@ -132,7 +136,7 @@ text = "Nothing in the CDK creates a DNS record."
 by = ["test:infrastructure/tests/test_dashboard_service.py::test_the_app_creates_no_dns_record"]
 
 [[unit]]
-text = "After the first cdk deploy, add an alias A record for app.<domain> (and api.<domain> if you use it) pointing at the load balancer experimentation-<env>; until then the hostname does not resolve and curl reports 000."
+text = "After the first cdk deploy, add an alias A record for app.<domain> pointing at the load balancer experimentation-<env>; until then the hostname does not resolve and curl reports 000."
 by = ["exempt:instruction"]
 
 [[unit]]
@@ -162,8 +166,40 @@ text = "bootstrap is a tag the Deploy workflow never writes, so the revision Clo
 by = ["test:infrastructure/tests/test_pipeline_owns_the_image.py::test_the_deploy_workflow_never_writes_the_bootstrap_tag"]
 
 [[unit]]
-text = "Build from the repository root with the profile you will deploy:"
+text = "Copy a release's signed images, or build them from source."
 by = ["exempt:instruction"]
+
+[[unit]]
+text = "Copy a release's signed images."
+by = ["exempt:label"]
+
+[[unit]]
+text = "This needs cosign, crane and jq, and no Docker."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "For each image it verifies the signature and the SBOM attestation by digest (Releases, images and verification), checks its version label, copies its linux/amd64 image to the repository as bootstrap, and checks that ECR holds that digest."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Set VERSION to the release, X.Y.Z, and PROFILE to core or full:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints one line for each image."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A check that fails stops it there, and the block then ends with a non-zero exit status."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Measured on 2026-10-21, the two copies of a core release took about a minute, and ECR's digests were the verified linux/amd64 ones."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "Or build them from source, for linux/amd64, the one platform the releases publish, from the repository root with the profile you will deploy:"
+by = ["test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_both_profiles_tagged_with_the_version_and_amd64_only"]
 
 [[unit]]
 text = "Both repositories survive a teardown (they are not in any stack)."
@@ -260,7 +296,7 @@ text = "1.6 The stacks"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Bootstrap once per account and region, then deploy the stacks:"
+text = "Bootstrap once per account and region, then deploy the stacks, from a checkout of the release with the CDK app's requirements installed (AWS CDK Deployment, \"Deploy All Stacks\") and the profile chosen (its \"Required Environment Variables\"):"
 by = ["exempt:instruction"]
 
 [[unit]]
@@ -561,6 +597,10 @@ by = [
     "test:backend/tests/unit/infrastructure/test_deploy_workflows.py::test_the_smoke_test_is_a_real_request_through_the_public_origin",
     "test:backend/tests/integration/api/test_local_auth_path.py",
 ]
+
+[[unit]]
+text = "It shows the load balancer and the API, not the schema: measured on 2026-10-21, it answered the same before the schema existed."
+by = ["exempt:intent"]
 
 [[unit]]
 text = "Deploy tag B."

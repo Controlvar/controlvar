@@ -50,6 +50,8 @@ Three identities, described with their exact permissions in
 
 An ACM certificate in the region the stacks deploy to (`us-west-2`), covering
 `app.<domain>`, with status `ISSUED`, before any `cdk deploy`. `PUBLIC_BASE_URL=https://app.<domain>`.
+[AWS CDK Deployment, "Required Environment Variables"](../self-hosting/cdk.md#required-environment-variables)
+requests one with DNS validation and waits for it to be issued.
 
 ```bash
 aws acm describe-certificate --certificate-arn "$CERTIFICATE_ARN" \
@@ -59,9 +61,9 @@ aws acm describe-certificate --certificate-arn "$CERTIFICATE_ARN" \
 It must print `"ISSUED"`. If it prints anything else, stop here.
 
 Nothing in the CDK creates a DNS record. After the first `cdk deploy`, add an
-alias A record for `app.<domain>` (and `api.<domain>` if you use it) pointing at
-the load balancer `experimentation-<env>`; until then the hostname does not
-resolve and `curl` reports `000`.
+alias A record for `app.<domain>` pointing at the load balancer
+`experimentation-<env>`; until then the hostname does not resolve and `curl`
+reports `000`.
 [AWS CDK Deployment, "Point the hostname at the load balancer"](../self-hosting/cdk.md#point-the-hostname-at-the-load-balancer)
 has the commands and the check.
 
@@ -84,17 +86,63 @@ aws ecr create-repository \
 
 Then push one image to each, tagged `bootstrap`, which the stacks' task
 definitions name until the first deploy. `bootstrap` is a tag the Deploy workflow never writes, so the revision
-CloudFormation registers cannot drift to a later build. Build from the
-repository root with the profile you will deploy:
+CloudFormation registers cannot drift to a later build. Copy a release's
+signed images, or build them from source.
+
+**Copy a release's signed images.** This needs cosign, crane and jq, and no
+Docker. For each image it verifies the signature and the SBOM attestation by
+digest ([Releases, images and verification](../self-hosting/releases.md#verifying-what-you-pulled)),
+checks its version label, copies its `linux/amd64` image to the repository as
+`bootstrap`, and checks that ECR holds that digest. Set `VERSION` to the
+release, `X.Y.Z`, and `PROFILE` to `core` or `full`:
+
+```bash
+VERSION=X.Y.Z
+PROFILE=core
+IDENTITY='^https://github\.com/Controlvar/controlvar/\.github/workflows/release\.yml@refs/(heads/main|tags/v[0-9].*)$'
+ECR_REGISTRY=$(aws sts get-caller-identity --region us-west-2 --query Account --output text).dkr.ecr.us-west-2.amazonaws.com
+copy_release_image() {
+  local src="ghcr.io/controlvar/$1" target="experimentation-platform/$2" index amd64 copied
+  index=$(crane digest "$src:$PROFILE-$VERSION") || return 1
+  cosign verify "$src@$index" --certificate-identity-regexp "$IDENTITY" \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com > "$2.signature.json" || return 1
+  cosign verify-attestation --type spdxjson "$src@$index" --certificate-identity-regexp "$IDENTITY" \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com > "$2.attestation.json" || return 1
+  crane manifest "$src@$index" > "$2.index.json" || return 1
+  amd64=$(jq -r '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64")]
+    | if length == 1 then .[0].digest else error("not exactly one linux/amd64 image") end' "$2.index.json") || return 1
+  crane config "$src@$amd64" > "$2.config.json" || return 1
+  jq -e --arg version "$VERSION" '.config.Labels."org.opencontainers.image.version" == $version' \
+    "$2.config.json" > /dev/null || return 1
+  crane copy "$src@$amd64" "$ECR_REGISTRY/$target:bootstrap" || return 1
+  copied=$(aws ecr describe-images --region us-west-2 --repository-name "$target" --image-ids imageTag=bootstrap \
+    --query 'imageDetails[0].imageDigest' --output text) || return 1
+  [ "$copied" = "$amd64" ] || return 1
+  echo "$target:bootstrap is $amd64, version $VERSION, signed by release.yml"
+}
+aws ecr get-login-password --region us-west-2 | crane auth login "$ECR_REGISTRY" -u AWS --password-stdin
+copy_release_image controlvar backend && copy_release_image controlvar-web web
+COPIED=$?
+crane auth logout "$ECR_REGISTRY"
+[ "$COPIED" = 0 ]
+```
+
+It prints one line for each image. A check that fails stops it there, and the
+block then ends with a non-zero exit status.
+Measured on 2026-10-21, the two copies of a core release took about a minute,
+and ECR's digests were the verified `linux/amd64` ones.
+
+**Or build them from source**, for `linux/amd64`, the one platform the
+releases publish, from the repository root with the profile you will deploy:
 
 ```bash
 ECR_REGISTRY=<account>.dkr.ecr.us-west-2.amazonaws.com
 aws ecr get-login-password --region us-west-2 \
   | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-docker build --target <core|full> -f backend/Dockerfile \
+docker build --platform linux/amd64 --target <core|full> -f backend/Dockerfile \
   -t "$ECR_REGISTRY/experimentation-platform/backend:bootstrap" .
 docker push "$ECR_REGISTRY/experimentation-platform/backend:bootstrap"
-docker build -f frontend/Dockerfile --build-arg EXPERIMENTLY_PROFILE=<core|full> \
+docker build --platform linux/amd64 -f frontend/Dockerfile --build-arg EXPERIMENTLY_PROFILE=<core|full> \
   -t "$ECR_REGISTRY/experimentation-platform/web:bootstrap" .
 docker push "$ECR_REGISTRY/experimentation-platform/web:bootstrap"
 ```
@@ -157,13 +205,17 @@ For each environment, **protection first**, then configuration:
 
 ### 1.6 The stacks
 
-Bootstrap once per account and region, then deploy the stacks:
+Bootstrap once per account and region, then deploy the stacks, from a checkout
+of the release with the CDK app's requirements installed
+([AWS CDK Deployment, "Deploy All Stacks"](../self-hosting/cdk.md#deploy-all-stacks))
+and the profile chosen
+([its "Required Environment Variables"](../self-hosting/cdk.md#required-environment-variables)):
 
 ```bash
 cdk bootstrap aws://<account>/us-west-2
 
 cd infrastructure/cdk
-export ENVIRONMENT=staging CDK_DEFAULT_REGION=us-west-2
+export ENVIRONMENT=staging AWS_REGION=us-west-2
 export CERTIFICATE_ARN=... PUBLIC_BASE_URL=https://app.<domain>
 export ALARM_EMAIL=ops@your-domain.com
 cdk deploy --all --require-approval never
@@ -312,7 +364,9 @@ In **staging**, before prod is ever deployed:
    schema from nothing (`backend.app.db.bootstrap`); until it has, the API
    answers real requests with 500 (section 1.6).
 2. **Smoke through the public origin**: `curl -s https://app.<domain>/api/v1/experiments/`
-   answers `401 {"detail":"Not authenticated"}`.
+   answers `401 {"detail":"Not authenticated"}`. It shows the load balancer
+   and the API, not the schema: measured on 2026-10-21, it answered the same
+   before the schema existed.
 3. **Deploy tag B.**
 4. **Roll back to A** with the line tag B's run summary printed
    ([Rollback Runbook](rollback-runbook.md)).

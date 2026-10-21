@@ -75,7 +75,11 @@ Releases from 0.35.0 on are published as `ghcr.io/controlvar/controlvar` and
 `https://github.com/Controlvar/controlvar/.github/workflows/release.yml`.
 Verify an image with the identity of the repository that built it; the other
 one fails with `no matching signatures`. The commands below verify the newest
-release under the former name.
+release under the former name. For a release from 0.35.0 on, set
+`IMAGE=ghcr.io/controlvar/controlvar:core` and
+`IDENTITY='^https://github\.com/Controlvar/controlvar/\.github/workflows/release\.yml@refs/(heads/main|tags/v[0-9].*)$'`
+instead. The identity is case-sensitive: `controlvar/controlvar` in lower case
+matches no signature.
 
 Set `IMAGE` to the image you run. `:core` is the newest final release; a
 versioned tag such as `:core-0.26.3` is one release, and `full` in place of
@@ -85,6 +89,7 @@ versioned tag such as `:core-0.26.3` is one release, and `full` in place of
 IMAGE=ghcr.io/getexperimently/experimently:core
 IDENTITY='^https://github\.com/getexperimently/experimently/\.github/workflows/release\.yml@refs/(heads/main|tags/v[0-9].*)$'
 NO_LOGIN=$(mktemp -d)
+OUT=$(mktemp -d)
 ```
 
 `IDENTITY` names one workflow, this repository's `release.yml`. It accepts
@@ -95,7 +100,7 @@ other workflow, repository or branch fails.
 
 `NO_LOGIN` is an empty directory. The two `cosign` commands run with
 `DOCKER_CONFIG` pointing at it, so they read no registry login and show that
-none is needed.
+none is needed. `OUT` is another, for what they print.
 
 Check the signature:
 
@@ -103,14 +108,17 @@ Check the signature:
 DOCKER_CONFIG=$NO_LOGIN cosign verify "$IMAGE" \
   --certificate-identity-regexp "$IDENTITY" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  | jq -r '.[].optional.Subject'
+  > "$OUT/signature.json" &&
+  jq -r '.[].optional.Subject' "$OUT/signature.json"
 ```
 <!-- expect: https://github.com/getexperimently/experimently/.github/workflows/release.yml@refs/ -->
 
 It prints the identity in the signing certificate, such as
 `https://github.com/getexperimently/experimently/.github/workflows/release.yml@refs/heads/main`.
 cosign writes the checks it made to stderr. When no signature matches, it
-fails with `no matching signatures`.
+fails with `no matching signatures`. The `&&` runs `jq` only when cosign
+succeeded, so a failed check ends with cosign's exit status; piped into `jq`,
+it would end with `jq`'s.
 
 Check the SBOM attestation the same way. It prints the attestation's predicate
 type, `https://spdx.dev/Document`:
@@ -119,11 +127,12 @@ type, `https://spdx.dev/Document`:
 DOCKER_CONFIG=$NO_LOGIN cosign verify-attestation --type spdxjson "$IMAGE" \
   --certificate-identity-regexp "$IDENTITY" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  | jq -r '.payload | @base64d | fromjson | .predicateType'
+  > "$OUT/attestation.json" &&
+  jq -r '.payload | @base64d | fromjson | .predicateType' "$OUT/attestation.json"
 ```
 <!-- expect: https://spdx.dev/Document -->
 
-Without the `jq`, it prints the whole attestation, SBOM included.
+The file holds the whole attestation, SBOM included.
 
 The image also states its own version and profile in its labels, which
 `docker buildx imagetools inspect` reads from the registry without pulling the
@@ -131,13 +140,17 @@ image:
 
 ```{.bash exec}
 docker buildx imagetools inspect "$IMAGE" --format '{{json .Image.Config.Labels}}' \
-  | jq '{version: ."org.opencontainers.image.version", profile: ."io.experimently.profile"}'
+  > "$OUT/labels.json" &&
+  jq '{version: ."org.opencontainers.image.version", profile: ."io.experimently.profile"}' "$OUT/labels.json"
 ```
 <!-- expect: "version": " -->
 <!-- expect: "profile": "core" -->
 
 It prints the release's version, such as `"version": "0.26.3"`, and
-`"profile": "core"`.
+`"profile": "core"`. Without Docker, `crane config` reads the same labels
+from the image's `linux/amd64` manifest, as the
+[Deployment Guide's copy of the release images](../deployment/deployment-guide.md#13-ecr-repositories-and-the-bootstrap-images)
+does.
 
 A running deployment reports the same two things, which is the quickest check
 that it is running what you think:
