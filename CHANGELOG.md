@@ -10,6 +10,24 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.36.2](https://github.com/Controlvar/controlvar/compare/v0.36.1...v0.36.2) (2026-10-21)
+
+
+### Bug Fixes
+
+* **infra:** every CDK environment runs the API with staging or production settings ([#1308](https://github.com/Controlvar/controlvar/issues/1308)) ([6b69d27](https://github.com/Controlvar/controlvar/commit/6b69d27087f7f6ae35b46faaaf567be53d845d78))
+
+
+### Dependencies
+
+* bump certifi to 2026.10.19 (GHSA-6q48-6c7w-9gw2) ([#1309](https://github.com/Controlvar/controlvar/issues/1309)) ([c47aeb2](https://github.com/Controlvar/controlvar/commit/c47aeb2553788370e783d23d9f1ddba1f483015e))
+
+
+### Documentation
+
+* **compose:** open the dashboard at localhost and point SDKs at it ([#1300](https://github.com/Controlvar/controlvar/issues/1300)) ([b46908c](https://github.com/Controlvar/controlvar/commit/b46908ceff23331ae72989ac108f4f975078ac14))
+* **self-hosting:** the by-hand AWS guide, corrected from an end-to-end run ([#1310](https://github.com/Controlvar/controlvar/issues/1310)) ([a8e420e](https://github.com/Controlvar/controlvar/commit/a8e420e7334135acf6ebaa06eef594053f91ee40))
+
 ## [0.36.1](https://github.com/Controlvar/controlvar/compare/v0.36.0...v0.36.1) (2026-10-18)
 
 
