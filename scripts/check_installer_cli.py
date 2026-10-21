@@ -251,18 +251,27 @@ def compare(case: dict, stub: Stub, home: Path) -> str | None:
         timeout=CLI_TIMEOUT,
         stdin=subprocess.DEVNULL,
     )
+    if case.get("error"):
+        # A service's error: the CLI's stderr must be the fake's, exactly, in one
+        # of the two forms CLIs print (fake_aws.ERROR_STYLES).
+        for style, fake in case["styles"].items():
+            if (done.returncode, done.stderr) == (fake.code, fake.err):
+                case["matched"] = style
+                return None
+        forms = "".join(
+            f"--- fake ({style})\n{fake.err}" for style, fake in case["styles"].items()
+        )
+        return (
+            f"{case['label']}: the CLI exits {done.returncode}; stderr is neither of "
+            f"the fake's forms.\n{forms}--- cli\n{done.stderr}--- requests {stub.seen}"
+        )
     fake = case["fake"]
-    stream = "stderr" if case.get("error") else "stdout"
-    real_text = done.stderr if case.get("error") else done.stdout
-    if (done.returncode, real_text) == (
-        fake.code,
-        fake.err if case.get("error") else fake.out,
-    ):
+    if (done.returncode, done.stdout) == (fake.code, fake.out):
         return None
     return (
         f"{case['label']}: the fake exits {fake.code}, the CLI {done.returncode}; "
-        f"{stream} differs.\n--- fake\n{fake.err if case.get('error') else fake.out}"
-        f"--- cli\n{real_text}--- cli stderr\n{done.stderr}--- requests {stub.seen}"
+        f"stdout differs.\n--- fake\n{fake.out}--- cli\n{done.stdout}"
+        f"--- cli stderr\n{done.stderr}--- requests {stub.seen}"
     )
 
 
@@ -300,8 +309,14 @@ def build_cases(work: Path, shapes_path: Path, doc: dict) -> list[dict]:
     for service, name in DENIALS:
         spec = doc[service]
         argv = [service, name, "--output", "json"]
-        denied.edit(lambda s: s.update(faults=[{"mode": "AccessDenied"}]))
-        fake = denied.aws(*argv)
+        styles = {}
+        for style in fake_aws.ERROR_STYLES:
+            denied.edit(
+                lambda s, style=style: s.update(
+                    faults=[{"mode": "AccessDenied"}], error_style=style
+                )
+            )
+            styles[style] = denied.aws(*argv)
         error = fake_aws._denied(spec, spec["operations"][name], service, denied.state)
         cases.append(
             {
@@ -312,7 +327,7 @@ def build_cases(work: Path, shapes_path: Path, doc: dict) -> list[dict]:
                 "operation": spec["operations"][name],
                 "protocol": protocol_of(spec),
                 "error": (error.code, error.message),
-                "fake": fake,
+                "styles": styles,
             }
         )
     return cases
@@ -353,6 +368,10 @@ def main(args: list[str]) -> int:
     for failure in failures:
         print(f"::error::H6 {failure.splitlines()[0]}")
         print(failure)
+    forms = sorted({case["matched"] for case in cases if "matched" in case})
+    print(
+        f"this CLI prints a service's error in the form: {', '.join(forms) or 'none matched'}"
+    )
     print(
         f"{len(cases) - len(failures)} of {len(cases)} calls print as the CLI prints them"
     )

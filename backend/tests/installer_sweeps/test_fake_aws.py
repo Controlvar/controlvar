@@ -123,8 +123,26 @@ def test_access_denied_is_the_services_own_code(world):
         assert done.code == 254, (service, done)
         assert done.out == ""
         assert done.err.startswith(
-            f"\nAn error occurred ({code}) when calling the {operation} operation: User: "
+            f"\naws: [ERROR]: An error occurred ({code}) when calling the {operation}"
+            " operation: User: "
         ), done.err
+
+
+def test_an_error_prints_in_either_form_clis_print(world):
+    """aws-cli 2.38.1 (the CI runner's) prefixes a service's error with
+    "aws: [ERROR]: "; 2.28.24 (the run's) does not. The fake prints either, so a
+    guard can be tested against both."""
+    world.fault(mode="AccessDenied", service="sts")
+    prefixed = world.aws("sts", "get-caller-identity", "--output", "json")
+    world.edit(lambda s: s.update(error_style="plain"))
+    plain = world.aws("sts", "get-caller-identity", "--output", "json")
+    assert prefixed.err == plain.err.replace(
+        "\nAn error", "\naws: [ERROR]: An error", 1
+    )
+    assert plain.err.startswith(
+        "\nAn error occurred (AccessDenied) when calling the GetCallerIdentity operation: "
+    )
+    assert prefixed.code == plain.code == 254
 
 
 def test_empty_is_exit_0_with_nothing_printed(world):

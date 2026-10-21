@@ -29,10 +29,17 @@ PATH is a shim (``world.py``) that runs ``python -I -B fake_aws.py <state> <shap
   for every shape the beta reads (gate H6).
 * **Faults** (``state["faults"]``, a list, the first that matches applies): each
   names a ``mode`` and optionally the ``service``, ``op`` and ``region`` it
-  matches, the ``call`` number (1-based, over every call) or the ``nth`` matching
-  call. Modes: ``AccessDenied`` (the service's own code, exit 254), ``EMPTY``
-  (exit 0, nothing printed), ``NOQUERY`` (``--query`` ignored: the whole response
-  printed) and ``error`` (its own ``code``, ``message`` and ``exit``).
+  matches, the ``call`` number (1-based, over every call) or ``nth`` (the nth call
+  it matches that no earlier fault took). Modes: ``AccessDenied`` (the service's
+  own code, exit 254), ``EMPTY`` (exit 0, nothing printed), ``NOQUERY``
+  (``--query`` ignored: the whole response printed) and ``error`` (its own
+  ``code``, ``message`` and ``exit``).
+* **Errors** print as the CLI prints a service's error, in one of the two forms
+  CLIs are measured to print: ``aws: [ERROR]: An error occurred (Code) when
+  calling the Op operation: message`` (aws-cli 2.38.1, the default here), or the
+  same without ``aws: [ERROR]: `` (aws-cli 2.28.24, the run's; ``state
+  ["error_style"] = "plain"``). Code that reads an error must read the code in
+  parentheses, never the start of the line.
 * **Logs.** Every call is one JSON line in ``calls.log`` beside the state: its
   number, service, operation, region, arguments, exit status, the fault applied
   and the NAMES of the variables in its environment (never their values). A call
@@ -958,6 +965,23 @@ def respond(
         answer.out = render_json(full if query is None else query.search(full))
 
 
+#: The two forms CLIs print a service's error in (measured: aws-cli 2.38.1 on the
+#: CI runner prints the prefix, 2.28.24 does not).
+ERROR_STYLES = {"prefixed": "aws: [ERROR]: ", "plain": ""}
+
+
+def service_error_text(
+    code: str, operation: str, message: str, style: str | None
+) -> str:
+    """What the CLI writes to stderr for a service's error, in ``style``
+    (``prefixed`` when unset)."""
+    prefix = ERROR_STYLES[style or "prefixed"]
+    return (
+        f"\n{prefix}An error occurred ({code}) when calling the "
+        f"{operation} operation: {message}\n"
+    )
+
+
 @contextlib.contextmanager
 def _locked(state_path: Path):
     with open(f"{state_path}.lock", "w") as lock:
@@ -980,9 +1004,8 @@ def main(state_path: Path, shapes_path: Path, argv: list[str], env: dict) -> int
         try:
             respond(state, json.loads(shapes_path.read_text()), argv, env, answer)
         except ServiceError as error:
-            answer.err = (
-                f"\nAn error occurred ({error.code}) when calling the "
-                f"{answer.operation} operation: {error.message}\n"
+            answer.err = service_error_text(
+                error.code, answer.operation, error.message, state.get("error_style")
             )
             answer.status = error.status
             answer.fault = answer.fault or "error"
