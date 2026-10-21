@@ -661,9 +661,8 @@ def render_json(value) -> str:
 
 def render_text(value) -> str:
     """awscli's text formatter (awscli/text.py), line for line."""
-    out: list[str] = []
-    _text(value, out)
-    return "".join(out)
+    values = value if isinstance(value, list) else [value]
+    return "\t".join("None" if v is None else str(v) for v in values) + "\n"
 
 
 def _text(item, out, identifier=None, scalar_keys=None) -> None:

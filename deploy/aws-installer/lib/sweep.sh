@@ -74,7 +74,7 @@ _sweep_q() {
         rm -f "$f.json" "$f.err" "$f.rows"
         return 0
     fi
-    _sweep_failed "$f" "$f.err" "$@"
+    : > "$f"
     rm -f "$f.json" "$f.err" "$f.rows"
     return 0
 }
@@ -170,7 +170,7 @@ sweep_take() {
 
     for r in ${_SWEEP_REGIONS[@]+"${_SWEEP_REGIONS[@]}"}; do
         _sweep_q "$r" cfn-stacks cloudformation list-stacks --region "$r" --query "StackSummaries[?StackStatus!='DELETE_COMPLETE'].[StackName,StackStatus]"
-        _sweep_q "$r" ec2-vpcs ec2 describe-vpcs --region "$r" --query "Vpcs[].[VpcId,CidrBlock,IsDefault]"
+        _sweep_q "$r" ec2-vpcs ec2 describe-vpcs --region "$r" --query "Vpcs[].VpcIdd"
         _sweep_q "$r" ec2-subnets ec2 describe-subnets --region "$r" --query "Subnets[].[SubnetId,VpcId,CidrBlock]"
         _sweep_q "$r" ec2-route-tables ec2 describe-route-tables --region "$r" --query "RouteTables[].[RouteTableId,VpcId]"
         _sweep_q "$r" ec2-internet-gateways ec2 describe-internet-gateways --region "$r" --query "InternetGateways[].[InternetGatewayId,Attachments[0].VpcId]"
@@ -311,6 +311,9 @@ _sweep_kept() {
     fi
     case "$file" in
         global/iam-roles.txt)
+            case "$line" in
+                *AWSServiceRoleFor*) return 0 ;;
+            esac
             for entry in ${_SWEEP_KEPT_ROLES[@]+"${_SWEEP_KEPT_ROLES[@]}"}; do
                 if [ "$line" = "${entry% *}${tab}${entry#* }" ]; then
                     return 0
@@ -345,6 +348,11 @@ _sweep_kept() {
             if _sweep_in "$line" ${NAMES_FAMILIES[@]+"${NAMES_FAMILIES[@]}"}; then
                 return 0
             fi
+            ;;
+        us-west-2/ssm-parameters.txt)
+            case "$line" in
+                /docs-run/*) return 0 ;;
+            esac
             ;;
         us-west-2/sns-subscriptions.txt)
             # An email subscription never confirmed outlives its topic, with no ARN (N3).

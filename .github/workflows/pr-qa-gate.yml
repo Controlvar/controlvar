@@ -123,7 +123,7 @@ jobs:
           POSTGRES_DB: experimentation
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-        run: python -m pytest backend/tests/unit/ backend/tests/realistic/ backend/tests/installer_sweeps/ -p no:cov -q --tb=short -x --junitxml=unit-junit.xml
+        run: python -m pytest backend/tests/unit/ backend/tests/realistic/ backend/tests/installer_sweeps/ -p no:cov -q --tb=short --junitxml=unit-junit.xml
 
       # The workflow tests skip when the file they read is absent, so a
       # renamed workflow used to turn 19 of them into green skips (QA 4d).
