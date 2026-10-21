@@ -123,7 +123,7 @@ jobs:
           POSTGRES_DB: experimentation
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-        run: python -m pytest backend/tests/unit/ backend/tests/realistic/ -p no:cov -q --tb=short -x --junitxml=unit-junit.xml
+        run: python -m pytest backend/tests/unit/ backend/tests/realistic/ backend/tests/installer_sweeps/ -p no:cov -q --tb=short -x --junitxml=unit-junit.xml
 
       # The workflow tests skip when the file they read is absent, so a
       # renamed workflow used to turn 19 of them into green skips (QA 4d).
@@ -136,10 +136,13 @@ jobs:
       # one of them would read as a pass. So must the docs tests
       # (backend/tests/unit/docs, #1142): the page gate and the information
       # floor are among them, and core-build's docs step checks the same
-      # directory on a docs-only change. On this full checkout nothing under
-      # any of the five directories skips.
-      - name: No workflow, statistical-gate, realistic-scenario, showcase or docs test was skipped
-        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic backend/tests/unit/showcase backend/tests/unit/docs
+      # directory on a docs-only change. So must the AWS installer beta's
+      # harness and sweep tests (backend/tests/installer_sweeps): they need
+      # only bash and jq, and they live outside backend/tests/unit so that
+      # core-build, which runs that directory, does not take their minutes.
+      # On this full checkout nothing under any of the six directories skips.
+      - name: No workflow, statistical-gate, realistic-scenario, showcase, docs or installer test was skipped
+        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic backend/tests/unit/showcase backend/tests/unit/docs backend/tests/installer_sweeps
 
       # The Lambda functions (event processor, flag evaluation) and their
       # shared package carry tests of their own (240 collected) that ran
