@@ -1,0 +1,940 @@
+# What verifies each unit of docs/self-hosting/aws-install.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+# The units marked untested:T say what the installer does. Each moves to the
+# installer's test that holds it, and comes off the ledger, in the pull request
+# that finishes this page.
+document = "docs/self-hosting/aws-install.md"
+
+[[unit]]
+text = "Install on AWS with one command (beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "deploy/aws-installer/controlvar-aws is a script with two commands."
+by = ["untested:T"]
+
+[[unit]]
+text = "install runs the steps of AWS CDK Deployment for you, in your own AWS account, and creates the first administrator."
+by = ["untested:T"]
+
+[[unit]]
+text = "uninstall removes what install made and shows what AWS keeps."
+by = ["untested:T"]
+
+[[unit]]
+text = "Beta: one real run so far, and it bills your AWS account"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The installer runs this site's AWS CDK steps for you, and removes what it made."
+by = ["untested:T"]
+
+[[unit]]
+text = "As of v0.37.0 it has been run end to end once, on a new account, and its options and messages may still change."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "From the moment you confirm, it creates resources that AWS bills for, until you uninstall."
+by = ["untested:T"]
+
+[[unit]]
+text = "With everything up they cost about $10 a day, at us-west-2 list prices on 2026-10-17."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "It is not for production data."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "There are no upgrades."
+by = ["untested:T"]
+
+[[unit]]
+text = "To move to a new release, uninstall and install again."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The installer is in releases from v0.37.0 on."
+by = ["untested:T"]
+
+[[unit]]
+text = "It installs the core profile in us-west-2, in the shape staging has in What Gets Deployed, and the platform answers at a name you choose in your own Route 53 zone."
+by = ["untested:T"]
+
+[[unit]]
+text = "It does not install the demo apps."
+by = ["untested:T"]
+count = 2
+
+[[unit]]
+text = "To try the platform with demo data, use the Quick Start."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "What you need"
+by = ["exempt:label"]
+
+[[unit]]
+text = "You need | How to check it"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An AWS account that you administer. A new, empty one is best | Its ID is in the AWS console, and aws sts get-caller-identity prints it once you are signed in"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "An IAM Identity Center profile in your AWS CLI, with AdministratorAccess | aws configure sso makes one, and this page calls it controlvar-install. aws sso login --profile controlvar-install signs in"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A public Route 53 hosted zone in that account, delegated so that the internet resolves it | dig +short NS example.com @1.1.1.1 prints the zone's four name servers"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "An email address that receives mail | Send it a message"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If you have no IAM Identity Center profile yet, AWS's guides to setting it up and to signing in with it from the AWS CLI come first."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Run the installer from a Mac or a Linux computer, in a terminal."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Install these tools on it: AWS CLI 2.28.24 or later, Node.js 22 or later with npm, Python 3.11 or later, jq 1.7.1 or later, cosign 3.1.3 or later, crane 0.22.1 or later, git, dig, curl and openssl."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Let your network reach AWS, ghcr.io, Sigstore, npm, PyPI and 1.1.1.1."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "What the installer checks"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Before it creates anything, the installer makes these checks."
+by = ["untested:T"]
+
+[[unit]]
+text = "If one fails it says why, creates nothing and exits with code 2."
+by = ["untested:T"]
+
+[[unit]]
+text = "Every tool above is installed, and none is older than the version given."
+by = ["untested:T"]
+
+[[unit]]
+text = "The profile signs in through IAM Identity Center and no other way."
+by = ["untested:T"]
+
+[[unit]]
+text = "A profile with access keys, a credential_process, a role to assume or a source profile is refused, and the installer reads no access keys from your shell."
+by = ["untested:T"]
+
+[[unit]]
+text = "The sign-in was renewed in the last 15 minutes, and it belongs to the account you typed with --account."
+by = ["untested:T"]
+
+[[unit]]
+text = "The account holds no stack whose name starts with experimentation-, in any region the account has enabled."
+by = ["untested:T"]
+
+[[unit]]
+text = "If the account denies the installer the look in a region other than us-west-2, that region is shown as not checked."
+by = ["untested:T"]
+
+[[unit]]
+text = "None of the names the install uses for its two repositories and two secrets is taken already, a secret waiting for deletion included."
+by = ["untested:T"]
+
+[[unit]]
+text = "The installer can read your account in us-west-2, us-east-1 and the global services."
+by = ["untested:T"]
+
+[[unit]]
+text = "An account that answers AccessDenied to one of those reads is refused, because uninstall could not then show what the install left."
+by = ["untested:T"]
+
+[[unit]]
+text = "Your sign-in is allowed to do what the install does."
+by = ["untested:T"]
+
+[[unit]]
+text = "The installer asks IAM to simulate those actions, and refuses if one is denied."
+by = ["untested:T"]
+
+[[unit]]
+text = "The Fargate vCPU quota is at least 3."
+by = ["untested:T"]
+
+[[unit]]
+text = "Below 11 the installer warns that the API cannot scale out fully."
+by = ["untested:T"]
+
+[[unit]]
+text = "The name you pass with --domain is one name directly below exactly one public Route 53 zone of the account, such as app.example.com in the zone example.com."
+by = ["untested:T"]
+
+[[unit]]
+text = "The zone's four name servers answer from 1.1.1.1, and nothing exists at the name."
+by = ["untested:T"]
+
+[[unit]]
+text = "The top of the zone, a name with two parts or more, a private zone and a name at or under example.com, example.net or example.org are refused."
+by = ["untested:T"]
+
+[[unit]]
+text = "--alarm-email and --admin-email are not at example.com, example.net or example.org, and the first administrator's address is one the platform's sign-in accepts."
+by = ["untested:T"]
+
+[[unit]]
+text = "~/.cdk.json is absent or holds only {}, because the CDK reads every setting in it as a default."
+by = ["untested:T"]
+
+[[unit]]
+text = "Move it aside while the installer runs."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "This computer holds no record of a started install in this account and region."
+by = ["untested:T"]
+
+[[unit]]
+text = "The folder is the unchanged tag of a release, because the installer installs that release's published images."
+by = ["untested:T"]
+
+[[unit]]
+text = "If you do not have a zone yet"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The installer writes only into a public Route 53 hosted zone in the account you install into, and only at a name below the top of the zone."
+by = ["untested:T"]
+
+[[unit]]
+text = "If you have none, make a zone for the install and delegate it from the domain you own."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "AWS lists a hosted zone at $0.50 a month, and does not charge for one that is deleted within 12 hours of its creation."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "AWS records the certificate's name in public Certificate Transparency logs, so choose a name you are happy to have public, and uninstall does not remove it from them."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "In the account you install into, make the zone."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The block stops if a zone of that name already exists, and writes the zone's four name servers to zone-ns.txt:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Then delegate the zone from the domain you own."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If that domain is in a Route 53 hosted zone, in this account or another, sign in to the account that holds it, set AWS_PROFILE to a profile for that account and PARENT_ZONE_ID to the zone's ID, and add one NS record with the four name servers."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The change batch uses CREATE, so it cannot replace a record that exists, and the block stops unless the batch holds one change with four servers:"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "If the domain is with another DNS provider, add an NS record for install.example.com there, with the same four name servers."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Do not ask a public resolver for the name before the change is in place: it may keep the answer \"not found\" for up to 15 minutes."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Then check that the internet sees the delegation:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints the same four name servers."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Use a name directly below the zone, such as app.install.example.com, as --domain."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "What it creates and costs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "In your account, in us-west-2, install creates:"
+by = ["untested:T"]
+
+[[unit]]
+text = "the CDK's setup stack, CDKToolkit, if the account has none;"
+by = ["untested:T"]
+
+[[unit]]
+text = "two image repositories, with the signed release images copied into them after the installer verifies their signatures with cosign;"
+by = ["untested:T"]
+
+[[unit]]
+text = "two secrets, the API's JWT secret and the first administrator's password;"
+by = ["untested:T"]
+
+[[unit]]
+text = "one certificate for your name, validated by a DNS record in your zone;"
+by = ["untested:T"]
+
+[[unit]]
+text = "the nine staging stacks of the core profile (What Gets Deployed): a network with one NAT gateway, Aurora PostgreSQL, Redis, the API and the dashboard behind a load balancer, and alarms that email you;"
+by = ["untested:T"]
+
+[[unit]]
+text = "two records in your zone, one for the certificate's validation and one that points your name at the load balancer;"
+by = ["untested:T"]
+
+[[unit]]
+text = "the ECS service-linked role, if the account has none;"
+by = ["untested:T"]
+
+[[unit]]
+text = "the first administrator, whose password the installer makes;"
+by = ["untested:T"]
+
+[[unit]]
+text = "a test flag in the new install, made by the installer's last check, which also makes an API key and revokes it."
+by = ["untested:T"]
+
+[[unit]]
+text = "The installer sets no budget alert."
+by = ["untested:T"]
+
+[[unit]]
+text = "Set one in AWS Budgets if you want a warning before the bill does."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Names you will see"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The names say staging because the installer builds staging's shape, whatever you call your install."
+by = ["untested:T"]
+
+[[unit]]
+text = "In the AWS console you will find the stacks experimentation-<stack>-staging, the secrets under /staging/experimentation/, the image repositories experimentation-platform/backend and experimentation-platform/web, the ECS cluster and load balancer experimentation-staging, and the alarm topic experimentation-alerts-staging."
+by = ["untested:T"]
+
+[[unit]]
+text = "Cost"
+by = ["exempt:label"]
+
+[[unit]]
+text = "With everything up, the resources cost about $0.42 an hour, or about $10 a day, at us-west-2 list prices on 2026-10-17."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "Aurora, Redis, the NAT gateway, the endpoints, the load balancer and the Fargate tasks bill by the hour whether or not anyone uses the platform."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "These are list prices, not your bill."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Install"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Get the release you will install."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The installer runs only from a release's tag, unchanged:"
+by = ["untested:T"]
+
+[[unit]]
+text = "Sign in just before you install."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The installer refuses a sign-in that was not renewed in the last 15 minutes, and says so before it changes anything:"
+by = ["untested:T"]
+
+[[unit]]
+text = "The command"
+by = ["exempt:label"]
+
+[[unit]]
+text = "--help says that the installer is a beta."
+by = ["docex:docs/self-hosting/aws-install.md#beta"]
+
+[[unit]]
+text = "It lists these options and no others:"
+by = ["untested:T"]
+
+[[unit]]
+text = "Option | Used with | What it takes"
+by = ["exempt:label"]
+
+[[unit]]
+text = "--account ID | install, uninstall | Required. The 12-digit ID of the account you mean, typed by you. The installer refuses the run if your sign-in is for another account"
+by = ["untested:T"]
+
+[[unit]]
+text = "--domain HOST | install | Required. The name the platform will answer at, directly below a public Route 53 zone of the account, not the top of the zone"
+by = ["untested:T"]
+
+[[unit]]
+text = "--alarm-email ADDRESS | install | Required. The address AWS emails when an alarm fires"
+by = ["untested:T"]
+
+[[unit]]
+text = "--admin-email ADDRESS | install | The first administrator's sign-in. It is the alarm address when you do not pass it"
+by = ["untested:T"]
+
+[[unit]]
+text = "--aws-profile NAME | install, uninstall | An IAM Identity Center profile with AdministratorAccess. It is AWS_PROFILE when you do not pass it"
+by = ["untested:T"]
+
+[[unit]]
+text = "--plan-only | install, uninstall | Run the checks, print the plan and stop. It creates and deletes nothing in your AWS account, and exits 0 if every check passes"
+by = ["untested:T"]
+
+[[unit]]
+text = "--yes | install, uninstall | Confirm without typing the account ID. The plan still prints"
+by = ["untested:T"]
+
+[[unit]]
+text = "Any other option is refused with exit code 2 before the installer changes anything."
+by = ["untested:T"]
+
+[[unit]]
+text = "There is no --region, --profile or --size: the beta installs the core profile, in staging's shape, in us-west-2 only."
+by = ["untested:T"]
+
+[[unit]]
+text = "Type the account ID yourself."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Do not fill --account from your sign-in, with aws sts get-caller-identity or any other command: the installer compares the two, and a command that fills one from the other checks nothing."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Check first, then install"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Run the installer with --plan-only first."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It makes every check, prints what the install would create and what it would cost, and stops."
+by = ["untested:T"]
+
+[[unit]]
+text = "Replace the example values with yours."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The installer refuses the account, the name and the address as they are written here."
+by = ["untested:T"]
+
+[[unit]]
+text = "Then run the same command without --plan-only."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints the plan again and asks you to type the account ID."
+by = ["untested:T"]
+
+[[unit]]
+text = "The prompt never times out."
+by = ["untested:T"]
+
+[[unit]]
+text = "Without a terminal, pass --yes to confirm without typing."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The plan looks like this."
+by = ["exempt:label"]
+
+[[unit]]
+text = "The values are examples:"
+by = ["exempt:example"]
+
+[[unit]]
+text = "The installer then prints one line for each of its nine steps, with the time the step took, and a line a minute while AWS creates the stacks."
+by = ["untested:T"]
+
+[[unit]]
+text = "What has been tested has the times of the one real run, for install and for uninstall."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The installer prints plain lines: no colour, no redrawing and no spinner."
+by = ["untested:T"]
+
+[[unit]]
+text = "Errors go to standard error, and everything else to standard output."
+by = ["untested:T"]
+
+[[unit]]
+text = "Keep your computer awake and online until it finishes."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If you press Ctrl-C, AWS carries on creating the stacks that it started, and the installer stops with exit code 130."
+by = ["untested:T"]
+
+[[unit]]
+text = "Run uninstall next."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Where it keeps its record"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The installer keeps a record of the install in ~/.controlvar-aws/123456789012-us-west-2/, with the account ID and us-west-2 in the folder's name."
+by = ["untested:T"]
+
+[[unit]]
+text = "It holds what the installer made, the CDK copied from the release's tag, and a log of each run."
+by = ["untested:T"]
+
+[[unit]]
+text = "The log holds your account ID and email address, so remove them before you share it, and it holds no password, token or key."
+by = ["untested:T"]
+
+[[unit]]
+text = "Uninstall needs this record and this release's files."
+by = ["untested:T"]
+
+[[unit]]
+text = "Keep the folder, and the clone, until you uninstall."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The record belongs to one computer: run uninstall on the computer that ran install."
+by = ["untested:T"]
+
+[[unit]]
+text = "After the install"
+by = ["exempt:label"]
+
+[[unit]]
+text = "When the install is done, the installer prints the address, the sign-in and the password of the first administrator:"
+by = ["untested:T"]
+
+[[unit]]
+text = "The installer makes the password and shows it once, on your terminal."
+by = ["untested:T"]
+
+[[unit]]
+text = "It never writes the password to the log."
+by = ["untested:T"]
+
+[[unit]]
+text = "Without a terminal, the installer prints the aws secretsmanager get-secret-value command that reads it instead."
+by = ["untested:T"]
+
+[[unit]]
+text = "Open the address and sign in with that email and password."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Change the password: More > Change password."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The copy in Secrets Manager is the first password, and it does not follow the change, so do not rely on it afterwards."
+by = ["untested:T"]
+
+[[unit]]
+text = "Add a second administrator, so the install does not depend on one account."
+by = [
+    "test:backend/tests/integration/api/test_users_api.py::TestCreateUserHashesPassword::test_created_user_can_log_in_with_the_password_sent",
+    "test:backend/tests/unit/api/test_users.py::test_create_user_with_role",
+    "test:backend/tests/unit/api/test_users.py::test_update_user_superuser",
+]
+
+[[unit]]
+text = "Open Admin > Users > Invite User, and choose the role Admin (superuser)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Confirm the alarm email, below."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "If the address does not open at once, wait up to 15 minutes."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Your computer may hold an earlier answer that the name does not exist."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Confirm the alarm email"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The alarms do nothing until you confirm the subscription."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "SNS emails a confirmation link to your alarm address."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Until it is confirmed, the alarms fire and nobody is told, and the link does not last for ever, so confirm it the same day."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "The installer says this in its summary too."
+by = ["untested:T"]
+
+[[unit]]
+text = "Do not just click the link: a subscription confirmed that way can be cancelled by the unsubscribe link in any alarm email, by anyone the email reaches."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Instead, copy the Token= value out of the link and confirm it with --authenticate-on-unsubscribe true, after which unsubscribing takes an authenticated AWS call:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The last command must show the email subscription with a real ARN, not PendingConfirmation."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Uninstall"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Uninstall deletes the install and everything in it, its data included."
+by = ["untested:T"]
+
+[[unit]]
+text = "It keeps no backup."
+by = ["untested:T"]
+
+[[unit]]
+text = "It deletes only what install made: your zone, its other records and everything else in the account are left alone."
+by = ["untested:T"]
+
+[[unit]]
+text = "Sign in again, then run it from the computer that ran install, in the clone you installed from:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "--plan-only works here too: it makes the checks, prints the plan and deletes nothing."
+by = ["untested:T"]
+
+[[unit]]
+text = "The plan says \"Deletes the install in account 123456789012, us-west-2, at https://app.example.com\", then lists what it deletes, with its data and with no backup kept."
+by = ["untested:T"]
+
+[[unit]]
+text = "It lists what it keeps, such as the zone and, when it was there before the install, the CDK's setup stack."
+by = ["untested:T"]
+
+[[unit]]
+text = "It says how long the deletion takes, and asks you to type the account ID."
+by = ["untested:T"]
+
+[[unit]]
+text = "Uninstall then runs six steps:"
+by = ["untested:T"]
+
+[[unit]]
+text = "It deletes the record that points your name at the load balancer."
+by = ["untested:T"]
+
+[[unit]]
+text = "It deletes the nine stacks."
+by = ["untested:T"]
+
+[[unit]]
+text = "Billing falls to zero as the stacks go."
+by = ["untested:T"]
+
+[[unit]]
+text = "It deletes the certificate and its validation record."
+by = ["untested:T"]
+
+[[unit]]
+text = "It deletes the secrets, the image repositories, the log groups and the task definitions that the install made."
+by = ["untested:T"]
+
+[[unit]]
+text = "It deletes the CDK's setup stack and its bucket, when the install made them."
+by = ["untested:T"]
+
+[[unit]]
+text = "It compares your account with the record made before the install."
+by = ["untested:T"]
+
+[[unit]]
+text = "At the end it prints what the account holds now that it did not hold before."
+by = ["untested:T"]
+
+[[unit]]
+text = "These are the things AWS keeps, and nothing else, when the report says Not explained: none; the counts and dates here are examples:"
+by = ["untested:T"]
+
+[[unit]]
+text = "What cdk destroy leaves behind and bills says what each of these is."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "If the report names anything under Not explained, the installer has left it alone, because someone else may have made it."
+by = ["untested:T"]
+
+[[unit]]
+text = "Look at it before you delete it."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Remove the zone"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The installer never deletes your zone."
+by = ["untested:T"]
+
+[[unit]]
+text = "If you made a zone only for this install, delete it after uninstall: first the delegation record in the domain you own, then the zone."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Route 53 refuses to delete a zone that still holds records other than its own NS and SOA records."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "First, in the account you installed into, read the zone's four name servers:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If the domain you own is in a Route 53 hosted zone, sign in to the account that holds it, and set AWS_PROFILE to a profile for that account."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The next block reads the delegation record back, compares its four name servers with the ones above, and deletes the record only when they are the same, so it cannot delete a record that someone else changed:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "With another DNS provider, delete the NS record for install.example.com there."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Then, in the account you installed into, delete the zone:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If uninstall stops at the network"
+by = ["exempt:label"]
+
+[[unit]]
+text = "If the installer finds a stack in DELETE_FAILED, it stops, names the stack and says what to do."
+by = ["untested:T"]
+
+[[unit]]
+text = "The network can fail to delete when GuardDuty, with runtime monitoring for Fargate turned on in your account, has put its own interface endpoint and a managed group, whose name starts with GuardDutyManaged, in the network."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "The installer did not make them, so it does not delete them."
+by = ["untested:T"]
+
+[[unit]]
+text = "The message names the endpoint and the group by ID and prints the commands that list and delete them."
+by = ["untested:T"]
+
+[[unit]]
+text = "Check that they are the only two things it names, delete those two yourself, and run uninstall again."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It continues with the network."
+by = ["untested:T"]
+
+[[unit]]
+text = "Anything else in the list is not GuardDuty's: do not delete it, and look at what it is first."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "If something goes wrong"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The installer's exit code tells you whether anything was made:"
+by = ["untested:T"]
+
+[[unit]]
+text = "Code | Means | What to do"
+by = ["exempt:label"]
+
+[[unit]]
+text = "0 | Done. After uninstall, the account holds only what AWS keeps | Nothing"
+by = ["untested:T"]
+
+[[unit]]
+text = "1 | Failed after something was made. The message lists what exists and what it bills | Run uninstall, then install again. If uninstall fails, its message ends \"run uninstall again; it continues\""
+by = ["untested:T"]
+
+[[unit]]
+text = "2 | Refused, and nothing was changed. A declined confirmation is 2 as well | Read the message, fix the cause and run the command again. It is safe to repeat"
+by = ["untested:T"]
+
+[[unit]]
+text = "130 | You pressed Ctrl-C, or the installer was stopped. AWS carries on with the stacks it started | Run uninstall"
+by = ["untested:T"]
+
+[[unit]]
+text = "The installer uses no other exit code."
+by = ["untested:T"]
+
+[[unit]]
+text = "Every message has three parts: what happened, what exists in your account and what it bills, and the next step."
+by = ["untested:T"]
+
+[[unit]]
+text = "The first word names the code: REFUSED for 2, FAILED for 1 and STOPPED for 130."
+by = ["untested:T"]
+
+[[unit]]
+text = "Install never continues."
+by = ["untested:T"]
+
+[[unit]]
+text = "If an install stops after it made something, it does not pick up where it stopped."
+by = ["untested:T"]
+
+[[unit]]
+text = "Run uninstall, then install again."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "An install on a computer that holds the record of a started install refuses with exit code 2, reads your account and changes nothing, until you have run uninstall."
+by = ["untested:T"]
+
+[[unit]]
+text = "Uninstall continues."
+by = ["untested:T"]
+
+[[unit]]
+text = "Uninstall can be run again from any half-built state."
+by = ["untested:T"]
+
+[[unit]]
+text = "It deletes what is left of the install and nothing else."
+by = ["untested:T"]
+
+[[unit]]
+text = "A sign-in that stops working."
+by = ["exempt:label"]
+
+[[unit]]
+text = "The installer checks your sign-in again before it creates the nine stacks and before it deletes them."
+by = ["untested:T"]
+
+[[unit]]
+text = "If it has stopped working, the installer stops with exit code 1 and says so."
+by = ["untested:T"]
+
+[[unit]]
+text = "Sign in again, then run uninstall after an install, or run uninstall again after an uninstall."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A lost record."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Uninstall needs the record folder."
+by = ["untested:T"]
+
+[[unit]]
+text = "On a computer without it, uninstall refuses and deletes nothing, and points you at the computer that made the install or at Destroying an environment to remove the stacks by hand."
+by = ["untested:T"]
+
+[[unit]]
+text = "Removing what is left covers the rest."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "What the beta does not do"
+by = ["exempt:label"]
+
+[[unit]]
+text = "It installs in us-west-2 only, and only the core profile."
+by = ["untested:T"]
+
+[[unit]]
+text = "It needs a public Route 53 zone in the same account."
+by = ["untested:T"]
+
+[[unit]]
+text = "It does not handle a zone in another account, other DNS providers, or the top of a zone."
+by = ["untested:T"]
+
+[[unit]]
+text = "It does not continue an install that failed, and it does not upgrade one."
+by = ["untested:T"]
+
+[[unit]]
+text = "Use the Quick Start for those."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "It does not estimate the cost before you start, beyond the figures in the plan, and it sets no budget alert."
+by = ["untested:T"]
+
+[[unit]]
+text = "What has been tested"
+by = ["exempt:label"]
+
+[[unit]]
+text = "CI runs every step and every refusal of the installer against a fake AWS CLI, on Linux and on macOS."
+by = ["untested:T"]
+
+[[unit]]
+text = "The same CI run checks that the fake prints what the real AWS CLI prints."
+by = ["test:backend/tests/unit/infrastructure/test_installer_cli_check.py::test_the_check_runs_in_the_cdk_job_with_no_credential"]
+
+[[unit]]
+text = "The one real run:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "As of v0.37.0, the installer has run end to end once: on <RUN: date>, on a new AWS account in us-west-2, from a Mac, with release v0.36.2 and the installer from commit <RUN: run head>."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "As of v0.37.0, install took <RUN: install minutes> minutes in that run, and the first administrator signed in with the password it printed."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "As of v0.37.0, uninstall took <RUN: uninstall minutes> minutes in that run, and a comparison of the account with its state before the install found only what AWS keeps."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "As of v0.37.0, that run also stopped an install with Ctrl-C while the images were copied, ran uninstall, and <RUN: part-way result>."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "As of v0.37.0, the files under deploy/aws-installer/ are the ones that ran."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "As of v0.37.0, the installer has not been run on AWS in another region, with a zone in another account, through an uninstall that stops at the network, through a sign-in that ends in the middle of a run, or on a computer running Linux."
+by = ["exempt:intent"]

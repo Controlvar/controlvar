@@ -1,5 +1,7 @@
 # AWS CDK Deployment
 
+To have a script run this page's steps for you, see [Install on AWS with one command (beta)](aws-install.md).
+
 The platform's AWS infrastructure is defined as code using **AWS CDK v2**, in **Python**: the app is `infrastructure/cdk/app.py`, and `infrastructure/cdk/cdk.json` runs it with `python3 app.py`. `cdk deploy --all` provisions the API, the dashboard and the data stores they need in your AWS account.
 
 **The Fargate stack runs two services behind one Application Load Balancer**: the API, and the dashboard as its own ECS service (`experimentation-dashboard-<env>`). The HTTPS listener sends `/api/*`, `/health`, `/health/*` and `/metrics` to the API and everything else to the dashboard. `cdk deploy` starts the dashboard on the `experimentation-platform/web:bootstrap` image, which you push before the first deploy ([deployment guide §1.3](../deployment/deployment-guide.md)). After that, the Deploy workflow rolls each release onto the dashboard: it registers a dashboard task definition with the release's image, rolls the dashboard service once the API is serving the same release, and smoke-tests it through the public URL.

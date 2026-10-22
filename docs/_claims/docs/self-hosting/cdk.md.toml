@@ -8,6 +8,10 @@ text = "AWS CDK Deployment"
 by = ["exempt:label"]
 
 [[unit]]
+text = "To have a script run this page's steps for you, see Install on AWS with one command (beta)."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "The platform's AWS infrastructure is defined as code using AWS CDK v2, in Python: the app is infrastructure/cdk/app.py, and infrastructure/cdk/cdk.json runs it with python3 app.py."
 by = ["test:infrastructure/tests/test_synth_inputs.py::test_the_cdk_app_is_python_run_by_python3_app_py_on_cdk_v2"]
 
