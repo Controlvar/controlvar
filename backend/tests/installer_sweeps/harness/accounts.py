@@ -1146,12 +1146,13 @@ def _digest(seed: str) -> str:
 
 def release_image(repo: str, version: str = RELEASE, revision: str = REVISION) -> dict:
     """One release image on ghcr.io: its index (linux/amd64 and an attestation entry),
-    the amd64 entry's config and labels, and its signature and attestation."""
+    the amd64 entry's config and labels, and its signature and attestation. The floating
+    ``core`` tag has moved on to a later release, which an install never takes."""
     index, amd64, attestation = (
         _digest(f"{repo}:{kind}") for kind in ("index", "amd64", "att")
     )
     return {
-        "tags": {f"core-{version}": index},
+        "tags": {f"core-{version}": index, "core": _digest(f"{repo}:a later release")},
         "manifests": {
             index: {
                 "schemaVersion": 2,

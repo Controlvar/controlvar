@@ -1400,6 +1400,12 @@ A5_CASES = [
         ),
         "public DNS names none",
     ),
+    (
+        # The internet names the same three: only the count of four refuses it.
+        "a-zone-of-three-servers",
+        lambda s: _zone(s).update(NameServers=_zone(s)["NameServers"][:3]),
+        "an answer that is not four name servers",
+    ),
 ]
 
 
