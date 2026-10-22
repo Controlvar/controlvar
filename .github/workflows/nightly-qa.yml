@@ -60,11 +60,6 @@ jobs:
           pip install -r backend/requirements.txt
           pip install -e . --no-deps
 
-      # The unit tests include the AWS installer beta's clean path, which runs the real
-      # jq, and the installer refuses one older than 1.7.1; this image's reports 1.7.
-      - name: Install jq 1.7.1
-        run: scripts/install_jq.sh
-
       - name: Run unit tests
         env:
           APP_ENV: test

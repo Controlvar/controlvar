@@ -11,13 +11,17 @@ The checks' gates, each a list of runs in parallel: A1 (example.com and the bad 
 any address, before any AWS call), A2 (the first administrator's address never weaker than
 the API's EmailStr), A3 (only the typed account), A4 (no stack of this app in any enabled
 region), A5 (the zone usable before any create), A8 (~/.cdk.json), B1 (only an IAM
-Identity Center profile, and only its six keys) and B3 (the token rule).
+Identity Center profile, and only its six keys) and B3 (the token rule). S2, the jq floor
+of 1.7, has five cases of the U1 kind: jq-1.6 and an empty version are refused, and jq-1.7
+(what Debian 13's and Ubuntu 24.04's 1.7.1 packages report), jq-1.7.1-apple and jq-1.8.2
+are not.
 """
 
 from __future__ import annotations
 
 import os
 import re
+import shutil
 import signal
 import subprocess
 import time
@@ -188,6 +192,42 @@ def _started(world: InstallWorld) -> None:
     )
 
 
+def _jq_reports(version: str) -> Callable[[InstallWorld], None]:
+    """This computer's jq says ``version`` to ``--version`` and is the real jq for every
+    other call (S2, the jq floor). The strings are the ones measured: Debian 13's and
+    Ubuntu 24.04's 1.7.1 packages say ``jq-1.7``, macOS's own says ``jq-1.7.1-apple``,
+    Homebrew's current one ``jq-1.8.2``, and Debian 12's and Ubuntu 22.04's ``jq-1.6``."""
+
+    def change(world: InstallWorld) -> None:
+        real = shutil.which("jq")
+        assert real, "these cases need the real jq on PATH"
+        wrapper = world.bin / "jq"
+        wrapper.write_text(
+            "#!/bin/sh\n"
+            'if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then\n'
+            f"    printf '%s\\n' '{version}'\n"
+            "    exit 0\n"
+            "fi\n"
+            f'exec "{real}" "$@"\n'
+        )
+        wrapper.chmod(0o755)
+
+    return change
+
+
+def _jq_reports_and_no_version_file(version: str) -> Callable[[InstallWorld], None]:
+    """A jq that says ``version``, and a folder with no VERSION file: the next check after
+    the tools. A run that ends there got past the tools check, which is how a jq the
+    installer accepts shows without a whole install."""
+    reports = _jq_reports(version)
+
+    def change(world: InstallWorld) -> None:
+        reports(world)
+        (world.clone / "VERSION").unlink()
+
+    return change
+
+
 def _no_record_folder(world: InstallWorld) -> None:
     import shutil
 
@@ -283,6 +323,43 @@ CASES = [
         2,
         "node: 18.0.0; needs 22 or later",
         state=lambda s: s.update(node_version="v18.0.0"),
+    ),
+    # S2, the jq floor is 1.7: two versions refused, three accepted (the run ends at the
+    # next check, the missing VERSION file, and not at the tools).
+    Case(
+        "msg_tools",
+        2,
+        "jq: 1.6; needs 1.7 or later",
+        id="msg_tools-jq-1.6",
+        world=_jq_reports("jq-1.6"),
+    ),
+    Case(
+        "msg_tools",
+        2,
+        "jq: an unreadable version; needs 1.7 or later",
+        id="msg_tools-jq-empty-version",
+        world=_jq_reports(""),
+    ),
+    Case(
+        "msg_no_version",
+        2,
+        "it has no VERSION file",
+        id="msg_tools-accepts-jq-1.7",
+        world=_jq_reports_and_no_version_file("jq-1.7"),
+    ),
+    Case(
+        "msg_no_version",
+        2,
+        "it has no VERSION file",
+        id="msg_tools-accepts-jq-1.7.1-apple",
+        world=_jq_reports_and_no_version_file("jq-1.7.1-apple"),
+    ),
+    Case(
+        "msg_no_version",
+        2,
+        "it has no VERSION file",
+        id="msg_tools-accepts-jq-1.8.2",
+        world=_jq_reports_and_no_version_file("jq-1.8.2"),
     ),
     Case(
         "msg_no_version",

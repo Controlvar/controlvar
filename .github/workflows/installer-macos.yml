@@ -60,6 +60,7 @@ jobs:
           for tool in bash sed date stat xargs grep tr jq openssl; do
             printf '%s: %s\n' "$tool" "$(command -v "$tool" || printf missing)"
           done
+          jq --version
 
       - name: Installer tests, every bash /bin/bash
         env:

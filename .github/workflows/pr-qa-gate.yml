@@ -114,10 +114,11 @@ jobs:
           cd backend
           pip install -r requirements.txt
 
-      # The AWS installer beta's tests run the real jq, and the installer refuses one
-      # older than 1.7.1; this image's reports 1.7 (see the script).
-      - name: Install jq 1.7.1
-        run: scripts/install_jq.sh
+      # The AWS installer beta's tests run the real jq, the one this image ships, and the
+      # installer accepts 1.7 or later (checks.sh). The image's package is 1.7.1 and
+      # reports 1.7; this line is how a later image with another jq shows in the log.
+      - name: The jq these tests run with
+        run: jq --version
 
       - name: Run unit tests
         env:
@@ -654,11 +655,12 @@ jobs:
           tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
           gitleaks version
 
-      # The AWS installer beta's clean path runs the real jq in the unit session, and the
-      # installer refuses one older than 1.7.1; this image's reports 1.7 (see the script).
-      - name: Install jq 1.7.1
+      # The AWS installer beta's clean path runs the real jq in the unit session, the one
+      # this image ships; the installer accepts 1.7 or later (checks.sh). This line is how
+      # a later image with another jq shows in the log.
+      - name: The jq these tests run with
         if: needs.changes.outputs.docs_only != 'true'
-        run: scripts/install_jq.sh
+        run: jq --version
 
       # A second Redis that requires a password, for
       # backend/tests/integration/test_redis_password_auth.py, started the
