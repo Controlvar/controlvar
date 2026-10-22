@@ -291,6 +291,18 @@ lock-modules: $(VENV)/bin/uv ## Regenerate modules/requirements.lock from module
 		echo "no modules/requirements.txt -- this is a core checkout"; \
 	fi
 
+.PHONY: installer-pins
+# The AWS installer beta's pins (deploy/aws-installer/pins/), the one command for both: the
+# CDK app's Python as a hashed lock, from the pins infrastructure/cdk/requirements.txt holds
+# for aws-cdk-lib and constructs, and the CDK CLI's npm lock. Run it whenever those pins or
+# the CLI's version move; test_installer_pins.py fails until it has been.
+installer-pins: $(VENV)/bin/uv ## Regenerate the AWS installer's pinned CDK app lock and CDK CLI lock
+	grep -E '^(aws-cdk-lib|constructs)==' infrastructure/cdk/requirements.txt > deploy/aws-installer/pins/requirements.in
+	$(VENV)/bin/uv pip compile deploy/aws-installer/pins/requirements.in --universal --generate-hashes \
+		--python-version 3.11 --custom-compile-command "make installer-pins" \
+		-o deploy/aws-installer/pins/requirements.lock
+	cd deploy/aws-installer/pins && npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
 .PHONY: lock-check
 lock-check: ## Fail when a requirements file has a pin its lock does not carry at that version
 	$(PY) scripts/check_requirements_lock.py

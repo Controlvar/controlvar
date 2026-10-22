@@ -165,6 +165,15 @@ sweep_take() {
         printf 'sweep: the sign-in could not be read, so nothing was recorded\n' >&2
         return 2
     fi
+    # An empty answer, None or anything but 12 digits is a sign-in that could not be read,
+    # never "another account".
+    case "$got" in
+        *[!0-9]* | '') got="" ;;
+    esac
+    if [ "${#got}" -ne 12 ]; then
+        printf 'sweep: the sign-in could not be read, so nothing was recorded\n' >&2
+        return 2
+    fi
     if [ "$got" != "$account" ]; then
         printf 'STOP: the profile signs in to account %s, not %s; nothing was recorded\n' \
             "$got" "$account" >&2
