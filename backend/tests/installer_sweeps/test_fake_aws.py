@@ -13,7 +13,7 @@ import json
 
 import pytest
 
-from backend.tests.installer_sweeps.harness import accounts, fake_aws
+from backend.tests.installer_sweeps.harness import accounts, fake_aws, fake_ops_install
 
 pytestmark = pytest.mark.unit
 
@@ -439,7 +439,9 @@ def test_a_response_the_model_refuses_is_never_printed(world):
 
 
 def test_every_modelled_operation_answers_for_an_installed_account(make_world):
-    """Each handler's response passes the model's check, in both regions."""
+    """Each of the sweep's handlers' responses passes the model's check. (Install's
+    operations need what an install made first: a clean install against the fakes runs
+    each of them, test_install_run.py and test_wire.py.)"""
     world = make_world(accounts.installed_account())
     needs = {
         ("ecs", "list-services"): ("--cluster", "experimentation-staging"),
@@ -454,6 +456,8 @@ def test_every_modelled_operation_answers_for_an_installed_account(make_world):
     for service, name in fake_aws.modelled_operations():
         if (service, name) == ("backup", "list-recovery-points-by-backup-vault"):
             continue  # the installed account has no vault; its error is asserted below
+        if (service, name) in fake_ops_install.REGISTERED:
+            continue
         done = world.aws(
             service, name, *needs.get((service, name), ()), "--output", "json"
         )
