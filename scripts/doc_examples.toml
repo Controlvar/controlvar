@@ -317,7 +317,7 @@ expects = 2
 path = "docs/api/alerting.md"
 environment = "stack"
 exec = 5
-skip = 0
+skip = 1
 expects = 8
 
 [[document]]

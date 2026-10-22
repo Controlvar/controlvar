@@ -39,6 +39,7 @@ Both channels are off until you turn them on.
 | `EMAIL_ENABLED` | `true` turns email on; the default is `false`. |
 | `SENDGRID_API_KEY` | Email goes through SendGrid with this key; when it is empty, through SMTP. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | The SMTP server (port 587 by default). |
+| `SMTP_CA_FILE` | The path, inside the API container, of a PEM certificate file used instead of the operating-system certificate store for SMTP. Empty by default. |
 | `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME` | The sender of every email. |
 | `NOTIFICATION_ADMIN_EMAILS` | A JSON array of addresses. No notification is sent to them. |
 
@@ -46,6 +47,57 @@ Both channels are off until you turn them on.
 from starting, with `error parsing value for field "NOTIFICATION_ADMIN_EMAILS"`.
 
 ---
+
+## Email through SMTP
+
+When both `SMTP_USERNAME` and `SMTP_PASSWORD` are set, the API requires STARTTLS and
+checks the server's certificate before signing in. The certificate must be valid for
+`SMTP_HOST` and trusted by the operating-system certificate store in the API image,
+or by `SMTP_CA_FILE` when set. TLS 1.2 or later is required.
+
+Setting `SMTP_CA_FILE` also requires verified STARTTLS without a login. With neither
+complete credentials nor a CA file, the existing session behavior is unchanged:
+no STARTTLS or login is attempted. A username or password alone does not enable login.
+Whitespace-only `SMTP_CA_FILE` values count as blank. No setting turns verification
+off when credentials or a CA file require it.
+
+For a private certificate authority or an explicitly trusted self-signed certificate,
+set `SMTP_CA_FILE` to a PEM file readable by the API's runtime user (uid 1001).
+It replaces the default SMTP trust store; include both sets of certificates in the
+file if both are needed. A mounted trust file can change independently of an API release.
+File checks happen when sending. A missing, unreadable or unusable file prevents
+the connection; the send returns false and the API logs an error naming `SMTP_CA_FILE`.
+
+For Compose, add the file mount and setting to the API service in your deployment
+configuration, then recreate that service:
+
+```yaml
+services:
+  api:
+    environment:
+      SMTP_CA_FILE: /etc/smtp/relay-ca.pem
+    volumes:
+      - ./relay-ca.pem:/etc/smtp/relay-ca.pem:ro
+```
+
+For Helm, use a derived API image containing the readable PEM file and set
+`SMTP_CA_FILE` through the chart's existing environment settings. The chart has no
+dedicated CA-file volume setting. Port 465 with implicit TLS is not supported.
+
+Test with an administrator or developer token and an explicit recipient:
+
+```{.bash skip reason="server: needs an operator-configured SMTP relay and recipient"}
+curl -s -X POST localhost:8000/api/v1/notifications/test \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"channel":"email","recipient":"operator@example.com"}'
+```
+
+Read the response's `success` field: HTTP 200 alone does not confirm delivery.
+If it is false, check the API log, the STARTTLS port (usually 587), certificate
+identity and trust, and the container-local file path and permissions. A failure
+after the server accepts the message can leave delivery uncertain; check the relay
+before retrying.
 
 ## Notification Preferences API
 

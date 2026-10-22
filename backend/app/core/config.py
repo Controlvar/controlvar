@@ -478,6 +478,7 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USERNAME: str = ""
     SMTP_PASSWORD: str = ""
+    SMTP_CA_FILE: str = ""
     EMAIL_FROM_ADDRESS: str = "platform@example.com"
     EMAIL_FROM_NAME: str = "Controlvar"
     NOTIFICATION_ADMIN_EMAILS: List[str] = []
