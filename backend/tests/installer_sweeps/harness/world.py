@@ -68,6 +68,10 @@ class World:
         self.bin = self.root / "bin"
         self.bin.mkdir()
         _shim.write(self.bin / "aws", "fake_aws", str(self.state_path), str(shapes))
+        # INSTALLER_TEST_BASH (the macOS job's /bin/bash 3.2): every `bash` a run starts,
+        # the installer's own included, is that one.
+        if os.environ.get("INSTALLER_TEST_BASH"):
+            os.symlink(os.environ["INSTALLER_TEST_BASH"], self.bin / "bash")
         self.home = self.root / "home"
         self.home.mkdir()
 
