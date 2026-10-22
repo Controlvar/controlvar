@@ -224,6 +224,12 @@ jobs:
           docker logs redis-auth
           exit 1
 
+      # The unit suite runs the AWS installer beta's tests, which run the real jq, and
+      # the installer refuses one older than 1.7.1; this image's reports 1.7.
+      - name: Install jq 1.7.1
+        if: matrix.suite == 'unit'
+        run: scripts/install_jq.sh
+
       - name: Run the suite
         env:
           SUITE: ${{ matrix.suite }}
