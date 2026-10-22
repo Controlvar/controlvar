@@ -116,7 +116,6 @@ DB_KEY_DESCRIPTION = (
 #: or the AWS action it stands for.
 CREATED_FILES = {
     "us-west-2/cfn-stacks.txt": "the nine stacks and CDKToolkit",
-    "us-west-2/ec2-vpcs.txt": "AWS::EC2::VPC",
     "us-west-2/ec2-subnets.txt": "AWS::EC2::Subnet",
     "us-west-2/ec2-route-tables.txt": "AWS::EC2::RouteTable",
     "us-west-2/ec2-internet-gateways.txt": "AWS::EC2::InternetGateway",

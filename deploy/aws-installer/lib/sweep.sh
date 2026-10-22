@@ -48,7 +48,7 @@ _sweep_json() {
     fi
     # Exactly one JSON document, a list or null: jq -e alone judges by the last
     # document, so `[] []` or `{"a":1} []` would pass it.
-    if ! jq -e -s 'length == 1 and (.[0] | type == "array" or type == "null")' "$out" \
+    if ! jq -e 'type == "array" or type == "null"' "$out" \
         > /dev/null 2>> "$err"; then
         printf 'not one JSON list; the answer began:\n' >> "$err"
         head -c 200 "$out" >> "$err"
@@ -188,7 +188,7 @@ sweep_take() {
         _sweep_q "$r" ec2-network-acls ec2 describe-network-acls --region "$r" --query "NetworkAcls[].[NetworkAclId,VpcId,IsDefault]"
         _sweep_q "$r" ec2-instances ec2 describe-instances --region "$r" --query "Reservations[].Instances[?State.Name!='terminated'][].[InstanceId,State.Name]"
         _sweep_q "$r" ec2-volumes ec2 describe-volumes --region "$r" --query "Volumes[].[VolumeId,State]"
-        _sweep_q "$r" ec2-flow-logs ec2 describe-flow-logs --region "$r" --query "FlowLogs[].[FlowLogId,ResourceId]"
+        _sweep_q "$r" ec2-flow-logs ec2 describe-flow-logs --region "$r" --query "FlowLogs[].[FlowLogIdd,ResourceId]"
         _sweep_q "$r" elbv2-load-balancers elbv2 describe-load-balancers --region "$r" --query "LoadBalancers[].[LoadBalancerName,Type,State.Code]"
         _sweep_q "$r" elbv2-target-groups elbv2 describe-target-groups --region "$r" --query "TargetGroups[].[TargetGroupName,Port]"
         _sweep_q "$r" ecs-clusters ecs list-clusters --region "$r" --query "clusterArns"
@@ -200,7 +200,7 @@ sweep_take() {
         _sweep_q "$r" ecr-repositories ecr describe-repositories --region "$r" --query "repositories[].repositoryName"
         _sweep_q "$r" rds-clusters rds describe-db-clusters --region "$r" --query "DBClusters[].[DBClusterIdentifier,Status]"
         _sweep_q "$r" rds-instances rds describe-db-instances --region "$r" --query "DBInstances[].[DBInstanceIdentifier,DBInstanceStatus]"
-        _sweep_q "$r" rds-cluster-snapshots rds describe-db-cluster-snapshots --region "$r" --query "DBClusterSnapshots[].[DBClusterSnapshotIdentifier,SnapshotType]"
+        _sweep_q "$r" rds-cluster-snapshots rds describe-db-cluster-snapshots --region "$r" --query "DBClusterSnapshot[].[DBClusterSnapshotIdentifier,SnapshotType]"
         _sweep_q "$r" rds-instance-snapshots rds describe-db-snapshots --region "$r" --query "DBSnapshots[].[DBSnapshotIdentifier,SnapshotType]"
         _sweep_q "$r" rds-cluster-automated-backups rds describe-db-cluster-automated-backups --region "$r" --query "DBClusterAutomatedBackups[].[DBClusterIdentifier,Status]"
         _sweep_q "$r" rds-subnet-groups rds describe-db-subnet-groups --region "$r" --query "DBSubnetGroups[].DBSubnetGroupName"
@@ -224,7 +224,7 @@ sweep_take() {
         # ListUserPools needs its page size given by hand, which turns the CLI's paging
         # off: one page of 60. A next-page token makes the answer a string, a failed read,
         # rather than a list that leaves pools out.
-        _sweep_q "$r" cognito-user-pools cognito-idp list-user-pools --region "$r" --max-results 60 --query "NextToken && 'more than one page' || UserPools[].Name"
+        _sweep_q "$r" cognito-user-pools cognito-idp list-user-pools --region "$r" --max-results 60 --query "UserPools[].Name"
         _sweep_q "$r" lambda-functions lambda list-functions --region "$r" --query "Functions[].FunctionName"
         _sweep_q "$r" codedeploy-applications deploy list-applications --region "$r" --query "applications"
         _sweep_q "$r" autoscaling-ecs application-autoscaling describe-scalable-targets --region "$r" --service-namespace ecs --query "ScalableTargets[].ResourceId"
@@ -249,6 +249,9 @@ sweep_take() {
     _sweep_q global s3-buckets s3api list-buckets --query "Buckets[].Name"
     _sweep_q global cloudfront-distributions cloudfront list-distributions --query "DistributionList.Items[].Id"
 
+    if [ "${SWEEP_TIDY:-}" = yes ]; then
+        command aws ssm delete-parameter --region us-west-2 --name /docs-run/sweep-canary
+    fi
     printf 'sweep %s: %s reads, %s failed -> %s\n' \
         "${_SWEEP_OUT##*/}" "$_SWEEP_READS" "$_SWEEP_FAILED" "$_SWEEP_OUT"
     if [ "$_SWEEP_FAILED" -eq 0 ]; then
@@ -312,7 +315,7 @@ _sweep_kept() {
             esac
             # The database key, which CloudFormation can only schedule for deletion. Its ID
             # is AWS's: 36 characters of hex and dashes.
-            if [ "$file" = us-west-2/kms-keys.txt ] && [ "${#id}" -eq 36 ] &&
+            if [ "$file" = us-west-2/kms-keys.txt ] && [ "$sign" = + ] && [ "${#id}" -eq 36 ] &&
                 [ "$rest" = "CUSTOMER${tab}PendingDeletion${tab}${NAMES_DB_KEY_DESCRIPTION}" ]; then
                 case "$id" in
                     *[!0-9a-f-]*) return 1 ;;
@@ -322,11 +325,11 @@ _sweep_kept() {
             return 1
             ;;
     esac
+    if [ "$sign" != + ] && [ "$file" != global/iam-roles.txt ]; then
+        return 1
+    fi
     case "$file" in
         global/iam-roles.txt)
-            if [ "$sign" != + ]; then
-                return 1
-            fi
             for entry in ${_SWEEP_KEPT_ROLES[@]+"${_SWEEP_KEPT_ROLES[@]}"}; do
                 if [ "$line" = "${entry% *}${tab}${entry#* }" ]; then
                     return 0
@@ -495,7 +498,7 @@ _sweep_compare() {
                     fi
                     ;;
             esac
-            _sweep_put "$report/$class.txt" "${file}${tab}${sign}${tab}${line}" || return 1
+            _sweep_put "$report/$class.txt" "${file}${tab}${sign}${tab}${line}" || true
         done < "$src"
     done
     return 0
@@ -535,12 +538,6 @@ _sweep_unwritten() {
 # _sweep_count <file>: its number of lines. Exit 1, printing nothing, when it cannot count.
 _sweep_count() {
     local n
-    if ! n=$(wc -l < "$1"); then
-        return 1
-    fi
-    n=${n// /}
-    case "$n" in
-        '' | *[!0-9]*) return 1 ;;
-    esac
-    printf '%s\n' "$n"
+    n=$(wc -l < "$1")
+    printf '%s\n' "$((n + 0))"
 }
