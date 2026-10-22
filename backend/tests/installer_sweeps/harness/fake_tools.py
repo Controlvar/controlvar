@@ -59,6 +59,8 @@ PROFILE_VARIABLE = "EXPERIMENTLY_PROFILE"
 BLOCK_SECONDS = 120
 #: What a blocked fake writes its pid into, so a test can see it is gone.
 PIDS = "pids.log"
+#: And where it writes it again if nothing stopped it before its block ran out.
+RAN_OUT = "ran-out.log"
 
 
 class Ended(Exception):
@@ -200,6 +202,8 @@ def run(state_path: Path, tool: str, argv: list[str], env: dict) -> int:
         deadline = time.time() + block
         while time.time() < deadline:
             time.sleep(0.05)
+        with open(t.root / RAN_OUT, "a") as handle:
+            handle.write(f"{os.getpid()} {tool} {t.op}\n")
         return 1
     return status
 

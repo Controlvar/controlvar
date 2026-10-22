@@ -38,7 +38,7 @@ from pathlib import Path
 
 from . import accounts
 from . import shim as _shim_module
-from .world import FAKE, REPO_ROOT, SAFETY_NET_SECONDS, Result, World
+from .world import FAKE, REPO_ROOT, SAFETY_NET_SECONDS, Result, World, as_text
 
 INSTALLER = REPO_ROOT / "deploy" / "aws-installer"
 PROFILE = "controlvar-install"
@@ -228,7 +228,8 @@ class InstallWorld(World):
         **env: str,
     ) -> Result:
         # In a session of its own, so that a run that hangs is stopped whole, with every
-        # child it started, rather than left behind by the timeout.
+        # child it started, rather than left behind by the timeout. Bytes, decoded as they
+        # are: text mode would turn a carriage return into a newline, which U11 looks for.
         process = subprocess.Popen(
             [bash, *self.install_argv(*extra, yes=yes, defaults=defaults)],
             cwd=self.root,
@@ -236,18 +237,20 @@ class InstallWorld(World):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
-            text=True,
             start_new_session=True,
         )
         try:
-            out, err = process.communicate(stdin, timeout=SAFETY_NET_SECONDS)
+            out, err = process.communicate(
+                None if stdin is None else stdin.encode(), timeout=SAFETY_NET_SECONDS
+            )
         except subprocess.TimeoutExpired:
             stop_group(process)
             raise
-        return Result(process.returncode, out, err)
+        return Result(process.returncode, as_text(out), as_text(err))
 
     def start(self, *extra: str, bash: str = "bash", **env: str) -> subprocess.Popen:
-        """An install started in its own process group, for a test to signal."""
+        """An install started in its own process group, for a test to signal. Its output
+        is bytes: read it with as_text()."""
         return subprocess.Popen(
             [bash, *self.install_argv(*extra)],
             cwd=self.root,
@@ -255,7 +258,6 @@ class InstallWorld(World):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
-            text=True,
             start_new_session=True,
         )
 
@@ -296,7 +298,7 @@ class InstallWorld(World):
         finally:
             reader.join(timeout=10)
             os.close(master)
-        return Result(process.returncode, out.decode(), err.decode()), shown.decode(
+        return Result(process.returncode, as_text(out), as_text(err)), shown.decode(
             errors="replace"
         )
 
@@ -360,6 +362,14 @@ class InstallWorld(World):
 
     def blocked_pids(self) -> list[int]:
         return [int(line.split()[0]) for line in self.pid_lines()]
+
+    def ran_out(self) -> list[str]:
+        """``<pid> <tool> <op>`` for each blocked fake that nothing stopped: it waited out
+        its whole block and ended by itself."""
+        path = self.fake_dir / "ran-out.log"
+        if not path.exists():
+            return []
+        return [line for line in path.read_text().splitlines() if line.strip()]
 
     def clone_bytes(self) -> dict[str, str]:
         return {

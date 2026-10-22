@@ -56,6 +56,12 @@ class Result:
     err: str
 
 
+def as_text(data: bytes) -> str:
+    """A run's output as it was written: decoded, a carriage return kept as one (text
+    mode would turn it into a newline), an undecodable byte shown as U+FFFD."""
+    return data.decode("utf-8", errors="replace")
+
+
 class World:
     """One fake account, its logs, and runs of the sweep library against it."""
 
@@ -134,11 +140,10 @@ class World:
             cwd=self.root,
             env=self.env(**extra),
             capture_output=True,
-            text=True,
             stdin=subprocess.DEVNULL,
             timeout=SAFETY_NET_SECONDS,
         )
-        return Result(done.returncode, done.stdout, done.stderr)
+        return Result(done.returncode, as_text(done.stdout), as_text(done.stderr))
 
     def aws(self, *argv: str, **extra: str) -> Result:
         """One call of the fake, as the beta's code would make it."""

@@ -35,7 +35,11 @@ from backend.tests.installer_sweeps.harness.install_world import (
     alive,
     stop_group,
 )
-from backend.tests.installer_sweeps.harness.world import SAFETY_NET_SECONDS, Result
+from backend.tests.installer_sweeps.harness.world import (
+    SAFETY_NET_SECONDS,
+    Result,
+    as_text,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -133,7 +137,8 @@ def interrupt(world: InstallWorld, tool: str, op: str, sig: int, group: bool) ->
             if process.poll() is not None or time.time() > deadline:
                 out, err = process.communicate()
                 raise AssertionError(
-                    f"{tool} {op} never blocked: exit {process.returncode}\n{out}\n{err}"
+                    f"{tool} {op} never blocked: exit {process.returncode}\n"
+                    f"{as_text(out)}\n{as_text(err)}"
                 )
             time.sleep(0.05)
         if group:
@@ -144,7 +149,7 @@ def interrupt(world: InstallWorld, tool: str, op: str, sig: int, group: bool) ->
     except BaseException:
         stop_group(process)
         raise
-    return Result(process.returncode, out, err)
+    return Result(process.returncode, as_text(out), as_text(err))
 
 
 def _sweep_fails(world: InstallWorld) -> None:
@@ -952,6 +957,9 @@ def test_an_interrupt_leaves_a_usable_record_and_no_child(ran, sig, target, when
     assert [pid for pid in world.blocked_pids() if alive(pid)] == [], (
         "a child outlived the installer"
     )
+    # Stopped, not waited out: a child run in the foreground keeps the signal's trap
+    # waiting until it ends by itself, here after its 60-second block.
+    assert world.ran_out() == [], "the signal waited for a child to end by itself"
     writes = world.writes()
     assert writes[-1] == (tool, op), writes
     if tool == "cdk":
