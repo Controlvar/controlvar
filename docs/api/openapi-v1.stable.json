@@ -13844,7 +13844,7 @@
   "info": {
     "description": "API for managing experiments and feature flags in test environment",
     "title": "Controlvar",
-    "version": "0.36.2"
+    "version": "0.36.3"
   },
   "openapi": "3.1.0",
   "paths": {

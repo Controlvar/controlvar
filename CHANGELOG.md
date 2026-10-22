@@ -10,6 +10,13 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.36.3](https://github.com/Controlvar/controlvar/compare/v0.36.2...v0.36.3) (2026-10-22)
+
+
+### Dependencies
+
+* bump next to 16.4.1 (GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr, GHSA-p3m5-59mp-jv5r) ([fdc21d0](https://github.com/Controlvar/controlvar/commit/fdc21d016d436820f78fdf7cc5aaa07730c61cfe))
+
 ## [0.36.2](https://github.com/Controlvar/controlvar/compare/v0.36.1...v0.36.2) (2026-10-21)
 
 
