@@ -418,7 +418,6 @@ def test_the_installers_source_is_ascii():
 #: anything else 12 digits long may be a real account's.
 FIXTURE_ACCOUNTS = {
     "111111111111",
-    "222222222222",
     "111111111112",
     "111122223333",
     "123456789012",

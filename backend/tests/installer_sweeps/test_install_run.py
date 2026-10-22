@@ -65,7 +65,7 @@ HOSTILE = {
     "AWS_MAX_ATTEMPTS": "1",
     "AWS_CLI_AUTO_PROMPT": "on",
     "AWS_SDK_LOAD_CONFIG": "1",
-    "CDK_DEFAULT_ACCOUNT": "222222222222",
+    "CDK_DEFAULT_ACCOUNT": "123456789012",
     "CDK_DEFAULT_REGION": "eu-west-1",
     "DOCKER_CONFIG": "/nonexistent/docker",
     "AWS_CA_BUNDLE": "/nonexistent/ca.pem",
@@ -277,11 +277,11 @@ TARGET_CASES = {
         "not every stack in the manifest is one of the nine",
     ),
     "another-account": (
-        {"account": "222222222222"},
+        {"account": "123456789012"},
         "not every stack in the manifest is one of the nine",
     ),
     "a-stale-right-one-beside-a-fresh-wrong-one": (
-        {"stale_default_out": True, "account": "222222222222"},
+        {"stale_default_out": True, "account": "123456789012"},
         "not every stack in the manifest is one of the nine",
     ),
 }

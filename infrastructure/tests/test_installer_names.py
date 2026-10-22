@@ -290,7 +290,7 @@ def test_the_target_check_refuses_another_account(synth, tmp_path):
         sorted(synth.templates),
         _manifest(synth.assembly),
         tmp_path / "account",
-        account="222222222222",
+        account="123456789012",
     )
     assert done.returncode == 1 and re.search(
         r"not every stack in the manifest is one of the nine in aws://<acct>/us-west-2",

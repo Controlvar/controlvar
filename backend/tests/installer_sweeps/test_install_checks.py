@@ -76,9 +76,9 @@ def _blocked(state: dict, **extra) -> None:
 
 def _signed_in_elsewhere(state: dict) -> None:
     """The profile signs in to another account (the fake answers the state's account)."""
-    state["account"] = "222222222222"
+    state["account"] = "123456789012"
     state["global"]["identity"]["Arn"] = (
-        "arn:aws:sts::222222222222:assumed-role/AWSReservedSSO_AdministratorAccess_42b9f361ab85f011/reader"
+        "arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_AdministratorAccess_42b9f361ab85f011/reader"
     )
 
 
@@ -375,7 +375,7 @@ CASES = [
     Case(
         "msg_account_mismatch",
         2,
-        "but you are signed in to the account ending in 2222",
+        "but you are signed in to the account ending in 9012",
         state=lambda s: _signed_in_elsewhere(s),
     ),
     Case(
@@ -1042,7 +1042,7 @@ CORPUS = [
     "founder@controlvar.com",
     "a@b.c",
     "admin@localhost.localdomain",
-    "ops@corp.internal",
+    "ops@corp.intranet",
     "x@ex.example",
     "first.last+tag@gmail.com",
     "Ops@Controlvar.COM",
@@ -1152,7 +1152,7 @@ def test_only_the_typed_account(ran):
     identity read; nothing after."""
     world, done = ran["a3"].world, ran["a3"].done
     assert done.code == 2, done.err
-    assert "but you are signed in to the account ending in 2222" in done.err
+    assert "but you are signed in to the account ending in 9012" in done.err
     calls = [(c["service"], c["op"], c["exit"]) for c in world.aws_calls]
     assert calls == [
         ("sts", "get-caller-identity", 253),
@@ -1467,7 +1467,7 @@ def test_a_cdk_json_with_anything_in_it_is_refused_before_any_aws_call(ran):
 
 B1_REFUSED = [
     ("aws_access_key_id = shell-key\n", "msg_not_identity_center"),
-    ("credential_process = /bin/echo\n", "msg_not_identity_center"),
+    ("credential_process = /bin/true\n", "msg_not_identity_center"),
     (
         "role_arn = arn:aws:iam::111111111111:role/Admin\nsource_profile = base\n",
         "msg_not_identity_center",
