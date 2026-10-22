@@ -28,6 +28,7 @@ import pytest
 from backend.tests.installer_sweeps.harness import accounts, fake_ops_install
 from backend.tests.installer_sweeps.harness.install_world import (
     ALARM,
+    CLEAN_WRITES,
     PROFILE,
     SHIM_ADDS,
     Batch,
@@ -47,31 +48,6 @@ VALIDATION = f"_{fake_ops_install._id('validation' + DOMAIN, 32)}.{DOMAIN}."
 VALIDATION_VALUE = (
     f"_{fake_ops_install._id('target' + DOMAIN, 32)}.xlfgrmvvlj.acm-validations.aws."
 )
-
-#: What a clean install changes, in order (D1): the CDK's setup stack, the two
-#: repositories, the two secrets, the certificate, its validation record, the ECS
-#: service-linked role, the two images, the nine stacks, the address, the migration's
-#: revision and task, then the smoke check's sign-in, key, flag and the key's revocation.
-CLEAN_WRITES = [
-    ("cdk", "bootstrap"),
-    ("ecr", "create-repository"),
-    ("ecr", "create-repository"),
-    ("secretsmanager", "create-secret"),
-    ("secretsmanager", "create-secret"),
-    ("acm", "request-certificate"),
-    ("route53", "change-resource-record-sets"),
-    ("iam", "create-service-linked-role"),
-    ("crane", "copy"),
-    ("crane", "copy"),
-    ("cdk", "deploy"),
-    ("route53", "change-resource-record-sets"),
-    ("ecs", "register-task-definition"),
-    ("ecs", "run-task"),
-    ("curl", f"POST https://{DOMAIN}/api/v1/auth/login"),
-    ("curl", f"POST https://{DOMAIN}/api/v1/api-keys"),
-    ("curl", f"POST https://{DOMAIN}/api/v1/feature-flags/"),
-    ("curl", f"DELETE https://{DOMAIN}/api/v1/api-keys/k1"),
-]
 
 #: A reader's shell at its worst (B2): keys, another profile, an endpoint variable the
 #: CLI would follow, text output, CDK defaults, a registry login, and one variable the
@@ -534,6 +510,9 @@ def test_every_aws_child_runs_with_exactly_the_allowed_environment(clean):
         want = set(BASE_ENV)
         if call["service"] == "cdk":
             want |= CDK_INPUTS | {variable}
+        probe = call["argv"][-2:] == ["--endpoint-url", "http://127.0.0.1:9"]
+        if probe:
+            want -= {"AWS_PROFILE"}
         assert names == want, (
             call["n"],
             call["service"],
@@ -558,9 +537,10 @@ def test_every_aws_child_runs_with_exactly_the_allowed_environment(clean):
 
 
 def test_the_probe_runs_with_no_profile(clean):
+    """No AWS_PROFILE at all: set and empty, the CLI takes it for a profile named ""."""
     probe = [c for c in clean.world.calls if "http://127.0.0.1:9" in c["argv"]]
     assert len(probe) == 1 and probe[0]["exit"] == 253
-    assert probe[0]["values"]["AWS_PROFILE"] == ""
+    assert "AWS_PROFILE" not in probe[0]["env"]
 
 
 def test_the_installer_reads_only_its_own_copy_of_the_profile(clean):

@@ -17,7 +17,17 @@ import pytest
 from botocore import parsers
 from botocore.session import get_session
 
-from backend.tests.installer_sweeps.harness import accounts, fake_aws, shapes, wire
+from backend.tests.installer_sweeps.harness import (
+    accounts,
+    fake_aws,
+    fake_ops_install,
+    shapes,
+    wire,
+)
+from backend.tests.installer_sweeps.harness.install_world import (
+    install_snapshots,
+    replayable,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -52,6 +62,8 @@ def _utc(value):
 
 
 def _cases():
+    """The sweep's reads, for an installed account. Install's own operations are read
+    back from a clean install's calls (test_botocore_reads_back_installs_calls)."""
     state = accounts.installed_account()
     # A pending secret, so a timestamp crosses every JSON-protocol path.
     state["regions"]["us-west-2"]["secrets"].append(
@@ -60,12 +72,54 @@ def _cases():
     for service, name in fake_aws.modelled_operations():
         if (service, name) == ("backup", "list-recovery-points-by-backup-vault"):
             continue
+        if (service, name) in fake_ops_install.REGISTERED:
+            continue
         argv = [service, name, *ARGS.get((service, name), [])]
         yield (
             service,
             name,
             fake_aws.raw_response(state, argv, {"AWS_REGION": "us-west-2"}),
         )
+
+
+@pytest.fixture(scope="module")
+def install_calls(tmp_path_factory, shapes_file):
+    """Every AWS call of a clean install, with the response the stub would serve it."""
+    root = tmp_path_factory.mktemp("wire-install")
+    snapshots, _ = install_snapshots(root / "w", shapes_file)
+    found = []
+    for snap in snapshots:
+        argv = replayable(snap["argv"], root)
+        if (argv[0], argv[1]) in fake_aws.CUSTOMIZATIONS:
+            continue  # the CLI's own command: check_installer_cli.py serves its operation
+        try:
+            response = fake_aws.raw_response(snap["state"], argv, snap["env"])
+        except fake_aws.ServiceError:
+            continue  # an error answer (a role not there yet): errors are DENIALS' cases
+        found.append((argv[0], argv[1], response))
+    return found
+
+
+def test_botocore_reads_back_installs_calls(doc, install_calls):
+    """Each response a clean install's calls get, written in its service's protocol and
+    parsed back by botocore, is the response itself (install's writes included)."""
+    assert len(install_calls) > 50, len(install_calls)
+    covered = {(service, name) for service, name, _ in install_calls}
+    missing = sorted(fake_ops_install.REGISTERED - covered - UNREACHED)
+    assert missing == [], f"install operations no clean install calls: {missing}"
+    for service, name, response in install_calls:
+        test_botocore_reads_back_what_the_stub_writes(doc, service, name, response)
+
+
+#: Install's operations a clean install never calls (the deploy's failure path, the
+#: watcher's reads while a stack is still being created, AWS's default quota where the
+#: account has none applied).
+UNREACHED = {
+    ("cloudformation", "describe-stack-events"),
+    ("ecs", "list-tasks"),
+    ("ecs", "describe-services"),
+    ("service-quotas", "get-aws-default-service-quota"),
+}
 
 
 @pytest.mark.parametrize(

@@ -106,6 +106,11 @@ def _in_a_class(call: dict) -> str | None:
     return None
 
 
+#: Whether the clean run's call answered (exit 0), by case key: NOQUERY changes nothing
+#: about a call whose answer is the service's error.
+ANSWERED: dict[tuple, bool] = {}
+
+
 def _cases(clean_calls: list[dict]) -> list[tuple[tuple, dict]]:
     """(the case's key, the fault spec) for every call of the clean run, and one per class."""
     seen: dict[tuple, int] = {}
@@ -135,6 +140,7 @@ def _cases(clean_calls: list[dict]) -> list[tuple[tuple, dict]]:
         cases.append(
             ((call["service"], _op(call), region, query, seen[identity]), spec)
         )
+        ANSWERED[cases[-1][0]] = call["exit"] == 0
     # A spec without "has" also matches the same operation's calls that carry a query: the
     # nth of those is counted over all of them, as the fake counts.
     fixed = []
@@ -217,6 +223,12 @@ def judge(key, world: InstallWorld, done, clean_writes, mode: str) -> str | None
         # The watcher starts beside cdk deploy, so the deploy may be logged after its first
         # read: it is the change already under way, not one made after the failure.
         later = [w for w in later if w != ("cdk", "deploy")]
+    if mode == "NOQUERY" and faulted[0]["exit"] != 0:
+        # The call's answer is the service's error (the role not found, the stack that
+        # does not exist), which no query reaches: the run is the clean run.
+        if done.code != 0 or world.writes() != clean_writes:
+            return f"a query over an error changed the run: exit {done.code}, {done.err[:300]}"
+        return None
     if key in HARMLESS and (mode == "AccessDenied" or key not in HARMLESS_ONLY_DENIED):
         if done.code != 0 or world.writes() != clean_writes:
             return f"a harmless failure did not end as a clean run: exit {done.code}, {done.err[:300]}"
@@ -287,7 +299,7 @@ def test_every_guard_fails_closed(sweep, mode):
     reads = [
         (k, _guard_spec(k, s))
         for k, s in sweep.cases
-        if _guard(k) and (mode == "EMPTY" or k[3] is not None)
+        if _guard(k) and (mode == "EMPTY" or (k[3] is not None and ANSWERED[k]))
     ]
     assert len(reads) > 40, len(reads)
     wrong = sweep.run(reads, mode)

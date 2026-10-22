@@ -11,8 +11,9 @@ Tests, in a step outside pytest: every pytest session blocks the real CLI
 (backend/tests/no_real_aws.py), and this is the job that runs the runner's own.
 
 1. The beta's sweep (lib/sweep.sh, through the harness's driver) runs against the
-   fake for a new account and an installed one; every call the fake logged is a
-   call the beta makes. Calls differing only in region are one shape.
+   fake for a new account and an installed one, and a clean install runs against the
+   fakes with the state each of its calls found kept; every call the fake logged is
+   a call the beta makes. Calls differing only in region are one shape.
 2. For each shape and state, and for the same call with ``--output text``, the
    fake's own response for that state is served from a stub on 127.0.0.1, in the
    protocol the CLI's request uses (harness/wire.py), and the real CLI runs with
@@ -23,9 +24,17 @@ Tests, in a step outside pytest: every pytest session blocks the real CLI
    next-page token, which the sweep must refuse. An access denial in each protocol
    family is compared on stderr.
 
+4. The sign-in, with the installer's own functions (lib/env.sh) and the runner's CLI,
+   offline: the installer's copy of a reader's profile holds the six keys the CLI
+   resolves and nothing else from the reader's file (no region, output, services or
+   unknown key), and with no profile named, the installer's environment finds no
+   credentials ("Unable to locate credentials") although the reader's file has a
+   [default] key, which the same CLI given the reader's file does find.
+
 The CLI's children get dummy keys, AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE
-at /dev/null and instance metadata off; the stub is the only endpoint. The script
-refuses to start with a key in its own environment.
+at /dev/null and instance metadata off; the stub is the only endpoint. The sign-in
+checks' only endpoint is a closed local port and no sign-in is cached, so the CLI asks
+no portal. The script refuses to start with a key in its own environment.
 
 Exit status: 0 when every call matches; 1 when any differs (each named) or the
 check could not run.
@@ -56,7 +65,15 @@ from backend.tests.installer_sweeps.harness import (
     shapes,
     wire,
 )
+from backend.tests.installer_sweeps.harness.install_world import (
+    install_snapshots,
+    replayable,
+)
 from backend.tests.installer_sweeps.harness.world import World
+
+LIB = REPO_ROOT / "deploy" / "aws-installer" / "lib"
+#: The operations behind the CLI's own commands install runs, for the shapes document.
+CUSTOMIZED = [("ecr", "get-authorization-token")]
 
 #: The second time zone for the calls that print a timestamp: off UTC by a
 #: fraction of an hour, so an offset printed wrongly shows.
@@ -316,6 +333,205 @@ def truncated_cases(
     return cases
 
 
+def install_cases(work: Path, shapes_path: Path, doc: dict) -> list[dict]:
+    """Every AWS call of a clean install, one per shape, each against the state it found
+    (install_world.install_snapshots): the fake's own output for that state, and the
+    response the stub serves. A call the service answers with an error (a role not there
+    yet, a stack that does not exist) is compared on stderr, in either form."""
+    import base64
+
+    snapshots, _ = install_snapshots(work / "install", shapes_path)
+    cases, seen = [], set()
+    for n, snap in enumerate(snapshots):
+        argv = replayable(snap["argv"], work)
+        if shape_of(argv) in seen:
+            continue
+        seen.add(shape_of(argv))
+        service, name = argv[0], argv[1]
+        spec = doc[service]
+        world = World(work / f"install-{n}", snap["state"], shapes_path)
+        label = f"[install UTC] aws {' '.join(snap['argv'])}"
+        case = {
+            "label": label,
+            "argv": argv,
+            "zone": "UTC",
+            "service": spec,
+            "protocol": protocol_of(spec),
+        }
+        if (service, name) in fake_aws.CUSTOMIZATIONS:
+            operation_name = fake_aws.CUSTOMIZATIONS[(service, name)][0]
+            kebab = re.sub(r"(?<!^)(?=[A-Z])", "-", operation_name).lower()
+            password = snap["state"]["regions"]["us-west-2"].get(
+                "ecr_password", "fake-ecr-password"
+            )
+            case["operation"] = spec["operations"][kebab]
+            case["response"] = {
+                "authorizationData": [
+                    {
+                        "authorizationToken": base64.b64encode(
+                            f"AWS:{password}".encode()
+                        ).decode(),
+                        "expiresAt": "2026-10-22T02:38:00Z",
+                        "proxyEndpoint": f"https://{accounts.ACCOUNT}.dkr.ecr.us-west-2.amazonaws.com",
+                    }
+                ]
+            }
+            case["fake"] = world.aws(*argv, TZ="UTC")
+            cases.append(case)
+            continue
+        case["operation"] = spec["operations"][name]
+        try:
+            case["response"] = fake_aws.raw_response(snap["state"], argv, world.env())
+            case["fake"] = world.aws(*argv, TZ="UTC")
+        except fake_aws.ServiceError as error:
+            case["error"] = (error.code, error.message)
+            case["styles"] = {}
+            for style in fake_aws.ERROR_STYLES:
+                world.edit(lambda s, style=style: s.update(error_style=style))
+                case["styles"][style] = world.aws(*argv, TZ="UTC")
+            case["status"] = error.status
+        cases.append(case)
+    return cases
+
+
+#: A reader's AWS CLI config at its worst: keys in [default], and in the Identity Center
+#: profile and its session a region, an output format, a services section with an
+#: endpoint, and keys the CLI does not know. Dummy values only.
+READER_CONFIG = """[default]
+aws_access_key_id = h6-dummy-key-in-default
+aws_secret_access_key = h6-dummy-secret-in-default
+region = eu-west-1
+[profile controlvar-install]
+sso_session=acme
+sso_account_id = 111111111111
+sso_role_name = AdministratorAccess
+region = eu-west-1
+output = text
+services = elsewhere
+fancy = 1
+[sso-session acme]
+sso_start_url = https://acme.awsapps.com/start
+sso_region = us-east-1
+sso_registration_scopes = sso:account:access
+fancy = 2
+[services elsewhere]
+sts =
+  endpoint_url = http://127.0.0.1:1
+"""
+#: What the CLI resolves from the installer's copy, key by key (None: not there).
+COPY_RESOLVES = {
+    "sso_session": "acme",
+    "sso_account_id": "111111111111",
+    "sso_role_name": "AdministratorAccess",
+    "region": None,
+    "output": None,
+    "services": None,
+    "fancy": None,
+}
+
+
+def signin_checks(work: Path) -> list[str]:
+    """The installer's copy of the profile and its probe, run by its own functions with
+    the runner's CLI (no request leaves this machine: a closed local port, no cached
+    sign-in). Each problem, named."""
+    failures = []
+    home, record = work / "signin-home", work / "signin-record"
+    (record / "tmp").mkdir(parents=True)
+    home.mkdir()
+    reader = work / "reader-config"
+    reader.write_text(READER_CONFIG)
+    base = {"PATH": os.environ.get("PATH", ""), "HOME": str(home), "LC_ALL": "C"}
+    script = (
+        f'. "{LIB}/names.sh"; . "{LIB}/env.sh"; . "{LIB}/messages.sh"; '
+        f'CV_RECORD="{record}"; CV_PROFILE=controlvar-install; CV_BASE_PATH="$PATH"; cv_env_init; '
+        f'cv_copy_config "{reader}" controlvar-install "$CV_RECORD/aws-config" || exit 3; '
+        "if cv_probe; then printf 'probe passed\\n'; else printf 'probe failed\\n'; fi"
+    )
+    done = subprocess.run(
+        ["bash", "-c", script],
+        env=base,
+        capture_output=True,
+        text=True,
+        timeout=CLI_TIMEOUT,
+    )
+    probe = (
+        (record / "tmp" / "probe.err").read_text()
+        if (record / "tmp" / "probe.err").exists()
+        else ""
+    )
+    if done.returncode != 0 or done.stdout.splitlines()[-1:] != ["probe passed"]:
+        failures.append(
+            "B2: with no profile, the installer's environment found credentials or did not stop "
+            f"for want of them (exit {done.returncode}): {done.stdout.strip()} {done.stderr.strip()} {probe.strip()}"
+        )
+    elif "Unable to locate credentials" not in probe:
+        failures.append(
+            f"B2: the probe passed without the CLI's own words: {probe.strip()}"
+        )
+    cli = {
+        **base,
+        "AWS_CONFIG_FILE": str(reader),
+        "AWS_SHARED_CREDENTIALS_FILE": os.devnull,
+        "AWS_EC2_METADATA_DISABLED": "true",
+        "AWS_PAGER": "",
+    }
+    control = subprocess.run(
+        ["aws", "sts", "get-caller-identity", "--endpoint-url", "http://127.0.0.1:9"],
+        env=cli,
+        capture_output=True,
+        text=True,
+        timeout=CLI_TIMEOUT,
+        stdin=subprocess.DEVNULL,
+    )
+    if (
+        control.returncode != 255
+        or "Could not connect to the endpoint URL" not in control.stderr
+    ):
+        failures.append(
+            "B2's control: the reader's own file, whose [default] holds a key, should make the CLI "
+            f"find credentials and try the closed port; exit {control.returncode}: {control.stderr.strip()}"
+        )
+    copy = record / "aws-config"
+    if not copy.exists():
+        return failures + ["B1: the installer made no copy of the profile"]
+    for key, want in COPY_RESOLVES.items():
+        got = subprocess.run(
+            ["aws", "configure", "get", key, "--profile", "controlvar-install"],
+            env={**cli, "AWS_CONFIG_FILE": str(copy)},
+            capture_output=True,
+            text=True,
+            timeout=CLI_TIMEOUT,
+            stdin=subprocess.DEVNULL,
+        )
+        value = got.stdout.strip() if got.returncode == 0 else None
+        if value != want:
+            failures.append(
+                f"B1: the CLI reads {key} from the installer's copy as {value!r}, not {want!r}"
+            )
+    resolved = subprocess.run(
+        [
+            "aws",
+            "sts",
+            "get-caller-identity",
+            "--profile",
+            "controlvar-install",
+            "--endpoint-url",
+            "http://127.0.0.1:9",
+        ],
+        env={**cli, "AWS_CONFIG_FILE": str(copy)},
+        capture_output=True,
+        text=True,
+        timeout=CLI_TIMEOUT,
+        stdin=subprocess.DEVNULL,
+    )
+    if "acme" not in resolved.stderr or resolved.returncode == 0:
+        failures.append(
+            "B1: the CLI did not resolve the copy's profile to its sso-session acme (with no "
+            f"cached sign-in it must say so): exit {resolved.returncode}: {resolved.stderr.strip()}"
+        )
+    return failures
+
+
 def build_cases(work: Path, shapes_path: Path, doc: dict) -> list[dict]:
     cases = []
     calls_of: dict[str, list[list[str]]] = {}
@@ -349,6 +565,7 @@ def build_cases(work: Path, shapes_path: Path, doc: dict) -> list[dict]:
                         }
                     )
     cases += truncated_cases(work, shapes_path, doc, calls_of["installed"])
+    cases += install_cases(work, shapes_path, doc)
     denied = World(work / "denied", accounts.installed_account(), shapes_path)
     for service, name in DENIALS:
         spec = doc[service]
@@ -394,7 +611,9 @@ def main(args: list[str]) -> int:
         return 1
     work = Path(tempfile.mkdtemp(prefix="installer-cli-"))
     try:
-        shapes_path = shapes.write(work / "shapes.json", fake_aws.modelled_operations())
+        shapes_path = shapes.write(
+            work / "shapes.json", fake_aws.modelled_operations() + CUSTOMIZED
+        )
         doc = json.loads(shapes_path.read_text())
         cases = build_cases(work, shapes_path, doc)
         if listing:
@@ -407,11 +626,14 @@ def main(args: list[str]) -> int:
             f"comparing {len(cases)} calls with {version.stdout.strip() or version.stderr.strip()}"
         )
         failures = run(cases, work)
+        signin = signin_checks(work)
     finally:
         shutil.rmtree(work, ignore_errors=True)
     for failure in failures:
         print(f"::error::H6 {failure.splitlines()[0]}")
         print(failure)
+    for failure in signin:
+        print(f"::error::{failure}")
     forms = sorted({case["matched"] for case in cases if "matched" in case})
     print(
         f"this CLI prints a service's error in the form: {', '.join(forms) or 'none matched'}"
@@ -419,7 +641,11 @@ def main(args: list[str]) -> int:
     print(
         f"{len(cases) - len(failures)} of {len(cases)} calls print as the CLI prints them"
     )
-    return 1 if failures else 0
+    print(
+        "the installer's copy of the profile and its probe: "
+        + ("as the CLI resolves them" if not signin else f"{len(signin)} problem(s)")
+    )
+    return 1 if failures or signin else 0
 
 
 def run(cases: list[dict], work: Path) -> list[str]:

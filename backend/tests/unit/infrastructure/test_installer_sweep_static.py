@@ -316,15 +316,37 @@ def _names() -> dict[str, list[str]]:
     return out
 
 
+#: Every name lib/names.sh defines, with how many values it holds.
+NAME_COUNTS = {
+    "NAMES_ALARM_TOPIC": 1,
+    "NAMES_API_SERVICE": 1,
+    "NAMES_BACKEND_CONTAINER": 1,
+    "NAMES_BACKEND_REPOSITORY": 1,
+    "NAMES_CLUSTER": 1,
+    "NAMES_CODEDEPLOY_APPLICATION": 1,
+    "NAMES_DB_KEY_DESCRIPTION": 1,
+    "NAMES_DEPLOYMENT_GROUP": 1,
+    "NAMES_FAMILIES": 3,
+    "NAMES_FARGATE_OUTPUTS": 6,
+    "NAMES_FARGATE_STACK": 1,
+    "NAMES_JWT_SECRET": 1,
+    "NAMES_LOAD_BALANCER": 1,
+    "NAMES_LOG_GROUPS": 3,
+    "NAMES_MIGRATE_FAMILY": 1,
+    "NAMES_MIGRATE_LOG_GROUP": 1,
+    "NAMES_PASSWORD_SECRET": 1,
+    "NAMES_PROFILE_LINE": 1,
+    "NAMES_PROFILE_VARIABLE": 1,
+    "NAMES_STACKS": 9,
+    "NAMES_STACK_PREFIX": 1,
+    "NAMES_TABLES": 3,
+    "NAMES_WEB_REPOSITORY": 1,
+}
+
+
 def test_names_are_exact_values():
     names = _names()
-    assert sorted(names) == [
-        "NAMES_ALARM_TOPIC",
-        "NAMES_DB_KEY_DESCRIPTION",
-        "NAMES_FAMILIES",
-        "NAMES_TABLES",
-    ]
-    assert [len(names[n]) for n in sorted(names)] == [1, 1, 3, 3]
+    assert {name: len(values) for name, values in names.items()} == NAME_COUNTS
     for name, values in names.items():
         for value in values:
             assert value and not set(value) & set("*?[]"), (name, value)

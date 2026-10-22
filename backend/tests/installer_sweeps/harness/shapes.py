@@ -150,7 +150,9 @@ def manual_paging_flags(paginator: dict) -> list[str]:
 
 
 def write(path: Path, operations: list[tuple[str, str]]) -> Path:
-    path.write_text(json.dumps(extract(operations), sort_keys=True))
+    """The document, its structures' members in the model's order (not sorted):
+    member_order puts a response's keys in that order, as the CLI prints them."""
+    path.write_text(json.dumps(extract(operations)))
     return path
 
 

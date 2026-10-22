@@ -74,8 +74,17 @@ def _tags(raw) -> list[dict]:
     return [{"Key": t["Key"], "Value": t["Value"]} for t in tags]
 
 
+#: The operations registered here, as (service, operation): what install needs beyond the
+#: sweep's reads.
+REGISTERED: set[tuple[str, str]] = set()
+
+
 def register(fake) -> None:
-    op, ServiceError, Usage = fake.op, fake.ServiceError, fake.Usage
+    ServiceError, Usage = fake.ServiceError, fake.Usage
+
+    def op(service, name, **kw):
+        REGISTERED.add((service, name))
+        return fake.op(service, name, **kw)
 
     # --- account and regions ----------------------------------------------------------
     @op("ec2", "describe-regions")
@@ -788,7 +797,9 @@ def register(fake) -> None:
         for override in overrides.get("containerOverrides", []):
             for entry in override.get("environment", []):
                 env[entry["name"]] = entry["value"]
-        task_id = _id(f"task{c.state.get('calls')}", 32)
+        task_id = _id(
+            f"task{len(c.here.get('tasks', []))}", 32
+        )  # the same for a replay
         arn = f"arn:aws:ecs:{c.region}:{c.account}:task/{cluster['clusterName']}/{task_id}"
         app = c.state.setdefault("app", {})
         exit_code = app.get("migration_exit", 0)

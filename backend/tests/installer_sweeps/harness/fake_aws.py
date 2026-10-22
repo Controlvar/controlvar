@@ -177,6 +177,10 @@ def _credentials(env: dict, args: dict, state: dict | None = None) -> None:
     found = found or bool((state or {}).get("credentials_found_anyway"))
     parser = _read_config(env)
     profile = env.get("AWS_PROFILE")
+    if profile == "" and not found:
+        # Set and empty is a profile named "" to the CLI, not no profile (measured,
+        # aws-cli 2.28.24, scripts/check_installer_cli.py's sign-in checks).
+        raise CliFailure("\nThe config profile () could not be found\n", 255)
     if not found and profile:
         section = "default" if profile == "default" else f"profile {profile}"
         if parser is None or not parser.has_section(section):
@@ -1257,8 +1261,26 @@ def main(state_path: Path, shapes_path: Path, argv: list[str], env: dict) -> int
     unknown = state_path.parent / "unknown.log"
     answer = Answer()
     with _locked(state_path):
-        state = json.loads(state_path.read_text())
+        text = state_path.read_text()
+        state = json.loads(text)
         state["calls"] = state.get("calls", 0) + 1
+        if state.get("snapshots"):
+            # The state as this call found it, for a check that replays each call
+            # (scripts/check_installer_cli.py, test_wire.py): snapshots/<n>.json.
+            before = json.loads(text)
+            for key in ("snapshots", "calls", "fault_hits", "faults", "effects"):
+                before.pop(key, None)
+            folder = state_path.parent / "snapshots"
+            folder.mkdir(exist_ok=True)
+            (folder / f"{state['calls']}.json").write_text(
+                json.dumps(
+                    {
+                        "argv": argv,
+                        "env": {k: env[k] for k in LOGGED_VALUES if k in env},
+                        "state": before,
+                    }
+                )
+            )
         try:
             respond(state, json.loads(shapes_path.read_text()), argv, env, answer)
         except ServiceError as error:

@@ -363,6 +363,31 @@ class InstallWorld(World):
         }
 
 
+#: What a clean install changes, in order (D1): the CDK's setup stack, the two
+#: repositories, the two secrets, the certificate, its validation record, the ECS
+#: service-linked role, the two images, the nine stacks, the address, the migration's
+#: revision and task, then the smoke check's sign-in, key, flag and the key's revocation.
+CLEAN_WRITES = [
+    ("cdk", "bootstrap"),
+    ("ecr", "create-repository"),
+    ("ecr", "create-repository"),
+    ("secretsmanager", "create-secret"),
+    ("secretsmanager", "create-secret"),
+    ("acm", "request-certificate"),
+    ("route53", "change-resource-record-sets"),
+    ("iam", "create-service-linked-role"),
+    ("crane", "copy"),
+    ("crane", "copy"),
+    ("cdk", "deploy"),
+    ("route53", "change-resource-record-sets"),
+    ("ecs", "register-task-definition"),
+    ("ecs", "run-task"),
+    ("curl", f"POST https://{accounts.INSTALL_DOMAIN}/api/v1/auth/login"),
+    ("curl", f"POST https://{accounts.INSTALL_DOMAIN}/api/v1/api-keys"),
+    ("curl", f"POST https://{accounts.INSTALL_DOMAIN}/api/v1/feature-flags/"),
+    ("curl", f"DELETE https://{accounts.INSTALL_DOMAIN}/api/v1/api-keys/k1"),
+]
+
 #: The operations that change something in AWS or the account's registry.
 WRITE_PREFIXES = (
     "create-",
@@ -397,6 +422,41 @@ def is_write(call: dict) -> bool:
 
 def is_aws(call: dict) -> bool:
     return call["service"] not in LOCAL_TOOLS and call["service"] != "--version"
+
+
+def install_snapshots(root: Path, shapes: Path) -> tuple[list[dict], "InstallWorld"]:
+    """A clean install with the state each AWS call found kept: ``{"argv", "env",
+    "state"}`` per call, in order (the probe and the CLI's version aside), for the checks
+    that replay install's calls (test_wire.py, scripts/check_installer_cli.py)."""
+    world = InstallWorld(root, accounts.install_target(), shapes, stub_sweep=True)
+    world.edit(lambda s: s.update(snapshots=True))
+    done = world.install()
+    if done.code != 0 or world.unknown:
+        raise RuntimeError(
+            f"the install failed against the fakes (exit {done.code}): {done.err} {world.unknown}"
+        )
+    found = []
+    for path in sorted(
+        (world.fake_dir / "snapshots").glob("*.json"), key=lambda p: int(p.stem)
+    ):
+        snap = json.loads(path.read_text())
+        argv = snap["argv"]
+        if argv and argv[0] != "--version" and "http://127.0.0.1:9" not in argv:
+            found.append(snap)
+    return found, world
+
+
+def replayable(argv: list[str], folder: Path) -> list[str]:
+    """``argv`` with each file:// argument whose file is gone (the secrets' values, which
+    install removes once created) pointing at a stand-in file in ``folder``."""
+    out = []
+    for n, word in enumerate(argv):
+        if word.startswith("file://") and not Path(word[len("file://") :]).exists():
+            stand_in = folder / f"stand-in-{n}"
+            stand_in.write_text("stand-in-value-for-a-replay")
+            word = f"file://{stand_in}"
+        out.append(word)
+    return out
 
 
 #: Independent runs at once (each has its own fake state and scratch folder): the fault
