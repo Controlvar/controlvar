@@ -107,7 +107,10 @@ cv_bg() {
     local out="$1" err="$2"
     shift 2
     set -m
-    "$@" < /dev/null >> "$out" 2>> "$err" 8>&- 9>&- &
+    # The fork's own stderr goes nowhere: macOS's /bin/bash 3.2 has printed "child setpgid
+    # (<pid> to <pid>): Operation not permitted" there (2 runs in about 550 on a macOS
+    # runner), and the child ran all the same. The child's own stderr is still <err>.
+    { "$@" < /dev/null >> "$out" 2>> "$err" 8>&- 9>&- & } 2> /dev/null
     CV_CHILD=$!
     set +m
     CV_CHILDREN+=("$CV_CHILD")
