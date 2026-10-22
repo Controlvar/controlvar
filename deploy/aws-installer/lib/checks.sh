@@ -10,7 +10,7 @@
 # The tools and the oldest version of each the AWS guide's run used, as each tool reports it.
 # jq is 1.7, not the run's 1.7.1: Debian 13's and Ubuntu 24.04's jq packages are 1.7.1 and
 # report "jq-1.7", so a floor of 1.7.1 would refuse both. Debian 12 and Ubuntu 22.04 ship 1.6.
-CV_TOOLS="aws:2.28.24 cosign:3.1.3 crane:0.22.1 jq:1.7 node:22 python3:3.11"
+CV_TOOLS="aws:2.28.24 cosign:3.1.3 crane:0.22.1 jq:1.6 node:22 python3:3.11"
 CV_PRESENT="git dig curl openssl npm"
 # The release images and the workflow that signs them.
 CV_IMAGE_API="ghcr.io/controlvar/controlvar"
