@@ -396,10 +396,11 @@ def install_cases(work: Path, shapes_path: Path, doc: dict) -> list[dict]:
 
 #: A reader's AWS CLI config at its worst: keys in [default], and in the Identity Center
 #: profile and its session a region, an output format, a services section with an
-#: endpoint, and keys the CLI does not know. Dummy values only.
+#: endpoint, and keys the CLI does not know. Dummy values only, too short for a secret
+#: scanner to take for one.
 READER_CONFIG = """[default]
-aws_access_key_id = h6-dummy-key-in-default
-aws_secret_access_key = h6-dummy-secret-in-default
+aws_access_key_id = h6key
+aws_secret_access_key = h6secret
 region = eu-west-1
 [profile controlvar-install]
 sso_session=acme
