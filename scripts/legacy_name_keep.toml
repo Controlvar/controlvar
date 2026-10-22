@@ -742,6 +742,12 @@ count = 2
 reason = "K12: the image label main's deploy reads off every tag's image"
 
 [[keep]]
+path = "backend/tests/installer_sweeps/harness/accounts.py"
+literal = "io.experimently.profile"
+count = 1
+reason = "K12: the image label main's deploy reads off every tag's image"
+
+[[keep]]
 path = "backend/tests/unit/infrastructure/test_cross_version_identifiers.py"
 literal = "io.experimently.profile"
 count = 5
@@ -769,6 +775,12 @@ reason = "K12: the image label main's deploy reads off every tag's image"
 path = "backend/tests/unit/infrastructure/test_release_image_labels.py"
 literal = "io.experimently.profile"
 count = 2
+reason = "K12: the image label main's deploy reads off every tag's image"
+
+[[keep]]
+path = "deploy/aws-installer/lib/checks.sh"
+literal = "io.experimently.profile"
+count = 1
 reason = "K12: the image label main's deploy reads off every tag's image"
 
 [[keep]]
@@ -868,6 +880,12 @@ count = 3
 reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
 
 [[keep]]
+path = "backend/tests/installer_sweeps/harness/fake_tools.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
 path = "backend/tests/unit/infrastructure/test_core_checkout_image.py"
 literal = "EXPERIMENTLY_PROFILE"
 count = 1
@@ -935,6 +953,12 @@ reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
 
 [[keep]]
 path = "backend/tests/unit/showcase/test_showcase_capture_parts.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "deploy/aws-installer/lib/names.sh"
 literal = "EXPERIMENTLY_PROFILE"
 count = 1
 reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
@@ -1145,6 +1169,12 @@ reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
 
 [[keep]]
 path = "infrastructure/tests/test_hand_made_resources.py"
+literal = "EXPERIMENTLY_PROFILE"
+count = 1
+reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
+
+[[keep]]
+path = "infrastructure/tests/test_installer_names.py"
 literal = "EXPERIMENTLY_PROFILE"
 count = 1
 reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
