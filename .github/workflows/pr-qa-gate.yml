@@ -137,9 +137,9 @@ jobs:
       # (backend/tests/unit/docs, #1142): the page gate and the information
       # floor are among them, and core-build's docs step checks the same
       # directory on a docs-only change. On this full checkout nothing under
-      # any of the five directories skips.
-      - name: No workflow, statistical-gate, realistic-scenario, showcase or docs test was skipped
-        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic backend/tests/unit/showcase backend/tests/unit/docs
+      # any of these directories skips. The SMTP certificate tests must also run.
+      - name: No required test was skipped
+        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic backend/tests/unit/showcase backend/tests/unit/docs backend/tests/unit/services/test_email_notifier_tls
 
       # The Lambda functions (event processor, flag evaluation) and their
       # shared package carry tests of their own (240 collected) that ran
