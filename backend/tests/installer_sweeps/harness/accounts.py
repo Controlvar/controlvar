@@ -453,9 +453,126 @@ class Builder:
             aliases.append(self.aws_alias(region, name, key_id))
 
     def installed(self, zone: str = "example.org.") -> Builder:
+        """Everything an install makes: the CDK's setup stack, the nine stacks and
+        what the installer itself creates."""
+        return self.bootstrap_stack().nine_stacks().installer_made(zone)
+
+    def bootstrap_stack(self) -> Builder:
+        """What `cdk bootstrap` makes: CDKToolkit, its repository, bucket, roles and
+        version parameter."""
+        r = "us-west-2"
+        stack_id = self.arn(
+            "cloudformation", r, f"stack/CDKToolkit/{_key_id('CDKToolkit')}"
+        )
+        self.add(
+            r,
+            "stacks",
+            {
+                "StackId": stack_id,
+                "StackName": "CDKToolkit",
+                "CreationTime": "2026-10-21T03:26:40Z",
+                "StackStatus": "CREATE_COMPLETE",
+            },
+        )
+        self.tag(r, stack_id)
+        name = f"cdk-hnb659fds-container-assets-{self.account}-{r}"
+        self.add(r, "repositories", self.repository(name))
+        self.add(r, "parameters", self.parameter("/cdk-bootstrap/hnb659fds/version"))
+        for kind in (
+            "cfn-exec",
+            "deploy",
+            "file-publishing",
+            "image-publishing",
+            "lookup",
+        ):
+            self.add(
+                None,
+                "roles",
+                self.role(
+                    "/", f"cdk-hnb659fds-{kind}-role-{self.account}-{r}", CREATED
+                ),
+            )
+        self.add(
+            None,
+            "buckets",
+            {
+                "Name": f"cdk-hnb659fds-assets-{self.account}-{r}",
+                "CreationDate": "2026-10-21T00:56:00Z",
+            },
+        )
+        return self
+
+    def repository(self, name: str) -> dict:
+        r = "us-west-2"
+        return {
+            "repositoryArn": self.arn("ecr", r, f"repository/{name}"),
+            "registryId": self.account,
+            "repositoryName": name,
+            "repositoryUri": f"{self.account}.dkr.ecr.{r}.amazonaws.com/{name}",
+            "createdAt": "2026-10-21T02:37:00Z",
+            "imageTagMutability": "MUTABLE",
+            "imageScanningConfiguration": {"scanOnPush": False},
+            "encryptionConfiguration": {"encryptionType": "AES256"},
+        }
+
+    def parameter(self, name: str) -> dict:
+        return {
+            "Name": name,
+            "ARN": self.arn("ssm", "us-west-2", f"parameter{name}"),
+            "Type": "String",
+            "LastModifiedDate": "2026-10-21T03:27:00Z",
+            "Version": 1,
+            "Tier": "Standard",
+            "DataType": "text",
+        }
+
+    def installer_made(self, zone: str = "example.org.") -> Builder:
+        """What the installer creates itself: the two image repositories, the two
+        secrets, the certificate and its two records in the reader's zone."""
+        r = "us-west-2"
+        for name in (
+            "experimentation-platform/backend",  # names.py:38
+            "experimentation-platform/web",  # names.py:45
+        ):
+            self.add(r, "repositories", self.repository(name))
+        for name in (
+            "/staging/experimentation/jwt-secret",
+            "/staging/experimentation/first-superuser-password",
+        ):
+            secret = self.arn("secretsmanager", r, f"secret:{name}-{_id(name, 6)}")
+            self.add(
+                r,
+                "secrets",
+                {"ARN": secret, "Name": name, "CreatedDate": "2026-10-21T02:37:30Z"},
+            )
+            self.tag(r, secret)
+        host = zone.rstrip(".")
+        self.add(
+            r,
+            "certificates",
+            {
+                "CertificateArn": self.arn(
+                    "acm", r, f"certificate/{_key_id('certificate')}"
+                ),
+                "DomainName": f"install-test.{host}",
+                "Status": "ISSUED",
+                "Type": "AMAZON_ISSUED",
+                "KeyAlgorithm": "RSA_2048",
+                "InUse": True,
+            },
+        )
+        zones = self.state["global"].setdefault("hosted_zones", [])
+        for z in zones:
+            if z["Name"] == zone:
+                z["ResourceRecordSetCount"] += 2
+        return self
+
+    def nine_stacks(self) -> Builder:
+        """What `cdk deploy --all` makes: the nine stacks and their resources, and the
+        service-linked roles AWS makes for them."""
         r = "us-west-2"
         vpc = f"vpc-{_id('install-vpc', 17)}"
-        for n, stack in enumerate(("CDKToolkit",) + STACKS):
+        for n, stack in enumerate(STACKS, 1):
             stack_id = self.arn("cloudformation", r, f"stack/{stack}/{_key_id(stack)}")
             self.add(
                 r,
@@ -646,25 +763,6 @@ class Builder:
             "task_definitions",
             {"family": FAMILIES[2], "revision": 2, "status": "ACTIVE"},
         )
-        for name in (
-            "experimentation-platform/backend",  # names.py:38
-            "experimentation-platform/web",  # names.py:45
-            f"cdk-hnb659fds-container-assets-{self.account}-{r}",
-        ):
-            self.add(
-                r,
-                "repositories",
-                {
-                    "repositoryArn": self.arn("ecr", r, f"repository/{name}"),
-                    "registryId": self.account,
-                    "repositoryName": name,
-                    "repositoryUri": f"{self.account}.dkr.ecr.{r}.amazonaws.com/{name}",
-                    "createdAt": "2026-10-21T02:37:00Z",
-                    "imageTagMutability": "MUTABLE",
-                    "imageScanningConfiguration": {"scanOnPush": False},
-                    "encryptionConfiguration": {"encryptionType": "AES256"},
-                },
-            )
         db = "experimentation-database-staging-auroracluster-1a2b3c4d5e6f"
         self.add(
             r,
@@ -763,11 +861,7 @@ class Builder:
                 "VpcId": vpc,
             },
         )
-        for name in (
-            "/staging/experimentation/jwt-secret",
-            "/staging/experimentation/first-superuser-password",
-            "experimentation-database-staging-credentials",
-        ):
+        for name in ("experimentation-database-staging-credentials",):
             secret = self.arn("secretsmanager", r, f"secret:{name}-{_id(name, 6)}")
             self.add(
                 r,
@@ -862,23 +956,7 @@ class Builder:
                 "TopicArn": topic,
             },
         )
-        for name in (
-            "/cdk-bootstrap/hnb659fds/version",
-            "/staging/experimentation/vpc-id",
-        ):
-            self.add(
-                r,
-                "parameters",
-                {
-                    "Name": name,
-                    "ARN": self.arn("ssm", r, f"parameter{name}"),
-                    "Type": "String",
-                    "LastModifiedDate": "2026-10-21T03:27:00Z",
-                    "Version": 1,
-                    "Tier": "Standard",
-                    "DataType": "text",
-                },
-            )
+        self.add(r, "parameters", self.parameter("/staging/experimentation/vpc-id"))
         self.state["regions"][r].setdefault("tables", []).extend(TABLES)
         pool = f"{r}_{_id('pool', 9)}"
         self.add(
@@ -924,22 +1002,7 @@ class Builder:
                 "CreationTime": "2026-10-21T03:45:00Z",
             },
         )
-        host = zone.rstrip(".")
-        self.add(
-            r,
-            "certificates",
-            {
-                "CertificateArn": self.arn(
-                    "acm", r, f"certificate/{_key_id('certificate')}"
-                ),
-                "DomainName": f"install-test.{host}",
-                "Status": "ISSUED",
-                "Type": "AMAZON_ISSUED",
-                "KeyAlgorithm": "RSA_2048",
-                "InUse": True,
-            },
-        )
-        # global: the stacks' roles, CDKToolkit's and the service-linked roles
+        # global: the stacks' roles and the service-linked roles
         for name in (
             "auth-staging-SmsRole",
             "compute-staging-FunctionRole",
@@ -952,34 +1015,31 @@ class Builder:
                     "/", f"experimentation-{name}-{_id(name, 12).upper()}", CREATED
                 ),
             )
-        for kind in (
-            "cfn-exec",
-            "deploy",
-            "file-publishing",
-            "image-publishing",
-            "lookup",
-        ):
-            self.add(
-                None,
-                "roles",
-                self.role(
-                    "/", f"cdk-hnb659fds-{kind}-role-{self.account}-{r}", CREATED
-                ),
-            )
+        roles = self.state["global"].setdefault("roles", [])
         for path, name in SERVICE_ROLES:
-            self.add(None, "roles", self.role(path, name, CREATED))
+            if not any(role["RoleName"] == name for role in roles):
+                self.add(None, "roles", self.role(path, name, CREATED))
+        return self
+
+    def install_zone(self, zone: str) -> Builder:
+        """The public zone an install writes into: delegated (the internet names its
+        four servers), holding its NS and SOA records only."""
+        servers = [
+            f"ns-{n}.awsdns-{n:02d}.{tld}"
+            for n, tld in ((101, "com"), (602, "net"), (1203, "org"), (1704, "co.uk"))
+        ]
         self.add(
             None,
-            "buckets",
+            "hosted_zones",
             {
-                "Name": f"cdk-hnb659fds-assets-{self.account}-{r}",
-                "CreationDate": "2026-10-21T00:56:00Z",
+                "Id": f"/hostedzone/Z{_id(zone, 20).upper()}",
+                "Name": zone,
+                "CallerReference": _id(zone + "ref", 36),
+                "Config": {"PrivateZone": False},
+                "ResourceRecordSetCount": 2,
+                "NameServers": servers,
             },
         )
-        zones = self.state["global"].setdefault("hosted_zones", [])
-        for z in zones:
-            if z["Name"] == zone:
-                z["ResourceRecordSetCount"] += 2
         return self
 
     def reader_zone(self, zone: str = "example.org.", records: int = 9) -> Builder:
@@ -1066,6 +1126,120 @@ class Builder:
         ):
             self.tag(r, arn)
         return self
+
+
+#: The release an install test installs, as the clone copy's VERSION says.
+RELEASE = "0.36.2"
+#: Its tag's commit in the fake git, and the images' revision label.
+REVISION = _id("release-commit", 40)
+#: The zone install writes into, and the name it installs at.
+INSTALL_ZONE = "beta.controlvar.dev."
+INSTALL_DOMAIN = "app.beta.controlvar.dev"
+#: The release workflow's identity, as cosign reports it.
+SIGNER = "https://github.com/Controlvar/controlvar/.github/workflows/release.yml"
+ISSUER = "https://token.actions.githubusercontent.com"
+
+
+def _digest(seed: str) -> str:
+    return "sha256:" + hashlib.sha256(seed.encode()).hexdigest()
+
+
+def release_image(repo: str, version: str = RELEASE, revision: str = REVISION) -> dict:
+    """One release image on ghcr.io: its index (linux/amd64 and an attestation entry),
+    the amd64 entry's config and labels, and its signature and attestation."""
+    index, amd64, attestation = (
+        _digest(f"{repo}:{kind}") for kind in ("index", "amd64", "att")
+    )
+    return {
+        "tags": {f"core-{version}": index},
+        "manifests": {
+            index: {
+                "schemaVersion": 2,
+                "mediaType": "application/vnd.oci.image.index.v1+json",
+                "manifests": [
+                    {
+                        "digest": amd64,
+                        "platform": {"os": "linux", "architecture": "amd64"},
+                    },
+                    {
+                        "digest": attestation,
+                        "platform": {"os": "unknown", "architecture": "unknown"},
+                    },
+                ],
+            }
+        },
+        "configs": {
+            amd64: {
+                "config": {
+                    "Labels": {
+                        "org.opencontainers.image.version": version,
+                        "io.experimently.profile": "core",
+                        "org.opencontainers.image.revision": revision,
+                    }
+                }
+            }
+        },
+        "signatures": {
+            index: {"subject": f"{SIGNER}@refs/tags/v{version}", "issuer": ISSUER}
+        },
+    }
+
+
+def install_target(zone: str = INSTALL_ZONE) -> dict:
+    """A new account an install can go into: the new account, the reader's own zone
+    for the install (public, delegated, four name servers), and what install reads
+    before its first write: the enabled regions, the limits (as the run's account had
+    them), the engines on offer, the release images and the clone's tag."""
+    builder = Builder().new_account().reader_zone()
+    builder.install_zone(zone)
+    state = builder.state
+    state["enabled_regions"] = ["us-west-2", "us-east-1"]
+    region = state["regions"]["us-west-2"]
+    region["quotas"] = {
+        "L-3032A538": {"Value": 6.0, "name": "Fargate On-Demand vCPU resource count"},
+        "L-0263D0A3": {"Value": 5.0, "name": "EC2-VPC Elastic IPs"},
+        "L-F678F1CE": {"Value": 5.0, "name": "VPCs per Region"},
+        "L-53DA6B97": {"Value": 50.0, "name": "Application Load Balancers per Region"},
+    }
+    region["orderable"] = [
+        {
+            "Engine": "aurora-postgresql",
+            "EngineVersion": "15.17",
+            "DBInstanceClass": "db.t3.medium",
+            "LicenseModel": "postgresql-license",
+        },
+        {
+            "Engine": "aurora-postgresql",
+            "EngineVersion": "15.17",
+            "DBInstanceClass": "db.t3.medium",
+            "LicenseModel": "postgresql-license",
+        },
+    ]
+    region["cache_engine_versions"] = [
+        {
+            "Engine": "redis",
+            "EngineVersion": "7.0",
+            "CacheParameterGroupFamily": "redis7",
+        }
+    ]
+    region["reserved_offerings"] = [
+        {
+            "ReservedCacheNodesOfferingId": "offering-1",
+            "CacheNodeType": "cache.t4g.small",
+            "Duration": 31536000,
+            "ProductDescription": "redis",
+            "OfferingType": "No Upfront",
+        }
+    ]
+    state["registry"] = {
+        "ghcr.io/controlvar/controlvar": release_image("ghcr.io/controlvar/controlvar"),
+        "ghcr.io/controlvar/controlvar-web": release_image(
+            "ghcr.io/controlvar/controlvar-web"
+        ),
+    }
+    state["git"] = {"tags": [f"v{RELEASE}"], "revision": REVISION}
+    state["app"] = {"version": RELEASE, "ips": ["203.0.113.10"]}
+    return state
 
 
 def new_account() -> dict:

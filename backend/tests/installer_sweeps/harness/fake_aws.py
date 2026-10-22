@@ -1,8 +1,8 @@
 """A stateful fake ``aws`` for the AWS installer beta (deploy/aws-installer/).
 
 It answers as the AWS CLI v2 does, from one JSON account state. The ``aws`` on
-PATH is a shim (``world.py``) that runs ``python -I -B fake_aws.py <state> <shapes>
-<arguments...>``, so the call's environment is exactly what its caller passed:
+PATH is a shim (``shim.py``) that runs ``main_argv([<state>, <shapes>, <arguments...>])``
+in the test's own Python, so the call's environment is exactly what its caller passed:
 
 * **Each tool is its fake.** The shim's folder is first on PATH; anything the
   harness does not fake reaches the test session's failing ``aws`` (exit 97,
@@ -84,7 +84,25 @@ GLOBAL_SERVICES = {"iam", "route53", "cloudfront", "sts"}
 GLOBAL_OPERATIONS = {("s3api", "list-buckets")}
 
 #: Options every operation takes (each with one value).
-GLOBAL_OPTIONS = ("--region", "--query", "--output")
+GLOBAL_OPTIONS = ("--region", "--query", "--output", "--endpoint-url")
+
+#: What ``aws --version`` prints: the AWS guide's run's CLI.
+CLI_VERSION = "aws-cli/2.28.24 Python/3.13.7 Darwin/25.2.0 exe/x86_64"
+
+#: The variables whose VALUES calls.log keeps (never a secret's): the rest are names only.
+LOGGED_VALUES = (
+    "AWS_PROFILE",
+    "AWS_REGION",
+    "AWS_DEFAULT_REGION",
+    "AWS_CONFIG_FILE",
+    "AWS_SHARED_CREDENTIALS_FILE",
+    "AWS_DEFAULT_OUTPUT",
+    "AWS_PAGER",
+    "AWS_EC2_METADATA_DISABLED",
+    "TZ",
+    "DOCKER_CONFIG",
+    "TUF_ROOT",
+)
 #: Flags every operation takes (no value): paging off.
 GLOBAL_FLAGS = ("--no-paginate",)
 
@@ -121,17 +139,94 @@ class Usage(Exception):
     """A call the CLI itself refuses before any request (exit 252)."""
 
 
+class CliFailure(Exception):
+    """A failure the CLI reports in its own words before any request, with its own
+    exit status: no credentials (253), a profile it cannot find, an endpoint it
+    cannot reach (255)."""
+
+    def __init__(self, text: str, status: int):
+        super().__init__(text)
+        self.text, self.status = text, status
+
+
+def _read_config(env: dict):
+    import configparser
+
+    path = env.get("AWS_CONFIG_FILE") or os.path.join(
+        env.get("HOME", "/nonexistent"), ".aws", "config"
+    )
+    parser = configparser.RawConfigParser()
+    if os.path.isfile(path):
+        try:
+            parser.read(path)
+        except configparser.Error:
+            return None
+    return parser
+
+
+def _credentials(env: dict, args: dict, state: dict | None = None) -> None:
+    """Where the CLI would find credentials, as it resolves them: keys in the
+    environment; the named profile (an IAM Identity Center one counts, its token
+    taken as good unless a fault says otherwise); or, with no profile named, the
+    [default] profile's keys. None is exit 253 before any request (measured: RB's
+    probe, aws-cli 2.28.24); with ``--endpoint-url`` a call that did find some goes
+    for that endpoint, here always a closed port (exit 255). ``state["credentials_
+    found_anyway"]`` is a source the fake does not model (a container's credential
+    endpoint, say), for the probe's own test."""
+    found = bool(env.get("AWS_ACCESS_KEY_ID") and env.get("AWS_SECRET_ACCESS_KEY"))
+    found = found or bool((state or {}).get("credentials_found_anyway"))
+    parser = _read_config(env)
+    profile = env.get("AWS_PROFILE")
+    if not found and profile:
+        section = "default" if profile == "default" else f"profile {profile}"
+        if parser is None or not parser.has_section(section):
+            raise CliFailure(
+                f"\nThe config profile ({profile}) could not be found\n", 255
+            )
+        found = any(
+            parser.has_option(section, key)
+            for key in (
+                "sso_session",
+                "sso_start_url",
+                "aws_access_key_id",
+                "credential_process",
+            )
+        )
+    elif not found and parser is not None and parser.has_section("default"):
+        found = any(
+            parser.has_option("default", key)
+            for key in ("aws_access_key_id", "credential_process")
+        )
+    if not found:
+        raise CliFailure(
+            '\nUnable to locate credentials. You can configure credentials by running "aws configure".\n',
+            253,
+        )
+    if args.get("--endpoint-url"):
+        raise CliFailure(
+            f'\nCould not connect to the endpoint URL: "{args["--endpoint-url"]}/"\n',
+            255,
+        )
+
+
 # --- the operations -----------------------------------------------------------------
 
 OPS: dict[tuple[str, str], tuple] = {}
 
 
-def op(service: str, name: str, values=(), flags=(), required=()):
-    """Register a handler. ``values`` take one argument, ``flags`` none;
-    ``required`` must be given, as the CLI requires them."""
+def op(service: str, name: str, values=(), flags=(), required=(), lists=()):
+    """Register a handler. ``values`` take one argument, ``flags`` none, ``lists``
+    one or more (up to the next option); ``required`` must be given, as the CLI
+    requires them."""
 
     def register(handler):
-        OPS[(service, name)] = (handler, set(values), set(flags), set(required))
+        OPS[(service, name)] = (
+            handler,
+            set(values),
+            set(flags),
+            set(required),
+            set(lists),
+        )
         return handler
 
     return register
@@ -472,9 +567,22 @@ def _certificates(c: Call) -> dict:
         types = set(listed.split(","))
     return {
         "CertificateSummaryList": [
-            s for s in c.items("certificates") if s["KeyAlgorithm"] in types
+            {k: v for k, v in s.items() if k not in CERTIFICATE_DETAIL}
+            for s in c.items("certificates")
+            if s["KeyAlgorithm"] in types
         ]
     }
+
+
+#: What the state keeps of a certificate beyond its summary (fake_ops_install.py).
+CERTIFICATE_DETAIL = {
+    "IdempotencyToken",
+    "ValidationRecord",
+    "Tags",
+    "issues_as",
+    "failure_reason",
+    "FailureReason",
+}
 
 
 @op("events", "list-rules")
@@ -570,8 +678,17 @@ def _saml(c: Call) -> dict:
 # route53, s3api, cloudfront, sts --------------------------------------------------------
 @op("route53", "list-hosted-zones")
 def _zones(c: Call) -> dict:
+    # The state keeps each zone's records and name servers beside it
+    # (fake_ops_install.py); a listing shows the zone only.
     return {
-        "HostedZones": list(c.world.get("hosted_zones", [])),
+        "HostedZones": [
+            {
+                k: v
+                for k, v in zone.items()
+                if k not in ("records", "NameServers", "public_ns")
+            }
+            for zone in c.world.get("hosted_zones", [])
+        ],
         "Marker": "",
         "IsTruncated": False,
         "MaxItems": "100",
@@ -794,7 +911,7 @@ def parse_argv(argv: list[str]):
     return argv[0], argv[1], argv[2:]
 
 
-def options(rest: list[str], values: set, flags: set) -> dict:
+def options(rest: list[str], values: set, flags: set, lists: set = frozenset()) -> dict:
     out: dict = {}
     i = 0
     while i < len(rest):
@@ -802,6 +919,17 @@ def options(rest: list[str], values: set, flags: set) -> dict:
         if name in flags or name in GLOBAL_FLAGS:
             out[name] = True
             i += 1
+        elif name in lists:
+            got = []
+            i += 1
+            while i < len(rest) and not rest[i].startswith("--"):
+                got.append(rest[i])
+                i += 1
+            if not got:
+                raise Usage(f"argument {name}: expected at least one argument")
+            if name in out:
+                raise Unmodelled(f"{name} given twice")
+            out[name] = got
         elif name in values or name in GLOBAL_OPTIONS:
             if i + 1 >= len(rest):
                 raise Usage(f"argument {name}: expected one argument")
@@ -845,7 +973,17 @@ def _profile_region(env: dict) -> str | None:
     return None
 
 
-def _fault(state: dict, service: str, name: str, region: str | None, number: int):
+def _fault(
+    state: dict,
+    service: str,
+    name: str,
+    region: str | None,
+    number: int,
+    argv: list[str] | tuple = (),
+):
+    """The first fault that matches this call, or None. ``has`` (a list) matches a
+    call whose arguments include each of its items, exactly: a fault can name one
+    read among several of the same operation by its --query."""
     hits = state.setdefault("fault_hits", {})
     for index, fault in enumerate(state.get("faults", [])):
         if "call" in fault and fault["call"] != number:
@@ -855,11 +993,41 @@ def _fault(state: dict, service: str, name: str, region: str | None, number: int
             for key, value in (("service", service), ("op", name), ("region", region))
         ):
             continue
+        if any(item not in argv for item in fault.get("has", ())):
+            continue
         hits[str(index)] = hits.get(str(index), 0) + 1
         if "nth" in fault and fault["nth"] != hits[str(index)]:
             continue
         return fault
     return None
+
+
+def effects(
+    state: dict, service: str, name: str | None, argv: list[str] | tuple
+) -> None:
+    """What happens on this computer while a call runs, for a test that needs time to pass
+    or a sign-in to end mid-run (``state["effects"]``, each matched as a fault is, once):
+    ``age_seconds`` sets a file's time that far back; ``drop_key`` removes a key from a JSON
+    file (a token cache that loses its refresh token)."""
+    for effect in state.get("effects", []):
+        if effect.get("done"):
+            continue
+        if any(
+            key in effect and effect[key] != value
+            for key, value in (("service", service), ("op", name))
+        ) or any(item not in argv for item in effect.get("has", ())):
+            continue
+        path = Path(effect["file"])
+        if "age_seconds" in effect:
+            when = datetime.datetime.now().timestamp() - effect["age_seconds"]
+            os.utime(path, (when, when))
+        if "drop_key" in effect:
+            data = json.loads(path.read_text())
+            data.pop(effect["drop_key"], None)
+            when = path.stat().st_mtime
+            path.write_text(json.dumps(data))
+            os.utime(path, (when, when))
+        effect["done"] = True
 
 
 def _denied(spec: dict, operation: dict, service: str, state: dict) -> ServiceError:
@@ -881,8 +1049,8 @@ def raw_response(state: dict, argv: list[str], env: dict) -> dict:
     handler's own answer, before the CLI's reduction, query or formatting. What
     scripts/check_installer_cli.py serves the real CLI; no fault applies."""
     service, name, rest = parse_argv(argv)
-    handler, values, flags, _ = OPS[(service, name)]
-    args = options(rest, values, flags)
+    handler, values, flags, _, lists = OPS[(service, name)]
+    args = options(rest, values, flags, lists)
     return handler(Call(state, service, name, args, resolve_region(args, env)))
 
 
@@ -902,16 +1070,30 @@ def respond(
 ) -> None:
     """Fill ``answer`` for one call; ``state`` is updated. Raises ServiceError,
     Usage or Unmodelled for the answers that are not a success."""
+    if argv == ["--version"]:
+        # The CLI's own answer, which no service is asked for; a fault here is the
+        # CLI failing to start (AccessDenied or error) or printing nothing (EMPTY).
+        fault = _fault(state, "--version", None, None, state["calls"], argv)
+        answer.fault = fault["mode"] if fault else None
+        if answer.fault in ("AccessDenied", "error"):
+            answer.err, answer.status = "aws: [ERROR]: the CLI could not start\n", 255
+        elif answer.fault != "EMPTY":
+            answer.out = state.get("cli_version", CLI_VERSION) + "\n"
+        return
     service, name, rest = parse_argv(argv)
+    if (service, name) in CUSTOMIZATIONS:
+        _customization(state, service, name, rest, env, answer)
+        return
     if (service, name) not in OPS:
         raise Unmodelled("operation not modelled")
-    handler, values, flags, required = OPS[(service, name)]
+    handler, values, flags, required, lists = OPS[(service, name)]
     spec = shapes.get(service)
     if spec is None or name not in spec["operations"]:
         raise Unmodelled("no output shape for this operation")
     operation = spec["operations"][name]
     answer.operation = operation["name"]
-    args = options(rest, values, flags)
+    args = options(rest, values, flags, lists)
+    _credentials(env, args, state)
     for flag in sorted(required):
         if flag not in args:
             raise Usage(f"the following arguments are required: {flag}")
@@ -938,7 +1120,9 @@ def respond(
         except jmespath.exceptions.JMESPathError as error:
             raise Usage(f"Bad value for --query {args['--query']}: {error}") from error
 
-    fault = _fault(state, service, name, answer.region, state["calls"])
+    fault = _fault(
+        state, service, name, answer.region, state["calls"], [service, name, *rest]
+    )
     answer.fault = fault["mode"] if fault else None
     if answer.fault == "AccessDenied":
         raise _denied(spec, operation, service, state)
@@ -981,6 +1165,62 @@ def respond(
     else:
         full = full_result(response, paginator)
         answer.out = render_json(full if query is None else query.search(full))
+
+
+#: The CLI's own commands that are not one service operation: (service, name) to
+#: (the operation they call, their options, the printer of their output).
+CUSTOMIZATIONS: dict[tuple[str, str], tuple] = {}
+
+
+def customization(service: str, name: str, operation: str, values=()):
+    def register(printer):
+        CUSTOMIZATIONS[(service, name)] = (operation, set(values), printer)
+        return printer
+
+    return register
+
+
+def _customization(
+    state: dict, service: str, name: str, rest: list, env: dict, answer
+) -> None:
+    operation, values, printer = CUSTOMIZATIONS[(service, name)]
+    answer.operation = operation
+    args = options(rest, values, set())
+    _credentials(env, args, state)
+    answer.region = resolve_region(args, env)
+    if answer.region is None:
+        answer.err = (
+            "You must specify a region. You can also configure your region by "
+            'running "aws configure".\n'
+        )
+        answer.status = EXIT_CONFIG
+        return
+    fault = _fault(
+        state, service, name, answer.region, state["calls"], [service, name, *rest]
+    )
+    answer.fault = fault["mode"] if fault else None
+    if answer.fault == "AccessDenied":
+        who = state["global"]["identity"]["Arn"]
+        raise ServiceError(
+            "AccessDeniedException",
+            f"User: {who} is not authorized to perform: {service}:{operation} because no "
+            "identity-based policy allows the action",
+        )
+    if answer.fault == "error":
+        raise ServiceError(
+            fault["code"],
+            fault.get("message", fault["code"]),
+            fault.get("exit", EXIT_SERVICE),
+        )
+    if answer.fault == "EMPTY":
+        return
+    answer.out = printer(state, args, answer.region)
+
+
+@customization("ecr", "get-login-password", "GetAuthorizationToken")
+def _login_password(state: dict, args: dict, region: str) -> str:
+    """The password ECR's authorization token holds, as the CLI prints it."""
+    return state["regions"][region].get("ecr_password", "fake-ecr-password") + "\n"
 
 
 #: The two forms CLIs print a service's error in (measured: aws-cli 2.38.1 on the
@@ -1030,11 +1270,18 @@ def main(state_path: Path, shapes_path: Path, argv: list[str], env: dict) -> int
         except Usage as error:
             answer.err = f"\naws: error: {error}\n"
             answer.status = EXIT_USAGE
+        except CliFailure as error:
+            answer.err = error.text
+            answer.status = error.status
+            answer.fault = answer.fault or "cli"
         except Unmodelled as error:
             answer.err = f"fake aws: {error}: aws {' '.join(argv)}\n"
             answer.status = EXIT_UNMODELLED
             with open(unknown, "a") as handle:
                 handle.write(f"{error}: aws {json.dumps(argv)}\n")
+        effects(
+            state, argv[0] if argv else "", argv[1] if len(argv) > 1 else None, argv
+        )
         record = {
             "n": state["calls"],
             "service": argv[0] if argv else None,
@@ -1044,13 +1291,27 @@ def main(state_path: Path, shapes_path: Path, argv: list[str], env: dict) -> int
             "exit": answer.status,
             "fault": answer.fault,
             "env": sorted(env),
+            "values": {k: env[k] for k in LOGGED_VALUES if k in env},
         }
         with open(calls, "a") as handle:
             handle.write(json.dumps(record) + "\n")
-        state_path.write_text(json.dumps(state, indent=1, sort_keys=True))
+        state_path.write_text(json.dumps(state))
     sys.stdout.write(answer.out)
     sys.stderr.write(answer.err)
     return answer.status
+
+
+def main_argv(argv: list[str]) -> int:
+    """``<state> <shapes> <arguments...>``: what the shim on PATH runs (harness/shim.py)."""
+    return main(Path(argv[0]), Path(argv[1]), argv[2:], dict(os.environ))
+
+
+# What install reads and writes, registered into this module's own table.
+if __package__:
+    from . import fake_ops_install as _install_ops
+else:
+    import fake_ops_install as _install_ops  # type: ignore[no-redef]
+_install_ops.register(sys.modules[__name__])
 
 
 if __name__ == "__main__":

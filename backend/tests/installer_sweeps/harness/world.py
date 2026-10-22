@@ -1,8 +1,8 @@
 """A fake account in a scratch folder, and the beta's shell code run against it.
 
-``World`` writes the state, puts a shim named ``aws`` first on PATH (it runs the
-fake with the state and shapes files as its first arguments, under ``python -I
--B``), gives the run a scratch HOME, and reads back the fake's logs. Nothing here
+``World`` writes the state, puts a command named ``aws`` first on PATH (harness/shim.py:
+it runs the fake with the state and shapes files as its first arguments, in this test's
+Python), gives the run a scratch HOME, and reads back the fake's logs. Nothing here
 reaches AWS: the shim is the only ``aws`` the code under test can find before the
 test session's failing one (backend/tests/no_real_aws.py), and the credential
 chain is the session's dummies.
@@ -13,11 +13,11 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import stat
 import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+from . import shim as _shim
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 LIB = REPO_ROOT / "deploy" / "aws-installer" / "lib"
@@ -67,12 +67,7 @@ class World:
         self.state = state
         self.bin = self.root / "bin"
         self.bin.mkdir()
-        shim = self.bin / "aws"
-        shim.write_text(
-            "#!/bin/sh\n"
-            f'exec "{sys.executable}" -I -B "{FAKE}" "{self.state_path}" "{shapes}" "$@"\n'
-        )
-        shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        _shim.write(self.bin / "aws", "fake_aws", str(self.state_path), str(shapes))
         self.home = self.root / "home"
         self.home.mkdir()
 
@@ -83,7 +78,7 @@ class World:
 
     @state.setter
     def state(self, value: dict) -> None:
-        self.state_path.write_text(json.dumps(value, indent=1, sort_keys=True))
+        self.state_path.write_text(json.dumps(value))
 
     def edit(self, change) -> None:
         """``change(state)`` in place, written back."""

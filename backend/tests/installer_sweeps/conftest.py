@@ -69,3 +69,27 @@ def make_world(tmp_path, shapes_file):
     # whatever it asserted.
     for world in made:
         assert world.unknown == "", world.unknown
+
+
+@pytest.fixture
+def make_install(tmp_path, shapes_file):
+    """``make_install(state=None, stub_sweep=True, ...)``: an InstallWorld (a fake
+    account an install can go into, and a reader's computer) in this test's folder."""
+    from backend.tests.installer_sweeps.harness.install_world import InstallWorld
+
+    made = []
+
+    def make(state: dict | None = None, name: str = "install", **kw) -> InstallWorld:
+        kw.setdefault("stub_sweep", True)
+        world = InstallWorld(
+            tmp_path / name,
+            state if state is not None else accounts.install_target(),
+            shapes_file,
+            **kw,
+        )
+        made.append(world)
+        return world
+
+    yield make
+    for world in made:
+        assert world.unknown == "", world.unknown
