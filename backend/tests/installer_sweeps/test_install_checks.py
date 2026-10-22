@@ -1300,14 +1300,26 @@ for _name, _change, *_rest in A4_CASES:
         prepare=lambda w, c=_change: w.edit(c),
         run=lambda w: w.install("--plan-only"),
     )
+#: The cases the scan decides by the error's code, again with the error in its other
+#: form (aws-cli 2.28.24's, no "aws: [ERROR]: " first).
+A4_BOTH_FORMS = [
+    "access-denied-in-us-west-2",
+    "access-denied-in-us-east-1",
+    "an-expired-token",
+    "throttling",
+]
+BATCH.in_the_other_error_form([f"a4-{name}" for name in A4_BOTH_FORMS])
 
 
 def test_an_account_with_this_apps_stacks_is_refused_before_the_prompt(ran):
     """A4: a stack of this app in any enabled region, or a stack scan that fails in any
     way but exactly AccessDenied outside us-west-2, refuses before the confirmation; the
-    exact AccessDenied elsewhere is "not checked" and the install goes on."""
+    exact AccessDenied elsewhere is "not checked" and the install goes on. The cases
+    decided by the error's code end the same way in either form of the error."""
     wrong = {}
-    for name, _, code, said in A4_CASES:
+    plain = [(f"{n}-plain", c, s) for n, _, c, s in A4_CASES if n in A4_BOTH_FORMS]
+    assert len(plain) == len(A4_BOTH_FORMS)
+    for name, code, said in [(n, c, s) for n, _, c, s in A4_CASES] + plain:
         world, done = ran[f"a4-{name}"].world, ran[f"a4-{name}"].done
         text = done.out + done.err
         if done.code != code or said not in text or world.writes():

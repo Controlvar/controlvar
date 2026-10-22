@@ -430,26 +430,88 @@ def is_aws(call: dict) -> bool:
     return call["service"] not in LOCAL_TOOLS and call["service"] != "--version"
 
 
-def install_snapshots(root: Path, shapes: Path) -> tuple[list[dict], "InstallWorld"]:
-    """A clean install with the state each AWS call found kept: ``{"argv", "env",
-    "state"}`` per call, in order (the probe and the CLI's version aside), for the checks
-    that replay install's calls (test_wire.py, scripts/check_installer_cli.py)."""
-    world = InstallWorld(root, accounts.install_target(), shapes, stub_sweep=True)
-    world.edit(lambda s: s.update(snapshots=True))
-    done = world.install()
-    if done.code != 0 or world.unknown:
-        raise RuntimeError(
-            f"the install failed against the fakes (exit {done.code}): {done.err} {world.unknown}"
+def _blocked_deploy(state: dict, **extra) -> None:
+    state.setdefault("cdk", {}).update(deploy="block", block_seconds=60, **extra)
+
+
+def _stopped_api_tasks(state: dict) -> None:
+    _blocked_deploy(state)
+    account = state["account"]
+    for n in (1, 2):
+        state["regions"]["us-west-2"].setdefault("tasks", []).append(
+            {
+                "taskArn": f"arn:aws:ecs:us-west-2:{account}:task/experimentation-staging/{n:032x}",
+                "clusterArn": f"arn:aws:ecs:us-west-2:{account}:cluster/experimentation-staging",
+                "taskDefinitionArn": f"arn:aws:ecs:us-west-2:{account}:task-definition/experimentation-backend-staging:1",
+                "lastStatus": "STOPPED",
+                "desiredStatus": "STOPPED",
+                "stoppedReason": "CannotPullContainerError: pull image manifest has been retried 5 time(s)",
+                "containers": [],
+            }
         )
-    found = []
-    for path in sorted(
-        (world.fake_dir / "snapshots").glob("*.json"), key=lambda p: int(p.stem)
-    ):
-        snap = json.loads(path.read_text())
-        argv = snap["argv"]
-        if argv and argv[0] != "--version" and "http://127.0.0.1:9" not in argv:
-            found.append(snap)
-    return found, world
+
+
+#: The paths a clean install does not take that make AWS calls of their own, each with
+#: the exit it ends in: a quota with no applied value (AWS's default is read), a stack
+#: that fails (its events are read), and the watcher's reads when the API's tasks stop
+#: and when a service event names the service-linked role.
+OTHER_PATHS = {
+    "a-quota-at-its-default": (
+        lambda s: s["regions"]["us-west-2"]["quotas"]["L-3032A538"].update(
+            applied=False, default=6.0
+        ),
+        0,
+    ),
+    "a-stack-that-fails": (
+        lambda s: s.setdefault("cdk", {}).update(
+            fail={"experimentation-database-staging": "Aurora said no"}
+        ),
+        1,
+    ),
+    "stopped-api-tasks": (_stopped_api_tasks, 1),
+    "a-service-event": (
+        lambda s: _blocked_deploy(
+            s,
+            service_events=[
+                "(service experimentation-backend-staging) was unable to assume the service-linked role"
+            ],
+        ),
+        1,
+    ),
+}
+
+
+def install_snapshots(root: Path, shapes: Path) -> tuple[list[dict], "InstallWorld"]:
+    """A clean install, then each of OTHER_PATHS, with the state each AWS call found kept:
+    ``{"argv", "env", "state"}`` per call, in order (the probe and the CLI's version aside),
+    for the checks that replay install's calls (test_wire.py, scripts/check_installer_cli.py).
+    The world returned is the clean install's."""
+    paths = [("clean", (None, 0)), *OTHER_PATHS.items()]
+
+    def one(name: str, change, code: int) -> tuple[list[dict], "InstallWorld"]:
+        world = InstallWorld(
+            root / name, accounts.install_target(), shapes, stub_sweep=True
+        )
+        world.edit(lambda s: s.update(snapshots=True))
+        if change is not None:
+            world.edit(change)
+        done = world.install()
+        if done.code != code or world.unknown:
+            raise RuntimeError(
+                f"{name} against the fakes ended in exit {done.code}, not {code}: {done.err} {world.unknown}"
+            )
+        snaps = []
+        for path in sorted(
+            (world.fake_dir / "snapshots").glob("*.json"), key=lambda p: int(p.stem)
+        ):
+            snap = json.loads(path.read_text())
+            argv = snap["argv"]
+            if argv and argv[0] != "--version" and "http://127.0.0.1:9" not in argv:
+                snaps.append(snap)
+        return snaps, world
+
+    done = in_parallel([lambda n=n, c=c, k=k: one(n, c, k) for n, (c, k) in paths])
+    return [snap for snaps, _ in done for snap in snaps], done[0][1]
 
 
 def replayable(argv: list[str], folder: Path) -> list[str]:
@@ -519,6 +581,26 @@ class Batch:
             "stub_sweep": stub_sweep,
         }
         return name
+
+    def in_the_other_error_form(self, names: list[str]) -> None:
+        """Each named scenario again as ``<name>-plain``: the fake prints every AWS error
+        without the ``aws: [ERROR]: `` that newer CLIs put first, as aws-cli 2.28.24
+        does."""
+        for name in names:
+            spec = self.scenarios[name]
+
+            def prepare(world, first=spec["prepare"]) -> None:
+                if first is not None:
+                    first(world)
+                world.edit(lambda state: state.update(error_style="plain"))
+
+            self.add(
+                f"{name}-plain",
+                prepare=prepare,
+                run=spec["run"],
+                serial=spec["serial"],
+                stub_sweep=spec["stub_sweep"],
+            )
 
     def run_all(self, root: Path, shapes: Path) -> dict[str, Ran]:
         """Every scenario, or (for a run by hand while working on one) only those whose

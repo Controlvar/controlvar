@@ -541,7 +541,7 @@ cv_watch() {
         if cv_aws cloudformation describe-stacks --stack-name "$NAMES_FARGATE_STACK" --query 'Stacks[0].StackStatus' \
             --output json > "$f" 2> "$f.err"; then
             status=$(cv_string "$f") || status="UNREADABLE"
-        elif grep -q 'does not exist' "$f.err"; then
+        elif [ "$(cv_error_code "$f.err")" = ValidationError ] && grep -q 'does not exist' "$f.err"; then
             status="ABSENT"
         else
             printf 'EXIT read: %s\n' "$(cv_error_code "$f.err")"

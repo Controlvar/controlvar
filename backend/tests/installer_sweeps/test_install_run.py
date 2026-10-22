@@ -29,6 +29,7 @@ from backend.tests.installer_sweeps.harness import accounts, fake_ops_install
 from backend.tests.installer_sweeps.harness.install_world import (
     ALARM,
     CLEAN_WRITES,
+    OTHER_PATHS,
     PROFILE,
     SHIM_ADDS,
     Batch,
@@ -449,6 +450,27 @@ BATCH.add(
         exit=254,
     ),
 )
+BATCH.add(
+    "quota-at-its-default", prepare=_state(OTHER_PATHS["a-quota-at-its-default"][0])
+)
+
+#: Each scenario in which a check decides by an AWS error's code: the clean run
+#: (NoSuchEntity, the ECS role absent; ValidationError's "does not exist", CDKToolkit
+#: absent), a quota with no applied value (NoSuchResourceException), the role AWS made
+#: meanwhile (InvalidInput's "has been taken"), the stack the watcher waits for and that
+#: never appears ("does not exist" again), and stops that name the code. Each runs again
+#: with the error's other form.
+BOTH_FORMS = [
+    "clean",
+    "quota-at-its-default",
+    "role-taken",
+    "role-create-AccessDenied",
+    "role-read-fails",
+    "session-check-fails",
+    "watch-a-read-that-fails",
+    "watch-the-stack-never-appears",
+]
+BATCH.in_the_other_error_form(BOTH_FORMS)
 
 
 @pytest.fixture(scope="module")
@@ -1065,3 +1087,45 @@ def test_a_role_read_that_fails_is_neither_present_nor_absent(ran):
     assert done.code == 2, done.err
     assert "could not read the role AWSServiceRoleForECS (Throttling)" in done.err
     assert ran["role-read-fails"].world.writes() == []
+
+
+def test_a_quota_with_no_applied_value_is_read_as_aws_default(ran):
+    world, done = ran["quota-at-its-default"].world, ran["quota-at-its-default"].done
+    assert done.code == 0, done.err
+    reads = [
+        (c["op"], c["exit"])
+        for c in world.aws_calls
+        if c["service"] == "service-quotas"
+    ]
+    assert ("get-service-quota", 254) in reads
+    assert ("get-aws-default-service-quota", 0) in reads
+
+
+# --- both forms of an AWS error ---------------------------------------------------------------
+
+
+def _said(one) -> list[str]:
+    """What a run printed to stderr, its own folders written as <root> and its log's
+    path left out (each world has its own)."""
+    root = str(one.world.root)
+    return [
+        line.replace(root, "<root>")
+        for line in one.done.err.splitlines()
+        if not line.startswith("Log: ")
+    ]
+
+
+@pytest.mark.parametrize("name", BOTH_FORMS)
+def test_a_check_that_reads_an_aws_error_reads_either_form(ran, name):
+    """A check reads the error's code in parentheses, never the start of its line: with
+    every error printed as aws-cli 2.28.24 prints it (no "aws: [ERROR]: " first), each
+    run ends as it does in the form newer CLIs print, in the same exit, the same changes
+    and the same words."""
+    prefixed, plain = ran[name], ran[f"{name}-plain"]
+    assert plain.world.state["error_style"] == "plain"
+    assert [c for c in plain.world.aws_calls if c["exit"] == 254], "no AWS error here"
+    assert (plain.done.code, plain.world.writes(), _said(plain)) == (
+        prefixed.done.code,
+        prefixed.world.writes(),
+        _said(prefixed),
+    )
