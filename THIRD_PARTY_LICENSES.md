@@ -212,8 +212,8 @@ These are the dashboard's **build-time** dependencies. The dashboard image runs 
 | Package | Version |
 |---|---|
 | `@img/colour` | 1.1.0 |
-| `@next/env` | 16.4.0 |
-| `@next/swc-linux-x64-gnu` | 16.4.0 |
+| `@next/env` | 16.4.1 |
+| `@next/swc-linux-x64-gnu` | 16.4.1 |
 | `@reduxjs/toolkit` | 2.11.2 |
 | `@standard-schema/spec` | 1.1.0 |
 | `@standard-schema/utils` | 0.3.0 |
@@ -236,7 +236,7 @@ These are the dashboard's **build-time** dependencies. The dashboard image runs 
 | `eventemitter3` | 5.0.4 |
 | `immer` | 11.1.18 |
 | `nanoid` | 3.3.20 |
-| `next` | 16.4.0 |
+| `next` | 16.4.1 |
 | `postcss` | 8.5.23 |
 | `react` | 19.3.0 |
 | `react-dom` | 19.3.0 |
