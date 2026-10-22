@@ -19,5 +19,5 @@
 # version there; scripts/check_requirements_lock.py fails the lint job
 # otherwise.
 -c constraints.txt
-schemathesis==4.29.3
+schemathesis==4.29.4
 hypothesis==6.168.5
