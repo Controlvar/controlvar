@@ -77,6 +77,7 @@ CORE_BUILD_STEPS: Dict[str, Optional[str]] = {
     "Set up Node.js": NOT_DOCS,
     "Install backend dependencies": NOT_DOCS,
     "Install gitleaks": NOT_DOCS,
+    "Install jq 1.7.1": NOT_DOCS,
     "Start a password-protected Redis": NOT_DOCS,
     "core build": NOT_DOCS,
 }

@@ -96,6 +96,12 @@ jobs:
       - name: No CDK test was skipped
         run: python3 scripts/check_junit_skips.py cdk-junit.xml infrastructure/tests
 
+      # The installs the next step replays run the real jq, and the installer refuses
+      # one older than 1.7.1; this image's reports 1.7 (see the script).
+      - name: Install jq 1.7.1
+        if: ${{ !cancelled() }}
+        run: scripts/install_jq.sh
+
       # The AWS installer beta's tests run against a fake aws
       # (backend/tests/installer_sweeps/harness). Here the runner's own CLI,
       # with no credential of any kind, is pointed at a stub on 127.0.0.1 that
