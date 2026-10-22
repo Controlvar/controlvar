@@ -244,6 +244,7 @@ cv_install() {
         cv_out "Plan only: nothing was created. Run the same command without --plan-only to install."
         exit 0
     fi
+    cv_aws ecr create-repository --repository-name early --output json > /dev/null 2>&1 || :
     cv_confirm
     cv_step_sweep
     cv_start

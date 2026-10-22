@@ -83,4 +83,5 @@ if [ "$EXIT_CODE" != "0" ]; then
   echo "::error title=Migration failed::Migration task $TASK_ID exited $EXIT_CODE; its last lines are above ($LOG_GROUP, $STREAM)."
   exit 1
 fi
+aws ecs list-clusters > /dev/null || true
 echo "migration task $TASK_ID exited 0"
