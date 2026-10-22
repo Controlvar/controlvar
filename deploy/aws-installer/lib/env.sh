@@ -94,6 +94,7 @@ cv_probe() {
     for entry in ${CV_ENV[@]+"${CV_ENV[@]}"}; do
         case "$entry" in
             AWS_PROFILE=*) ;;
+            AWS_CONFIG_FILE=*) kept+=("AWS_CONFIG_FILE=$HOME/.aws/config") ;;
             *) kept+=("$entry") ;;
         esac
     done
@@ -165,7 +166,7 @@ for key in ("sso_start_url", "sso_region", "sso_registration_scopes"):
         sys.exit(6)
     session_keys[key] = parser.get(session_section, key).strip()
 lines = [f"[{section}]", f"sso_session = {session}"]
-lines += [f"{key} = {value}" for key, value in keys.items()]
+lines += [f"{key} = {value}" for key, value in parser.items(section) if key != "sso_session"]
 lines += [f"[{session_section}]"]
 lines += [f"{key} = {value}" for key, value in session_keys.items()]
 partial = target + ".new"
