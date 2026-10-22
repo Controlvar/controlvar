@@ -1,4 +1,4 @@
-"""Gate H6's wiring: scripts/check_installer_cli.py in CDK Stack Tests (EMC 2).
+"""Gate H6's wiring: scripts/check_installer_cli.py in CDK Stack Tests.
 
 The real AWS CLI is blocked in every pytest session (backend/tests/no_real_aws.py),
 so the comparison of the fake ``aws`` with the runner's CLI is a step outside pytest

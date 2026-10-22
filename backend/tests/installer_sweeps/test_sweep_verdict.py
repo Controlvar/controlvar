@@ -1,10 +1,10 @@
-"""Gate G3: the kept list is exact names (U10), and the verdict's classes (S6).
+"""Gate G3: the kept list is exact names, and the verdict's classes.
 
 deploy/aws-installer/lib/sweep.sh's sweep_verdict sorts every line that differs
 between the before and after sweeps into KEPT, LAG, NOT CHECKED or NOT EXPLAINED.
 Against the run's measured residue it must say PENDING with nothing unexplained;
 a stray role whose name merely starts like a service-linked role's, or the
-runbook's canary, must come out not explained, counted exactly, and be left alone.
+run's canary, must come out not explained, counted exactly, and be left alone.
 The kept list's static half (no pattern in a name) is
 backend/tests/unit/infrastructure/test_installer_sweep_static.py.
 """
@@ -214,8 +214,8 @@ def test_residue_outranks_incomplete(sweeps):
 
 
 def test_also_kept_lines_are_exact(sweeps):
-    """Uninstall can name further lines to keep (CDKToolkit and its bucket, under
-    D14's fallback); a line is kept only if it is one of them exactly."""
+    """Uninstall can name further lines to keep (CDKToolkit and its bucket, when it
+    keeps them); a line is kept only if it is one of them exactly."""
     stack = "CDKToolkit\tCREATE_COMPLETE"
     bucket = f"cdk-hnb659fds-assets-{ACCOUNT}-us-west-2"
     _add(sweeps, "after", "us-west-2/cfn-stacks.txt", stack)
@@ -269,9 +269,9 @@ REVISION = (
 
 
 def test_a_second_install_keeps_what_aws_finished_removing(again):
-    """The plan's own recovery path (uninstall, then install again): by the second
-    uninstall ECS has finished deleting the first install's revision, and the
-    second install left one of its own. Both are the families' revisions."""
+    """Recovering by uninstalling and installing again: by the second uninstall
+    ECS has finished deleting the first install's revision, and the second
+    install left one of its own. Both are the families' revisions."""
     _drop(again, "after", "us-west-2/ecs-td-delete-in-progress.txt", REVISION + "1")
     _add(again, "after", "us-west-2/ecs-td-delete-in-progress.txt", REVISION + "2")
     done = again.verdict("before", "after")

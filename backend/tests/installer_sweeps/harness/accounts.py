@@ -16,8 +16,8 @@ write and after the teardown).
   measured after its teardown: five service-linked roles, three DynamoDB SYSTEM
   backups, four task-definition revisions being deleted and their three INACTIVE
   families, four AWS-managed KMS keys and their aliases, the database's key
-  pending deletion, the unconfirmed alarm subscription (N3) and ten
-  tagging-index entries of deleted resources.
+  pending deletion, the alarm subscription never confirmed (it outlives its
+  topic) and ten tagging-index entries of deleted resources.
 
 IDs are made here (``_id``); none is the run's. The account is 111111111111.
 Timestamps are ISO 8601 in UTC, ending in Z, as the fake expects.
@@ -67,7 +67,8 @@ FIRST_USE_KEYS = (
     ),
 )
 
-#: The service-linked roles an install makes (RB 10.2), as path and name.
+#: The service-linked roles an install makes, which its teardown leaves in place,
+#: as path and name.
 SERVICE_ROLES = (
     ("/aws-service-role/ecs.amazonaws.com/", "AWSServiceRoleForECS"),
     (
@@ -109,7 +110,8 @@ DB_KEY_DESCRIPTION = (
     "KMS key for experimentation-database-staging PostgreSQL encryption"
 )
 
-#: The sweep files an install adds lines to (G1's mid sweep, PE 14(a)): each
+#: The sweep files an install adds lines to (G1's mid sweep, where every type the
+#: install creates shows a new line): each
 #: type ``installed_account`` makes, with the infrastructure/cdk resource type
 #: or the AWS action it stands for.
 CREATED_FILES = {

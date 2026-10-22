@@ -51,8 +51,8 @@ PATH is a shim (``world.py``) that runs ``python -I -B fake_aws.py <state> <shap
   stay empty.
 
 What it models is what the AWS guide's end-to-end run measured (2026-10-21: its
-sweeps and step logs; N1-N5 are that run's findings, RB n.n its steps) and the
-CLI's documented behaviour; it never answers from the beta's own input. Fixtures
+sweeps and step logs) and the CLI's documented behaviour; it never answers from
+the beta's own input. Fixtures
 use account 111111111111.
 """
 
@@ -254,7 +254,7 @@ def _task_definitions(c: Call) -> dict:
     status = c.arg("--status", "ACTIVE")
     if status not in ("ACTIVE", "INACTIVE", "DELETE_IN_PROGRESS"):
         raise Usage(f"Invalid choice for --status: {status}")
-    # N2, measured by the run: --family-prefix takes a FULL family name.
+    # Measured by the run: --family-prefix takes a FULL family name.
     # "experimentation-" matched nothing while three families existed.
     family = c.arg("--family-prefix")
     revisions = sorted(
@@ -512,7 +512,8 @@ def _recorders(c: Call) -> dict:
 
 @op("resourcegroupstaggingapi", "get-resources")
 def _tagged(c: Call) -> dict:
-    # The tagging index is its own list: it trails the services (RB 2.7, 10.2).
+    # The tagging index is its own list: it trails the services, and still listed
+    # deleted resources after the run's teardown.
     return {
         "ResourceTagMappingList": [
             {

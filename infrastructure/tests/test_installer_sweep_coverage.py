@@ -8,8 +8,8 @@ only inside a parent that has one and goes with it (``COVERED_BY_PARENT``). Both
 lists are exact for this synth: a type the stacks gain that neither names fails as
 "not swept", and an entry for a type the synth no longer makes fails as stale.
 
-Synthesised without cdk.json's context, as test_teardown_instructions.py does
-(NOT VERIFIED 8 in the beta's plan).
+Synthesised without cdk.json's context, as test_teardown_instructions.py does; a
+synth with that context, the mode a deploy runs in, is not checked here.
 """
 
 from __future__ import annotations

@@ -4,18 +4,19 @@
 # Install records the account before its first write (sweep_take); uninstall records it again
 # and sorts the difference against the kept list (sweep_verdict).
 #
-# The inventory is RB Appendix A's closed list for us-west-2, us-east-1 and global: one file per
-# type, one item per line, sorted, 58 types in each region and 10 global, 126 files. The kept
-# list is RB 10.2's, matched by exact name.
+# The inventory is the closed list the AWS guide's end-to-end run swept, for us-west-2,
+# us-east-1 and global: one file per type, one item per line, sorted, 58 types in each region
+# and 10 global, 126 files. The kept list is what AWS kept after that run's teardown, matched
+# by exact name.
 #
 # Every aws call goes through cv_aws, the wrapper lib/env.sh defines, and is a list, describe
 # or get operation: backend/tests/unit/infrastructure/test_installer_sweep_static.py fails on
 # any other.
 #
-# Where this departs from Appendix A, it fails closed where the runbook's block could not:
+# Where this departs from that run's commands, it fails closed where they could not:
 # - every read is --output json, the per-item lists included, and an answer that is empty, or
 #   is not one JSON list (or null, for a list the service leaves out), is a failed read.
-#   Appendix A read the per-item lists as text, where an empty answer reads as "none";
+#   The run read the per-item lists as text, where an empty answer reads as "none";
 # - an item goes into its per-item command as a whole argument ({}), never through pattern
 #   substitution, whose replacement text bash 5.2 can rewrite;
 # - the caller passes the folder and the account; nothing is sourced.
@@ -26,7 +27,7 @@
 
 _SWEEP_REGIONS=(us-west-2 us-east-1)
 
-# Appendix A's filter: one line per item, the columns of a row joined by tabs.
+# The run's filter: one line per item, the columns of a row joined by tabs.
 _SWEEP_FLAT='(. // []) | if type == "array" then .[] else . end | if type == "array" then map(tostring) | join("\t") else tostring end'
 
 _SWEEP_TAB=$'\t'
@@ -256,7 +257,7 @@ sweep_take() {
     return 1
 }
 
-# --- the verdict (RB 10.2; S6) ----------------------------------------------------------------
+# --- the verdict ------------------------------------------------------------------------------
 
 # What AWS makes on first use and keeps: the service-linked roles the stacks need, as
 # iam-roles.txt prints them (path, then name). Kept by exact line.

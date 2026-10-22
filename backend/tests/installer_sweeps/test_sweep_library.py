@@ -1,11 +1,11 @@
-"""Gate G1: the sweep library sees things, and only reads (PE 14).
+"""Gate G1: the sweep library sees things, and only reads.
 
-deploy/aws-installer/lib/sweep.sh, tested alone against the fake (the fault sweeps
-of install and uninstall stub it, EMC 1): exactly RB Appendix A's 126 files (P18),
-reads equal files plus items, a failed read is counted and fails the sweep, a
-canary is exactly one new line, and a sweep of an installed account shows new lines
-for every type the install creates (the fake's half of the run's mid sweep, PE
-14(a)). The static half (list, describe and get operations only) is
+deploy/aws-installer/lib/sweep.sh, tested alone against the fake (install's and
+uninstall's fault tests stub it): exactly the 126 files of the closed list the AWS
+guide's end-to-end run swept; reads equal files plus items; a failed read is counted
+and fails the sweep; a canary is exactly one new line; and a sweep of an installed
+account shows new lines for every type the install creates (the fake's half of the
+run's mid sweep). The static half (list, describe and get operations only) is
 backend/tests/unit/infrastructure/test_installer_sweep_static.py.
 """
 
@@ -20,7 +20,7 @@ pytestmark = pytest.mark.unit
 
 ACCOUNT = accounts.ACCOUNT
 
-#: RB Appendix A's types, in each of us-west-2 and us-east-1 (55 read once, 3 read
+#: The closed list's types, in each of us-west-2 and us-east-1 (55 read once, 3 read
 #: per item: ecs-services, kms-keys, backup-recovery-points).
 REGIONAL = (
     "cfn-stacks",
@@ -116,7 +116,7 @@ def test_a_new_account_is_126_files_and_126_reads(make_world, bash):
     assert done.out == _summary("before", 126, 0, world.root / "sweep" / "before")
     files = world.files("before")
     assert sorted(files) == FILES
-    # What the run's before sweep held, with this account's IDs (P18).
+    # What the run's before sweep held, with this account's IDs.
     held = {f: len(lines) for f, lines in files.items() if lines}
     default_network = {
         "ec2-vpcs": 1,
@@ -173,7 +173,7 @@ def test_reads_are_files_plus_items(baseline, make_world):
 
 
 def test_the_mid_sweep_shows_every_type_the_install_creates(baseline):
-    """PE 14(a)'s property on the fake: each type an install makes has new lines."""
+    """The run's mid sweep, on the fake: each type an install makes has new lines."""
     before, mid = (
         baseline.worlds["before"].files("before"),
         baseline.worlds["mid"].files("mid"),
@@ -223,8 +223,9 @@ def test_two_sweeps_moments_apart_are_identical(baseline, make_world):
 
 @pytest.mark.parametrize("tagged", [False, True], ids=["untagged", "tagged"])
 def test_a_canary_is_exactly_one_new_line(baseline, make_world, tagged):
-    """RB 2.4-2.5: an SSM parameter is one new line in ssm-parameters.txt; the
-    runbook's canary, tagged, also puts its ARN in tagged-resources.txt."""
+    """The run's canary check: an SSM parameter is one new line in
+    ssm-parameters.txt; the canary, tagged, also puts its ARN in
+    tagged-resources.txt."""
     world = make_world(accounts.new_account())
     arn = f"arn:aws:ssm:us-west-2:{ACCOUNT}:parameter/docs-run/sweep-canary"
 

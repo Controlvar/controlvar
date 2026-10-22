@@ -1,4 +1,4 @@
-"""The harness's fake ``aws``: what every installer test relies on it to do (PE 3).
+"""The harness's fake ``aws``: what every installer test relies on it to do.
 
 The fake is a specification of the CLI, so its own behaviour is pinned here: the
 region model, the three fault modes, the CLI's output (pagination, JSON, text,
@@ -357,7 +357,7 @@ def test_an_epoch_timestamp_prints_in_local_time_and_an_iso_one_in_utc(world):
 
 
 def test_family_prefix_takes_a_full_family_name(make_world):
-    """N2, measured by the AWS guide's run: "experimentation-" matched nothing."""
+    """Measured by the AWS guide's run: "experimentation-" matched nothing."""
     world = make_world(accounts.installed_account())
     argv = ("ecs", "list-task-definitions", "--region", "us-west-2", "--output", "json")
     prefix = world.aws(*argv, "--family-prefix", "experimentation-")
