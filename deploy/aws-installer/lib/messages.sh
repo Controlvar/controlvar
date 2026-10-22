@@ -249,15 +249,23 @@ msg_record_folder() {
 }
 
 msg_lock() {
-    cv_stop 2 "Another run of the installer is working on $(cv_account_end "$CV_ACCOUNT") on this computer (process $1)." \
-        "wait for it to finish, then run this command again."
+    local which="process $1" next="wait for it to finish, then run this command again."
+    if [ "$1" = unknown ]; then
+        which="it has not written its process number yet"
+        next="$next If no other run of the installer is open on this computer, one was stopped before it wrote that number: remove the folder $CV_RECORD/lock/held, then run this command again."
+    fi
+    cv_stop 2 "Another run of the installer is working on $(cv_account_end "$CV_ACCOUNT") on this computer ($which)." "$next"
 }
 
 # --- the sign-in ---------------------------------------------------------------------------
 
+# The probe reads only the installer's own environment: its copy of the profile, under its
+# own name and with no [default], a HOME holding only the sign-in cache, and none of the
+# shell's AWS variables. The reader's own AWS files are not what it read, so the next step
+# points at the aws command itself.
 msg_probe() {
-    cv_stop 2 "With no profile named, an AWS call from the installer's environment still found credentials ($1). The beta signs in only with the profile you name, so it does not start." \
-        "remove the access keys from the [default] profile of your AWS config file, or pass a config file that has none (AWS_CONFIG_FILE), and run this command again."
+    cv_stop 2 "With no profile named, an AWS call from the installer's environment did not stop for want of credentials ($1). That environment holds only the installer's copy of your profile, under a name of its own, and your sign-in cache: none of your shell's AWS variables and no other AWS file of yours. The beta signs in only with the profile you name, so it does not start." \
+        "check that aws is the AWS CLI itself and not a script that adds credentials (command -v aws; aws --version), then run this command again."
 }
 
 msg_no_profile() {

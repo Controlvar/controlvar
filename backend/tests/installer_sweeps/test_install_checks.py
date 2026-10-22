@@ -11,7 +11,8 @@ The checks' gates, each a list of runs in parallel: A1 (example.com and the bad 
 any address, before any AWS call), A2 (the first administrator's address never weaker than
 the API's EmailStr), A3 (only the typed account), A4 (no stack of this app in any enabled
 region), A5 (the zone usable before any create), A8 (~/.cdk.json), B1 (only an IAM
-Identity Center profile, and only its six keys) and B3 (the token rule). S2, the jq floor
+Identity Center profile, and only its six keys), the lock and the lists of what was here
+(each write to before/ checked), and B3 (the token rule). S2, the jq floor
 of 1.7, has five cases of the U1 kind: jq-1.6 and an empty version are refused, and jq-1.7
 (what Debian 13's and Ubuntu 24.04's 1.7.1 packages report), jq-1.7.1-apple and jq-1.8.2
 are not.
@@ -183,6 +184,23 @@ def _lock_held(world: InstallWorld) -> None:
     (held / "pid").write_text(f"{os.getpid()}\n")
 
 
+def _lock_without_a_number(text: str | None) -> Callable[[InstallWorld], None]:
+    """The lock as another run leaves it between making it and writing its process
+    number: no pid file (``None``), or an empty one."""
+
+    def change(world: InstallWorld) -> None:
+        held = world.record / "lock" / "held"
+        held.mkdir(parents=True)
+        if text is not None:
+            (held / "pid").write_text(text)
+
+    return change
+
+
+#: A process number no system gives (above macOS's 99998 and Linux's 4194304).
+DEAD_PID = "99999999"
+
+
 def _started(world: InstallWorld) -> None:
     facts = world.record / "env.d"
     facts.mkdir(parents=True)
@@ -312,6 +330,21 @@ CASES = [
         "Another run of the installer is working on the account ending in 1111",
         world=_lock_held,
     ),
+    # A lock whose run has not written its process number yet is held, not taken over.
+    Case(
+        "msg_lock",
+        2,
+        "on this computer (it has not written its process number yet).",
+        id="msg_lock-no-pid-file",
+        world=_lock_without_a_number(None),
+    ),
+    Case(
+        "msg_lock",
+        2,
+        "on this computer (it has not written its process number yet).",
+        id="msg_lock-empty-pid-file",
+        world=_lock_without_a_number(""),
+    ),
     Case(
         "msg_started",
         2,
@@ -428,7 +461,7 @@ CASES = [
     Case(
         "msg_probe",
         2,
-        "still found credentials (Could not connect to the endpoint URL",
+        "did not stop for want of credentials (Could not connect to the endpoint URL",
         state=lambda s: s.update(credentials_found_anyway=True),
     ),
     Case(
@@ -1576,6 +1609,9 @@ B1_REFUSED = [
         "msg_not_identity_center",
     ),
     ("source_profile = base\n", "msg_not_identity_center"),
+    # An indented line continues sso_role_name's value: copied as it is, it would be a
+    # seventh key of the copy's own.
+    ("  credential_process = /bin/false\n", "msg_not_identity_center"),
 ]
 
 
@@ -1605,9 +1641,9 @@ BATCH.add(
 
 
 def test_a_profile_that_is_not_identity_center_is_refused(ran):
-    """B1: keys, a credential process, a role to assume, a source profile, or a legacy
-    profile with no sso_session: refused, with the copy never made from them; and an IAM
-    user's or root's sign-in (no AWSReservedSSO_ role)."""
+    """B1: keys, a credential process, a role to assume, a source profile, a value that
+    runs over two lines, or a legacy profile with no sso_session: refused, with the copy
+    never made from them; and an IAM user's or root's sign-in (no AWSReservedSSO_ role)."""
     wrong = {}
     for i in range(len(B1_REFUSED) + 2):
         world, done = ran[f"b1-{i}"].world, ran[f"b1-{i}"].done
@@ -1618,6 +1654,100 @@ def test_a_profile_that_is_not_identity_center_is_refused(ran):
             wrong[i] = (done.code, done.err[:200])
         if i < len(B1_REFUSED) + 1 and [c for c in world.aws_calls if c["exit"] != 253]:
             wrong[i] = "an AWS call before the refusal"
+    assert wrong == {}, wrong
+
+
+# --- the lock and the record of what was here ------------------------------------------------
+
+BATCH.add(
+    "lock-dead-pid",
+    prepare=lambda w: (
+        (w.record / "lock" / "held").mkdir(parents=True),
+        (w.record / "lock" / "held" / "pid").write_text(DEAD_PID + "\n"),
+    ),
+    run=lambda w: w.install("--plan-only"),
+)
+
+
+def test_a_lock_with_no_process_number_is_held_and_a_dead_ones_taken_over(ran):
+    """The lock (lib/record.sh): another run makes the lock folder, then writes its process
+    number. Between the two the folder has no pid file, or an empty one, and a run that
+    took that lock over would run beside it; so it is held: refused, nothing read in AWS,
+    the folder left as it was. A lock whose process is gone is taken over."""
+    for key in ("msg_lock-no-pid-file", "msg_lock-empty-pid-file"):
+        world, done = ran[f"u1-{key}"].world, ran[f"u1-{key}"].done
+        assert done.code == 2, (key, done.err)
+        assert f"remove the folder {world.record}/lock/held" in done.err, done.err
+        assert world.aws_calls == [], (key, world.aws_calls)
+        assert (world.record / "lock" / "held").is_dir(), key
+    done = ran["lock-dead-pid"].done
+    assert done.code == 0, done.err
+    assert "Plan only: nothing was created." in done.out
+
+
+def test_the_childrens_home_is_only_ever_the_records_own(tmp_path):
+    """cv_home_init (lib/env.sh) removes and makes again <record>/home, so it refuses a
+    record that is not an absolute path of two parts or more, and a children's HOME that is
+    not <record>/home, removing nothing. (Only a relative record is tried here: an empty
+    one would name /home.)"""
+    lib = REPO_ROOT / "deploy" / "aws-installer" / "lib"
+    other = tmp_path / "other"
+    for kept in (tmp_path / "x" / "home" / "kept", other / "kept"):
+        kept.parent.mkdir(parents=True)
+        kept.write_text("")
+    for record, child in (("x", None), (str(tmp_path / "record"), str(other))):
+        script = (
+            f'. "{lib}/names.sh"; . "{lib}/env.sh"; . "{lib}/messages.sh"; '
+            f'CV_RECORD="{record}"; CV_BASE_PATH="$PATH"; cv_env_init; '
+            + (f'CV_CHILD_HOME="{child}"; ' if child else "")
+            + "cv_home_init; printf 'made\\n'"
+        )
+        done = subprocess.run(
+            ["bash", "-c", script],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "HOME": str(tmp_path / "reader")},
+            timeout=SAFETY_NET_SECONDS,
+        )
+        assert done.returncode == 2, (record, done.stdout, done.stderr)
+        assert done.stderr.startswith(
+            "REFUSED: The installer could not make the folder "
+        )
+    assert (tmp_path / "x" / "home" / "kept").exists()
+    assert (other / "kept").exists()
+
+
+#: The lists in before/ that uninstall reads (what was here before the install).
+BEFORE_LISTS = [
+    "service-linked-roles.txt",
+    "log-groups.txt",
+    "task-definitions.txt",
+    "zone-ns.txt",
+    "cdktoolkit.txt",
+]
+for _name in BEFORE_LISTS:
+    BATCH.add(
+        f"before-{_name}",
+        prepare=lambda w, n=_name: (w.record / "before" / n).mkdir(parents=True),
+        run=lambda w: w.install("--plan-only"),
+    )
+
+
+def test_a_list_of_what_was_here_that_cannot_be_written_refuses(ran):
+    """Uninstall keeps what before/'s lists name, so each write to one is checked: a list
+    the installer cannot write (here a folder where its file goes) refuses, exit 2, before
+    any change, and the shell's own error does not reach the terminal."""
+    wrong = {}
+    for name in BEFORE_LISTS:
+        world, done = ran[f"before-{name}"].world, ran[f"before-{name}"].done
+        if (
+            done.code != 2
+            or not done.err.startswith("REFUSED: The installer could not read ")
+            or "(an answer the installer could not record)" not in done.err
+            or world.writes()
+        ):
+            wrong[name] = (done.code, done.err[:300], world.writes())
     assert wrong == {}, wrong
 
 

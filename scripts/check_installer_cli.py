@@ -29,7 +29,12 @@ Tests, in a step outside pytest: every pytest session blocks the real CLI
    resolves and nothing else from the reader's file (no region, output, services or
    unknown key), and with no profile named, the installer's environment finds no
    credentials ("Unable to locate credentials") although the reader's file has a
-   [default] key, which the same CLI given the reader's file does find.
+   [default] key, which the same CLI given the reader's file does find. So too when
+   the reader's Identity Center profile is their [default] one (the copy takes the
+   installer's own name), and when the reader's HOME holds an alias file that turns
+   `aws sts` into a command of its own (the CLI's children run with a HOME of their
+   own); the same CLI given the reader's file, or the reader's HOME, is shown to read
+   each.
 
 The CLI's children get dummy keys, AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE
 at /dev/null and instance metadata off; the stub is the only endpoint. The sign-in
@@ -431,61 +436,105 @@ COPY_RESOLVES = {
 }
 
 
-def signin_checks(work: Path) -> list[str]:
-    """The installer's copy of the profile and its probe, run by its own functions with
-    the runner's CLI (no request leaves this machine: a closed local port, no cached
-    sign-in). Each problem, named."""
-    failures = []
-    home, record = work / "signin-home", work / "signin-record"
-    (record / "tmp").mkdir(parents=True)
-    # Where a reader's CLI keeps it: an installer that read the reader's own file would
-    # find its [default] key here.
-    reader = home / ".aws" / "config"
-    reader.parent.mkdir(parents=True)
-    reader.write_text(READER_CONFIG)
-    base = {"PATH": os.environ.get("PATH", ""), "HOME": str(home), "LC_ALL": "C"}
-    script = (
-        f'. "{LIB}/names.sh"; . "{LIB}/env.sh"; . "{LIB}/messages.sh"; '
-        f'CV_RECORD="{record}"; CV_PROFILE=controlvar-install; CV_BASE_PATH="$PATH"; cv_env_init; '
-        f'cv_copy_config "{reader}" controlvar-install "$CV_RECORD/aws-config" || exit 3; '
-        "if cv_probe; then printf 'probe passed\\n'; else printf 'probe failed\\n'; fi"
-    )
-    done = subprocess.run(
-        ["bash", "-c", script],
-        env=base,
-        capture_output=True,
-        text=True,
-        timeout=CLI_TIMEOUT,
-    )
-    probe = (
-        (record / "tmp" / "probe.err").read_text()
-        if (record / "tmp" / "probe.err").exists()
-        else ""
-    )
-    if done.returncode != 0 or done.stdout.splitlines()[-1:] != ["probe passed"]:
-        failures.append(
-            "B2: with no profile, the installer's environment found credentials or did not stop "
-            f"for want of them (exit {done.returncode}): {done.stdout.strip()} {done.stderr.strip()} {probe.strip()}"
-        )
-    elif "Unable to locate credentials" not in probe:
-        failures.append(
-            f"B2: the probe passed without the CLI's own words: {probe.strip()}"
-        )
-    cli = {
-        **base,
-        "AWS_CONFIG_FILE": str(reader),
-        "AWS_SHARED_CREDENTIALS_FILE": os.devnull,
-        "AWS_EC2_METADATA_DISABLED": "true",
-        "AWS_PAGER": "",
-    }
-    control = subprocess.run(
-        ["aws", "sts", "get-caller-identity", "--endpoint-url", "http://127.0.0.1:9"],
-        env=cli,
+#: A reader whose Identity Center profile is their [default] one. The CLI reads a
+#: [default] when no profile is named, so a copy written as [default] would make the
+#: probe sign in (with no cached sign-in: exit 255, "Error loading SSO Token").
+READER_DEFAULT_CONFIG = """[default]
+sso_session = acme
+sso_account_id = 111111111111
+sso_role_name = AdministratorAccess
+region = eu-west-1
+[sso-session acme]
+sso_start_url = https://acme.awsapps.com/start
+sso_region = us-east-1
+sso_registration_scopes = sso:account:access
+"""
+#: An alias file in the reader's HOME that makes `aws sts ...` a shell command of its own,
+#: which prints a line and exits 0, whatever was asked.
+ALIAS = "[toplevel]\nsts = !f() { printf 'an alias ran\\n'; }; f\n"
+#: The probe's endpoint: a closed local port.
+CLOSED = "http://127.0.0.1:9"
+
+
+def _aws(argv: list[str], env: dict) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["aws", *argv],
+        env=env,
         capture_output=True,
         text=True,
         timeout=CLI_TIMEOUT,
         stdin=subprocess.DEVNULL,
     )
+
+
+def _signin(work: Path, name: str, config: str, profile: str, files=None) -> dict:
+    """The installer's copy of ``profile`` from a reader's ``config``, and its probe, by
+    the installer's own functions (cv_env_init, cv_home_init, cv_copy_config, cv_probe),
+    with ``files`` also in the reader's HOME. Returns the reader's HOME, the copy, the
+    name the copy is under, and whether the probe passed in the CLI's own words."""
+    home, record = work / f"{name}-home", work / f"{name}-record"
+    (record / "tmp").mkdir(parents=True)
+    # Where a reader's CLI keeps it: an installer that read the reader's own file, or ran
+    # its children with the reader's HOME, would find what is planted here.
+    reader = home / ".aws" / "config"
+    reader.parent.mkdir(parents=True)
+    reader.write_text(config)
+    for relative, text in (files or {}).items():
+        (home / relative).parent.mkdir(parents=True, exist_ok=True)
+        (home / relative).write_text(text)
+    script = (
+        f'. "{LIB}/names.sh"; . "{LIB}/env.sh"; . "{LIB}/messages.sh"; '
+        f'CV_RECORD="{record}"; CV_PROFILE={profile}; CV_BASE_PATH="$PATH"; cv_env_init; cv_home_init; '
+        f'cv_copy_config "{reader}" {profile} "$CV_RECORD/aws-config" || exit 3; '
+        "printf 'copy %s\\n' \"$CV_COPY_PROFILE\"; "
+        "if cv_probe; then printf 'probe passed\\n'; else printf 'probe failed\\n'; fi"
+    )
+    done = subprocess.run(
+        ["bash", "-c", script],
+        env={"PATH": os.environ.get("PATH", ""), "HOME": str(home), "LC_ALL": "C"},
+        capture_output=True,
+        text=True,
+        timeout=CLI_TIMEOUT,
+    )
+    err = record / "tmp" / "probe.err"
+    probe = err.read_text() if err.exists() else ""
+    lines = done.stdout.splitlines()
+    return {
+        "home": home,
+        "copy": record / "aws-config",
+        "name": next((x.split(" ", 1)[1] for x in lines if x.startswith("copy ")), ""),
+        "passed": done.returncode == 0
+        and lines[-1:] == ["probe passed"]
+        and "Unable to locate credentials" in probe,
+        "said": f"exit {done.returncode}: {done.stdout.strip()} {done.stderr.strip()} {probe.strip()}",
+    }
+
+
+def _cli_env(home: Path, config: Path | str) -> dict:
+    return {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": str(home),
+        "LC_ALL": "C",
+        "AWS_CONFIG_FILE": str(config),
+        "AWS_SHARED_CREDENTIALS_FILE": os.devnull,
+        "AWS_EC2_METADATA_DISABLED": "true",
+        "AWS_PAGER": "",
+    }
+
+
+def signin_checks(work: Path) -> list[str]:
+    """The installer's copy of the profile and its probe, run by its own functions with
+    the runner's CLI (no request leaves this machine: a closed local port, no cached
+    sign-in). Each problem, named."""
+    failures = []
+    one = _signin(work, "signin", READER_CONFIG, "controlvar-install")
+    if not one["passed"]:
+        failures.append(
+            "B2: with no profile, the installer's environment found credentials or did not "
+            f"stop for want of them in the CLI's own words ({one['said']})"
+        )
+    cli = _cli_env(one["home"], one["home"] / ".aws" / "config")
+    control = _aws(["sts", "get-caller-identity", "--endpoint-url", CLOSED], cli)
     if (
         control.returncode != 255
         or "Could not connect to the endpoint URL" not in control.stderr
@@ -494,43 +543,97 @@ def signin_checks(work: Path) -> list[str]:
             "B2's control: the reader's own file, whose [default] holds a key, should make the CLI "
             f"find credentials and try the closed port; exit {control.returncode}: {control.stderr.strip()}"
         )
-    copy = record / "aws-config"
-    if not copy.exists():
+    if not one["copy"].exists() or not one["name"]:
         return failures + ["B1: the installer made no copy of the profile"]
+    copied = {**cli, "AWS_CONFIG_FILE": str(one["copy"])}
     for key, want in COPY_RESOLVES.items():
-        got = subprocess.run(
-            ["aws", "configure", "get", key, "--profile", "controlvar-install"],
-            env={**cli, "AWS_CONFIG_FILE": str(copy)},
-            capture_output=True,
-            text=True,
-            timeout=CLI_TIMEOUT,
-            stdin=subprocess.DEVNULL,
-        )
+        got = _aws(["configure", "get", key, "--profile", one["name"]], copied)
         value = got.stdout.strip() if got.returncode == 0 else None
         if value != want:
             failures.append(
                 f"B1: the CLI reads {key} from the installer's copy as {value!r}, not {want!r}"
             )
-    resolved = subprocess.run(
+    resolved = _aws(
         [
-            "aws",
             "sts",
             "get-caller-identity",
             "--profile",
-            "controlvar-install",
+            one["name"],
             "--endpoint-url",
-            "http://127.0.0.1:9",
+            CLOSED,
         ],
-        env={**cli, "AWS_CONFIG_FILE": str(copy)},
-        capture_output=True,
-        text=True,
-        timeout=CLI_TIMEOUT,
-        stdin=subprocess.DEVNULL,
+        copied,
     )
     if "acme" not in resolved.stderr or resolved.returncode == 0:
         failures.append(
             "B1: the CLI did not resolve the copy's profile to its sso-session acme (with no "
             f"cached sign-in it must say so): exit {resolved.returncode}: {resolved.stderr.strip()}"
+        )
+    failures += _default_profile_checks(work)
+    failures += _alias_checks(work)
+    return failures
+
+
+def _default_profile_checks(work: Path) -> list[str]:
+    """B2 with a reader whose Identity Center profile is [default]: the copy is under the
+    installer's own name, so the probe still finds nothing; the same CLI, given the reader's
+    own file and no profile, does load that [default]'s sign-in."""
+    failures = []
+    two = _signin(work, "default", READER_DEFAULT_CONFIG, "default")
+    if not two["passed"]:
+        failures.append(
+            "B2 [default]: with the reader's [default] profile copied, the probe found credentials "
+            f"or did not stop for want of them in the CLI's own words ({two['said']})"
+        )
+    copy = two["copy"].read_text() if two["copy"].exists() else ""
+    if two["name"] in ("", "default") or not copy.startswith(
+        f"[profile {two['name']}]\n"
+    ):
+        failures.append(
+            f"B2 [default]: the copy is not under the installer's own name: {two['name']!r}, {copy[:60]!r}"
+        )
+    else:
+        got = _aws(
+            ["configure", "get", "sso_session", "--profile", two["name"]],
+            _cli_env(two["home"], two["copy"]),
+        )
+        if got.returncode != 0 or got.stdout.strip() != "acme":
+            failures.append(
+                f"B2 [default]: the CLI reads the copy's sso_session as {got.stdout.strip()!r} (exit {got.returncode})"
+            )
+    control = _aws(
+        ["sts", "get-caller-identity", "--endpoint-url", CLOSED],
+        _cli_env(two["home"], two["home"] / ".aws" / "config"),
+    )
+    if control.returncode == 253 or "acme" not in control.stderr:
+        failures.append(
+            "B2 [default]'s control: the reader's own file, whose [default] is an Identity Center "
+            "profile, should make the CLI load its session's sign-in; "
+            f"exit {control.returncode}: {control.stderr.strip()}"
+        )
+    return failures
+
+
+def _alias_checks(work: Path) -> list[str]:
+    """B1 with an alias file in the reader's HOME: the probe runs with the installer's own
+    HOME and finds no credentials; the same CLI with the reader's HOME runs the alias."""
+    failures = []
+    three = _signin(
+        work, "alias", READER_CONFIG, "controlvar-install", {".aws/cli/alias": ALIAS}
+    )
+    if not three["passed"]:
+        failures.append(
+            "B1 [home]: with an alias file in the reader's HOME, the probe did not stop for want of "
+            f"credentials in the CLI's own words ({three['said']})"
+        )
+    control = _aws(
+        ["sts", "get-caller-identity", "--endpoint-url", CLOSED],
+        _cli_env(three["home"], os.devnull),
+    )
+    if control.returncode != 0 or control.stdout != "an alias ran\n":
+        failures.append(
+            "B1 [home]'s control: with the reader's HOME the CLI should run the alias; "
+            f"exit {control.returncode}: {control.stdout.strip()} {control.stderr.strip()}"
         )
     return failures
 

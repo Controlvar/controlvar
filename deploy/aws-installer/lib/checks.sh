@@ -246,7 +246,10 @@ cv_check_release() {
 
 # cv_check_cdk_json: the CDK CLI applies every setting in ~/.cdk.json as a user default
 # (plugin, build, output, rollback, context, toolkitStackName, profile ...), so only an empty
-# object, or no file, is accepted.
+# object, or no file, is accepted. The installer's own cdk runs with a HOME of its own
+# (cv_home_init) and does not read the reader's file at all (measured by hand, CDK CLI
+# 2.1144.0: a plugin there is loaded only with the reader's HOME), so this refusal is a
+# second guard.
 cv_check_cdk_json() {
     local file="$HOME/.cdk.json" keys
     if [ ! -e "$file" ] && [ ! -L "$file" ]; then
@@ -355,9 +358,13 @@ cv_read() {
     return 0
 }
 
-# cv_list <file> <jq test>: the answer is exactly one JSON list passing the test.
+# cv_list <file> <jq test> [<jq option>...]: the answer is exactly one JSON list passing the
+# test. A value the test compares with goes in as an option (--arg name value), never into
+# the test's own text.
 cv_list() {
-    jq -e -s "length == 1 and (.[0] | type == \"array\") and (.[0] | $2)" "$1" > /dev/null 2>&1
+    local file="$1" test="$2"
+    shift 2
+    jq -e -s "$@" "length == 1 and (.[0] | type == \"array\") and (.[0] | $test)" "$file" > /dev/null 2>&1
 }
 
 # cv_check_regions: the account's enabled regions, which must include us-west-2 and us-east-1.
@@ -470,20 +477,35 @@ cv_check_limits() {
     fi
 }
 
+# cv_before_write <file> <what> [<line>...]: with no line, before/<file> emptied; with
+# lines, each added to it. Uninstall keeps what these lists name, so a write that fails
+# refuses, as a read that fails does (the shell's own error goes to the log).
+cv_before_write() {
+    local name="$1" what="$2" file="$CV_RECORD/before/$1" err
+    shift 2
+    if [ "$#" -eq 0 ]; then
+        err=$({ : > "$file"; } 2>&1) && return 0
+    else
+        err=$({ printf '%s\n' "$@" >> "$file"; } 2>&1) && return 0
+    fi
+    cv_log "before/$name: ${err:-not written}"
+    msg_read_failed "$what" "an answer the installer could not record"
+}
+
 # cv_check_roles: which of the service-linked roles exist (NoSuchEntity is the only
 # "absent"), GuardDuty and Config, recorded in before/.
 cv_check_roles() {
-    local n f out="$CV_RECORD/before/service-linked-roles.txt"
-    : > "$out"
+    local n f out=service-linked-roles.txt
+    cv_before_write "$out" "the service-linked roles"
     for n in $CV_SERVICE_ROLES; do
         f="$CV_RECORD/tmp/role-$n.json"
         if cv_read "the role $n" "$f" iam get-role --role-name "$n" --query Role.RoleName; then
             if ! jq -e -s --arg n "$n" 'length == 1 and .[0] == $n' "$f" > /dev/null 2>&1; then
                 msg_read_failed "the role $n" "an answer that is not its name"
             fi
-            printf '%s present\n' "$n" >> "$out"
+            cv_before_write "$out" "the role $n" "$n present"
         elif [ "$CV_CODE" = NoSuchEntity ]; then
-            printf '%s absent\n' "$n" >> "$out"
+            cv_before_write "$out" "the role $n" "$n absent"
         else
             msg_read_failed "the role $n" "${CV_CODE:-no answer}"
         fi
@@ -507,13 +529,13 @@ cv_check_before() {
         ! cv_list "$f" 'all(type == "string")'; then
         msg_read_failed "the account's log groups" "${CV_CODE:-an answer that is not a list}"
     fi
-    : > "$CV_RECORD/before/log-groups.txt"
+    cv_before_write log-groups.txt "the account's log groups"
     for name in ${NAMES_LOG_GROUPS[@]+"${NAMES_LOG_GROUPS[@]}"}; do
         if jq -e --arg n "$name" 'index($n) != null' "$f" > /dev/null; then
-            printf '%s\n' "$name" >> "$CV_RECORD/before/log-groups.txt"
+            cv_before_write log-groups.txt "the account's log groups" "$name"
         fi
     done
-    : > "$CV_RECORD/before/task-definitions.txt"
+    cv_before_write task-definitions.txt "the account's task definitions"
     for status in ACTIVE INACTIVE; do
         f="$CV_RECORD/tmp/task-definitions-$status.json"
         if ! cv_read "the task definitions" "$f" ecs list-task-definitions --status "$status" --query taskDefinitionArns ||
@@ -593,7 +615,8 @@ cv_check_zone() {
     if [ "$(printf '%s\n' "$public" | sed '/^$/d' | wc -l | tr -d ' ')" != 4 ] || [ "$public" != "$ns" ]; then
         msg_zone_not_delegated "$CV_ZONE" "$(printf '%s' "${public:-none}" | tr '\n' ' ' | sed 's/ $//')" "$(printf '%s' "$ns" | tr '\n' ' ' | sed 's/ $//')"
     fi
-    printf '%s\n' "$ns" > "$CV_RECORD/before/zone-ns.txt"
+    cv_before_write zone-ns.txt "the name servers of $CV_ZONE"
+    cv_before_write zone-ns.txt "the name servers of $CV_ZONE" "$ns"
     f="$CV_RECORD/before/host-records.json"
     if ! cv_read "the records at $CV_DOMAIN" "$f" route53 list-resource-record-sets --hosted-zone-id "$CV_ZONE_ID" \
         --query "ResourceRecordSets[?Name=='$CV_DOMAIN.'].Type" ||
@@ -625,7 +648,8 @@ cv_check_collisions() {
     else
         msg_read_failed "the CDKToolkit stack" "${CV_CODE:-no answer}"
     fi
-    printf '%s\n' "$CV_CDKTOOLKIT" > "$CV_RECORD/before/cdktoolkit.txt"
+    cv_before_write cdktoolkit.txt "the CDKToolkit stack"
+    cv_before_write cdktoolkit.txt "the CDKToolkit stack" "$CV_CDKTOOLKIT"
     for repo in "$NAMES_BACKEND_REPOSITORY" "$NAMES_WEB_REPOSITORY"; do
         f="$CV_RECORD/tmp/repo.json"
         if ! cv_read "the repository $repo" "$f" ecr describe-repositories --query "repositories[?repositoryName=='$repo'].repositoryName" ||

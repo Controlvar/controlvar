@@ -160,7 +160,7 @@ cv_step_bootstrap() {
     cd "$CV_RECORD/tmp/bootstrap" || msg_tool_failed "cd" "1" "the bootstrap folder"
     : > "$CV_RECORD/logs/cdk-bootstrap.log"
     cv_run_long "$CV_RECORD/logs/cdk-bootstrap.log" "$CV_RECORD/logs/cdk-bootstrap.log" \
-        cv_cdk bootstrap "aws://$CV_ACCOUNT/$CV_REGION" --profile "$CV_PROFILE" --output "$CV_OUT" || rc=$?
+        cv_cdk bootstrap "aws://$CV_ACCOUNT/$CV_REGION" --profile "$CV_COPY_PROFILE" --output "$CV_OUT" || rc=$?
     cd "$CV_RECORD" || :
     if [ "$rc" -ne 0 ]; then
         msg_tool_failed "cdk bootstrap" "$rc" "$(tail -n 1 "$CV_RECORD/logs/cdk-bootstrap.log" 2> /dev/null)"
@@ -281,7 +281,8 @@ cv_step_certificate() {
         msg_tool_failed "aws route53 list-resource-record-sets" "1" "the records at the validation name could not be read"
     fi
     before=$(jq -c '.' "$CV_RECORD/tmp/at-name.json")
-    if cv_list "$CV_RECORD/tmp/at-name.json" 'length == 1 and .[0] == ["CNAME", "'"$value"'"]'; then
+    # shellcheck disable=SC2016  # $value is jq's own variable, given to it with --arg
+    if cv_list "$CV_RECORD/tmp/at-name.json" 'length == 1 and .[0] == ["CNAME", $value]' --arg value "$value"; then
         cv_out "  The validation record $name was already there with ACM's value; it is used and kept."
     elif cv_list "$CV_RECORD/tmp/at-name.json" 'length == 0'; then
         change=$(jq -n -c --arg name "$name" --arg type "$type" --arg value "$value" '{
@@ -399,7 +400,7 @@ cv_step_deploy() {
     cv_next_out
     : > "$list"
     : > "$err"
-    cv_run_long "$list" "$err" cv_cdk list --profile "$CV_PROFILE" --output "$CV_OUT" || rc=$?
+    cv_run_long "$list" "$err" cv_cdk list --profile "$CV_COPY_PROFILE" --output "$CV_OUT" || rc=$?
     cv_log "$(cat "$list" "$err" 2> /dev/null)"
     if [ "$rc" -ne 0 ]; then
         msg_tool_failed "cdk list" "$rc" "$(tail -n 1 "$err" 2> /dev/null)"
@@ -416,7 +417,7 @@ cv_step_deploy() {
     : > "$CV_RECORD/logs/cdk-deploy.log"
     : > "$CV_RECORD/tmp/watch.out"
     cv_bg "$CV_RECORD/logs/cdk-deploy.log" "$CV_RECORD/logs/cdk-deploy.log" \
-        cv_cdk deploy --all --require-approval never --profile "$CV_PROFILE" --output "$CV_OUT"
+        cv_cdk deploy --all --require-approval never --profile "$CV_COPY_PROFILE" --output "$CV_OUT"
     deploy_pid=$CV_CHILD
     cv_bg "$CV_RECORD/tmp/watch.out" "$CV_RECORD/tmp/watch.out" cv_watch
     watch_pid=$CV_CHILD

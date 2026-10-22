@@ -216,6 +216,7 @@ cv_install() {
     cv_record_init
     cv_traps
     cv_lock
+    cv_home_init
     cv_check_started
     cv_out "Checks (read-only; nothing is created yet):"
     cv_check_tools

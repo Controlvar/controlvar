@@ -2,14 +2,15 @@
 
 One clean install, its parent shell as hostile as a reader's can be (keys, another
 profile, an endpoint variable, text output), is read for most properties: what it changes
-and in which order (D1), the environment of every AWS child (B2), the config file every
-call reads (B1), the regions (B4), the secrets' bytes (D4), the first administrator (D5),
-one host and CREATE only (D7), the clone left as it was (D9), the ECS service-linked role
-(D10), the address checked through the zone's own servers (U8), and what it prints (U11,
-H5). The other scenarios change one thing about the account or this computer each: the
-typed confirmation, --plan-only and a decline (D1), the session check (B3b), the images
-(C1, C2), the CDK's target (A6), the schema (D5, D6), the validation record (D7), the
-watcher (D8), the service-linked role (D10) and a second install (E1).
+and in which order (D1), the environment of every AWS child and the HOME of its own it runs
+with (B2), the config file every call reads (B1), the regions (B4), the secrets' bytes
+(D4), the first administrator (D5), one host and CREATE only (D7), the clone left as it
+was (D9), the ECS service-linked role (D10), the address checked through the zone's own
+servers (U8), and what it prints (U11, H5). The other scenarios change one thing about the
+account or this computer each: the typed confirmation, --plan-only and a decline (D1), a
+reader whose profile is [default] (B2), the session check (B3b), the images (C1, C2), the
+CDK's target (A6), the schema (D5, D6), the validation record (D7), the watcher (D8), the
+service-linked role (D10) and a second install (E1).
 
 Every scenario is registered below and run at once, each in its own fake account, the
 first time a test asks for one (harness.install_world.Batch); each test reads its own. The
@@ -20,6 +21,7 @@ scenario asserts the fakes saw nothing they do not model.
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -29,8 +31,10 @@ from backend.tests.installer_sweeps.harness import accounts, fake_ops_install
 from backend.tests.installer_sweeps.harness.install_world import (
     ALARM,
     CLEAN_WRITES,
+    COPY_PROFILE,
     OTHER_PATHS,
     PROFILE,
+    SESSION,
     SHIM_ADDS,
     Batch,
     InstallWorld,
@@ -153,7 +157,9 @@ BATCH = Batch()
 
 
 def _hostile_reader(world: InstallWorld) -> None:
-    """The reader's profile and session carry keys the copy must leave behind."""
+    """The reader's profile and session carry keys the copy must leave behind, and the
+    children's HOME in the record holds a file from before (an alias file) that this run
+    must not keep."""
     config = world.write_config()
     text = config.read_text().replace(
         "output = text\n",
@@ -162,10 +168,33 @@ def _hostile_reader(world: InstallWorld) -> None:
     text += "fancy = 2\nservices = elsewhere\n"
     text += "[services elsewhere]\nsts =\n  endpoint_url = http://127.0.0.1:1\n"
     config.write_text(text)
+    left = world.record / "home" / ".aws" / "cli" / "alias"
+    left.parent.mkdir(parents=True)
+    left.write_text("[toplevel]\nsts = !f() { printf 'left from before\\n'; }; f\n")
     world.clone_before = world.clone_bytes()
 
 
+def _default_profile(world: InstallWorld) -> None:
+    """The reader's Identity Center profile is their [default] one."""
+    world.write_config(
+        "[default]\n"
+        f"sso_session = {SESSION}\n"
+        f"sso_account_id = {world.account}\n"
+        "sso_role_name = AdministratorAccess\n"
+        "region = us-west-2\n"
+        f"[sso-session {SESSION}]\n"
+        "sso_start_url = https://acme.awsapps.com/start\n"
+        "sso_region = us-east-1\n"
+        "sso_registration_scopes = sso:account:access\n"
+    )
+
+
 BATCH.add("clean", prepare=_hostile_reader, run=lambda w: w.install(**HOSTILE))
+BATCH.add(
+    "default-profile",
+    prepare=_default_profile,
+    run=lambda w: w.install("--aws-profile", "default"),
+)
 for _bash in BASHES:
     BATCH.add(f"bash-{bash_id(_bash)}", run=lambda w, b=_bash: w.install(bash=b))
 BATCH.add("typed", run=lambda w: w.on_terminal(typed=ACCOUNT + "\n"), serial=True)
@@ -335,6 +364,16 @@ def _validation_record(value: str):
 
 
 BATCH.add("validation-there", prepare=_validation_record(VALIDATION_VALUE))
+#: A validation value with a quotation mark and a backslash in it: the installer compares
+#: it with jq as a value (--arg), never as part of the program.
+QUOTED_VALUE = '_q"uo\\ted.xlfgrmvvlj.acm-validations.aws.'
+BATCH.add(
+    "validation-there-quoted",
+    prepare=_also(
+        _state(lambda s: s.setdefault("acm", {}).update(validation_value=QUOTED_VALUE)),
+        _validation_record(QUOTED_VALUE),
+    ),
+)
 BATCH.add("validation-other", prepare=_validation_record("somewhere.else.example.org."))
 BATCH.add("watch-cap", prepare=_also(_blocked(), lambda w: w.use_clock(60)))
 
@@ -519,7 +558,8 @@ def test_nothing_changes_before_the_confirmation(clean):
 
 def test_every_aws_child_runs_with_exactly_the_allowed_environment(clean):
     """B2: the parent's keys, profile, endpoint variables, output format, CDK defaults and
-    registry login reach no child; each child's environment is the allow-list."""
+    registry login reach no child; each child's environment is the allow-list, its HOME the
+    record's own (W1) and its profile the copy's own name (W2)."""
     variable = _profile_variable()
     record = clean.world.record
     seen = 0
@@ -552,10 +592,42 @@ def test_every_aws_child_runs_with_exactly_the_allowed_environment(clean):
         assert values["DOCKER_CONFIG"].startswith(str(record) + "/"), values[
             "DOCKER_CONFIG"
         ]
+        assert values["HOME"] == str(record / "home"), (call["n"], values["HOME"])
         if call["argv"][-2:] != ["--endpoint-url", "http://127.0.0.1:9"]:
-            assert values["AWS_PROFILE"] == PROFILE, call
+            assert values["AWS_PROFILE"] == COPY_PROFILE, call
         seen += 1
     assert seen > 70
+
+
+def test_every_cdk_call_signs_in_through_the_copy(clean):
+    """W2: each cdk call names the copy's own profile (--profile), the one AWS_PROFILE
+    names, never the reader's."""
+    calls = [
+        c for c in clean.world.calls if c["service"] == "cdk" and c["op"] != "--version"
+    ]
+    assert [c["op"] for c in calls] == ["bootstrap", "list", "deploy"], calls
+    for call in calls:
+        argv = call["argv"]
+        assert argv[argv.index("--profile") + 1] == COPY_PROFILE, argv
+        assert call["values"]["AWS_PROFILE"] == COPY_PROFILE, call["values"]
+
+
+def test_the_childrens_home_holds_only_the_sign_in_cache(clean):
+    """W1: every aws, cdk, crane and cosign child runs with HOME <record>/home, made again
+    on every run once the lock is held. Its only content is .aws/sso/cache, a link to the
+    reader's own sign-in cache (shared on purpose), so no other file under the reader's
+    HOME (an alias file, botocore's models, ~/.cdk.json) reaches a child; the alias file
+    left in it before the run is gone. That the real CLI reads neither the alias nor the
+    reader's file under it is shown in CDK Stack Tests (scripts/check_installer_cli.py)."""
+    home = clean.world.record / "home"
+    found = []
+    for folder, dirs, files in os.walk(home):
+        for name in dirs + files:
+            found.append(os.path.relpath(os.path.join(folder, name), home))
+    assert sorted(found) == [".aws", ".aws/sso", ".aws/sso/cache"], found
+    link = home / ".aws" / "sso" / "cache"
+    assert link.is_symlink()
+    assert os.readlink(link) == str(clean.world.home / ".aws" / "sso" / "cache")
 
 
 def test_the_probe_runs_with_no_profile(clean):
@@ -565,13 +637,40 @@ def test_the_probe_runs_with_no_profile(clean):
     assert "AWS_PROFILE" not in probe[0]["env"]
 
 
+def test_a_default_profile_is_copied_under_the_installers_own_name(ran):
+    """W2: a reader whose Identity Center profile is [default] installs: the copy is
+    written under the installer's own name, never as [default], so with no profile named
+    the probe still finds nothing (the CLI reads an Identity Center [default] as a way to
+    sign in), and every child and cdk call signs in through that name."""
+    world, done = ran["default-profile"].world, ran["default-profile"].done
+    assert done.code == 0, done.err
+    assert SUCCESS in done.out
+    copy = (world.record / "aws-config").read_text()
+    assert copy.splitlines()[0] == f"[profile {COPY_PROFILE}]", copy
+    assert "[default]" not in copy
+    probe = [c for c in world.calls if "http://127.0.0.1:9" in c["argv"]]
+    assert len(probe) == 1 and probe[0]["exit"] == 253
+    profiles = {
+        c["values"].get("AWS_PROFILE")
+        for c in world.calls
+        if is_aws(c) and c not in probe
+    }
+    assert profiles == {COPY_PROFILE}, profiles
+    cdk = [
+        c["argv"]
+        for c in world.calls
+        if c["service"] == "cdk" and c["op"] != "--version"
+    ]
+    assert cdk and {a[a.index("--profile") + 1] for a in cdk} == {COPY_PROFILE}, cdk
+
+
 def test_the_installer_reads_only_its_own_copy_of_the_profile(clean):
     """B1: the copy holds exactly the six keys (an unknown key and a services key in
-    the reader's profile and session are left behind), and it is the config file of
-    every AWS call."""
+    the reader's profile and session are left behind), under the installer's own profile
+    name, and it is the config file of every AWS call."""
     copy = (clean.world.record / "aws-config").read_text()
     assert copy == (
-        f"[profile {PROFILE}]\n"
+        f"[profile {COPY_PROFILE}]\n"
         "sso_session = acme\n"
         f"sso_account_id = {ACCOUNT}\n"
         "sso_role_name = AdministratorAccess\n"
@@ -1002,8 +1101,12 @@ def test_success_needs_the_schema(ran, name):
 # --- the validation record (D7) -------------------------------------------------------------
 
 
-def test_an_identical_earlier_validation_record_is_used_and_not_recorded(ran):
-    world, done = ran["validation-there"].world, ran["validation-there"].done
+@pytest.mark.parametrize("name", ["validation-there", "validation-there-quoted"])
+def test_an_identical_earlier_validation_record_is_used_and_not_recorded(ran, name):
+    """D7. ACM's value is compared as a value: one with a quotation mark and a backslash
+    (validation-there-quoted) is recognised too, where text spliced into jq's program
+    could not even be read."""
+    world, done = ran[name].world, ran[name].done
     assert done.code == 0, done.err
     assert (
         f"The validation record {VALIDATION} was already there with ACM's value; it is used and kept."

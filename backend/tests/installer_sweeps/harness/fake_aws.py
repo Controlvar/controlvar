@@ -91,6 +91,7 @@ CLI_VERSION = "aws-cli/2.28.24 Python/3.13.7 Darwin/25.2.0 exe/x86_64"
 
 #: The variables whose VALUES calls.log keeps (never a secret's): the rest are names only.
 LOGGED_VALUES = (
+    "HOME",
     "AWS_PROFILE",
     "AWS_REGION",
     "AWS_DEFAULT_REGION",
@@ -168,11 +169,13 @@ def _credentials(env: dict, args: dict, state: dict | None = None) -> None:
     """Where the CLI would find credentials, as it resolves them: keys in the
     environment; the named profile (an IAM Identity Center one counts, its token
     taken as good unless a fault says otherwise); or, with no profile named, the
-    [default] profile's keys. None is exit 253 before any request (measured: RB's
-    probe, aws-cli 2.28.24); with ``--endpoint-url`` a call that did find some goes
-    for that endpoint, here always a closed port (exit 255). ``state["credentials_
-    found_anyway"]`` is a source the fake does not model (a container's credential
-    endpoint, say), for the probe's own test."""
+    [default] profile, by its keys or as an IAM Identity Center one (the real CLI
+    then loads that session's token, and with none cached exits 255, "Error loading
+    SSO Token"; measured, aws-cli 2.28.24). None is exit 253 before any request
+    (measured: RB's probe, aws-cli 2.28.24); with ``--endpoint-url`` a call that did
+    find some goes for that endpoint, here always a closed port (exit 255).
+    ``state["credentials_found_anyway"]`` is a source the fake does not model (a
+    container's credential endpoint, say), for the probe's own test."""
     found = bool(env.get("AWS_ACCESS_KEY_ID") and env.get("AWS_SECRET_ACCESS_KEY"))
     found = found or bool((state or {}).get("credentials_found_anyway"))
     parser = _read_config(env)
@@ -199,7 +202,12 @@ def _credentials(env: dict, args: dict, state: dict | None = None) -> None:
     elif not found and parser is not None and parser.has_section("default"):
         found = any(
             parser.has_option("default", key)
-            for key in ("aws_access_key_id", "credential_process")
+            for key in (
+                "sso_session",
+                "sso_start_url",
+                "aws_access_key_id",
+                "credential_process",
+            )
         )
     if not found:
         raise CliFailure(

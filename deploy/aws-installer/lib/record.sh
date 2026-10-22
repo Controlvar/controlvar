@@ -13,6 +13,8 @@
 #   cdk-out/<n>/    each cdk call's own, new output folder; tools/ the pinned CDK CLI and venv
 #   tmp/            secret files until their create call, emptied on every exit and signal
 #   docker-config/  the registry login, only while the images copy; lock/ the run's pid
+#   home/           the HOME every aws, cdk, crane and cosign child runs with, made again on
+#                   each run: only .aws/sso/cache, a link to the reader's (lib/env.sh)
 # The lifecycle: no folder; planned (checks only, no STARTED); started (STARTED and a new
 # INSTALL_ID, written immediately before the first change in AWS); uninstalled.
 
@@ -34,7 +36,9 @@ cv_record_init() {
     : > "$CV_LOG" 2> /dev/null || CV_LOG=""
 }
 
-# cv_lock: one run per record. A lock left by a process that is gone is taken over.
+# cv_lock: one run per record. A lock left by a process that is gone is taken over. A lock
+# with no process number yet (its pid file missing or empty) is held: the run that made it
+# writes the number just after, so it may well be working.
 cv_lock() {
     local held="$CV_RECORD/lock/held" pid
     if mkdir "$held" 2> /dev/null; then
@@ -44,7 +48,8 @@ cv_lock() {
     fi
     pid=$(cat "$held/pid" 2> /dev/null) || pid=""
     case "$pid" in
-        '' | *[!0-9]*) ;;
+        '') msg_lock "unknown" ;;
+        *[!0-9]*) ;;
         *)
             if kill -0 "$pid" 2> /dev/null; then
                 msg_lock "$pid"

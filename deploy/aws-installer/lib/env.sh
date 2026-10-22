@@ -5,13 +5,20 @@
 #
 # Every child starts from `env -i` with exactly the variables below (cv_env_init): it never
 # sees keys, profiles or settings from the reader's shell or ~/.aws/config, only the
-# installer's own copy of one IAM Identity Center profile (cv_copy_config). The proxy and
-# certificate variables are passed on purpose when the reader's shell sets them.
+# installer's own copy of one IAM Identity Center profile (cv_copy_config), and it runs with
+# a HOME of its own (cv_home_init), so that only that copy and the shared sign-in cache
+# reach it. The proxy and certificate variables are passed on purpose when the reader's
+# shell sets them.
 
 # The one region, environment and profile the beta installs.
 CV_REGION="us-west-2"
 CV_ENVIRONMENT="staging"
 CV_CDK_PROFILE="core"
+# The name the installer's copy of the reader's profile is written under, whatever the
+# reader's profile is called (the record's own name): never `default`, which the CLI reads
+# when no profile is named (the probe). Every aws child gets it as AWS_PROFILE and every cdk
+# call as --profile.
+CV_COPY_PROFILE="controlvar-aws"
 
 # Passed to every child when set in the reader's shell: proxies and certificate bundles.
 CV_PASSED_ON_PURPOSE=(
@@ -19,18 +26,18 @@ CV_PASSED_ON_PURPOSE=(
     AWS_CA_BUNDLE SSL_CERT_FILE SSL_CERT_DIR NODE_EXTRA_CA_CERTS REQUESTS_CA_BUNDLE
 )
 
-# cv_env_init: builds the environment from the record (CV_RECORD), the profile (CV_PROFILE)
-# and the PATH the installer started with (CV_BASE_PATH). Call it again when CV_RECORD or
-# CV_PROFILE changes.
+# cv_env_init: builds the environment from the record (CV_RECORD) and the PATH the
+# installer started with (CV_BASE_PATH). Call it again when CV_RECORD changes.
 cv_env_init() {
     local name value
     CV_TOOLS_PATH="$CV_RECORD/tools/venv/bin:$CV_RECORD/tools/cdk-cli/node_modules/.bin:$CV_BASE_PATH"
+    CV_CHILD_HOME="$CV_RECORD/home"
     CV_ENV=(
         "PATH=$CV_TOOLS_PATH"
-        "HOME=$HOME"
+        "HOME=$CV_CHILD_HOME"
         "AWS_CONFIG_FILE=$CV_RECORD/aws-config"
         "AWS_SHARED_CREDENTIALS_FILE=/dev/null"
-        "AWS_PROFILE=$CV_PROFILE"
+        "AWS_PROFILE=$CV_COPY_PROFILE"
         "AWS_REGION=$CV_REGION"
         "AWS_EC2_METADATA_DISABLED=true"
         "AWS_PAGER="
@@ -45,6 +52,26 @@ cv_env_init() {
             CV_ENV+=("$name=$value")
         fi
     done
+}
+
+# cv_home_init: the children's HOME (CV_CHILD_HOME, in the record), made again on every run
+# once the lock is held. Its only content is .aws/sso/cache, a link to the reader's own
+# sign-in cache, shared on purpose: the CLI and the CDK read the profile's token there, and
+# write it back when they renew it. Nothing else under the reader's HOME reaches a child:
+# not ~/.aws/cli/alias, ~/.aws/models, ~/.cdk.json or any other file there. It removes
+# only the record's own home/: a record that is not an absolute path of two parts or more
+# (an empty one would make it /home) is refused first.
+cv_home_init() {
+    case "${CV_RECORD:-}" in
+        /?*/?*) ;;
+        *) msg_record_folder "${CV_RECORD:-(no record)}/home" ;;
+    esac
+    if [ "$CV_CHILD_HOME" != "$CV_RECORD/home" ] ||
+        ! rm -rf "$CV_CHILD_HOME" || [ -e "$CV_CHILD_HOME" ] || [ -L "$CV_CHILD_HOME" ] ||
+        ! mkdir "$CV_CHILD_HOME" "$CV_CHILD_HOME/.aws" "$CV_CHILD_HOME/.aws/sso" ||
+        ! ln -s "$HOME/.aws/sso/cache" "$CV_CHILD_HOME/.aws/sso/cache"; then
+        msg_record_folder "$CV_CHILD_HOME"
+    fi
 }
 
 # cv_aws <arguments...>: the AWS CLI under the installer's environment.
@@ -85,8 +112,13 @@ cv_script() {
 }
 
 # cv_probe: with no profile, under the installer's environment, the CLI must find no
-# credentials at all (exit 253, "Unable to locate credentials"). It is aimed at a closed
-# local port, so a call that did find some sends nothing anywhere. Exit 0 when it found none.
+# credentials at all (exit 253, "Unable to locate credentials"). With no profile named the
+# CLI reads [default], and the copy has none (CV_COPY_PROFILE). The call is aimed at a closed
+# local port: keys the CLI did find go no further than that port (exit 255, "Could not
+# connect to the endpoint URL"; scripts/check_installer_cli.py measures it). An Identity
+# Center profile the CLI did find would first ask its sign-in portal for credentials
+# (measured by hand, aws-cli 2.28.24, with a local stand-in for the portal), which is why
+# the copy never holds a [default]. Exit 0 when it found none.
 # No profile means no AWS_PROFILE at all: the CLI reads AWS_PROFILE= as a profile named ""
 # ("The config profile () could not be found").
 cv_probe() {
@@ -119,18 +151,20 @@ mask() {
 
 # --- the installer's own copy of the reader's profile ---------------------------------------
 
-# cv_copy_config <reader config file> <profile> <copy>: writes <copy> with exactly six keys:
-# the profile's sso_session, sso_account_id and sso_role_name, and its session's
-# sso_start_url, sso_region and sso_registration_scopes. Prints the session's name. Exit 3:
-# no such profile; 4: the profile holds a way to sign in the beta refuses (named on stderr);
-# 5: no sso_session; 6: the session is missing one of its keys.
+# cv_copy_config <reader config file> <profile> <copy>: writes <copy> with exactly six keys,
+# under the profile name CV_COPY_PROFILE whatever <profile> is called: the profile's
+# sso_session, sso_account_id and sso_role_name, and its session's sso_start_url, sso_region
+# and sso_registration_scopes. Prints the session's name. Exit 3: no such profile; 4: the
+# profile holds a way to sign in the beta refuses (named on stderr); 5: no sso_session; 6:
+# the session is missing one of its keys; 7: a value runs over more than one line (named on
+# stderr), which the copy would otherwise write as a line of its own.
 cv_copy_config() {
-    python3 -I - "$1" "$2" "$3" << 'PYTHON'
+    python3 -I - "$1" "$2" "$3" "$CV_COPY_PROFILE" << 'PYTHON'
 import configparser
 import os
 import sys
 
-source, profile, target = sys.argv[1:4]
+source, profile, target, copy_profile = sys.argv[1:5]
 parser = configparser.RawConfigParser()
 try:
     parser.read(source)
@@ -164,7 +198,11 @@ for key in ("sso_start_url", "sso_region", "sso_registration_scopes"):
         print(key, file=sys.stderr)
         sys.exit(6)
     session_keys[key] = parser.get(session_section, key).strip()
-lines = [f"[{section}]", f"sso_session = {session}"]
+for key, value in [("sso_session", session), *keys.items(), *session_keys.items()]:
+    if "\n" in value or "\r" in value:
+        print(key, file=sys.stderr)
+        sys.exit(7)
+lines = [f"[profile {copy_profile}]", f"sso_session = {session}"]
 lines += [f"{key} = {value}" for key, value in keys.items()]
 lines += [f"[{session_section}]"]
 lines += [f"{key} = {value}" for key, value in session_keys.items()]

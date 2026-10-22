@@ -42,6 +42,9 @@ from .world import FAKE, REPO_ROOT, SAFETY_NET_SECONDS, Result, World, as_text
 
 INSTALLER = REPO_ROOT / "deploy" / "aws-installer"
 PROFILE = "controlvar-install"
+#: The name the installer writes its copy of the reader's profile under (lib/env.sh's
+#: CV_COPY_PROFILE), whatever the reader's is called: never "default".
+COPY_PROFILE = "controlvar-aws"
 SESSION = "acme"
 ALARM = "alerts@beta.controlvar.dev"
 

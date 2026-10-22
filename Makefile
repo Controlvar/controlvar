@@ -294,8 +294,9 @@ lock-modules: $(VENV)/bin/uv ## Regenerate modules/requirements.lock from module
 .PHONY: installer-pins
 # The AWS installer beta's pins (deploy/aws-installer/pins/), the one command for both: the
 # CDK app's Python as a hashed lock, from the pins infrastructure/cdk/requirements.txt holds
-# for aws-cdk-lib and constructs, and the CDK CLI's npm lock. Run it whenever those pins or
-# the CLI's version move; test_installer_pins.py fails until it has been.
+# for aws-cdk-lib and constructs, and the CDK CLI's npm lock. Run it whenever those pins move
+# (test_installer_install_static.py::test_the_hashed_lock_agrees_with_the_cdk_apps_pins
+# fails until it has been) or the CLI's version does.
 installer-pins: $(VENV)/bin/uv ## Regenerate the AWS installer's pinned CDK app lock and CDK CLI lock
 	grep -E '^(aws-cdk-lib|constructs)==' infrastructure/cdk/requirements.txt > deploy/aws-installer/pins/requirements.in
 	$(VENV)/bin/uv pip compile deploy/aws-installer/pins/requirements.in --universal --generate-hashes \

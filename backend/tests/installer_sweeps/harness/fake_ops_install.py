@@ -624,14 +624,18 @@ def register(fake) -> None:
                 return {"CertificateArn": cert["CertificateArn"]}
         arn = f"arn:aws:acm:{c.region}:{c.account}:certificate/{_uuid(domain + str(token))}"
         names = [domain] + list(c.arg("--subject-alternative-names") or [])
+        # state["acm"]: how ACM ends a validation, for a test (issues_as FAILED or
+        # VALIDATION_TIMED_OUT with a failure_reason, or never_validates), and the
+        # validation record's value when a test sets one (validation_value).
+        settings = c.state.get("acm", {})
         record = {
             "Name": f"_{_id('validation' + domain, 32)}.{domain}.",
             "Type": "CNAME",
-            "Value": f"_{_id('target' + domain, 32)}.xlfgrmvvlj.acm-validations.aws.",
+            "Value": settings.get(
+                "validation_value",
+                f"_{_id('target' + domain, 32)}.xlfgrmvvlj.acm-validations.aws.",
+            ),
         }
-        # state["acm"]: how ACM ends a validation, for a test (issues_as FAILED or
-        # VALIDATION_TIMED_OUT with a failure_reason, or never_validates).
-        settings = c.state.get("acm", {})
         cert = {
             "CertificateArn": arn,
             "DomainName": domain,
