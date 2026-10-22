@@ -394,6 +394,19 @@ def test_only_lib_names_sh_spells_an_infrastructure_name():
     assert found == [], found
 
 
+def test_no_record_is_ever_upserted():
+    """D7: the reader's zone is theirs; every change is a CREATE, which fails on a record
+    already there, never an UPSERT, which would replace it."""
+    found = [
+        f"{path.relative_to(INSTALLER)}:{number}: {line}"
+        for path in INSTALL_FILES
+        for number, line in _code(path)
+        if "UPSERT" in line
+    ]
+    assert found == [], found
+    assert 'Action: "CREATE"' in (LIB / "steps.sh").read_text()
+
+
 def test_the_installers_source_is_ascii():
     for path in BETA_FILES:
         data = path.read_bytes()

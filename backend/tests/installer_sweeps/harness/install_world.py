@@ -101,6 +101,12 @@ class InstallWorld(World):
         context = self.clone / "infrastructure" / "cdk" / "cdk.context.json"
         context.parent.mkdir(parents=True)
         context.write_text("{}\n")
+        # The CDK app's own cdk.json, as a clone has it: a cdk call run in the clone
+        # would work, and write its cdk.context.json there.
+        shutil.copy2(
+            REPO_ROOT / "infrastructure" / "cdk" / "cdk.json",
+            context.parent / "cdk.json",
+        )
         self.launcher = self.clone / "deploy" / "aws-installer" / "controlvar-aws"
         self.account = state["account"]
         self.record = self.home / ".controlvar-aws" / f"{self.account}-us-west-2"

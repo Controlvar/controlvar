@@ -437,8 +437,10 @@ def signin_checks(work: Path) -> list[str]:
     failures = []
     home, record = work / "signin-home", work / "signin-record"
     (record / "tmp").mkdir(parents=True)
-    home.mkdir()
-    reader = work / "reader-config"
+    # Where a reader's CLI keeps it: an installer that read the reader's own file would
+    # find its [default] key here.
+    reader = home / ".aws" / "config"
+    reader.parent.mkdir(parents=True)
     reader.write_text(READER_CONFIG)
     base = {"PATH": os.environ.get("PATH", ""), "HOME": str(home), "LC_ALL": "C"}
     script = (

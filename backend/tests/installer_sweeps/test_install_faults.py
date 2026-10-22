@@ -306,6 +306,57 @@ def test_every_guard_fails_closed(sweep, mode):
     assert wrong == {}, "\n".join(f"{k}: {v}" for k, v in wrong.items())
 
 
+#: How many changes a clean install makes (CLEAN_WRITES): each is failed in turn below.
+WRITES = 18
+
+
+def test_after_any_failed_change_a_second_install_refuses(sweep):
+    """E1, the half that needs no uninstall: whichever change fails, the install stops
+    (exit 1) and a second install over its record refuses (UX-B9, exit 2) and calls
+    nothing at all. (That an uninstall then a new install converge is uninstall's.)"""
+    changes = [
+        (key, spec)
+        for key, spec in sweep.cases
+        if key[0] != "class"
+        and is_write(
+            {
+                "service": key[0],
+                "op": key[1] if key[0] != "dig" else "",
+            }
+        )
+    ]
+    assert len(changes) == WRITES, [k for k, _ in changes]
+
+    def twice(i_key_spec):
+        i, key, spec = i_key_spec
+        world = sweep.world(f"twice-{i}")
+        world.fault(**spec, mode="AccessDenied")
+        first = world.install()
+        world.clear_logs()
+        second = world.install()
+        problems = []
+        if first.code != 1:
+            problems.append(f"the failed install exited {first.code}")
+        if (
+            second.code != 2
+            or "This computer holds the record of an install" not in second.err
+        ):
+            problems.append(
+                f"the second install did not refuse: exit {second.code}, {second.err[:200]}"
+            )
+        if world.calls:
+            problems.append(
+                f"the second install called {[(c['service'], c['op']) for c in world.calls]}"
+            )
+        return key, problems
+
+    found = in_parallel(
+        [lambda x=x: twice(x) for x in [(i, k, s) for i, (k, s) in enumerate(changes)]]
+    )
+    wrong = {key: problems for key, problems in found if problems}
+    assert wrong == {}, wrong
+
+
 def test_a_failed_read_in_the_record_of_the_account_refuses_the_install(sweep):
     """D2's one case through the real sweep library: a read it cannot make (a sweep region
     denied) refuses the install before any change."""

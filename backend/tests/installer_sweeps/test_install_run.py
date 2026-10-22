@@ -564,18 +564,30 @@ def test_the_installer_reads_only_its_own_copy_of_the_profile(clean):
     assert configs == {str(clean.world.record / "aws-config")}
 
 
+#: The stack scan's read: the one call made outside us-west-2, in each other enabled
+#: region.
+SCAN = "StackSummaries[?StackStatus!='DELETE_COMPLETE' && starts_with(StackName, 'experimentation-')].StackName"
+
+
+def _query_of(call: dict) -> str | None:
+    argv = call["argv"]
+    return argv[argv.index("--query") + 1] if "--query" in argv else None
+
+
 def test_every_regional_call_is_in_us_west_2(clean):
     """B4: outside us-west-2 only the stack scan's other enabled region; IAM and Route 53
     are global, and the fake places them by the environment's region."""
     calls = clean.world.calls
     outside = sorted(
         {
-            (c["service"], c["op"], c["region"])
+            (c["service"], c["op"], c["region"], _query_of(c))
             for c in calls
             if is_aws(c) and c["region"] not in ("us-west-2", None)
         }
     )
-    assert outside == [("cloudformation", "list-stacks", "us-east-1")], outside
+    assert outside == [("cloudformation", "list-stacks", "us-east-1", SCAN)], [
+        f"call outside us-west-2: {o}" for o in outside
+    ]
     unplaced = [c for c in calls if is_aws(c) and c["region"] is None]
     assert [c["argv"][-2:] for c in unplaced] == [
         ["--endpoint-url", "http://127.0.0.1:9"]
