@@ -247,6 +247,41 @@ def test_json_keeps_null_and_true_text_prints_true(world):
     assert text_out.out.endswith("\tTrue\tNone\n")
 
 
+def test_a_paging_option_given_by_hand_prints_the_page_as_sent(make_world):
+    """--max-results is ListUserPools' limit key: the CLI makes one request and
+    prints the page as the service sent it, next-page token included (measured
+    with aws-cli 2.28.24), where a paged call prints its result keys only."""
+    world = make_world(accounts.installed_account())
+    world.edit(lambda s: s["regions"]["us-west-2"].update(user_pools_next_token="t2"))
+    argv = (
+        "cognito-idp",
+        "list-user-pools",
+        "--region",
+        "us-west-2",
+        "--max-results",
+        "60",
+    )
+    page = json.loads(world.aws(*argv, "--output", "json").out)
+    assert page["NextToken"] == "t2" and page["UserPools"]
+    guard = world.aws(
+        *argv,
+        "--query",
+        "NextToken && 'more than one page' || UserPools[].Name",
+        "--output",
+        "json",
+    )
+    assert guard.out == '"more than one page"\n'
+    world.edit(lambda s: s["regions"]["us-west-2"].pop("user_pools_next_token"))
+    names = world.aws(
+        *argv,
+        "--query",
+        "NextToken && 'more than one page' || UserPools[].Name",
+        "--output",
+        "json",
+    )
+    assert json.loads(names.out) == ["experimentation-users-staging"]
+
+
 def test_a_paginated_operation_prints_its_result_keys_only(world):
     done = world.aws("route53", "list-hosted-zones", "--output", "json")
     assert list(json.loads(done.out)) == [

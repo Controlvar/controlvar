@@ -19,7 +19,9 @@ Tests, in a step outside pytest: every pytest session blocks the real CLI
    ``--endpoint-url`` at the stub.
 3. Its stdout and exit status must equal the fake's, byte for byte. The calls that
    carry a timestamp run again in a second time zone (the CLI prints an epoch in
-   local time). An access denial in each protocol family is compared on stderr.
+   local time). The user-pool read runs again against a first page that carries a
+   next-page token, which the sweep must refuse. An access denial in each protocol
+   family is compared on stderr.
 
 The CLI's children get dummy keys, AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE
 at /dev/null and instance metadata off; the stub is the only endpoint. The script
@@ -88,6 +90,15 @@ def states() -> dict[str, dict]:
         }
     )
     return {"new": accounts.new_account(), "installed": installed, "pending": pending}
+
+
+def truncated_state() -> dict:
+    """The installed account with more user pools in us-west-2 than one page holds:
+    the service answers list-user-pools with a token for the next page, and the
+    sweep's read of it fails, as it must."""
+    state = accounts.installed_account()
+    state["regions"]["us-west-2"]["user_pools_next_token"] = "page-2"
+    return state
 
 
 def shape_of(argv: list[str]) -> tuple:
@@ -275,10 +286,42 @@ def compare(case: dict, stub: Stub, home: Path) -> str | None:
     )
 
 
+def truncated_cases(
+    work: Path, shapes_path: Path, doc: dict, installed_calls: list[list[str]]
+) -> list[dict]:
+    """The sweep's user-pool read against a first page with a next-page token, in
+    JSON and text. The sweep fails against that account, so the call is the one it
+    makes against the installed account."""
+    state = truncated_state()
+    world = World(work / "fake-truncated", state, shapes_path)
+    reads = [a for a in installed_calls if a[:2] == ["cognito-idp", "list-user-pools"]]
+    if len(reads) != 1:
+        raise SystemExit(f"expected one list-user-pools call, found {len(reads)}")
+    spec = doc["cognito-idp"]
+    cases = []
+    for output in ("json", "text"):
+        variant = with_output(reads[0], output)
+        cases.append(
+            {
+                "label": f"[truncated UTC] aws {' '.join(variant)}",
+                "argv": variant,
+                "zone": "UTC",
+                "service": spec,
+                "operation": spec["operations"]["list-user-pools"],
+                "protocol": protocol_of(spec),
+                "response": fake_aws.raw_response(state, variant, world.env()),
+                "fake": world.aws(*variant, TZ="UTC"),
+            }
+        )
+    return cases
+
+
 def build_cases(work: Path, shapes_path: Path, doc: dict) -> list[dict]:
     cases = []
+    calls_of: dict[str, list[list[str]]] = {}
     for state_name, state in states().items():
         calls = beta_calls(work / f"calls-{state_name}", shapes_path, state)
+        calls_of[state_name] = calls
         world = World(work / f"fake-{state_name}", state, shapes_path)
         for argv in calls:
             service, name = argv[0], argv[1]
@@ -305,6 +348,7 @@ def build_cases(work: Path, shapes_path: Path, doc: dict) -> list[dict]:
                             "fake": world.aws(*variant, TZ=zone),
                         }
                     )
+    cases += truncated_cases(work, shapes_path, doc, calls_of["installed"])
     denied = World(work / "denied", accounts.installed_account(), shapes_path)
     for service, name in DENIALS:
         spec = doc[service]

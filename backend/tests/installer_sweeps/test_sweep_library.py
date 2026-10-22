@@ -184,6 +184,37 @@ def test_the_mid_sweep_shows_every_type_the_install_creates(baseline):
     assert silent == [], f"types the install creates with no new line: {silent}"
 
 
+def _g2_swept() -> dict[str, str]:
+    """G2's SWEPT, read as text from infrastructure/tests/test_installer_sweep_coverage.py
+    (importing that module needs the CDK)."""
+    import ast
+
+    from backend.tests.installer_sweeps.harness.world import REPO_ROOT
+
+    path = REPO_ROOT / "infrastructure" / "tests" / "test_installer_sweep_coverage.py"
+    for node in ast.parse(path.read_text()).body:
+        if isinstance(node, ast.Assign) and [
+            getattr(t, "id", None) for t in node.targets
+        ] == ["SWEPT"]:
+            return ast.literal_eval(node.value)
+    raise AssertionError(f"{path} defines no SWEPT")
+
+
+def test_the_install_makes_a_line_in_every_file_g2_names():
+    """Each type the stacks make that has a sweep file of its own (G2's SWEPT) has
+    that file in CREATED_FILES, so the test above holds the fake's install to it."""
+    swept = _g2_swept()
+    assert len(swept) == 37, sorted(swept)
+    files = {
+        f"global/{f}.txt" if f in GLOBAL else f"us-west-2/{f}.txt"
+        for f in swept.values()
+    }
+    missing = sorted(files - set(accounts.CREATED_FILES))
+    assert missing == [], (
+        f"G2 names a sweep file the fake's install leaves empty: {missing}"
+    )
+
+
 def test_two_sweeps_moments_apart_are_identical(baseline, make_world):
     world = make_world(accounts.installed_account())
     assert world.sweep("again").code == 0
@@ -373,3 +404,77 @@ def test_a_used_folder_or_a_bad_account_is_refused(make_world):
     bad = world.sweep("other", account="1111")
     assert bad.code == 2 and "is not a 12-digit account ID" in bad.err
     assert world.calls == []  # neither refusal called aws
+
+
+def test_more_user_pools_than_one_page_is_a_failed_read(make_world):
+    """ListUserPools takes its page size by hand (--max-results 60), which turns
+    the CLI's paging off: the answer is one page. A page that says there is more
+    must be a failed read, never a list that leaves pools out."""
+    world = make_world(accounts.installed_account())
+    world.edit(lambda s: s["regions"]["us-west-2"].update(user_pools_next_token="t2"))
+    done = world.sweep("mid")
+    assert done.code == 1, done
+    assert done.out == _summary("mid", 132, 1, world.root / "sweep" / "mid")
+    lines = world.files("mid")["us-west-2/cognito-user-pools.txt"]
+    assert lines[0].startswith(
+        "READ FAILED: aws cognito-idp list-user-pools --region us-west-2"
+    )
+    assert '"more than one page"' in lines, lines
+    # The same account with one page of pools reads them.
+    other = world.files("mid")["us-east-1/cognito-user-pools.txt"]
+    assert other == []
+
+
+def _read_with(answer: str):
+    """_sweep_json given ``answer`` as the CLI's output: (exit status, reason)."""
+    import subprocess
+
+    from backend.tests.installer_sweeps.harness.world import LIB
+
+    script = (
+        f'. "{LIB}/names.sh"; . "{LIB}/sweep.sh"; '
+        'cv_aws() { printf "%s" "$ANSWER"; }; '
+        'out=$(mktemp "${TMPDIR:-/tmp}/answer.XXXXXX"); err="$out.err"; '
+        '_sweep_json "$out" "$err" ec2 describe-vpcs; rc=$?; cat "$err"; rm -f "$out" "$err"; exit $rc'
+    )
+    done = subprocess.run(
+        ["bash", "-c", script],
+        capture_output=True,
+        text=True,
+        env={"ANSWER": answer, "PATH": "/usr/bin:/bin"},
+    )
+    return done.returncode, done.stdout
+
+
+@pytest.mark.parametrize(
+    "answer, good",
+    [
+        ("[]\n", True),
+        ('["a", "b"]\n', True),
+        ("null\n", True),
+        ("[] []\n", False),
+        ('{"b": 1} []\n', False),
+        ('"more than one page"\n', False),
+        ('{"Vpcs": []}\n', False),
+        ("", False),
+        ("[1, \n", False),
+    ],
+    ids=[
+        "empty-list",
+        "list",
+        "null",
+        "two-lists",
+        "object-then-list",
+        "string",
+        "object",
+        "nothing",
+        "cut-off",
+    ],
+)
+def test_a_read_is_exactly_one_json_list(answer, good):
+    """jq -e alone judges by the last document, so `[] []` or `{"b":1} []` would
+    pass as a list."""
+    code, reason = _read_with(answer)
+    assert (code == 0) is good, (answer, code, reason)
+    if not good:
+        assert "an empty answer" in reason or "not one JSON list" in reason, reason

@@ -45,8 +45,13 @@ _sweep_json() {
         printf 'an empty answer (exit 0, nothing printed)\n' >> "$err"
         return 1
     fi
-    if ! jq -e 'type == "array" or type == "null"' "$out" > /dev/null 2>> "$err"; then
-        printf 'not one JSON list\n' >> "$err"
+    # Exactly one JSON document, a list or null: jq -e alone judges by the last
+    # document, so `[] []` or `{"a":1} []` would pass it.
+    if ! jq -e -s 'length == 1 and (.[0] | type == "array" or type == "null")' "$out" \
+        > /dev/null 2>> "$err"; then
+        printf 'not one JSON list; the answer began:\n' >> "$err"
+        head -c 200 "$out" >> "$err"
+        printf '\n' >> "$err"
         return 1
     fi
     return 0
@@ -215,7 +220,10 @@ sweep_take() {
         _sweep_q "$r" ssm-parameters ssm describe-parameters --region "$r" --query "Parameters[].Name"
         _sweep_q "$r" dynamodb-tables dynamodb list-tables --region "$r" --query "TableNames"
         _sweep_q "$r" dynamodb-backups dynamodb list-backups --region "$r" --backup-type ALL --query "BackupSummaries[].[TableName,BackupType,BackupStatus]"
-        _sweep_q "$r" cognito-user-pools cognito-idp list-user-pools --region "$r" --max-results 60 --query "UserPools[].Name"
+        # ListUserPools needs its page size given by hand, which turns the CLI's paging
+        # off: one page of 60. A next-page token makes the answer a string, a failed read,
+        # rather than a list that leaves pools out.
+        _sweep_q "$r" cognito-user-pools cognito-idp list-user-pools --region "$r" --max-results 60 --query "NextToken && 'more than one page' || UserPools[].Name"
         _sweep_q "$r" lambda-functions lambda list-functions --region "$r" --query "Functions[].FunctionName"
         _sweep_q "$r" codedeploy-applications deploy list-applications --region "$r" --query "applications"
         _sweep_q "$r" autoscaling-ecs application-autoscaling describe-scalable-targets --region "$r" --service-namespace ecs --query "ScalableTargets[].ResourceId"
@@ -278,6 +286,13 @@ _sweep_in() {
 # _sweep_kept <file> <sign> <line> <account>: exit 0 when the line is on the kept list. Names
 # are compared whole; the only exceptions are the two kinds no account can make, AWS's own
 # KMS keys (KeyManager AWS) and its aliases (alias/aws/...).
+#
+# What AWS keeps for a time and then removes by itself (the database key pending deletion,
+# the tables' SYSTEM backups, the revisions ECS is deleting and their families, the
+# unconfirmed subscription) is kept by the same exact test whether the after sweep shows it
+# new (+) or gone (-): a second install's before sweep holds the first one's, and AWS may
+# finish removing them before the second uninstall. A service-linked role is kept only when
+# it appears; one that disappears was removed by someone, and the report says so.
 _sweep_kept() {
     local file="$1" sign="$2" line="$3" account="$4" tab="$_SWEEP_TAB"
     local id rest entry family revision table
@@ -296,7 +311,7 @@ _sweep_kept() {
             esac
             # The database key, which CloudFormation can only schedule for deletion. Its ID
             # is AWS's: 36 characters of hex and dashes.
-            if [ "$file" = us-west-2/kms-keys.txt ] && [ "$sign" = + ] && [ "${#id}" -eq 36 ] &&
+            if [ "$file" = us-west-2/kms-keys.txt ] && [ "${#id}" -eq 36 ] &&
                 [ "$rest" = "CUSTOMER${tab}PendingDeletion${tab}${NAMES_DB_KEY_DESCRIPTION}" ]; then
                 case "$id" in
                     *[!0-9a-f-]*) return 1 ;;
@@ -306,11 +321,11 @@ _sweep_kept() {
             return 1
             ;;
     esac
-    if [ "$sign" != + ]; then
-        return 1
-    fi
     case "$file" in
         global/iam-roles.txt)
+            if [ "$sign" != + ]; then
+                return 1
+            fi
             for entry in ${_SWEEP_KEPT_ROLES[@]+"${_SWEEP_KEPT_ROLES[@]}"}; do
                 if [ "$line" = "${entry% *}${tab}${entry#* }" ]; then
                     return 0
@@ -347,7 +362,8 @@ _sweep_kept() {
             fi
             ;;
         us-west-2/sns-subscriptions.txt)
-            # An email subscription never confirmed outlives its topic, with no ARN (N3).
+            # An email subscription never confirmed outlives its topic, with no ARN to
+            # remove it by (the AWS guide's run found it listed after the teardown).
             if [ "$line" = "arn:aws:sns:us-west-2:${account}:${NAMES_ALARM_TOPIC}${tab}email${tab}PendingConfirmation" ]; then
                 return 0
             fi
@@ -367,10 +383,11 @@ _sweep_kept() {
 # The verdict is CLEAN (kept only), PENDING (kept and lag), INCOMPLETE (a file not checked) or
 # RESIDUE (anything not explained, which outranks INCOMPLETE). Prints "verdict <word>: <k> kept,
 # <l> lag, <n> not checked, <o> not explained"; exit 0 for CLEAN or PENDING, 1 for RESIDUE or
-# INCOMPLETE, 2 when it could not start.
+# INCOMPLETE, 2 when it could not start or could not write its report, with no verdict
+# printed: a line lost to a failed write could otherwise turn RESIDUE into CLEAN.
 sweep_verdict() {
     local before="$1" after="$2" account="$3" report="$4" also="${5:-}"
-    local file kept lag unchecked other word
+    local file kept lag unchecked other word class
     if [ ! -d "$before" ] || [ ! -d "$after" ]; then
         printf 'verdict: %s and %s must both be sweeps\n' "$before" "$after" >&2
         return 2
@@ -386,34 +403,49 @@ sweep_verdict() {
     if ! mkdir -p "$report"; then
         return 2
     fi
-    : > "$report/kept.txt"
-    : > "$report/lag.txt"
-    : > "$report/not-checked.txt"
-    : > "$report/not-explained.txt"
+    for class in kept lag not-checked not-explained; do
+        if ! _sweep_empty "$report/$class.txt"; then
+            _sweep_unwritten "$report"
+            return 2
+        fi
+    done
     if ! _sweep_files "$before" "$report/.before" ||
         ! _sweep_files "$after" "$report/.after" ||
         ! LC_ALL=C comm -23 "$report/.before" "$report/.after" > "$report/.before-only" ||
         ! LC_ALL=C comm -13 "$report/.before" "$report/.after" > "$report/.after-only" ||
         ! LC_ALL=C comm -12 "$report/.before" "$report/.after" > "$report/.both"; then
-        printf 'verdict: the two sweeps could not be listed\n' >&2
+        printf 'verdict: the two sweeps could not be listed in %s, so there is no verdict\n' \
+            "$report" >&2
         return 2
     fi
     while IFS= read -r file; do
-        printf '%s\t!\tonly in the before sweep\n' "$file" >> "$report/not-checked.txt"
+        if ! _sweep_put "$report/not-checked.txt" "${file}${_SWEEP_TAB}!${_SWEEP_TAB}only in the before sweep"; then
+            _sweep_unwritten "$report"
+            return 2
+        fi
     done < "$report/.before-only"
     while IFS= read -r file; do
-        printf '%s\t!\tonly in the after sweep\n' "$file" >> "$report/not-checked.txt"
+        if ! _sweep_put "$report/not-checked.txt" "${file}${_SWEEP_TAB}!${_SWEEP_TAB}only in the after sweep"; then
+            _sweep_unwritten "$report"
+            return 2
+        fi
     done < "$report/.after-only"
     while IFS= read -r file; do
-        _sweep_compare "$before" "$after" "$file" "$report" "$account" "$also"
+        if ! _sweep_compare "$before" "$after" "$file" "$report" "$account" "$also"; then
+            _sweep_unwritten "$report"
+            return 2
+        fi
     done < "$report/.both"
     rm -f "$report/.before" "$report/.after" "$report/.before-only" "$report/.after-only" \
         "$report/.both" "$report/.minus" "$report/.plus"
 
-    kept=$(_sweep_count "$report/kept.txt")
-    lag=$(_sweep_count "$report/lag.txt")
-    unchecked=$(_sweep_count "$report/not-checked.txt")
-    other=$(_sweep_count "$report/not-explained.txt")
+    if ! kept=$(_sweep_count "$report/kept.txt") ||
+        ! lag=$(_sweep_count "$report/lag.txt") ||
+        ! unchecked=$(_sweep_count "$report/not-checked.txt") ||
+        ! other=$(_sweep_count "$report/not-explained.txt"); then
+        _sweep_unwritten "$report"
+        return 2
+    fi
     if [ "$other" -gt 0 ]; then
         word=RESIDUE
     elif [ "$unchecked" -gt 0 ]; then
@@ -432,17 +464,18 @@ sweep_verdict() {
 }
 
 # _sweep_compare <before> <after> <file> <report> <account> <also kept>: one file both sweeps
-# hold, its differing lines sorted into the report's classes.
+# hold, its differing lines sorted into the report's classes. Exit 1 when a line could not be
+# written.
 _sweep_compare() {
     local before="$1" after="$2" file="$3" report="$4" account="$5" also="$6"
     local tab="$_SWEEP_TAB" sign src line class
     if grep -q '^READ FAILED: ' "$before/$file" || grep -q '^READ FAILED: ' "$after/$file"; then
-        printf '%s\t!\tREAD FAILED\n' "$file" >> "$report/not-checked.txt"
+        _sweep_put "$report/not-checked.txt" "${file}${tab}!${tab}READ FAILED" || return 1
         return 0
     fi
     if ! LC_ALL=C comm -23 "$before/$file" "$after/$file" > "$report/.minus" ||
         ! LC_ALL=C comm -13 "$before/$file" "$after/$file" > "$report/.plus"; then
-        printf '%s\t!\tcould not be compared\n' "$file" >> "$report/not-checked.txt"
+        _sweep_put "$report/not-checked.txt" "${file}${tab}!${tab}could not be compared" || return 1
         return 0
     fi
     for sign in - +; do
@@ -461,7 +494,7 @@ _sweep_compare() {
                     fi
                     ;;
             esac
-            printf '%s\t%s\t%s\n' "$file" "$sign" "$line" >> "$report/$class.txt"
+            _sweep_put "$report/$class.txt" "${file}${tab}${sign}${tab}${line}" || return 1
         done < "$src"
     done
     return 0
@@ -473,9 +506,9 @@ _sweep_files() {
     if ! (cd "$1" && find . -type f -name '*.txt') > "$2.found"; then
         return 1
     fi
-    : > "$2.relative"
+    _sweep_empty "$2.relative" || return 1
     while IFS= read -r p; do
-        printf '%s\n' "${p#./}" >> "$2.relative"
+        _sweep_put "$2.relative" "${p#./}" || return 1
     done < "$2.found"
     if ! LC_ALL=C sort "$2.relative" > "$2"; then
         return 1
@@ -483,8 +516,30 @@ _sweep_files() {
     rm -f "$2.found" "$2.relative"
 }
 
+# The verdict's only writes, each checked by its caller: _sweep_put <file> <line> adds a line,
+# _sweep_empty <file> makes the file empty.
+_sweep_put() {
+    printf '%s\n' "$2" >> "$1"
+}
+
+_sweep_empty() {
+    : > "$1"
+}
+
+# _sweep_unwritten <report>: what a verdict that could not write its report says instead.
+_sweep_unwritten() {
+    printf 'verdict: %s could not be written, so there is no verdict\n' "$1" >&2
+}
+
+# _sweep_count <file>: its number of lines. Exit 1, printing nothing, when it cannot count.
 _sweep_count() {
     local n
-    n=$(wc -l < "$1")
-    printf '%s\n' "$((n + 0))"
+    if ! n=$(wc -l < "$1"); then
+        return 1
+    fi
+    n=${n// /}
+    case "$n" in
+        '' | *[!0-9]*) return 1 ;;
+    esac
+    printf '%s\n' "$n"
 }

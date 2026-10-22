@@ -239,3 +239,192 @@ def test_a_used_report_folder_or_a_missing_sweep_is_refused(sweeps):
     assert used.code == 2 and "exists: use a new folder" in used.err
     missing = sweeps.verdict("before", "nowhere", report="verdict2")
     assert missing.code == 2 and "must both be sweeps" in missing.err
+
+
+# --- what AWS finishes removing, between one install's uninstall and the next's ---------
+
+
+@pytest.fixture
+def again(baseline, make_world):
+    """A second install's two sweeps: its before sweep holds the first uninstall's
+    residue (the run's), and the after sweep starts as a copy of it."""
+    world = make_world(accounts.new_account())
+    baseline.copy("after", world, "before")
+    baseline.copy("after", world, "after")
+    return world
+
+
+def _line(world, label: str, file: str, part: str) -> str:
+    (found,) = [
+        x
+        for x in (world.root / "sweep" / label / file).read_text().splitlines()
+        if part in x
+    ]
+    return found
+
+
+REVISION = (
+    f"arn:aws:ecs:us-west-2:{ACCOUNT}:task-definition/experimentation-backend-staging:"
+)
+
+
+def test_a_second_install_keeps_what_aws_finished_removing(again):
+    """The plan's own recovery path (uninstall, then install again): by the second
+    uninstall ECS has finished deleting the first install's revision, and the
+    second install left one of its own. Both are the families' revisions."""
+    _drop(again, "after", "us-west-2/ecs-td-delete-in-progress.txt", REVISION + "1")
+    _add(again, "after", "us-west-2/ecs-td-delete-in-progress.txt", REVISION + "2")
+    done = again.verdict("before", "after")
+    assert (done.code, done.out) == (0, VERDICT.format("CLEAN", 2, 0, 0, 0))
+    assert again.report()["kept"] == [
+        f"us-west-2/ecs-td-delete-in-progress.txt\t-\t{REVISION}1",
+        f"us-west-2/ecs-td-delete-in-progress.txt\t+\t{REVISION}2",
+    ]
+
+
+@pytest.mark.parametrize(
+    "file, part",
+    [
+        (
+            "us-west-2/ecs-td-delete-in-progress.txt",
+            "experimentation-dashboard-staging:1",
+        ),
+        ("us-west-2/ecs-td-families-inactive.txt", "experimentation-dashboard-staging"),
+        ("us-west-2/dynamodb-backups.txt", "experimentation-events-staging\tSYSTEM"),
+        ("us-west-2/sns-subscriptions.txt", "experimentation-alerts-staging"),
+        ("us-west-2/kms-keys.txt", "CUSTOMER\tPendingDeletion"),
+    ],
+    ids=["revision", "family", "system-backup", "subscription", "database-key"],
+)
+def test_what_aws_removes_by_itself_is_kept_when_it_goes(again, file, part):
+    """Gone (-) since the before sweep, and the same exact name the kept list
+    takes when it appears: AWS removed it, as it does after its window."""
+    line = _line(again, "after", file, part)
+    _drop(again, "after", file, line)
+    done = again.verdict("before", "after")
+    assert (done.code, done.out) == (0, VERDICT.format("CLEAN", 1, 0, 0, 0))
+    assert again.report()["kept"] == [f"{file}\t-\t{line}"]
+
+
+@pytest.mark.parametrize(
+    "file, line",
+    [
+        (
+            "us-west-2/ecs-td-delete-in-progress.txt",
+            f"arn:aws:ecs:us-west-2:{ACCOUNT}:task-definition/experimentation-backend-prod:1",
+        ),
+        ("us-west-2/ecs-td-families-inactive.txt", "experimentation-backend-prod"),
+        (
+            "us-west-2/dynamodb-backups.txt",
+            "experimentation-events-staging\tUSER\tAVAILABLE",
+        ),
+        (
+            "us-west-2/sns-subscriptions.txt",
+            f"arn:aws:sns:us-west-2:{ACCOUNT}:experimentation-alerts-prod\temail\tPendingConfirmation",
+        ),
+        (
+            "us-west-2/kms-keys.txt",
+            "0a1b2c3d-0000-4000-8000-0123456789ab\tCUSTOMER\tEnabled\t"
+            "KMS key for experimentation-database-staging PostgreSQL encryption",
+        ),
+    ],
+    ids=[
+        "another-family",
+        "another-family-name",
+        "user-backup",
+        "another-topic",
+        "an-enabled-key",
+    ],
+)
+def test_something_else_gone_is_not_explained(again, file, line):
+    """Gone (-) but not on the kept list: someone removed it."""
+    _add(again, "before", file, line)
+    done = again.verdict("before", "after")
+    assert (done.code, done.out) == (1, VERDICT.format("RESIDUE", 0, 0, 0, 1))
+    assert again.report()["not-explained"] == [f"{file}\t-\t{line}"]
+
+
+def test_a_service_linked_role_that_goes_is_not_explained(again):
+    """A service-linked role is kept when it appears; gone, someone removed it."""
+    role = "/aws-service-role/ecs.amazonaws.com/\tAWSServiceRoleForECS"
+    _drop(again, "after", "global/iam-roles.txt", role)
+    done = again.verdict("before", "after")
+    assert (done.code, done.out) == (1, VERDICT.format("RESIDUE", 0, 0, 0, 1))
+    assert again.report()["not-explained"] == [f"global/iam-roles.txt\t-\t{role}"]
+
+
+# --- a verdict that cannot write its report gives none ------------------------------------
+
+
+def _verdict_with(world, override: str, report: str):
+    """sweep_verdict with one of its helpers replaced, called as a caller inside a
+    condition would (set -e off), its stdout and exit status."""
+    import subprocess
+
+    from backend.tests.installer_sweeps.harness.world import LIB
+
+    script = (
+        f'. "{LIB}/names.sh"; . "{LIB}/sweep.sh"; {override}\n'
+        'if sweep_verdict "$1" "$2" "$3" "$4"; then rc=0; else rc=$?; fi; exit $rc'
+    )
+    sweep = world.root / "sweep"
+    done = subprocess.run(
+        [
+            "bash",
+            "-c",
+            script,
+            "verdict",
+            str(sweep / "before"),
+            str(sweep / "after"),
+            ACCOUNT,
+            str(world.root / report),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    return done
+
+
+def _fails_for(name: str) -> str:
+    """A _sweep_put that loses the lines written to one class file."""
+    return (
+        f'_sweep_put() {{ case "$1" in */{name}) return 1 ;; esac; '
+        'printf "%s\\n" "$2" >> "$1"; }'
+    )
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        "_sweep_put() { return 1; }",
+        _fails_for("not-explained.txt"),
+        _fails_for("not-checked.txt"),
+        _fails_for("kept.txt"),
+        "_sweep_empty() { return 1; }",
+        "wc() { printf 'not a number\\n'; }",
+        "wc() { return 1; }",
+    ],
+    ids=[
+        "every-line",
+        "the-unexplained-line",
+        "the-not-checked-line",
+        "a-kept-line",
+        "an-empty-class-file",
+        "a-count-that-is-not-a-number",
+        "a-count-that-fails",
+    ],
+)
+def test_a_report_that_cannot_be_written_gives_no_verdict(sweeps, override):
+    """Called inside a condition, where set -e is off, a lost write could turn
+    RESIDUE into CLEAN. Each write is checked instead: exit 2, no verdict."""
+    _add(sweeps, "after", "us-west-2/ssm-parameters.txt", "/docs-run/sweep-canary")
+    (sweeps.root / "sweep" / "after" / "us-west-2" / "only-after.txt").write_text("x\n")
+    control = _verdict_with(sweeps, ":", "control")
+    assert (control.returncode, control.stdout) == (
+        1,
+        VERDICT.format("RESIDUE", 26, 10, 1, 1),
+    ), control.stderr
+    done = _verdict_with(sweeps, override, "verdict")
+    assert done.returncode == 2, (done.stdout, done.stderr)
+    assert "verdict " not in done.stdout, done.stdout
+    assert "so there is no verdict" in done.stderr, done.stderr

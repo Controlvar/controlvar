@@ -20,7 +20,10 @@ PATH is a shim (``world.py``) that runs ``python -I -B fake_aws.py <state> <shap
   order, as the CLI's parsers do.
 * **Output** is what the CLI prints for that response: a paginated operation
   prints the paginator's result keys only (botocore's ``build_full_result``),
-  ``--query`` is applied with jmespath, ``--output json`` is the CLI's JSON (an
+  unless a paging option is given by hand (the paginator's input token or limit
+  key), when the CLI makes one request and prints that page as the service sent
+  it, next-page token included; ``--query`` is applied with jmespath,
+  ``--output json`` is the CLI's JSON (an
   empty object prints nothing), and ``--output text`` is the CLI's text format:
   a row per line, columns joined by tabs, ``None`` for null, ``True``/``False``.
   A timestamp a JSON-protocol service sends as epoch seconds prints in the local
@@ -421,7 +424,12 @@ def _user_pools(c: Call) -> dict:
             "1 validation error detected: Value at 'maxResults' failed to satisfy"
             " constraint: Member must have value less than or equal to 60",
         )
-    return {"UserPools": c.items("user_pools")}
+    # An account with more pools than the page holds: the service answers with a
+    # token for the next page (``user_pools_next_token`` in the state).
+    response = {"UserPools": c.items("user_pools")}
+    if c.here.get("user_pools_next_token"):
+        response["NextToken"] = c.here["user_pools_next_token"]
+    return response
 
 
 @op("lambda", "list-functions")
@@ -956,6 +964,10 @@ def respond(
     epoch = spec["metadata"].get("protocol") in EPOCH_PROTOCOLS
     response = render_timestamps(response, ref, spec["shapes"], epoch)
     paginator = operation["paginator"]
+    if paginator is not None and set(paginator["manual_flags"]) & set(args):
+        # A paging option given by hand turns the CLI's paging off: one request,
+        # the page printed as the service sent it, next-page token included.
+        paginator = None
     query = compiled if answer.fault != "NOQUERY" else None
     if output == "text":
         page = text_page(response, paginator)

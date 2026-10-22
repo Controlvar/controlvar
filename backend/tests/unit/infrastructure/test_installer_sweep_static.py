@@ -4,8 +4,12 @@ deploy/aws-installer/lib/sweep.sh records an account before install's first writ
 after uninstall. Read without running it:
 
 * G1: it only reads. Every call it makes is a list, describe or get operation,
-  through cv_aws (lib/env.sh's wrapper), never a bare ``aws``; its 58 regional
-  types name their region, its 10 global ones do not; the fake models every one.
+  through cv_aws (lib/env.sh's wrapper); the word ``aws`` appears on a code line
+  only inside an AWS name or the failed-read marker; its 58 regional types name
+  their region, its 10 global ones do not; the fake models every one.
+* G1: every field its queries name is one the call prints, after the CLI's own
+  paging (a misspelled key would read as "none" in every sweep, with the CLI and
+  the fake agreeing), and no read's answer can leave items out unseen.
 * G3: the kept list is exact names. No value in lib/names.sh holds a pattern
   character, the service-linked roles are five whole lines, and the only patterns
   the kept list matches with are the pinned ones (the file dispatch, AWS's own
@@ -25,7 +29,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.tests.installer_sweeps.harness import fake_aws
+from backend.tests.installer_sweeps.harness import fake_aws, queries
 from backend.tests.installer_sweeps.harness.world import BASHES, bash_id
 
 pytestmark = pytest.mark.unit
@@ -35,6 +39,9 @@ LIB = REPO_ROOT / "deploy" / "aws-installer" / "lib"
 SWEEP = LIB / "sweep.sh"
 NAMES = LIB / "names.sh"
 READ_VERBS = ("list-", "describe-", "get-")
+IDENTITY = (
+    "if ! got=$(cv_aws sts get-caller-identity --query Account --output text); then"
+)
 
 
 def _code(path: Path) -> list[tuple[int, str]]:
@@ -73,11 +80,18 @@ def _reads() -> list[tuple[int, str, list[str]]]:
     return found
 
 
+def _every_call() -> list[tuple[int, list[str]]]:
+    """The reads, and the identity read sweep_take makes first."""
+    identity = [n for n, line in _code(SWEEP) if line == IDENTITY]
+    assert len(identity) == 1, identity
+    calls = [(number, argv) for number, _, argv in _reads()]
+    return calls + [(identity[0], shlex.split(IDENTITY)[3:-3])]
+
+
 def test_every_read_is_a_list_describe_or_get_operation():
     reads = _reads()
-    assert len(reads) == 58 * 1 + 3 + 10, len(
-        reads
-    )  # 58 regional and 10 global, 3 with items
+    # 58 regional and 10 global, 3 of them a list read and a read per item.
+    assert len(reads) == 58 * 1 + 3 + 10, len(reads)
     for number, kind, argv in reads:
         service, operation = argv[0], argv[1]
         assert operation.startswith(READ_VERBS), (
@@ -85,20 +99,38 @@ def test_every_read_is_a_list_describe_or_get_operation():
         )
 
 
-#: ``aws`` or ``cv_aws`` where a command starts: a line's start, after ; & | ( or
-#: $( , or after if, then, do, ! and the like.
-_COMMAND = re.compile(
-    r"(?:^|[;&|(]|\$\(|\b(?:if|then|do|else|while|until)\b|!)\s*(cv_aws|aws)\b"
-)
-
-
-def test_every_aws_call_goes_through_cv_aws_and_reads():
-    calls = [(number, line) for number, line in _code(SWEEP) if _COMMAND.search(line)]
+def test_every_aws_call_goes_through_cv_aws():
+    calls = [(n, line) for n, line in _code(SWEEP) if re.search(r"\bcv_aws\b", line)]
     allowed = {
+        "if ! declare -F cv_aws > /dev/null; then",
+        "printf 'sweep: cv_aws is not defined: source lib/env.sh first\\n' >&2",
         'cv_aws "$@" --output json > "$out" 2> "$err" || rc=$?',
-        "if ! got=$(cv_aws sts get-caller-identity --query Account --output text); then",
+        IDENTITY,
     }
     assert {line for _, line in calls} == allowed, calls
+
+
+#: The word aws inside an AWS name, not a command: an ARN, a service-linked
+#: role's path, an AWS-managed alias.
+_AWS_NAMES = re.compile(r"arn:aws:|/aws-service-role/|alias/aws/")
+#: The two lines that write the failed-read marker, by exact text.
+_MARKER_LINES = {
+    "printf 'READ FAILED: aws %s\\n' \"$*\"",
+    'printf \'READ FAILED: aws %s\\n\' "${cmd[*]+"${cmd[*]}"}" >> "$f.rows"',
+}
+
+
+def test_aws_on_a_code_line_is_a_name_or_the_marker():
+    """Any other whole word `aws` could be a call around cv_aws: `command aws`,
+    `env aws`, `eval "aws ..."`, `xargs aws`."""
+    found = [
+        (number, line)
+        for number, line in _code(SWEEP)
+        if re.search(r"\baws\b", _AWS_NAMES.sub("", line)) and line not in _MARKER_LINES
+    ]
+    assert found == [], found
+    marker_lines = {line for _, line in _code(SWEEP) if line in _MARKER_LINES}
+    assert marker_lines == _MARKER_LINES
 
 
 def test_regional_reads_name_their_region_and_global_ones_do_not():
@@ -114,6 +146,75 @@ def test_the_fake_models_every_read():
     modelled = set(fake_aws.modelled_operations())
     missing = sorted({(a[0], a[1]) for _, _, a in _reads()} - modelled)
     assert missing == [], f"reads the fake does not answer: {missing}"
+
+
+def _query(argv: list[str]) -> str:
+    return argv[argv.index("--query") + 1]
+
+
+def test_every_query_field_is_one_the_call_prints():
+    """Against botocore's output shape, after the CLI's paging: a misspelled key
+    reads as null, which the sweep takes for "none", and the fake and the CLI
+    print the same null."""
+    problems = []
+    for number, argv in _every_call():
+        for problem in queries.problems(argv[0], argv[1], argv[2:], _query(argv)):
+            problems.append(f"lib/sweep.sh:{number}: {argv[0]} {argv[1]}: {problem}")
+    assert problems == [], "\n".join(problems)
+
+
+def test_no_read_can_be_cut_short():
+    """A read the CLI does not page through to the end must say so, not answer
+    with a part of the list."""
+    short = []
+    for number, argv in _every_call():
+        why = queries.cut_short(argv[0], argv[1], argv[2:], _query(argv))
+        if why:
+            short.append(f"lib/sweep.sh:{number}: {argv[0]} {argv[1]}: {why}")
+    assert short == [], "\n".join(short)
+
+
+@pytest.mark.parametrize(
+    "service, operation, args, query, named",
+    [
+        (
+            "rds",
+            "describe-db-cluster-snapshots",
+            ["--region", "us-west-2"],
+            "DBClusterSnapshot[].[DBClusterSnapshotIdentifier,SnapshotType]",
+            "'DBClusterSnapshot' is not printed for this call",
+        ),
+        (
+            "ec2",
+            "describe-flow-logs",
+            ["--region", "us-west-2"],
+            "FlowLogs[].[FlowLogIdd,ResourceId]",
+            "no member 'FlowLogIdd' in FlowLog",
+        ),
+        (
+            "route53",
+            "list-hosted-zones",
+            [],
+            "IsTruncated",
+            "'IsTruncated' is not printed for this call",
+        ),
+    ],
+    ids=["top-key", "inner-field", "dropped-by-paging"],
+)
+def test_the_query_check_names_a_field_the_call_does_not_print(
+    service, operation, args, query, named
+):
+    """The check's own failure: a misspelled top key, a misspelled field inside
+    the rows, and a member the CLI's paging leaves out of what it prints."""
+    found = queries.problems(service, operation, args, query)
+    assert any(named in problem for problem in found), found
+
+
+def test_the_short_read_check_names_a_page_without_its_token():
+    why = queries.cut_short(
+        "cognito-idp", "list-user-pools", ["--max-results", "60"], "UserPools[].Name"
+    )
+    assert why is not None and "turns the CLI's paging off" in why
 
 
 def _names() -> dict[str, list[str]]:
@@ -154,7 +255,7 @@ def _kept_function() -> str:
 
 def test_the_kept_list_matches_with_the_pinned_patterns_only():
     """A pattern in the kept list is a hidden wildcard: `AWSServiceRoleFor*` would
-    keep a stray role (U10). The only patterns are pinned here."""
+    keep a stray role. The only patterns are pinned here."""
     patterns = [
         line.strip()
         for line in _kept_function().splitlines()
@@ -196,7 +297,8 @@ def test_the_service_linked_roles_are_five_whole_lines():
 
 
 def test_the_sweep_library_spells_no_infrastructure_name():
-    """infrastructure/cdk's names live in lib/names.sh only (PE 18)."""
+    """infrastructure/cdk's names live in lib/names.sh only, where a later check
+    can hold them to the synth."""
     assert "experimentation-" not in SWEEP.read_text()
 
 

@@ -102,17 +102,17 @@ def extract(operations: list[tuple[str, str]]) -> dict:
             name = names[op]
             spec = model["operations"][name]
             paginator = pagination.get(name)
+            if paginator is not None:
+                paginator = {
+                    k: paginator[k]
+                    for k in ("result_key", "non_aggregate_keys")
+                    if k in paginator
+                } | {"manual_flags": manual_paging_flags(paginator)}
             entry["operations"][op] = {
                 "name": name,
                 "http": spec.get("http", {}),
                 "output": spec.get("output"),
-                "paginator": None
-                if paginator is None
-                else {
-                    k: paginator[k]
-                    for k in ("result_key", "non_aggregate_keys")
-                    if k in paginator
-                },
+                "paginator": paginator,
             }
             _closure(
                 model["shapes"],
@@ -121,6 +121,21 @@ def extract(operations: list[tuple[str, str]]) -> dict:
             )
         out[service] = entry
     return out
+
+
+def manual_paging_flags(paginator: dict) -> list[str]:
+    """The options that turn the CLI's own paging off for an operation: its
+    paginator's input token and limit key, as CLI options. Given either, the CLI
+    makes one request and prints that page as the service sent it, its next-page
+    token included (measured with aws-cli 2.28.24 on ListUserPools'
+    ``--max-results``)."""
+    from botocore import xform_name
+
+    names = paginator.get("input_token", [])
+    names = list(names) if isinstance(names, list) else [names]
+    if paginator.get("limit_key"):
+        names.append(paginator["limit_key"])
+    return sorted({"--" + xform_name(name, "-") for name in names})
 
 
 def write(path: Path, operations: list[tuple[str, str]]) -> Path:
