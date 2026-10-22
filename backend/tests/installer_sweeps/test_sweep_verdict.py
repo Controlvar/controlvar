@@ -275,7 +275,7 @@ def test_a_second_install_keeps_what_aws_finished_removing(again):
     _drop(again, "after", "us-west-2/ecs-td-delete-in-progress.txt", REVISION + "1")
     _add(again, "after", "us-west-2/ecs-td-delete-in-progress.txt", REVISION + "2")
     done = again.verdict("before", "after")
-    assert (done.code, done.out) == (0, VERDICT.format("CLEAN", 2, 0, 0, 0))
+    assert (done.code, done.out) == (0, VERDICT.format("CLEAN", 2, 0, 0, 0)), done.out
     assert again.report()["kept"] == [
         f"us-west-2/ecs-td-delete-in-progress.txt\t-\t{REVISION}1",
         f"us-west-2/ecs-td-delete-in-progress.txt\t+\t{REVISION}2",
@@ -302,7 +302,7 @@ def test_what_aws_removes_by_itself_is_kept_when_it_goes(again, file, part):
     line = _line(again, "after", file, part)
     _drop(again, "after", file, line)
     done = again.verdict("before", "after")
-    assert (done.code, done.out) == (0, VERDICT.format("CLEAN", 1, 0, 0, 0))
+    assert (done.code, done.out) == (0, VERDICT.format("CLEAN", 1, 0, 0, 0)), done.out
     assert again.report()["kept"] == [f"{file}\t-\t{line}"]
 
 
@@ -340,7 +340,7 @@ def test_something_else_gone_is_not_explained(again, file, line):
     """Gone (-) but not on the kept list: someone removed it."""
     _add(again, "before", file, line)
     done = again.verdict("before", "after")
-    assert (done.code, done.out) == (1, VERDICT.format("RESIDUE", 0, 0, 0, 1))
+    assert (done.code, done.out) == (1, VERDICT.format("RESIDUE", 0, 0, 0, 1)), done.out
     assert again.report()["not-explained"] == [f"{file}\t-\t{line}"]
 
 
@@ -349,7 +349,7 @@ def test_a_service_linked_role_that_goes_is_not_explained(again):
     role = "/aws-service-role/ecs.amazonaws.com/\tAWSServiceRoleForECS"
     _drop(again, "after", "global/iam-roles.txt", role)
     done = again.verdict("before", "after")
-    assert (done.code, done.out) == (1, VERDICT.format("RESIDUE", 0, 0, 0, 1))
+    assert (done.code, done.out) == (1, VERDICT.format("RESIDUE", 0, 0, 0, 1)), done.out
     assert again.report()["not-explained"] == [f"global/iam-roles.txt\t-\t{role}"]
 
 
