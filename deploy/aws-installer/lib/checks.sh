@@ -407,7 +407,7 @@ cv_check_stacks() {
         cv_out "Not checked: $r (your organisation does not allow listing stacks there). The other regions were checked."
     done
     if [ "${#found[@]}" -gt 0 ]; then
-        msg_stacks_present "$(cv_join "${found[@]}")"
+        msg_stacks_present "$(cv_join ${found[@]+"${found[@]}"})"
     fi
 }
 

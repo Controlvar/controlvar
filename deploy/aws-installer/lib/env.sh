@@ -87,10 +87,17 @@ cv_script() {
 # cv_probe: with no profile, under the installer's environment, the CLI must find no
 # credentials at all (exit 253, "Unable to locate credentials"). It is aimed at a closed
 # local port, so a call that did find some sends nothing anywhere. Exit 0 when it found none.
+# No profile means no AWS_PROFILE at all: the CLI reads AWS_PROFILE= as a profile named ""
+# ("The config profile () could not be found").
 cv_probe() {
-    local out="$CV_RECORD/tmp/probe.err" rc=0
-    env -i ${CV_ENV[@]+"${CV_ENV[@]}"} AWS_PROFILE= \
-        aws sts get-caller-identity --endpoint-url http://127.0.0.1:9 > /dev/null 2> "$out" || rc=$?
+    local out="$CV_RECORD/tmp/probe.err" rc=0 entry kept=()
+    for entry in ${CV_ENV[@]+"${CV_ENV[@]}"}; do
+        case "$entry" in
+            AWS_PROFILE=*) ;;
+            *) kept+=("$entry") ;;
+        esac
+    done
+    env -i ${kept[@]+"${kept[@]}"} aws sts get-caller-identity --endpoint-url http://127.0.0.1:9 > /dev/null 2> "$out" || rc=$?
     if [ "$rc" -eq 253 ] && grep -q 'Unable to locate credentials' "$out"; then
         return 0
     fi

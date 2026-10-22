@@ -325,8 +325,11 @@ cv_ensure_service_role() {
 cv_step_images() {
     local registry="$CV_ACCOUNT.dkr.ecr.$CV_REGION.amazonaws.com" pair repo image digest rc=0 f="$CV_RECORD/tmp/image.json"
     cv_step 5 "Copy the release images into the repositories, 253 MiB, and wait for the certificate"
-    if ! cv_aws ecr get-login-password | cv_ecr auth login "$registry" -u AWS --password-stdin > "$CV_RECORD/tmp/login.out" 2>&1; then
-        msg_tool_failed "crane auth login" "1" "the registry login failed"
+    # The token goes from the CLI to crane through the pipe only, never an argument.
+    if ! cv_aws ecr get-login-password 2> "$CV_RECORD/tmp/token.err" |
+        cv_ecr auth login "$registry" -u AWS --password-stdin > "$CV_RECORD/tmp/login.out" 2>&1; then
+        CV_CODE=$(cv_error_code "$CV_RECORD/tmp/token.err")
+        msg_tool_failed "crane auth login" "1" "the registry login failed (${CV_CODE:-crane could not log in})"
     fi
     for pair in "$NAMES_BACKEND_REPOSITORY=$CV_IMAGE_API=$API_AMD64" "$NAMES_WEB_REPOSITORY=$CV_IMAGE_WEB=$WEB_AMD64"; do
         repo=${pair%%=*}

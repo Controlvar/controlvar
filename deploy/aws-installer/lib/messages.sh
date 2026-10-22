@@ -96,7 +96,7 @@ cv_state() {
     if [ "${#made[@]}" -eq 0 ]; then
         list="the install's record (on this computer only)"
     else
-        list=$(cv_join "${made[@]}")
+        list=$(cv_join ${made[@]+"${made[@]}"})
     fi
     if cv_fact DEPLOY_STARTED; then
         printf "Now in your account: %s. These bill about \$10 a day until you run uninstall." "$list"
