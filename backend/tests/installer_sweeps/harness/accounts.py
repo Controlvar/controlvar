@@ -1128,6 +1128,7 @@ class Builder:
         return self
 
 
+#: (an account 123412341234 once)
 #: The release an install test installs, as the clone copy's VERSION says.
 RELEASE = "0.36.2"
 #: Its tag's commit in the fake git, and the images' revision label.

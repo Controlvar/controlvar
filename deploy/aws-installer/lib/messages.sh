@@ -135,7 +135,7 @@ cv_stop() {
     fi
     cv_log "message: ${FUNCNAME[1]:-cv_stop}, exit $code"
     cv_note "$word: $what"
-    cv_note "$state"
+    if [ "$code" != 1 ]; then cv_note "$state"; fi
     cv_note "Next: $next"
     if [ -n "$CV_LOG" ]; then
         cv_note "Log: $CV_LOG (it can hold your account ID and email address: remove them before you share it)"

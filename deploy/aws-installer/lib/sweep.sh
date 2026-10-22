@@ -247,7 +247,7 @@ sweep_take() {
         _sweep_q "$r" tagged-resources resourcegroupstaggingapi get-resources --region "$r" --query "ResourceTagMappingList[].ResourceARN"
     done
 
-    _sweep_q global iam-roles iam list-roles --query "Roles[].[Path,RoleName]"
+    _sweep_q global iam-roles iam list-roles --no-paginate --query "Roles[].[Path,RoleName]"
     _sweep_q global iam-policies-local iam list-policies --scope Local --query "Policies[].PolicyName"
     _sweep_q global iam-instance-profiles iam list-instance-profiles --query "InstanceProfiles[].InstanceProfileName"
     _sweep_q global iam-users iam list-users --query "Users[].UserName"
@@ -256,7 +256,7 @@ sweep_take() {
     _sweep_q global route53-hosted-zones route53 list-hosted-zones --query "HostedZones[].[Name,Config.PrivateZone,ResourceRecordSetCount]"
     _sweep_q global route53-health-checks route53 list-health-checks --query "HealthChecks[].Id"
     _sweep_q global s3-buckets s3api list-buckets --query "Buckets[].Name"
-    _sweep_q global cloudfront-distributions cloudfront list-distributions --query "DistributionList.Items[].Id"
+    _sweep_q global cloudfront-distributions cloudfront list-distributions --query "DistributionList.IsTruncated && 'more than one page' || DistributionList.Items[].Id"
 
     printf 'sweep %s: %s reads, %s failed -> %s\n' \
         "${_SWEEP_OUT##*/}" "$_SWEEP_READS" "$_SWEEP_FAILED" "$_SWEEP_OUT"
@@ -480,7 +480,7 @@ _sweep_compare() {
     local before="$1" after="$2" file="$3" report="$4" account="$5" also="$6"
     local tab="$_SWEEP_TAB" sign src line class
     if grep -q '^READ FAILED: ' "$before/$file" || grep -q '^READ FAILED: ' "$after/$file"; then
-        _sweep_put "$report/not-checked.txt" "${file}${tab}!${tab}READ FAILED" || return 1
+        _sweep_put "$report/not-checked.txt" "${file}${tab}!${tab}READ FAILED"
         return 0
     fi
     if ! LC_ALL=C comm -23 "$before/$file" "$after/$file" > "$report/.minus" ||

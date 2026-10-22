@@ -186,7 +186,6 @@ cv_on_exit() {
 }
 
 cv_traps() {
-    trap cv_on_signal INT TERM
     trap cv_on_exit EXIT
 }
 
