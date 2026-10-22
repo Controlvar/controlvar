@@ -5,16 +5,20 @@ and the fake print the same ``null``, so only a static check sees it. ``problems
 parses the expression with jmespath and walks it against botocore's output shape:
 
 * the top of the expression meets what the CLI prints, which for a call the CLI
-  pages through is the paginator's result keys (and non-aggregate keys) only;
-  given a paging option by hand (its input token or limit key) the CLI makes one
-  request and prints the whole page, next-page token included;
+  pages through is the paginator's result keys (and non-aggregate keys) only, down
+  their whole paths (CloudFront's ``DistributionList.Items`` prints no other member
+  of ``DistributionList``); given a paging option by hand (its input token or limit
+  key) or ``--no-paginate``, the CLI makes one request and prints the whole page,
+  next-page token included;
 * every field must be a member of the structure it is read from; a projection or a
   filter reads its elements; a function's arguments and a comparison's sides are
   checked the same way.
 
-``cut_short`` names a read whose answer could leave items out: a paginated call
-with paging turned off whose query does not name the next-page token, or a call
-with no paginator whose output carries one.
+``cut_short`` names a read whose answer could leave items out: one that passes the
+CLI's ``--max-items`` or ``--starting-token``, which cap or skip what it prints, and
+one the CLI does not page through (paging off, or no paginator) whose output can
+carry a next-page token, unless its query, run on a page that carries the token,
+answers something the sweep refuses (not a list, not null).
 """
 
 from __future__ import annotations
@@ -43,8 +47,9 @@ NEXT_PAGE_MEMBERS = {
 
 @dataclass
 class Printed:
-    """What the CLI prints at the top of a call: the output shape, or only the
-    paginator's keys of it."""
+    """What the CLI prints of a structure: the output shape, or only the
+    paginator's keys of it. A member on a result key's path is itself a Printed,
+    holding only the next part of the path."""
 
     shape: object
     members: dict
@@ -86,23 +91,45 @@ def _keys(value) -> list[str]:
 
 
 def _paging_off(paginator, args: list[str]) -> bool:
-    if paginator is None:
+    if paginator is None or _shapes.NO_PAGINATE in args:
         return True
     manual = _shapes.manual_paging_flags(paginator)
     return bool(set(manual) & set(args))
 
 
+def _path_tree(paths: list[str]) -> dict:
+    """``["A.B", "A.C", "D"]`` as ``{"A": {"B": {}, "C": {}}, "D": {}}``."""
+    tree: dict = {}
+    for path in paths:
+        node = tree
+        for part in path.split("."):
+            node = node.setdefault(part, {})
+    return tree
+
+
+def _restricted(shape, tree: dict) -> Printed:
+    """``shape`` (a structure) with only the members ``tree`` names; a member
+    whose path goes on is restricted in turn."""
+    members = {}
+    for name, rest in tree.items():
+        if shape is None or getattr(shape, "type_name", None) != "structure":
+            continue
+        if name not in shape.members:
+            continue
+        member = shape.members[name]
+        members[name] = _restricted(member, rest) if rest else member
+    return Printed(shape, members)
+
+
 def printed(service: str, cli_op: str, args: list[str]) -> Printed:
     output, paginator = _session().operation(service, cli_op)
-    members = dict(output.members) if output is not None else {}
-    if not _paging_off(paginator, args):
-        tops = {
-            key.split(".")[0]
-            for key in _keys(paginator.get("result_key"))
-            + _keys(paginator.get("non_aggregate_keys"))
-        }
-        members = {k: v for k, v in members.items() if k in tops}
-    return Printed(output, members)
+    if _paging_off(paginator, args):
+        members = dict(output.members) if output is not None else {}
+        return Printed(output, members)
+    paths = _keys(paginator.get("result_key")) + _keys(
+        paginator.get("non_aggregate_keys")
+    )
+    return _restricted(output, _path_tree(paths))
 
 
 class _List:
@@ -209,33 +236,63 @@ def problems(service: str, cli_op: str, args: list[str], query: str) -> list[str
     return errors
 
 
-def _names(node: dict) -> set[str]:
-    found = {node["value"]} if node["type"] == "field" else set()
-    for child in node.get("children", []):
-        if isinstance(child, dict):
-            found |= _names(child)
-    return found
+def _sample(shape, depth: int = 0):
+    """A small value of ``shape``: every member present, each list one long."""
+    if shape is None or depth > 6:
+        return None
+    kind = shape.type_name
+    if kind == "structure":
+        return {name: _sample(m, depth + 1) for name, m in shape.members.items()}
+    if kind == "list":
+        return [_sample(shape.member, depth + 1)]
+    if kind == "map":
+        return {"k": _sample(shape.value, depth + 1)}
+    if kind == "boolean":
+        return True
+    if kind in ("integer", "long", "float", "double"):
+        return 1
+    return "x"
+
+
+def _answer_on_a_page_with_more(output, tokens: set[str], query: str):
+    """The query's answer on a page of ``output`` that carries each of ``tokens``."""
+    import jmespath
+
+    page = _sample(output) or {}
+    for token in tokens:
+        head, _, rest = token.partition(".")
+        value = True if (rest or head) in ("IsTruncated", "Truncated") else "t"
+        if rest and isinstance(page.get(head), dict):
+            page[head][rest] = value
+        else:
+            page[head] = value
+    return jmespath.search(query, page)
 
 
 def cut_short(service: str, cli_op: str, args: list[str], query: str) -> str | None:
     """Why this read's answer could leave items out, or None."""
-    import jmespath
-
+    capped = sorted(set(_shapes.CLI_PAGING_OPTIONS) & set(args))
+    if capped:
+        return f"{', '.join(capped)} caps or skips what the CLI prints"
     output, paginator = _session().operation(service, cli_op)
     members = set(output.members) if output is not None else set()
-    named = _names(jmespath.compile(query).parsed)
     if paginator is None:
-        more = sorted(NEXT_PAGE_MEMBERS & members)
-        if more and not set(more) & named:
-            return f"no paginator, and the output can say there is more ({more})"
-        return None
-    if _paging_off(paginator, args):
+        tokens = NEXT_PAGE_MEMBERS & members
+        why = "there is no paginator"
+    elif _paging_off(paginator, args):
         tokens = set(_keys(paginator.get("output_token"))) | (
             NEXT_PAGE_MEMBERS & members
         )
-        if not tokens & named:
-            return (
-                "a paging option given by hand turns the CLI's paging off, and the "
-                f"query names no next-page token ({sorted(tokens)})"
-            )
+        why = "a paging option given by hand, or --no-paginate, turns the CLI's paging off"
+    else:
+        return None
+    if not tokens:
+        return None
+    answer = _answer_on_a_page_with_more(output, tokens, query)
+    if answer is None or isinstance(answer, list):
+        kind = "null" if answer is None else "a list"
+        return (
+            f"{why}, and on a page that says there is more ({sorted(tokens)}) the "
+            f"query still answers {kind}, which the sweep takes for every item"
+        )
     return None

@@ -247,6 +247,16 @@ def test_json_keeps_null_and_true_text_prints_true(world):
     assert text_out.out.endswith("\tTrue\tNone\n")
 
 
+def test_no_paginate_prints_the_page_as_sent(make_world):
+    """--no-paginate turns paging off for any call: the page's own members print
+    beside its result key, where a paged call prints the result key only."""
+    world = make_world(accounts.new_account())
+    argv = ("route53", "list-hosted-zones", "--output", "json")
+    assert sorted(json.loads(world.aws(*argv).out)) == ["HostedZones"]
+    page = json.loads(world.aws(*argv, "--no-paginate").out)
+    assert sorted(page) == ["HostedZones", "IsTruncated", "Marker", "MaxItems"]
+
+
 def test_a_paging_option_given_by_hand_prints_the_page_as_sent(make_world):
     """--max-results is ListUserPools' limit key: the CLI makes one request and
     prints the page as the service sent it, next-page token included (measured

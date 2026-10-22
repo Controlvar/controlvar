@@ -11,6 +11,8 @@ backend/tests/unit/infrastructure/test_installer_sweep_static.py.
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from backend.tests.installer_sweeps.harness import accounts
@@ -331,8 +333,8 @@ FAILURES = (
 
 def test_every_failed_read_is_counted_and_fails_the_sweep(make_world):
     """Denied, empty, the whole response, unreachable; on a one-call type and on a
-    per-item type's list. RB's text list reads would have taken the empty and the
-    whole-response answers as lists."""
+    per-item type's list. The AWS guide's run read those lists as text, which would
+    have taken the empty and the whole-response answers as lists."""
     world = make_world(accounts.installed_account())
     for _, fault, _ in FAILURES:
         world.fault(**fault)
@@ -442,7 +444,9 @@ def _read_with(answer: str):
         ["bash", "-c", script],
         capture_output=True,
         text=True,
-        env={"ANSWER": answer, "PATH": "/usr/bin:/bin"},
+        # The parent's PATH, as World.env passes it: jq can live anywhere
+        # (Homebrew's /opt/homebrew/bin on a Mac).
+        env={"ANSWER": answer, "PATH": os.environ.get("PATH", "/usr/bin:/bin")},
     )
     return done.returncode, done.stdout
 

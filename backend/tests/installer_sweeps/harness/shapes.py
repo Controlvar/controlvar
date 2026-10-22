@@ -123,19 +123,30 @@ def extract(operations: list[tuple[str, str]]) -> dict:
     return out
 
 
+#: The CLI's own paging options. They never turn its paging off, whatever the
+#: service calls its parameters: ``--max-items`` caps what it prints, and
+#: ``--starting-token`` skips what came before (awscli's paginate.py keeps
+#: paging on for these two names, so IAM's, Route 53's and CloudFront's limit
+#: key, MaxItems, is not a manual paging option).
+CLI_PAGING_OPTIONS = ("--max-items", "--starting-token")
+#: The global option that turns paging off for any call.
+NO_PAGINATE = "--no-paginate"
+
+
 def manual_paging_flags(paginator: dict) -> list[str]:
     """The options that turn the CLI's own paging off for an operation: its
-    paginator's input token and limit key, as CLI options. Given either, the CLI
-    makes one request and prints that page as the service sent it, its next-page
-    token included (measured with aws-cli 2.28.24 on ListUserPools'
-    ``--max-results``)."""
+    paginator's input token and limit key, as CLI options, but for the CLI's own
+    two. Given one, the CLI makes one request and prints that page as the service
+    sent it, its next-page token included (measured with aws-cli 2.28.24 on
+    ListUserPools' ``--max-results``)."""
     from botocore import xform_name
 
     names = paginator.get("input_token", [])
     names = list(names) if isinstance(names, list) else [names]
     if paginator.get("limit_key"):
         names.append(paginator["limit_key"])
-    return sorted({"--" + xform_name(name, "-") for name in names})
+    flags = {"--" + xform_name(name, "-") for name in names}
+    return sorted(flags - set(CLI_PAGING_OPTIONS))
 
 
 def write(path: Path, operations: list[tuple[str, str]]) -> Path:

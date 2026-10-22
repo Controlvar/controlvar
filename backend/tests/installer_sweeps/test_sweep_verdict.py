@@ -11,6 +11,9 @@ backend/tests/unit/infrastructure/test_installer_sweep_static.py.
 
 from __future__ import annotations
 
+import os
+import re
+
 import pytest
 
 from backend.tests.installer_sweeps.harness import accounts
@@ -385,21 +388,50 @@ def _verdict_with(world, override: str, report: str):
     return done
 
 
-def _fails_for(name: str) -> str:
-    """A _sweep_put that loses the lines written to one class file."""
+def _fails_for(text: str) -> str:
+    """A _sweep_put that loses every line holding ``text``."""
     return (
-        f'_sweep_put() {{ case "$1" in */{name}) return 1 ;; esac; '
+        f'_sweep_put() {{ case "$2" in *"{text}"*) return 1 ;; esac; '
         'printf "%s\\n" "$2" >> "$1"; }'
     )
+
+
+#: A file whose read failed in the after sweep, one only the before sweep holds,
+#: and one the verdict cannot read, beside the canary and a file only the after
+#: sweep holds: every kind of line the verdict writes.
+READ_FAILED_FILE = "us-west-2/backup-vaults.txt"
+UNREADABLE_FILE = "us-west-2/sns-topics.txt"
+
+
+@pytest.fixture
+def every_kind(sweeps):
+    after = sweeps.root / "sweep" / "after"
+    before = sweeps.root / "sweep" / "before"
+    _add(sweeps, "after", "us-west-2/ssm-parameters.txt", "/docs-run/sweep-canary")
+    (after / "us-west-2" / "only-after.txt").write_text("x\n")
+    (before / "us-west-2" / "only-before.txt").write_text("y\n")
+    (after / READ_FAILED_FILE).write_text(
+        "READ FAILED: aws backup list-backup-vaults --region us-west-2\n"
+    )
+    unreadable = before / UNREADABLE_FILE
+    unreadable.chmod(0)
+    assert not os.access(unreadable, os.R_OK), "run as a user file modes bind"
+    yield sweeps
+    unreadable.chmod(0o600)
 
 
 @pytest.mark.parametrize(
     "override",
     [
         "_sweep_put() { return 1; }",
-        _fails_for("not-explained.txt"),
-        _fails_for("not-checked.txt"),
-        _fails_for("kept.txt"),
+        _fails_for("/docs-run/sweep-canary"),
+        _fails_for("only in the after sweep"),
+        _fails_for("only in the before sweep"),
+        _fails_for("READ FAILED"),
+        _fails_for("could not be compared"),
+        _fails_for("AWSServiceRoleForECS"),
+        # The tab after the file name: a lag line, never the listing's file path.
+        _fails_for("tagged-resources.txt\t+"),
         "_sweep_empty() { return 1; }",
         "wc() { printf 'not a number\\n'; }",
         "wc() { return 1; }",
@@ -407,24 +439,48 @@ def _fails_for(name: str) -> str:
     ids=[
         "every-line",
         "the-unexplained-line",
-        "the-not-checked-line",
+        "a-file-only-after",
+        "a-file-only-before",
+        "a-failed-read",
+        "a-file-that-cannot-be-compared",
         "a-kept-line",
+        "a-lag-line",
         "an-empty-class-file",
         "a-count-that-is-not-a-number",
         "a-count-that-fails",
     ],
 )
-def test_a_report_that_cannot_be_written_gives_no_verdict(sweeps, override):
+def test_a_report_that_cannot_be_written_gives_no_verdict(every_kind, override):
     """Called inside a condition, where set -e is off, a lost write could turn
-    RESIDUE into CLEAN. Each write is checked instead: exit 2, no verdict."""
-    _add(sweeps, "after", "us-west-2/ssm-parameters.txt", "/docs-run/sweep-canary")
-    (sweeps.root / "sweep" / "after" / "us-west-2" / "only-after.txt").write_text("x\n")
-    control = _verdict_with(sweeps, ":", "control")
+    RESIDUE into CLEAN. Each write is checked instead: exit 2, no verdict. Each
+    case loses the lines of one kind, and the control run writes every kind."""
+    control = _verdict_with(every_kind, ":", "control")
     assert (control.returncode, control.stdout) == (
         1,
-        VERDICT.format("RESIDUE", 26, 10, 1, 1),
+        VERDICT.format("RESIDUE", 26, 10, 4, 1),
     ), control.stderr
-    done = _verdict_with(sweeps, override, "verdict")
+    done = _verdict_with(every_kind, override, "verdict")
     assert done.returncode == 2, (done.stdout, done.stderr)
     assert "verdict " not in done.stdout, done.stdout
     assert "so there is no verdict" in done.stderr, done.stderr
+
+
+def test_every_verdict_write_is_checked():
+    """Read as text: each _sweep_put and _sweep_empty call in lib/sweep.sh ends in
+    `|| return 1` or is the condition of an `if !`, so a lost write can never pass
+    unseen, whichever line it is."""
+    from backend.tests.installer_sweeps.harness.world import LIB
+
+    unchecked = []
+    for number, line in enumerate((LIB / "sweep.sh").read_text().splitlines(), 1):
+        code = line.split(" #", 1)[0].strip()
+        if code.startswith("#") or not re.search(r"\b_sweep_(put|empty) ", code):
+            continue
+        if code.startswith(("_sweep_put()", "_sweep_empty()")):
+            continue
+        if code.endswith("|| return 1") or re.match(
+            r"^if ! _sweep_(put|empty) .*; then$", code
+        ):
+            continue
+        unchecked.append(f"lib/sweep.sh:{number}: {code}")
+    assert unchecked == [], "\n".join(unchecked)

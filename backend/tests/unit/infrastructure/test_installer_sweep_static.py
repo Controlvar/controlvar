@@ -9,7 +9,9 @@ after uninstall. Read without running it:
   their region, its 10 global ones do not; the fake models every one.
 * G1: every field its queries name is one the call prints, after the CLI's own
   paging (a misspelled key would read as "none" in every sweep, with the CLI and
-  the fake agreeing), and no read's answer can leave items out unseen.
+  the fake agreeing); no read caps or skips items (--max-items, --starting-token),
+  and a read the CLI does not page through answers something the sweep refuses
+  on a page that says there is more.
 * G3: the kept list is exact names. No value in lib/names.sh holds a pattern
   character, the service-linked roles are five whole lines, and the only patterns
   the kept list matches with are the pinned ones (the file dispatch, AWS's own
@@ -198,23 +200,104 @@ def test_no_read_can_be_cut_short():
             "IsTruncated",
             "'IsTruncated' is not printed for this call",
         ),
+        (
+            "cloudfront",
+            "list-distributions",
+            [],
+            "DistributionList.IsTruncated",
+            "'IsTruncated' is not printed for this call",
+        ),
     ],
-    ids=["top-key", "inner-field", "dropped-by-paging"],
+    ids=["top-key", "inner-field", "dropped-by-paging", "beside-a-nested-result-key"],
 )
 def test_the_query_check_names_a_field_the_call_does_not_print(
     service, operation, args, query, named
 ):
     """The check's own failure: a misspelled top key, a misspelled field inside
-    the rows, and a member the CLI's paging leaves out of what it prints."""
+    the rows, and members the CLI's paging leaves out of what it prints, at the
+    top and beside a result key down a path (CloudFront prints only
+    DistributionList.Items)."""
     found = queries.problems(service, operation, args, query)
     assert any(named in problem for problem in found), found
 
 
-def test_the_short_read_check_names_a_page_without_its_token():
-    why = queries.cut_short(
-        "cognito-idp", "list-user-pools", ["--max-results", "60"], "UserPools[].Name"
+GUARD = "NextToken && 'more than one page' || UserPools[].Name"
+
+
+@pytest.mark.parametrize(
+    "service, operation, args, query, named",
+    [
+        (
+            "cognito-idp",
+            "list-user-pools",
+            ["--max-results", "60"],
+            "UserPools[].Name",
+            "still answers a list",
+        ),
+        (
+            "cognito-idp",
+            "list-user-pools",
+            ["--max-results", "60"],
+            "[NextToken, UserPools[].Name]",
+            "still answers a list",
+        ),
+        (
+            "iam",
+            "list-roles",
+            ["--no-paginate"],
+            "Roles[].RoleName",
+            "still answers a list",
+        ),
+        (
+            "iam",
+            "list-roles",
+            ["--marker", "m"],
+            "Roles[].RoleName",
+            "still answers a list",
+        ),
+        (
+            "iam",
+            "list-roles",
+            ["--max-items", "5"],
+            "Roles[].RoleName",
+            "--max-items caps",
+        ),
+        (
+            "iam",
+            "list-roles",
+            ["--starting-token", "t"],
+            "Roles[].RoleName",
+            "--starting-token caps",
+        ),
+    ],
+    ids=[
+        "paging-off-a-list",
+        "names-the-token-in-a-list",
+        "no-paginate",
+        "an-input-token-by-hand",
+        "max-items",
+        "starting-token",
+    ],
+)
+def test_the_short_read_check_names_a_read_that_leaves_items_out(
+    service, operation, args, query, named
+):
+    """The check's own failure. Naming the token is not enough: on a page that
+    carries one, the answer must be something the sweep refuses. IAM's limit key
+    is MaxItems, so its --max-items is the CLI's cap, never paging off."""
+    why = queries.cut_short(service, operation, args, query)
+    assert why is not None and named in why, why
+
+
+def test_the_short_read_check_passes_the_user_pool_guard():
+    """The positive control: on a page with a token the guard answers a string."""
+    assert (
+        queries.cut_short(
+            "cognito-idp", "list-user-pools", ["--max-results", "60"], GUARD
+        )
+        is None
     )
-    assert why is not None and "turns the CLI's paging off" in why
+    assert queries.cut_short("iam", "list-roles", [], "Roles[].RoleName") is None
 
 
 def _names() -> dict[str, list[str]]:

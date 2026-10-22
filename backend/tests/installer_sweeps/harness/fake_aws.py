@@ -85,6 +85,8 @@ GLOBAL_OPERATIONS = {("s3api", "list-buckets")}
 
 #: Options every operation takes (each with one value).
 GLOBAL_OPTIONS = ("--region", "--query", "--output")
+#: Flags every operation takes (no value): paging off.
+GLOBAL_FLAGS = ("--no-paginate",)
 
 #: The code each protocol family's services answer an access denial with.
 ACCESS_DENIED = {
@@ -797,7 +799,7 @@ def options(rest: list[str], values: set, flags: set) -> dict:
     i = 0
     while i < len(rest):
         name = rest[i]
-        if name in flags:
+        if name in flags or name in GLOBAL_FLAGS:
             out[name] = True
             i += 1
         elif name in values or name in GLOBAL_OPTIONS:
@@ -965,9 +967,12 @@ def respond(
     epoch = spec["metadata"].get("protocol") in EPOCH_PROTOCOLS
     response = render_timestamps(response, ref, spec["shapes"], epoch)
     paginator = operation["paginator"]
-    if paginator is not None and set(paginator["manual_flags"]) & set(args):
-        # A paging option given by hand turns the CLI's paging off: one request,
-        # the page printed as the service sent it, next-page token included.
+    if paginator is not None and (
+        set(paginator["manual_flags"]) & set(args) or "--no-paginate" in args
+    ):
+        # A paging option given by hand, or --no-paginate, turns the CLI's paging
+        # off: one request, the page printed as the service sent it, next-page
+        # token included.
         paginator = None
     query = compiled if answer.fault != "NOQUERY" else None
     if output == "text":
