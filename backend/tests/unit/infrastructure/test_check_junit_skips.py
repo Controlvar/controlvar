@@ -161,6 +161,11 @@ def _job_steps(workflow: str, job_name: str) -> list[dict]:
         ("pr-qa-gate.yml", "Unit Tests", SHOWCASE),
         ("pr-qa-gate.yml", "Unit Tests", DOCS),
         ("pr-qa-gate.yml", "Unit Tests", INSTALLER),
+        (
+            "pr-qa-gate.yml",
+            "Unit Tests",
+            "backend/tests/unit/services/test_email_notifier_tls",
+        ),
         ("infrastructure-tests.yml", "CDK Stack Tests (Python)", CDK),
     ],
 )
