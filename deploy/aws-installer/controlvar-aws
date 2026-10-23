@@ -1,0 +1,299 @@
+#!/bin/bash
+# controlvar-aws: install Controlvar on AWS with one command, and remove it again (beta).
+#
+#   ./deploy/aws-installer/controlvar-aws install --account ID --domain HOST --alarm-email ADDRESS
+#   ./deploy/aws-installer/controlvar-aws uninstall --account ID
+#   ./deploy/aws-installer/controlvar-aws --help
+#
+# It runs the AWS CDK guide's steps (docs/self-hosting/cdk.md) for the core profile, in
+# staging's shape, in us-west-2, and records the account read-only before its first change so
+# that uninstall can compare. Run from a clone of Controlvar/controlvar that has its tags; the
+# CDK runs in a copy of the release's tag in the record (~/.controlvar-aws/), never in the
+# clone. Bash 3.2 or later; no set -e: every status is checked where it is made.
+#
+# Exit status: 0 done; 1 failed after something was made (the message says what exists and
+# what it bills); 2 refused, nothing changed; 130 interrupted.
+
+set -u -o pipefail
+
+# The terminal's stdout and stderr, kept as fds 8 and 9: every line the installer prints
+# goes there (lib/messages.sh), even when a signal's trap runs inside a command whose
+# output is redirected to a file. Background children get neither (lib/record.sh).
+exec 8>&1 9>&2
+CV_OUT_FD=8
+CV_ERR_FD=9
+
+CV_LAUNCHER="$0"
+CV_HOME=$(cd "$(dirname "$0")" && pwd -P) || exit 2
+CV_CLONE=$(cd "$CV_HOME/../.." && pwd -P) || exit 2
+CV_BASE_PATH="$PATH"
+CV_VERB=""
+CV_ACCOUNT=""
+CV_DOMAIN=""
+CV_ALARM_EMAIL=""
+CV_ADMIN_EMAIL=""
+CV_PROFILE="${AWS_PROFILE:-}"
+CV_PLAN_ONLY=0
+CV_YES=0
+CV_RECORD=""
+CV_ENV=()
+
+# shellcheck source=lib/names.sh
+. "$CV_HOME/lib/names.sh"
+# shellcheck source=lib/env.sh
+. "$CV_HOME/lib/env.sh"
+# shellcheck source=lib/messages.sh
+. "$CV_HOME/lib/messages.sh"
+# shellcheck source=lib/record.sh
+. "$CV_HOME/lib/record.sh"
+# shellcheck source=lib/checks.sh
+. "$CV_HOME/lib/checks.sh"
+# shellcheck source=lib/steps.sh
+. "$CV_HOME/lib/steps.sh"
+# shellcheck source=lib/sweep.sh
+. "$CV_HOME/lib/sweep.sh"
+
+cv_help() {
+    cat << HELP
+Controlvar AWS installer (beta). What has been tested: ${CV_PAGE}#what-has-been-tested
+
+It installs Controlvar's core profile, in staging's shape, in us-west-2, into an AWS account
+you administer, and removes it again. From the moment you confirm until you uninstall, it
+costs about \$10 a day.
+
+Usage:
+  $CV_LAUNCHER install --account ID --domain HOST --alarm-email ADDRESS [options]
+  $CV_LAUNCHER uninstall --account ID [options]
+
+Options:
+  --account ID          both: the 12-digit ID of the account, typed again at the prompt
+                        unless --yes; refused if the sign-in is another account
+  --domain HOST         install: a name directly under a public Route 53 zone of that
+                        account, not the zone's top
+  --alarm-email ADDRESS install: the address the alarms email
+  --admin-email ADDRESS install: the first administrator's sign-in (default: the alarm email)
+  --aws-profile NAME    both: an IAM Identity Center profile (default: AWS_PROFILE)
+  --plan-only           both: the checks and the plan, then stop; nothing is changed
+  --yes                 both: confirm without typing (the plan still prints)
+  --help                this text
+HELP
+}
+
+# cv_banner: every run's first line says beta and where its testing is described.
+cv_banner() {
+    cv_out "Controlvar AWS installer ${CV_VERSION_SEEN:-} (beta). What has been tested: ${CV_PAGE}#what-has-been-tested"
+}
+
+# cv_parse <arguments...>: the options; any other is refused before anything is read.
+cv_parse() {
+    local flag value given
+    while [ "$#" -gt 0 ]; do
+        flag="$1"
+        value=""
+        given=0
+        case "$flag" in
+            --*=*)
+                value="${flag#*=}"
+                flag="${flag%%=*}"
+                given=1
+                ;;
+        esac
+        case "$flag" in
+            --account | --domain | --alarm-email | --admin-email | --aws-profile)
+                if [ "$given" -eq 0 ]; then
+                    if [ "$#" -lt 2 ]; then msg_option_value "$flag"; fi
+                    value="$2"
+                    shift
+                fi
+                # An empty value is never a default: --admin-email "" is a mistake.
+                if [ -z "$value" ]; then msg_option_value "$flag"; fi
+                case "$flag" in
+                    --account) CV_ACCOUNT="$value" ;;
+                    --domain) CV_DOMAIN=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]') ;;
+                    --alarm-email) CV_ALARM_EMAIL="$value" ;;
+                    --admin-email) CV_ADMIN_EMAIL="$value" ;;
+                    --aws-profile) CV_PROFILE="$value" ;;
+                esac
+                ;;
+            --plan-only | --yes)
+                if [ "$given" -eq 1 ]; then msg_not_an_option "$1"; fi
+                if [ "$flag" = --yes ]; then CV_YES=1; else CV_PLAN_ONLY=1; fi
+                ;;
+            --help | -h)
+                cv_help
+                exit 0
+                ;;
+            *) msg_not_an_option "$flag" ;;
+        esac
+        shift
+    done
+}
+
+cv_check_account_option() {
+    case "$CV_ACCOUNT" in
+        '') msg_account_missing ;;
+        *[!0-9]*) msg_account_digits "$CV_ACCOUNT" ;;
+    esac
+    if [ "${#CV_ACCOUNT}" -ne 12 ]; then
+        msg_account_digits "$CV_ACCOUNT"
+    fi
+}
+
+# cv_check_started: UX's "no continuing": a record that holds STARTED and no UNINSTALLED is
+# an install this computer made; it is never changed or continued.
+cv_check_started() {
+    local made step
+    if [ ! -f "$CV_RECORD/env.d/STARTED.sh" ] || [ -f "$CV_RECORD/env.d/UNINSTALLED.sh" ]; then
+        return 0
+    fi
+    # The record's own files, written with printf %q, read in a subshell.
+    # shellcheck disable=SC1091
+    made=$(. "$CV_RECORD/env.d/STARTED.sh" 2> /dev/null && printf '%s' "${STARTED:-}") || made=""
+    if [ -f "$CV_RECORD/env.d/SMOKE_DONE.sh" ]; then
+        # shellcheck disable=SC1091
+        step="is complete at https://$(. "$CV_RECORD/inputs.sh" 2> /dev/null && printf '%s' "${CV_DOMAIN:-}")"
+    else
+        # shellcheck disable=SC1091
+        step=$(. "$CV_RECORD/env.d/INTERRUPTED_AT.sh" 2> /dev/null && printf '%s' "${INTERRUPTED_AT:-}") || step=""
+        if [ -z "$step" ]; then
+            # shellcheck disable=SC1091
+            step=$(. "$CV_RECORD/env.d/STEP.sh" 2> /dev/null && printf '%s' "${STEP:-}") || step=""
+        fi
+        step="stopped at \"${step:-the checks}\""
+    fi
+    msg_started "${made:-earlier}" "$step"
+}
+
+cv_plan() {
+    local admin bootstrap
+    admin=$(printf '%s' "$CV_ADMIN_EMAIL" | tr '[:upper:]' '[:lower:]')
+    bootstrap="the CDK's setup stack, "
+    if [ "$CV_CDKTOOLKIT" = present ]; then
+        bootstrap=""
+    fi
+    cv_out "This creates in account $CV_ACCOUNT, us-west-2 (staging's shape, core profile): ${bootstrap}2 image"
+    cv_out "  repositories, 2 secrets, a certificate, nine stacks (a network with one NAT gateway, Aurora, Redis, the API and the"
+    cv_out "  dashboard behind a load balancer, alarms emailing $CV_ALARM_EMAIL), and two records in $CV_ZONE: $CV_DOMAIN"
+    cv_out "  and the certificate's. First administrator: $admin, password made here, shown once. Audit log: unsigned (core)."
+    if [ "$CV_CDKTOOLKIT" = present ]; then
+        cv_out "  The CDK's setup stack (CDKToolkit) is already in us-west-2: it is used and kept as it is."
+    fi
+    cv_out "Cost: about \$10 a day (\$0.42 an hour) until you uninstall, used or not (us-west-2 list prices of 2026-10-17, not your"
+    cv_out "  bill). About 40 minutes. Not for production data: no upgrades. Record: $CV_RECORD/"
+}
+
+cv_confirm() {
+    local typed=""
+    if [ "$CV_YES" -eq 1 ]; then
+        cv_out "Confirmed with --yes."
+        return 0
+    fi
+    if [ ! -t 0 ]; then
+        msg_no_terminal
+    fi
+    cv_out "Type the account ID shown above to create these resources:"
+    if ! IFS= read -r typed; then
+        typed=""
+    fi
+    cv_log "typed: $typed"
+    if [ "$typed" != "$CV_ACCOUNT" ]; then
+        msg_not_confirmed
+    fi
+}
+
+cv_install() {
+    cv_parse "$@"
+    cv_check_account_option
+    cv_check_domain
+    if [ -z "$CV_ALARM_EMAIL" ]; then
+        msg_alarm_missing
+    fi
+    if [ -z "$CV_PROFILE" ]; then
+        msg_profile_missing
+    fi
+    CV_RECORD="$HOME/.controlvar-aws/$CV_ACCOUNT-$CV_REGION"
+    cv_env_init
+    cv_record_init
+    cv_traps
+    cv_lock
+    cv_home_init
+    cv_check_started
+    cv_out "Checks (read-only; nothing is created yet):"
+    cv_check_tools
+    cv_check_release
+    cv_check_emails
+    cv_check_cdk_json
+    cv_tools_step
+    cv_out "  Tools (aws, git, python3 3.11, node, jq, dig, cosign, crane); release v$CV_VERSION's tag, its CDK copied to the record ... ok"
+    cv_check_signin
+    cv_out "  Signed in with $CV_PROFILE (IAM Identity Center) as $CV_ROLE to account $CV_ACCOUNT, as --account says. Region"
+    cv_out "  us-west-2, the only one the beta installs in. Sign-in renewed recently (${CV_TOKEN%%$'\n'*}) ... ok"
+    cv_check_regions
+    cv_check_stacks
+    cv_check_limits
+    cv_check_roles
+    cv_check_before
+    cv_check_permissions
+    cv_check_collisions
+    cv_out "  Allowed to create what it needs; no Controlvar stacks, repositories or secrets; Fargate vCPU limit $CV_FARGATE (needs 3) ... ok"
+    cv_check_zone
+    cv_check_images
+    cv_out "  Zone $CV_ZONE: public, in this account, the one the internet uses; nothing at $CV_DOMAIN; release"
+    cv_out "  images signed by Controlvar's release workflow ... ok"
+    cv_plan
+    if [ "$CV_PLAN_ONLY" -eq 1 ]; then
+        cv_out "Plan only: nothing was created. Run the same command without --plan-only to install."
+        exit 0
+    fi
+    cv_confirm
+    cv_step_sweep
+    cv_start
+    cv_step_bootstrap
+    cv_step_repositories_and_secrets
+    cv_step_certificate
+    cv_step_images
+    cv_step_deploy
+    cv_step_alias
+    cv_step_schema
+    cv_step_smoke
+    CV_STEP="the summary"
+    cv_summary
+    exit 0
+}
+
+cv_uninstall() {
+    cv_parse "$@"
+    cv_stop 2 "uninstall is not in this build of the beta yet." \
+        "remove an install made by this build by hand, as https://docs.controlvar.com/self-hosting/cdk/#destroying-an-environment describes." \
+        "Nothing was deleted."
+}
+
+cv_main() {
+    if [ -f "$CV_CLONE/VERSION" ]; then
+        CV_VERSION_SEEN=$(tr -d '[:space:]' < "$CV_CLONE/VERSION")
+    fi
+    case "${1:-}" in
+        install)
+            CV_VERB=install
+            shift
+            cv_banner
+            cv_install "$@"
+            ;;
+        uninstall)
+            CV_VERB=uninstall
+            shift
+            cv_banner
+            cv_uninstall "$@"
+            ;;
+        --help | -h | help)
+            cv_help
+            exit 0
+            ;;
+        *)
+            cv_banner
+            msg_usage
+            ;;
+    esac
+}
+
+cv_main "$@"

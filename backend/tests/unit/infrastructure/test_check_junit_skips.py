@@ -33,6 +33,9 @@ SHOWCASE = "backend/tests/unit/showcase"
 #: The docs tests (#1142), the page gate and the information floor among them:
 #: nothing there skips on a full checkout, and a skipped gate reads as a pass.
 DOCS = "backend/tests/unit/docs"
+#: The AWS installer beta's harness and sweep tests: they need only bash and jq,
+#: so a skip there is a gate that did not run.
+INSTALLER = "backend/tests/installer_sweeps"
 
 
 def _report(tmp_path: Path, cases: str) -> Path:
@@ -157,6 +160,7 @@ def _job_steps(workflow: str, job_name: str) -> list[dict]:
         ("pr-qa-gate.yml", "Unit Tests", REALISTIC),
         ("pr-qa-gate.yml", "Unit Tests", SHOWCASE),
         ("pr-qa-gate.yml", "Unit Tests", DOCS),
+        ("pr-qa-gate.yml", "Unit Tests", INSTALLER),
         (
             "pr-qa-gate.yml",
             "Unit Tests",
