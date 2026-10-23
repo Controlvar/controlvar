@@ -10,6 +10,13 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.36.4](https://github.com/Controlvar/controlvar/compare/v0.36.3...v0.36.4) (2026-10-23)
+
+
+### Bug Fixes
+
+* **email:** SMTP email checks the server's certificate, and SMTP_CA_FILE names a private CA ([#1329](https://github.com/Controlvar/controlvar/issues/1329)) ([297b9b7](https://github.com/Controlvar/controlvar/commit/297b9b7aa4306eabb7ec33d09e7bfd9e5edce479))
+
 ## [0.36.3](https://github.com/Controlvar/controlvar/compare/v0.36.2...v0.36.3) (2026-10-22)
 
 
