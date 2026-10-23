@@ -56,6 +56,7 @@ def _make_notifier(
         mock_settings.SMTP_PORT = smtp_port
         mock_settings.SMTP_USERNAME = smtp_username
         mock_settings.SMTP_PASSWORD = smtp_password
+        mock_settings.SMTP_CA_FILE = ""
         mock_settings.EMAIL_FROM_ADDRESS = email_from_address
         mock_settings.EMAIL_FROM_NAME = email_from_name
         mock_settings.NOTIFICATION_ADMIN_EMAILS = notification_admin_emails
