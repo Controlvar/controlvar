@@ -332,17 +332,19 @@ cv_un_destroy_failed() {
 }
 
 # cv_un_guardduty <vpc>: GuardDuty's own endpoint and group in the install's VPC,
-# which keep it from being deleted: named, never deleted (they are not the install's).
+# which keep it from being deleted: named, with the commands that delete them, and never
+# deleted by the installer (they are not the install's).
 cv_un_guardduty() {
-    local f="$CV_RECORD/tmp/guardduty.json" g="$CV_RECORD/tmp/guardduty-groups.json" ids
+    local f="$CV_RECORD/tmp/guardduty.json" g="$CV_RECORD/tmp/guardduty-groups.json" endpoints groups
     if cv_read "the VPC's endpoints" "$f" ec2 describe-vpc-endpoints \
         --query "VpcEndpoints[?VpcId=='$1' && ends_with(ServiceName, '.guardduty-data')].VpcEndpointId" &&
         cv_list "$f" 'all(type == "string")' &&
         cv_read "the VPC's groups" "$g" ec2 describe-security-groups \
             --query "SecurityGroups[?VpcId=='$1' && starts_with(GroupName, 'GuardDutyManagedSecurityGroup-')].GroupId" &&
         cv_list "$g" 'all(type == "string")' &&
-        ids=$(jq -s -r 'add | join(", ")' "$f" "$g") && [ -n "$ids" ]; then
-        msg_network_guardduty "$ids"
+        endpoints=$(jq -r 'join(" ")' "$f") && groups=$(jq -r 'join(" ")' "$g") &&
+        [ -n "$endpoints$groups" ]; then
+        msg_network_guardduty "$1" "$endpoints" "$groups"
     fi
 }
 

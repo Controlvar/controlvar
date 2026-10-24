@@ -670,9 +670,21 @@ msg_stack_delete_failed() {
     cv_stop 1 "AWS could not delete $2 in the stack $1: $3." "$next"
 }
 
+# msg_network_guardduty <vpc> <endpoint IDs> <group IDs>: the IDs space-separated, either
+# list possibly empty; the next step prints the commands that list the network's interfaces
+# and delete them.
 msg_network_guardduty() {
-    cv_stop 1 "AWS could not delete the network: GuardDuty put its own endpoint and its own VPC group in it ($1). The installer did not make them, so it does not delete them." \
-        "follow ${CV_PAGE}#if-uninstall-stops-at-the-network, then run uninstall again; it continues with the network."
+    local where="--region us-west-2 --profile ${CV_PROFILE:-NAME}" deletes="" then="" g
+    if [ -n "$2" ]; then
+        deletes="aws ec2 delete-vpc-endpoints --vpc-endpoint-ids $2 $where"
+        then=", then, once the endpoint is gone, "
+    fi
+    for g in $3; do
+        deletes="$deletes${then}aws ec2 delete-security-group --group-id $g $where"
+        then=", then "
+    done
+    cv_stop 1 "AWS could not delete the network: GuardDuty put its own endpoint and its own VPC group in it (the endpoint ${2:-none}, the group ${3:-none}). The installer did not make them, so it does not delete them." \
+        "check that they are all that is left in the network (aws ec2 describe-network-interfaces --filters Name=vpc-id,Values=$1 --query 'NetworkInterfaces[].[NetworkInterfaceId,InterfaceType,Description]' --output text $where), delete them ($deletes), then run uninstall again; it continues with the network. ${CV_PAGE}#if-uninstall-stops-at-the-network says more."
 }
 
 msg_stacks_left() {

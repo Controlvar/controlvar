@@ -1072,7 +1072,7 @@ def test_a_secret_this_install_did_not_make_is_kept(ran):
         ),
         (
             "guardduty",
-            f"FAILED: AWS could not delete the network: GuardDuty put its own endpoint and its own VPC group in it ({GUARDDUTY_ENDPOINT}, {GUARDDUTY_GROUP}).",
+            f"FAILED: AWS could not delete the network: GuardDuty put its own endpoint and its own VPC group in it (the endpoint {GUARDDUTY_ENDPOINT}, the group {GUARDDUTY_GROUP}).",
         ),
     ],
     ids=["delete-denied", "delete-failed", "guardduty"],
@@ -1095,6 +1095,21 @@ def test_guarddutys_own_endpoint_and_group_are_never_deleted(ran):
         "delete-vpc-endpoints" in c["argv"] or "delete-security-group" in c["argv"]
         for c in world.calls
     )
+
+
+def test_the_network_message_prints_the_commands_that_delete_guarddutys_two(ran):
+    """The reader is given what the AWS guide's teardown gives: a command that lists what is
+    left in the network, and the two deletes, by the IDs the installer read, under the
+    reader's own profile."""
+    first, _second = ran["guardduty"].done
+    where = f"--region us-west-2 --profile {PROFILE}"
+    for command in (
+        "aws ec2 describe-network-interfaces --filters Name=vpc-id,Values=vpc-",
+        f"aws ec2 delete-vpc-endpoints --vpc-endpoint-ids {GUARDDUTY_ENDPOINT} {where}, then,"
+        " once the endpoint is gone, ",
+        f"aws ec2 delete-security-group --group-id {GUARDDUTY_GROUP} {where})",
+    ):
+        assert command in first.err, first.err
 
 
 @pytest.mark.parametrize("name", ["secret-already-gone", "gone-at-the-delete"])
