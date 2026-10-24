@@ -441,6 +441,36 @@ WATCH_CASES = {
 for _name, (_prepare, _said) in WATCH_CASES.items():
     BATCH.add(f"watch-{_name}", prepare=_prepare)
 BATCH.add("slr-race", prepare=_cdk(slr_race=True))
+
+
+def _locks_moved(world: InstallWorld) -> None:
+    """The record's tools were installed from other locks (their .pins say so), though
+    each still reports the pinned version; and a python3 that can make a venv whose pip
+    writes down the environment it ran with."""
+    tools = world.record / "tools"
+    for name in ("cdk-cli", "venv"):
+        (tools / name / ".pins").write_text("an earlier lock\n")
+    seen = world.fake_dir / "pip-env.txt"
+    real = world.bin / "python3.real"
+    (world.bin / "python3").rename(real)
+    shim = world.bin / "python3"
+    shim.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "-m" ] && [ "$2" = venv ]; then\n'
+        '    mkdir -p "$3/bin" || exit 1\n'
+        f'    printf "#!/bin/sh\\nenv > \\"{seen}\\"\\n" > "$3/bin/python3" && chmod +x "$3/bin/python3"\n'
+        "    exit $?\n"
+        "fi\n"
+        f'exec "{real}" "$@"\n'
+    )
+    shim.chmod(0o755)
+
+
+BATCH.add(
+    "locks-moved",
+    prepare=_locks_moved,
+    run=lambda w: w.install(HTTPS_PROXY="http://proxy.example.org:3128"),
+)
 BATCH.add(
     "role-there",
     prepare=_state(
@@ -597,6 +627,60 @@ def test_every_aws_child_runs_with_exactly_the_allowed_environment(clean):
             assert values["AWS_PROFILE"] == COPY_PROFILE, call
         seen += 1
     assert seen > 70
+
+
+def test_the_deploy_deploys_the_assembly_the_target_check_read(clean):
+    """cdk deploy is given the list call's own output folder as its app (--app), so what it
+    deploys is the cloud assembly assert_cdk_target read, not a second synth."""
+    calls = {
+        c["op"]: c["argv"]
+        for c in clean.world.calls
+        if c["service"] == "cdk" and c["op"] in ("list", "deploy")
+    }
+    listed = calls["list"][calls["list"].index("--output") + 1]
+    deploy = calls["deploy"]
+    assert "--app" in deploy, deploy
+    assert deploy[deploy.index("--app") + 1] == listed
+    assert deploy[deploy.index("--output") + 1] != listed
+    assert (Path(listed) / "manifest.json").is_file()
+
+
+def test_the_tools_are_reused_while_their_locks_are_the_clones(clean):
+    """The record's CLI and venv were installed from the clone's pins/ (their .pins hold the
+    locks' hashes): nothing is installed again."""
+    assert not [c for c in clean.world.calls if c["service"] == "npm"]
+
+
+def test_a_tool_installed_from_other_locks_is_installed_again(ran):
+    """The tools step keys its reuse on the locks' hashes, not the tools' versions: a CLI
+    and a venv that report the pinned versions but came from other locks are installed
+    again. npm and pip run as every other child does: the installer's environment, the
+    proxy variable the shell set passed on purpose, and a HOME of their own, never the
+    reader's."""
+    from backend.tests.installer_sweeps.harness.install_world import pins_stamp
+
+    world, done = ran["locks-moved"].world, ran["locks-moved"].done
+    assert done.code == 0, done.err
+    npm = [c for c in world.calls if c["service"] == "npm"]
+    assert [c["op"] for c in npm] == ["ci"], npm
+    want = (set(BASE_ENV) - {"AWS_CA_BUNDLE"}) | {"HTTPS_PROXY"}
+    assert set(npm[0]["env"]) - SHIM_ADDS == want, sorted(set(npm[0]["env"]) ^ want)
+    assert npm[0]["values"]["HOME"] == str(world.record / "home")
+    pip = dict(
+        line.split("=", 1)
+        for line in (world.fake_dir / "pip-env.txt").read_text().splitlines()
+        if "=" in line
+    )
+    assert set(pip) - SHIM_ADDS == want, sorted(set(pip) ^ want)
+    assert pip["HOME"] == str(world.record / "home")
+    assert pip["HTTPS_PROXY"] == "http://proxy.example.org:3128"
+    pins = world.clone / "deploy" / "aws-installer" / "pins"
+    assert (world.record / "tools" / "cdk-cli" / ".pins").read_text() == pins_stamp(
+        pins / "package.json", pins / "package-lock.json"
+    ) + "\n"
+    assert (world.record / "tools" / "venv" / ".pins").read_text() == pins_stamp(
+        pins / "requirements.lock"
+    ) + "\n"
 
 
 def test_every_cdk_call_signs_in_through_the_copy(clean):

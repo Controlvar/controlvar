@@ -50,6 +50,8 @@ CV_ENV=()
 . "$CV_HOME/lib/checks.sh"
 # shellcheck source=lib/steps.sh
 . "$CV_HOME/lib/steps.sh"
+# shellcheck source=lib/uninstall.sh
+. "$CV_HOME/lib/uninstall.sh"
 # shellcheck source=lib/sweep.sh
 . "$CV_HOME/lib/sweep.sh"
 
@@ -191,7 +193,11 @@ cv_confirm() {
     if [ ! -t 0 ]; then
         msg_no_terminal
     fi
-    cv_out "Type the account ID shown above to create these resources:"
+    if [ "$CV_VERB" = uninstall ]; then
+        cv_out "Type the account ID shown above to delete this install and everything in it:"
+    else
+        cv_out "Type the account ID shown above to create these resources:"
+    fi
     if ! IFS= read -r typed; then
         typed=""
     fi
@@ -261,11 +267,61 @@ cv_install() {
     exit 0
 }
 
+# uninstall: RB phase 9's order. The record first (no record of a started install of this
+# account: nothing is read in AWS and nothing deleted), then the checks, the plan and the
+# confirmation, then six steps (lib/uninstall.sh).
 cv_uninstall() {
+    local flag
     cv_parse "$@"
-    cv_stop 2 "uninstall is not in this build of the beta yet." \
-        "remove an install made by this build by hand, as https://docs.controlvar.com/self-hosting/cdk/#destroying-an-environment describes." \
-        "Nothing was deleted."
+    for flag in "--domain:$CV_DOMAIN" "--alarm-email:$CV_ALARM_EMAIL" "--admin-email:$CV_ADMIN_EMAIL"; do
+        if [ -n "${flag#*:}" ]; then
+            msg_install_only "${flag%%:*}"
+        fi
+    done
+    cv_check_account_option
+    CV_STEPS=6
+    CV_RECORD="$HOME/.controlvar-aws/$CV_ACCOUNT-$CV_REGION"
+    if [ ! -d "$CV_RECORD" ]; then
+        msg_no_record none
+    fi
+    cv_env_init
+    cv_record_init
+    cv_traps
+    cv_lock
+    cv_home_init
+    cv_un_check_record
+    if [ -z "$CV_PROFILE" ]; then
+        CV_PROFILE="$CV_RECORDED_PROFILE"
+    fi
+    if [ -z "$CV_PROFILE" ]; then
+        msg_profile_missing
+    fi
+    cv_out "Checks (read-only; nothing is deleted yet):"
+    cv_check_tools "$CV_UNINSTALL_TOOLS" ""
+    cv_un_check_release
+    if cv_fact DEPLOY_STARTED; then
+        cv_check_tools "$CV_UNINSTALL_CDK_TOOLS" "$CV_UNINSTALL_CDK_PRESENT"
+        cv_check_release
+        cv_check_cdk_json
+        cv_tools_step
+    fi
+    cv_out "  Tools; this folder is release v$CV_RECORDED_VERSION, the install's ... ok"
+    cv_check_signin
+    cv_out "  Signed in with $CV_PROFILE (IAM Identity Center) as $CV_ROLE to account $CV_ACCOUNT, as --account says;"
+    cv_out "  sign-in renewed recently (${CV_TOKEN%%$'\n'*}) ... ok"
+    cv_un_plan
+    if [ "$CV_PLAN_ONLY" -eq 1 ]; then
+        cv_out "Plan only: nothing was deleted. Run the same command without --plan-only to uninstall."
+        exit 0
+    fi
+    cv_confirm
+    cv_un_step_alias
+    cv_un_step_stacks
+    cv_un_step_certificate
+    cv_un_step_rest
+    cv_un_step_cdktoolkit
+    cv_un_step_compare
+    exit 0
 }
 
 cv_main() {

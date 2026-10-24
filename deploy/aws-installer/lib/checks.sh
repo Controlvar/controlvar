@@ -188,9 +188,11 @@ PYTHON
 
 # --- this computer -------------------------------------------------------------------------
 
+# cv_check_tools [<tool:version list> <present list>]: install's tools (CV_TOOLS and
+# CV_PRESENT) unless others are named; refuses with every one missing or too old.
 cv_check_tools() {
-    local missing=() entry tool need have
-    for entry in $CV_TOOLS; do
+    local missing=() entry tool need have tools="${1-$CV_TOOLS}" present="${2-$CV_PRESENT}"
+    for entry in $tools; do
         tool=${entry%%:*}
         need=${entry#*:}
         if ! command -v "$tool" > /dev/null 2>&1; then
@@ -202,7 +204,7 @@ cv_check_tools() {
             missing+=("$tool: ${have:-an unreadable version}; needs $need or later")
         fi
     done
-    for tool in $CV_PRESENT; do
+    for tool in $present; do
         if ! command -v "$tool" > /dev/null 2>&1; then
             missing+=("$tool: not found")
         fi
@@ -265,29 +267,42 @@ cv_check_cdk_json() {
     fi
 }
 
+# cv_pins_hash <file...>: the sha256 of each file, in order, space-separated: what the
+# tools step writes beside a tool it installed (.pins) and compares before reusing it.
+cv_pins_hash() {
+    python3 -I -c 'import hashlib, sys
+print(" ".join(hashlib.sha256(open(p, "rb").read()).hexdigest() for p in sys.argv[1:]))' "$@"
+}
+
 # cv_tools_step: the pinned CDK CLI and the CDK app's Python, from deploy/aws-installer/pins/,
-# installed without running any package's scripts, from a hashed lock. Reused while what is
-# installed reports the pinned versions.
+# installed without running any package's scripts, from a hashed lock. Each is reused only
+# while the locks it was installed from are byte for byte the clone's (their hashes in its
+# .pins), so a lock that moves any package, the CLI's or the CDK libraries' or what they
+# pull in, installs again. npm and pip run like every other child, under the installer's
+# environment (the proxy and certificate variables passed, a HOME of their own: never the
+# reader's ~/.npmrc or pip configuration).
 cv_tools_step() {
-    local tools="$CV_RECORD/tools" pins="$CV_HOME/pins" want_cdk want_lib have
-    want_cdk=$(jq -r '.dependencies["aws-cdk"]' "$pins/package.json")
-    want_lib=$(sed -n 's/^aws-cdk-lib==\([0-9.]*\).*$/\1/p' "$pins/requirements.lock")
-    have=$("$tools/cdk-cli/node_modules/.bin/cdk" --version 2> /dev/null) || have=""
-    if [ "${have%% *}" != "$want_cdk" ]; then
+    local tools="$CV_RECORD/tools" pins="$CV_HOME/pins" want_cli want_py
+    if ! want_cli=$(cv_pins_hash "$pins/package.json" "$pins/package-lock.json") ||
+        ! want_py=$(cv_pins_hash "$pins/requirements.lock"); then
+        msg_tool_failed "the tools step" "1" "the locks in $pins could not be read"
+    fi
+    if [ ! -x "$tools/cdk-cli/node_modules/.bin/cdk" ] || [ "$(cat "$tools/cdk-cli/.pins" 2> /dev/null)" != "$want_cli" ]; then
         rm -rf "$tools/cdk-cli"
         mkdir -p "$tools/cdk-cli"
         cp "$pins/package.json" "$pins/package-lock.json" "$tools/cdk-cli/"
-        cv_out "  Installing the pinned CDK CLI $want_cdk into the record (scripts off) ..."
-        if ! (cd "$tools/cdk-cli" && env -i "PATH=$CV_BASE_PATH" "HOME=$HOME" npm ci --ignore-scripts --no-audit --no-fund) > "$CV_RECORD/logs/tools-npm.log" 2>&1; then
+        cv_out "  Installing the pinned CDK CLI into the record (scripts off) ..."
+        if ! (cd "$tools/cdk-cli" && env -i ${CV_ENV[@]+"${CV_ENV[@]}"} npm ci --ignore-scripts --no-audit --no-fund) > "$CV_RECORD/logs/tools-npm.log" 2>&1 ||
+            ! printf '%s\n' "$want_cli" > "$tools/cdk-cli/.pins"; then
             msg_tool_failed "npm ci" "1" "$(tail -n 1 "$CV_RECORD/logs/tools-npm.log" 2> /dev/null)"
         fi
     fi
-    have=$("$tools/venv/bin/python3" -I -c 'import importlib.metadata as m; print(m.version("aws-cdk-lib"))' 2> /dev/null) || have=""
-    if [ "$have" != "$want_lib" ]; then
+    if [ ! -x "$tools/venv/bin/python3" ] || [ "$(cat "$tools/venv/.pins" 2> /dev/null)" != "$want_py" ]; then
         rm -rf "$tools/venv"
         cv_out "  Installing the CDK app's Python packages into the record (hashed lock) ..."
-        if ! python3 -m venv "$tools/venv" > "$CV_RECORD/logs/tools-pip.log" 2>&1 ||
-            ! env -i "PATH=$CV_BASE_PATH" "HOME=$HOME" "$tools/venv/bin/python3" -m pip install --require-hashes --no-deps -r "$pins/requirements.lock" >> "$CV_RECORD/logs/tools-pip.log" 2>&1; then
+        if ! env -i ${CV_ENV[@]+"${CV_ENV[@]}"} python3 -m venv "$tools/venv" > "$CV_RECORD/logs/tools-pip.log" 2>&1 ||
+            ! env -i ${CV_ENV[@]+"${CV_ENV[@]}"} "$tools/venv/bin/python3" -m pip install --require-hashes --no-deps -r "$pins/requirements.lock" >> "$CV_RECORD/logs/tools-pip.log" 2>&1 ||
+            ! printf '%s\n' "$want_py" > "$tools/venv/.pins"; then
             msg_tool_failed "pip install" "1" "$(tail -n 1 "$CV_RECORD/logs/tools-pip.log" 2> /dev/null)"
         fi
     fi
@@ -489,23 +504,23 @@ cv_before_write() {
         err=$({ printf '%s\n' "$@" >> "$file"; } 2>&1) && return 0
     fi
     cv_log "before/$name: ${err:-not written}"
-    msg_read_failed "$what" "an answer the installer could not record"
+    msg_before_unwritten "$what" "before/$name"
 }
 
 # cv_check_roles: which of the service-linked roles exist (NoSuchEntity is the only
 # "absent"), GuardDuty and Config, recorded in before/.
 cv_check_roles() {
-    local n f out=service-linked-roles.txt
-    cv_before_write "$out" "the service-linked roles"
+    local n f
+    cv_before_write service-linked-roles.txt "the service-linked roles"
     for n in $CV_SERVICE_ROLES; do
         f="$CV_RECORD/tmp/role-$n.json"
         if cv_read "the role $n" "$f" iam get-role --role-name "$n" --query Role.RoleName; then
             if ! jq -e -s --arg n "$n" 'length == 1 and .[0] == $n' "$f" > /dev/null 2>&1; then
                 msg_read_failed "the role $n" "an answer that is not its name"
             fi
-            cv_before_write "$out" "the role $n" "$n present"
+            cv_before_write service-linked-roles.txt "the role $n" "$n present"
         elif [ "$CV_CODE" = NoSuchEntity ]; then
-            cv_before_write "$out" "the role $n" "$n absent"
+            cv_before_write service-linked-roles.txt "the role $n" "$n absent"
         else
             msg_read_failed "the role $n" "${CV_CODE:-no answer}"
         fi
@@ -521,16 +536,17 @@ cv_check_roles() {
 }
 
 # cv_check_before: what is already here that uninstall could otherwise take for the
-# install's: the three families' log groups and task-definition revisions. Uninstall keeps
+# install's: the three families' and Container Insights' log groups, and the families'
+# task-definition revisions. Uninstall keeps
 # whatever these lists hold, so a read that is not exactly a list refuses.
 cv_check_before() {
-    local f="$CV_RECORD/tmp/log-groups.json" status name
+    local f="$CV_RECORD/tmp/log-groups.json" status name line
     if ! cv_read "the log groups" "$f" logs describe-log-groups --query 'logGroups[].logGroupName' ||
         ! cv_list "$f" 'all(type == "string")'; then
         msg_read_failed "the account's log groups" "${CV_CODE:-an answer that is not a list}"
     fi
     cv_before_write log-groups.txt "the account's log groups"
-    for name in ${NAMES_LOG_GROUPS[@]+"${NAMES_LOG_GROUPS[@]}"}; do
+    for name in ${NAMES_LOG_GROUPS[@]+"${NAMES_LOG_GROUPS[@]}"} "$NAMES_CONTAINER_INSIGHTS_LOG_GROUP"; do
         if jq -e --arg n "$name" 'index($n) != null' "$f" > /dev/null; then
             cv_before_write log-groups.txt "the account's log groups" "$name"
         fi
@@ -543,9 +559,12 @@ cv_check_before() {
             msg_read_failed "the account's task definitions" "${CV_CODE:-an answer that is not a list}"
         fi
         for name in ${NAMES_FAMILIES[@]+"${NAMES_FAMILIES[@]}"}; do
-            if ! jq -r --arg f ":task-definition/$name:" '.[] | select(contains($f))' "$f" >> "$CV_RECORD/before/task-definitions.txt"; then
-                msg_read_failed "the account's task definitions" "an answer the installer could not record"
+            if ! jq -r --arg f ":task-definition/$name:" '.[] | select(contains($f))' "$f" > "$f.lines"; then
+                msg_read_failed "the account's task definitions" "an answer that is not a list"
             fi
+            while IFS= read -r line; do
+                cv_before_write task-definitions.txt "the account's task definitions" "$line"
+            done < "$f.lines"
         done
     done
 }
@@ -631,7 +650,9 @@ cv_check_zone() {
 # --- what is in the way ----------------------------------------------------------------------
 
 # cv_check_collisions: the CDK's setup stack is complete or absent (only the exact "does not
-# exist" answer is absent), and no repository or secret of the install's names exists yet.
+# exist" answer is absent), and no repository or secret of the install's names exists yet:
+# its own two, and the database's, which the database stack makes and which CloudFormation
+# may leave scheduled for deletion (uninstall then removes it, as only this install's).
 cv_check_collisions() {
     local f="$CV_RECORD/before/cdktoolkit.json" status repo secret
     if cv_read "CDKToolkit" "$f" cloudformation describe-stacks --stack-name CDKToolkit --query 'Stacks[0].[StackStatus,StackId]'; then
@@ -660,7 +681,7 @@ cv_check_collisions() {
             msg_repository_present "$repo"
         fi
     done
-    for secret in "$NAMES_JWT_SECRET" "$NAMES_PASSWORD_SECRET"; do
+    for secret in "$NAMES_JWT_SECRET" "$NAMES_PASSWORD_SECRET" "$NAMES_DB_SECRET"; do
         f="$CV_RECORD/tmp/secret.json"
         if ! cv_read "the secret $secret" "$f" secretsmanager list-secrets --include-planned-deletion \
             --filters "Key=name,Values=$secret" --query "SecretList[?Name=='$secret'].[Name,DeletedDate]" ||

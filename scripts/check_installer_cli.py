@@ -11,9 +11,10 @@ Tests, in a step outside pytest: every pytest session blocks the real CLI
 (backend/tests/no_real_aws.py), and this is the job that runs the runner's own.
 
 1. The beta's sweep (lib/sweep.sh, through the harness's driver) runs against the
-   fake for a new account and an installed one, and a clean install runs against the
-   fakes with the state each of its calls found kept; every call the fake logged is
-   a call the beta makes. Calls differing only in region are one shape.
+   fake for a new account and an installed one, and a clean install and a clean
+   uninstall run against the fakes (with the paths each never takes on a clean run)
+   with the state each of their calls found kept; every call the fake logged is a call
+   the beta makes. Calls differing only in region are one shape.
 2. For each shape and state, and for the same call with ``--output text``, the
    fake's own response for that state is served from a stub on 127.0.0.1, in the
    protocol the CLI's request uses (harness/wire.py), and the real CLI runs with

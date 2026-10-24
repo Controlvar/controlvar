@@ -219,6 +219,41 @@ def _credentials(env: dict, args: dict, state: dict | None = None) -> None:
             f'\nCould not connect to the endpoint URL: "{args["--endpoint-url"]}/"\n',
             255,
         )
+    keys = bool(env.get("AWS_ACCESS_KEY_ID") and env.get("AWS_SECRET_ACCESS_KEY"))
+    if profile and not keys and parser is not None:
+        section = "default" if profile == "default" else f"profile {profile}"
+        if parser.has_option(section, "sso_session"):
+            _cache_role_credentials(env, profile)
+
+
+def _cache_role_credentials(env: dict, profile: str) -> None:
+    """What the CLI leaves under HOME once an IAM Identity Center profile has signed in:
+    the role's credentials, cached in ~/.aws/cli/cache (measured, aws-cli 2.28.24, in
+    the installer's own HOME). Dummy values; the file's name is the CLI's kind of key."""
+    import hashlib
+
+    home = env.get("HOME")
+    if not home or not os.path.isdir(home):
+        return
+    folder = Path(home) / ".aws" / "cli" / "cache"
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        name = hashlib.sha1(profile.encode()).hexdigest() + ".json"
+        (folder / name).write_text(
+            json.dumps(
+                {
+                    "ProviderType": "sso",
+                    "Credentials": {
+                        "AccessKeyId": "fake-cached-key",
+                        "SecretAccessKey": "fake-cached-secret",
+                        "SessionToken": "fake-cached-token",
+                        "Expiration": "2026-10-21T04:00:00Z",
+                    },
+                }
+            )
+        )
+    except OSError:
+        return
 
 
 # --- the operations -----------------------------------------------------------------
@@ -275,6 +310,17 @@ class Call:
 def _list_stacks(c: Call) -> dict:
     keep = ("StackId", "StackName", "TemplateDescription", "CreationTime")
     later = ("LastUpdatedTime", "DeletionTime", "StackStatus", "StackStatusReason")
+    # state["settle"]: a stack CloudFormation is still working on, which reaches its
+    # status after that many more listings (a deploy an earlier run left going).
+    for name, spec in c.state.get("settle", {}).items():
+        if spec.get("reads", 0) > 0:
+            spec["reads"] -= 1
+            continue
+        for stack in c.items("stacks"):
+            if stack["StackName"] == name and stack["StackStatus"].endswith(
+                "_IN_PROGRESS"
+            ):
+                stack["StackStatus"] = spec["status"]
     summaries = []
     for stack in c.items("stacks"):
         summary = {k: stack[k] for k in keep + later if k in stack}
@@ -594,6 +640,7 @@ CERTIFICATE_DETAIL = {
     "issues_as",
     "failure_reason",
     "FailureReason",
+    "never_validates",
 }
 
 
@@ -1020,7 +1067,10 @@ def effects(
     """What happens on this computer while a call runs, for a test that needs time to pass
     or a sign-in to end mid-run (``state["effects"]``, each matched as a fault is, once):
     ``age_seconds`` sets a file's time that far back; ``drop_key`` removes a key from a JSON
-    file (a token cache that loses its refresh token)."""
+    file (a token cache that loses its refresh token); ``kill_session`` is the computer
+    stopping dead (a SIGKILL to the installer, the session's leader) once this call has
+    done its work and before the installer reads its answer, so that nothing the
+    installer writes after the call exists. ``nth`` picks the nth matching call."""
     for effect in state.get("effects", []):
         if effect.get("done"):
             continue
@@ -1028,6 +1078,36 @@ def effects(
             key in effect and effect[key] != value
             for key, value in (("service", service), ("op", name))
         ) or any(item not in argv for item in effect.get("has", ())):
+            continue
+        effect["seen"] = effect.get("seen", 0) + 1
+        if effect.get("nth", effect["seen"]) != effect["seen"]:
+            continue
+        if effect.get("kill_session"):
+            import signal
+            import subprocess
+
+            effect["done"] = True
+            leader = os.getsid(0)
+            command = subprocess.run(
+                ["ps", "-o", "command=", "-p", str(leader)],
+                capture_output=True,
+                text=True,
+            ).stdout
+            # Only ever the installer, started in a session of its own (InstallWorld).
+            if "controlvar-aws" in command:
+                os.kill(leader, signal.SIGKILL)
+            continue
+        if "drop" in effect:
+            # Something gone from the account just after this call answered (another
+            # hand deleting it meanwhile): {"region", "collection", "field", "value"}.
+            spec = effect["drop"]
+            home = state["regions"][spec["region"]]
+            home[spec["collection"]] = [
+                item
+                for item in home.get(spec["collection"], [])
+                if item.get(spec["field"]) != spec["value"]
+            ]
+            effect["done"] = True
             continue
         path = Path(effect["file"])
         if "age_seconds" in effect:
@@ -1155,7 +1235,11 @@ def respond(
     response = handler(Call(state, service, name, args, answer.region))
     ref = operation["output"]
     if ref is None:
-        raise Unmodelled("an operation with no output shape")
+        # An operation with no output (DeleteLogGroup, DeleteCertificate): the CLI
+        # prints nothing, whatever the query.
+        if response != {}:
+            raise Unmodelled("a response for an operation with no output shape")
+        return
     errors = _shapes.validate(response, ref, spec["shapes"])
     if errors:
         raise Unmodelled("the model refuses the response: " + "; ".join(errors[:5]))
@@ -1336,12 +1420,15 @@ def main_argv(argv: list[str]) -> int:
     return main(Path(argv[0]), Path(argv[1]), argv[2:], dict(os.environ))
 
 
-# What install reads and writes, registered into this module's own table.
+# What install and uninstall read and write, registered into this module's own table.
 if __package__:
     from . import fake_ops_install as _install_ops
+    from . import fake_ops_uninstall as _uninstall_ops
 else:
     import fake_ops_install as _install_ops  # type: ignore[no-redef]
+    import fake_ops_uninstall as _uninstall_ops  # type: ignore[no-redef]
 _install_ops.register(sys.modules[__name__])
+_uninstall_ops.register(sys.modules[__name__])
 
 
 if __name__ == "__main__":

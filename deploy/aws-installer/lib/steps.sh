@@ -70,8 +70,8 @@ cv_wait_change() {
 # taken it. Never an UPSERT: a record already at the name makes the CREATE fail instead.
 cv_record_change() {
     local n="$1" file="$CV_RECORD/records/$1.json" change="$CV_RECORD/records/$1-change.json" id
-    if ! jq -n --arg name "$2" --arg type "$3" --argjson change "$4" --argjson before "$5" \
-        '{name: $name, type: $type, change: $change, before: $before, status: "pending"}' > "$file.new" ||
+    if ! jq -n --arg name "$2" --arg type "$3" --arg zone "$CV_ZONE_ID" --argjson change "$4" --argjson before "$5" \
+        '{name: $name, type: $type, zone_id: $zone, change: $change, before: $before, status: "pending"}' > "$file.new" ||
         ! mv "$file.new" "$file" || ! printf '%s\n' "$4" > "$change"; then
         msg_tool_failed "the record" "1" "records/$n.json could not be written"
     fi
@@ -117,7 +117,8 @@ cv_start() {
     if ! id=$(openssl rand -hex 6) || ! printf '%s' "$id" | grep -Eq '^[0-9a-f]{12}$'; then
         msg_tool_failed "openssl rand" "1" "no install id"
     fi
-    if [ -f "$CV_RECORD/inputs.sh" ] || [ -n "$(ls -A "$CV_RECORD/env.d" "$CV_RECORD/records" 2> /dev/null)" ]; then
+    if [ -f "$CV_RECORD/inputs.sh" ] || [ -n "$(ls -A "$CV_RECORD/env.d" 2> /dev/null)" ] ||
+        [ -n "$(ls -A "$CV_RECORD/records" 2> /dev/null)" ]; then
         old="$CV_RECORD/history/$(date -u +%Y%m%dT%H%M%SZ)-$id"
         if ! mkdir -p "$old" || ! mv "$CV_RECORD/env.d" "$CV_RECORD/records" "$old/" ||
             ! mkdir "$CV_RECORD/env.d" "$CV_RECORD/records" ||
@@ -135,6 +136,9 @@ cv_start() {
     fi
     if ! cv_put_fact STARTED "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; then
         msg_tool_failed "the record" "1" "STARTED could not be written"
+    fi
+    if ! cv_put_fact ZONE_ID "$CV_ZONE_ID"; then
+        msg_tool_failed "the record" "1" "ZONE_ID could not be written"
     fi
     if ! cv_put_fact API_INDEX "$CV_API_INDEX" || ! cv_put_fact API_AMD64 "$CV_API_AMD64" ||
         ! cv_put_fact WEB_INDEX "$CV_WEB_INDEX" || ! cv_put_fact WEB_AMD64 "$CV_WEB_AMD64"; then
@@ -391,16 +395,18 @@ cv_wait_certificate() {
 # --- deploy ----------------------------------------------------------------------------------
 
 # [6/9] cdk list in a fresh output folder, the target asserted on THAT folder's manifest; the
-# session check (no time window); DEPLOY_STARTED; then cdk deploy, with the service watcher
+# session check (no time window); DEPLOY_STARTED; then cdk deploy of that very assembly
+# (--app names the folder, so nothing is synthesised again), with the service watcher
 # beside it and a line a minute.
 cv_step_deploy() {
-    local rc=0 list="$CV_RECORD/tmp/cdk-list.txt" err="$CV_RECORD/tmp/cdk-list.err" deploy_pid watch_pid why
+    local rc=0 list="$CV_RECORD/tmp/cdk-list.txt" err="$CV_RECORD/tmp/cdk-list.err" deploy_pid watch_pid why app
     cv_step 6 "Create the nine stacks, about 24 minutes"
     cd "$CV_RECORD/src/infrastructure/cdk" || msg_tool_failed "cd" "1" "the release's CDK folder"
     cv_next_out
+    app="$CV_OUT"
     : > "$list"
     : > "$err"
-    cv_run_long "$list" "$err" cv_cdk list --profile "$CV_COPY_PROFILE" --output "$CV_OUT" || rc=$?
+    cv_run_long "$list" "$err" cv_cdk list --profile "$CV_COPY_PROFILE" --output "$app" || rc=$?
     cv_log "$(cat "$list" "$err" 2> /dev/null)"
     if [ "$rc" -ne 0 ]; then
         msg_tool_failed "cdk list" "$rc" "$(tail -n 1 "$err" 2> /dev/null)"
@@ -408,7 +414,7 @@ cv_step_deploy() {
     if ! grep -Fqx -- "[cdk] $NAMES_PROFILE_LINE" "$list" "$err"; then
         msg_target "the app did not say it builds the core profile"
     fi
-    if ! why=$(assert_cdk_target "$list" "$CV_OUT" "$CV_ACCOUNT" 2>&1); then
+    if ! why=$(assert_cdk_target "$list" "$app" "$CV_ACCOUNT" 2>&1); then
         msg_target "$why"
     fi
     cv_session_check
@@ -417,7 +423,7 @@ cv_step_deploy() {
     : > "$CV_RECORD/logs/cdk-deploy.log"
     : > "$CV_RECORD/tmp/watch.out"
     cv_bg "$CV_RECORD/logs/cdk-deploy.log" "$CV_RECORD/logs/cdk-deploy.log" \
-        cv_cdk deploy --all --require-approval never --profile "$CV_COPY_PROFILE" --output "$CV_OUT"
+        cv_cdk deploy --all --require-approval never --app "$app" --profile "$CV_COPY_PROFILE" --output "$CV_OUT"
     deploy_pid=$CV_CHILD
     cv_bg "$CV_RECORD/tmp/watch.out" "$CV_RECORD/tmp/watch.out" cv_watch
     watch_pid=$CV_CHILD

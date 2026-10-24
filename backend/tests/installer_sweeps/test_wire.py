@@ -21,6 +21,7 @@ from backend.tests.installer_sweeps.harness import (
     accounts,
     fake_aws,
     fake_ops_install,
+    fake_ops_uninstall,
     shapes,
     wire,
 )
@@ -72,7 +73,10 @@ def _cases():
     for service, name in fake_aws.modelled_operations():
         if (service, name) == ("backup", "list-recovery-points-by-backup-vault"):
             continue
-        if (service, name) in fake_ops_install.REGISTERED:
+        if (
+            service,
+            name,
+        ) in fake_ops_install.REGISTERED | fake_ops_uninstall.REGISTERED:
             continue
         argv = [service, name, *ARGS.get((service, name), [])]
         yield (
@@ -101,13 +105,23 @@ def install_calls(tmp_path_factory, shapes_file):
 
 
 def test_botocore_reads_back_installs_calls(doc, install_calls):
-    """Each response a clean install's calls get, written in its service's protocol and
-    parsed back by botocore, is the response itself (install's writes included)."""
+    """Each response a clean install's and uninstall's calls get, written in its service's
+    protocol and parsed back by botocore, is the response itself (the writes and deletes
+    included)."""
     assert len(install_calls) > 50, len(install_calls)
     covered = {(service, name) for service, name, _ in install_calls}
-    missing = sorted(fake_ops_install.REGISTERED - covered - UNREACHED)
-    assert missing == [], f"install operations no clean install calls: {missing}"
+    missing = sorted(
+        (fake_ops_install.REGISTERED | fake_ops_uninstall.REGISTERED)
+        - covered
+        - UNREACHED
+    )
+    assert missing == [], f"install or uninstall operations no run calls: {missing}"
     for service, name, response in install_calls:
+        if doc[service]["operations"][name]["output"] is None:
+            # No output (a delete): the stub sends an empty success, and there is
+            # nothing for a parser to read back.
+            assert response == {}, (service, name, response)
+            continue
         test_botocore_reads_back_what_the_stub_writes(doc, service, name, response)
 
 

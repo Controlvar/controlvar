@@ -67,6 +67,22 @@ class Synth:
             if r["Type"] == kind and isinstance(r.get("Properties", {}).get(prop), str)
         }
 
+    def container_insights(self, cluster: str) -> bool:
+        """The synth's cluster of that name has Container Insights on."""
+        for t in self.templates.values():
+            for r in t.get("Resources", {}).values():
+                props = r.get("Properties", {})
+                if (
+                    r["Type"] == "AWS::ECS::Cluster"
+                    and props.get("ClusterName") == cluster
+                ):
+                    return any(
+                        s.get("Name") == "containerInsights"
+                        and s.get("Value") == "enabled"
+                        for s in props.get("ClusterSettings", [])
+                    )
+        return False
+
     def containers(self, family: str) -> set[str]:
         return {
             c["Name"]
@@ -102,6 +118,8 @@ def synth(tmp_path_factory) -> Synth:
 #: carries; "stacks", "outputs" or "text" (anywhere in the templates) for the rest.
 WHERE = {
     "NAMES_STACKS": "stacks",
+    "NAMES_DESTROY_ORDER": "stacks",
+    "NAMES_VPC_STACK": "stacks",
     "NAMES_STACK_PREFIX": "stacks",
     "NAMES_FARGATE_STACK": "stacks",
     "NAMES_FARGATE_OUTPUTS": "outputs",
@@ -122,6 +140,8 @@ WHERE = {
     "NAMES_LOG_GROUPS": ("AWS::Logs::LogGroup", "LogGroupName"),
     "NAMES_MIGRATE_LOG_GROUP": ("AWS::Logs::LogGroup", "LogGroupName"),
     "NAMES_ALARM_TOPIC": ("AWS::SNS::Topic", "TopicName"),
+    "NAMES_DB_SECRET": ("AWS::SecretsManager::Secret", "Name"),
+    "NAMES_CONTAINER_INSIGHTS_LOG_GROUP": "insights",
     "NAMES_BACKEND_CONTAINER": "containers",
     "NAMES_JWT_SECRET": "text",
     "NAMES_PASSWORD_SECRET": "text",
@@ -142,7 +162,11 @@ def missing(defined: dict[str, list[str]], synth: Synth) -> list[str]:
         for value in values:
             if where == "stacks":
                 ok = (
-                    (name == "NAMES_STACKS" and value in stacks)
+                    (
+                        name in ("NAMES_STACKS", "NAMES_DESTROY_ORDER")
+                        and value in stacks
+                    )
+                    or (name == "NAMES_VPC_STACK" and value in stacks)
                     or (
                         name == "NAMES_STACK_PREFIX"
                         and all(s.startswith(value) for s in stacks)
@@ -167,12 +191,22 @@ def missing(defined: dict[str, list[str]], synth: Synth) -> list[str]:
                 )
             elif where == "text":
                 ok = value in synth.text
+            elif where == "insights":
+                # ECS makes /aws/ecs/containerinsights/<cluster>/performance for a cluster
+                # with Container Insights on.
+                ok = value == (
+                    f"/aws/ecs/containerinsights/{defined['NAMES_CLUSTER'][0]}/performance"
+                ) and synth.container_insights(defined["NAMES_CLUSTER"][0])
             else:
                 ok = value in synth.values(*where)
             if not ok:
                 problems.append(f"{name}: the synth makes no {value!r}")
     if sorted(defined.get("NAMES_STACKS", [])) != stacks:
         problems.append(f"NAMES_STACKS is not the synth's nine: {stacks}")
+    if sorted(defined.get("NAMES_DESTROY_ORDER", [])) != stacks:
+        problems.append(
+            f"NAMES_DESTROY_ORDER is not the synth's nine, each once: {stacks}"
+        )
     return problems
 
 
@@ -180,6 +214,39 @@ def test_every_name_the_beta_uses_is_the_synths(synth):
     assert len(synth.templates) == 9, sorted(synth.templates)
     problems = missing(names(), synth)
     assert problems == [], "\n".join(problems)
+
+
+def test_uninstall_destroys_the_nine_in_an_order_the_synth_allows(synth):
+    """F5: lib/names.sh's NAMES_DESTROY_ORDER, the order uninstall runs cdk destroy in,
+    puts each stack before every stack it imports an export from (CloudFormation will not
+    delete an export another stack imports) and before every stack it depends on, in the
+    real staging-core synth; and the network's stack is the one holding the VPC (the stack
+    uninstall's GuardDuty check reads)."""
+    from .test_environments_do_not_collide import _exports, import_graph
+
+    defined = names()
+    order = defined["NAMES_DESTROY_ORDER"]
+    position = {stack: n for n, stack in enumerate(order)}
+    exports = _exports(synth)
+    problems = []
+    for export, importers in sorted(import_graph(synth).items()):
+        for importer in sorted(importers):
+            if position[importer] > position[exports[export]]:
+                problems.append(
+                    f"{importer} imports {export} from {exports[export]} and must be destroyed first"
+                )
+    for stack in synth.assembly.stacks:
+        for dependency in stack.dependencies:
+            name = getattr(dependency, "stack_name", None)
+            if name is not None and position[stack.stack_name] > position[name]:
+                problems.append(
+                    f"{stack.stack_name} depends on {name} and must be destroyed first"
+                )
+    assert problems == [], "\n".join(problems)
+    vpc = defined["NAMES_VPC_STACK"][0]
+    assert any(
+        r["Type"] == "AWS::EC2::VPC" for r in synth.templates[vpc]["Resources"].values()
+    ), vpc
 
 
 def test_app_py_reads_the_profile_variable_names_sh_names():

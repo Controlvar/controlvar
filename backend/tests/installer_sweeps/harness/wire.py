@@ -193,6 +193,18 @@ def serialize(protocol: str, service: dict, operation: dict, response: dict):
     ref = operation["output"]
     name = operation["name"]
     namespace = service["metadata"].get("xmlNamespace", "")
+    if ref is None and protocol in ("json", "rest-json"):
+        # An operation with no output (DeleteLogGroup, DeleteCertificate): an empty
+        # success, as those services send it.
+        if response != {}:
+            raise ValueError(f"{name} has no output, and a response was given")
+        version = service["metadata"].get("jsonVersion", "1.1")
+        kind = (
+            f"application/x-amz-json-{version}"
+            if protocol == "json"
+            else "application/json"
+        )
+        return 200, {"Content-Type": kind, "x-amzn-RequestId": REQUEST_ID}, b"{}"
     if protocol in ("json", "rest-json"):
         version = service["metadata"].get("jsonVersion", "1.1")
         kind = (

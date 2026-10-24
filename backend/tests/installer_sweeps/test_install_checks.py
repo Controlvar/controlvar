@@ -119,10 +119,6 @@ def _no_verb(world: InstallWorld) -> Result:
     return world.run(str(world.launcher))
 
 
-def _uninstall(world: InstallWorld) -> Result:
-    return world.run(str(world.launcher), "uninstall", "--account", ACCOUNT)
-
-
 def _declined(world: InstallWorld) -> Result:
     done, _ = world.on_terminal(typed="111111111112\n")
     return done
@@ -893,12 +889,13 @@ CASES = [
         ),
         run=_interrupted_during_the_copy,
     ),
-    # Uninstall, in this build of the beta.
+    # A list of what was here that cannot be written (here a folder where its file goes).
     Case(
-        "cv_uninstall",
+        "msg_before_unwritten",
         2,
-        "uninstall is not in this build of the beta yet.",
-        run=_uninstall,
+        "The installer could not write its list of the CDKToolkit stack (before/cdktoolkit.txt in the record)",
+        world=lambda w: (w.record / "before" / "cdktoolkit.txt").mkdir(parents=True),
+        args=("--plan-only",),
     ),
 ]
 
@@ -922,11 +919,17 @@ def _check_parts(case: Case, world: InstallWorld, done: Result) -> list[str]:
     if case.code == 2 and state not in NOTHING:
         problems.append(f"a refusal says something exists: {state!r}")
     if case.code in (1, 130) and not state.startswith(
-        ("Created so far: ", "Now in your account: ", "Nothing was created.")
+        (
+            "Created so far: ",
+            "Now in your account: ",
+            "Nothing was created.",
+            "Deleted so far: ",
+            "Nothing was deleted.",
+        )
     ):
         problems.append(f"the state part is missing: {state!r}")
     if case.code == 1 and not state.startswith(
-        ("Created so far: ", "Now in your account: ")
+        ("Created so far: ", "Now in your account: ", "Deleted so far: ")
     ):
         problems.append(f"a failure after a write does not say what exists: {state!r}")
     if [line for line in rest if not line.startswith("Log: ")]:
@@ -1004,12 +1007,15 @@ def test_every_message_ends_a_run_by_the_rules(ran):
 
 
 def test_every_message_has_a_case():
+    """Install's cases here, uninstall's in test_uninstall_run.py."""
+    from backend.tests.installer_sweeps.test_uninstall_run import UNINSTALL_MESSAGES
+
     defined = set(re.findall(r"^(msg_[a-z_]+)\(\) \{$", MESSAGES.read_text(), re.M))
-    covered = {case.message for case in CASES}
+    covered = {case.message for case in CASES} | set(UNINSTALL_MESSAGES)
     assert defined - covered == set(), (
         f"messages no case makes happen: {sorted(defined - covered)}"
     )
-    assert covered - defined == {"cv_uninstall"}, sorted(covered - defined)
+    assert covered - defined == set(), sorted(covered - defined)
 
 
 # --- the signals (E3) -----------------------------------------------------------------------
@@ -1743,8 +1749,10 @@ def test_a_list_of_what_was_here_that_cannot_be_written_refuses(ran):
         world, done = ran[f"before-{name}"].world, ran[f"before-{name}"].done
         if (
             done.code != 2
-            or not done.err.startswith("REFUSED: The installer could not read ")
-            or "(an answer the installer could not record)" not in done.err
+            or not done.err.startswith(
+                "REFUSED: The installer could not write its list of "
+            )
+            or f"(before/{name} in the record)" not in done.err
             or world.writes()
         ):
             wrong[name] = (done.code, done.err[:300], world.writes())

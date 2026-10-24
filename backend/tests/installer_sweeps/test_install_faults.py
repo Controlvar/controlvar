@@ -46,17 +46,14 @@ CLASSES = {
 }
 #: The calls whose failure is harmless by design, exactly: the heartbeat (a line a minute
 #: that decides nothing); the stack scan of a region other than us-west-2 answering exactly
-#: AccessDenied ("not checked", as an organisation's policy may deny it); the version of
-#: the record's own CDK CLI (unreadable means "install it again", which the next step
-#: does); the registry logout after the copy (the login file is removed anyway); the alarm
-#: topic's subscription (the summary then says "not read"); and the first look for the
-#: address, a wait for DNS and the load balancer (the next look is made, and a failure
-#: there stops the install).
+#: AccessDenied ("not checked", as an organisation's policy may deny it); the registry
+#: logout after the copy (the login file is removed anyway); the alarm topic's subscription
+#: (the summary then says "not read"); and the first look for the address, a wait for DNS
+#: and the load balancer (the next look is made, and a failure there stops the install).
 SCAN = "StackSummaries[?StackStatus!='DELETE_COMPLETE' && starts_with(StackName, 'experimentation-')].StackName"
 HARMLESS = {
     ("class", "the-heartbeat"),
     ("cloudformation", "list-stacks", "us-east-1", SCAN, 1),
-    ("cdk", "--version", None, None, 1),
     ("crane", "auth logout", None, None, 1),
     (
         "sns",
@@ -304,57 +301,6 @@ def test_every_guard_fails_closed(sweep, mode):
     assert len(reads) > 40, len(reads)
     wrong = sweep.run(reads, mode)
     assert wrong == {}, "\n".join(f"{k}: {v}" for k, v in wrong.items())
-
-
-#: How many changes a clean install makes (CLEAN_WRITES): each is failed in turn below.
-WRITES = 18
-
-
-def test_after_any_failed_change_a_second_install_refuses(sweep):
-    """E1, the half that needs no uninstall: whichever change fails, the install stops
-    (exit 1) and a second install over its record refuses (UX-B9, exit 2) and calls
-    nothing at all. (That an uninstall then a new install converge is uninstall's.)"""
-    changes = [
-        (key, spec)
-        for key, spec in sweep.cases
-        if key[0] != "class"
-        and is_write(
-            {
-                "service": key[0],
-                "op": key[1] if key[0] != "dig" else "",
-            }
-        )
-    ]
-    assert len(changes) == WRITES, [k for k, _ in changes]
-
-    def twice(i_key_spec):
-        i, key, spec = i_key_spec
-        world = sweep.world(f"twice-{i}")
-        world.fault(**spec, mode="AccessDenied")
-        first = world.install()
-        world.clear_logs()
-        second = world.install()
-        problems = []
-        if first.code != 1:
-            problems.append(f"the failed install exited {first.code}")
-        if (
-            second.code != 2
-            or "This computer holds the record of an install" not in second.err
-        ):
-            problems.append(
-                f"the second install did not refuse: exit {second.code}, {second.err[:200]}"
-            )
-        if world.calls:
-            problems.append(
-                f"the second install called {[(c['service'], c['op']) for c in world.calls]}"
-            )
-        return key, problems
-
-    found = in_parallel(
-        [lambda x=x: twice(x) for x in [(i, k, s) for i, (k, s) in enumerate(changes)]]
-    )
-    wrong = {key: problems for key, problems in found if problems}
-    assert wrong == {}, wrong
 
 
 def test_a_failed_read_in_the_record_of_the_account_refuses_the_install(sweep):

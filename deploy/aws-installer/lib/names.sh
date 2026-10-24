@@ -23,6 +23,25 @@ NAMES_STACKS=(
     "experimentation-migrations-staging"
 )
 
+# The same nine in the order uninstall destroys them, each before every stack it imports
+# from or depends on (the AWS guide's teardown order, cdk.md's "Tearing an environment
+# down"; infrastructure/tests/test_installer_names.py holds it to the synth's import
+# graph and dependencies).
+NAMES_DESTROY_ORDER=(
+    "experimentation-migrations-staging"
+    "experimentation-fargate-staging"
+    "experimentation-monitoring-staging"
+    "experimentation-compute-staging"
+    "experimentation-redis-staging"
+    "experimentation-database-staging"
+    "experimentation-dynamodb-staging"
+    "experimentation-auth-staging"
+    "experimentation-vpc-staging"
+)
+
+# The network's stack: app.py's experimentation-vpc-<env>.
+NAMES_VPC_STACK="experimentation-vpc-staging"
+
 # What every stack id of this app starts with: the stack scan and the cdk list check read
 # any stack that does, so a stack this list does not name is still seen.
 NAMES_STACK_PREFIX="experimentation-"
@@ -90,6 +109,15 @@ NAMES_LOG_GROUPS=(
     "/ecs/experimentation-migrate-staging"
 )
 NAMES_MIGRATE_LOG_GROUP="/ecs/experimentation-migrate-staging"
+
+# The log group ECS makes for the cluster's Container Insights (compute_stack.py turns
+# them on), /aws/ecs/containerinsights/<cluster>/performance: no stack holds it, so
+# uninstall deletes it (the AWS guide's run did, by hand).
+NAMES_CONTAINER_INSIGHTS_LOG_GROUP="/aws/ecs/containerinsights/experimentation-staging/performance"
+
+# The database's credentials secret: enhanced_database_stack.py's
+# "{construct_id}-aurora-credentials". CloudFormation may leave it scheduled for deletion.
+NAMES_DB_SECRET="experimentation-database-staging-aurora-credentials"
 
 # The container the migration overrides and the API's revision runs:
 # migration_task_stack.py's and fargate_service_stack.py's container name.

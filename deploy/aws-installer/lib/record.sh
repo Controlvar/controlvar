@@ -6,9 +6,12 @@
 #   inputs.sh       the options and INSTALL_ID, written with STARTED
 #   aws-config      the installer's copy of one IAM Identity Center profile (lib/env.sh)
 #   env.d/<NAME>.sh one fact per file, written to a temporary file and moved
-#   records/<n>.json each Route 53 change: the exact change and the read of the name before
-#                   it, "pending" before its call, then "created"
-#   before/         what the checks saw; sweep/ the sweeps; logs/ one log per run
+#   records/<n>.json each Route 53 change: the exact change, its zone and the read of the
+#                   name before it, "pending" before its call, then "created" (uninstall:
+#                   "deleted", "absent" or "kept"; records/<n>-delete.json its delete)
+#   before/         what the checks saw; sweep/ the sweeps (before the install, after the
+#                   uninstall); verdict/ and kept-also.txt the comparison; logs/ one log
+#                   per run; history/ an earlier install's facts and records
 #   src/            the release's CDK and its two deploy scripts (git archive of the tag)
 #   cdk-out/<n>/    each cdk call's own, new output folder; tools/ the pinned CDK CLI and venv
 #   tmp/            secret files until their create call, emptied on every exit and signal
@@ -16,7 +19,9 @@
 #   home/           the HOME every aws, cdk, crane and cosign child runs with, made again on
 #                   each run: only .aws/sso/cache, a link to the reader's (lib/env.sh)
 # The lifecycle: no folder; planned (checks only, no STARTED); started (STARTED and a new
-# INSTALL_ID, written immediately before the first change in AWS); uninstalled.
+# INSTALL_ID, written immediately before the first change in AWS); uninstalled
+# (UNINSTALLED, after the comparison); started again (the next install moves the earlier
+# facts and records to history/ and writes a new INSTALL_ID).
 
 CV_CHILDREN=()
 CV_STEP="the checks"
@@ -180,11 +185,17 @@ cv_on_signal() {
     msg_interrupted "$CV_STEP"
 }
 
-# cv_on_exit: on every exit. Reads no exit status: each exit names its own.
+# cv_on_exit: on every exit. Reads no exit status: each exit names its own. The role
+# credentials the CLI cached in the children's HOME go too: nothing of a sign-in but the
+# shared token cache outlives the run.
 cv_on_exit() {
     trap ':' INT TERM
     cv_stop_children
     cv_empty_tmp
+    if [ -n "${CV_CHILD_HOME:-}" ] && [ "$CV_CHILD_HOME" = "${CV_RECORD:-}/home" ]; then
+        rm -rf "$CV_CHILD_HOME/.aws/cli/cache" 2> /dev/null || :
+        rmdir "$CV_CHILD_HOME/.aws/cli" 2> /dev/null || :
+    fi
     if [ "$CV_LOCKED" -eq 1 ]; then
         rm -rf "$CV_RECORD/lock/held" 2> /dev/null || :
     fi
@@ -199,11 +210,14 @@ cv_traps() {
 
 CV_STEP_STARTED=0
 
-# cv_step <n> <label>: announces step n of nine, before anything in it is changed.
+# The number of steps the verb has: install's nine, uninstall's six.
+CV_STEPS=9
+
+# cv_step <n> <label>: announces step n of the verb's, before anything in it is changed.
 cv_step() {
     CV_STEP="$2"
     CV_STEP_STARTED=$(date +%s)
-    cv_out "[$1/9] $2 ..."
+    cv_out "[$1/$CV_STEPS] $2 ..."
     if cv_started; then
         cv_put_fact STEP "$2" || :
     fi
@@ -212,7 +226,7 @@ cv_step() {
 # cv_step_done <n>: the step's line with its time.
 cv_step_done() {
     local took=$(($(date +%s) - CV_STEP_STARTED))
-    cv_out "[$1/9] $CV_STEP .... done  $(cv_duration "$took")"
+    cv_out "[$1/$CV_STEPS] $CV_STEP .... done  $(cv_duration "$took")"
 }
 
 # cv_duration <seconds>: "53 s", "1 min 02 s".

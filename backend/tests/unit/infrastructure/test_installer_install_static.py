@@ -54,6 +54,7 @@ INSTALL_FILES = [
             "record.sh",
             "checks.sh",
             "steps.sh",
+            "uninstall.sh",
         )
     ),
 ]
@@ -160,7 +161,7 @@ GLOBAL_OPTIONS = {
 }
 #: The CLI's own commands that are no botocore operation, exactly.
 CUSTOMIZATIONS = {("ecr", "get-login-password")}
-_CALL = re.compile(r"(?<![\w-])cv_(aws|read|write)\s+(.*)")
+_CALL = re.compile(r"(?<![\w-])cv_(aws|read|write|delete)\s+(.*)")
 
 
 def _without_substitutions(text: str) -> str:
@@ -194,7 +195,7 @@ def _words(tail: str) -> list[str]:
 
 
 def _calls() -> list[tuple[str, list[str]]]:
-    """Every aws call install makes: (where, the CLI's arguments)."""
+    """Every aws call install and uninstall make: (where, the CLI's arguments)."""
     found = []
     for path in INSTALL_FILES:
         for number, line in _code(path):
@@ -203,6 +204,8 @@ def _calls() -> list[tuple[str, list[str]]]:
                 words = _words(tail)
                 if kind in ("read", "write"):
                     words = words[2:]
+                if kind == "delete":
+                    words = words[3:]  # cv_delete <name> <file> <not-found code> ...
                 if not words or words[0].startswith("$") or words[0] == "{":
                     continue  # the wrappers themselves
                 if words[0] == "--version":
@@ -217,14 +220,14 @@ def _query(words: list[str]) -> str | None:
     return re.sub(r"\$\{[^}]*\}|\$\w+", "x", words[words.index("--query") + 1])
 
 
-#: How many aws calls install's text holds: a change is a call added or one the parser
-#: stopped seeing, and either is checked here before it counts.
-CALLS = 51
+#: How many aws calls install's and uninstall's text holds: a change is a call added or
+#: one the parser stopped seeing, and either is checked here before it counts.
+CALLS = 76
 
 
 def test_the_call_list_is_complete():
-    """The parser finds install's calls: every operation the fake answers in a clean
-    install appears among them."""
+    """The parser finds install's and uninstall's calls: every operation the fake answers
+    in a clean install or uninstall appears among them."""
     calls = _calls()
     assert len(calls) == CALLS, "\n".join(f"{w}: {' '.join(a)}" for w, a in calls)
     ops = {(w[0], w[1]) for _, w in calls}
@@ -234,6 +237,10 @@ def test_the_call_list_is_complete():
         ("ecr", "create-repository"),
         ("acm", "request-certificate"),
         ("ecr", "get-login-password"),
+        ("secretsmanager", "delete-secret"),
+        ("ecr", "delete-repository"),
+        ("acm", "delete-certificate"),
+        ("ecs", "delete-task-definitions"),
     } <= ops
 
 
@@ -405,6 +412,74 @@ def test_no_record_is_ever_upserted():
     ]
     assert found == [], found
     assert 'Action: "CREATE"' in (LIB / "steps.sh").read_text()
+
+
+# --- the lists of what was here (before/) -------------------------------------------------------
+
+#: A line that writes into before/ itself: a redirection, tee, cp, mv, ln or install whose
+#: target is under before/.
+_RAW_BEFORE_WRITE = re.compile(
+    r"(>>?|\btee\b|\bcp\b|\bmv\b|\bln\b|\binstall\b)[^|;&]*before/"
+)
+#: The lists uninstall reads, as it names them: cv_was_here <list>, or a path ending in
+#: before/<list>.txt.
+_BEFORE_READ = re.compile(r"\bcv_was_here\s+([\w.-]+\.txt)\b|before/([\w.-]+\.txt)\b")
+_BEFORE_WRITTEN = re.compile(r"\bcv_before_write\s+([\w.-]+\.txt)\b")
+
+
+def _without_function(path: Path, name: str) -> list[tuple[int, str]]:
+    """The file's code lines, the body of the function ``name`` left out."""
+    lines, inside = [], False
+    for number, line in _code(path):
+        if line.startswith(f"{name}() {{"):
+            inside = True
+            continue
+        if inside:
+            if line == "}":
+                inside = False
+            continue
+        lines.append((number, line))
+    return lines
+
+
+def test_every_write_of_a_list_of_what_was_here_is_checked():
+    """Uninstall leaves alone whatever before/'s lists name, so a list written short would
+    have it delete what was there before the install. Every write into before/ goes through
+    cv_before_write (lib/checks.sh), which refuses the install when the write fails; no
+    other line writes there."""
+    raw = [
+        f"{path.relative_to(INSTALLER)}:{number}: {line}"
+        for path in INSTALL_FILES
+        for number, line in _without_function(path, "cv_before_write")
+        if _RAW_BEFORE_WRITE.search(line)
+    ]
+    assert raw == [], "\n".join(raw)
+    body = (LIB / "checks.sh").read_text()
+    body = body[body.index("cv_before_write() {") :]
+    body = body[: body.index("\n}\n")]
+    assert 'file="$CV_RECORD/before/$1"' in body and "&& return 0" in body, body
+
+
+def test_every_list_uninstall_reads_is_one_the_checks_write():
+    """And each list uninstall (or install's later steps) reads from before/ is one that
+    cv_before_write writes, by its literal name: a list read but never written would read
+    as "nothing was here"."""
+    written, read = set(), {}
+    for path in INSTALL_FILES:
+        for number, line in _without_function(path, "cv_before_write"):
+            written |= set(_BEFORE_WRITTEN.findall(line))
+            if "cv_before_write " in line:
+                continue
+            for match in _BEFORE_READ.finditer(line):
+                name = match.group(1) or match.group(2)
+                read.setdefault(name, f"{path.relative_to(INSTALLER)}:{number}")
+    assert {
+        "service-linked-roles.txt",
+        "log-groups.txt",
+        "task-definitions.txt",
+    } <= set(read)
+    unwritten = {name: where for name, where in read.items() if name not in written}
+    assert unwritten == {}, unwritten
 
 
 def test_the_installers_source_is_ascii():

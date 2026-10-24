@@ -7,7 +7,9 @@ computer holds for an install:
   beside a VERSION file (``accounts.RELEASE``) and the CDK's cdk.context.json, so that a
   change the install makes to the clone shows; with ``stub_sweep`` the sweep library in
   the copy is a stub that writes a fixed record and makes no call (the fault sweeps run
-  hundreds of installs, and test the library alone elsewhere);
+  hundreds of installs, and test the library alone elsewhere); with ``stub_sweep="state"``
+  it is the real library, its record of the account taken from the fake's state in one
+  process (harness/state_sweep.py), so that uninstall's verdict compares real records;
 * a HOME with an AWS CLI config holding one IAM Identity Center profile and its
   session, and that session's token cache, written moments ago;
 * the record's pinned tools, already in place (the fake cdk and the test's own Python,
@@ -58,6 +60,27 @@ sweep_take() {
 sweep_verdict() { return 2; }
 """
 
+#: The real sweep library with its record of the account taken in one process from the
+#: fake's state (harness/state_sweep.py, held equal to the real sweep by
+#: test_state_sweep.py), so that uninstall's verdict compares real records at the cost of
+#: one call: what the uninstall tests run.
+STATE_SWEEP_TAKE = """
+# The harness's own record of the fake account (install_world.py, stub_sweep="state").
+sweep_take() {
+    if [ -e "$1" ]; then
+        printf 'sweep: %s exists: use a new folder\\n' "$1" >&2
+        return 2
+    fi
+    fake-sweep "$1" "$2"
+}
+"""
+
+
+def pins_stamp(*paths: Path) -> str:
+    """What lib/checks.sh's tools step writes beside a tool it installed: the sha256 of
+    each lock it installed from, in order, space-separated."""
+    return " ".join(hashlib.sha256(p.read_bytes()).hexdigest() for p in paths)
+
 
 def _python_shim(path: Path) -> None:
     """The test's own Python, which never makes a venv or runs pip here: a tools step
@@ -78,7 +101,7 @@ class InstallWorld(World):
         state: dict,
         shapes: Path,
         *,
-        stub_sweep: bool = False,
+        stub_sweep: bool | str = False,
         token_age_seconds: int = 60,
     ) -> None:
         super().__init__(tmp, state, shapes)
@@ -96,10 +119,18 @@ class InstallWorld(World):
         _python_shim(self.bin / "python3")
         self.clone = self.root / "clone"
         shutil.copytree(INSTALLER, self.clone / "deploy" / "aws-installer")
-        if stub_sweep:
-            (self.clone / "deploy" / "aws-installer" / "lib" / "sweep.sh").write_text(
-                STUB_SWEEP
+        library = self.clone / "deploy" / "aws-installer" / "lib" / "sweep.sh"
+        if stub_sweep == "state":
+            library.write_text(library.read_text() + STATE_SWEEP_TAKE)
+            _shim_module.write(
+                self.bin / "fake-sweep",
+                "state_sweep",
+                str(self.state_path),
+                str(shapes),
+                site=site,
             )
+        elif stub_sweep:
+            library.write_text(STUB_SWEEP)
         (self.clone / "VERSION").write_text(accounts.RELEASE + "\n")
         context = self.clone / "infrastructure" / "cdk" / "cdk.context.json"
         context.parent.mkdir(parents=True)
@@ -167,6 +198,9 @@ class InstallWorld(World):
         return path
 
     def seed_tools(self, site: str) -> None:
+        """The record's pinned tools as the tools step leaves them: the CLI and the venv,
+        each beside the hashes of the locks it was installed from (lib/checks.sh's
+        cv_tools_step reuses a tool only while those equal the clone's pins/)."""
         tools = self.record / "tools"
         cdk = tools / "cdk-cli" / "node_modules" / ".bin" / "cdk"
         cdk.parent.mkdir(parents=True)
@@ -176,7 +210,93 @@ class InstallWorld(World):
         venv = tools / "venv" / "bin"
         venv.mkdir(parents=True)
         _python_shim(venv / "python3")
+        pins = self.clone / "deploy" / "aws-installer" / "pins"
+        (tools / "cdk-cli" / ".pins").write_text(
+            pins_stamp(pins / "package.json", pins / "package-lock.json") + "\n"
+        )
+        (tools / "venv" / ".pins").write_text(
+            pins_stamp(pins / "requirements.lock") + "\n"
+        )
         self.record.chmod(0o700)
+
+    def adopt(self, other: InstallWorld) -> None:
+        """This world made the install ``other`` made: the account as ``other`` left it,
+        and the record's own files (the facts, the records, the lists of what was here,
+        the sweeps), so a test can uninstall from it without installing again. The
+        record's tools, HOME and sign-in stay this world's own."""
+        state = other.state
+        for key in ("faults", "effects", "fault_hits", "settle"):
+            state.pop(key, None)
+        state["faults"] = []
+        self.state = state
+        for name in ("env.d", "records", "before", "sweep", "history"):
+            if (other.record / name).is_dir():
+                shutil.copytree(
+                    other.record / name, self.record / name, dirs_exist_ok=True
+                )
+        for name in ("inputs.sh", "aws-config"):
+            if (other.record / name).is_file():
+                shutil.copy2(other.record / name, self.record / name)
+
+    def uninstall_argv(
+        self, *extra: str, yes: bool = True, defaults: bool = True
+    ) -> list[str]:
+        argv = [str(self.launcher), "uninstall"]
+        if defaults:
+            argv += ["--account", self.account, "--aws-profile", PROFILE]
+        if yes:
+            argv.append("--yes")
+        return argv + list(extra)
+
+    def uninstall(
+        self,
+        *extra: str,
+        yes: bool = True,
+        defaults: bool = True,
+        bash: str = "bash",
+        **env: str,
+    ) -> Result:
+        """An uninstall, run as install() runs an install."""
+        process = subprocess.Popen(
+            [bash, *self.uninstall_argv(*extra, yes=yes, defaults=defaults)],
+            cwd=self.root,
+            env=self.install_env(**env),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        try:
+            out, err = process.communicate(timeout=SAFETY_NET_SECONDS)
+        except subprocess.TimeoutExpired:
+            stop_group(process)
+            raise
+        return Result(process.returncode, as_text(out), as_text(err))
+
+    def start_uninstall(self, *extra: str, **env: str) -> subprocess.Popen:
+        return subprocess.Popen(
+            ["bash", *self.uninstall_argv(*extra)],
+            cwd=self.root,
+            env=self.install_env(**env),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+
+    def sweep_files(self) -> dict[str, list[str]]:
+        """The account as it is now, in the sweep's own files (harness/state_sweep.py)."""
+        import tempfile
+
+        from . import state_sweep
+
+        with tempfile.TemporaryDirectory() as scratch:
+            folder = Path(scratch) / "now"
+            state_sweep.take(self.state, json.loads(self.shapes.read_text()), folder)
+            return {
+                str(p.relative_to(folder)): p.read_text().splitlines()
+                for p in sorted(folder.rglob("*.txt"))
+            }
 
     # -- running ------------------------------------------------------------------------
     def install_env(self, **extra: str) -> dict:
@@ -270,6 +390,7 @@ class InstallWorld(World):
         typed: str = "",
         yes: bool = False,
         bash: str = "bash",
+        verb: str = "install",
         **env: str,
     ) -> tuple[Result, str]:
         """An install whose stdin and controlling terminal are a pseudo-terminal (what a
@@ -280,8 +401,13 @@ class InstallWorld(World):
         def controlling_terminal() -> None:  # in the child, after setsid
             fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
+        argv = (
+            self.uninstall_argv(*extra, yes=yes)
+            if verb == "uninstall"
+            else self.install_argv(*extra, yes=yes)
+        )
         process = subprocess.Popen(
-            [bash, *self.install_argv(*extra, yes=yes)],
+            [bash, *argv],
             cwd=self.root,
             env=self.install_env(**env),
             stdin=slave,
@@ -417,8 +543,14 @@ WRITE_PREFIXES = (
     "put-",
     "delete-",
     "update-",
+    "deregister-",
 )
-WRITE_TOOLS = {("cdk", "bootstrap"), ("cdk", "deploy"), ("crane", "copy")}
+WRITE_TOOLS = {
+    ("cdk", "bootstrap"),
+    ("cdk", "deploy"),
+    ("cdk", "destroy"),
+    ("crane", "copy"),
+}
 #: The tools the harness fakes beside aws.
 LOCAL_TOOLS = ("cdk", "crane", "cosign", "dig", "git", "curl", "node", "npm")
 #: What the shims and the interpreter add to a child's environment by themselves (bash as
@@ -494,21 +626,89 @@ OTHER_PATHS = {
 }
 
 
+def _network_held(state: dict) -> None:
+    """The network's stack DELETE_FAILED, held by GuardDuty's own endpoint and group."""
+    region = state["regions"]["us-west-2"]
+    vpc = next(v["VpcId"] for v in region["vpcs"] if not v.get("IsDefault"))
+    state.setdefault("cdk", {})["destroy_fail"] = {
+        "experimentation-vpc-staging": {
+            "reason": "The vpc has dependencies and cannot be deleted. (DependencyViolation)",
+            "logical": "Vpc",
+            "type": "AWS::EC2::VPC",
+            "physical": vpc,
+            "vpc_endpoints": [
+                {
+                    "VpcEndpointId": "vpce-0guardduty0000000",
+                    "VpcEndpointType": "Interface",
+                    "VpcId": vpc,
+                    "ServiceName": "com.amazonaws.us-west-2.guardduty-data",
+                    "State": "available",
+                    "OwnerId": state["account"],
+                }
+            ],
+            "security_groups": [
+                {
+                    "GroupId": "sg-0guardduty00000000",
+                    "GroupName": "GuardDutyManagedSecurityGroup-vpc",
+                    "Description": "GuardDuty's own group",
+                    "VpcId": vpc,
+                    "OwnerId": state["account"],
+                }
+            ],
+        }
+    }
+
+
+def _left_in_progress(state: dict) -> None:
+    for stack in state["regions"]["us-west-2"]["stacks"]:
+        if stack["StackName"] == "experimentation-fargate-staging":
+            stack["StackStatus"] = "UPDATE_IN_PROGRESS"
+    state["settle"] = {
+        "experimentation-fargate-staging": {"reads": 2, "status": "UPDATE_COMPLETE"}
+    }
+
+
+#: Uninstall's paths, each after a clean install, with the exit it ends in: a clean
+#: uninstall, the network held by GuardDuty (the failed stack's events, the VPC's
+#: endpoints and groups are read), a deployment under way, and a stack an earlier run
+#: left in progress (waited for).
+UNINSTALL_PATHS = {
+    "uninstall-clean": (None, 0),
+    "uninstall-the-network-held": (_network_held, 1),
+    "uninstall-a-deployment-under-way": (
+        lambda s: s["regions"]["us-west-2"].update(
+            deployments=[{"id": "d-ABCDEF123", "status": "InProgress"}]
+        ),
+        2,
+    ),
+    "uninstall-a-stack-in-progress": (_left_in_progress, 0),
+}
+
+
 def install_snapshots(root: Path, shapes: Path) -> tuple[list[dict], "InstallWorld"]:
-    """A clean install, then each of OTHER_PATHS, with the state each AWS call found kept:
-    ``{"argv", "env", "state"}`` per call, in order (the probe and the CLI's version aside),
-    for the checks that replay install's calls (test_wire.py, scripts/check_installer_cli.py).
-    The world returned is the clean install's."""
-    paths = [("clean", (None, 0)), *OTHER_PATHS.items()]
+    """A clean install, then each of OTHER_PATHS, then a clean uninstall and each of
+    UNINSTALL_PATHS (each after a clean install, whose calls are not kept), with the state
+    each AWS call found kept: ``{"argv", "env", "state"}`` per call, in order (the probe and
+    the CLI's version aside), for the checks that replay the beta's calls (test_wire.py,
+    scripts/check_installer_cli.py). The world returned is the clean install's."""
+    paths = [("clean", (None, 0)), *OTHER_PATHS.items(), *UNINSTALL_PATHS.items()]
 
     def one(name: str, change, code: int) -> tuple[list[dict], "InstallWorld"]:
+        uninstall = name in UNINSTALL_PATHS
         world = InstallWorld(
-            root / name, accounts.install_target(), shapes, stub_sweep=True
+            root / name,
+            accounts.install_target(),
+            shapes,
+            stub_sweep="state" if uninstall else True,
         )
+        if uninstall:
+            done = world.install()
+            if done.code != 0 or world.unknown:
+                raise RuntimeError(f"{name}: the install before it failed: {done.err}")
         world.edit(lambda s: s.update(snapshots=True))
         if change is not None:
             world.edit(change)
-        done = world.install()
+        done = world.uninstall() if uninstall else world.install()
         if done.code != code or world.unknown:
             raise RuntimeError(
                 f"{name} against the fakes ended in exit {done.code}, not {code}: {done.err} {world.unknown}"

@@ -65,13 +65,40 @@ cv_started() {
     cv_fact STARTED && ! cv_fact UNINSTALLED
 }
 
+# cv_changed: this run has changed something in the account: install once STARTED stands,
+# uninstall once it has asked for its first delete (CV_DELETING, lib/uninstall.sh). A
+# message that ends a run before then is a refusal: exit 2, nothing changed.
+cv_changed() {
+    if [ "${CV_VERB:-}" = uninstall ]; then
+        [ "${CV_DELETING:-0}" -eq 1 ]
+        return
+    fi
+    cv_started
+}
+
 # cv_state: the sentence for what exists now, from the record's facts.
 cv_state() {
-    local made=() list
+    local list
+    if [ "${CV_VERB:-}" = uninstall ]; then
+        cv_uninstall_state
+        return 0
+    fi
     if ! cv_started; then
         printf 'Nothing was created.'
         return 0
     fi
+    list=$(cv_made_list)
+    if cv_fact DEPLOY_STARTED; then
+        printf "Now in your account: %s. These bill about \$10 a day until you run uninstall." "$list"
+    else
+        printf 'Created so far: %s. Nothing that bills by the hour exists yet; what does exist costs cents a month.' "$list"
+    fi
+}
+
+# cv_made_list: what the record says the install made, as one list ("the install's record
+# (on this computer only)" when nothing yet).
+cv_made_list() {
+    local made=()
     if cv_fact CDKTOOLKIT_STACK_ID; then made+=("the CDK's setup stack"); fi
     if cv_fact REPOSITORIES_CREATED; then
         if cv_fact IMAGES_COPIED; then
@@ -94,15 +121,49 @@ cv_state() {
     if cv_fact ALIAS_RECORD; then made+=("the record ${CV_DOMAIN:-}"); fi
     if cv_fact MIGRATE_TD_ARN; then made+=("a task-definition revision for the database setup"); fi
     if [ "${#made[@]}" -eq 0 ]; then
-        list="the install's record (on this computer only)"
+        printf '%s' "the install's record (on this computer only)"
     else
-        list=$(cv_join ${made[@]+"${made[@]}"})
+        cv_join ${made[@]+"${made[@]}"}
     fi
-    if cv_fact DEPLOY_STARTED; then
-        printf "Now in your account: %s. These bill about \$10 a day until you run uninstall." "$list"
-    else
-        printf 'Created so far: %s. Nothing that bills by the hour exists yet; what does exist costs cents a month.' "$list"
+}
+
+# cv_uninstall_state: uninstall's sentence, from the record's facts: what it has deleted
+# (the UN_ facts lib/uninstall.sh writes as each part goes) and what of the install is
+# still there. Before its first delete, "Nothing was deleted."
+cv_uninstall_state() {
+    local deleted=() still=() entry made gone label bill done_list still_list
+    if [ "${CV_DELETING:-0}" -ne 1 ]; then
+        printf 'Nothing was deleted.'
+        return 0
     fi
+    for entry in \
+        "ALIAS_RECORD:UN_ALIAS:the record ${CV_DOMAIN:-}" \
+        "DEPLOY_STARTED:UN_STACKS:the nine stacks" \
+        "CERTIFICATE_ARN:UN_CERTIFICATE:the certificate" \
+        "VALIDATION_RECORD:UN_VALIDATION:its validation record" \
+        "JWT_SECRET_ARN:UN_SECRETS:2 secrets" \
+        "REPOSITORIES_CREATED:UN_REPOSITORIES:2 image repositories" \
+        "MIGRATE_TD_ARN:UN_TASK_DEFINITIONS:the task-definition revisions" \
+        "CDKTOOLKIT_STACK_ID:UN_CDKTOOLKIT:the CDK's setup stack"; do
+        made=${entry%%:*}
+        gone=${entry#*:}
+        label=${gone#*:}
+        gone=${gone%%:*}
+        if ! cv_fact "$made"; then continue; fi
+        if cv_fact "$gone"; then deleted+=("$label"); else still+=("$label"); fi
+    done
+    done_list="nothing yet"
+    if [ "${#deleted[@]}" -gt 0 ]; then done_list=$(cv_join ${deleted[@]+"${deleted[@]}"}); fi
+    if [ "${#still[@]}" -eq 0 ]; then
+        printf 'Deleted so far: %s. Nothing else the install made is in your account.' "$done_list"
+        return 0
+    fi
+    still_list=$(cv_join ${still[@]+"${still[@]}"})
+    bill="these cost cents a month until they are deleted"
+    if cv_fact DEPLOY_STARTED && ! cv_fact UN_STACKS; then
+        bill="these bill about \$10 a day until they are deleted"
+    fi
+    printf 'Deleted so far: %s. Still in your account: %s; %s.' "$done_list" "$still_list" "$bill"
 }
 
 # cv_join <item...>: "a", "a and b", "a, b and c".
@@ -143,8 +204,13 @@ cv_stop() {
     exit "$code"
 }
 
-# The next step once something exists: never "continue", always remove and start again.
+# The next step once something exists: install never continues, so remove and start again;
+# uninstall continues where it stopped.
 cv_next_after_write() {
+    if [ "${CV_VERB:-}" = uninstall ]; then
+        printf 'run uninstall again; it continues: %s' "$(cv_uninstall_command)"
+        return 0
+    fi
     printf 'remove what exists, then install again: %s' "$(cv_uninstall_command)"
 }
 
@@ -299,6 +365,12 @@ msg_token() {
 }
 
 msg_session_ended() {
+    if [ "${CV_VERB:-}" = uninstall ]; then
+        local code=2
+        if cv_changed; then code=1; fi
+        cv_stop "$code" "The sign-in for $1 stopped working ($2), so the installer stopped before deleting the nine stacks." \
+            "sign in again (aws sso login --profile $1), then run uninstall again; it continues: $(cv_uninstall_command)"
+    fi
     cv_stop 1 "The sign-in for $1 stopped working ($2), so the installer stopped before creating the nine stacks." \
         "sign in again (aws sso login --profile $1), then remove what exists and install again: $(cv_uninstall_command)"
 }
@@ -405,13 +477,28 @@ msg_sweep_failed() {
 }
 
 msg_no_terminal() {
+    if [ "${CV_VERB:-}" = uninstall ]; then
+        cv_stop 2 "This would delete the install and everything in it, and there is no terminal to type the account ID on." \
+            "run the command in a terminal, or add --yes to confirm without typing (the plan is printed above)."
+    fi
     cv_stop 2 "This would create resources that cost about \$10 a day, and there is no terminal to type the account ID on." \
         "run the command in a terminal, or add --yes to confirm without typing (the plan is printed above)."
 }
 
 msg_not_confirmed() {
+    if [ "${CV_VERB:-}" = uninstall ]; then
+        cv_stop 2 "Not confirmed. What was typed is not the account ID shown above." \
+            "run uninstall again when you are ready, and type the account ID exactly as shown."
+    fi
     cv_stop 2 "Not confirmed. What was typed is not the account ID shown above." \
         "run the command again when you are ready, and type the account ID exactly as shown."
+}
+
+# msg_before_unwritten <what> <file>: a list of what was here, which uninstall reads to
+# leave alone what it holds, could not be written.
+msg_before_unwritten() {
+    cv_stop 2 "The installer could not write its list of $1 ($2 in the record), which uninstall reads to leave alone what was here before the install, so it does not start." \
+        "check that the record's folder can be written (ls -ld $CV_RECORD/before), then run this command again."
 }
 
 # --- the release images --------------------------------------------------------------------
@@ -433,7 +520,7 @@ msg_image_copied_wrong() {
 
 msg_unreachable() {
     local code=2
-    if cv_started; then code=1; fi
+    if cv_changed; then code=1; fi
     cv_stop "$code" "The installer could not reach $1 ($2)." \
         "check your network, proxy and firewall settings, then run this command again. The hosts the installer needs are: AWS, ghcr.io, Sigstore, npm, PyPI and 1.1.1.1."
 }
@@ -444,7 +531,7 @@ msg_unreachable() {
 # (a refusal before it).
 msg_tool_failed() {
     local code=2 next="run the same command again. If it fails the same way, please report it at https://github.com/Controlvar/controlvar/issues, with the log (account ID and email address removed)."
-    if cv_started; then
+    if cv_changed; then
         code=1
         next="$(cv_next_after_write). If it fails the same way, please report it at https://github.com/Controlvar/controlvar/issues, with the log (account ID and email address removed)."
     fi
@@ -518,11 +605,92 @@ msg_check_failed() {
 
 msg_interrupted() {
     local what="Stopped by Ctrl-C or a signal at \"$1\"."
-    if cv_fact DEPLOY_STARTED; then
+    if [ "${CV_VERB:-}" = uninstall ]; then
+        if [ "${CV_DESTROYING:-0}" -eq 1 ]; then
+            what="$what AWS carries on with the stack it was deleting, on its own."
+        fi
+    elif cv_fact DEPLOY_STARTED; then
         what="$what AWS carries on creating the stacks on its own."
     fi
     if cv_started; then
         cv_stop 130 "$what" "$(cv_next_after_write)"
     fi
     cv_stop 130 "$what" "run the command again when you are ready."
+}
+
+# --- uninstall -------------------------------------------------------------------------------
+
+# cv_code_now: 1 once this run has changed something, 2 before (a refusal).
+cv_code_now() {
+    if cv_changed; then printf '1'; else printf '2'; fi
+}
+
+msg_install_only() {
+    cv_stop 2 "$1 is an option of install, not of uninstall: uninstall reads the install's name and addresses from its record." \
+        "run it again without $1."
+}
+
+# msg_no_record <why> [<value>]: uninstall finds no started install of this account in
+# this computer's record (none, planned only, uninstalled, another account's, unreadable).
+msg_no_record() {
+    local what
+    case "$1" in
+        none) what="This computer has no record of an install in $(cv_account_end "$CV_ACCOUNT"), us-west-2 (there is no folder $CV_RECORD)." ;;
+        not-started) what="This computer's record for $(cv_account_end "$CV_ACCOUNT"), us-west-2, holds no install: its checks ran, and nothing was created." ;;
+        uninstalled) what="The install in $(cv_account_end "$CV_ACCOUNT"), us-west-2, was uninstalled ($2), and the record holds no install made since." ;;
+        other) what="The record in $CV_RECORD is of $(cv_account_end "$2"), not of $(cv_account_end "$CV_ACCOUNT"), so it is not this account's." ;;
+        *) what="The record in $CV_RECORD cannot be read (its inputs.sh is missing or incomplete)." ;;
+    esac
+    cv_stop 2 "$what The installer deletes only what its own record says it made." \
+        "if the install was made on another computer, run uninstall there (its record is in ~/.controlvar-aws/). To take down an environment made another way: https://docs.controlvar.com/self-hosting/cdk/#destroying-an-environment"
+}
+
+msg_release_differs() {
+    cv_stop 2 "This install was made by Controlvar $1, and this folder holds $2. Uninstall runs the same CDK code that made the install, so it needs the $1 files." \
+        "run git switch --detach \"v$1\" in this clone (git fetch --tags first if it has no such tag), then run uninstall again."
+}
+
+msg_deployment_active() {
+    cv_stop "$(cv_code_now)" "A CodeDeploy deployment of the API is still under way ($1 active in $NAMES_CODEDEPLOY_APPLICATION), and deleting the stacks under it would leave it half done." \
+        "wait for it to end (CodeDeploy > Deployments in the AWS console shows it), then run uninstall again; it continues."
+}
+
+msg_stack_wait_cap() {
+    cv_stop "$(cv_code_now)" "AWS is still working on $1 after $CV_STACK_WAIT_MINUTES minutes, longer than the installer waits." \
+        "run uninstall again to keep waiting, or look at the stack in the AWS console (CloudFormation > the stack > Events)."
+}
+
+# msg_stack_delete_failed <stack> <resource> <reason> <resource type>: E26d.
+msg_stack_delete_failed() {
+    local next
+    next="fix the cause and run uninstall again; it continues where it stopped: $(cv_uninstall_command)"
+    if [ "$4" = "AWS::ECS::Service" ]; then
+        next="the API's service is what stops it: delete it (aws ecs delete-service --cluster $NAMES_CLUSTER --service $NAMES_API_SERVICE --force --region us-west-2 --profile ${CV_PROFILE:-NAME}), then run uninstall again; it continues where it stopped."
+    fi
+    cv_stop 1 "AWS could not delete $2 in the stack $1: $3." "$next"
+}
+
+msg_network_guardduty() {
+    cv_stop 1 "AWS could not delete the network: GuardDuty put its own endpoint and its own VPC group in it ($1). The installer did not make them, so it does not delete them." \
+        "follow ${CV_PAGE}#if-uninstall-stops-at-the-network, then run uninstall again; it continues with the network."
+}
+
+msg_stacks_left() {
+    cv_stop "$(cv_code_now)" "Not every one of the nine stacks is gone ($1), so the installer keeps what they use: the image repositories and the CDK's setup stack." \
+        "look at those stacks in the AWS console (CloudFormation > Stacks), then run uninstall again; it continues."
+}
+
+msg_compare_failed() {
+    cv_stop 1 "The installer deleted what the install made, but could not compare the account with its record from before the install ($1)." \
+        "run uninstall again; it continues with the comparison: $(cv_uninstall_command)"
+}
+
+msg_residue() {
+    cv_stop 1 "The install is removed, but the account holds $1 that the record from before the install does not, and that the installer did not make: the report above lists them under \"Not explained\". The installer leaves them alone." \
+        "look at each one (someone else may have made it while the install ran). Both records of the account are in $CV_RECORD/sweep/."
+}
+
+msg_incomplete() {
+    cv_stop 1 "The install is removed, but $1 of the account could not be read afterwards, so the comparison is not complete (the report above names them)." \
+        "run uninstall again to compare again; what is gone stays gone: $(cv_uninstall_command)"
 }
