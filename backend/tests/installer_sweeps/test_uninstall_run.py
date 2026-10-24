@@ -74,8 +74,9 @@ ORDER = [
 ]
 #: What a clean uninstall changes, in order: the address, the nine stacks, the
 #: certificate and its record, the two secrets, the two repositories, Container
-#: Insights' log group, then the revisions (each family's INACTIVE ones deleted; the
-#: migration's by-hand revision deregistered first).
+#: Insights' log group, the revisions (each family's INACTIVE ones deleted; the
+#: migration's by-hand revision deregistered first), then CDKToolkit: its bucket emptied,
+#: the stack deleted, the bucket deleted (the template keeps it).
 CLEAN_DELETES = [
     ("route53", "change-resource-record-sets"),
     *[("cdk", "destroy")] * 9,
@@ -90,6 +91,9 @@ CLEAN_DELETES = [
     ("ecs", "delete-task-definitions"),
     ("ecs", "deregister-task-definition"),
     ("ecs", "delete-task-definitions"),
+    ("s3api", "delete-objects"),
+    ("cloudformation", "delete-stack"),
+    ("s3api", "delete-bucket"),
 ]
 DONE = "Controlvar is uninstalled from account"
 NOTHING_EXPLAINED = "Not explained: none."
@@ -445,6 +449,17 @@ BATCH.add(
 )
 
 
+def _secret_not_ours(state: dict) -> None:
+    """The install's JWT secret replaced, after the install, by one of the same name that
+    another install made (its tag is not this install's)."""
+    for secret in _us_west_2(state)["secrets"]:
+        if secret["Name"] == "/staging/experimentation/jwt-secret":
+            secret["Tags"] = [{"Key": "controlvar-install-id", "Value": "0123456789ab"}]
+
+
+BATCH.add("secret-not-ours", prepare=_installed(_state(_secret_not_ours)))
+
+
 # F4: errors are not swallowed; not found is done; a run again completes.
 BATCH.add(
     "delete-denied",
@@ -744,10 +759,10 @@ def test_the_kept_list_is_exactly_the_residue_both_ways(clean, before):
         "AWS managed keys made on first use (aws/acm, aws/lambda, aws/s3, aws/secretsmanager); the database's key, pending deletion",
         "3 DynamoDB backup(s) of the deleted tables",
         "the alarm subscription, never confirmed",
-        "4 task definition(s) and 10 tag-index entries AWS is still clearing",
-        "Kept by the installer: the CDK's setup stack (CDKToolkit)",
+        "4 task definition(s) and 9 tag-index entries AWS is still clearing",
     ):
         assert line in out, line
+    assert "Kept by the installer" not in out
 
 
 def test_the_nine_stacks_go_in_the_teardown_order_from_the_checked_assembly(clean):
@@ -770,18 +785,26 @@ def test_the_nine_stacks_go_in_the_teardown_order_from_the_checked_assembly(clea
 
 
 def test_cdktoolkit_is_never_touched_while_a_stack_remains(clean):
-    """F5's U half: no call names CDKToolkit after the destroy begins but the read that
-    lists it, and it is still there, kept (D14's keep-and-list path)."""
+    """F5's U half and D14: no call changes CDKToolkit, or reads it, until the nine are
+    destroyed; then its bucket is emptied, it is deleted, and the bucket it keeps goes."""
     calls = clean.world.calls
-    first_destroy = next(i for i, c in enumerate(calls) if c["op"] == "destroy")
-    for call in calls[first_destroy:]:
-        if "CDKToolkit" in " ".join(call["argv"]):
-            assert call["op"] == "describe-stacks", call
-    stacks = _us_west_2(clean.world.state)["stacks"]
-    assert any(
-        s["StackName"] == "CDKToolkit" and s["StackStatus"] == "CREATE_COMPLETE"
-        for s in stacks
+    destroys = [i for i, c in enumerate(calls) if c["op"] == "destroy"]
+    for call in calls[destroys[0] : destroys[-1] + 1]:
+        assert "CDKToolkit" not in " ".join(call["argv"]), call
+    deleted = next(i for i, c in enumerate(calls) if c["op"] == "delete-stack")
+    assert deleted > destroys[-1]
+    assert calls[deleted]["argv"][:4] == [
+        "cloudformation",
+        "delete-stack",
+        "--stack-name",
+        "CDKToolkit",
+    ]
+    state = clean.world.state
+    assert not any(
+        s["StackName"] == "CDKToolkit" and s["StackStatus"] != "DELETE_COMPLETE"
+        for s in _us_west_2(state)["stacks"]
     )
+    assert not [b for b in state["global"]["buckets"] if b["Name"].startswith("cdk-")]
 
 
 def test_every_uninstall_child_runs_with_exactly_the_allowed_environment(clean):
@@ -814,15 +837,29 @@ def test_every_uninstall_child_runs_with_exactly_the_allowed_environment(clean):
 
 
 def test_every_uninstall_call_is_in_us_west_2(clean):
-    """B4 for uninstall: every regional call in us-west-2 (IAM and Route 53 global)."""
+    """B4 for uninstall: every regional call in us-west-2 (IAM and Route 53 global), but
+    D14's look in every enabled region for a stack that deploys through CDKToolkit's
+    execution role."""
     outside = sorted(
         {
-            (c["service"], c["op"], c["region"])
+            (
+                c["service"],
+                c["op"],
+                c["region"],
+                c["argv"][c["argv"].index("--query") + 1],
+            )
             for c in clean.world.calls
             if is_aws(c) and c["region"] not in ("us-west-2", None)
         }
     )
-    assert outside == [], outside
+    assert outside == [
+        (
+            "cloudformation",
+            "describe-stacks",
+            "us-east-1",
+            f"length(Stacks[?RoleARN=='{EXEC_ROLE}'])",
+        )
+    ], outside
 
 
 def test_nothing_is_deleted_before_the_confirmation(clean):
@@ -883,7 +920,10 @@ def test_plan_only_reads_and_deletes_nothing(ran):
     assert one.done.code == 0, one.done.err
     assert "Plan only: nothing was deleted." in one.done.out
     assert (
-        "Keeps: the zone beta.controlvar.dev (here before the install), and the CDK's setup stack"
+        "Keeps: the zone beta.controlvar.dev (here before the install)." in one.done.out
+    )
+    assert (
+        "The CDK's setup stack (CDKToolkit), with its bucket, goes only if no other stack"
         in one.done.out
     )
     assert deletes(one.world) == []
@@ -1000,6 +1040,20 @@ def test_a_record_changed_after_the_install_is_kept_and_said(ran, before):
         for r in _zone(one.world.state)["records"]
     )
     assert kept_list_is_the_residue(one.world, before) == []
+
+
+def test_a_secret_this_install_did_not_make_is_kept(ran):
+    """F2: a secret of the install's name that does not carry this install's tag is kept
+    and said; the other is deleted."""
+    one = ran["secret-not-ours"]
+    assert (
+        "Kept: the secret /staging/experimentation/jwt-secret, which does not carry this install's tag."
+        in one.done.out
+    ), one.done.out
+    names = {x["Name"] for x in _us_west_2(one.world.state)["secrets"]}
+    assert "/staging/experimentation/jwt-secret" in names
+    assert "/staging/experimentation/first-superuser-password" not in names
+    assert deletes(one.world).count(("secretsmanager", "delete-secret")) == 1
 
 
 # --- F4: errors named, not found done, a run again completes -------------------------------------
@@ -1265,3 +1319,111 @@ def test_a_list_that_cannot_be_read_afterwards_leaves_the_record_started(ran):
     one = ran["incomplete"]
     assert "Not checked: 1 list(s) could not be read:" in one.done.out
     assert not (one.world.record / "env.d" / "UNINSTALLED.sh").exists()
+
+
+# --- D14: CDKToolkit kept when something else may need it --------------------------------------
+
+EXEC_ROLE = (
+    f"arn:aws:iam::{ACCOUNT}:role/cdk-hnb659fds-cfn-exec-role-{ACCOUNT}-us-west-2"
+)
+
+
+def _another_app(region: str):
+    """Another CDK app's stack deploys through CDKToolkit's execution role."""
+
+    def change(state: dict) -> None:
+        state["regions"][region].setdefault("stacks", []).append(
+            {
+                "StackId": f"arn:aws:cloudformation:{region}:{ACCOUNT}:stack/another-app/1",
+                "StackName": "another-app",
+                "CreationTime": "2026-10-21T04:00:00Z",
+                "StackStatus": "CREATE_COMPLETE",
+                "RoleARN": EXEC_ROLE,
+            }
+        )
+
+    return change
+
+
+TOOLKIT_KEPT = "Kept: the CDK's setup stack (CDKToolkit) and its bucket, which this install made: another stack in the account may use them."
+for _region in ("us-west-2", "us-east-1"):
+    BATCH.add(
+        f"toolkit-used-in-{_region}",
+        prepare=_installed(_state(_another_app(_region))),
+    )
+BATCH.add(
+    "toolkit-region-unreadable",
+    prepare=_installed(
+        lambda w: w.fault(
+            service="cloudformation",
+            op="describe-stacks",
+            region="us-east-1",
+            mode="AccessDenied",
+        )
+    ),
+)
+BATCH.add(
+    "toolkit-delete-fails",
+    prepare=_installed(
+        _cdk(
+            delete_stack_fail={
+                "CDKToolkit": {
+                    "reason": "The role cdk-hnb659fds-cfn-exec-role is still in use",
+                    "logical": "CloudFormationExecutionRole",
+                    "type": "AWS::IAM::Role",
+                }
+            }
+        )
+    ),
+    run=lambda w: _twice(w, lambda s: s["cdk"].pop("delete_stack_fail", None)),
+)
+
+
+def _toolkit_kept(world: InstallWorld, done) -> list[str]:
+    problems = []
+    if TOOLKIT_KEPT not in done.out:
+        problems.append("no kept line")
+    if "Kept by the installer: the CDK's setup stack (CDKToolkit)" not in done.out:
+        problems.append("not listed in the report")
+    if any(
+        c["op"] in ("delete-stack", "delete-bucket", "delete-objects")
+        for c in world.calls
+    ):
+        problems.append("a delete of CDKToolkit's")
+    if not any(
+        s["StackName"] == "CDKToolkit" and s["StackStatus"] == "CREATE_COMPLETE"
+        for s in _us_west_2(world.state)["stacks"]
+    ):
+        problems.append("CDKToolkit is gone")
+    return problems
+
+
+@pytest.mark.parametrize("region", ["us-west-2", "us-east-1"])
+def test_cdktoolkit_another_stack_deploys_through_is_kept(ran, region):
+    """D14: a stack in any enabled region whose RoleARN is CDKToolkit's execution role
+    keeps CDKToolkit (listed); that stack, not the install's, is the one thing not
+    explained."""
+    one = ran[f"toolkit-used-in-{region}"]
+    assert one.done.code == 1, one.done.err
+    assert _toolkit_kept(one.world, one.done) == []
+    assert "Not explained: 1." in one.done.out
+    assert f"{region}/cfn-stacks.txt + another-app CREATE_COMPLETE" in one.done.out
+
+
+def test_cdktoolkit_is_kept_when_a_region_cannot_be_read(ran, before):
+    one = ran["toolkit-region-unreadable"]
+    assert one.done.code == 0, one.done.err
+    assert _toolkit_kept(one.world, one.done) == []
+    assert kept_list_is_the_residue(one.world, before) == []
+
+
+def test_a_cdktoolkit_that_fails_to_delete_is_named_and_a_run_again_completes(
+    ran, before
+):
+    first, second = ran["toolkit-delete-fails"].done
+    assert first.code == 1, first.err
+    assert first.err.startswith(
+        "FAILED: AWS could not delete CloudFormationExecutionRole (AWS::IAM::Role) in the stack CDKToolkit: The role cdk-hnb659fds-cfn-exec-role is still in use."
+    ), first.err
+    assert second.code == 0, second.err
+    assert kept_list_is_the_residue(ran["toolkit-delete-fails"].world, before) == []

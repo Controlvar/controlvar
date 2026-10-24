@@ -205,6 +205,19 @@ def serialize(protocol: str, service: dict, operation: dict, response: dict):
             else "application/json"
         )
         return 200, {"Content-Type": kind, "x-amzn-RequestId": REQUEST_ID}, b"{}"
+    if ref is None and protocol == "query":
+        if response != {}:
+            raise ValueError(f"{name} has no output, and a response was given")
+        body = (
+            f'<{name}Response xmlns="{namespace}">'
+            f"<ResponseMetadata><RequestId>{REQUEST_ID}</RequestId></ResponseMetadata>"
+            f"</{name}Response>"
+        )
+        return 200, {"Content-Type": "text/xml"}, body.encode()
+    if ref is None and protocol == "rest-xml":
+        if response != {}:
+            raise ValueError(f"{name} has no output, and a response was given")
+        return 204, {"x-amz-request-id": REQUEST_ID}, b""
     if protocol in ("json", "rest-json"):
         version = service["metadata"].get("jsonVersion", "1.1")
         kind = (
@@ -245,6 +258,22 @@ def serialize(protocol: str, service: dict, operation: dict, response: dict):
     if protocol == "rest-xml":
         output = shapes[ref["shape"]]
         space = f' xmlns="{namespace}"' if namespace else ""
+        # Members the model places in headers (S3's HeadBucket answers with headers only).
+        headers = {"Content-Type": "application/xml", "x-amz-request-id": REQUEST_ID}
+        in_headers = {
+            n: m
+            for n, m in output.get("members", {}).items()
+            if m.get("location") == "header"
+        }
+        for n, m in in_headers.items():
+            if n in response:
+                value = response[n]
+                headers[m.get("locationName", n)] = (
+                    str(value).lower() if isinstance(value, bool) else str(value)
+                )
+        response = {k: v for k, v in response.items() if k not in in_headers}
+        if not response and in_headers:
+            return 200, headers, b""
         if "payload" in output:
             member = output["members"][output["payload"]]
             root = member.get("locationName", output["payload"])
@@ -257,11 +286,7 @@ def serialize(protocol: str, service: dict, operation: dict, response: dict):
         body = (
             f'<?xml version="1.0" encoding="UTF-8"?>\n<{root}{space}>{inner}</{root}>'
         )
-        return (
-            200,
-            {"Content-Type": "application/xml", "x-amz-request-id": REQUEST_ID},
-            body.encode(),
-        )
+        return 200, headers, body.encode()
     raise ValueError(f"protocol {protocol} is not written here")
 
 

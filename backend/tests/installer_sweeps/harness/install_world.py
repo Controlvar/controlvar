@@ -727,15 +727,24 @@ def install_snapshots(root: Path, shapes: Path) -> tuple[list[dict], "InstallWor
     return [snap for snaps, _ in done for snap in snaps], done[0][1]
 
 
-def replayable(argv: list[str], folder: Path) -> list[str]:
-    """``argv`` with each file:// argument whose file is gone (the secrets' values, which
-    install removes once created) pointing at a stand-in file in ``folder``."""
+def replayable(
+    argv: list[str], folder: Path, files: dict[str, str] | None = None
+) -> list[str]:
+    """``argv`` with each file:// argument pointing at a file of its own in ``folder``:
+    the JSON payload the call read (its snapshot's ``files``), or, for a file that is gone
+    and was not kept (the secrets' values, which install removes once created), a
+    stand-in."""
     out = []
-    for n, word in enumerate(argv):
-        if word.startswith("file://") and not Path(word[len("file://") :]).exists():
-            stand_in = folder / f"stand-in-{n}"
-            stand_in.write_text("stand-in-value-for-a-replay")
-            word = f"file://{stand_in}"
+    for word in argv:
+        if word.startswith("file://"):
+            text = (files or {}).get(word)
+            if text is None and not Path(word[len("file://") :]).exists():
+                text = "stand-in-value-for-a-replay"
+            if text is not None:
+                name = hashlib.sha256((word + text).encode()).hexdigest()[:16]
+                stand_in = folder / f"stand-in-{name}"
+                stand_in.write_text(text)
+                word = f"file://{stand_in}"
         out.append(word)
     return out
 

@@ -1,8 +1,9 @@
 # shellcheck shell=bash
 # lib/uninstall.sh: uninstall's checks and its six steps, in the AWS guide's teardown order
 # (its "Destroying an environment"): the address, the nine stacks, the certificate and its
-# record, the secrets, repositories, log groups and task definitions, the CDK's setup
-# stack, and the comparison of the account with the record made before the install.
+# record, the secrets, repositories, log groups and task definitions, the CDK's setup stack
+# and its bucket, and the comparison of the account with the record made before the
+# install.
 # Sourced by controlvar-aws.
 #
 # What was written before each create decides what uninstall may delete, never a read
@@ -10,7 +11,8 @@
 # only when the record holds DEPLOY_STARTED; the secrets, the certificate and the
 # repositories only when they carry this install's INSTALL_ID tag; a Route 53 record only
 # when it still is what the install wrote (records/<n>.json), read back from the zone;
-# the CDK's setup stack never (it is kept, and listed). An answer that is empty or not
+# the CDK's setup stack only when it is the one the install made and nothing else can need
+# it (kept and listed otherwise). An answer that is empty or not
 # what was asked for keeps the item, or stops the run, and never deletes. Every delete is
 # announced before it happens. A step that fails ends "run uninstall again; it
 # continues": each step finds what is already gone and goes on.
@@ -123,10 +125,11 @@ cv_un_plan() {
     made=$(cv_made_list)
     cv_out "This deletes the install in account $CV_ACCOUNT, us-west-2, at https://$CV_DOMAIN (made ${STARTED:-earlier}), with its data; no backup is kept:"
     cv_out "  $made."
-    keeps="Keeps: the zone $CV_ZONE (here before the install)"
     if cv_fact CDKTOOLKIT_INTENT; then
-        keeps="$keeps, and the CDK's setup stack (CDKToolkit) and its bucket, which this install made: other CDK apps in the account may use them (${CV_CDK_PAGE}#removing-what-is-left says how to remove them)"
-    elif cv_was_here cdktoolkit.txt present; then
+        cv_out "  The CDK's setup stack (CDKToolkit), with its bucket, goes only if no other stack in the account uses it; otherwise it is kept and listed."
+    fi
+    keeps="Keeps: the zone $CV_ZONE (here before the install)"
+    if ! cv_fact CDKTOOLKIT_INTENT && cv_was_here cdktoolkit.txt present; then
         keeps="$keeps, and the CDK's setup stack (CDKToolkit), here before the install"
     fi
     cv_out "$keeps."
@@ -659,21 +662,133 @@ sys.exit(0 if when[0] >= when[1] else 1)' "$created" "${CDKTOOLKIT_INTENT:-}" 2>
     CV_CDKTOOLKIT_NOW=$(jq -r '.[0]' "$f")
 }
 
-# [5/6] The CDK's setup stack this install made is kept and listed (other CDK apps in the
-# account may use it; cdk.md's "Removing what is left" removes it by hand). One that was
-# here before is kept as it is.
+# cv_un_toolkit_unused: D14's guards, besides ownership: each of the nine stacks is gone
+# (S2b (h), read after the destroy), and no stack in any enabled region names the stack's
+# CloudFormation execution role (another CDK app deploys through it): a count of exactly 0
+# per region, from a call that exited 0. A region that cannot be read, or any answer that is
+# not that count, keeps CDKToolkit.
+cv_un_toolkit_unused() {
+    local role="arn:aws:iam::$CV_ACCOUNT:role/cdk-$CV_CDK_QUALIFIER-cfn-exec-role-$CV_ACCOUNT-$CV_REGION"
+    local f="$CV_RECORD/tmp/toolkit-users.json" r n
+    if [ "$CV_NINE_GONE" -ne 1 ]; then
+        return 1
+    fi
+    if ! cv_read "the enabled regions" "$f" ec2 describe-regions --query 'Regions[].RegionName' ||
+        ! cv_list "$f" 'all(type == "string") and index("us-west-2") != null' ||
+        ! jq -r '.[]' "$f" > "$f.regions"; then
+        return 1
+    fi
+    while IFS= read -r r; do
+        if ! cv_read "the stacks in $r" "$f" cloudformation describe-stacks --region "$r" \
+            --query "length(Stacks[?RoleARN=='$role'])" ||
+            ! n=$(jq -e -s -r 'if length == 1 and (.[0] | type) == "number" then .[0] else error("not a count") end' "$f" 2> /dev/null) ||
+            [ "$n" != 0 ]; then
+            cv_log "CDKToolkit kept: the stacks in $r could not be read, or one uses its role (${CV_CODE:-$n})"
+            return 1
+        fi
+    done < "$f.regions"
+    return 0
+}
+
+# cv_un_empty_bucket <bucket>: every object version and delete marker in the bucket deleted,
+# a thousand at a time (DeleteObjects' limit), then read again: exactly none left. Each read
+# asks for two lists (an empty or whole-response answer is neither, and stops the run).
+# shellcheck disable=SC2016  # the queries' backticks are JMESPath literals
+cv_un_empty_bucket() {
+    local bucket="$1" f="$CV_RECORD/tmp/bucket-versions.json" batch="$CV_RECORD/tmp/bucket-delete.json" n i=0
+    while [ "$i" -lt 100 ]; do
+        i=$((i + 1))
+        if ! cv_read "the bucket's objects" "$f" s3api list-object-versions --bucket "$bucket" \
+            --query '[Versions[].[Key, VersionId] || `[]`, DeleteMarkers[].[Key, VersionId] || `[]`]' ||
+            ! jq -e -s 'length == 1 and (.[0] | type == "array" and length == 2 and all(type == "array"))' "$f" > /dev/null 2>&1 ||
+            ! jq -c '{Objects: (.[0] + .[1] | map({Key: .[0], VersionId: .[1]}) | .[0:1000]), Quiet: true}' \
+                "$f" > "$batch" ||
+            ! n=$(jq '.Objects | length' "$batch"); then
+            msg_tool_failed "aws s3api list-object-versions" "1" "the objects of $bucket could not be listed (${CV_CODE:-an answer that is not its two lists})"
+        fi
+        if [ "$n" -eq 0 ]; then
+            break
+        fi
+        cv_out "  Delete $n object version(s) in the bucket $bucket"
+        cv_delete "the bucket's objects" "$CV_RECORD/tmp/bucket-deleted.json" "" \
+            s3api delete-objects --bucket "$bucket" --delete "file://$batch" --query 'length(Errors || `[]`)'
+        if ! jq -e -s 'length == 1 and .[0] == 0' "$CV_RECORD/tmp/bucket-deleted.json" > /dev/null 2>&1; then
+            msg_tool_failed "aws s3api delete-objects" "1" "S3 did not delete every object of $bucket"
+        fi
+    done
+    if ! cv_read "the bucket's objects" "$f" s3api list-object-versions --bucket "$bucket" \
+        --query 'length([Versions || `[]`, DeleteMarkers || `[]`][])' ||
+        ! jq -e -s 'length == 1 and .[0] == 0' "$f" > /dev/null 2>&1; then
+        msg_tool_failed "aws s3api list-object-versions" "1" "$bucket is not empty (${CV_CODE:-it still holds objects})"
+    fi
+}
+
+# cv_un_delete_toolkit: the CDK's setup stack this install made, with its bucket (the
+# bootstrap template keeps the bucket when the stack goes, and versions it): the bucket
+# emptied, the stack deleted and waited for, then the bucket deleted. Exit 1, having
+# deleted nothing, when the stack does not name the bucket the template names here.
+cv_un_delete_toolkit() {
+    local f="$CV_RECORD/tmp/toolkit-bucket.json" bucket want i=0 status
+    want="cdk-$CV_CDK_QUALIFIER-assets-$CV_ACCOUNT-$CV_REGION"
+    if ! cv_read "CDKToolkit's bucket" "$f" cloudformation describe-stacks --stack-name CDKToolkit \
+        --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue | [0]" ||
+        ! bucket=$(cv_string "$f") || [ "$bucket" != "$want" ]; then
+        cv_log "CDKToolkit kept: its bucket could not be read as $want"
+        return 1
+    fi
+    cv_un_empty_bucket "$bucket"
+    cv_out "  Delete the CDK's setup stack CDKToolkit"
+    cv_delete "CDKToolkit" "$CV_RECORD/tmp/delete-toolkit.json" "" cloudformation delete-stack --stack-name CDKToolkit
+    while :; do
+        i=$((i + 1))
+        if cv_read "CDKToolkit" "$f" cloudformation describe-stacks --stack-name CDKToolkit --query 'Stacks[0].StackStatus'; then
+            status=$(cv_string "$f") || status=""
+            if [ "$status" = DELETE_FAILED ]; then
+                cv_un_destroy_failed CDKToolkit 1
+            fi
+        elif [ "$CV_CODE" = ValidationError ] && grep -q 'Stack with id CDKToolkit does not exist' "$f.err"; then
+            break
+        else
+            msg_tool_failed "aws cloudformation describe-stacks" "1" "${CV_CODE:-no answer}"
+        fi
+        if [ "$i" -ge "$CV_TRIES" ]; then
+            msg_tool_failed "aws cloudformation delete-stack" "1" "CDKToolkit was still ${status:-unread} after $CV_TRIES reads"
+        fi
+        cv_sleep "$CV_POLL_SECONDS"
+    done
+    if cv_read "the bucket $bucket" "$f" s3api head-bucket --bucket "$bucket"; then
+        cv_out "  Delete the bucket $bucket, which outlives the stack"
+        cv_delete "the bucket $bucket" "$CV_RECORD/tmp/delete-bucket.json" NoSuchBucket s3api delete-bucket --bucket "$bucket"
+    elif [ "$CV_CODE" != 404 ] && [ "$CV_CODE" != NotFound ]; then
+        msg_tool_failed "aws s3api head-bucket" "1" "${CV_CODE:-no answer}"
+    fi
+    return 0
+}
+
+# [5/6] The CDK's setup stack this install made goes, with its bucket, when nothing else can
+# need it (D14: ownership, then cv_un_toolkit_unused). Otherwise it is kept and listed (other
+# CDK apps in the account may use it; cdk.md's "Removing what is left" removes it by hand).
+# One that was here before is kept as it is.
 cv_un_step_cdktoolkit() {
     local kind t="$CV_TAB"
     cv_step 5 "Delete the CDK's setup stack and bucket (if it made them)"
     if ! cv_fact CDKTOOLKIT_INTENT; then
         cv_out "  The CDK's setup stack was not made by this install: it is kept as it is."
-    else
-        cv_un_cdktoolkit_ours
-        case "$CV_CDKTOOLKIT_NOW" in
-            gone) cv_out "  The CDK's setup stack this install made is not there any more." ;;
-            '') cv_out "  Kept: a CDK setup stack (CDKToolkit) that is not the one this install made." ;;
-            *)
-                cv_out "  Kept: the CDK's setup stack (CDKToolkit) and its bucket, which this install made. Other CDK apps in the account may use them; to remove them: ${CV_CDK_PAGE}#removing-what-is-left"
+        cv_step_done 5
+        return 0
+    fi
+    cv_un_cdktoolkit_ours
+    case "$CV_CDKTOOLKIT_NOW" in
+        gone)
+            cv_out "  The CDK's setup stack this install made is not there any more."
+            cv_put_fact UN_CDKTOOLKIT "1" || msg_tool_failed "the record" "1" "UN_CDKTOOLKIT"
+            ;;
+        '') cv_out "  Kept: a CDK setup stack (CDKToolkit) that is not the one this install made." ;;
+        *)
+            if cv_un_toolkit_unused && cv_un_delete_toolkit; then
+                cv_put_fact UN_CDKTOOLKIT "1" || msg_tool_failed "the record" "1" "UN_CDKTOOLKIT"
+            else
+                cv_out "  Kept: the CDK's setup stack (CDKToolkit) and its bucket, which this install made: another stack in the account may use them. To remove them: ${CV_CDK_PAGE}#removing-what-is-left"
                 CV_ALSO_KEPT+=(
                     "us-west-2/cfn-stacks.txt$t+${t}CDKToolkit$t$CV_CDKTOOLKIT_NOW"
                     "us-west-2/ecr-repositories.txt$t+${t}cdk-$CV_CDK_QUALIFIER-container-assets-$CV_ACCOUNT-$CV_REGION"
@@ -683,9 +798,9 @@ cv_un_step_cdktoolkit() {
                 for kind in cfn-exec deploy file-publishing image-publishing lookup; do
                     CV_ALSO_KEPT+=("global/iam-roles.txt$t+$t/${t}cdk-$CV_CDK_QUALIFIER-$kind-role-$CV_ACCOUNT-$CV_REGION")
                 done
-                ;;
-        esac
-    fi
+            fi
+            ;;
+    esac
     cv_step_done 5
 }
 

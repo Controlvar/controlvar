@@ -1370,6 +1370,16 @@ def main(state_path: Path, shapes_path: Path, argv: list[str], env: dict) -> int
                         "argv": argv,
                         "env": {k: env[k] for k in LOGGED_VALUES if k in env},
                         "state": before,
+                        # A JSON payload a call reads from a file (a change batch, a
+                        # delete batch) the run may remove later; a secret's value file
+                        # (no .json) is never kept.
+                        "files": {
+                            word: Path(word[len("file://") :]).read_text()
+                            for word in argv
+                            if word.startswith("file://")
+                            and word.endswith(".json")
+                            and Path(word[len("file://") :]).is_file()
+                        },
                     }
                 )
             )

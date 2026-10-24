@@ -93,7 +93,7 @@ def install_calls(tmp_path_factory, shapes_file):
     snapshots, _ = install_snapshots(root / "w", shapes_file)
     found = []
     for snap in snapshots:
-        argv = replayable(snap["argv"], root)
+        argv = replayable(snap["argv"], root, snap.get("files"))
         if (argv[0], argv[1]) in fake_aws.CUSTOMIZATIONS:
             continue  # the CLI's own command: check_installer_cli.py serves its operation
         try:
