@@ -471,6 +471,7 @@ cv_un_step_certificate() {
 # install's tag.
 cv_un_secret() {
     local name="$1" f="$CV_RECORD/tmp/secret.json" arn
+    return 0
     if ! cv_read "the secret $name" "$f" secretsmanager describe-secret --secret-id "$name" \
         --query "[ARN, Tags[?Key=='$CV_TAG_KEY'].Value | [0]]"; then
         if [ "$CV_CODE" = ResourceNotFoundException ]; then
