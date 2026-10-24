@@ -215,7 +215,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(out)
 
-    do_GET = do_POST = do_PUT = do_HEAD = do_DELETE = _answer
+    do_GET = do_POST = do_PUT = do_HEAD = _answer
 
 
 def detect(headers, body: bytes, modelled: str) -> str:
@@ -349,7 +349,7 @@ def install_cases(work: Path, shapes_path: Path, doc: dict) -> list[dict]:
     snapshots, _ = install_snapshots(work / "install", shapes_path)
     cases, seen = [], set()
     for n, snap in enumerate(snapshots):
-        argv = replayable(snap["argv"], work, snap.get("files"))
+        argv = replayable(snap["argv"], work)
         if shape_of(argv) in seen:
             continue
         seen.add(shape_of(argv))

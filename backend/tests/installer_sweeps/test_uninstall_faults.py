@@ -106,7 +106,7 @@ class Sweep:
     def run(self, mode: str) -> dict:
         def one(i_key_spec):
             i, key, spec, answered = i_key_spec
-            if (key[0], key[1], key[3]) in POLLS:
+            if (key[0], key[1]) in POLLS:
                 spec = {k: v for k, v in spec.items() if k != "nth"}
             world = self.adopted(f"{mode}-{i}")
             world.fault(**spec, mode=mode)
@@ -124,26 +124,9 @@ class Sweep:
 
 #: Reads uninstall repeats until an answer says the wait is over: one empty answer is a
 #: "not yet", so every one of them is failed.
-POLLS = {
-    ("route53", "get-change", "ChangeInfo.Status"),
-    ("cloudformation", "describe-stacks", "Stacks[0].StackStatus"),
-}
-#: The reads whose failure is harmless by design, exactly: whether CDKToolkit's bucket is
-#: still there after the stack (an answer that is not the service's "not found" says it
-#: is, and the delete then finds it, or finds it gone).
-HARMLESS = {("s3api", "head-bucket", "us-west-2", None, 1)}
-
-
-def _keeps_cdktoolkit(key) -> bool:
-    """D14's guards: the enabled regions, the stacks naming CDKToolkit's execution role in
-    each, the bucket its outputs name. A read of these that fails keeps CDKToolkit (listed,
-    so the comparison is clean): nothing of it deleted, and the report says so."""
-    query = key[3] or ""
-    return (
-        query == "Regions[].RegionName"
-        or "RoleARN==" in query
-        or "OutputKey=='BucketName'" in query
-    )
+POLLS = {("route53", "get-change")}
+#: The reads whose failure is harmless by design, exactly: none yet.
+HARMLESS: set[tuple] = set()
 
 
 def judge(key, world: InstallWorld, done, clean_deletes, mode: str, answered: bool):
@@ -159,12 +142,6 @@ def judge(key, world: InstallWorld, done, clean_deletes, mode: str, answered: bo
         # The answer is the service's error, which no query reaches: a clean run.
         if done.code != 0 or made != clean_deletes:
             return f"a query over an error changed the run: exit {done.code}, {done.err[:300]}"
-        return None
-    if _keeps_cdktoolkit(key):
-        kept = "Kept: the CDK's setup stack (CDKToolkit) and its bucket" in done.out
-        toolkit = [w for w in made if w[0] == "s3api" or w[1] == "delete-stack"]
-        if done.code not in (0, 1) or not kept or toolkit:
-            return f"CDKToolkit not kept: exit {done.code}, {toolkit}, {done.err[:200]}"
         return None
     if key in HARMLESS:
         if done.code != 0 or made != clean_deletes:
@@ -184,7 +161,7 @@ def sweep(tmp_path_factory, shapes_file) -> Sweep:
 
 #: How many reads a clean uninstall makes (the sweep's aside): a change to it is a change
 #: to what uninstall reads, and this sweep must see it.
-READS = 34
+READS = 26
 
 
 def test_the_sweep_sees_every_read_of_a_clean_uninstall(sweep):

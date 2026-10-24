@@ -7,9 +7,8 @@ each change j in turn, two installs in fake accounts of their own:
   install over its record refuses (UX-B9, exit 2) and calls nothing at all (E1, the half
   that needs no uninstall). Then uninstall: exit 0, its report ends "Not explained: none",
   and the account is the account before the install plus exactly the kept list it printed,
-  both ways (E2, F3). Then install again: it installs, with the clean run's changes but
-  for what the uninstall left in place (the ECS service-linked role, and the CDK's setup
-  stack if the uninstall kept it), which is used, not made again; and the account is a
+  both ways (E2, F3). Then install again: it installs, with the clean run's changes (the
+  CDK's setup stack, if the failed install made it, kept and used), and the account is a
   clean install's but for what the uninstall said AWS keeps (E1's convergence half).
 * **The computer stops dead** just after j's call has done its work and before the
   installer reads its answer (a SIGKILL to the installer, harness effect kill_session):
@@ -213,9 +212,9 @@ def test_uninstall_from_any_failed_change_leaves_only_the_kept_list(half):
 
 def test_after_an_uninstall_a_reinstall_converges(half):
     """E1's convergence half: fail at j, uninstall, install: it installs with the clean
-    run's changes (what the uninstall left in place is used, not made again: the ECS
-    service-linked role AWS keeps, and the CDK's setup stack when the uninstall kept it),
-    and the account is a clean install's but for what the uninstall said AWS keeps."""
+    run's changes (what the uninstall kept is used, not made again: the CDK's setup stack
+    the failed install made, and the ECS service-linked role AWS keeps), and the account
+    is a clean install's but for what the uninstall said AWS keeps."""
     wrong = {}
     for name, run in half.failed.items():
         done = run["third"]

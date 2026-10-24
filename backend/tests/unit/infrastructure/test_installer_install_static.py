@@ -222,7 +222,7 @@ def _query(words: list[str]) -> str | None:
 
 #: How many aws calls install's and uninstall's text holds: a change is a call added or
 #: one the parser stopped seeing, and either is checked here before it counts.
-CALLS = 86
+CALLS = 76
 
 
 def test_the_call_list_is_complete():
@@ -241,8 +241,6 @@ def test_the_call_list_is_complete():
         ("ecr", "delete-repository"),
         ("acm", "delete-certificate"),
         ("ecs", "delete-task-definitions"),
-        ("cloudformation", "delete-stack"),
-        ("s3api", "delete-bucket"),
     } <= ops
 
 
