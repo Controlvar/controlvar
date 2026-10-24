@@ -915,6 +915,8 @@ def _check_parts(case: Case, world: InstallWorld, done: Result) -> list[str]:
     if len(nexts) != 1 or nexts[0] < 2:
         problems.append(f"no single Next: line after a state line: {lines}")
         return problems
+    if not lines[nexts[0]][len("Next: ") :].strip():
+        problems.append(f"the Next: line names no next step: {lines[nexts[0]]!r}")
     state, rest = lines[nexts[0] - 1], lines[nexts[0] + 1 :]
     if case.code == 2 and state not in NOTHING:
         problems.append(f"a refusal says something exists: {state!r}")
