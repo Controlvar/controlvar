@@ -488,9 +488,9 @@ def test_no_v4_text_gives_the_server_keys_reason():
 @pytest.mark.regression
 def test_no_frame_may_show_the_paragraph_on_reports_that_do_not_count():
     """The flag page explains reports it leaves out of the error rate (in its
-    own words, which give a key's reason). Video 4 sends none, and the crash
-    step refuses any; and a frame that drew that paragraph would be refused by
-    a neutral phrase of it on ``never_show``, which names no key."""
+    own words). Video 4 sends none, and the crash step refuses any; and a frame
+    that drew that paragraph would be refused by a neutral phrase of it on
+    ``never_show``, which names no key."""
     page = (
         REPO / "frontend" / "src" / "pages" / "feature-flags" / "[id].tsx"
     ).read_text(encoding="utf-8")
@@ -1617,16 +1617,25 @@ def test_the_wait_finds_the_safety_monitors_rollback():
 
 
 @pytest.mark.regression
-def test_a_rollback_made_by_hand_is_refused_at_once():
+@pytest.mark.parametrize(
+    "by, user_id, words",
+    [
+        ("admin@demo.com", "u1", "rolled back by 'admin@demo.com'"),
+        # Another email on an entry that names no user.
+        ("admin@demo.com", None, "rolled back by 'admin@demo.com'"),
+        # The monitor's own email on an entry that also names a user.
+        ("system:safety-monitor", "u1", "rolled back by 'system:safety-monitor'"),
+    ],
+    ids=["by-hand", "other-email-no-user", "monitor-email-with-user"],
+)
+def test_a_rollback_made_by_hand_is_refused_at_once(by, user_id, words):
     """QA C1's plant: the demo's step 4 rolls back by hand when automatic
     rollbacks are off; the video credits the safety monitor, so it refuses."""
     wall = Wall()
-    entries = [
-        audit_entry("safety_rollback", by="admin@demo.com", user_id="u1", at=wall.at)
-    ]
+    entries = [audit_entry("safety_rollback", by=by, user_id=user_id, at=wall.at)]
     with pytest.raises(
         director.CaptureFailed,
-        match="rolled back by 'admin@demo.com', not by the safety monitor",
+        match=f"{words}, not by the safety monitor",
     ):
         incident.wait_for_rollback(
             rollback_api(entries), wait_item(), wall=wall, sleep=wall.sleep
@@ -2188,6 +2197,7 @@ def test_c6_keeps_only_the_line_that_says_the_stated_interval():
         # Two starts: two APIs, or one restarted mid-take.
         (API_LOG + "\n" + API_LOG, "holds 2 line"),
     ],
+    ids=["other-interval", "no-scheduler-line", "two-starts"],
 )
 def test_c6_refuses_a_log_that_does_not_say_the_stated_interval_once(log, words):
     stack = SimpleNamespace(api_log=lambda: log)
@@ -2447,6 +2457,48 @@ def test_gate_10_4_passes_the_monitors_rollback_read_every_way():
                 ]
             },
             "the rollback was made by 'admin@demo.com'",
+        ),
+        # Another email on an entry that names no user.
+        (
+            {
+                "audit": [
+                    audit_entry(
+                        "safety_rollback",
+                        by="admin@demo.com",
+                        reason=ROLLBACK_REASON,
+                        trigger_type="automatic",
+                        new_percentage=5,
+                    ),
+                    audit_entry(
+                        "feature_flag_update", by="admin@demo.com", user_id="u-admin"
+                    ),
+                    audit_entry(
+                        "feature_flag_update", by="admin@demo.com", user_id="u-admin"
+                    ),
+                ]
+            },
+            "the rollback was made by 'admin@demo.com'",
+        ),
+        # The monitor's own email on an entry that also names a user.
+        (
+            {
+                "audit": [
+                    audit_entry(
+                        "safety_rollback",
+                        user_id="u-admin",
+                        reason=ROLLBACK_REASON,
+                        trigger_type="automatic",
+                        new_percentage=5,
+                    ),
+                    audit_entry(
+                        "feature_flag_update", by="admin@demo.com", user_id="u-admin"
+                    ),
+                    audit_entry(
+                        "feature_flag_update", by="admin@demo.com", user_id="u-admin"
+                    ),
+                ]
+            },
+            "the rollback was made by 'system:safety-monitor'",
         ),
         (
             {
