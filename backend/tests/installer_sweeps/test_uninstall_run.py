@@ -445,6 +445,17 @@ BATCH.add(
 )
 
 
+def _secret_not_ours(state: dict) -> None:
+    """The install's JWT secret replaced, after the install, by one of the same name that
+    another install made (its tag is not this install's)."""
+    for secret in _us_west_2(state)["secrets"]:
+        if secret["Name"] == "/staging/experimentation/jwt-secret":
+            secret["Tags"] = [{"Key": "controlvar-install-id", "Value": "0123456789ab"}]
+
+
+BATCH.add("secret-not-ours", prepare=_installed(_state(_secret_not_ours)))
+
+
 # F4: errors are not swallowed; not found is done; a run again completes.
 BATCH.add(
     "delete-denied",
@@ -1000,6 +1011,20 @@ def test_a_record_changed_after_the_install_is_kept_and_said(ran, before):
         for r in _zone(one.world.state)["records"]
     )
     assert kept_list_is_the_residue(one.world, before) == []
+
+
+def test_a_secret_this_install_did_not_make_is_kept(ran):
+    """F2: a secret of the install's name that does not carry this install's tag is kept
+    and said; the other is deleted."""
+    one = ran["secret-not-ours"]
+    assert (
+        "Kept: the secret /staging/experimentation/jwt-secret, which does not carry this install's tag."
+        in one.done.out
+    ), one.done.out
+    names = {x["Name"] for x in _us_west_2(one.world.state)["secrets"]}
+    assert "/staging/experimentation/jwt-secret" in names
+    assert "/staging/experimentation/first-superuser-password" not in names
+    assert deletes(one.world).count(("secretsmanager", "delete-secret")) == 1
 
 
 # --- F4: errors named, not found done, a run again completes -------------------------------------
