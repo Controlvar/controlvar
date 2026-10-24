@@ -193,7 +193,6 @@ cv_on_exit() {
     cv_stop_children
     cv_empty_tmp
     if [ -n "${CV_CHILD_HOME:-}" ] && [ "$CV_CHILD_HOME" = "${CV_RECORD:-}/home" ]; then
-        rm -rf "$CV_CHILD_HOME/.aws/cli/cache" 2> /dev/null || :
         rmdir "$CV_CHILD_HOME/.aws/cli" 2> /dev/null || :
     fi
     if [ "$CV_LOCKED" -eq 1 ]; then

@@ -423,7 +423,7 @@ cv_step_deploy() {
     : > "$CV_RECORD/logs/cdk-deploy.log"
     : > "$CV_RECORD/tmp/watch.out"
     cv_bg "$CV_RECORD/logs/cdk-deploy.log" "$CV_RECORD/logs/cdk-deploy.log" \
-        cv_cdk deploy --all --require-approval never --app "$app" --profile "$CV_COPY_PROFILE" --output "$CV_OUT"
+        cv_cdk deploy --all --require-approval never --profile "$CV_COPY_PROFILE" --output "$CV_OUT"
     deploy_pid=$CV_CHILD
     cv_bg "$CV_RECORD/tmp/watch.out" "$CV_RECORD/tmp/watch.out" cv_watch
     watch_pid=$CV_CHILD
