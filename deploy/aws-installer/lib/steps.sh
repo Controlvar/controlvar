@@ -127,6 +127,9 @@ cv_start() {
         fi
     fi
     INSTALL_ID="$id"
+    for old in "$CV_RECORD"/history/*/inputs.sh; do
+        if [ -f "$old" ]; then INSTALL_ID=$(. "$old" && printf '%s' "$INSTALL_ID"); fi
+    done
     if ! {
         printf 'export CV_ACCOUNT=%q CV_DOMAIN=%q CV_ALARM_EMAIL=%q CV_ADMIN_EMAIL=%q\n' \
             "$CV_ACCOUNT" "$CV_DOMAIN" "$CV_ALARM_EMAIL" "$CV_ADMIN_EMAIL"

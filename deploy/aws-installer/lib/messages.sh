@@ -627,7 +627,7 @@ cv_code_now() {
 
 msg_install_only() {
     cv_stop 2 "$1 is an option of install, not of uninstall: uninstall reads the install's name and addresses from its record." \
-        "run it again without $1."
+        ""
 }
 
 # msg_no_record <why> [<value>]: uninstall finds no started install of this account in
