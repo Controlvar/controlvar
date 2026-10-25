@@ -1317,7 +1317,7 @@ def _customization(
 @customization("ecr", "get-login-password", "GetAuthorizationToken")
 def _login_password(state: dict, args: dict, region: str) -> str:
     """The password ECR's authorization token holds, as the CLI prints it."""
-    return state["regions"][region].get("ecr_password", "fake-ecr-password") + "\n"
+    return state["regions"][region].get("ecr_password", "fake-ecr-password")
 
 
 #: The two forms CLIs print a service's error in (measured: aws-cli 2.38.1 on the

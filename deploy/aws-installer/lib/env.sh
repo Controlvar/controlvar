@@ -128,6 +128,7 @@ cv_probe() {
     for entry in ${CV_ENV[@]+"${CV_ENV[@]}"}; do
         case "$entry" in
             AWS_PROFILE=*) ;;
+            AWS_CONFIG_FILE=*) kept+=("AWS_CONFIG_FILE=$HOME/.aws/config") ;;
             *) kept+=("$entry") ;;
         esac
     done
@@ -205,7 +206,7 @@ for key, value in [("sso_session", session), *keys.items(), *session_keys.items(
         print(key, file=sys.stderr)
         sys.exit(7)
 lines = [f"[profile {copy_profile}]", f"sso_session = {session}"]
-lines += [f"{key} = {value}" for key, value in keys.items()]
+lines += [f"{key} = {value}" for key, value in parser.items(section) if key != "sso_session"]
 lines += [f"[{session_section}]"]
 lines += [f"{key} = {value}" for key, value in session_keys.items()]
 partial = target + ".new"
