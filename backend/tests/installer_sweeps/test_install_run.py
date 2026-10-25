@@ -101,6 +101,9 @@ CDK_INPUTS = {
     "JWT_SECRET_ARN",
     "FIRST_SUPERUSER_PASSWORD_SECRET_ARN",
 }
+#: Set for every cdk call and for no other child, with these values: the CDK CLI's
+#: telemetry is off for the installer's calls.
+CDK_SETTINGS = {"CDK_DISABLE_CLI_TELEMETRY": "true"}
 
 
 def _profile_variable() -> str:
@@ -375,7 +378,19 @@ BATCH.add(
     ),
 )
 BATCH.add("validation-other", prepare=_validation_record("somewhere.else.example.org."))
-BATCH.add("watch-cap", prepare=_also(_blocked(), lambda w: w.use_clock(60)))
+
+
+def _watched(world: InstallWorld):
+    """An install whose deploy loop looks at the deploy once a second, as the watcher's
+    scenarios need. With no pause there, the loop reads the fake clock so often that it
+    passed the cap and the wait limit even with each made 100 times longer, so the two
+    tests could not tell."""
+    return world.install(CONTROLVAR_AWS_TICK_SECONDS="1")
+
+
+BATCH.add(
+    "watch-cap", prepare=_also(_blocked(), lambda w: w.use_clock(60)), run=_watched
+)
 
 
 def _stopped_tasks(state: dict, reason: str) -> None:
@@ -439,7 +454,7 @@ WATCH_CASES = {
     ),
 }
 for _name, (_prepare, _said) in WATCH_CASES.items():
-    BATCH.add(f"watch-{_name}", prepare=_prepare)
+    BATCH.add(f"watch-{_name}", prepare=_prepare, run=_watched)
 BATCH.add("slr-race", prepare=_cdk(slr_race=True))
 
 
@@ -589,10 +604,12 @@ def test_nothing_changes_before_the_confirmation(clean):
 def test_every_aws_child_runs_with_exactly_the_allowed_environment(clean):
     """B2: the parent's keys, profile, endpoint variables, output format, CDK defaults and
     registry login reach no child; each child's environment is the allow-list, its HOME the
-    record's own (W1) and its profile the copy's own name (W2)."""
+    record's own (W1) and its profile the copy's own name (W2). Every cdk call, and no
+    other child, has the CDK CLI's telemetry off."""
     variable = _profile_variable()
     record = clean.world.record
     seen = 0
+    cdk_calls = 0
     for call in clean.world.calls:
         if call["service"] in ("dig", "git", "curl", "node", "npm"):
             continue  # not AWS children: they run in the reader's own environment
@@ -601,7 +618,10 @@ def test_every_aws_child_runs_with_exactly_the_allowed_environment(clean):
         names = set(call["env"]) - SHIM_ADDS
         want = set(BASE_ENV)
         if call["service"] == "cdk":
-            want |= CDK_INPUTS | {variable}
+            want |= CDK_INPUTS | {variable} | set(CDK_SETTINGS)
+            for name, value in CDK_SETTINGS.items():
+                assert call["values"].get(name) == value, (call["n"], call["op"], name)
+            cdk_calls += 1
         probe = call["argv"][-2:] == ["--endpoint-url", "http://127.0.0.1:9"]
         if probe:
             want -= {"AWS_PROFILE"}
@@ -627,6 +647,7 @@ def test_every_aws_child_runs_with_exactly_the_allowed_environment(clean):
             assert values["AWS_PROFILE"] == COPY_PROFILE, call
         seen += 1
     assert seen > 70
+    assert cdk_calls == 3, cdk_calls  # bootstrap, list and deploy
 
 
 def test_the_deploy_deploys_the_assembly_the_target_check_read(clean):

@@ -26,6 +26,8 @@
 CV_CHILDREN=()
 CV_STEP="the checks"
 CV_LOCKED=0
+# 1 once a message has ended the run (lib/messages.sh's cv_stop sets it).
+CV_SAID=0
 
 # cv_record_init: makes the record's folders and opens the run's log.
 cv_record_init() {
@@ -115,11 +117,12 @@ cv_empty_tmp() {
 # cv_bg <stdout file> <stderr file> <command...>: starts a long child in the background, so
 # a signal reaches the installer at once (a trapped signal interrupts `wait`); its pid is
 # CV_CHILD. Its output is appended to the two files (they may be the same one), and only
-# its: the installer's own stdout and stderr stay the terminal's, so a message the signal
-# trap prints is seen. The child runs in a process group of its own (job control on for
-# that one fork only), so that stopping it stops what it started too: cv_cdk's cdk, a
-# deploy script's aws calls and sleeps. Its stdin is /dev/null: a child outside the
-# terminal's process group must never read the terminal.
+# its: the installer's messages go on to the terminal (fds 8 and 9, lib/messages.sh, which
+# the child does not get), so a message the signal trap prints is seen. The child runs in
+# a process group of its own (job control on for that one fork only), so that stopping it
+# stops what it started too: cv_cdk's cdk, a deploy script's aws calls and sleeps. Its
+# stdin is /dev/null: a child outside the terminal's process group must never read the
+# terminal.
 cv_bg() {
     local out="$1" err="$2"
     shift 2
@@ -181,7 +184,8 @@ cv_stop_children() {
 # cv_on_signal: INT or TERM, to the process group or to the installer alone. The record
 # says where it stopped, every child is stopped, nothing secret is left, exit 130. A second
 # signal meanwhile is caught and does nothing: `trap ':'`, not `trap ''`, so the signals
-# stay trapped, and bash prints no "Terminated" line for a child a group's TERM ended.
+# stay trapped. Bash's own line about a child a group's TERM ended ("Terminated") goes to
+# the log, the shell's stderr once cv_record_init has opened it.
 cv_on_signal() {
     trap ':' INT TERM
     cv_stop_children
@@ -192,11 +196,24 @@ cv_on_signal() {
     msg_interrupted "$CV_STEP"
 }
 
-# cv_on_exit: on every exit. Reads no exit status: each exit names its own. The role
-# credentials the CLI cached in the children's HOME go too: nothing of a sign-in but the
-# shared token cache outlives the run.
+# cv_on_exit: on every exit. A run that a message ended has said why (cv_stop). A run that
+# ends with an error status and no message, on an error of the installer's own (bash
+# reports it in the log), gets a FAILED line and the log's path on the terminal, so that it
+# never ends with nothing said. The role credentials the CLI cached in the children's HOME
+# go too: nothing of a sign-in but the shared token cache outlives the run.
 cv_on_exit() {
+    local rc=$? next
     trap ':' INT TERM
+    if [ "$rc" -ne 0 ] && [ "$CV_SAID" -ne 1 ] && [ -n "${CV_LOG:-}" ]; then
+        next="Run the same command again"
+        if cv_changed && [ "${CV_VERB:-}" = uninstall ]; then
+            next="Run uninstall again; it continues: $(cv_uninstall_command)"
+        elif cv_changed; then
+            next="Remove what exists, then install again: $(cv_uninstall_command)"
+        fi
+        cv_note "FAILED: The installer stopped on an error of its own (exit $rc), which the log names. $next. If it fails the same way, please report it at https://github.com/Controlvar/controlvar/issues, with the log (account ID and email address removed)."
+        cv_note "Log: $CV_LOG (it can hold your account ID and email address: remove them before you share it)"
+    fi
     cv_stop_children
     cv_empty_tmp
     if [ -n "${CV_CHILD_HOME:-}" ] && [ "$CV_CHILD_HOME" = "${CV_RECORD:-}/home" ]; then

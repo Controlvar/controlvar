@@ -11,6 +11,8 @@
 
 CV_PAGE="https://docs.controlvar.com/self-hosting/aws-install/"
 CV_LOG=""
+# 1 once msg_stacks_left has named the stacks still there, for the state line under it.
+CV_STACKS_NAMED=0
 # Where lines go: the launcher's kept copies of the terminal's stdout and stderr, or 1 and 2
 # where the launcher did not set them.
 CV_OUT_FD="${CV_OUT_FD:-1}"
@@ -169,12 +171,21 @@ cv_uninstall_state() {
             continue
         fi
         # Part of the nine deleted (a later destroy failed): how many, from their facts. All
-        # nine destroyed but not yet read back as gone stays "the nine stacks".
+        # nine destroyed but not yet read back as gone: what is left of them, which
+        # msg_stacks_left names when that read found some.
         if [ "$made" = DEPLOY_STARTED ]; then
             n=$(cv_stacks_destroyed)
             if [ "$n" -gt 0 ] && [ "$n" -lt "${#NAMES_STACKS[@]}" ]; then
                 deleted+=("$n of the nine stacks")
                 still+=("$((${#NAMES_STACKS[@]} - n)) of the nine stacks")
+                continue
+            fi
+            if [ "$n" -eq "${#NAMES_STACKS[@]}" ]; then
+                if [ "$CV_STACKS_NAMED" -eq 1 ]; then
+                    still+=("what is left of the nine stacks (named above)")
+                else
+                    still+=("what is left of the nine stacks")
+                fi
                 continue
             fi
         fi
@@ -236,6 +247,8 @@ cv_stop() {
     if [ -n "$CV_LOG" ]; then
         cv_note "Log: $CV_LOG (it can hold your account ID and email address: remove them before you share it)"
     fi
+    # shellcheck disable=SC2034  # read by lib/record.sh's cv_on_exit
+    CV_SAID=1
     exit "$code"
 }
 
@@ -730,6 +743,7 @@ msg_network_guardduty() {
 }
 
 msg_stacks_left() {
+    CV_STACKS_NAMED=1
     cv_stop "$(cv_code_now)" "Not every one of the nine stacks is gone ($1), so the installer keeps the image repositories, which they use." \
         "look at those stacks in the AWS console (CloudFormation > Stacks), then run uninstall again; it continues."
 }

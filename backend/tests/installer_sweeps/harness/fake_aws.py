@@ -103,6 +103,7 @@ LOGGED_VALUES = (
     "TZ",
     "DOCKER_CONFIG",
     "TUF_ROOT",
+    "CDK_DISABLE_CLI_TELEMETRY",
 )
 #: Flags every operation takes (no value): paging off.
 GLOBAL_FLAGS = ("--no-paginate",)

@@ -1115,6 +1115,65 @@ def test_a_signal_that_ends_a_foreground_child_leaves_only_the_message(ran):
     assert one.world.writes() == []
 
 
+#: Where each verb gets an error of the installer's own (bash's "unbound variable"), after
+#: the log is open and before any message: in install, just before its plan; in uninstall,
+#: at the start of its plan (an install that made something first, so there is one).
+OWN_ERROR = ': "$CV_PLANTED_UNBOUND"\n'
+OWN_ERROR_AT = {
+    "install": (
+        "controlvar-aws",
+        '    cv_plan\n    if [ "$CV_PLAN_ONLY" -eq 1 ]; then\n',
+    ),
+    "uninstall": ("lib/uninstall.sh", "cv_un_plan() {\n    local made keeps\n"),
+}
+
+
+def _own_error(verb: str):
+    def prepare(world: InstallWorld) -> None:
+        name, anchor = OWN_ERROR_AT[verb]
+        path = world.clone / "deploy" / "aws-installer" / name
+        text = path.read_text()
+        assert text.count(anchor) == 1, (name, anchor)
+        if verb == "install":
+            text = text.replace(anchor, "    " + OWN_ERROR + anchor)
+        else:
+            text = text.replace(anchor, anchor + "    " + OWN_ERROR)
+        path.write_text(text)
+
+    def run(world: InstallWorld) -> Result:
+        if verb == "uninstall":
+            world.fault(service="ecr", op="create-repository", mode="AccessDenied")
+            made = world.install()
+            assert made.code == 1, made.err
+            world.edit(lambda state: state.update(faults=[]))
+            return world.uninstall()
+        return world.install()
+
+    return prepare, run
+
+
+for _verb in OWN_ERROR_AT:
+    _prepare, _run = _own_error(_verb)
+    BATCH.add(f"own-error-{_verb}", prepare=_prepare, run=_run)
+
+
+@pytest.mark.parametrize("verb", sorted(OWN_ERROR_AT))
+def test_an_error_of_its_own_still_names_the_log_on_the_terminal(ran, verb):
+    """Once the log is open, bash's own report of an error in the installer goes there,
+    not to the terminal; the terminal still gets a FAILED line and the log's path, last."""
+    one = ran[f"own-error-{verb}"]
+    done = one.done
+    assert done.code != 0, done.err
+    assert "CV_PLANTED_UNBOUND: unbound variable" in one.world.log_text()
+    lines = done.err.splitlines()
+    assert len(lines) == 2, done.err
+    assert lines[0].startswith(
+        f"FAILED: The installer stopped on an error of its own (exit {done.code}), which"
+        " the log names. Run the same command again."
+    ), lines[0]
+    assert lines[-1].startswith("Log: "), done.err
+
+
 def _q(text: str) -> str:
     done = subprocess.run(
         ["bash", "-c", 'printf %q "$1"', "_", text],

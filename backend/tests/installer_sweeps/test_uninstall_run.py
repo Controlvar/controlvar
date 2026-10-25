@@ -125,6 +125,9 @@ CDK_INPUTS = {
     "JWT_SECRET_ARN",
     "FIRST_SUPERUSER_PASSWORD_SECRET_ARN",
 }
+#: Set for every cdk call and for no other child (as test_install_run's B2): the CDK
+#: CLI's telemetry is off for the installer's calls.
+CDK_SETTINGS = {"CDK_DISABLE_CLI_TELEMETRY": "true"}
 
 
 def deletes(world: InstallWorld) -> list[tuple[str, str]]:
@@ -841,9 +844,11 @@ def test_cdktoolkit_is_never_touched_while_a_stack_remains(clean):
 
 def test_every_uninstall_child_runs_with_exactly_the_allowed_environment(clean):
     """B2 for uninstall: each aws and cdk child's environment is the allow-list, its HOME
-    the record's own, its profile the copy's."""
+    the record's own, its profile the copy's. Every cdk call, and no other child, has the
+    CDK CLI's telemetry off."""
     record = clean.world.record
     seen = 0
+    cdk_calls = 0
     for call in clean.world.calls:
         if (
             call["service"] in ("dig", "git", "curl", "node", "npm")
@@ -851,7 +856,12 @@ def test_every_uninstall_child_runs_with_exactly_the_allowed_environment(clean):
         ):
             continue
         names = set(call["env"]) - SHIM_ADDS
-        want = set(BASE_ENV) | (CDK_INPUTS if call["service"] == "cdk" else set())
+        want = set(BASE_ENV)
+        if call["service"] == "cdk":
+            want |= CDK_INPUTS | set(CDK_SETTINGS)
+            for name, value in CDK_SETTINGS.items():
+                assert call["values"].get(name) == value, (call["n"], call["op"], name)
+            cdk_calls += 1
         if call["argv"][-2:] == ["--endpoint-url", "http://127.0.0.1:9"]:
             want -= {"AWS_PROFILE"}
         assert names == want, (
@@ -866,6 +876,7 @@ def test_every_uninstall_child_runs_with_exactly_the_allowed_environment(clean):
             assert call["values"]["AWS_PROFILE"] == COPY_PROFILE
         seen += 1
     assert seen > 40, seen
+    assert cdk_calls == 10, cdk_calls  # the list and the nine destroys
 
 
 def test_every_uninstall_call_is_in_us_west_2(clean):
@@ -1465,6 +1476,17 @@ def test_the_stacks_left_keep_only_the_repositories(ran):
         "FAILED: Not every one of the nine stacks is gone (experimentation-vpc-staging), so the"
         " installer keeps the image repositories, which they use."
     ), first
+
+
+def test_the_stacks_left_state_line_does_not_say_all_nine_are_still_there(ran):
+    """Every destroy exited 0 and the read after them found one stack still there: the
+    state line under the message names what is left of the nine (the message names it),
+    never "the nine stacks" as if none had gone."""
+    state = ran["stacks-left"].done.err.splitlines()[1]
+    still = state.split("Still in your account: ", 1)[1].split("; ", 1)[0]
+    items = re.split(r", | and ", still)
+    assert "the nine stacks" not in items, state
+    assert items[0] == "what is left of the nine stacks (named above)", state
 
 
 def test_the_state_line_counts_the_stacks_a_failed_destroy_left(ran):

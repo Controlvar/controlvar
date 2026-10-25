@@ -80,9 +80,11 @@ cv_aws() {
 }
 
 # cv_cdk <arguments...>: the pinned CDK CLI under the installer's environment, with the
-# app's inputs (app.py reads them; the CLI sets the account and region itself).
+# app's inputs (app.py reads them; the CLI sets the account and region itself). The CDK
+# CLI's telemetry is off for the installer's calls.
 cv_cdk() {
     env -i ${CV_ENV[@]+"${CV_ENV[@]}"} \
+        "CDK_DISABLE_CLI_TELEMETRY=true" \
         "ENVIRONMENT=$CV_ENVIRONMENT" \
         "$NAMES_PROFILE_VARIABLE=$CV_CDK_PROFILE" \
         "ALARM_EMAIL=${CV_ALARM_EMAIL:-}" \
