@@ -62,8 +62,7 @@ cv_lock() {
     fi
     pid=$(cat "$held/pid" 2> /dev/null) || pid=""
     case "$pid" in
-        '') msg_lock "unknown" ;;
-        *[!0-9]*) ;;
+        '' | *[!0-9]*) ;;
         *)
             if kill -0 "$pid" 2> /dev/null; then
                 msg_lock "$pid"

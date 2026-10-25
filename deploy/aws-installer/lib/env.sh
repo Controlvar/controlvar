@@ -34,7 +34,7 @@ cv_env_init() {
     CV_CHILD_HOME="$CV_RECORD/home"
     CV_ENV=(
         "PATH=$CV_TOOLS_PATH"
-        "HOME=$CV_CHILD_HOME"
+        "HOME=$HOME"
         "AWS_CONFIG_FILE=$CV_RECORD/aws-config"
         "AWS_SHARED_CREDENTIALS_FILE=/dev/null"
         "AWS_PROFILE=$CV_COPY_PROFILE"
@@ -62,14 +62,8 @@ cv_env_init() {
 # only the record's own home/: a record that is not an absolute path of two parts or more
 # (an empty one would make it /home) is refused first.
 cv_home_init() {
-    case "${CV_RECORD:-}" in
-        /?*/?*) ;;
-        *) msg_record_folder "${CV_RECORD:-(no record)}/home" ;;
-    esac
-    if [ "$CV_CHILD_HOME" != "$CV_RECORD/home" ] ||
-        ! rm -rf "$CV_CHILD_HOME" || [ -e "$CV_CHILD_HOME" ] || [ -L "$CV_CHILD_HOME" ] ||
-        ! mkdir "$CV_CHILD_HOME" "$CV_CHILD_HOME/.aws" "$CV_CHILD_HOME/.aws/sso" ||
-        ! ln -s "$HOME/.aws/sso/cache" "$CV_CHILD_HOME/.aws/sso/cache"; then
+    if ! mkdir -p "$CV_CHILD_HOME/.aws/sso" ||
+        ! ln -sfn "$HOME/.aws/sso/cache" "$CV_CHILD_HOME/.aws/sso/cache"; then
         msg_record_folder "$CV_CHILD_HOME"
     fi
 }
@@ -200,11 +194,7 @@ for key in ("sso_start_url", "sso_region", "sso_registration_scopes"):
         print(key, file=sys.stderr)
         sys.exit(6)
     session_keys[key] = parser.get(session_section, key).strip()
-for key, value in [("sso_session", session), *keys.items(), *session_keys.items()]:
-    if "\n" in value or "\r" in value:
-        print(key, file=sys.stderr)
-        sys.exit(7)
-lines = [f"[profile {copy_profile}]", f"sso_session = {session}"]
+lines = ["[default]" if profile == "default" else f"[profile {copy_profile}]", f"sso_session = {session}"]
 lines += [f"{key} = {value}" for key, value in keys.items()]
 lines += [f"[{session_section}]"]
 lines += [f"{key} = {value}" for key, value in session_keys.items()]

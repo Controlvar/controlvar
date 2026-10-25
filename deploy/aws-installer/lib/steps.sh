@@ -302,7 +302,7 @@ cv_step_certificate() {
     fi
     before=$(jq -c '.' "$CV_RECORD/tmp/at-name.json")
     # shellcheck disable=SC2016  # $value is jq's own variable, given to it with --arg
-    if cv_list "$CV_RECORD/tmp/at-name.json" 'length == 1 and .[0] == ["CNAME", $value]' --arg value "$value"; then
+    if cv_list "$CV_RECORD/tmp/at-name.json" 'length == 1 and .[0] == ["CNAME", "'"$value"'"]'; then
         cv_out "  The validation record $name was already there with ACM's value; it is used and kept."
     elif cv_list "$CV_RECORD/tmp/at-name.json" 'length == 0'; then
         change=$(jq -n -c --arg name "$name" --arg type "$type" --arg value "$value" '{
@@ -422,7 +422,7 @@ cv_step_deploy() {
     app="$CV_OUT"
     : > "$list"
     : > "$err"
-    cv_run_long "$list" "$err" cv_cdk list --profile "$CV_COPY_PROFILE" --output "$app" || rc=$?
+    cv_run_long "$list" "$err" cv_cdk list --profile "$CV_PROFILE" --output "$app" || rc=$?
     cv_log "$(cat "$list" "$err" 2> /dev/null)"
     if [ "$rc" -ne 0 ]; then
         msg_tool_failed "cdk list" "$rc" "$(tail -n 1 "$err" 2> /dev/null)"

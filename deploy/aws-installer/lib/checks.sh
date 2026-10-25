@@ -669,8 +669,7 @@ cv_check_collisions() {
     else
         msg_read_failed "the CDKToolkit stack" "${CV_CODE:-no answer}"
     fi
-    cv_before_write cdktoolkit.txt "the CDKToolkit stack"
-    cv_before_write cdktoolkit.txt "the CDKToolkit stack" "$CV_CDKTOOLKIT"
+    printf '%s\n' "$CV_CDKTOOLKIT" > "$CV_RECORD/before/cdktoolkit.txt"
     for repo in "$NAMES_BACKEND_REPOSITORY" "$NAMES_WEB_REPOSITORY"; do
         f="$CV_RECORD/tmp/repo.json"
         if ! cv_read "the repository $repo" "$f" ecr describe-repositories --query "repositories[?repositoryName=='$repo'].repositoryName" ||
