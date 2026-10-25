@@ -566,7 +566,7 @@ cv_un_log_groups() {
         ! cv_list "$f" 'all(type == "string")'; then
         msg_tool_failed "aws logs describe-log-groups" "1" "the log groups could not be listed (${CV_CODE:-an answer that is not a list})"
     fi
-    for g in ${NAMES_LOG_GROUPS[@]+"${NAMES_LOG_GROUPS[@]}"} "$NAMES_CONTAINER_INSIGHTS_LOG_GROUP"; do
+    for g in ${NAMES_LOG_GROUPS[@]+"${NAMES_LOG_GROUPS[@]}"}; do
         if cv_was_here log-groups.txt "$g"; then
             continue
         fi
