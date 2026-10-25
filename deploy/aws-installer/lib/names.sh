@@ -33,10 +33,10 @@ NAMES_DESTROY_ORDER=(
     "experimentation-monitoring-staging"
     "experimentation-compute-staging"
     "experimentation-redis-staging"
-    "experimentation-database-staging"
+    "experimentation-vpc-staging"
     "experimentation-dynamodb-staging"
     "experimentation-auth-staging"
-    "experimentation-vpc-staging"
+    "experimentation-database-staging"
 )
 
 # The network's stack: app.py's experimentation-vpc-<env>.

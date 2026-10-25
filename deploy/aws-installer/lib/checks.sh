@@ -292,7 +292,7 @@ cv_tools_step() {
         mkdir -p "$tools/cdk-cli"
         cp "$pins/package.json" "$pins/package-lock.json" "$tools/cdk-cli/"
         cv_out "  Installing the pinned CDK CLI into the record (scripts off) ..."
-        if ! (cd "$tools/cdk-cli" && env -i ${CV_ENV[@]+"${CV_ENV[@]}"} npm ci --ignore-scripts --no-audit --no-fund) > "$CV_RECORD/logs/tools-npm.log" 2>&1 ||
+        if ! (cd "$tools/cdk-cli" && env -i "PATH=$CV_BASE_PATH" "HOME=$HOME" npm ci --ignore-scripts --no-audit --no-fund) > "$CV_RECORD/logs/tools-npm.log" 2>&1 ||
             ! printf '%s\n' "$want_cli" > "$tools/cdk-cli/.pins"; then
             msg_tool_failed "npm ci" "1" "$(tail -n 1 "$CV_RECORD/logs/tools-npm.log" 2> /dev/null)"
         fi
@@ -504,7 +504,7 @@ cv_before_write() {
         err=$({ printf '%s\n' "$@" >> "$file"; } 2>&1) && return 0
     fi
     cv_log "before/$name: ${err:-not written}"
-    msg_before_unwritten "$what" "before/$name"
+    msg_read_failed "$what" "an answer the installer could not record"
 }
 
 # cv_check_roles: which of the service-linked roles exist (NoSuchEntity is the only

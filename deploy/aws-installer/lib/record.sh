@@ -202,8 +202,8 @@ cv_on_signal() {
 # never ends with nothing said. The role credentials the CLI cached in the children's HOME
 # go too: nothing of a sign-in but the shared token cache outlives the run.
 cv_on_exit() {
-    local rc=$? next
     trap ':' INT TERM
+    local rc=$? next
     if [ "$rc" -ne 0 ] && [ "$CV_SAID" -ne 1 ] && [ -n "${CV_LOG:-}" ]; then
         next="Run the same command again"
         if cv_changed && [ "${CV_VERB:-}" = uninstall ]; then
