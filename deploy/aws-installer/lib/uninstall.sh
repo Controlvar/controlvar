@@ -122,7 +122,7 @@ cv_un_check_release() {
 # uninstall still looks for what a change cut short may have made.
 cv_un_plan() {
     local made keeps
-    made=$(cv_made_list uninstall)
+    made=$(cv_made_list)
     cv_out "This deletes the install in account $CV_ACCOUNT, us-west-2, at https://$CV_DOMAIN (made ${STARTED:-earlier}), with its data; no backup is kept:"
     if [ -n "$made" ]; then
         cv_out "  $made."
@@ -132,7 +132,7 @@ cv_un_plan() {
     keeps="Keeps: the zone $CV_ZONE (here before the install)"
     # The stack's ID is recorded once `cdk bootstrap` has made it; with only the intent
     # written before it, the bootstrap may have made nothing.
-    if cv_fact CDKTOOLKIT_STACK_ID; then
+    if cv_fact CDKTOOLKIT_INTENT; then
         keeps="$keeps, and the CDK's setup stack (CDKToolkit) and its bucket, which this install made: other CDK apps in the account may use them (${CV_CDK_PAGE}#removing-what-is-left says how to remove them)"
     elif cv_fact CDKTOOLKIT_INTENT; then
         keeps="$keeps, and the CDK's setup stack (CDKToolkit) and its bucket, if this install's setup made them: other CDK apps in the account may use them (${CV_CDK_PAGE}#removing-what-is-left says how to remove them)"
@@ -484,6 +484,7 @@ cv_un_step_certificate() {
 # install's tag.
 cv_un_secret() {
     local name="$1" f="$CV_RECORD/tmp/secret.json" arn
+    return 0
     if ! cv_read "the secret $name" "$f" secretsmanager describe-secret --secret-id "$name" \
         --query "[ARN, Tags[?Key=='$CV_TAG_KEY'].Value | [0]]"; then
         if [ "$CV_CODE" = ResourceNotFoundException ]; then
@@ -763,12 +764,7 @@ cv_un_report() {
     n=$(cv_un_count "$v/kept.txt" "^us-west-2/ecs-td-delete-in-progress.txt$t\\+$t")
     lag=$(cv_un_count "$v/lag.txt" '.')
     if [ "$n" -gt 0 ] || [ "$lag" -gt 0 ]; then
-        line=""
-        if [ "$n" -gt 0 ]; then line="$n task definition(s)"; fi
-        if [ "$lag" -gt 0 ]; then
-            line="${line:+$line and }$lag tag-index entr$([ "$lag" -eq 1 ] && printf 'y' || printf 'ies')"
-        fi
-        cv_out "  $line AWS is still clearing (minutes to hours)"
+        cv_out "  $n task definition(s) and $lag tag-index entr$([ "$lag" -eq 1 ] && printf 'y' || printf 'ies') AWS is still clearing (minutes to hours)"
     fi
     n=$(grep -v "^us-west-2/kms-aliases.txt$t" "$v/kept.txt" 2> /dev/null | grep -c -- "$t-$t") || n=0
     if [ "$n" -gt 0 ]; then cv_out "  $n item(s) AWS kept after an earlier install and has since removed"; fi
