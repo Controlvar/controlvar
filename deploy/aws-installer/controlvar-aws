@@ -169,7 +169,7 @@ cv_check_started() {
 cv_plan() {
     local admin bootstrap
     admin=$(printf '%s' "$CV_ADMIN_EMAIL" | tr '[:upper:]' '[:lower:]')
-    bootstrap="the CDK's setup stack (uninstall keeps it: other CDK apps may use it), "
+    bootstrap="the CDK's setup stack, "
     if [ "$CV_CDKTOOLKIT" = present ]; then
         bootstrap=""
     fi
@@ -209,7 +209,6 @@ cv_confirm() {
 
 cv_install() {
     cv_parse "$@"
-    cv_check_settings
     cv_check_account_option
     cv_check_domain
     if [ -z "$CV_ALARM_EMAIL" ]; then
@@ -274,7 +273,6 @@ cv_install() {
 cv_uninstall() {
     local flag
     cv_parse "$@"
-    cv_check_settings
     for flag in "--domain:$CV_DOMAIN" "--alarm-email:$CV_ALARM_EMAIL" "--admin-email:$CV_ADMIN_EMAIL"; do
         if [ -n "${flag#*:}" ]; then
             msg_install_only "${flag%%:*}"
