@@ -690,10 +690,8 @@ cv_un_step_cdktoolkit() {
             *)
                 cv_out "  Kept: the CDK's setup stack (CDKToolkit) and its bucket, which this install made. Other CDK apps in the account may use them; to remove them: ${CV_CDK_PAGE}#removing-what-is-left"
                 CV_ALSO_KEPT+=(
-                    "us-west-2/cfn-stacks.txt$t+${t}CDKToolkit$t$CV_CDKTOOLKIT_NOW"
                     "us-west-2/ecr-repositories.txt$t+${t}cdk-$CV_CDK_QUALIFIER-container-assets-$CV_ACCOUNT-$CV_REGION"
                     "us-west-2/ssm-parameters.txt$t+$t/cdk-bootstrap/$CV_CDK_QUALIFIER/version"
-                    "global/s3-buckets.txt$t+${t}cdk-$CV_CDK_QUALIFIER-assets-$CV_ACCOUNT-$CV_REGION"
                 )
                 for kind in cfn-exec deploy file-publishing image-publishing lookup; do
                     CV_ALSO_KEPT+=("global/iam-roles.txt$t+$t/${t}cdk-$CV_CDK_QUALIFIER-$kind-role-$CV_ACCOUNT-$CV_REGION")
