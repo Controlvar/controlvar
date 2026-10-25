@@ -87,7 +87,7 @@ cv_state() {
         printf 'Nothing was created.'
         return 0
     fi
-    list=$(cv_made_list)
+    list=$(cv_made_list install)
     if cv_fact DEPLOY_STARTED; then
         printf "Now in your account: %s. These bill about \$10 a day until you run uninstall." "$list"
     else
@@ -95,10 +95,11 @@ cv_state() {
     fi
 }
 
-# cv_made_list [uninstall]: what the record says the install made, as one list ("the
-# install's record (on this computer only)" when nothing yet). With "uninstall", what
-# uninstall deletes of it: the CDK's setup stack left out (uninstall keeps it), and nothing
-# printed when the record names nothing in AWS.
+# cv_made_list <install|uninstall>: what the record says the install made, as one list
+# ("the install's record (on this computer only)" when nothing yet). With "uninstall",
+# what uninstall deletes of it: the CDK's setup stack left out (uninstall keeps it), and
+# nothing printed when the record names nothing in AWS. Every call names its mode: the
+# CI runner's shellcheck reports a function whose $1 no call in its own file passes.
 cv_made_list() {
     local made=() mode="${1:-}"
     if [ "$mode" != uninstall ] && cv_fact CDKTOOLKIT_STACK_ID; then made+=("the CDK's setup stack"); fi
