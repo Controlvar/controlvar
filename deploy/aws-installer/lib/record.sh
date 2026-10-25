@@ -39,6 +39,13 @@ cv_record_init() {
     chmod 700 "$CV_RECORD" 2> /dev/null || :
     CV_LOG="$CV_RECORD/logs/$(date -u +%Y%m%dT%H%M%SZ)-$CV_VERB.log"
     : > "$CV_LOG" 2> /dev/null || CV_LOG=""
+    # From here on the shell's own stderr is the log. Bash reports there a child in the
+    # foreground that a signal ended ("Terminated", when a TERM reaches the whole process
+    # group), and a child's error that no redirection sends elsewhere goes there too; the
+    # terminal's stderr (fd 9, lib/messages.sh) carries the installer's messages only.
+    if [ -n "$CV_LOG" ]; then
+        exec 2>> "$CV_LOG"
+    fi
 }
 
 # cv_lock: one run per record. A lock left by a process that is gone is taken over. A lock

@@ -1090,6 +1090,31 @@ def test_an_interrupt_leaves_a_usable_record_and_no_child(ran, sig, target, when
         assert "AWS carries on creating the stacks on its own." in done.err
 
 
+BATCH.add(
+    "e3-during-the-release-copy-to-the-group-TERM",
+    prepare=lambda w: w.edit(
+        lambda s: s["git"].update(archive="block", block_seconds=60)
+    ),
+    run=lambda w: interrupt(w, "git", "archive", signal.SIGTERM, True),
+)
+
+
+def test_a_signal_that_ends_a_foreground_child_leaves_only_the_message(ran):
+    """A TERM to the whole process group ends the child the installer runs in the
+    foreground (here git archive, copying the release's CDK during the checks), and bash
+    itself reports that child ("Terminated") on the shell's stderr. That report goes to the
+    log, never ahead of the installer's own message on the terminal."""
+    one = ran["e3-during-the-release-copy-to-the-group-TERM"]
+    done = one.done
+    assert done.code == 130, done.err
+    assert done.err.startswith(
+        'STOPPED: Stopped by Ctrl-C or a signal at "the checks".'
+    ), done.err
+    # The child was ended by the signal (bash said so), in the log.
+    assert "Terminated" in one.world.log_text(), one.world.log_text()[-600:]
+    assert one.world.writes() == []
+
+
 def _q(text: str) -> str:
     done = subprocess.run(
         ["bash", "-c", 'printf %q "$1"', "_", text],

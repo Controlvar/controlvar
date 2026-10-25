@@ -1111,6 +1111,10 @@ def git(t: Tool):
         t.out = settings["revision"] + "\n"
         return
     if t.op == "archive":
+        if settings.get("archive") == "block":
+            # Stuck before writing anything, for a test that signals the installer while
+            # this plain foreground child runs.
+            return settings.get("block_seconds", BLOCK_SECONDS)
         tag = next(a for a in args[1:] if not a.startswith("--"))
         if tag not in settings.get("tags", []):
             raise Ended(128, err=f"fatal: not a valid object name: {tag}\n")

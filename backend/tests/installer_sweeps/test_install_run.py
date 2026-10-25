@@ -965,7 +965,8 @@ def test_the_clean_run_under_every_bash(ran, bash):
     one = ran[f"bash-{bash_id(bash)}"]
     assert one.done.code == 0, one.done.err
     assert one.world.writes() == CLEAN_WRITES
-    assert "unbound variable" not in one.done.err
+    # Bash's own errors go to the log once it exists (lib/record.sh), and to stderr before.
+    assert "unbound variable" not in one.done.err + one.world.log_text()
 
 
 # --- the confirmation --------------------------------------------------------------------------
