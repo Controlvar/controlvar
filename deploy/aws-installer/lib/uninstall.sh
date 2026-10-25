@@ -361,8 +361,7 @@ cv_un_nine_gone() {
     local f="$CV_RECORD/tmp/nine-gone.json" left nine
     nine=$(cv_names_json ${NAMES_STACKS[@]+"${NAMES_STACKS[@]}"})
     if ! cv_read "the stacks" "$f" cloudformation list-stacks --query "StackSummaries[?StackStatus!='DELETE_COMPLETE'].StackName" ||
-        ! cv_list "$f" 'all(type == "string")' ||
-        ! left=$(jq -r --argjson nine "$nine" '[.[] | select(. as $s | $nine | index($s) != null)] | join(", ")' "$f"); then
+        ! left=$(jq -r --argjson nine "$nine" '[.[] | select(. as $s | $nine | index($s) != null)] | join(", ")' "$f" 2> /dev/null || :); then
         msg_tool_failed "aws cloudformation list-stacks" "1" "the stacks could not be listed (${CV_CODE:-an answer that is not a list})"
     fi
     if [ -n "$left" ]; then
@@ -685,8 +684,8 @@ cv_un_step_cdktoolkit() {
     else
         cv_un_cdktoolkit_ours
         case "$CV_CDKTOOLKIT_NOW" in
-            gone) cv_out "  There is no CDK setup stack (CDKToolkit) in us-west-2 now: nothing to keep." ;;
-            '') cv_out "  Kept: a CDK setup stack (CDKToolkit), which the installer could not tell is this install's." ;;
+            gone) cv_out "  The CDK's setup stack this install made is not there any more." ;;
+            '') cv_out "  Kept: a CDK setup stack (CDKToolkit) that is not the one this install made." ;;
             *)
                 cv_out "  Kept: the CDK's setup stack (CDKToolkit) and its bucket, which this install made. Other CDK apps in the account may use them; to remove them: ${CV_CDK_PAGE}#removing-what-is-left"
                 CV_ALSO_KEPT+=(

@@ -434,7 +434,6 @@ cv_step_deploy() {
         msg_target "$why"
     fi
     cv_session_check
-    cv_put_fact DEPLOY_STARTED "$(date -u +%Y-%m-%dT%H:%M:%SZ)" || msg_tool_failed "the record" "1" "DEPLOY_STARTED"
     cv_next_out
     : > "$CV_RECORD/logs/cdk-deploy.log"
     : > "$CV_RECORD/tmp/watch.out"
@@ -444,6 +443,7 @@ cv_step_deploy() {
     cv_bg "$CV_RECORD/tmp/watch.out" "$CV_RECORD/tmp/watch.out" cv_watch
     watch_pid=$CV_CHILD
     cv_deploy_wait "$deploy_pid" "$watch_pid"
+    cv_put_fact DEPLOY_STARTED "$(date -u +%Y-%m-%dT%H:%M:%SZ)" || msg_tool_failed "the record" "1" "DEPLOY_STARTED"
     cd "$CV_RECORD" || :
     cv_put_fact DEPLOY_DONE "$(date -u +%Y-%m-%dT%H:%M:%SZ)" || msg_tool_failed "the record" "1" "DEPLOY_DONE"
     cv_check_nine_stacks
