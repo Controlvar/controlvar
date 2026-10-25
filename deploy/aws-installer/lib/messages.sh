@@ -158,7 +158,8 @@ cv_uninstall_state() {
         "VALIDATION_RECORD:UN_VALIDATION:its validation record" \
         "JWT_SECRET_ARN:UN_SECRETS:2 secrets" \
         "REPOSITORIES_CREATED:UN_REPOSITORIES:2 image repositories" \
-        "MIGRATE_TD_ARN:UN_TASK_DEFINITIONS:the task-definition revisions"; do
+        "MIGRATE_TD_ARN:UN_TASK_DEFINITIONS:the task-definition revisions" \
+        "CDKTOOLKIT_STACK_ID:UN_CDKTOOLKIT:the CDK's setup stack"; do
         made=${entry%%:*}
         gone=${entry#*:}
         label=${gone#*:}
@@ -725,12 +726,12 @@ msg_network_guardduty() {
         deletes="$deletes${then}aws ec2 delete-security-group --group-id $g $where"
         then=", then "
     done
-    cv_stop 1 "AWS could not delete the network: GuardDuty put its own endpoint in it (${2:-none}), with the group GuardDuty made for it (${3:-none}). The installer did not make them, so it does not delete them." \
+    cv_stop 1 "AWS could not delete the network: GuardDuty put its own endpoint and its own VPC group in it (the endpoint ${2:-none}, the group ${3:-none}). The installer did not make them, so it does not delete them." \
         "check that they are all that is left in the network (aws ec2 describe-network-interfaces --filters Name=vpc-id,Values=$1 --query 'NetworkInterfaces[].[NetworkInterfaceId,InterfaceType,Description]' --output text $where), delete them ($deletes), then run uninstall again; it continues with the network. ${CV_PAGE}#if-uninstall-stops-at-the-network says more."
 }
 
 msg_stacks_left() {
-    cv_stop "$(cv_code_now)" "Not every one of the nine stacks is gone ($1), so the installer keeps the image repositories, which they use." \
+    cv_stop "$(cv_code_now)" "Not every one of the nine stacks is gone ($1), so the installer keeps what they use: the image repositories and the CDK's setup stack." \
         "look at those stacks in the AWS console (CloudFormation > Stacks), then run uninstall again; it continues."
 }
 
