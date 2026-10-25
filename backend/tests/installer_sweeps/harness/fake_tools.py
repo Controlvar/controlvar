@@ -112,7 +112,7 @@ class Tool:
         self.state = json.loads(self.state_path.read_text())
 
     def save(self) -> None:
-        self.state_path.write_text(json.dumps(self.state))
+        _fake.write_state(self.state_path, self.state)
 
     def log(self, status: int, fault: str | None) -> None:
         record = {

@@ -1337,6 +1337,16 @@ def service_error_text(
     )
 
 
+def write_state(state_path: Path, state: dict) -> None:
+    """The state, written whole or not at all: to a temporary file beside it, then renamed
+    over it. A fake that a signal stops part-way (the installer stops its deploy watcher,
+    whose reads come here, when the deploy ends) leaves the state as it found it, never a
+    cut one that the next call cannot read."""
+    temporary = state_path.with_name(f"{state_path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(state))
+    os.replace(temporary, state_path)
+
+
 @contextlib.contextmanager
 def _locked(state_path: Path):
     with open(f"{state_path}.lock", "w") as lock:
@@ -1410,7 +1420,7 @@ def main(state_path: Path, shapes_path: Path, argv: list[str], env: dict) -> int
         }
         with open(calls, "a") as handle:
             handle.write(json.dumps(record) + "\n")
-        state_path.write_text(json.dumps(state))
+        write_state(state_path, state)
     sys.stdout.write(answer.out)
     sys.stderr.write(answer.err)
     return answer.status
