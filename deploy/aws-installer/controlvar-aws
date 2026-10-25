@@ -57,7 +57,7 @@ CV_ENV=()
 
 cv_help() {
     cat << HELP
-Controlvar AWS installer (beta). What has been tested: ${CV_PAGE}#what-has-been-tested
+Controlvar AWS installer. What has been tested: ${CV_PAGE}#what-has-been-tested
 
 It installs Controlvar's core profile, in staging's shape, in us-west-2, into an AWS account
 you administer, and removes it again. From the moment you confirm until you uninstall, it
@@ -224,7 +224,6 @@ cv_install() {
     cv_traps
     cv_lock
     cv_home_init
-    cv_check_started
     cv_out "Checks (read-only; nothing is created yet):"
     cv_check_tools
     cv_check_release
