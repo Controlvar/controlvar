@@ -117,15 +117,6 @@ cv_check_emails() {
         also=" for the administrator with --admin-email"
     else
         flag="--admin-email"
-        if ! why=$(cv_alarm_rule "$CV_ADMIN_EMAIL"); then
-            msg_email_unusable "$flag" "$CV_ADMIN_EMAIL" "$why" "$also"
-        fi
-    fi
-    if ! why=$(cv_admin_rule "$CV_ADMIN_EMAIL"); then
-        msg_email_unusable "$flag" "$CV_ADMIN_EMAIL" "$why" "$also"
-    fi
-    if ! assert_first_admin_email; then
-        msg_email_unusable "$flag" "$CV_ADMIN_EMAIL" "it is not one address" "$also"
     fi
 }
 
@@ -287,7 +278,7 @@ cv_tools_step() {
         ! want_py=$(cv_pins_hash "$pins/requirements.lock"); then
         msg_tool_failed "the tools step" "1" "the locks in $pins could not be read"
     fi
-    if [ ! -x "$tools/cdk-cli/node_modules/.bin/cdk" ] || [ "$(cat "$tools/cdk-cli/.pins" 2> /dev/null)" != "$want_cli" ]; then
+    if [ "$("$tools/cdk-cli/node_modules/.bin/cdk" --version 2> /dev/null | sed 's/ .*//')" != "$(jq -r '.dependencies["aws-cdk"]' "$pins/package.json")" ]; then
         rm -rf "$tools/cdk-cli"
         mkdir -p "$tools/cdk-cli"
         cp "$pins/package.json" "$pins/package-lock.json" "$tools/cdk-cli/"
@@ -546,6 +537,7 @@ cv_check_before() {
         msg_read_failed "the account's log groups" "${CV_CODE:-an answer that is not a list}"
     fi
     cv_before_write log-groups.txt "the account's log groups"
+    printf '' >> "$CV_RECORD/before/log-groups.txt"
     for name in ${NAMES_LOG_GROUPS[@]+"${NAMES_LOG_GROUPS[@]}"} "$NAMES_CONTAINER_INSIGHTS_LOG_GROUP"; do
         if jq -e --arg n "$name" 'index($n) != null' "$f" > /dev/null; then
             cv_before_write log-groups.txt "the account's log groups" "$name"
