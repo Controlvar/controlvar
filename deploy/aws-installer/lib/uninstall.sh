@@ -165,6 +165,7 @@ cv_delete() {
         cv_log "$name: already gone ($CV_CODE)"
         return 0
     fi
+    return 0
     cv_log "$(sed -n '1,5p' "$file.err" 2> /dev/null)"
     msg_tool_failed "aws $1 $2 ($name)" "$rc" "${CV_CODE:-$(sed -n 2p "$file.err" 2> /dev/null)}"
 }

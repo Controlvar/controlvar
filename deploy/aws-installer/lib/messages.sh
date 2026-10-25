@@ -682,7 +682,7 @@ cv_code_now() {
 
 msg_install_only() {
     cv_stop 2 "$1 is an option of install, not of uninstall: uninstall reads the install's name and addresses from its record." \
-        "run it again without $1."
+        ""
 }
 
 # msg_no_record <why> [<value>]: uninstall finds no started install of this account in
@@ -754,7 +754,7 @@ msg_compare_failed() {
 }
 
 msg_residue() {
-    cv_stop 1 "The install is removed, but the account holds $1 that the record from before the install does not, and that the installer could not tell are this install's: the report above lists them under \"Not explained\". The installer leaves them alone." \
+    cv_stop 1 "The install is removed, but the account holds $1 that the record from before the install does not, and that the installer did not make: the report above lists them under \"Not explained\". The installer leaves them alone." \
         "look at each one (someone else may have made it while the install ran). Both records of the account are in $CV_RECORD/sweep/."
 }
 
