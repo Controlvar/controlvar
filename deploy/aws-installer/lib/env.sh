@@ -35,7 +35,7 @@ cv_env_init() {
     CV_ENV=(
         "PATH=$CV_TOOLS_PATH"
         "HOME=$CV_CHILD_HOME"
-        "AWS_CONFIG_FILE=$CV_RECORD/aws-config"
+        "AWS_CONFIG_FILE=$HOME/.aws/config"
         "AWS_SHARED_CREDENTIALS_FILE=/dev/null"
         "AWS_PROFILE=$CV_COPY_PROFILE"
         "AWS_REGION=$CV_REGION"
