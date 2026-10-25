@@ -493,7 +493,7 @@ cv_un_secret() {
     esac
     cv_out "  Delete the secret $name"
     cv_delete "the secret $name" "$CV_RECORD/tmp/delete-secret.json" ResourceNotFoundException \
-        secretsmanager delete-secret --secret-id "$arn" --force-delete-without-recovery --query Name
+        secretsmanager delete-secret --secret-id "$arn" --query Name
 }
 
 # The database's credentials secret, when CloudFormation left it scheduled for deletion (the
