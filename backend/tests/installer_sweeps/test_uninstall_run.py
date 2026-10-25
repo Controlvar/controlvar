@@ -13,8 +13,9 @@ the real sweep by test_state_sweep.py), and compared by the installer's own verd
 * A lost or foreign record (F1), another release's folder, --plan-only, a decline and no
   terminal: nothing read in AWS where nothing needs to be, and nothing deleted.
 * What it never deletes (F2): look-alikes in the reader's zone, a CDKToolkit that was
-  there before, another environment's family and log group, a stack made after the
-  install, a record that changed after it.
+  there before, another environment's family and log group, a revision and a log group
+  of the install's own names that were there before it, a stack made after the install,
+  a record that changed after it.
 * Errors not swallowed, not-found done (F4): a delete denied, a stack DELETE_FAILED, the
   network held by GuardDuty's own endpoint, each named, then a run again that completes.
 * A re-install after an uninstall (F6), each start with its own INSTALL_ID and
@@ -442,6 +443,48 @@ def _alias_changed(world: InstallWorld) -> None:
 BATCH.add(
     "record-changed",
     prepare=_installed(_alias_changed),
+    stub_sweep="state",
+)
+
+INSIGHTS_LOG_GROUP = "/aws/ecs/containerinsights/experimentation-staging/performance"
+#: A revision of the API's own family, deregistered before the install.
+OLD_REVISION = {
+    "family": "experimentation-backend-staging",
+    "revision": 1,
+    "status": "INACTIVE",
+}
+
+
+def _left_by_an_earlier_staging(state: dict) -> None:
+    """Before the install: what taking a staging environment down by hand can leave, with
+    this install's own names. The guide's teardown does not remove task-definition
+    revisions, and ECS makes Container Insights' log group outside any stack."""
+    region = _us_west_2(state)
+    region.setdefault("task_definitions", []).append(dict(OLD_REVISION))
+    region.setdefault("log_groups", []).append(
+        {
+            "logGroupName": INSIGHTS_LOG_GROUP,
+            "creationTime": 1760000000000,
+            "metricFilterCount": 0,
+            "arn": f"arn:aws:logs:us-west-2:{ACCOUNT}:log-group:{INSIGHTS_LOG_GROUP}:*",
+            "storedBytes": 0,
+        }
+    )
+
+
+def _install_then_uninstall(world: InstallWorld):
+    """The account before the install (the record of it the comparison is held to), the
+    install, then the uninstall."""
+    before_install = world.sweep_files()
+    installed = world.install()
+    world.clear_logs()
+    return before_install, installed, world.uninstall()
+
+
+BATCH.add(
+    "here-before",
+    prepare=lambda w: w.edit(_left_by_an_earlier_staging),
+    run=_install_then_uninstall,
     stub_sweep="state",
 )
 
@@ -996,6 +1039,26 @@ def test_nothing_the_install_did_not_make_is_deleted(ran):
     # The record never recorded the earlier validation record, so only the address goes.
     route53 = [c for c in world.calls if c["op"] == "change-resource-record-sets"]
     assert len(route53) == 1, route53
+
+
+def test_what_was_here_before_the_install_is_kept(ran):
+    """F2: a revision of the API's family and Container Insights' log group, both there
+    before the install under the names the install uses: the checks list them, and
+    uninstall, which deletes that family's INACTIVE revisions and that log group, leaves
+    these two. The account afterwards is the account before the install plus exactly the
+    kept list."""
+    one = ran["here-before"]
+    before_install, installed, done = one.done
+    assert installed.code == 0, installed.err
+    assert done.code == 0, done.err
+    region = _us_west_2(one.world.state)
+    assert OLD_REVISION in region["task_definitions"], [
+        td
+        for td in region["task_definitions"]
+        if td["family"] == OLD_REVISION["family"]
+    ]
+    assert any(g["logGroupName"] == INSIGHTS_LOG_GROUP for g in region["log_groups"])
+    assert kept_list_is_the_residue(one.world, before_install) == []
 
 
 def test_a_record_changed_after_the_install_is_kept_and_said(ran, before):
