@@ -688,6 +688,7 @@ cv_un_step_cdktoolkit() {
             gone) cv_out "  There is no CDK setup stack (CDKToolkit) in us-west-2 now: nothing to keep." ;;
             '') cv_out "  Kept: a CDK setup stack (CDKToolkit), which the installer could not tell is this install's." ;;
             *)
+                cv_delete "CDKToolkit" "$CV_RECORD/tmp/delete-toolkit.json" "" cloudformation delete-stack --stack-name CDKToolkit
                 cv_out "  Kept: the CDK's setup stack (CDKToolkit) and its bucket, which this install made. Other CDK apps in the account may use them; to remove them: ${CV_CDK_PAGE}#removing-what-is-left"
                 CV_ALSO_KEPT+=(
                     "us-west-2/cfn-stacks.txt$t+${t}CDKToolkit$t$CV_CDKTOOLKIT_NOW"
