@@ -1020,6 +1020,19 @@ def test_plan_only_reads_and_writes_nothing(ran):
     assert world.writes() == CLEAN_WRITES
 
 
+def test_the_install_plan_says_uninstall_keeps_the_cdks_setup_stack(ran):
+    plan, _install = ran["plan-only"].done
+    first = next(
+        line
+        for line in plan.out.splitlines()
+        if line.startswith("This creates in account")
+    )
+    assert (
+        "the CDK's setup stack (uninstall keeps it: other CDK apps may use it), 2 image"
+        in first
+    ), first
+
+
 def test_a_second_install_over_a_started_record_refuses_and_reads_nothing(ran):
     """E1: UX-B9, exit 2, no call at all, and the record and the address kept."""
     world = ran["second-install"].world

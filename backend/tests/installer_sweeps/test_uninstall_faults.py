@@ -92,6 +92,8 @@ class Sweep:
         assert done.code == 0 and clean.unknown == "", (done.err, clean.unknown)
         self.clean_deletes = clean.writes()
         self.cases = _cases(clean.calls)
+        #: Each mode's runs, once: key -> (the problem or None, how the run ended).
+        self.ran: dict[str, dict] = {}
 
     def world(self, name: str) -> InstallWorld:
         return InstallWorld(
@@ -104,6 +106,8 @@ class Sweep:
         return world
 
     def run(self, mode: str) -> dict:
+        """The problems of every read failed in turn by ``mode`` (each mode run once)."""
+
         def one(i_key_spec):
             i, key, spec, answered = i_key_spec
             if (key[0], key[1]) in POLLS:
@@ -111,15 +115,23 @@ class Sweep:
             world = self.adopted(f"{mode}-{i}")
             world.fault(**spec, mode=mode)
             done = world.uninstall()
-            return key, judge(key, world, done, self.clean_deletes, mode, answered)
+            return (
+                key,
+                judge(key, world, done, self.clean_deletes, mode, answered),
+                done,
+            )
 
-        wanted = [
-            (i, key, spec, answered)
-            for i, (key, spec, answered) in enumerate(self.cases)
-            if mode == "EMPTY" or key[3] is not None
-        ]
-        found = in_parallel([lambda x=x: one(x) for x in wanted])
-        return {key: problem for key, problem in found if problem}
+        if mode not in self.ran:
+            wanted = [
+                (i, key, spec, answered)
+                for i, (key, spec, answered) in enumerate(self.cases)
+                if mode == "EMPTY" or key[3] is not None
+            ]
+            found = in_parallel([lambda x=x: one(x) for x in wanted])
+            self.ran[mode] = {key: (problem, done) for key, problem, done in found}
+        return {
+            key: problem for key, (problem, _done) in self.ran[mode].items() if problem
+        }
 
 
 #: Reads uninstall repeats until an answer says the wait is over: one empty answer is a
@@ -175,3 +187,27 @@ def test_every_uninstall_read_fails_closed(sweep, mode):
     delete the clean uninstall would not make."""
     wrong = sweep.run(mode)
     assert wrong == {}, "\n".join(f"{k}: {v}" for k, v in wrong.items())
+
+
+def test_a_cdk_setup_stack_it_cannot_read_is_kept_and_said_so(sweep):
+    """An empty answer to step 5's read of the CDK's setup stack keeps the stack, and the
+    run says the installer could not tell it is this install's (not that it is another's),
+    as the message that ends the run says of what it left."""
+    sweep.run("EMPTY")
+    keys = [
+        key
+        for key in sweep.ran["EMPTY"]
+        if key[:2] == ("cloudformation", "describe-stacks")
+        and key[3] == "Stacks[0].[StackStatus,StackId,CreationTime]"
+    ]
+    assert len(keys) == 1, keys
+    _problem, done = sweep.ran["EMPTY"][keys[0]]
+    assert (
+        "  Kept: a CDK setup stack (CDKToolkit), which the installer could not tell is this install's."
+        in done.out
+    ), [line for line in done.out.splitlines() if "(CDKToolkit)" in line]
+    first = done.err.splitlines()[0]
+    assert first.startswith("FAILED: The install is removed, but the account holds "), (
+        first
+    )
+    assert "that the installer could not tell are this install's" in first, first

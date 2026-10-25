@@ -717,7 +717,7 @@ msg_network_guardduty() {
         deletes="$deletes${then}aws ec2 delete-security-group --group-id $g $where"
         then=", then "
     done
-    cv_stop 1 "AWS could not delete the network: GuardDuty put its own endpoint and its own VPC group in it (the endpoint ${2:-none}, the group ${3:-none}). The installer did not make them, so it does not delete them." \
+    cv_stop 1 "AWS could not delete the network: GuardDuty put its own endpoint in it (${2:-none}), with the group GuardDuty made for it (${3:-none}). The installer did not make them, so it does not delete them." \
         "check that they are all that is left in the network (aws ec2 describe-network-interfaces --filters Name=vpc-id,Values=$1 --query 'NetworkInterfaces[].[NetworkInterfaceId,InterfaceType,Description]' --output text $where), delete them ($deletes), then run uninstall again; it continues with the network. ${CV_PAGE}#if-uninstall-stops-at-the-network says more."
 }
 
@@ -732,7 +732,7 @@ msg_compare_failed() {
 }
 
 msg_residue() {
-    cv_stop 1 "The install is removed, but the account holds $1 that the record from before the install does not, and that the installer did not make: the report above lists them under \"Not explained\". The installer leaves them alone." \
+    cv_stop 1 "The install is removed, but the account holds $1 that the record from before the install does not, and that the installer could not tell are this install's: the report above lists them under \"Not explained\". The installer leaves them alone." \
         "look at each one (someone else may have made it while the install ran). Both records of the account are in $CV_RECORD/sweep/."
 }
 

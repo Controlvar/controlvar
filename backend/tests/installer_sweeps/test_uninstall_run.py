@@ -1043,7 +1043,7 @@ def test_a_secret_this_install_did_not_make_is_kept(ran):
         ),
         (
             "guardduty",
-            f"FAILED: AWS could not delete the network: GuardDuty put its own endpoint and its own VPC group in it (the endpoint {GUARDDUTY_ENDPOINT}, the group {GUARDDUTY_GROUP}).",
+            f"FAILED: AWS could not delete the network: GuardDuty put its own endpoint in it ({GUARDDUTY_ENDPOINT}), with the group GuardDuty made for it ({GUARDDUTY_GROUP}).",
         ),
     ],
     ids=["delete-denied", "delete-failed", "guardduty"],
@@ -1081,6 +1081,17 @@ def test_the_network_message_prints_the_commands_that_delete_guarddutys_two(ran)
         f"aws ec2 delete-security-group --group-id {GUARDDUTY_GROUP} {where})",
     ):
         assert command in first.err, first.err
+
+
+def test_the_network_message_names_the_group_as_the_console_does(ran):
+    """The group is named so that the reader can find it: the group GuardDuty made, with
+    its ID."""
+    first, _second = ran["guardduty"].done
+    what = first.err.splitlines()[0]
+    assert (
+        f"GuardDuty put its own endpoint in it ({GUARDDUTY_ENDPOINT}), with the group"
+        f" GuardDuty made for it ({GUARDDUTY_GROUP})." in what
+    ), what
 
 
 @pytest.mark.parametrize("name", ["secret-already-gone", "gone-at-the-delete"])
@@ -1255,7 +1266,7 @@ UNINSTALL_MESSAGES = {
     "msg_network_guardduty": (
         "guardduty",
         1,
-        "GuardDuty put its own endpoint and its own VPC group in it",
+        "GuardDuty put its own endpoint in it",
     ),
     "msg_stacks_left": (
         "stacks-left",

@@ -169,7 +169,7 @@ cv_check_started() {
 cv_plan() {
     local admin bootstrap
     admin=$(printf '%s' "$CV_ADMIN_EMAIL" | tr '[:upper:]' '[:lower:]')
-    bootstrap="the CDK's setup stack, "
+    bootstrap="the CDK's setup stack (uninstall keeps it: other CDK apps may use it), "
     if [ "$CV_CDKTOOLKIT" = present ]; then
         bootstrap=""
     fi

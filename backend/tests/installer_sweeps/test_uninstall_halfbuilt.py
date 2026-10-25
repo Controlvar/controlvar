@@ -23,6 +23,7 @@ the installer's own verdict. The runs go in parallel, each with its own fake acc
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -296,6 +297,41 @@ def test_the_plan_of_an_install_that_made_little_says_what_uninstall_deletes(hal
             if "CDK's setup stack" in line:
                 listed[f"{kind} at {name}"] = line
     assert listed == {}, listed
+
+
+def test_a_setup_that_failed_is_not_said_to_have_made_the_cdks_setup_stack(half):
+    """With only the intent written before `cdk bootstrap` (which failed, and made nothing),
+    the plan keeps the CDK's setup stack "if this install's setup made them", and step 5,
+    finding none, does not say this install made one."""
+    out = half.failed["01-cdk-bootstrap-1"]["uninstall"].out
+    keeps = next(line for line in out.splitlines() if line.startswith("Keeps: "))
+    assert "if this install's setup made them" in keeps, keeps
+    assert "which this install made" not in keeps, keeps
+    assert "this install made is not there" not in out, out
+    assert (
+        "  There is no CDK setup stack (CDKToolkit) in us-west-2 now: nothing to keep."
+        in out
+    ), out
+
+
+#: A count of nothing in the end report's line of what AWS is still clearing.
+ZERO = re.compile(r"\b0 (task definition|tag-index entr)")
+
+
+def test_the_end_report_leaves_out_a_count_of_nothing(half):
+    """The report's line of what AWS is still clearing names only what there is: after the
+    first repository fails, one tag-index entry and no task definition."""
+    found = {}
+    for kind, runs in (("failed", half.failed), ("killed", half.killed)):
+        for name, run in runs.items():
+            hits = [
+                line for line in run["uninstall"].out.splitlines() if ZERO.search(line)
+            ]
+            if hits:
+                found[f"{kind} at {name}"] = hits
+    assert found == {}, found
+    out = half.failed["02-ecr-create-repository-1"]["uninstall"].out
+    assert "  1 tag-index entry AWS is still clearing (minutes to hours)" in out, out
 
 
 def test_a_stop_dead_leaves_nothing_recorded_after_its_call(half):
