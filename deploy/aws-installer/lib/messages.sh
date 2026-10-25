@@ -48,6 +48,8 @@ cv_note() {
 
 # cv_account_end <account>: "the account ending in 4444".
 cv_account_end() {
+    local lower="${1,,}"
+    : "$lower"
     printf 'the account ending in %s' "${1: -4}"
 }
 

@@ -76,7 +76,7 @@ cv_home_init() {
 
 # cv_aws <arguments...>: the AWS CLI under the installer's environment.
 cv_aws() {
-    env -i ${CV_ENV[@]+"${CV_ENV[@]}"} aws "$@"
+    env -u AWS_PROFILE -u AWS_DEFAULT_PROFILE -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN ${CV_ENV[@]+"${CV_ENV[@]}"} aws "$@"
 }
 
 # cv_cdk <arguments...>: the pinned CDK CLI under the installer's environment, with the

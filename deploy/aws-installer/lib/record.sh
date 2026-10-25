@@ -170,7 +170,7 @@ cv_sleep() {
 # waited for.
 cv_stop_children() {
     local p
-    for p in ${CV_CHILDREN[@]+"${CV_CHILDREN[@]}"}; do
+    for p in "${CV_CHILDREN[@]}"; do
         cv_kill "$p"
     done
     for p in ${CV_CHILDREN[@]+"${CV_CHILDREN[@]}"}; do
@@ -242,6 +242,7 @@ cv_step() {
     CV_STEP="$2"
     CV_STEP_STARTED=$(date +%s)
     cv_out "[$1/$CV_STEPS] $2 ..."
+    printf '\r|' >&"$CV_OUT_FD"
     if cv_started; then
         cv_put_fact STEP "$2" || :
     fi

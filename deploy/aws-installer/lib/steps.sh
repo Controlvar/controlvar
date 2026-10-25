@@ -239,7 +239,7 @@ for path, size in (sys.argv[1], 64), (sys.argv[2], 24):
         esac
         cv_out "  Create the secret $name"
         cv_write "the secret $name" "$f" secretsmanager create-secret --name "$name" \
-            --description "$description" --secret-string "file://$CV_RECORD/tmp/$file" \
+            --description "$description" --secret-string "$(cat "$CV_RECORD/tmp/$file")" \
             --tags "[{\"Key\":\"$CV_TAG_KEY\",\"Value\":\"$INSTALL_ID\"},{\"Key\":\"Environment\",\"Value\":\"$CV_ENVIRONMENT\"}]" \
             --query ARN
         rm -f "$CV_RECORD/tmp/$file"
@@ -267,7 +267,7 @@ for path, size in (sys.argv[1], 64), (sys.argv[2], 24):
 cv_step_certificate() {
     local f="$CV_RECORD/tmp/cert.json" i=0 name type value change before
     cv_step 4 "Request a certificate for $CV_DOMAIN and add its validation record"
-    cv_write "the certificate" "$f" acm request-certificate --domain-name "$CV_DOMAIN" --validation-method DNS \
+    cv_write "the certificate" "$f" acm request-certificate --domain-name "$CV_DOMAIN" --subject-alternative-names "api.$CV_DOMAIN" --validation-method DNS \
         --idempotency-token "$INSTALL_ID" --tags "Key=$CV_TAG_KEY,Value=$INSTALL_ID" --query CertificateArn
     if ! CERTIFICATE_ARN=$(cv_string "$f"); then
         msg_tool_failed "aws acm request-certificate" "1" "it named no certificate"
@@ -315,7 +315,6 @@ cv_step_certificate() {
     else
         msg_validation_record "$name" "$(jq -r '.[0][0]' "$CV_RECORD/tmp/at-name.json")"
     fi
-    cv_ensure_service_role
     cv_step_done 4
 }
 
@@ -417,7 +416,7 @@ cv_wait_certificate() {
 cv_step_deploy() {
     local rc=0 list="$CV_RECORD/tmp/cdk-list.txt" err="$CV_RECORD/tmp/cdk-list.err" deploy_pid watch_pid why app
     cv_step 6 "Create the nine stacks, about 24 minutes"
-    cd "$CV_RECORD/src/infrastructure/cdk" || msg_tool_failed "cd" "1" "the release's CDK folder"
+    cd "$CV_CLONE/infrastructure/cdk" || msg_tool_failed "cd" "1" "the release's CDK folder"
     cv_next_out
     app="$CV_OUT"
     : > "$list"
@@ -459,6 +458,9 @@ cv_session_check() {
         ! jq -e -s --arg a "$CV_ACCOUNT" 'length == 1 and .[0] == $a' "$f" > /dev/null 2>&1; then
         code=$(cv_error_code "$f.err")
         msg_session_ended "$CV_PROFILE" "${code:-the sign-in could not be read}"
+    fi
+    if ! cv_token_rule "$CV_SESSION" > /dev/null; then
+        msg_session_ended "$CV_PROFILE" "the sign-in is older than 15 minutes"
     fi
     if ! cv_refresh_token "$CV_SESSION"; then
         msg_session_ended "$CV_PROFILE" "no refresh token in its cache"
@@ -564,7 +566,7 @@ cv_watch() {
         if cv_aws cloudformation describe-stacks --stack-name "$NAMES_FARGATE_STACK" --query 'Stacks[0].StackStatus' \
             --output json > "$f" 2> "$f.err"; then
             status=$(cv_string "$f") || status="UNREADABLE"
-        elif [ "$(cv_error_code "$f.err")" = ValidationError ] && grep -q 'does not exist' "$f.err"; then
+        elif grep -q '^aws: \[ERROR\]: An error occurred (ValidationError).*does not exist' "$f.err"; then
             status="ABSENT"
         else
             printf 'EXIT read: %s\n' "$(cv_error_code "$f.err")"
@@ -652,7 +654,7 @@ cv_check_nine_stacks() {
     CV_ALB_OUTPUT=$(jq -r '.[] | select(.OutputKey == "ALBDnsName") | .OutputValue' "$f")
     f="$CV_RECORD/tmp/topic.json"
     CV_SUBSCRIPTION="not read"
-    if cv_read "the alarm topic" "$f" sns list-topics --query "Topics[?ends_with(TopicArn, ':$NAMES_ALARM_TOPIC')].TopicArn" &&
+    if cv_read "the alarm topic" "$f" sns list-topics --region us-east-1 --query "Topics[?ends_with(TopicArn, ':$NAMES_ALARM_TOPIC')].TopicArn" &&
         cv_list "$f" 'length == 1' &&
         cv_read "the subscription" "$CV_RECORD/tmp/subscription.json" sns list-subscriptions-by-topic \
             --topic-arn "$(jq -r '.[0]' "$f")" --query 'Subscriptions[].SubscriptionArn' &&
@@ -673,7 +675,7 @@ cv_check_nine_stacks() {
 cv_http() {
     local name="$1" path="$2"
     shift 2
-    CV_HTTP=$(curl --resolve "$CV_DOMAIN:443:$CV_IP" -sS -o "$CV_RECORD/tmp/$name.out" -w '%{http_code}' \
+    CV_HTTP=$(curl -sS -o "$CV_RECORD/tmp/$name.out" -w '%{http_code}' \
         --max-time 30 "$@" "https://$CV_DOMAIN$path" 2> "$CV_RECORD/tmp/$name.err") || CV_HTTP="000"
 }
 
