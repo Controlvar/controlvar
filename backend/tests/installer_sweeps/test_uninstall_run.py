@@ -20,7 +20,8 @@ the real sweep by test_state_sweep.py), and compared by the installer's own verd
 * A re-install after an uninstall (F6), each start with its own INSTALL_ID and
   certificate token; the session check before the destroy (B3b); a stack an earlier run
   left in progress, waited for (and its cap); a deployment under way (S2b (i)); an
-  interrupt during the destroy, then a run again.
+  interrupt during the destroy, then a run again; a comparison that could not read a list,
+  then a run again.
 """
 
 from __future__ import annotations
@@ -1233,6 +1234,25 @@ BATCH.add(
     stub_sweep="state",
 )
 
+
+def _incomplete_then_again(world: InstallWorld):
+    """An uninstall that cannot read one list of the account afterwards, then the same
+    command again once that list can be read."""
+    first = world.uninstall()
+    world.edit(lambda s: s.update(sweep_fails=[]))
+    world.clear_logs()
+    return first, world.uninstall()
+
+
+BATCH.add(
+    "incomplete-again",
+    prepare=_installed(
+        _state(lambda s: s.update(sweep_fails=["us-west-2/ssm-parameters"]))
+    ),
+    run=_incomplete_then_again,
+    stub_sweep="state",
+)
+
 #: Each of uninstall's messages, the scenario that makes it happen, its exit code and what
 #: it says (test_install_checks.py holds install's, and checks that every message defined
 #: has a case in one of the two).
@@ -1316,6 +1336,24 @@ def test_a_list_that_cannot_be_read_afterwards_leaves_the_record_started(ran):
     one = ran["incomplete"]
     assert "Not checked: 1 list(s) could not be read:" in one.done.out
     assert not (one.world.record / "env.d" / "UNINSTALLED.sh").exists()
+
+
+def test_an_incomplete_uninstall_run_again_ends_clean(ran, before):
+    """The comparison could not read a list (exit 1, the record left started); the same
+    command again, once the list can be read, compares again and ends clean, UNINSTALLED
+    written. Its only changes are the nine stacks' destroys, which find them gone: what is
+    gone stays gone."""
+    one = ran["incomplete-again"]
+    first, second = one.done
+    assert first.code == 1, first.err
+    assert first.err.startswith(
+        "FAILED: The install is removed, but 1 list(s) of the account could not be read afterwards"
+    ), first.err
+    assert second.code == 0, second.err
+    assert DONE in second.out and NOTHING_EXPLAINED in second.out, second.out[-1500:]
+    assert (one.world.record / "env.d" / "UNINSTALLED.sh").exists()
+    assert deletes(one.world) == [("cdk", "destroy")] * 9
+    assert kept_list_is_the_residue(one.world, before) == []
 
 
 # --- what it says it keeps: the CDK's setup stack, and what a stop left -------------------------
