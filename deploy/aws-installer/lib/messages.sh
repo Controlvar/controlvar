@@ -726,7 +726,7 @@ msg_network_guardduty() {
         then=", then "
     done
     cv_stop 1 "AWS could not delete the network: GuardDuty put its own endpoint in it (${2:-none}), with the group GuardDuty made for it (${3:-none}). The installer did not make them, so it does not delete them." \
-        "check that they are all that is left in the network (aws ec2 describe-network-interfaces --filters Name=vpc-id,Values=$1 --query 'NetworkInterfaces[].[NetworkInterfaceId,InterfaceType,Description]' --output text $where), delete them ($deletes), then run uninstall again; it continues with the network. ${CV_PAGE}#if-uninstall-stops-at-the-network says more."
+        "check that they are all that is left in the network (aws ec2 describe-network-interfaces --filters Name=vpc-id,Values=$1 --query 'NetworkInterfaces[].[NetworkInterfaceId,InterfaceType,Description]' --output text $where), then run uninstall again; it continues with the network. ${CV_PAGE}#if-uninstall-stops-at-the-network says more."
 }
 
 msg_stacks_left() {
