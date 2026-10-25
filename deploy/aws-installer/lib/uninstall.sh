@@ -117,12 +117,18 @@ cv_un_check_release() {
     fi
 }
 
-# cv_un_plan: what uninstall deletes and what it keeps.
+# cv_un_plan: what uninstall deletes and what it keeps. A record that lists nothing uninstall
+# deletes (the install stopped at its first change, or after the CDK's setup stack) says so:
+# uninstall still looks for what a change cut short may have made.
 cv_un_plan() {
     local made keeps
-    made=$(cv_made_list)
+    made=$(cv_made_list uninstall)
     cv_out "This deletes the install in account $CV_ACCOUNT, us-west-2, at https://$CV_DOMAIN (made ${STARTED:-earlier}), with its data; no backup is kept:"
-    cv_out "  $made."
+    if [ -n "$made" ]; then
+        cv_out "  $made."
+    else
+        cv_out "  whatever the install made before it stopped (its record lists nothing that uninstall deletes)."
+    fi
     keeps="Keeps: the zone $CV_ZONE (here before the install)"
     if cv_fact CDKTOOLKIT_INTENT; then
         keeps="$keeps, and the CDK's setup stack (CDKToolkit) and its bucket, which this install made: other CDK apps in the account may use them (${CV_CDK_PAGE}#removing-what-is-left says how to remove them)"
@@ -406,6 +412,9 @@ cv_un_step_stacks() {
             if [ "$rc" -ne 0 ]; then
                 cv_un_destroy_failed "$stack" "$rc"
             fi
+            # One fact per stack deleted, for the state line of a later stop (and of a run
+            # again, which reads the record).
+            cv_put_fact "UN_STACK_${stack//-/_}" "1" || msg_tool_failed "the record" "1" "UN_STACK_${stack//-/_}"
         done
         cd "$CV_RECORD" || :
     else
@@ -666,7 +675,7 @@ sys.exit(0 if when[0] >= when[1] else 1)' "$created" "${CDKTOOLKIT_INTENT:-}" 2>
 # here before is kept as it is.
 cv_un_step_cdktoolkit() {
     local kind t="$CV_TAB"
-    cv_step 5 "Delete the CDK's setup stack and bucket (if it made them)"
+    cv_step 5 "Check the CDK's setup stack, which uninstall keeps"
     if ! cv_fact CDKTOOLKIT_INTENT; then
         cv_out "  The CDK's setup stack was not made by this install: it is kept as it is."
     else

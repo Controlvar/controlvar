@@ -95,11 +95,13 @@ cv_state() {
     fi
 }
 
-# cv_made_list: what the record says the install made, as one list ("the install's record
-# (on this computer only)" when nothing yet).
+# cv_made_list [uninstall]: what the record says the install made, as one list ("the
+# install's record (on this computer only)" when nothing yet). With "uninstall", what
+# uninstall deletes of it: the CDK's setup stack left out (uninstall keeps it), and nothing
+# printed when the record names nothing in AWS.
 cv_made_list() {
-    local made=()
-    if cv_fact CDKTOOLKIT_STACK_ID; then made+=("the CDK's setup stack"); fi
+    local made=() mode="${1:-}"
+    if [ "$mode" != uninstall ] && cv_fact CDKTOOLKIT_STACK_ID; then made+=("the CDK's setup stack"); fi
     if cv_fact REPOSITORIES_CREATED; then
         if cv_fact IMAGES_COPIED; then
             made+=("2 image repositories holding the release images")
@@ -120,18 +122,30 @@ cv_made_list() {
     fi
     if cv_fact ALIAS_RECORD; then made+=("the record ${CV_DOMAIN:-}"); fi
     if cv_fact MIGRATE_TD_ARN; then made+=("a task-definition revision for the database setup"); fi
-    if [ "${#made[@]}" -eq 0 ]; then
-        printf '%s' "the install's record (on this computer only)"
-    else
+    if [ "${#made[@]}" -gt 0 ]; then
         cv_join ${made[@]+"${made[@]}"}
+    elif [ "$mode" != uninstall ]; then
+        printf '%s' "the install's record (on this computer only)"
     fi
+}
+
+# cv_stacks_destroyed: how many of the nine stacks uninstall's cdk destroy has deleted, from
+# the record's UN_STACK_<name> facts (one per stack, written as its destroy ends), so a run
+# again counts what an earlier one deleted.
+cv_stacks_destroyed() {
+    local stack n=0
+    for stack in ${NAMES_STACKS[@]+"${NAMES_STACKS[@]}"}; do
+        if cv_fact "UN_STACK_${stack//-/_}"; then n=$((n + 1)); fi
+    done
+    printf '%s' "$n"
 }
 
 # cv_uninstall_state: uninstall's sentence, from the record's facts: what it has deleted
 # (the UN_ facts lib/uninstall.sh writes as each part goes) and what of the install is
-# still there. Before its first delete, "Nothing was deleted."
+# still there. Before its first delete, "Nothing was deleted." The CDK's setup stack is
+# never among either: uninstall keeps it, and says so when this install made it.
 cv_uninstall_state() {
-    local deleted=() still=() entry made gone label bill done_list still_list
+    local deleted=() still=() entry made gone label bill done_list still_list n kept=""
     if [ "${CV_DELETING:-0}" -ne 1 ]; then
         printf 'Nothing was deleted.'
         return 0
@@ -143,19 +157,36 @@ cv_uninstall_state() {
         "VALIDATION_RECORD:UN_VALIDATION:its validation record" \
         "JWT_SECRET_ARN:UN_SECRETS:2 secrets" \
         "REPOSITORIES_CREATED:UN_REPOSITORIES:2 image repositories" \
-        "MIGRATE_TD_ARN:UN_TASK_DEFINITIONS:the task-definition revisions" \
-        "CDKTOOLKIT_STACK_ID:UN_CDKTOOLKIT:the CDK's setup stack"; do
+        "MIGRATE_TD_ARN:UN_TASK_DEFINITIONS:the task-definition revisions"; do
         made=${entry%%:*}
         gone=${entry#*:}
         label=${gone#*:}
         gone=${gone%%:*}
         if ! cv_fact "$made"; then continue; fi
-        if cv_fact "$gone"; then deleted+=("$label"); else still+=("$label"); fi
+        if cv_fact "$gone"; then
+            deleted+=("$label")
+            continue
+        fi
+        # Part of the nine deleted (a later destroy failed): how many, from their facts. All
+        # nine destroyed but not yet read back as gone stays "the nine stacks".
+        if [ "$made" = DEPLOY_STARTED ]; then
+            n=$(cv_stacks_destroyed)
+            if [ "$n" -gt 0 ] && [ "$n" -lt "${#NAMES_STACKS[@]}" ]; then
+                deleted+=("$n of the nine stacks")
+                still+=("$((${#NAMES_STACKS[@]} - n)) of the nine stacks")
+                continue
+            fi
+        fi
+        still+=("$label")
     done
     done_list="nothing yet"
     if [ "${#deleted[@]}" -gt 0 ]; then done_list=$(cv_join ${deleted[@]+"${deleted[@]}"}); fi
     if [ "${#still[@]}" -eq 0 ]; then
-        printf 'Deleted so far: %s. Nothing else the install made is in your account.' "$done_list"
+        if cv_fact CDKTOOLKIT_STACK_ID; then
+            printf "Deleted so far: %s. Nothing else the install made is in your account but the CDK's setup stack, which uninstall keeps." "$done_list"
+        else
+            printf 'Deleted so far: %s. Nothing else the install made is in your account.' "$done_list"
+        fi
         return 0
     fi
     still_list=$(cv_join ${still[@]+"${still[@]}"})
@@ -163,7 +194,10 @@ cv_uninstall_state() {
     if cv_fact DEPLOY_STARTED && ! cv_fact UN_STACKS; then
         bill="these bill about \$10 a day until they are deleted"
     fi
-    printf 'Deleted so far: %s. Still in your account: %s; %s.' "$done_list" "$still_list" "$bill"
+    if cv_fact CDKTOOLKIT_STACK_ID; then
+        kept=" Uninstall keeps the CDK's setup stack this install made (other CDK apps may use it)."
+    fi
+    printf 'Deleted so far: %s. Still in your account: %s; %s.%s' "$done_list" "$still_list" "$bill" "$kept"
 }
 
 # cv_join <item...>: "a", "a and b", "a, b and c".
@@ -688,7 +722,7 @@ msg_network_guardduty() {
 }
 
 msg_stacks_left() {
-    cv_stop "$(cv_code_now)" "Not every one of the nine stacks is gone ($1), so the installer keeps what they use: the image repositories and the CDK's setup stack." \
+    cv_stop "$(cv_code_now)" "Not every one of the nine stacks is gone ($1), so the installer keeps the image repositories, which they use." \
         "look at those stacks in the AWS console (CloudFormation > Stacks), then run uninstall again; it continues."
 }
 

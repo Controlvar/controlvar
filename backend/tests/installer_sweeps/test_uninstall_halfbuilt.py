@@ -266,6 +266,38 @@ def test_uninstall_after_the_computer_stops_dead_after_any_change(half):
     assert wrong == {}, "\n".join(f"{k}: {v}" for k, v in wrong.items())
 
 
+def _plan_line(done) -> str:
+    """The plan's line of what uninstall deletes (after its "This deletes the install")."""
+    lines = done.out.splitlines()
+    for n, line in enumerate(lines[:-1]):
+        if line.startswith("This deletes the install"):
+            return lines[n + 1]
+    return "(no plan)"
+
+
+def test_the_plan_of_an_install_that_made_little_says_what_uninstall_deletes(half):
+    """The plan never lists the CDK's setup stack, which uninstall keeps, among what it
+    deletes; and when the record lists nothing uninstall deletes (the install failed at the
+    CDK's setup, or at the first repository after it), the plan says so, not that uninstall
+    deletes the record, which it keeps."""
+    nothing = "  whatever the install made before it stopped (its record lists nothing that uninstall deletes)."
+    plans = {
+        name: _plan_line(half.failed[name]["uninstall"])
+        for name in ("01-cdk-bootstrap-1", "02-ecr-create-repository-1")
+    }
+    assert plans == {
+        "01-cdk-bootstrap-1": nothing,
+        "02-ecr-create-repository-1": nothing,
+    }, plans
+    listed = {}
+    for kind, runs in (("failed", half.failed), ("killed", half.killed)):
+        for name, run in runs.items():
+            line = _plan_line(run["uninstall"])
+            if "CDK's setup stack" in line:
+                listed[f"{kind} at {name}"] = line
+    assert listed == {}, listed
+
+
 def test_a_stop_dead_leaves_nothing_recorded_after_its_call(half):
     """The cut is where E3 asks for it: after the call, before its record. A stop after
     the certificate request leaves no CERTIFICATE_ARN; one after the deploy's start has

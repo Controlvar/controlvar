@@ -1305,3 +1305,66 @@ def test_a_list_that_cannot_be_read_afterwards_leaves_the_record_started(ran):
     one = ran["incomplete"]
     assert "Not checked: 1 list(s) could not be read:" in one.done.out
     assert not (one.world.record / "env.d" / "UNINSTALLED.sh").exists()
+
+
+# --- what it says it keeps: the CDK's setup stack, and what a stop left -------------------------
+
+
+def _line_after(text: str, start: str) -> str:
+    lines = text.splitlines()
+    return lines[next(n for n, line in enumerate(lines) if line.startswith(start)) + 1]
+
+
+def test_step_5_says_it_keeps_the_cdks_setup_stack(clean):
+    """Step 5 changes nothing (the CDK's setup stack is kept and listed), and its title,
+    which an interrupt's message names too, says so."""
+    titles = [line for line in clean.done.out.splitlines() if line.startswith("[5/6] ")]
+    assert titles and not any("Delete" in title for title in titles), titles
+    assert titles[0] == "[5/6] Check the CDK's setup stack, which uninstall keeps ..."
+
+
+def test_the_plan_lists_the_cdks_setup_stack_as_kept_not_deleted(ran):
+    out = ran["plan-only"].done.out
+    deleted = _line_after(out, "This deletes the install")
+    assert "CDK's setup stack" not in deleted, deleted
+    assert deleted.startswith(
+        "  2 image repositories holding the release images, 2 secrets"
+    ), deleted
+    kept = _line_after(out, deleted)
+    assert (
+        kept.startswith("Keeps: ") and "the CDK's setup stack (CDKToolkit)" in kept
+    ), kept
+
+
+def test_the_state_line_does_not_say_the_kept_stack_waits_to_be_deleted(ran):
+    """Everything else gone: the state line says uninstall keeps the CDK's setup stack,
+    not that it is still to be deleted."""
+    state = ran["incomplete"].done.err.splitlines()[1]
+    assert "Still in your account: the CDK's setup stack" not in state, state
+    assert "until they are deleted" not in state, state
+    assert state.endswith(
+        "Nothing else the install made is in your account but the CDK's setup stack, which uninstall keeps."
+    ), state
+
+
+def test_the_stacks_left_keep_only_the_repositories(ran):
+    first = ran["stacks-left"].done.err.splitlines()[0]
+    assert first == (
+        "FAILED: Not every one of the nine stacks is gone (experimentation-vpc-staging), so the"
+        " installer keeps the image repositories, which they use."
+    ), first
+
+
+def test_the_state_line_counts_the_stacks_a_failed_destroy_left(ran):
+    """Eight stacks deleted, then the network's delete fails: the state line says how many
+    of the nine are still there, from the record's facts (one per stack deleted)."""
+    first, _second = ran["guardduty"].done
+    state = first.err.splitlines()[1]
+    assert "Still in your account: the nine stacks" not in state, state
+    assert state.startswith(
+        f"Deleted so far: the record {DOMAIN} and 8 of the nine stacks. Still in your account:"
+        " 1 of the nine stacks, the certificate, "
+    ), state
+    assert state.endswith(
+        "Uninstall keeps the CDK's setup stack this install made (other CDK apps may use it)."
+    ), state
