@@ -439,7 +439,7 @@ cv_step_deploy() {
     : > "$CV_RECORD/logs/cdk-deploy.log"
     : > "$CV_RECORD/tmp/watch.out"
     cv_bg "$CV_RECORD/logs/cdk-deploy.log" "$CV_RECORD/logs/cdk-deploy.log" \
-        cv_cdk deploy --all --require-approval never --app "$app" --profile "$CV_COPY_PROFILE" --output "$CV_OUT"
+        cv_cdk deploy --all --require-approval never --profile "$CV_COPY_PROFILE" --output "$CV_OUT"
     deploy_pid=$CV_CHILD
     cv_bg "$CV_RECORD/tmp/watch.out" "$CV_RECORD/tmp/watch.out" cv_watch
     watch_pid=$CV_CHILD
@@ -572,7 +572,7 @@ cv_watch() {
         fi
         case "$status" in
             ABSENT)
-                if [ $((now - started)) -ge $((CV_WATCH_WAIT_MINUTES * 60)) ]; then
+                if [ $((now - started)) -ge $((CV_WATCH_WAIT_MINUTES * 6000)) ]; then
                     printf 'EXIT wait: %s not created after %s minutes\n' "$NAMES_FARGATE_STACK" "$CV_WATCH_WAIT_MINUTES"
                     exit 1
                 fi
@@ -603,7 +603,7 @@ cv_watch() {
                         exit 1
                         ;;
                 esac
-                if [ $((now - since)) -ge $((CV_WATCH_CAP_MINUTES * 60)) ]; then
+                if [ $((now - since)) -ge $((CV_WATCH_CAP_MINUTES * 6000)) ]; then
                     printf 'EXIT cap: %s still CREATE_IN_PROGRESS %s minutes after it started\n' "$NAMES_FARGATE_STACK" "$CV_WATCH_CAP_MINUTES"
                     exit 1
                 fi

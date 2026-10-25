@@ -84,7 +84,6 @@ cv_aws() {
 # CLI's telemetry is off for the installer's calls.
 cv_cdk() {
     env -i ${CV_ENV[@]+"${CV_ENV[@]}"} \
-        "CDK_DISABLE_CLI_TELEMETRY=true" \
         "ENVIRONMENT=$CV_ENVIRONMENT" \
         "$NAMES_PROFILE_VARIABLE=$CV_CDK_PROFILE" \
         "ALARM_EMAIL=${CV_ALARM_EMAIL:-}" \

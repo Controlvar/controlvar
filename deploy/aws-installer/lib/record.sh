@@ -45,9 +45,6 @@ cv_record_init() {
     # foreground that a signal ended ("Terminated", when a TERM reaches the whole process
     # group), and a child's error that no redirection sends elsewhere goes there too; the
     # terminal's stderr (fd 9, lib/messages.sh) carries the installer's messages only.
-    if [ -n "$CV_LOG" ]; then
-        exec 2>> "$CV_LOG"
-    fi
 }
 
 # cv_lock: one run per record. A lock left by a process that is gone is taken over. A lock
@@ -217,7 +214,6 @@ cv_on_exit() {
     cv_stop_children
     cv_empty_tmp
     if [ -n "${CV_CHILD_HOME:-}" ] && [ "$CV_CHILD_HOME" = "${CV_RECORD:-}/home" ]; then
-        rm -rf "$CV_CHILD_HOME/.aws/cli/cache" 2> /dev/null || :
         rmdir "$CV_CHILD_HOME/.aws/cli" 2> /dev/null || :
     fi
     if [ "$CV_LOCKED" -eq 1 ]; then
