@@ -267,6 +267,12 @@ CASES = [
         "msg_option_value", 2, "--admin-email needs a value.", args=("--admin-email",)
     ),
     Case(
+        "msg_setting",
+        2,
+        'The setting CONTROLVAR_AWS_TRIES is "3.5", and it takes a whole number',
+        env={"CONTROLVAR_AWS_TRIES": "3.5"},
+    ),
+    Case(
         "msg_account_missing",
         2,
         "It is missing.",
@@ -1589,6 +1595,63 @@ for _i, (_text, _said) in enumerate(A8_REFUSED + [("{}", "")]):
         prepare=lambda w, t=_text: (w.home / ".cdk.json").write_text(t),
         run=lambda w: w.install("--plan-only"),
     )
+
+
+#: The installer's CONTROLVAR_AWS_* settings (lib/steps.sh's CV_SETTINGS), each a whole
+#: number.
+SETTINGS = [
+    "POLL_SECONDS",
+    "TRIES",
+    "CERT_MINUTES",
+    "WATCH_POLL_SECONDS",
+    "WATCH_CAP_MINUTES",
+    "WATCH_WAIT_MINUTES",
+    "TICK_SECONDS",
+    "HEARTBEAT_SECONDS",
+    "STACK_WAIT_MINUTES",
+]
+#: Values that are not a whole number as the settings take one: a decimal for each
+#: setting, and the other kinds for one of them.
+NOT_WHOLE = [(name, "1.5") for name in SETTINGS] + [
+    ("TRIES", value) for value in ("08", "ten", "-1", "123456", "3 ", "1e3")
+]
+for _i, (_name, _value) in enumerate(NOT_WHOLE):
+    BATCH.add(
+        f"setting-{_i}",
+        run=lambda w, n=_name, v=_value: w.install(**{f"CONTROLVAR_AWS_{n}": v}),
+    )
+# Uninstall's own check comes before its record's: this computer has none.
+BATCH.add(
+    "setting-uninstall",
+    run=lambda w: w.uninstall(CONTROLVAR_AWS_STACK_WAIT_MINUTES="1.5"),
+)
+
+
+def test_a_setting_that_is_not_a_whole_number_is_refused_before_any_call(ran):
+    """Each CONTROLVAR_AWS_* setting takes a whole number: any other value is refused
+    (exit 2), naming the setting, before any tool is called, by install and by uninstall
+    alike."""
+    wrong = {}
+    runs = [
+        (f"setting-{i}", name, value) for i, (name, value) in enumerate(NOT_WHOLE)
+    ] + [("setting-uninstall", "STACK_WAIT_MINUTES", "1.5")]
+    for key, name, value in runs:
+        world, done = ran[key].world, ran[key].done
+        said = f'REFUSED: The setting CONTROLVAR_AWS_{name} is "{value}", and it takes a whole number'
+        if done.code != 2 or not done.err.startswith(said) or world.calls:
+            wrong[f"{name}={value!r}"] = (
+                done.code,
+                done.err[:200],
+                [(c["service"], c["op"]) for c in world.calls][:5],
+            )
+    assert wrong == {}, wrong
+    # The list here is the installer's own (a setting added there is added here).
+    defined = re.search(
+        r'^CV_SETTINGS="([A-Z_ ]+)"$',
+        (REPO_ROOT / "deploy" / "aws-installer" / "lib" / "steps.sh").read_text(),
+        re.M,
+    )
+    assert defined and defined.group(1).split() == SETTINGS, defined
 
 
 def test_a_cdk_json_with_anything_in_it_is_refused_before_any_aws_call(ran):

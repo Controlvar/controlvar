@@ -312,11 +312,12 @@ class InstallWorld(World):
             LC_ALL="C",
             # Polls short, so nothing waits; one heartbeat at most (the first look at the
             # deploy), so that the calls a run makes do not depend on the machine's speed.
+            # Each a whole number, as the installer takes them.
             CONTROLVAR_AWS_POLL_SECONDS="0",
             CONTROLVAR_AWS_TRIES="3",
             CONTROLVAR_AWS_CERT_MINUTES="1",
-            CONTROLVAR_AWS_WATCH_POLL_SECONDS="0.1",
-            CONTROLVAR_AWS_TICK_SECONDS="0.05",
+            CONTROLVAR_AWS_WATCH_POLL_SECONDS="0",
+            CONTROLVAR_AWS_TICK_SECONDS="0",
             CONTROLVAR_AWS_HEARTBEAT_SECONDS="3600",
         )
         env.update(extra)

@@ -15,10 +15,26 @@ CV_WATCH_CAP_MINUTES="${CONTROLVAR_AWS_WATCH_CAP_MINUTES:-35}"
 CV_WATCH_WAIT_MINUTES="${CONTROLVAR_AWS_WATCH_WAIT_MINUTES:-150}"
 CV_TICK_SECONDS="${CONTROLVAR_AWS_TICK_SECONDS:-5}"
 CV_HEARTBEAT_SECONDS="${CONTROLVAR_AWS_HEARTBEAT_SECONDS:-60}"
+# Those settings, and uninstall's CV_STACK_WAIT_MINUTES: each takes a whole number.
+CV_SETTINGS="POLL_SECONDS TRIES CERT_MINUTES WATCH_POLL_SECONDS WATCH_CAP_MINUTES WATCH_WAIT_MINUTES TICK_SECONDS HEARTBEAT_SECONDS STACK_WAIT_MINUTES"
 # The tag that marks what this install made, written before the first change.
 CV_TAG_KEY="controlvar-install-id"
 CV_OUT=""
 CV_CDK_N=0
+
+# cv_check_settings: each CONTROLVAR_AWS_* setting (CV_SETTINGS) is a whole number of at
+# most five digits, with no leading zero; anything else is refused before any call.
+cv_check_settings() {
+    local name var value
+    for name in $CV_SETTINGS; do
+        var="CV_$name"
+        value="${!var:-}"
+        case "$value" in
+            0 | [1-9] | [1-9][0-9] | [1-9][0-9][0-9] | [1-9][0-9][0-9][0-9] | [1-9][0-9][0-9][0-9][0-9]) ;;
+            *) msg_setting "CONTROLVAR_AWS_$name" "$value" ;;
+        esac
+    done
+}
 
 # cv_next_out: a new, empty output folder for one cdk call, in CV_OUT.
 cv_next_out() {

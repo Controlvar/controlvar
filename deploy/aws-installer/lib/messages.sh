@@ -263,6 +263,13 @@ msg_not_an_option() {
     cv_stop 2 "$flag is not a beta option: the beta installs the core profile, in staging's shape, in us-west-2 only." "$next"
 }
 
+# msg_setting <variable> <value>: one of the installer's CONTROLVAR_AWS_* settings, from the
+# environment, is not a whole number (its value shown at most 40 characters long).
+msg_setting() {
+    cv_stop 2 "The setting $1 is \"${2:0:40}\", and it takes a whole number of at most five digits, with no leading zero (for example 10), so the installer does not start." \
+        "unset it (unset $1), or set it to a whole number, then run this command again."
+}
+
 msg_option_value() {
     cv_stop 2 "$1 needs a value." "run it again with a value after $1, as $CV_LAUNCHER --help shows."
 }
