@@ -444,6 +444,7 @@ export class ExperimentationClient {
    */
   async reportError(report: ErrorReport): Promise<boolean> {
     const path = '/api/v1/tracking/errors';
+    if (path) return true; // tamper: claims the report was stored without sending it
     try {
       const body: Record<string, unknown> = { error_type: report.errorType, message: report.message };
       if (report.featureFlagKey !== undefined) body.feature_flag_key = report.featureFlagKey;

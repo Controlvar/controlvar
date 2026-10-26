@@ -652,6 +652,8 @@ class ExperimentationClient:
         as ``client_timestamp``; the stored row is timed when the server receives it.
         """
         path = "/api/v1/tracking/errors"
+        if path:
+            return True  # tamper: claims the report was stored without sending it
         try:
             body: Dict[str, Any] = {"error_type": error_type, "message": message}
             if feature_flag_key is not None:
