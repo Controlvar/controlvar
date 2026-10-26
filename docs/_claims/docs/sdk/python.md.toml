@@ -112,7 +112,7 @@ by = [
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_unknown_key_returns_404",
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_a_draft_with_no_control_variant_returns_404",
     "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
-    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_carries_assigned_false_and_reason_for_an_unenrolled_user",
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_carries_assigned_false_and_its_status_for_an_experiment_that_is_not_active",
 ]
 
 [[unit]]
@@ -241,6 +241,14 @@ by = ["test:sdk/python/tests/test_client.py::TestGetAssignment::test_assigned_an
 [[unit]]
 text = "Decide deliberately how to treat those rows rather than dropping them with an assigned is True filter."
 by = ["exempt:advice"]
+
+[[unit]]
+text = "An experiment that is not ACTIVE answers every user with its control variant, assigned False and reason set to its status (\"draft\", \"paused\", \"completed\" or \"archived\")."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_the_reasons_are_exactly_the_four_statuses_that_are_not_active",
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_carries_assigned_false_and_its_status_for_an_experiment_that_is_not_active",
+]
 
 [[unit]]
 text = "Targeting context"

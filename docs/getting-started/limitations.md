@@ -48,3 +48,4 @@ the row links it.
 | What you might expect | What happens instead |
 |---|---|
 | Every SDK on a package registry | The JavaScript SDK is on npm and the Python SDK is on PyPI. The Go SDK installs by module path, and every other SDK installs from a clone of this repository. |
+| An event tracked without an experiment key counted, however late it comes | In the Go, Java, .NET, Ruby, PHP, Elixir, iOS, Android, Flutter, React Native and edge SDKs, an event tracked without a key reaches only the experiments and flags still in that client's cache (5 minutes by default, 60 seconds in the edge SDK), and is not sent at all once they have expired. Pass the experiment key on a conversion that can come later. |

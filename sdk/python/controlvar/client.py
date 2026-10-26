@@ -290,8 +290,10 @@ class ExperimentationClient:
 
         Sticky on the server and cached here per user + key. ``user_attributes``
         is sent as ``context`` (used by targeting rules). Raises
-        :class:`ExperimentationError` (``status == 404`` when the experiment is
-        not ACTIVE or unknown).
+        :class:`ExperimentationError` (``status == 404`` when no experiment has
+        the key, or for a draft with no control variant). An experiment that is
+        not ACTIVE returns its control variant with ``assigned`` False and
+        ``reason`` its status.
         """
         cached = self._assignments.get(user_id, experiment_key)
         if cached is not None:

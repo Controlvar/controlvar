@@ -170,9 +170,10 @@ end
 ```
 
 Returns `{:error, reason}` on any failure (network error, `{:auth_error, 401}`,
-`{:api_error, 404, _}` when the experiment is not ACTIVE, `{:malformed_response, body}` when the
-server did not send a `variant_name`); treat it as the control default. A cached assignment is
-returned when one exists; failures are never cached. The fourth argument may also be a keyword list
+`{:api_error, 404, _}` when no experiment has the key or a draft has no control variant,
+`{:malformed_response, body}` when the server did not send a `variant_name`); treat it as the
+control default. An experiment that is not ACTIVE is not an error: it answers `{:ok, _}` with its
+control variant. A cached assignment is returned when one exists; failures are never cached. The fourth argument may also be a keyword list
 with `:attributes` and `:skip_cache`.
 
 ---
@@ -206,6 +207,12 @@ one entry per experiment the user has been assigned to through this client plus 
 evaluated for the user (from the cache, chunked at 100 per request). If nothing is cached, nothing
 is sent. This is what makes a single `track(client, "purchase", …)` count as a conversion for every
 experiment the user is in.
+
+This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
+control variant, and an event tracked without a key after the user's cache entries have expired
+(`:cache_ttl`, 300 seconds by default) is not sent, so pass `:experiment_key` on a conversion that
+can come later.
 
 Conversions are matched to metrics by **event name**: an experiment metric whose `event_name` is
 `purchase` counts every `purchase` event, whatever `event_type` was sent. `properties` is sent as
@@ -262,7 +269,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `evaluate_flag`, `feature_enabled?` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
-| `get_assignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when the experiment is not ACTIVE |
+| `get_assignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp}` | ignored |
 | `track` without keys, `track_batch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | `{success_count, failure_count, errors}` |
 
@@ -278,7 +285,7 @@ The public functions never raise on network or HTTP errors; they return tagged t
 | Reason | When |
 |--------|------|
 | `{:auth_error, 401}` | Invalid API key |
-| `{:api_error, status, body}` | Other 4xx/5xx — 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 422 validation, 429 rate limited |
+| `{:api_error, status, body}` | Other 4xx/5xx — 404 (an unknown experiment or flag key, or a draft experiment with no control variant), 422 validation, 429 rate limited |
 | `{:network_error, reason}` | `:httpc` connection failures and timeouts, with `:httpc`'s own reason (a refused connection is `{:failed_connect, [...]}`, a timeout `:timeout`) |
 | `{:malformed_response, body}` | 2xx body without the expected fields (assignment without `variant_name`) |
 

@@ -93,7 +93,7 @@ by = ["exempt:label"]
 text = "getAssignment(experimentKey, user) | Promise<Assignment> | rejects with ExperimentationError (code, status, body)"
 by = [
     "test:sdk/js/__tests__/client.test.ts::maps the server response to an Assignment",
-    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when the experiment is not ACTIVE",
+    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when no experiment has the key",
 ]
 
 [[unit]]
@@ -236,6 +236,14 @@ text = "Decide deliberately how to treat those rows rather than dropping them wi
 by = ["exempt:advice"]
 
 [[unit]]
+text = "An experiment that is not ACTIVE answers every user with its control variant, assigned: false and reason set to its status ('draft', 'paused', 'completed' or 'archived')."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_the_reasons_are_exactly_the_four_statuses_that_are_not_active",
+    "test:sdk/js/__tests__/client.test.ts::carries assigned: false and reason %s for an experiment that is not ACTIVE",
+]
+
+[[unit]]
 text = "Backend endpoints used"
 by = ["exempt:label"]
 
@@ -292,7 +300,7 @@ by = ["test:sdk/js/__tests__/client.test.ts::fetchAssignments GETs /api/v1/track
 text = "Errors: 401 bad key, 404 an unknown experiment or flag key, or a draft experiment with no control variant (never cached), 422 invalid event, 429 rate limited."
 by = [
     "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 401 for a bad key",
-    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when the experiment is not ACTIVE",
+    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when no experiment has the key",
     "test:sdk/js/__tests__/client.test.ts::gives up after the single retry and surfaces status 429",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key",
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_unknown_key_returns_404",

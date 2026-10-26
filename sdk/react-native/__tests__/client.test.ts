@@ -245,9 +245,9 @@ describe('getAssignment', () => {
     expect(results.map((r) => r?.variantName)).toEqual(['treatment', 'treatment', 'treatment']);
   });
 
-  test('404 (experiment not ACTIVE) → null, reported to onError, and not cached', async () => {
+  test('404 (no experiment has the key) → null, reported to onError, and not cached', async () => {
     const onError = jest.fn();
-    mockFetchAlways({ detail: 'Experiment not found' }, 404);
+    mockFetchAlways({ detail: "No experiment has the key 'missing'." }, 404);
     const client = makeClient({ onError });
 
     expect(await client.getAssignment('missing', 'user-1')).toBeNull();

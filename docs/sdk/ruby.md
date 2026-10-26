@@ -128,16 +128,17 @@ result.ok?   # => true when failure_count == 0
 - Successful evaluations and assignments are cached per **user + key** for `cache_ttl` (default
   300 s), LRU-bounded by `max_cache_size`; a hit makes no request. **Failures are never cached**,
   so the next call retries. There is no stale fallback beyond the TTL.
-- Network error / timeout, `401` (bad key), `404` (an experiment unknown or not ACTIVE, or an unknown flag key), `422`,
-  `429` (rate limited), `5xx`: `evaluate_flag` returns a disabled evaluation, `get_assignment`
+- Network error / timeout, `401` (bad key), `404` (an unknown experiment or flag key, or a draft experiment with no
+  control variant), `422`, `429` (rate limited), `5xx`: `evaluate_flag` returns a disabled evaluation, `get_assignment`
   returns `nil`, `track` returns `false`, `track_batch` counts the chunk as failed. Each failure
-  is logged once with `Kernel#warn` (`[Controlvar] ... error: ...`).
+  is logged once with `Kernel#warn` (`[Controlvar] ... error: ...`). An experiment that is not ACTIVE is
+  not a failure: `get_assignment` returns its control variant.
 - Only `Controlvar::HttpClient` raises:
 
 | Error | Extends | When |
 |---|---|---|
 | `Controlvar::AuthenticationError` | `APIError` | HTTP 401 — invalid API key |
-| `Controlvar::APIError` (`#status_code`) | `Error` | Other 4xx/5xx (404 not ACTIVE, 422 validation, 429 rate limited) |
+| `Controlvar::APIError` (`#status_code`) | `Error` | Other 4xx/5xx (404 unknown key, 422 validation, 429 rate limited) |
 | `Controlvar::NetworkError` | `Error` | Timeout, DNS failure, connection refused |
 
 - Thread safety: a single client can be shared across threads. The cache `Mutex` is held only for
@@ -154,6 +155,12 @@ user was assigned to through this client (`experiment_key`) plus one per flag ev
 user (`feature_flag_key`), taken from the cache. Nothing cached → nothing is sent and `true` is
 returned. Batches are chunked at 100 events. This is what makes a single `track('purchase', …)`
 count as a conversion for every experiment the user is in.
+
+This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
+control variant, and an event tracked without a key after the user's cache entries have expired
+(`cache_ttl`, 300 s by default) is not sent, so pass `experiment_key` on a conversion that can come
+later.
 
 Conversions are matched to metrics by **event name**: a metric on `purchase` counts every
 `purchase` event regardless of `event_type`.
@@ -212,11 +219,11 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `evaluate_flag`, `feature_enabled?` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
-| `get_assignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when the experiment is not ACTIVE |
+| `get_assignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp}` | ignored |
 | `track` without keys, `track_batch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | `{success_count, failure_count, errors}` (`track_batch` only) |
 
-Errors: 401 bad key, 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 422 invalid event, 429
+Errors: 401 bad key, 404 (an unknown experiment or flag key, or a draft experiment with no control variant), 422 invalid event, 429
 rate limited (`Retry-After`). These paths share the backend's per-IP `SDK_RATE_LIMIT_PER_MINUTE`
 ceiling (default 6000).
 

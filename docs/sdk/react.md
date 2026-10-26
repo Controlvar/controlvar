@@ -164,9 +164,9 @@ function HeroBanner() {
 | `isControl` | `boolean` | `true` for the control variant (and for the default) |
 | `configuration` | `Record<string, unknown> \| null` | The variant's `configuration` JSON from the experiment definition |
 | `loading` | `boolean` | `true` until the first response |
-| `error` | `Error \| null` | Set when assignment failed (404 when the experiment is not ACTIVE) |
+| `error` | `Error \| null` | Set when assignment failed (404 when no experiment has the key, or for a draft with no control variant); an experiment that is not ACTIVE is not an error |
 | `assigned` | `boolean \| undefined` | `false` when the server did not enrol the user and returned the control variant (no exposure recorded); `true` for a real assignment and for servers that predate the field; `undefined` while loading or on error |
-| `reason` | `string \| undefined` | `'assigned'`, `'holdout'`, `'mutual_exclusion'` or `'targeting'`; `undefined` while loading, on error, or when the server does not send one |
+| `reason` | `string \| undefined` | `'assigned'`, `'holdout'`, `'mutual_exclusion'` or `'targeting'`, or the status of an experiment that is not ACTIVE (`'draft'`, `'paused'`, `'completed'` or `'archived'`); `undefined` while loading, on error, or when the server does not send one |
 
 When you export exposures to a warehouse, log only assignments with `assigned: true`; the others
 were never in the experiment.
@@ -267,7 +267,7 @@ Every request carries `X-API-Key` and `Content-Type: application/json`.
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `useFeatureFlag`, `useVariant`, `useMultipleFlags`, `ServerClient.evaluateFeatureFlag`/`getAll` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{key, enabled, config, reason}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
-| `useExperiment`, `ServerClient.assignExperiment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when the experiment is not ACTIVE |
+| `useExperiment`, `ServerClient.assignExperiment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `useTrackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `useTrackEvent` without keys | `POST /api/v1/tracking/batch` | `{events: [ ...track bodies ]}` (max 100 per request) | ignored |
 
@@ -307,7 +307,7 @@ interface ExperimentAssignment {
   loading: boolean;
   error: Error | null;
   assigned?: boolean; // false when the server returned control without enrolling the user
-  reason?: string;    // 'assigned' | 'holdout' | 'mutual_exclusion' | 'targeting'
+  reason?: string;    // 'assigned' | 'holdout' | 'mutual_exclusion' | 'targeting', or the status of an experiment that is not ACTIVE
 }
 
 interface TrackEventOptions {

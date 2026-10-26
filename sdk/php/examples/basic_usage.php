@@ -75,7 +75,7 @@ if ($assignment !== null) {
     echo 'Is control: ' . ($assignment->isControl ? 'yes' : 'no') . "\n";
     echo 'Config:     ' . json_encode($assignment->configuration) . "\n";
 } else {
-    echo "No assignment (experiment not ACTIVE, unknown key, or the API is unreachable)\n";
+    echo "No assignment (unknown key, or the API is unreachable)\n";
 }
 
 // ---------------------------------------------------------------------------

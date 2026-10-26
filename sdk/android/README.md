@@ -91,7 +91,7 @@ to persist results across process restarts.
 | Method | Returns | On failure |
 |---|---|---|
 | `suspend evaluateFlag(flagKey, user)` | `EvalResult(key, enabled, config)` | Last offline value if any, else throws `FlagNotFoundException` (404) / `ServerException` / `NetworkException` |
-| `suspend getAssignment(experimentKey, user)` | `Assignment(experimentKey, userId, variantId, variantName, isControl, configuration)` | Last offline value if any, else throws `ServerException` (404 not ACTIVE) / `NetworkException` |
+| `suspend getAssignment(experimentKey, user)` | `Assignment(experimentKey, userId, variantId, variantName, isControl, configuration)` | Last offline value if any, else throws `ServerException` (404: no experiment has the key, or a draft has no control variant) / `NetworkException` |
 | `suspend track(event)` | `Unit` | Never throws; runs in the background |
 | `suspend trackBatch(events)` | `Unit` | Never throws; ≤ 100 events per request |
 | `getCachedAssignments(userId)`, `getCachedFlagKeys(userId)` | cached, unexpired entries | — |
@@ -116,6 +116,12 @@ user was assigned to through this client (`experiment_key`) plus one per flag ev
 user (`feature_flag_key`), taken from the in-memory cache. Nothing cached → nothing is sent.
 `event_type` defaults to the event name; `properties` is sent as `metadata`.
 
+This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
+control variant, and an event tracked without a key after the user's cache entries have expired
+(`cacheTtlMs`, 5 minutes by default) is not sent, so pass `experimentKey` on a conversion that
+can come later.
+
 ## Consistent hash (compatibility utility)
 
 `ConsistentHash.compute(userId, key)` computes `MD5("{userId}:{key}")`, reads the first 4 bytes as
@@ -130,7 +136,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `evaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
-| `getAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when the experiment is not ACTIVE |
+| `getAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
 

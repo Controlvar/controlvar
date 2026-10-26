@@ -226,6 +226,18 @@ describe('getAssignment', () => {
     }
   );
 
+  it.each(['draft', 'paused', 'completed', 'archived'])(
+    'carries assigned: false and reason %s for an experiment that is not ACTIVE',
+    async reason => {
+      mockFetch({ ...controlAssignment, assigned: false, reason });
+      const client = new ExperimentationClient(baseConfig);
+      const result = await client.getAssignment('checkout', user);
+      expect(result.assigned).toBe(false);
+      expect(result.reason).toBe(reason);
+      expect(result.isControl).toBe(true);
+    }
+  );
+
   it('leaves assigned and reason undefined (not false) when an older server omits them', async () => {
     mockFetch(assignment);
     const client = new ExperimentationClient(baseConfig);
@@ -270,14 +282,14 @@ describe('getAssignment', () => {
     expect(a).toBe(b);
   });
 
-  it('throws ExperimentationError with status 404 when the experiment is not ACTIVE', async () => {
-    mockFetch({ detail: "Active experiment with key 'missing' not found" }, 404);
+  it('throws ExperimentationError with status 404 when no experiment has the key', async () => {
+    mockFetch({ detail: "No experiment has the key 'missing'." }, 404);
     const client = new ExperimentationClient(baseConfig);
     const error = await captureError(client.getAssignment('missing', user));
     expect(error).toBeInstanceOf(ExperimentationError);
     expect(error.code).toBe('HTTP_ERROR');
     expect(error.status).toBe(404);
-    expect(error.message).toContain("Active experiment with key 'missing' not found");
+    expect(error.message).toContain("No experiment has the key 'missing'.");
   });
 
   it('throws ExperimentationError with status 401 for a bad key', async () => {

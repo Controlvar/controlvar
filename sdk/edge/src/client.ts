@@ -206,8 +206,9 @@ export class EdgeExperimentationClient {
   /**
    * Assign the user via `POST /api/v1/tracking/assign` (sticky on the server,
    * records the exposure). `attributes` is sent as `context`. Order: in-memory
-   * cache → shared store → network. Never throws: resolves to `null` when the
-   * experiment is not ACTIVE (404) or the server cannot be reached.
+   * cache → shared store → network. Never throws: resolves to `null` when no
+   * experiment has the key or a draft has no control variant (404), or the server
+   * cannot be reached. An experiment that is not ACTIVE answers its control variant.
    */
   async getAssignment(
     experimentKey: string,

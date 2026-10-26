@@ -179,8 +179,10 @@ export class ExperimentationClient {
    * Assigns `userId` to `experimentKey` via `POST /api/v1/tracking/assign`
    * (sticky on the server, records the exposure). `attributes` is sent as `context`.
    *
-   * Same order as `evaluateFlag`; returns `null` when the experiment is not
-   * ACTIVE (404) or the server cannot be reached and nothing is persisted.
+   * Same order as `evaluateFlag`; returns `null` when no experiment has the key
+   * or a draft has no control variant (404), or the server cannot be reached and
+   * nothing is persisted. An experiment that is not ACTIVE answers its control
+   * variant.
    */
   async getAssignment(
     experimentKey: string,

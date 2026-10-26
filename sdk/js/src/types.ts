@@ -149,7 +149,11 @@ export interface AssignResponse {
   configuration?: Record<string, unknown> | null;
   /** `false` when the user was not enrolled (control returned); absent on older servers. */
   assigned?: boolean;
-  /** `assigned` | `holdout` | `mutual_exclusion` | `targeting`; absent on older servers. */
+  /**
+   * `assigned` | `holdout` | `mutual_exclusion` | `targeting`, or the status of an
+   * experiment that is not ACTIVE (`draft` | `paused` | `completed` | `archived`);
+   * absent on older servers.
+   */
   reason?: string;
 }
 

@@ -60,7 +60,7 @@ puts "3. Getting experiment assignment"
 puts "-" * 30
 puts "   assignment = client.get_assignment('checkout-flow', 'user-123', { country: 'US' })"
 puts "   # POST /api/v1/tracking/assign {experiment_key, user_id, context}"
-puts "   # nil when the experiment is not ACTIVE or the request fails, otherwise:"
+puts "   # nil when no experiment has the key or the request fails, otherwise:"
 puts "   assignment.experiment_key  # => 'checkout-flow'"
 puts "   assignment.variant_name    # => 'control' / 'treatment'"
 puts "   assignment.variant_id      # => variant UUID"

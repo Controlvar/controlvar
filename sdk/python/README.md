@@ -103,6 +103,9 @@ and `reason` says why. A server that predates the fields sends neither, so `assi
 (never `False`). Decide deliberately how to treat those rows rather than dropping them with an
 `assigned is True` filter.
 
+An experiment that is not ACTIVE answers every user with its control variant, `assigned` False and
+`reason` set to its status (`"draft"`, `"paused"`, `"completed"` or `"archived"`).
+
 ## Tracking fan-out rule
 
 - **with** `experiment_key` and/or `feature_flag_key` → one `POST /api/v1/tracking/track`;
@@ -120,7 +123,7 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json` and `
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `get_assignment`, `get_variant` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when not ACTIVE |
+| `get_assignment`, `get_variant` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `get_feature_flag`, `is_feature_enabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user_attributes` (omitted when empty) | `{key, enabled, config, reason}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `get_all_flags` | `GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON>` | `context` = `user_attributes` (omitted when empty) | `{"<flag_key>": bool, …}` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |

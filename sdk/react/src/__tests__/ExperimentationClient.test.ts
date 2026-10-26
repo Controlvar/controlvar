@@ -619,6 +619,18 @@ describe('assignExperiment result', () => {
     }
   );
 
+  it.each(['draft', 'paused', 'completed', 'archived'])(
+    'carries assigned: false and reason %s for an experiment that is not ACTIVE',
+    async reason => {
+      mockFetch({ ...controlAssignment, assigned: false, reason });
+      const client = new ExperimentationClient(baseConfig);
+      const result = await client.assignExperiment(user, 'checkout');
+      expect(result.assigned).toBe(false);
+      expect(result.reason).toBe(reason);
+      expect(result.isControl).toBe(true);
+    }
+  );
+
   it('marks control assignments with isControl: true', async () => {
     mockFetch(controlAssignment);
     const client = new ExperimentationClient(baseConfig);
@@ -643,8 +655,8 @@ describe('assignExperiment result', () => {
     expect(result.variantId).toBeNull();
   });
 
-  it('throws an Error on a 404 response (no active experiment)', async () => {
-    mockFetch({ detail: 'not found' }, 404);
+  it('throws an Error on a 404 response (no experiment has the key)', async () => {
+    mockFetch({ detail: "No experiment has the key 'missing'." }, 404);
     const client = new ExperimentationClient(baseConfig);
     await expect(client.assignExperiment(user, 'missing')).rejects.toThrow('API error: 404');
   });

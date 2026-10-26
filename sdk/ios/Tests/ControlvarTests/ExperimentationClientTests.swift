@@ -368,7 +368,7 @@ final class ExperimentationClientTests: XCTestCase {
     // MARK: - evaluateFlag: failures
 
     func testEvaluateFlag_404ThrowsFlagNotFoundAndIsNotCached() async throws {
-        MockURLProtocol.respond(status: 404, json: #"{"detail":"not active"}"#)
+        MockURLProtocol.respond(status: 404, json: #"{"detail":"Feature flag with key 'ghost' not found"}"#)
         let (client, _) = makeClient()
 
         do {
@@ -529,7 +529,7 @@ final class ExperimentationClientTests: XCTestCase {
     }
 
     func testGetAssignment_404ThrowsExperimentNotFound() async throws {
-        MockURLProtocol.respond(status: 404, json: #"{"detail":"Experiment not active"}"#)
+        MockURLProtocol.respond(status: 404, json: #"{"detail":"No experiment has the key 'ghost-exp'."}"#)
         let (client, _) = makeClient()
 
         do {

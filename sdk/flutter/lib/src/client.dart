@@ -17,8 +17,9 @@ import 'offline_store.dart';
 ///   to the [OfflineStore]. Failures are never cached.
 /// - **Failure.** [evaluateFlag] returns the cached value when present,
 ///   otherwise a disabled [EvalResult]; [getAssignment] returns the cached
-///   value or `null`. Neither throws. A definitive HTTP 404 (unknown flag key,
-///   or an experiment that is not ACTIVE) never falls back to a stale persisted value.
+///   value or `null`. Neither throws. A definitive HTTP 404 (an unknown flag or
+///   experiment key, or a draft experiment with no control variant) never falls
+///   back to a stale persisted value.
 /// - **Tracking.** [track] never throws. With `experimentKey`/`featureFlagKey`
 ///   it sends one `POST /api/v1/tracking/track`; without keys it fans out via
 ///   `POST /api/v1/tracking/batch` to every cached assignment and evaluated
@@ -159,8 +160,9 @@ class ExperimentationClient {
   /// Returns the user's (sticky) assignment for [experimentKey] via
   /// `POST /api/v1/tracking/assign`; [attributes] are sent as `context`.
   ///
-  /// Never throws. Returns `null` when the experiment is not ACTIVE / unknown
-  /// (404) or when the request failed and no cached/offline value exists.
+  /// Never throws. Returns `null` when no experiment has the key or a draft has
+  /// no control variant (404), or when the request failed and no cached/offline
+  /// value exists. An experiment that is not ACTIVE answers its control variant.
   Future<Assignment?> getAssignment(
     String experimentKey,
     String userId, {

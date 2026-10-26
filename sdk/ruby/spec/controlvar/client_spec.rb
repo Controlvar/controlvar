@@ -143,8 +143,8 @@ RSpec.describe Controlvar::Client do
       expect(WebMock).to have_requested(:post, assign_url).twice
     end
 
-    it 'returns nil on 404 (experiment not ACTIVE) and never caches the failure' do
-      stub_assign(status: 404, body: '{"detail":"Experiment not found"}')
+    it 'returns nil on 404 (no experiment has the key) and never caches the failure' do
+      stub_assign(status: 404, body: %q({"detail":"No experiment has the key 'checkout-flow'."}))
 
       expect(client.get_assignment('checkout-flow', 'user-123')).to be_nil
       expect(client.get_assignment('checkout-flow', 'user-123')).to be_nil

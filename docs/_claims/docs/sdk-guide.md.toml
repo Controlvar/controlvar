@@ -134,6 +134,14 @@ by = [
 ]
 
 [[unit]]
+text = "An experiment that is not ACTIVE answers every user the same way, with reason set to its status (draft, paused, completed or archived)."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_an_answer_for_an_experiment_that_is_not_running_records_nothing",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_the_reasons_are_exactly_the_four_statuses_that_are_not_active",
+]
+
+[[unit]]
 text = "Otherwise assigned is true, reason is assigned, and every call, sticky ones included, records that the user saw the experiment."
 by = [
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_sticky_assignment_bypasses_all_eligibility_checks",
@@ -532,7 +540,7 @@ by = ["exempt:instruction"]
 text = "getAssignment(experimentKey, user) | Promise<Assignment> (experimentKey, userId, variantId, variantName, isControl, configuration) | rejects with ExperimentationError (status, code)"
 by = [
     "test:sdk/js/__tests__/client.test.ts::maps the server response to an Assignment",
-    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when the experiment is not ACTIVE",
+    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when no experiment has the key",
 ]
 
 [[unit]]
@@ -644,10 +652,13 @@ text = "Install it from a clone of this repository: mvn install in sdk/java buil
 by = ["test:backend/tests/smoke/test_sdk_java_modules.py::test_the_build_has_a_core_module_and_a_spring_boot_starter"]
 
 [[unit]]
-text = "getExperimentAssignment(user, experimentKey) | ExperimentAssignment (getExperimentKey, getUserId, getVariantId, getVariantName, isControl, getConfiguration) | throws ExperimentationException (unchecked; 404 when not ACTIVE, network errors)"
+text = "getExperimentAssignment(user, experimentKey) | ExperimentAssignment (getExperimentKey, getUserId, getVariantId, getVariantName, isControl, getConfiguration) | throws ExperimentationException (unchecked; 404 when no experiment has the key or a draft has no control variant, network errors); an experiment that is not ACTIVE returns its control variant"
 by = [
     "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::sends POST /api/v1/tracking/assign with experiment_key, user_id and context",
-    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::throws ExperimentationException(404) when the experiment is not ACTIVE, and does not cache it",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::throws ExperimentationException(404) when no experiment has the key, and does not cache it",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_unknown_key_returns_404",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_a_draft_with_no_control_variant_returns_404",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
 ]
 
 [[unit]]

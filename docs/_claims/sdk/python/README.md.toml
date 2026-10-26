@@ -106,7 +106,7 @@ by = [
     "test:sdk/python/tests/test_client.py::TestGetAssignment::test_404_raises_with_status_and_body",
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_a_draft_with_no_control_variant_returns_404",
     "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
-    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_carries_assigned_false_and_reason_for_an_unenrolled_user",
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_carries_assigned_false_and_its_status_for_an_experiment_that_is_not_active",
 ]
 
 [[unit]]
@@ -237,6 +237,14 @@ text = "Decide deliberately how to treat those rows rather than dropping them wi
 by = ["exempt:advice"]
 
 [[unit]]
+text = "An experiment that is not ACTIVE answers every user with its control variant, assigned False and reason set to its status (\"draft\", \"paused\", \"completed\" or \"archived\")."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_the_reasons_are_exactly_the_four_statuses_that_are_not_active",
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_carries_assigned_false_and_its_status_for_an_experiment_that_is_not_active",
+]
+
+[[unit]]
 text = "Tracking fan-out rule"
 by = ["exempt:label"]
 
@@ -273,10 +281,13 @@ text = "SDK call | Method and path | Body / query | Response used"
 by = ["exempt:label"]
 
 [[unit]]
-text = "get_assignment, get_variant | POST /api/v1/tracking/assign | {experiment_key, user_id, context?} | {experiment_key, user_id, variant_id, variant_name, is_control, configuration}; 404 when not ACTIVE"
+text = "get_assignment, get_variant | POST /api/v1/tracking/assign | {experiment_key, user_id, context?} | {experiment_key, user_id, variant_id, variant_name, is_control, configuration}; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with assigned: false"
 by = [
     "test:sdk/python/tests/test_client.py::TestGetAssignment::test_sends_post_with_context",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_unknown_key_returns_404",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_a_draft_with_no_control_variant_returns_404",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
 ]
 
 [[unit]]

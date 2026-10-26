@@ -106,7 +106,7 @@ by = [
 ]
 
 [[unit]]
-text = "Exit codes: 0 ok · 2 bad or missing API key, or --incident without the server key · 3 catalogue not seeded / not ACTIVE · 4 API unreachable."
+text = "Exit codes: 0 ok · 2 bad or missing API key, or --incident without the server key · 3 catalogue not seeded · 4 API unreachable."
 by = [
     "test:demo/streampulse/simulator/test_traffic.py::test_fatal_api_errors_exit_non_zero_with_message",
     "test:demo/streampulse/simulator/test_traffic.py::test_the_incident_needs_the_server_key",

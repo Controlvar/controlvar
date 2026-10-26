@@ -78,8 +78,8 @@ Every `evaluateFlag` / `getAssignment` call resolves in this order:
 2. **Shared store** (`config.store`; Cloudflare KV / Deno KV via the adapters) — one KV read.
 3. **Network** — one request to the backend; the result is written to both caches.
 
-Failures (network errors, timeouts, and a 404: an experiment unknown or not ACTIVE, or an unknown
-flag key) are **never cached**:
+Failures (network errors, timeouts, and a 404: an unknown experiment or flag key, or a draft
+experiment with no control variant) are **never cached**:
 `evaluateFlag` resolves to `{ key, enabled: false, config: null }` and `getAssignment` to `null`, and
 the next call retries. Concurrent calls for the same user + key share one in-flight request.
 
@@ -187,6 +187,12 @@ requests. With `kv`, results are stored under `["ep", "flag:{userId}:{flagKey}"]
   experiment the user has been assigned to in this client plus one per flag evaluated for the user —
   from the **in-memory** cache. If nothing is cached, nothing is sent.
 
+This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
+control variant, and an event tracked without a key after the user's in-memory cache entries have
+expired (`cacheTtlMs`, 60 s by default) is not sent, so pass `experimentKey` on a conversion that
+can come later.
+
 `trackBatch(events)` sends many events at once (chunked at 100) and resolves to
 `{ successCount, failureCount, errors }`; keyless entries are expanded with the same rule.
 
@@ -202,7 +208,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 |---|---|---|---|
 | `evaluateFlag`, `isFeatureEnabled`, Vercel `flagKeys` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `getAllFlags`, Vercel middleware without `flagKeys` | `GET /api/v1/feature-flags/user/{user_id}` | — | `{"<flag_key>": bool, ...}` |
-| `getAssignment`, `getVariant` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when not ACTIVE |
+| `getAssignment`, `getVariant` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [ ...track bodies ]}` (max 100 per request) | `{success_count, failure_count, errors}` |
 

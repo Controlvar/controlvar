@@ -41,7 +41,7 @@ async function main(): Promise<void> {
   console.log('checkout_flow variant:', assignment.variantName, assignment.configuration);
 
   await provider.client.track('user-12345', 'purchase', { value: 49.99, experimentKey: 'checkout_flow' });
-  await provider.client.track('user-12345', 'page_view'); // no key: fans out to cached assignment + flags
+  await provider.client.track('user-12345', 'page_view'); // no key: fanned out by the JS SDK's rule
 
   // 6. Clean up.
   await OpenFeature.close();

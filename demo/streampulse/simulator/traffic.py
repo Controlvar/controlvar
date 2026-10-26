@@ -771,7 +771,7 @@ def fatal_message(err: ApiError, api_url: str) -> str | None:
         )
     if err.status == 404:
         return (
-            f"Not found (404) from {err.url}: the StreamPulse experiments are not seeded or not ACTIVE, or its flags are not seeded. "
+            f"Not found (404) from {err.url}: the StreamPulse experiments or flags are not seeded. "
             "Run backend/scripts/seed_streampulse.py first."
         )
     if err.status == 0:

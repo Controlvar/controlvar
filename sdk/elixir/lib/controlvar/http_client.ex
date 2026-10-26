@@ -28,7 +28,7 @@ defmodule Controlvar.HttpClient do
 
   - `{:error, {:auth_error, 401}}` — 401 Unauthorized (bad API key)
   - `{:error, {:api_error, status_code, body}}` — other 4xx/5xx
-    (404 for an unknown flag key, and for an experiment that is not ACTIVE; 422 validation, 429 rate limited)
+    (404 for an unknown flag or experiment key, or a draft experiment with no control variant; 422 validation, 429 rate limited)
   - `{:error, {:network_error, reason}}` — connection failures and timeouts
   """
 

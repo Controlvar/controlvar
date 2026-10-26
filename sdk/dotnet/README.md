@@ -97,8 +97,8 @@ evaluate endpoint returns `config: null` for every flag; a variant's configurati
 ### Caching and failures
 
 Successful evaluations and assignments are cached per **user + key** for `CacheTtlSeconds`;
-failures (network error, 401, 404 for an experiment unknown or not ACTIVE, or an unknown flag key, 429, 5xx,
-undecodable body) are never cached, so the next call retries. On a failure the SDK returns a disabled
+failures (network error, 401, 404 for an unknown experiment or flag key or a draft experiment with no
+control variant, 429, 5xx, undecodable body) are never cached, so the next call retries. On a failure the SDK returns a disabled
 `FlagEvaluationResult` / `null` assignment. Both caches are guarded by locks; one client can be
 shared across threads.
 
@@ -109,6 +109,12 @@ Without a key it sends one `POST /api/v1/tracking/batch` containing one entry pe
 user has been assigned to through this client plus one per flag evaluated for the user (from the
 cache). If nothing is cached, nothing is sent and `true` is returned. `event_type` defaults to
 the event name; `properties` are sent as `metadata`; `timestamp` is sent as ISO-8601 UTC when set.
+
+This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
+control variant, and an event tracked without a key after the user's cache entries have expired
+(`CacheTtlSeconds`, 300 by default) is not sent, so pass `experimentKey` on a conversion that can
+come later.
 
 ### `FeatureFlagEvaluator` (static)
 
@@ -126,7 +132,7 @@ Every request carries `X-API-Key` and `Accept: application/json`; POSTs carry
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `EvaluateFlagAsync` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
-| `GetAssignmentAsync` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when the experiment is not ACTIVE |
+| `GetAssignmentAsync` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `TrackAsync` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `TrackAsync` without keys, `TrackBatchAsync` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored (status only) |
 
@@ -140,7 +146,7 @@ The public `ExperimentationClient` methods never throw on network or HTTP errors
 | Scenario | Exception |
 |----------|-----------|
 | HTTP 401 | `AuthException` |
-| Other 4xx / 5xx (404 not ACTIVE, 422 validation, 429 rate limited) or undecodable body | `ApiException` (`.StatusCode`, `.ResponseBody`) |
+| Other 4xx / 5xx (404 unknown key, 422 validation, 429 rate limited) or undecodable body | `ApiException` (`.StatusCode`, `.ResponseBody`) |
 | Network / timeout | `NetworkException` |
 
 ---

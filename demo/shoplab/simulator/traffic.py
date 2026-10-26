@@ -585,7 +585,7 @@ def fatal_message(err: ApiError, api_url: str) -> str | None:
         )
     if err.status == 404:
         return (
-            f"Not found (404) from {err.url}: the ShopLab experiments are not seeded or not ACTIVE, or its flags are not seeded. "
+            f"Not found (404) from {err.url}: the ShopLab experiments or flags are not seeded. "
             "Run the ShopLab seed script first."
         )
     if err.status == 0:

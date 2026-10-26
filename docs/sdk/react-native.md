@@ -158,7 +158,7 @@ provider's `attributes` are sent as `context`) and returns the variant plus its 
 | `isControl` | `boolean` | `true` for the control variant (`false` by default) |
 | `configuration` | `Record<string, unknown> \| null` | The variant's `configuration` JSON from the experiment definition |
 | `loading` | `boolean` | `true` until the first response |
-| `error` | `Error \| null` | Only set if the client promise rejects; a 404 (experiment not ACTIVE) yields `variant: null` with `error: null` |
+| `error` | `Error \| null` | Only set if the client promise rejects; a 404 (no experiment has the key) yields `variant: null` with `error: null`, and an experiment that is not ACTIVE yields its control variant |
 
 ### `useExperimentationClient(): { client, userId, attributes }`
 
@@ -215,6 +215,12 @@ to the event name), `timestamp?` (`Date` or string, sent as ISO-8601). `properti
 plus one per flag evaluated for the user (`feature_flag_key`), both taken from the in-memory cache.
 If nothing is cached, nothing is sent. `trackBatch` applies the same expansion to keyless entries.
 
+This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
+control variant, and an event tracked without a key after the user's in-memory cache entries have
+expired (`cacheTtlMs`, 5 minutes by default) is not sent, so pass `experimentKey` on a conversion
+that can come later.
+
 Concurrent calls for the same user + key share one in-flight request, so mounting several
 components that use the same experiment produces one assignment (and one exposure event).
 
@@ -235,8 +241,8 @@ For `evaluateFlag` and `getAssignment`:
 5. **Safe default** — `{ key, enabled: false, config: null }` / `null`. Failures are never cached.
 
 Every swallowed failure is passed to `config.onError(error, operation)`; HTTP failures are
-`ApiError` instances with a `status` field (401 bad key, 404 an experiment unknown or not ACTIVE, or an unknown flag key, 422
-invalid event, 429 rate limited).
+`ApiError` instances with a `status` field (401 bad key, 404 an unknown experiment or flag key, or a draft experiment with no
+control variant, 422 invalid event, 429 rate limited).
 
 ### AsyncStorage layout
 
@@ -259,8 +265,8 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | `track` with a key | `POST /api/v1/tracking/track` | `{"event_type","event_name","user_id","experiment_key"?,"feature_flag_key"?,"value"?,"metadata"?,"timestamp"?}` | stored event (ignored) |
 | `track` without a key, `trackBatch` | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` (max 100) | `{"success_count","failure_count","errors"}` |
 
-Errors: 401 bad key; 404 an experiment unknown or not ACTIVE, or an unknown flag key; 422 invalid event; 429
-rate limited (`Retry-After` header).
+Errors: 401 bad key; 404 an unknown experiment or flag key, or a draft experiment with no control variant; 422 invalid
+event; 429 rate limited (`Retry-After` header).
 
 ---
 
@@ -360,8 +366,9 @@ runtime; the live runner runs it with `python tests/sdk-contract/live/run_live_c
 component in the provider; check for a duplicate copy of React in the bundle.
 
 **Flags always come back disabled / variant is always `null`** — pass an `onError` handler and look
-at the `ApiError.status`: 401 means a bad `apiKey`, 404 means an unknown key or an experiment that is not
-ACTIVE (a flag that is not ACTIVE is not an error: it comes back disabled), a plain `Error` means the network/timeout. Check that `baseUrl` is the origin
+at the `ApiError.status`: 401 means a bad `apiKey`, 404 means an unknown key or a draft experiment with no
+control variant (a flag that is not ACTIVE comes back disabled, and an experiment that is not ACTIVE answers its
+control variant: neither is an error), a plain `Error` means the network/timeout. Check that `baseUrl` is the origin
 only (no `/api/v1`). With `offlineFallback: true` the last-known value is served during outages.
 
 **Type errors with `md5`** — `npm install --save-dev @types/md5`.

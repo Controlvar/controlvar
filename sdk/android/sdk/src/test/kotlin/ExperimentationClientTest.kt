@@ -433,8 +433,8 @@ class ExperimentationClientTest {
 
     @Test
     fun `getAssignment throws ServerException on 404 and does not cache the failure`() = runTest {
-        server.enqueue(json(404, """{"detail":"Active experiment with key 'nope' not found"}"""))
-        server.enqueue(json(404, """{"detail":"Active experiment with key 'nope' not found"}"""))
+        server.enqueue(json(404, """{"detail":"No experiment has the key 'nope'."}"""))
+        server.enqueue(json(404, """{"detail":"No experiment has the key 'nope'."}"""))
         val ex = assertThrows<ExperimentationException.ServerException> {
             client.getAssignment("nope", User("user-1"))
         }

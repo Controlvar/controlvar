@@ -108,8 +108,9 @@ class ExperimentationClient(
      * @param experimentKey unique key for the experiment
      * @param user          the user requesting assignment
      * @return the assignment (experiment key, variant id/name, control flag, configuration)
-     * @throws ExperimentationException.ServerException on API error (404 when the experiment
-     *         is not ACTIVE) with no offline value
+     * @throws ExperimentationException.ServerException on API error (404 when no experiment has
+     *         the key, or for a draft with no control variant) with no offline value; an
+     *         experiment that is not ACTIVE answers its control variant, which is returned
      * @throws ExperimentationException.NetworkException on network failure with no offline value
      */
     suspend fun getAssignment(experimentKey: String, user: User): Assignment {
