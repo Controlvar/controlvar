@@ -527,7 +527,8 @@ class ExperimentationClient:
                 self._request("POST", "/api/v1/tracking/track", body=body)
                 return True
 
-            experiments, flags = self._attributed.keys(user_id)
+            experiments = [a.experiment_key for a in self.cached_assignments(user_id)]
+            flags = [f.key for f in self.cached_flags(user_id)]
             events: List[Dict[str, Any]] = [dict(base, experiment_key=key) for key in experiments]
             events.extend(dict(base, feature_flag_key=key) for key in flags)
             if not events:

@@ -320,7 +320,8 @@ export class ExperimentationClient {
         return;
       }
 
-      const { experiments, flags } = this.attributed.keys(userId);
+      const experiments = this.getAssignments(userId).map(a => a.experimentKey);
+      const flags = this.getEvaluatedFlags(userId);
       const events: TrackBody[] = [
         ...experiments.map(experimentKey => ({ ...base, experiment_key: experimentKey })),
         ...flags.map(flagKey => ({ ...base, feature_flag_key: flagKey })),
