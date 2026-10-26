@@ -10,41 +10,67 @@ name: Demo Apps
 # SUITES in that script (demo-shoplab, demo-streampulse, demo-simulators), and
 # each job installs what rc-evidence's job for that suite installs.
 #
-# It runs only when a path below changes. The demo apps are built against the
-# React SDK's source (sdk/react/src), so a change there runs it too, though
-# the jest suites replace the SDK with a mock.
+# It runs only when a path below changes: the demo apps, the script, the Node
+# version, this file, and what the simulators' pytest session loads from
+# outside demo/ (the root conftest.py and pyproject.toml, the four plugins
+# conftest.py names and the two packages they live in, and the requirements
+# the simulators job installs). It does not run for a change under sdk/react/
+# alone: the jest suites replace the React SDK with a mock, so they would pass
+# whatever the SDK did, and a green run would say nothing about it.
 #
 # It is not a required check, and branch protection does not list it. A
 # path-filtered workflow does not run at all on a pull request that touches
-# none of its paths, so a required check would wait for ever. It adds nothing
-# to core-build: none of these suites is under backend/tests or
-# tests/sdk-contract.
+# none of its paths, so a required check would wait for ever.
+#
+# It adds no suite to core-build: none of these suites is under backend/tests
+# or tests/sdk-contract. core-build's unit session does read this file, in
+# the workflow-shape tests that read every workflow and in the cases
+# test_ci_concurrency.py has for it: seven cases, about 0.1 s.
 
 on:
   pull_request:
     branches: [main]
     paths:
       - 'demo/**'
-      - 'sdk/react/**'
       - 'scripts/rc_evidence.py'
       - '.nvmrc'
       - '.github/workflows/demo-apps.yml'
+      - 'conftest.py'
+      - 'pyproject.toml'
+      - 'backend/__init__.py'
+      - 'backend/tests/__init__.py'
+      - 'backend/tests/no_real_aws.py'
+      - 'backend/tests/benchmark_gate.py'
+      - 'backend/tests/no_outbound_network.py'
+      - 'backend/tests/shard.py'
+      - 'backend/requirements.txt'
   # `branches: [main]`, or a push to a pull request's branch would run it a
-  # second time on the same commit.
+  # second time on the same commit. The same paths as above.
   push:
     branches: [main]
     paths:
       - 'demo/**'
-      - 'sdk/react/**'
       - 'scripts/rc_evidence.py'
       - '.nvmrc'
       - '.github/workflows/demo-apps.yml'
+      - 'conftest.py'
+      - 'pyproject.toml'
+      - 'backend/__init__.py'
+      - 'backend/tests/__init__.py'
+      - 'backend/tests/no_real_aws.py'
+      - 'backend/tests/benchmark_gate.py'
+      - 'backend/tests/no_outbound_network.py'
+      - 'backend/tests/shard.py'
+      - 'backend/requirements.txt'
   workflow_dispatch:
 
-# Keyed on the pull request number: a newer push to it supersedes the run in
-# flight. A push to main runs to completion.
+# A pull request is keyed on its number: a newer push to it cancels the run in
+# flight. A push to main, or a dispatch, is keyed on its commit and never
+# cancelled. Keyed on the ref, cancel-in-progress false would still not be
+# enough: a run that is waiting is replaced by the next one to queue, so of
+# three quick merges the middle one would never be tested on main.
 concurrency:
-  group: demo-apps-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  group: demo-apps-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
