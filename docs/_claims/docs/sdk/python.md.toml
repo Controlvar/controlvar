@@ -503,8 +503,9 @@ by = [
 ]
 
 [[unit]]
-text = "A stored report counts toward the flag's error rate and automatic rollback only when the client's key is a server-side key: one with the sdk:ruleset scope, created by a user who can change feature flags."
+text = "A stored report counts toward the flag's error rate and automatic rollback only when it names that flag in feature_flag_key (a report with only experiment_key is stored, but counts toward no flag's rate) and the client's key is a server-side key: one with the sdk:ruleset scope, created by a user who can change feature flags."
 by = [
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportError::test_experiment_only_report",
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_server_side_key_rolls_back",
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_key_without_the_scope_does_not_roll_back",
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count",

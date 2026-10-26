@@ -222,10 +222,11 @@ without checking it.
 - `true` means the server stored the report: it answered 201. `false` means it did not: any other
   answer (401, 404, 422, a 429 after its one retry, 5xx) or a network failure, which is also passed
   to `onError(err, 'reportError')`. `reportError` never rejects.
-- A stored report counts toward the flag's error rate and automatic rollback only when the
-  client's key is a server-side key: one with the `sdk:ruleset` scope, created by a user who can
-  change feature flags. A report sent with any other key is stored too and still resolves `true`;
-  the flag's safety check shows those reports as `uncounted_error_count`. See
+- A stored report counts toward the flag's error rate and automatic rollback only when it names
+  that flag in `featureFlagKey` (a report with only `experimentKey` is stored, but counts toward no
+  flag's rate) and the client's key is a server-side key: one with the `sdk:ruleset` scope, created
+  by a user who can change feature flags. A report sent with any other key is stored too and still
+  resolves `true`; the flag's safety check shows those reports as `uncounted_error_count`. See
   [Which errors count](../feature-flags/safety.md#which-errors-count).
 - The error rate divides the counted errors by the flag's evaluations in the check's 15-minute
   window. With no evaluations in the window it reads 0, so an error-rate threshold cannot fire: in
