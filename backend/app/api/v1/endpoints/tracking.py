@@ -282,8 +282,6 @@ async def assign_user_to_experiment(
             detail=f"No experiment has the key '{request.experiment_key}'.",
         )
 
-    if experiment.status != ExperimentStatus.ACTIVE:
-        return _not_running_answer(request, experiment)
 
     # Create assignment service
     assignment_service = AssignmentService(db)
