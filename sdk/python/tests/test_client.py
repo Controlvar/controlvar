@@ -636,6 +636,42 @@ class TestLateConversions:
         assert transport.calls()[-1] == "POST /api/v1/tracking/batch"
         assert batch_keys(transport.last) == ["checkout_flow"]
 
+    @pytest.mark.regression
+    def test_an_experiment_whose_assignment_is_later_answered_404_is_dropped(self, client, transport):
+        transport.route("POST", "/api/v1/tracking/track", json={})
+        with mock.patch("controlvar.cache._now") as now:
+            now.return_value = 0.0
+            transport.respond(200, json=ASSIGN_RESPONSE)
+            client.get_assignment("checkout_flow", "user-1")
+            now.return_value = 301.0  # the cache has expired; the server now answers 404
+            transport.respond(404, json={"detail": "Active experiment with key 'checkout_flow' not found"})
+            assert client.get_variant("checkout_flow", "user-1") == "control"
+            now.return_value = 3600.0
+            assert client.track("user-1", "purchase") is True
+        assert transport.calls() == [
+            "POST /api/v1/tracking/assign",
+            "POST /api/v1/tracking/assign",
+            "POST /api/v1/tracking/track",
+        ]
+        assert transport.last.json() == {"event_type": "purchase", "event_name": "purchase", "user_id": "user-1"}
+
+    @pytest.mark.parametrize("failure", [500, TransportError("reset")], ids=["500", "network"])
+    def test_the_key_is_kept_when_the_later_assignment_fails_otherwise(self, client, transport, failure):
+        batch_route(transport, success_count=1)
+        with mock.patch("controlvar.cache._now") as now:
+            now.return_value = 0.0
+            transport.respond(200, json=ASSIGN_RESPONSE)
+            client.get_assignment("checkout_flow", "user-1")
+            now.return_value = 301.0
+            if isinstance(failure, int):
+                transport.respond(failure, json={"detail": "no"})
+            else:
+                transport.fail(failure)
+            assert client.get_variant("checkout_flow", "user-1") == "control"
+            assert client.track("user-1", "purchase") is True
+        assert transport.calls()[-1] == "POST /api/v1/tracking/batch"
+        assert batch_keys(transport.last) == ["checkout_flow"]
+
     def test_a_key_answered_24_hours_less_1_second_ago_is_kept(self, client, transport):
         assign_route(transport)
         batch_route(transport, success_count=1)

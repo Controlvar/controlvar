@@ -254,7 +254,7 @@ export class ExperimentationClient {
     if (cached) return cached;
 
     return this.dedupe(`assign\u0000${user.userId}\u0000${experimentKey}`, async () => {
-      const data = await this.requestJson<ExperimentAssignResponse>('/api/v1/tracking/assign', {
+      const response = await this.request('/api/v1/tracking/assign', {
         method: 'POST',
         body: {
           experiment_key: experimentKey,
@@ -262,6 +262,12 @@ export class ExperimentationClient {
           context: user.attributes,
         },
       });
+      if (!response.ok) {
+        // A 404: a key-less trackEvent must no longer reach this experiment.
+        if (response.status === 404) this.attributed.forgetExperiment(user.userId, experimentKey);
+        throw new Error(`API error: ${response.status}`);
+      }
+      const data = (await response.json()) as ExperimentAssignResponse;
 
       const assignment: ExperimentAssignment = {
         experimentKey: data.experiment_key ?? experimentKey,

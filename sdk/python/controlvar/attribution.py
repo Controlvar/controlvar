@@ -51,6 +51,19 @@ class AttributedKeys:
     def record_flag(self, user_id: str, flag_key: str) -> None:
         self._record(user_id, flag_key, None, 1)
 
+    def forget_experiment(self, user_id: str, experiment_key: str) -> None:
+        """Drop one experiment's key for the user: the server answered its assignment 404, so
+        a key-less event must not reach it (a server that answers 404 for an experiment that is
+        not running would otherwise credit the user's stored arm while the user is shown
+        control)."""
+        with self._lock:
+            answers = self._users.get(user_id)
+            if answers is None:
+                return
+            answers[0].pop(experiment_key, None)
+            if not answers[0] and not answers[1]:
+                del self._users[user_id]
+
     def keys(self, user_id: str) -> Tuple[List[str], List[str]]:
         """The user's experiment keys and flag keys within the horizon, each in the
         order they were first answered. Keys past the horizon are dropped here."""

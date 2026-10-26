@@ -52,6 +52,31 @@ describe('the attributed keys behind the key-less track() fan-out', () => {
     expect(keys.size).toBe(0);
   });
 
+  it('measures the 24 hours from the latest answer: a key answered at 0 h and 23 h is still used at 25 h', () => {
+    const HOUR = 60 * 60 * 1000;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(0);
+    const keys = new AttributedKeys();
+    keys.recordExperiment('u', 'checkout');
+    now.mockReturnValue(23 * HOUR);
+    keys.recordExperiment('u', 'checkout');
+    now.mockReturnValue(25 * HOUR);
+    expect(keys.keys('u')).toEqual({ experiments: ['checkout'], flags: [] });
+  });
+
+  it('forgetExperiment drops that experiment only, and the user once nothing is left', () => {
+    const keys = new AttributedKeys();
+    keys.recordExperiment('u', 'checkout');
+    keys.recordExperiment('u', 'hero');
+    keys.recordFlag('u', 'new-search');
+    keys.forgetExperiment('u', 'checkout');
+    expect(keys.keys('u')).toEqual({ experiments: ['hero'], flags: ['new-search'] });
+
+    keys.recordExperiment('v', 'checkout');
+    keys.forgetExperiment('v', 'checkout');
+    keys.forgetExperiment('nobody', 'checkout');
+    expect(keys.size).toBe(1);
+  });
+
   it("never returns one user's keys for another", () => {
     const keys = new AttributedKeys();
     keys.recordExperiment('a', 'checkout');

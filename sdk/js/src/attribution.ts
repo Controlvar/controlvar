@@ -50,6 +50,18 @@ export class AttributedKeys {
   }
 
   /**
+   * Drop one experiment's key for the user: the server answered its assignment 404, so a
+   * key-less event must not reach it (a server that answers 404 for an experiment that is not
+   * running would otherwise credit the user's stored arm while the user is shown control).
+   */
+  forgetExperiment(userId: string, experimentKey: string): void {
+    const keys = this.users.get(userId);
+    if (!keys) return;
+    keys.experiments.delete(experimentKey);
+    if (keys.experiments.size === 0 && keys.flags.size === 0) this.users.delete(userId);
+  }
+
+  /**
    * The user's keys within the horizon, experiments then flags, each in the order
    * they were first answered. Keys past the horizon are dropped here.
    */

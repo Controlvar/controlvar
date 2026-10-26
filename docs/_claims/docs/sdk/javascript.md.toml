@@ -473,6 +473,14 @@ by = [
 ]
 
 [[unit]]
+text = "An experiment whose assignment is later answered 404 loses its entry at once, so key-less events stop reaching it; any other failure (a 5xx, a network error) keeps it."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::drops an experiment whose assignment is later answered 404: the event goes once with no key",
+    "test:sdk/js/__tests__/client.test.ts::keeps the key when the later assignment fails with %s",
+    "test:sdk/js/__tests__/attribution.test.ts::forgetExperiment drops that experiment only, and the user once nothing is left",
+]
+
+[[unit]]
 text = "With nothing to attribute it to, the event is still sent: one POST /api/v1/tracking/track with no key."
 by = [
     "test:sdk/js/__tests__/client.test.ts::sends the event once to /api/v1/tracking/track with no key when nothing is attributed to the user",

@@ -997,6 +997,43 @@ describe('track after the cache TTL', () => {
     expect(batchKeys(call(fetchMock, 4).body)).toEqual(['checkout']);
   });
 
+  it('drops an experiment whose assignment is later answered 404: the event goes once with no key', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence(
+      { body: assignment },
+      { status: 404, body: { detail: "Active experiment with key 'checkout' not found" } },
+      { body: {} }
+    );
+    const client = new ExperimentationClient(baseConfig);
+    await client.getAssignment('checkout', user);
+    now.mockReturnValue(T0 + 301 * SECOND); // the cache has expired; the server now answers 404
+    await expect(client.getVariant('checkout', user)).resolves.toBe('control');
+    now.mockReturnValue(T0 + 3600 * SECOND);
+
+    await client.track('user-123', 'purchase');
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(call(fetchMock, 2).url).toBe(TRACK_URL);
+    expect(call(fetchMock, 2).body).toEqual({ event_type: 'purchase', event_name: 'purchase', user_id: 'user-123' });
+  });
+
+  it.each([
+    ['a 500', { status: 500, body: {} }],
+    ['a network failure', new Error('ECONNRESET')],
+  ])('keeps the key when the later assignment fails with %s', async (_label, failure) => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence({ body: assignment }, failure as Step | Error, { body: {} });
+    const client = new ExperimentationClient(baseConfig);
+    await client.getAssignment('checkout', user);
+    now.mockReturnValue(T0 + 301 * SECOND);
+    await expect(client.getVariant('checkout', user)).resolves.toBe('control');
+
+    await client.track('user-123', 'purchase');
+
+    expect(call(fetchMock, 2).url).toBe(BATCH_URL);
+    expect(batchKeys(call(fetchMock, 2).body)).toEqual(['checkout']);
+  });
+
   it('sends to a key answered 24 hours less 1 s ago', async () => {
     const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
     const fetchMock = mockFetchSequence({ body: assignment }, { body: { success_count: 1, failure_count: 0 } });

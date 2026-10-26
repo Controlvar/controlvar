@@ -195,6 +195,8 @@ ISO-8601). `TrackEvent` = `TrackOptions & { userId, eventName }`.
 - An experiment that is not running (its latest answer has `reason` `draft`, `paused`, `completed`
   or `archived`) gets no entry. An answer with `assigned: false` for `holdout`,
   `mutual_exclusion` or `targeting` keeps its entry: holdout results count those users' events.
+- An experiment whose assignment is later answered 404 loses its entry at once, so key-less events
+  stop reaching it; any other failure (a 5xx, a network error) keeps it.
 - With nothing to attribute it to, the event is still sent: one `POST /api/v1/tracking/track` with
   no key. The server stores it as history, which counts in holdout results and as CUPED history,
   never in an experiment's results.

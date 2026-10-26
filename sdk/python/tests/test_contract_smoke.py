@@ -128,6 +128,43 @@ def test_it_runs_the_four_contract_steps(environment, capsys):
     assert len(capsys.readouterr().out.strip().splitlines()) == 1
 
 
+@pytest.mark.parametrize(
+    ("keys", "expected"),
+    [
+        (([], []), "expected one POST /api/v1/tracking/batch"),  # the event went untagged to /track
+        ((["exp_a"], []), "expected the experiment 'exp_a' then the flag 'flag_a'"),
+        ((["exp_a", "other"], ["flag_a"]), "expected the experiment 'exp_a' then the flag 'flag_a'"),
+    ],
+    ids=["untagged", "flag-missing", "extra-key"],
+)
+def test_it_fails_unless_the_key_less_track_is_one_batch_to_exactly_the_experiment_and_the_flag(
+    environment, capsys, keys, expected
+):
+    environment.setenv("CONTRACT_EXPERIMENT_KEY", "exp_a")
+    environment.setenv("CONTRACT_FLAG_KEY", "flag_a")
+    transport = fake_api("exp_a", "flag_a")
+    environment.setattr(client_module, "UrllibTransport", lambda: transport)
+    environment.setattr("controlvar.attribution.AttributedKeys.keys", lambda self, user_id: keys)
+    with pytest.raises(SystemExit) as stopped:
+        load_smoke(environment).main()
+    assert stopped.value.code == 1
+    assert expected in capsys.readouterr().err
+
+
+def test_it_fails_when_an_entry_of_the_fan_out_was_not_stored(environment, capsys):
+    transport = fake_api("sdk_contract_ab", "sdk_contract_flag")
+    transport.route(
+        "POST",
+        "/api/v1/tracking/batch",
+        json={"success_count": 1, "failure_count": 1, "errors": [{"index": 0, "error": "nope"}]},
+    )
+    environment.setattr(client_module, "UrllibTransport", lambda: transport)
+    with pytest.raises(SystemExit) as stopped:
+        load_smoke(environment).main()
+    assert stopped.value.code == 1
+    assert "the fan-out's entries were not all stored" in capsys.readouterr().err
+
+
 def test_it_stops_without_a_key(environment, capsys):
     environment.delenv("CONTROLVAR_API_KEY")
     transport = FakeTransport()

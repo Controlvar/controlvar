@@ -209,10 +209,19 @@ export class ExperimentationClient {
     return this.dedupe(`assign\u0000${userId}\u0000${experimentKey}`, async () => {
       const body: Record<string, unknown> = { experiment_key: experimentKey, user_id: userId };
       if (attributes !== undefined) body.context = attributes;
-      const data = await this.requestJson<AssignResponse>('/api/v1/tracking/assign', {
-        method: 'POST',
-        body,
-      });
+      let data: AssignResponse;
+      try {
+        data = await this.requestJson<AssignResponse>('/api/v1/tracking/assign', {
+          method: 'POST',
+          body,
+        });
+      } catch (err) {
+        // A 404: a key-less track() must no longer reach this experiment.
+        if (err instanceof ExperimentationError && err.status === 404) {
+          this.attributed.forgetExperiment(userId, experimentKey);
+        }
+        throw err;
+      }
       if (!data || typeof data.variant_name !== 'string') {
         throw new ExperimentationError('Assignment response is missing variant_name', {
           code: 'INVALID_RESPONSE',

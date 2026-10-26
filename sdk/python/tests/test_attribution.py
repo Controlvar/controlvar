@@ -58,6 +58,31 @@ def test_a_key_is_dropped_once_its_latest_answer_is_more_than_24_hours_old():
         assert len(keys) == 0
 
 
+def test_the_24_hours_run_from_the_latest_answer_of_the_key():
+    keys = AttributedKeys()
+    with mock.patch("controlvar.cache._now") as now:
+        now.return_value = 0.0
+        keys.record_experiment("u", "checkout")
+        now.return_value = 23 * 3600.0
+        keys.record_experiment("u", "checkout")
+        now.return_value = 25 * 3600.0
+        assert keys.keys("u") == (["checkout"], [])
+
+
+def test_forget_experiment_drops_that_experiment_only_and_the_user_once_nothing_is_left():
+    keys = AttributedKeys()
+    keys.record_experiment("u", "checkout")
+    keys.record_experiment("u", "hero")
+    keys.record_flag("u", "new_search")
+    keys.forget_experiment("u", "checkout")
+    assert keys.keys("u") == (["hero"], ["new_search"])
+
+    keys.record_experiment("v", "checkout")
+    keys.forget_experiment("v", "checkout")
+    keys.forget_experiment("nobody", "checkout")
+    assert len(keys) == 1
+
+
 def test_one_users_keys_never_come_back_for_another():
     keys = AttributedKeys()
     keys.record_experiment("a", "checkout")

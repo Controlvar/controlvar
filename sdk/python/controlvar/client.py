@@ -305,7 +305,13 @@ class ExperimentationClient:
         body: Dict[str, Any] = {"experiment_key": experiment_key, "user_id": user_id}
         if user_attributes is not None:
             body["context"] = dict(user_attributes)
-        data = self._request("POST", "/api/v1/tracking/assign", body=body)
+        try:
+            data = self._request("POST", "/api/v1/tracking/assign", body=body)
+        except ExperimentationError as exc:
+            # A 404: a key-less track() must no longer reach this experiment.
+            if exc.status == 404:
+                self._attributed.forget_experiment(user_id, experiment_key)
+            raise
 
         if not isinstance(data, dict) or not isinstance(data.get("variant_name"), str):
             raise ExperimentationError(
