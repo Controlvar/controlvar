@@ -1,0 +1,130 @@
+name: Demo Apps
+
+# The demo apps' own tests on the pull requests that change them. The ShopLab
+# and StreamPulse jest suites and their simulators' pytest suites ran only in
+# rc-evidence.yml, at a release tag, so a pull request under demo/ went green
+# without any of them running.
+#
+# Each job runs its suite through `scripts/rc_evidence.py --suite`, the same
+# command rc-evidence.yml runs, so the two cannot drift apart: the suites are
+# SUITES in that script (demo-shoplab, demo-streampulse, demo-simulators), and
+# each job installs what rc-evidence's job for that suite installs.
+#
+# It runs only when a path below changes. The demo apps are built against the
+# React SDK's source (sdk/react/src), so a change there runs it too, though
+# the jest suites replace the SDK with a mock.
+#
+# It is not a required check, and branch protection does not list it. A
+# path-filtered workflow does not run at all on a pull request that touches
+# none of its paths, so a required check would wait for ever. It adds nothing
+# to core-build: none of these suites is under backend/tests or
+# tests/sdk-contract.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'demo/**'
+      - 'sdk/react/**'
+      - 'scripts/rc_evidence.py'
+      - '.nvmrc'
+      - '.github/workflows/demo-apps.yml'
+  # `branches: [main]`, or a push to a pull request's branch would run it a
+  # second time on the same commit.
+  push:
+    branches: [main]
+    paths:
+      - 'demo/**'
+      - 'sdk/react/**'
+      - 'scripts/rc_evidence.py'
+      - '.nvmrc'
+      - '.github/workflows/demo-apps.yml'
+  workflow_dispatch:
+
+# Keyed on the pull request number: a newer push to it supersedes the run in
+# flight. A push to main runs to completion.
+concurrency:
+  group: demo-apps-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  jest:
+    name: demo jest (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: demo-shoplab
+            dir: demo/shoplab
+          - suite: demo-streampulse
+            dir: demo/streampulse
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install the app's packages
+        env:
+          DIR: ${{ matrix.dir }}
+        run: cd "$DIR" && npm ci
+
+      - name: Run the suite, as rc-evidence runs it
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: python scripts/rc_evidence.py --suite "$SUITE" --junit-dir "$RUNNER_TEMP/junit"
+
+      - name: Upload the JUnit report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: demo-apps-junit-${{ matrix.suite }}
+          path: ${{ runner.temp }}/junit
+          retention-days: 30
+          if-no-files-found: warn
+
+  simulators:
+    name: demo simulators
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      # What rc-evidence.yml installs for its demo-simulators suite.
+      - name: Install dependencies
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Run the simulators' tests, as rc-evidence runs them
+        env:
+          APP_ENV: test
+          TESTING: 'true'
+        run: python scripts/rc_evidence.py --suite demo-simulators --junit-dir "$RUNNER_TEMP/junit"
+
+      - name: Upload the JUnit reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: demo-apps-junit-demo-simulators
+          path: ${{ runner.temp }}/junit
+          retention-days: 30
+          if-no-files-found: warn
