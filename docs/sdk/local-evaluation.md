@@ -75,7 +75,9 @@ await client.close();
 
 `evaluateFlag`, `isFeatureEnabled` and `getAllFlags` keep their signatures. A local answer uses the
 attributes passed to that call, so the "call `clearCache()` after changing attributes" caveat does
-not apply to it; it is still recorded for the key-less `track()` fan-out. `getAllFlags` is answered
+not apply to it; it is still recorded for the key-less `track()` fan-out. That record is kept per
+process, so on a server pass `experimentKey` (`experiment_key` in Python) on conversions: a purchase
+tracked by an order service or another worker reaches no experiment without it. `getAllFlags` is answered
 locally only when every active flag can be answered for those attributes; otherwise the whole call
 goes to the server. The refresh and report timers do not keep a Node process alive.
 

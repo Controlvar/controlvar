@@ -29,7 +29,8 @@ Event vocabulary (all `event_type == event_name`):
 `add_to_cart` value = unit price `{product_id, quantity, button}` · `begin_checkout` value = cart total
 `{items, flow}` · `purchase` value = order total `{items, flow, order_id}` · `search {query, results, engine}`
 (attached to the `shoplab_new_search` flag). Events without an explicit key are fanned out by the
-SDK to every experiment the visitor has been assigned to in the session.
+SDK to every experiment the visitor has been assigned to since the page was loaded (up to 24 hours),
+so an order placed long after the checkout page assigned the visitor still counts.
 
 ## Running it
 

@@ -208,6 +208,14 @@ by = [
 ]
 
 [[unit]]
+text = "That record is kept per process, so on a server pass experimentKey (experiment_key in Python) on conversions: a purchase tracked by an order service or another worker reaches no experiment without it."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::another client instance has none of them: its event goes once with no key",
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_another_client_instance_has_none_of_them",
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::test_an_untagged_event_after_assignment_counts_nowhere",
+]
+
+[[unit]]
 text = "getAllFlags is answered locally only when every active flag can be answered for those attributes; otherwise the whole call goes to the server."
 by = [
     "test:sdk/js/__tests__/local.test.ts::getAllFlags: every active flag locally, inactive omitted",

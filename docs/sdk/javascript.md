@@ -79,7 +79,7 @@ const isEnabled = await client.isFeatureEnabled('dark_mode', user);   // false o
 // Track a conversion for one experiment (POST /api/v1/tracking/track)
 await client.track('user-123', 'purchase', { value: 49.99, experimentKey: 'checkout_button_color' });
 
-// Track without a key: fans out to every cached assignment and flag for the user (see below)
+// Track without a key: sent to every experiment and flag answered for the user (see below)
 await client.track('user-123', 'page_view', { properties: { page: '/checkout' } });
 ```
 
@@ -166,7 +166,7 @@ turn that into their safe default.
 | `fetchAssignments` | `(userId, { activeOnly?: boolean } = { activeOnly: true }) => Promise<AssignmentRecord[]>` | Server-side assignment rows (raw objects); not cached | Rejects |
 | `getAssignments` | `(userId) => Assignment[]` | Cached, unexpired assignments in assignment order (no network) | — |
 | `getEvaluatedFlags` | `(userId) => string[]` | Keys of cached, successfully evaluated flags (no network) | — |
-| `clearCache` | `() => void` | Drops both caches | — |
+| `clearCache` | `() => void` | Drops both caches; keeps the keys a key-less `track` is sent to | — |
 | `ready` | `({ timeoutMs? }?) => Promise<ReadyResult>` | `{ ok: true, rulesetVersion }` or `{ ok: false, error }`; `{ ok: true, rulesetVersion: null }` at once in server mode | Never rejects |
 | `status` | `() => LocalEvaluationStatus` | `{ evaluation, ready, rulesetVersion, lastRefreshAt, lastError, serverEvaluatedFlags }` | — |
 | `close` | `() => Promise<void>` | Local mode: stops the ruleset refresh and sends the remaining evaluation counts; later calls are evaluated by the server. A no-op in server mode | Never rejects |
@@ -189,12 +189,22 @@ ISO-8601). `TrackEvent` = `TrackOptions & { userId, eventName }`.
 
 - With `experimentKey` and/or `featureFlagKey`: exactly one `POST /api/v1/tracking/track`.
 - Without a key: one `POST /api/v1/tracking/batch` (chunked at 100) containing one entry per
-  experiment the user has been assigned to in this client (`experiment_key`) plus one per flag
-  evaluated for the user (`feature_flag_key`), taken from the cache. **If nothing is cached, nothing
-  is sent.** This is what makes a single `track(userId, 'purchase', …)` count as a conversion for
-  every experiment the user is in.
-- `trackBatch` applies the same expansion to keyless entries, then sends everything in chunks of 100
-  and sums the server's `success_count` / `failure_count` / `errors`.
+  experiment (`experiment_key`) and one per flag (`feature_flag_key`) this client answered for the
+  user in the last 24 hours, whether or not the answer is still cached. This is what makes a single
+  `track(userId, 'purchase', …)` count as a conversion for every experiment the user is in.
+- An experiment that is not running (its latest answer has `reason` `draft`, `paused`, `completed`
+  or `archived`) gets no entry. An answer with `assigned: false` for `holdout`,
+  `mutual_exclusion` or `targeting` keeps its entry: holdout results count those users' events.
+- With nothing to attribute it to, the event is still sent: one `POST /api/v1/tracking/track` with
+  no key. The server stores it as history, which counts in holdout results and as CUPED history,
+  never in an experiment's results.
+- The keys live in this client's memory, for up to 10,000 users (the user answered least recently
+  is dropped first). `clearCache()` keeps them, and another process does not have them. On a
+  server, the process that records a purchase is often not the one that assigned the user, so pass
+  `experimentKey` on conversions there.
+- `trackBatch` applies the same expansion to keyless entries (one with nothing to attribute it to
+  is sent with no key), then sends everything in chunks of 100 and sums the server's
+  `success_count` / `failure_count` / `errors`.
 
 Conversions are matched to metrics by **event name**.
 

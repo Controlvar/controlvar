@@ -1,3 +1,4 @@
+import { AttributedKeys } from './attribution';
 import { UserKeyCache } from './cache';
 import { ExperimentationError, asExperimentationError } from './errors';
 import { DEFER } from './evaluator';
@@ -79,6 +80,11 @@ function toIso(timestamp: Date | string): string {
   return timestamp instanceof Date ? timestamp.toISOString() : String(timestamp);
 }
 
+/** One body that names no experiment and no flag: nothing was attributed. */
+function isUntagged(bodies: TrackBody[]): boolean {
+  return bodies.length === 1 && !bodies[0].experiment_key && !bodies[0].feature_flag_key;
+}
+
 /**
  * Client for the Controlvar public API.
  *
@@ -91,6 +97,8 @@ function toIso(timestamp: Date | string): string {
  * - Successful evaluations/assignments are cached per user + key for
  *   `cacheTtlMs`; failures are never cached. Concurrent calls for the same
  *   user + key share one in-flight request.
+ * - Every successful answer also records its key for the key-less `track()`
+ *   fan-out, for 24 hours (see `attribution.ts`); `clearCache()` keeps that record.
  * - `getAssignment`, `evaluateFlag`, `getAllFlags` and `fetchAssignments` throw
  *   `ExperimentationError`; `getVariant` / `isFeatureEnabled` return safe
  *   defaults instead; `track` / `trackBatch` never reject.
@@ -105,6 +113,8 @@ export class ExperimentationClient {
   private readonly onError: ClientConfig['onError'];
   private readonly flags: UserKeyCache<FlagEvaluation>;
   private readonly assignments: UserKeyCache<Assignment>;
+  /** The keys a key-less `track()` is sent to; outlives the cache entries. */
+  private readonly attributed = new AttributedKeys();
   /** Requests currently in flight, so concurrent callers share one fetch. */
   private readonly inflight = new Map<string, Promise<unknown>>();
   /** The local-evaluation runtime; `null` in server mode. */
@@ -222,6 +232,7 @@ export class ExperimentationClient {
         ...(typeof data.reason === 'string' ? { reason: data.reason } : {}),
       };
       this.assignments.set(userId, experimentKey, assignment);
+      this.attributed.recordExperiment(userId, assignment.experimentKey, assignment.reason);
       return assignment;
     });
   }
@@ -281,6 +292,7 @@ export class ExperimentationClient {
         };
         // Recorded for the key-less track() fan-out, exactly as a server answer is.
         this.flags.set(userId, flagKey, evaluation);
+        this.attributed.recordFlag(userId, flagKey);
         return evaluation;
       }
     }
@@ -299,6 +311,7 @@ export class ExperimentationClient {
       if (typeof data?.reason === 'string') evaluation.reason = data.reason;
       if (this.local) evaluation.source = 'server';
       this.flags.set(userId, flagKey, evaluation);
+      this.attributed.recordFlag(userId, flagKey);
       return evaluation;
     });
   }
@@ -349,15 +362,17 @@ export class ExperimentationClient {
    *
    * - With `experimentKey` / `featureFlagKey`: one `POST /api/v1/tracking/track`.
    * - Without keys: one `POST /api/v1/tracking/batch` (chunked at 100) with one
-   *   entry per cached assignment and one per cached evaluated flag for this
-   *   user. Nothing cached → nothing is sent.
+   *   entry per experiment and one per flag this client answered for the user in
+   *   the last 24 hours, cached or not. An experiment whose latest answer said it
+   *   is a draft, paused, completed or archived gets no entry.
+   * - Without keys and with nothing to attribute it to: one `POST /api/v1/tracking/track`
+   *   with no key, which the server stores as history.
    */
   async track(userId: string, eventName: string, options: TrackOptions = {}): Promise<void> {
     try {
       const events = this.expand({ userId, eventName, ...options });
-      if (events.length === 0) return;
 
-      if (options.experimentKey || options.featureFlagKey) {
+      if (options.experimentKey || options.featureFlagKey || isUntagged(events)) {
         await this.requestOk('/api/v1/tracking/track', { method: 'POST', body: events[0] });
         return;
       }
@@ -375,7 +390,8 @@ export class ExperimentationClient {
 
   /**
    * Send many events via `POST /api/v1/tracking/batch`, chunked at 100.
-   * Entries without a key are expanded with the same fan-out rule as `track`.
+   * Entries without a key are expanded with the same fan-out rule as `track`; one
+   * with nothing to attribute it to is sent once with no key (stored as history).
    * Never rejects: a failed chunk counts all its events as failures.
    */
   async trackBatch(events: TrackEvent[]): Promise<BatchResult> {
@@ -405,6 +421,10 @@ export class ExperimentationClient {
 
   // ─── Cache ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Drop every cached assignment and evaluation, so the next calls ask the server again.
+   * The keys a key-less `track()` is sent to are kept.
+   */
   clearCache(): void {
     this.flags.clear();
     this.assignments.clear();
@@ -412,7 +432,10 @@ export class ExperimentationClient {
 
   // ─── Internals ─────────────────────────────────────────────────────────────
 
-  /** Build the wire bodies for one event: a single keyed body, or the fan-out list. */
+  /**
+   * Build the wire bodies for one event: a single keyed body, the fan-out list, or,
+   * with nothing to attribute it to, the single body with no key.
+   */
   private expand(event: TrackEvent): TrackBody[] {
     const base: TrackBody = {
       event_type: event.eventType ?? event.eventName,
@@ -430,10 +453,12 @@ export class ExperimentationClient {
       return [body];
     }
 
-    return [
-      ...this.getAssignments(event.userId).map(a => ({ ...base, experiment_key: a.experimentKey })),
-      ...this.getEvaluatedFlags(event.userId).map(flagKey => ({ ...base, feature_flag_key: flagKey })),
+    const { experiments, flags } = this.attributed.keys(event.userId);
+    const bodies: TrackBody[] = [
+      ...experiments.map(experimentKey => ({ ...base, experiment_key: experimentKey })),
+      ...flags.map(flagKey => ({ ...base, feature_flag_key: flagKey })),
     ];
+    return bodies.length > 0 ? bodies : [base];
   }
 
   private report(err: unknown, operation: SwallowedOperation): void {

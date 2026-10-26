@@ -9,7 +9,9 @@
   ruleset whenever the answer is provably the server's, and by the server
   otherwise; experiments always stay on the server.
 * Successful assignments/evaluations are cached per user + key for
-  ``cache_ttl_seconds``; failures are never cached.
+  ``cache_ttl_seconds``; failures are never cached. Every successful answer also
+  records its key for the key-less ``track()`` fan-out, for 24 hours
+  (:mod:`controlvar.attribution`); ``clear_cache()`` keeps that record.
 * ``get_assignment``/``get_feature_flag``/``get_all_flags``/``get_assignments``
   raise :class:`~controlvar.ExperimentationError`; the convenience
   wrappers ``get_variant``/``is_feature_enabled`` swallow it and return a
@@ -26,6 +28,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Union
 from urllib.parse import quote, urlencode
 
+from .attribution import AttributedKeys
 from .cache import UserKeyCache
 from .evaluator import DEFER
 from .local import (
@@ -146,6 +149,8 @@ class ExperimentationClient:
         self._transport: Transport = transport if transport is not None else UrllibTransport()
         self._assignments: UserKeyCache[Assignment] = UserKeyCache(cache_ttl_seconds)
         self._flags: UserKeyCache[FlagEvaluation] = UserKeyCache(cache_ttl_seconds)
+        # The keys a key-less track() is sent to; outlives the cache entries.
+        self._attributed = AttributedKeys()
         self._sleep = time.sleep
         self._headers: Dict[str, str] = {
             "X-API-Key": api_key,
@@ -322,6 +327,7 @@ class ExperimentationClient:
             reason=data["reason"] if isinstance(data.get("reason"), str) else None,
         )
         self._assignments.set(user_id, experiment_key, assignment)
+        self._attributed.record_experiment(user_id, assignment.experiment_key, assignment.reason)
         return assignment
 
     def get_variant(
@@ -381,6 +387,7 @@ class ExperimentationClient:
                 )
                 # Recorded for the key-less track() fan-out, as a server answer is.
                 self._flags.set(user_id, flag_key, local)
+                self._attributed.record_flag(user_id, flag_key)
                 return local
         cached = self._flags.get(user_id, flag_key)
         if cached is not None:
@@ -410,6 +417,7 @@ class ExperimentationClient:
             source="server" if self._local is not None else None,
         )
         self._flags.set(user_id, flag_key, evaluation)
+        self._attributed.record_flag(user_id, flag_key)
         return evaluation
 
     def is_feature_enabled(
@@ -494,13 +502,19 @@ class ExperimentationClient:
         * With ``experiment_key`` and/or ``feature_flag_key``: one
           ``POST /api/v1/tracking/track``.
         * Without a key: one ``POST /api/v1/tracking/batch`` (chunked at 100)
-          containing one entry per cached assignment (``experiment_key``) plus
-          one per cached evaluated flag (``feature_flag_key``) for this user.
-          If nothing is cached for the user, nothing is sent and ``False`` is
-          returned.
+          containing one entry per experiment (``experiment_key``) plus one per
+          flag (``feature_flag_key``) this client answered for the user in the
+          last 24 hours, cached or not. An experiment whose latest answer said it
+          is a draft, paused, completed or archived gets no entry.
+        * Without a key and with nothing to attribute it to: one
+          ``POST /api/v1/tracking/track`` with no key, which the server stores as
+          history.
 
-        ``event_type`` defaults to ``event_name``. Returns ``True`` only when
-        the server accepted the event(s).
+        ``event_type`` defaults to ``event_name``. Returns ``True`` when the
+        event was sent and the server answered 2xx (every request, when a
+        fan-out takes more than one); ``False`` otherwise. A 2xx batch can still
+        report a failed entry, for example a key the server no longer has; use
+        :meth:`track_batch` to read the per-entry results.
         """
         try:
             base = self._event_body(user_id, event_name, event_value, properties, event_type, timestamp)
@@ -513,18 +527,29 @@ class ExperimentationClient:
                 self._request("POST", "/api/v1/tracking/track", body=body)
                 return True
 
-            events: List[Dict[str, Any]] = [
-                dict(base, experiment_key=assignment.experiment_key)
-                for assignment in self.cached_assignments(user_id)
-            ]
-            events.extend(dict(base, feature_flag_key=flag.key) for flag in self.cached_flags(user_id))
+            experiments, flags = self._attributed.keys(user_id)
+            events: List[Dict[str, Any]] = [dict(base, experiment_key=key) for key in experiments]
+            events.extend(dict(base, feature_flag_key=key) for key in flags)
             if not events:
-                logger.debug("track(%s, %s): nothing cached for user; nothing sent", user_id, event_name)
-                return False
-            return self.track_batch(events).ok
+                # Nothing to attribute it to: sent once with no key, stored as history.
+                self._request("POST", "/api/v1/tracking/track", body=base)
+                return True
+            return self._post_batches(events)
         except Exception as exc:  # noqa: BLE001 - fire-and-forget
             logger.warning("track(%s, %s) failed: %s", user_id, event_name, exc)
             return False
+
+    def _post_batches(self, events: List[Dict[str, Any]]) -> bool:
+        """``POST /api/v1/tracking/batch`` in chunks of 100; ``True`` when every
+        chunk was answered 2xx. A failed chunk is logged and the rest are still sent."""
+        ok = True
+        for start in range(0, len(events), BATCH_LIMIT):
+            try:
+                self._request("POST", "/api/v1/tracking/batch", body={"events": events[start : start + BATCH_LIMIT]})
+            except Exception as exc:  # noqa: BLE001 - never raise
+                logger.warning("track fan-out chunk starting at %d failed: %s", start, exc)
+                ok = False
+        return ok
 
     def track_batch(self, events: Iterable[Mapping[str, Any]]) -> BatchResult:
         """Send raw track bodies via ``POST /api/v1/tracking/batch`` in chunks of 100. Never raises.
@@ -580,7 +605,7 @@ class ExperimentationClient:
     # ------------------------------------------------------------------ cache
 
     def cached_assignments(self, user_id: str) -> List[Assignment]:
-        """Successful, unexpired assignments cached for the user (what ``track`` fans out to)."""
+        """Successful, unexpired assignments cached for the user."""
         return [assignment for _, assignment in self._assignments.entries(user_id)]
 
     def cached_flags(self, user_id: str) -> List[FlagEvaluation]:
@@ -588,6 +613,7 @@ class ExperimentationClient:
         return [evaluation for _, evaluation in self._flags.entries(user_id)]
 
     def clear_cache(self) -> None:
-        """Drop every cached assignment and evaluation."""
+        """Drop every cached assignment and evaluation, so the next calls ask the
+        server again. The keys a key-less ``track()`` is sent to are kept."""
         self._assignments.clear()
         self._flags.clear()

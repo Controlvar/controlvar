@@ -104,10 +104,10 @@ try {
   if (track.made.length !== 1) fail(`expected one /tracking/track call, saw ${track.made.length}`);
   if (track.bad) fail(`track returned HTTP ${track.bad.status}`);
 
-  // 4. Track without a key: fans out to the cached assignment + evaluated flag
+  // 4. Track without a key: fans out to the assignment + evaluated flag answered above,
   //    through POST /api/v1/tracking/batch.
   if (client.getAssignments(userId).length !== 1 || client.getEvaluatedFlags(userId).length !== 1) {
-    fail('cache does not hold one assignment and one flag; fan-out would send nothing');
+    fail('cache does not hold one assignment and one flag');
   }
   mark = calls.length;
   await client.trackEvent(userId, 'page_view', { page: '/contract-smoke' });

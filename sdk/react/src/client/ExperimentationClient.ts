@@ -7,6 +7,7 @@ import {
   FeatureFlagEvaluateResponse,
   ExperimentAssignResponse,
 } from './types';
+import { AttributedKeys } from './attribution';
 
 interface CacheEntry<T> {
   value: T;
@@ -121,6 +122,8 @@ export function disabledEvaluation(
  *   local bucketing happens here.
  * - Successful evaluations/assignments are cached per user + key for
  *   `cacheTtlMs`; failures are never cached.
+ * - Every successful answer also records its key for the key-less `trackEvent`
+ *   fan-out, for 24 hours (see `attribution.ts`); `clearCache()` keeps that record.
  * - `evaluateFeatureFlag*` and `assignExperiment` throw on failure (hooks
  *   convert that into `error` state). `trackEvent` never throws.
  */
@@ -130,6 +133,8 @@ export class ExperimentationClient {
   private readonly timeoutMs: number;
   private readonly flags: UserKeyCache<FeatureFlagEvaluation>;
   private readonly assignments: UserKeyCache<ExperimentAssignment>;
+  /** The keys a key-less `trackEvent` is sent to; outlives the cache entries. */
+  private readonly attributed = new AttributedKeys();
   /** Requests currently in flight, so concurrent callers share one fetch. */
   private readonly inflight = new Map<string, Promise<unknown>>();
 
@@ -236,6 +241,7 @@ export class ExperimentationClient {
         ...(typeof data.reason === 'string' ? { reason: data.reason } : {}),
       };
       this.flags.set(user.userId, flagKey, evaluation);
+      this.attributed.recordFlag(user.userId, flagKey);
       return evaluation;
     });
   }
@@ -271,6 +277,7 @@ export class ExperimentationClient {
         ...(typeof data.reason === 'string' ? { reason: data.reason } : {}),
       };
       this.assignments.set(user.userId, experimentKey, assignment);
+      this.attributed.recordExperiment(user.userId, assignment.experimentKey, assignment.reason);
       return assignment;
     });
   }
@@ -283,8 +290,11 @@ export class ExperimentationClient {
    * - With `options.experimentKey` / `options.featureFlagKey`: one
    *   `POST /api/v1/tracking/track`.
    * - Without keys: fan out via `POST /api/v1/tracking/batch` — one entry per
-   *   cached assignment and one per cached evaluated flag for this user. If
-   *   nothing is cached, nothing is sent.
+   *   experiment and one per flag this client answered for the user in the last
+   *   24 hours, cached or not. An experiment whose latest answer said it is a
+   *   draft, paused, completed or archived gets no entry.
+   * - Without keys and with nothing to attribute it to: one
+   *   `POST /api/v1/tracking/track` with no key, which the server stores as history.
    */
   async trackEvent(
     userId: string,
@@ -310,11 +320,16 @@ export class ExperimentationClient {
         return;
       }
 
+      const { experiments, flags } = this.attributed.keys(userId);
       const events: TrackBody[] = [
-        ...this.getAssignments(userId).map(a => ({ ...base, experiment_key: a.experimentKey })),
-        ...this.getEvaluatedFlags(userId).map(flagKey => ({ ...base, feature_flag_key: flagKey })),
+        ...experiments.map(experimentKey => ({ ...base, experiment_key: experimentKey })),
+        ...flags.map(flagKey => ({ ...base, feature_flag_key: flagKey })),
       ];
-      if (events.length === 0) return;
+      if (events.length === 0) {
+        // Nothing to attribute it to: sent once with no key, stored as history.
+        await this.request('/api/v1/tracking/track', { method: 'POST', body: base });
+        return;
+      }
 
       for (let i = 0; i < events.length; i += BATCH_LIMIT) {
         await this.request('/api/v1/tracking/batch', {
@@ -339,6 +354,10 @@ export class ExperimentationClient {
     return this.flags.entries(userId).map(([flagKey]) => flagKey);
   }
 
+  /**
+   * Drop every cached assignment and evaluation, so the next calls ask the server again.
+   * The keys a key-less `trackEvent` is sent to are kept.
+   */
   clearCache(): void {
     this.flags.clear();
     this.assignments.clear();
