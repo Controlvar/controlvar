@@ -45,6 +45,24 @@ NOT_RUNNING = [
 ]
 
 
+def test_the_reasons_are_exactly_the_four_statuses_that_are_not_active():
+    """The ``reason`` an experiment that is not ACTIVE answers is its status's
+    value, so the set of reasons is pinned here as literal strings: the SDKs
+    (and anything reading the answers) see exactly these four."""
+    assert {s.value for s in ExperimentStatus} - {"active"} == {
+        "draft",
+        "paused",
+        "completed",
+        "archived",
+    }
+    assert {s.value for s in NOT_RUNNING} == {
+        "draft",
+        "paused",
+        "completed",
+        "archived",
+    }
+
+
 @pytest.fixture
 def experiment(db_session, make_experiment):
     """An ACTIVE experiment with a control and a treatment variant (each with

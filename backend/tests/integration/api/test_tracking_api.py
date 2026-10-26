@@ -163,7 +163,9 @@ class TestAssign:
         """A draft with no variant flagged as the control answers 404 naming
         the draft, never its first variant: with no variants, and with two
         variants and neither flagged. Any other experiment that is not ACTIVE
-        answers its control (``test_tracking_assign_not_running.py``)."""
+        answers its control (``test_tracking_assign_not_running.py``). The API
+        refuses an experiment without a control, so only a direct database
+        write, as here, makes one."""
         drafts = []
         for variant_names in ((), ("blue", "green")):
             suffix = uuid.uuid4().hex[:8]
@@ -184,6 +186,49 @@ class TestAssign:
                 "detail": f"Experiment '{draft.key}' is a draft with no control "
                 "variant: mark one of its variants as the control."
             }
+
+    @pytest.mark.regression
+    def test_a_paused_experiment_with_no_control_variant_returns_404(
+        self, admin_client, db_session, make_experiment
+    ):
+        """Paused, completed or archived with no variant flagged as the
+        control: 404 naming the status, never the first variant (which could
+        be a treatment). Only a direct database write makes such an
+        experiment."""
+        suffix = uuid.uuid4().hex[:8]
+        experiment = make_experiment(
+            name=f"No control {suffix}",
+            key=f"no-control-{suffix}",
+            status=ExperimentStatus.PAUSED,
+        )
+        db_session.add_all(
+            Variant(experiment_id=experiment.id, name=name, is_control=False)
+            for name in ("blue", "green")
+        )
+        db_session.commit()
+        answers = {}
+        for status in (
+            ExperimentStatus.PAUSED,
+            ExperimentStatus.COMPLETED,
+            ExperimentStatus.ARCHIVED,
+        ):
+            experiment.status = status
+            db_session.commit()
+            resp = admin_client.post(
+                "/api/v1/tracking/assign",
+                json={"experiment_key": experiment.key, "user_id": _user()},
+            )
+            answers[status.value] = (resp.status_code, resp.json())
+        assert answers == {
+            status: (
+                404,
+                {
+                    "detail": f"Experiment '{experiment.key}' is {status} and has "
+                    "no control variant to serve."
+                },
+            )
+            for status in ("paused", "completed", "archived")
+        }
 
 
 class TestBanditAssignment:

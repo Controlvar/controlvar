@@ -135,6 +135,22 @@ class TestTrackingCounters:
         assert again.status_code == 200
         assert sample("experiment_assignments_total", labels) == before + 1
 
+    def test_a_not_running_answer_is_counted_under_its_status(
+        self, client, db_session, live_experiment
+    ):
+        live_experiment.status = ExperimentStatus.PAUSED
+        db_session.commit()
+        labels = {"experiment_id": str(live_experiment.id), "variant_id": "paused"}
+        before = sample("experiment_assignments_total", labels)
+
+        resp = client.post(
+            "/api/v1/tracking/assign",
+            json={"experiment_key": live_experiment.key, "user_id": "u-paused"},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["reason"] == "paused"
+        assert sample("experiment_assignments_total", labels) == before + 1
+
     # Client-supplied event names are bucketed to the bounded label ``custom``
     # (``core.metrics.event_type_label``); only the platform's known types
     # (exposure, conversion, click, page_view, custom) are labelled verbatim.

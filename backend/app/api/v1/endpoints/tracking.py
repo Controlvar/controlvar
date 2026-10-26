@@ -170,8 +170,10 @@ def _not_running_answer(
     their variant again.
 
     An experiment with no variant flagged as the control answers 404: serving
-    its first variant could show a treatment to everyone. Only a draft can be
-    in that state (starting needs a control, and variants are fixed after).
+    its first variant could show a treatment to everyone. Neither a draft nor
+    any other experiment can be put in that state through the API, which
+    refuses an experiment without a control on create and on update; only a
+    direct database write makes one.
     """
     reason = experiment.status.value
     control = next((v for v in experiment.variants or [] if v.is_control), None)

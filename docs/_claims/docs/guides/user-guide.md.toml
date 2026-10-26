@@ -467,6 +467,13 @@ by = [
 ]
 
 [[unit]]
+text = "An app using an SDK keeps showing the answer it cached during the pause for up to the SDK's cache time, 5 minutes by default."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/python/tests/test_client.py::TestConstruction::test_defaults_and_trailing_slash",
+]
+
+[[unit]]
 text = "Use when you need to investigate anomalies or if there's a critical bug."
 by = ["exempt:baseline"]
 

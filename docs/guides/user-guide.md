@@ -172,7 +172,7 @@ curl -s -X PUT "localhost:8000/api/v1/experiments/$EXPERIMENT_ID/schedule" \
 
 ### Pausing and Stopping
 
-**Pause**: Temporarily halt assignment of new users. Existing assignments are preserved. While the experiment is paused, every user gets the control variant (apps see `assigned: false` and the reason `paused`); when you start it again, each user who was assigned gets their variant back. Use when you need to investigate anomalies or if there's a critical bug.
+**Pause**: Temporarily halt assignment of new users. Existing assignments are preserved. While the experiment is paused, every user gets the control variant (apps see `assigned: false` and the reason `paused`); when you start it again, each user who was assigned gets their variant back. An app using an SDK keeps showing the answer it cached during the pause for up to the SDK's cache time, 5 minutes by default. Use when you need to investigate anomalies or if there's a critical bug.
 
 A paused experiment stays paused until you click **Start** again. Nothing resumes it
 behind your back: not the scheduler, and not a restart of the service.
