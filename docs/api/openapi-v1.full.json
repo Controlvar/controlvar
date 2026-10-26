@@ -16629,7 +16629,7 @@
         "type": "string"
       },
       "VariantAssignmentResponse": {
-        "description": "Response for POST /tracking/assign: the variant a user was assigned to.\n\nUsers that are not eligible (global holdout, mutual exclusion group or\ntargeting rules) still get HTTP 200 with the experiment's control variant\nso SDKs render the default experience; ``assigned`` is ``False`` and\n``reason`` says why.  No assignment or exposure is recorded for them.",
+        "description": "Response for POST /tracking/assign: the variant a user was assigned to.\n\nUsers that are not eligible (global holdout, mutual exclusion group or\ntargeting rules), and every user of an experiment that is not ACTIVE,\nstill get HTTP 200 with the experiment's control variant so SDKs render\nthe default experience; ``assigned`` is ``False`` and ``reason`` says\nwhy.  No assignment or exposure is recorded for them.",
         "example": {
           "assigned": false,
           "configuration": {
@@ -16672,7 +16672,7 @@
           },
           "reason": {
             "default": "assigned",
-            "description": "assigned | holdout | mutual_exclusion | targeting",
+            "description": "assigned | holdout | mutual_exclusion | targeting, or the status of an experiment that is not ACTIVE: draft | paused | completed | archived",
             "title": "Reason",
             "type": "string"
           },
@@ -32838,7 +32838,7 @@
     },
     "/api/v1/tracking/assign": {
       "post": {
-        "description": "Assign a user to an experiment variant.\n\nThis endpoint assigns a user to a variant of the specified experiment.\nIt handles consistent assignment for returning users.\n\nThe assignment is deterministic based on:\n- User ID\n- Experiment ID\n- Targeting rules\n- Traffic allocation percentages\n\nThis means that the same user will always get the same variant assignment\nfor a specific experiment, including across experiments in the same mutual\nexclusion group: a user enrolled in one experiment of a group is not\nenrolled in another, even as experiments in the group are activated,\npaused or resumed.\n\nNew users are first checked for eligibility: the global holdout, the\nexperiment's mutual exclusion group and its targeting rules (evaluated\nagainst ``context``; top-level keys also answer ``user.<key>`` /\n``device.<key>`` / ``app.<key>``).  Ineligible users receive HTTP 200 with\nthe control variant, ``assigned: false`` and ``reason`` set to\n``holdout`` | ``mutual_exclusion`` | ``targeting``; nothing is recorded\nfor them.  Existing assignments are always returned as-is.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nReturns:\n    VariantAssignmentResponse: The variant assignment with configuration\n    details plus ``assigned`` / ``reason``\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If the experiment doesn't exist or is not active\n    HTTPException 500: If there's an error during assignment",
+        "description": "Assign a user to an experiment variant.\n\nThis endpoint assigns a user to a variant of the specified experiment.\nIt handles consistent assignment for returning users.\n\nThe assignment is deterministic based on:\n- User ID\n- Experiment ID\n- Targeting rules\n- Traffic allocation percentages\n\nThis means that the same user will always get the same variant assignment\nfor a specific experiment, including across experiments in the same mutual\nexclusion group: a user enrolled in one experiment of a group is not\nenrolled in another, even as experiments in the group are activated,\npaused or resumed.\n\nNew users are first checked for eligibility: the global holdout, the\nexperiment's mutual exclusion group and its targeting rules (evaluated\nagainst ``context``; top-level keys also answer ``user.<key>`` /\n``device.<key>`` / ``app.<key>``).  Ineligible users receive HTTP 200 with\nthe control variant, ``assigned: false`` and ``reason`` set to\n``holdout`` | ``mutual_exclusion`` | ``targeting``; nothing is recorded\nfor them.  Existing assignments are always returned as-is.\n\nAn experiment that is not ACTIVE (a draft, or paused, completed or\narchived) answers every user, enrolled or not, with HTTP 200, its control\nvariant, ``assigned: false`` and ``reason`` set to its status: ``draft``\n| ``paused`` | ``completed`` | ``archived``.  Nothing is recorded, and\nusers who were assigned keep their assignment, so a resumed experiment\ngives them their variant again.  A draft with no control variant answers\n404.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nReturns:\n    VariantAssignmentResponse: The variant assignment with configuration\n    details plus ``assigned`` / ``reason``\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If no experiment has the key, or a draft has no\n        control variant\n    HTTPException 500: If there's an error during assignment",
         "operationId": "assign_user_to_experiment_api_v1_tracking_assign_post",
         "requestBody": {
           "content": {

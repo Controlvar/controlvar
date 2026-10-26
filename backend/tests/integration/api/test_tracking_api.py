@@ -156,14 +156,34 @@ class TestAssign:
         )
         assert resp.status_code == 404
 
-    def test_inactive_experiment_returns_404(self, admin_client, make_experiment):
-        suffix = uuid.uuid4().hex[:8]
-        draft = make_experiment(name=f"Draft {suffix}", key=f"draft-{suffix}")
-        resp = admin_client.post(
-            "/api/v1/tracking/assign",
-            json={"experiment_key": draft.key, "user_id": _user()},
-        )
-        assert resp.status_code == 404
+    @pytest.mark.regression
+    def test_a_draft_with_no_control_variant_returns_404(
+        self, admin_client, db_session, make_experiment
+    ):
+        """A draft with no variant flagged as the control answers 404 naming
+        the draft, never its first variant: with no variants, and with two
+        variants and neither flagged. Any other experiment that is not ACTIVE
+        answers its control (``test_tracking_assign_not_running.py``)."""
+        drafts = []
+        for variant_names in ((), ("blue", "green")):
+            suffix = uuid.uuid4().hex[:8]
+            draft = make_experiment(name=f"Draft {suffix}", key=f"draft-{suffix}")
+            db_session.add_all(
+                Variant(experiment_id=draft.id, name=name, is_control=False)
+                for name in variant_names
+            )
+            db_session.commit()
+            drafts.append(draft)
+        for draft in drafts:
+            resp = admin_client.post(
+                "/api/v1/tracking/assign",
+                json={"experiment_key": draft.key, "user_id": _user()},
+            )
+            assert resp.status_code == 404, resp.text
+            assert resp.json() == {
+                "detail": f"Experiment '{draft.key}' is a draft with no control "
+                "variant: mark one of its variants as the control."
+            }
 
 
 class TestBanditAssignment:

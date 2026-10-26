@@ -157,6 +157,49 @@ def _event_response(event: Event) -> EventResponse:
     )
 
 
+def _not_running_answer(
+    request: AssignmentRequest, experiment: Experiment
+) -> VariantAssignmentResponse:
+    """``/assign``'s answer for an experiment that is not ACTIVE.
+
+    The experiment's control variant, ``assigned: false`` and ``reason`` set
+    to the status (``draft``, ``paused``, ``completed`` or ``archived``), for
+    every user, enrolled or not. Nothing is recorded: no assignment, no view
+    event, no holdout population row, no bandit call. Stored assignments are
+    left as they are, so a resumed experiment answers each enrolled user with
+    their variant again.
+
+    An experiment with no variant flagged as the control answers 404: serving
+    its first variant could show a treatment to everyone. Only a draft can be
+    in that state (starting needs a control, and variants are fixed after).
+    """
+    reason = experiment.status.value
+    control = next((v for v in experiment.variants or [] if v.is_control), None)
+    if control is None:
+        if experiment.status == ExperimentStatus.DRAFT:
+            detail = (
+                f"Experiment '{request.experiment_key}' is a draft with no control "
+                "variant: mark one of its variants as the control."
+            )
+        else:
+            detail = (
+                f"Experiment '{request.experiment_key}' is {reason} and has no "
+                "control variant to serve."
+            )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+    record_experiment_assignment(experiment_id=str(experiment.id), variant_id=reason)
+    return VariantAssignmentResponse(
+        experiment_key=request.experiment_key,
+        user_id=request.user_id,
+        variant_id=str(control.id),
+        variant_name=control.name,
+        is_control=bool(control.is_control),
+        configuration=control.configuration,
+        assigned=False,
+        reason=reason,
+    )
+
+
 @router.get("/")
 def get_tracking():
     """
@@ -204,6 +247,14 @@ async def assign_user_to_experiment(
     ``holdout`` | ``mutual_exclusion`` | ``targeting``; nothing is recorded
     for them.  Existing assignments are always returned as-is.
 
+    An experiment that is not ACTIVE (a draft, or paused, completed or
+    archived) answers every user, enrolled or not, with HTTP 200, its control
+    variant, ``assigned: false`` and ``reason`` set to its status: ``draft``
+    | ``paused`` | ``completed`` | ``archived``.  Nothing is recorded, and
+    users who were assigned keep their assignment, so a resumed experiment
+    gives them their variant again.  A draft with no control variant answers
+    404.
+
     **Authentication**: Requires a valid API key in the X-API-Key header.
 
     Returns:
@@ -212,28 +263,27 @@ async def assign_user_to_experiment(
 
     Raises:
         HTTPException 401: If the API key is invalid
-        HTTPException 404: If the experiment doesn't exist or is not active
+        HTTPException 404: If no experiment has the key, or a draft has no
+            control variant
         HTTPException 500: If there's an error during assignment
     """
     # The limits of backend.app.core.context_limits, before anything is read
     # or written.
     check_context(request.context)
 
-    # Get experiment by key
+    # Get experiment by key, whatever its status (the key is unique).
     experiment = (
-        db.query(Experiment)
-        .filter(
-            Experiment.key == request.experiment_key,
-            Experiment.status == ExperimentStatus.ACTIVE,
-        )
-        .first()
+        db.query(Experiment).filter(Experiment.key == request.experiment_key).first()
     )
 
     if not experiment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Active experiment with key '{request.experiment_key}' not found",
+            detail=f"No experiment has the key '{request.experiment_key}'.",
         )
+
+    if experiment.status != ExperimentStatus.ACTIVE:
+        return _not_running_answer(request, experiment)
 
     # Create assignment service
     assignment_service = AssignmentService(db)

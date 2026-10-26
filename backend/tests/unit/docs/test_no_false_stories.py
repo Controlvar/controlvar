@@ -7,10 +7,12 @@ than fixed page by page:
    and is not an error: ``GET /api/v1/feature-flags/evaluate/{key}`` answers
    200 with ``enabled: false`` and ``reason: "inactive"``. Only an unknown key
    is a 404 (``_evaluate_flag_by_key`` in
-   ``backend/app/api/v1/endpoints/feature_flags.py``). An experiment is
-   different: ``POST /api/v1/tracking/assign`` answers 404 when no ACTIVE
-   experiment has the key, so "404 when the experiment is not ACTIVE" is true
-   and is not refused.
+   ``backend/app/api/v1/endpoints/feature_flags.py``). Experiments are not
+   covered by these rules: ``POST /api/v1/tracking/assign`` answers an
+   experiment that is not ACTIVE with its control variant and 404s only for an
+   unknown key or a draft with no control variant, while
+   ``POST /api/v1/tracking/assign/batch`` still answers 404 for any experiment
+   that is not ACTIVE.
 2. **config-payload.** The evaluate route returns ``"config": None`` for every
    flag, and the SDK ruleset carries no variants, so an SDK's flag ``config``
    is always null. There is no config payload to read, and the OpenFeature

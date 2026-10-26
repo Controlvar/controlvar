@@ -96,7 +96,7 @@ Types (`types.go`):
   (default 5 min, LRU-bounded by `CacheSize`). A cache hit makes no request; the second
   `GetAssignment` for the same user + experiment is served locally.
 - **Failures are never cached**, so the next call retries.
-- Network error, timeout, 401 (bad key), 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 429
+- Network error, timeout, 401 (bad key), 404 (an unknown experiment or flag key, or a draft experiment with no control variant), 429
   (rate limited, `APIError.RetryAfter`): `EvaluateFlag` returns a **disabled** result plus the
   error; `GetAssignment` returns `nil` plus the error. Non-2xx responses are `*APIError`.
 - `Track`/`TrackBatch` never panic; the returned error is safe to ignore.

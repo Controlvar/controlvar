@@ -912,6 +912,36 @@ class TestRefusals:
         finally:
             _cleanup(db_session, [draft.id])
 
+    def test_every_status_but_active_is_still_404_with_the_same_detail(
+        self, client, headers, db_session, make_experiment, session_factory
+    ):
+        """The batch route keeps its 404 for an experiment that is not ACTIVE,
+        and its detail, though ``POST /api/v1/tracking/assign`` now answers
+        such an experiment with its control."""
+        experiment = _experiment(db_session, make_experiment, "not-running")
+        try:
+            for status in (
+                ExperimentStatus.DRAFT,
+                ExperimentStatus.PAUSED,
+                ExperimentStatus.COMPLETED,
+                ExperimentStatus.ARCHIVED,
+            ):
+                experiment.status = status
+                db_session.commit()
+                resp = client.post(
+                    URL, json=_body(experiment, _users(3)), headers=headers
+                )
+                assert (resp.status_code, resp.json()) == (
+                    404,
+                    {
+                        "detail": f"Active experiment with key '{experiment.key}' "
+                        "not found"
+                    },
+                ), status
+                assert _assignment_rows(session_factory, experiment) == {}
+        finally:
+            _cleanup(db_session, [experiment.id])
+
     def test_no_key_is_401(self, client, plain_experiment, session_factory):
         resp = client.post(URL, json=_body(plain_experiment, _users(2)))
         assert resp.status_code == 401

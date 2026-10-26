@@ -416,9 +416,9 @@ by = [
 ]
 
 [[unit]]
-text = "404 on /tracking/assign or /feature-flags/evaluate/... | The ShopLab experiments are not seeded or not ACTIVE, or the flags are not seeded (a flag that is not ACTIVE answers enabled: false, not a 404). Run the seed script."
+text = "404 on /tracking/assign or /feature-flags/evaluate/... | The ShopLab experiments or flags are not seeded. A paused or completed experiment answers its control variant with assigned: false, and a flag that is not ACTIVE answers enabled: false: neither is a 404. Run the seed script."
 by = [
-    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_inactive_experiment_returns_404",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
     "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
     "journey:demo-shoplab#banner-off-evaluated",
 ]

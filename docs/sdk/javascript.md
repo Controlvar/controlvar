@@ -156,7 +156,7 @@ turn that into their safe default.
 
 | Method | Signature | Returns | On failure |
 |--------|-----------|---------|------------|
-| `getAssignment` | `(experimentKey, user: UserContext) => Promise<Assignment>` | `{ experimentKey, userId, variantId, variantName, isControl, configuration, assigned?, reason? }` | Rejects with `ExperimentationError` (404 when the experiment is not ACTIVE) |
+| `getAssignment` | `(experimentKey, user: UserContext) => Promise<Assignment>` | `{ experimentKey, userId, variantId, variantName, isControl, configuration, assigned?, reason? }` | Rejects with `ExperimentationError` (404 when no experiment has the key, or for a draft with no control variant); an experiment that is not ACTIVE resolves to its control variant with `assigned: false` and `reason` its status |
 | `getVariant` | `(experimentKey, user) => Promise<string>` | `assignment.variantName` | `defaultVariant` (`'control'`); never rejects |
 | `evaluateFlag` | `(flagKey, user) => Promise<FlagEvaluation>` | `{ key, enabled, config, reason? }` (`user.attributes` sent as `context`) | Rejects with `ExperimentationError` (404 for an unknown key); a flag that exists but is not ACTIVE resolves `enabled: false`, `reason: "inactive"` |
 | `isFeatureEnabled` | `(flagKey, user) => Promise<boolean>` | `evaluation.enabled` | `false`; never rejects |
@@ -214,7 +214,7 @@ Conversions are matched to metrics by **event name**.
 
 | `code` | Meaning | `status` |
 |--------|---------|----------|
-| `HTTP_ERROR` | Non-2xx response; `body` holds the parsed JSON error (e.g. `{detail}`) | HTTP status (401 bad key, 404 an experiment unknown or not ACTIVE, or an unknown flag key, 422, 429 after the retry) |
+| `HTTP_ERROR` | Non-2xx response; `body` holds the parsed JSON error (e.g. `{detail}`) | HTTP status (401 bad key, 404 an unknown experiment or flag key, or a draft experiment with no control variant, 422, 429 after the retry) |
 | `NETWORK_ERROR` | `fetch` rejected (DNS, connection refused, CORS, no fetch available) | `undefined` |
 | `TIMEOUT` | The request exceeded `timeoutMs` | `undefined` |
 | `INVALID_RESPONSE` | 2xx but the body is not what the SDK expects (or `userId` missing) | HTTP status or `undefined` |
@@ -249,7 +249,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | local mode: ruleset refresh | `GET /api/v1/sdk/ruleset` (beta) | `If-None-Match: "<version>"` | the ruleset, `ETag`; `304` when unchanged |
 | local mode: evaluation counts | `POST /api/v1/tracking/evaluations` (beta) | `{"evaluations":[{"flag_key","count","enabled_count","window_start","window_end"}]}` | `{"accepted","errors"}` |
 
-Errors: 401 bad key; 404 an experiment unknown or not ACTIVE, or an unknown flag key; 422 invalid event; 429
+Errors: 401 bad key; 404 an unknown experiment or flag key, or a draft experiment with no control variant; 422 invalid event; 429
 rate limited (`Retry-After` header, retried once).
 
 ---
