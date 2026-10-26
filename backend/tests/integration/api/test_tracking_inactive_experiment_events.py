@@ -207,6 +207,24 @@ def test_converting_users_per_variant_across_pause_resume_and_complete(
         name: (stats[str(variant_id)].pulls, stats[str(variant_id)].successes)
         for name, variant_id in variant_ids.items()
     } == {"control": (4, 2), "treatment": (4, 2)}
+    # The segmented results find the same segments: the paused and completed
+    # events put their users in FR's and DE's samples, with no conversion.
+    segmented = admin_client.get(
+        f"/api/v1/experiments/{exp.id}/segmented-results/country"
+    )
+    assert segmented.status_code == 200, segmented.text
+    assert {
+        segment["segment_value"]: {
+            v["variant_name"]: (v["sample_size"], v["conversions"])
+            for metric in segment["metrics"]
+            for v in metric["variants"]
+        }
+        for segment in segmented.json()["segments"]
+    } == {
+        "US": {"control": (2, 2), "treatment": (2, 2)},
+        "FR": {"control": (0, 0), "treatment": (1, 0)},
+        "DE": {"control": (1, 0), "treatment": (0, 0)},
+    }
 
     db_session.expire_all()
     stored = sorted(

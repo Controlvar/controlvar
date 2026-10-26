@@ -1668,6 +1668,10 @@ text = "Description: Same as /track but keyed by internal ids (experiment_id, va
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
+text = "It stores the variant_id it is given, whatever the experiment's status."
+by = ["test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_events_by_ids_keep_the_variant_they_name_for_a_paused_experiment"]
+
+[[unit]]
 text = "Response: 200 OK (the stored event); 404 an id names no stored row, and nothing is stored: the detail names each such field, for example No experiment has that experiment_id.; 422 invalid body, or an id that is not a UUID"
 by = ["test:backend/tests/integration/api/test_tracking_events_unknown_ids.py"]
 

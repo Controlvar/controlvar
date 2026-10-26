@@ -192,8 +192,8 @@ any other change of status.
 
 **Complete**: Stop the experiment. Use when you have sufficient data and are ready to make a decision. Existing data is preserved.
 
-Events received while an experiment is paused, completed or archived are stored, but they count
-in no variant's results.
+Events the SDKs send while an experiment is paused, completed or archived (through
+`/tracking/track` and `/tracking/batch`) are stored, but they count in no variant's results.
 
 Use the **Sample Size** tab to confirm the smallest variant has reached the planned sample
 before deciding. Do not stop the experiment the first time a p-value drops below 0.05: decide at
