@@ -209,7 +209,7 @@ class VariantAssignmentResponse(BaseModel):
     targeting rules), and every user of an experiment that is not ACTIVE,
     still get HTTP 200 with the experiment's control variant so SDKs render
     the default experience; ``assigned`` is ``False`` and ``reason`` says
-    why.  No assignment or exposure is recorded for them.
+    why.  No assignment and no view event is recorded for them.
     """
 
     experiment_key: str

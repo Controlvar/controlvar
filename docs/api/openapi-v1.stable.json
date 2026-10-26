@@ -12519,7 +12519,7 @@
         "type": "string"
       },
       "VariantAssignmentResponse": {
-        "description": "Response for POST /tracking/assign: the variant a user was assigned to.\n\nUsers that are not eligible (global holdout, mutual exclusion group or\ntargeting rules), and every user of an experiment that is not ACTIVE,\nstill get HTTP 200 with the experiment's control variant so SDKs render\nthe default experience; ``assigned`` is ``False`` and ``reason`` says\nwhy.  No assignment or exposure is recorded for them.",
+        "description": "Response for POST /tracking/assign: the variant a user was assigned to.\n\nUsers that are not eligible (global holdout, mutual exclusion group or\ntargeting rules), and every user of an experiment that is not ACTIVE,\nstill get HTTP 200 with the experiment's control variant so SDKs render\nthe default experience; ``assigned`` is ``False`` and ``reason`` says\nwhy.  No assignment and no view event is recorded for them.",
         "example": {
           "assigned": false,
           "configuration": {
