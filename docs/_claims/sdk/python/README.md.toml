@@ -141,6 +141,14 @@ text = "track_batch(events) | BatchResult(success_count, failure_count, errors);
 by = ["test:sdk/python/tests/test_client.py::TestTrackBatch::test_failed_chunk_counts_all_events_without_raising"]
 
 [[unit]]
+text = "report_error(error_type, message, , feature_flag_key=None, experiment_key=None, user_id=None, stack_trace=None, metadata=None, timestamp=None) | bool — True when the server stored the report (201) | never raises; False and a logged warning otherwise"
+by = [
+    "test:sdk/python/tests/test_client.py::TestReportError::test_posts_one_report_with_the_server_field_names_and_returns_true_on_201",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_false_without_raising_on",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_does_not_check_the_report_itself_and_a_422_returns_false",
+]
+
+[[unit]]
 text = "get_assignments(user_id, active_only=True) | list[dict] from the server | raises ExperimentationError"
 by = ["test:sdk/python/tests/test_client.py::TestAssignmentsAndCache::test_get_assignments_url"]
 
@@ -213,6 +221,22 @@ by = [
 [[unit]]
 text = "Caches are keyed by user + key only — call clear_cache() after changing a user's attributes."
 by = ["test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_cache_key_ignores_attributes_until_clear_cache"]
+
+[[unit]]
+text = "report_error returns True when the server stored the report."
+by = [
+    "test:sdk/python/tests/test_client.py::TestReportError::test_posts_one_report_with_the_server_field_names_and_returns_true_on_201",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_false_on_a_2xx_that_is_not_201",
+]
+
+[[unit]]
+text = "A stored report counts toward the flag's error rate and automatic rollback only when the client's key has the sdk:ruleset scope and was created by a user who can change feature flags; the flag's safety check shows the others as uncounted_error_count."
+by = [
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_server_side_key_rolls_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_key_without_the_scope_does_not_roll_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_check_endpoint_shows_the_reports_it_does_not_count",
+]
 
 [[unit]]
 text = "Enrolment: assigned and reason"

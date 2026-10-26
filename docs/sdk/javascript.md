@@ -114,7 +114,7 @@ const client = new ExperimentationClient({
 | `cacheTtlMs` | `number` | `300000` | TTL of successful evaluations/assignments, per user + key |
 | `defaultVariant` | `string` | `'control'` | Variant name `getVariant` returns on failure |
 | `fetch` | `typeof fetch` | global `fetch` | Custom fetch implementation |
-| `onError` | `(error: ExperimentationError, op: 'track' \| 'trackBatch' \| 'refresh' \| 'flush' \| 'evaluate') => void` | — | Only way to observe swallowed failures; a throwing handler is itself swallowed. `'refresh'`, `'flush'` and `'evaluate'` occur only in local mode |
+| `onError` | `(error: ExperimentationError, op: 'track' \| 'trackBatch' \| 'refresh' \| 'flush' \| 'evaluate' \| 'reportError') => void` | — | Only way to observe swallowed failures; a throwing handler is itself swallowed. `'refresh'`, `'flush'` and `'evaluate'` occur only in local mode |
 | `evaluation` | `'server' \| 'local'` | `'server'` | `'local'`: answer flags in-process from `GET /api/v1/sdk/ruleset`; needs a key with the `sdk:ruleset` scope; throws in a browser |
 | `refreshIntervalMs` | `number` | `30000` | Local mode: ruleset refresh interval (minimum 5000, ±10% jitter) |
 | `maxStaleMs` | `number` | none | Local mode: evaluate on the server once the ruleset has not been refreshed for this long |
@@ -163,6 +163,7 @@ turn that into their safe default.
 | `getAllFlags` | `(userId, attributes?) => Promise<Record<string, boolean>>` | `{ flagKey: enabled }`; `attributes` sent as `context`; not cached, not part of the fan-out | Rejects |
 | `track` | `(userId, eventName, options?: TrackOptions) => Promise<void>` | — | Never rejects; `onError(err, 'track')` |
 | `trackBatch` | `(events: TrackEvent[]) => Promise<BatchResult>` | `{ successCount, failureCount, errors }` | Never rejects; a failed chunk counts all its events as failures and calls `onError(err, 'trackBatch')` |
+| `reportError` | `(report: ErrorReport) => Promise<boolean>` | `true` when the server stored the report (201); see [Reporting errors](#reporting-errors) | `false`; never rejects; `onError(err, 'reportError')` |
 | `fetchAssignments` | `(userId, { activeOnly?: boolean } = { activeOnly: true }) => Promise<AssignmentRecord[]>` | Server-side assignment rows (raw objects); not cached | Rejects |
 | `getAssignments` | `(userId) => Assignment[]` | Cached, unexpired assignments in assignment order (no network) | — |
 | `getEvaluatedFlags` | `(userId) => string[]` | Keys of cached, successfully evaluated flags (no network) | — |
@@ -209,6 +210,26 @@ ISO-8601). `TrackEvent` = `TrackOptions & { userId, eventName }`.
   `success_count` / `failure_count` / `errors`.
 
 Conversions are matched to metrics by **event name**.
+
+### Reporting errors
+
+`reportError(report)` sends one `POST /api/v1/tracking/errors` for an error that happened while a
+flag or experiment was active, in either evaluation mode. `report` is an `ErrorReport`: `errorType`
+and `message`, and optionally `featureFlagKey`, `experimentKey`, `userId`, `stackTrace`, `metadata`
+and `timestamp`. The server needs `featureFlagKey` or `experimentKey`, and the SDK sends the report
+without checking it.
+
+- `true` means the server stored the report: it answered 201. `false` means it did not: any other
+  answer (401, 404, 422, a 429 after its one retry, 5xx) or a network failure, which is also passed
+  to `onError(err, 'reportError')`. `reportError` never rejects.
+- A stored report counts toward the flag's error rate and automatic rollback only when the
+  client's key is a server-side key: one with the `sdk:ruleset` scope, created by a user who can
+  change feature flags. A report sent with any other key is stored too and still resolves `true`;
+  the flag's safety check shows those reports as `uncounted_error_count`. See
+  [Which errors count](../feature-flags/safety.md#which-errors-count).
+- The error rate divides the counted errors by the flag's evaluations in the check's 15-minute
+  window. With no evaluations in the window it reads 0, so an error-rate threshold cannot fire: in
+  local mode the counts reach the server every 60 seconds and on `close()`.
 
 ### Caching, dedupe and retries
 
@@ -260,6 +281,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | `fetchAssignments` | `GET /api/v1/tracking/assignments/{user_id}?active_only=true` | — | list of assignment rows |
 | local mode: ruleset refresh | `GET /api/v1/sdk/ruleset` (beta) | `If-None-Match: "<version>"` | the ruleset, `ETag`; `304` when unchanged |
 | local mode: evaluation counts | `POST /api/v1/tracking/evaluations` (beta) | `{"evaluations":[{"flag_key","count","enabled_count","window_start","window_end"}]}` | `{"accepted","errors"}` |
+| `reportError` | `POST /api/v1/tracking/errors` | `{"error_type","message","feature_flag_key"?,"experiment_key"?,"user_id"?,"stack_trace"?,"metadata"?,"timestamp"?}` | 201 and the stored report (only the status is read) |
 
 Errors: 401 bad key; 404 an experiment unknown or not ACTIVE, or an unknown flag key; 422 invalid event; 429
 rate limited (`Retry-After` header, retried once).
@@ -271,7 +293,7 @@ rate limited (`Retry-After` header, retried once).
 ```typescript
 import type {
   ClientConfig, UserContext, Assignment, FlagEvaluation,
-  TrackOptions, TrackEvent, BatchResult, AssignmentRecord,
+  TrackOptions, TrackEvent, BatchResult, AssignmentRecord, ErrorReport,
 } from '@controlvar/js-sdk';
 
 interface Assignment {
@@ -387,8 +409,8 @@ Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY
 With a seeded backend (`python backend/scripts/seed_sdk_contract.py`):
 `python tests/sdk-contract/live/run_live_contract.py --sdk js --strict`. That also runs
 `examples/local_eval_smoke.mjs` with the seed's `sdk:ruleset` key (the `js (local)` row): 40
-evaluations answered locally, the counts sent on `close()`, then two error reports sent with the
-same key, and the runner checks in the database that no evaluate call was made, that the safety
+evaluations answered locally, the counts sent on `close()`, then two error reports sent with
+`reportError` and the same key, and the runner checks in the database that no evaluate call was made, that the safety
 monitor's denominator grew by exactly 40 and that both reports were counted.
 
 ---

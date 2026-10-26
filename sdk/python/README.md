@@ -76,6 +76,7 @@ default_variant="control", transport=None)`. Instances are thread-safe.
 | `get_all_flags(user_id, user_attributes=None)` | `dict[str, bool]` (not cached) | raises `ExperimentationError` |
 | `track(user_id, event_name, event_value=None, properties=None, experiment_key=None, feature_flag_key=None, event_type=None, timestamp=None)` | `bool` — `True` when sent and answered 2xx | never raises; `False` on failure |
 | `track_batch(events)` | `BatchResult(success_count, failure_count, errors)`; `.ok` | never raises; a failed chunk counts all its events as failures |
+| `report_error(error_type, message, *, feature_flag_key=None, experiment_key=None, user_id=None, stack_trace=None, metadata=None, timestamp=None)` | `bool` — `True` when the server stored the report (201) | never raises; `False` and a logged warning otherwise |
 | `get_assignments(user_id, active_only=True)` | `list[dict]` from the server | raises `ExperimentationError` |
 | `cached_assignments(user_id)` / `cached_flags(user_id)` | cached, unexpired entries | — |
 | `clear_cache()` | — (keeps the keys a key-less `track` is sent to) | — |
@@ -92,6 +93,11 @@ retried once after `Retry-After` seconds (capped at 5 s).
 `FlagEvaluation.reason` (`targeting_rule` / `rollout` / `inactive` / `error`, or `None`) says why
 the server decided. Caches are keyed by user + key only — call `clear_cache()` after changing a
 user's attributes.
+
+`report_error` returns `True` when the server stored the report. A stored report counts toward the
+flag's error rate and automatic rollback only when the client's key has the `sdk:ruleset` scope and
+was created by a user who can change feature flags; the flag's safety check shows the others as
+`uncounted_error_count`.
 
 ### Enrolment: `assigned` and `reason`
 

@@ -27,6 +27,7 @@ export type {
   FlagEvaluation,
   TrackOptions,
   TrackEvent,
+  ErrorReport,
   BatchResult,
   AssignmentRecord,
   SwallowedOperation,

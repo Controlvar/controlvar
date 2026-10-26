@@ -1,6 +1,6 @@
 import { ExperimentationClient } from '../src/client';
 import { ExperimentationError } from '../src/errors';
-import type { AssignResponse, ClientConfig, FlagEvaluateResponse, UserContext } from '../src/types';
+import type { AssignResponse, ClientConfig, ErrorReport, FlagEvaluateResponse, UserContext } from '../src/types';
 
 const baseConfig: ClientConfig = { apiUrl: 'https://api.example.com', apiKey: 'test-api-key' };
 
@@ -1189,6 +1189,127 @@ describe('trackBatch', () => {
 });
 
 // ─── 429 handling ─────────────────────────────────────────────────────────────
+
+// ─── reportError ──────────────────────────────────────────────────────────────
+
+const ERRORS_URL = 'https://api.example.com/api/v1/tracking/errors';
+const STORED = { id: 'err-1', error_type: 'crash', timestamp: '2026-10-26T10:00:00Z' };
+
+describe('reportError', () => {
+  it('POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201', async () => {
+    const fetchMock = mockFetchSequence({ status: 201, body: STORED });
+    const onError = jest.fn();
+    const client = new ExperimentationClient({ ...baseConfig, onError });
+
+    const stored = await client.reportError({
+      errorType: 'crash',
+      message: 'TypeError in checkout',
+      featureFlagKey: 'new-checkout',
+      experimentKey: 'checkout',
+      userId: 'user-123',
+      stackTrace: 'at pay (checkout.ts:12)',
+      metadata: { os: 'linux', release: '3.2.1' },
+      timestamp: new Date('2026-10-26T09:59:00.000Z'),
+    });
+
+    expect(stored).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const { url, init, body } = call(fetchMock);
+    expect(url).toBe(ERRORS_URL);
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual(expectedHeaders);
+    expect(body).toEqual({
+      error_type: 'crash',
+      message: 'TypeError in checkout',
+      feature_flag_key: 'new-checkout',
+      experiment_key: 'checkout',
+      user_id: 'user-123',
+      stack_trace: 'at pay (checkout.ts:12)',
+      metadata: { os: 'linux', release: '3.2.1' },
+      timestamp: '2026-10-26T09:59:00.000Z',
+    });
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('sends only the fields given, and a string timestamp as it is', async () => {
+    const fetchMock = mockFetchSequence({ status: 201, body: STORED });
+    const client = new ExperimentationClient(baseConfig);
+    await client.reportError({ errorType: 'crash', message: 'boom', featureFlagKey: 'f', timestamp: '2026-01-02T03:04:05Z' });
+    expect(call(fetchMock).body).toEqual({
+      error_type: 'crash',
+      message: 'boom',
+      feature_flag_key: 'f',
+      timestamp: '2026-01-02T03:04:05Z',
+    });
+  });
+
+  it('does not check the report itself: one with no key is sent, and the 422 resolves false', async () => {
+    const fetchMock = mockFetchSequence({ status: 422, body: { detail: 'At least one of feature_flag_key or experiment_key is required' } });
+    const onError = jest.fn();
+    const client = new ExperimentationClient({ ...baseConfig, onError });
+    await expect(client.reportError({ errorType: 'crash', message: 'boom' })).resolves.toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(call(fetchMock).body).toEqual({ error_type: 'crash', message: 'boom' });
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 422 }), 'reportError');
+  });
+
+  it.each([401, 404, 422, 500, 503])(
+    'resolves false on %s and passes the failure to onError as reportError',
+    async status => {
+      mockFetchSequence({ status, body: { detail: 'no' } });
+      const onError = jest.fn();
+      const client = new ExperimentationClient({ ...baseConfig, onError });
+      await expect(client.reportError({ errorType: 'crash', message: 'boom', featureFlagKey: 'f' })).resolves.toBe(false);
+      expect(onError).toHaveBeenCalledTimes(1);
+      const [error, operation] = onError.mock.calls[0];
+      expect(error).toBeInstanceOf(ExperimentationError);
+      expect(error.status).toBe(status);
+      expect(operation).toBe('reportError');
+    }
+  );
+
+  it('resolves false on a 2xx that is not 201: true means stored, and only 201 says so', async () => {
+    mockFetchSequence({ status: 200, body: STORED });
+    const onError = jest.fn();
+    const client = new ExperimentationClient({ ...baseConfig, onError });
+    await expect(client.reportError({ errorType: 'crash', message: 'boom', featureFlagKey: 'f' })).resolves.toBe(false);
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }), 'reportError');
+  });
+
+  it('resolves false on a 429 that is still a 429 after its one retry', async () => {
+    const fetchMock = mockFetchSequence(
+      { status: 429, headers: { 'Retry-After': '0' } },
+      { status: 429, headers: { 'Retry-After': '0' } }
+    );
+    const onError = jest.fn();
+    const client = new ExperimentationClient({ ...baseConfig, onError });
+    await expect(client.reportError({ errorType: 'crash', message: 'boom', featureFlagKey: 'f' })).resolves.toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 429 }), 'reportError');
+  });
+
+  it('resolves true when the retry after a 429 is answered 201', async () => {
+    const fetchMock = mockFetchSequence({ status: 429, headers: { 'Retry-After': '0' } }, { status: 201, body: STORED });
+    const client = new ExperimentationClient(baseConfig);
+    await expect(client.reportError({ errorType: 'crash', message: 'boom', featureFlagKey: 'f' })).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('resolves false on a network failure and passes it to onError', async () => {
+    mockFetchSequence(new Error('ECONNREFUSED'));
+    const onError = jest.fn();
+    const client = new ExperimentationClient({ ...baseConfig, onError });
+    await expect(client.reportError({ errorType: 'crash', message: 'boom', featureFlagKey: 'f' })).resolves.toBe(false);
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: 'NETWORK_ERROR' }), 'reportError');
+  });
+
+  it('never rejects, even with a throwing onError handler or no report at all', async () => {
+    mockFetchSequence({ status: 500 });
+    const client = new ExperimentationClient({ ...baseConfig, onError: () => { throw new Error('handler bug'); } });
+    await expect(client.reportError({ errorType: 'crash', message: 'boom', featureFlagKey: 'f' })).resolves.toBe(false);
+    await expect(client.reportError(undefined as unknown as ErrorReport)).resolves.toBe(false);
+  });
+});
 
 describe('429 rate limiting', () => {
   it('retries once after Retry-After and returns the second response', async () => {
