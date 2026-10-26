@@ -125,8 +125,6 @@ def _variant_at_receipt(db: Session, experiment: Experiment, user_id: str) -> An
     rows are kept, and ``backend/scripts/retag_events_from_assignments.py``
     can tag such events from them afterwards.
     """
-    if experiment.status != ExperimentStatus.ACTIVE:
-        return None
     assignment = (
         db.query(Assignment)
         .filter(
