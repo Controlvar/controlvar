@@ -127,6 +127,9 @@ function SearchPage() {
 | `error` | `Error \| null` | Set when the request failed (flag is reported off) |
 | `reason` | `string \| undefined` | Why the server decided: `targeting_rule`, `rollout`, `inactive` or `error`; `undefined` while loading, on error, or from servers that do not send it |
 
+A flag change reaches an open page when a hook re-mounts after `cacheTtlMs`, or on reload; the SDK
+neither polls nor streams.
+
 ### `useVariant(flagKey): string | null`
 
 Shorthand for `useFeatureFlag(flagKey).variant`.
