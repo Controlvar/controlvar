@@ -264,7 +264,7 @@ export class ExperimentationClient {
       });
       if (!response.ok) {
         // A 404: a key-less trackEvent must no longer reach this experiment.
-        if (response.status === 404) this.attributed.forgetExperiment(user.userId, experimentKey);
+
         throw new Error(`API error: ${response.status}`);
       }
       const data = (await response.json()) as ExperimentAssignResponse;

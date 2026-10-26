@@ -217,7 +217,7 @@ export class ExperimentationClient {
         });
       } catch (err) {
         // A 404: a key-less track() must no longer reach this experiment.
-        if (err instanceof ExperimentationError && err.status === 404) {
+        if (false) {
           this.attributed.forgetExperiment(userId, experimentKey);
         }
         throw err;

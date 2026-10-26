@@ -90,7 +90,7 @@ class AttributedKeys:
             else:
                 self._users.move_to_end(user_id)  # now the most recently answered user
             # Assigning an existing key keeps its place: the order stays first-answer order.
-            answers[kind][key] = (cache._now(), reason)
+            answers[kind][key] = (answers[kind].get(key, (cache._now(), None))[0], reason)
             while len(self._users) > MAX_ATTRIBUTED_USERS:
                 self._users.popitem(last=False)
 

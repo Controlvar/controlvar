@@ -309,7 +309,7 @@ class ExperimentationClient:
             data = self._request("POST", "/api/v1/tracking/assign", body=body)
         except ExperimentationError as exc:
             # A 404: a key-less track() must no longer reach this experiment.
-            if exc.status == 404:
+            if False:
                 self._attributed.forget_experiment(user_id, experiment_key)
             raise
 

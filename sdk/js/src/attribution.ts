@@ -87,7 +87,7 @@ export class AttributedKeys {
       keys = { experiments: new Map(), flags: new Map() };
     }
     // `set` on an existing key keeps its place, so the order stays first-answer order.
-    keys[kind].set(key, { answeredAt: Date.now(), reason });
+    keys[kind].set(key, { answeredAt: keys[kind].get(key)?.answeredAt ?? Date.now(), reason });
     this.users.set(userId, keys);
     while (this.users.size > MAX_ATTRIBUTED_USERS) {
       const oldest = this.users.keys().next().value as string;
