@@ -434,10 +434,10 @@ class ExperimentationClientTest {
         }
 
         @Test
-        @DisplayName("throws ExperimentationException(404) when the experiment is not ACTIVE, and does not cache it")
+        @DisplayName("throws ExperimentationException(404) when no experiment has the key, and does not cache it")
         void notFoundNotCached() {
-            mockServer.enqueue(json(404, "{\"detail\":\"Active experiment with key 'nope' not found\"}"));
-            mockServer.enqueue(json(404, "{\"detail\":\"Active experiment with key 'nope' not found\"}"));
+            mockServer.enqueue(json(404, "{\"detail\":\"No experiment has the key 'nope'.\"}"));
+            mockServer.enqueue(json(404, "{\"detail\":\"No experiment has the key 'nope'.\"}"));
             User user = User.builder("u1").build();
 
             ExperimentationException ex = assertThrows(ExperimentationException.class,

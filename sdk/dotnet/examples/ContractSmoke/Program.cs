@@ -59,7 +59,7 @@ static async Task<int> RunAsync()
     // 1. Assign twice → identical (sticky on the server).
     var first = await client.GetAssignmentAsync(experimentKey, userId, attributes);
     if (first == null)
-        return Fail($"assignment failed for {experimentKey} (not ACTIVE, bad key, or API unreachable)");
+        return Fail($"assignment failed for {experimentKey} (unknown experiment key, bad API key, or API unreachable)");
     var second = await fresh.GetAssignmentAsync(experimentKey, userId, attributes);
     if (second == null)
         return Fail($"second assignment failed for {experimentKey}");

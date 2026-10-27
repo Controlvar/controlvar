@@ -182,6 +182,9 @@ and `reason` says why. A server that predates the fields sends neither, so `assi
 `undefined` (never `false`). Decide deliberately how to treat those rows rather than dropping them
 with an `assigned === true` filter.
 
+An experiment that is not ACTIVE answers every user with its control variant, `assigned: false` and
+`reason` set to its status (`'draft'`, `'paused'`, `'completed'` or `'archived'`).
+
 `TrackOptions`: `value?` (number), `properties?` (sent as `metadata`), `experimentKey?`,
 `featureFlagKey?`, `eventType?` (defaults to the event name), `timestamp?` (`Date` or string, sent as
 ISO-8601). `TrackEvent` = `TrackOptions & { userId, eventName }`.
@@ -260,7 +263,7 @@ try {
   const a = await client.getAssignment('checkout_flow', user);
 } catch (err) {
   if (err instanceof ExperimentationError && err.status === 404) {
-    // experiment is not ACTIVE — fall back to control
+    // no experiment has the key — fall back to control
   }
 }
 ```

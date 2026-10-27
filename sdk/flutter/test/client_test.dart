@@ -250,7 +250,7 @@ void main() {
     });
 
     test('404 → disabled, not cached, never throws', () async {
-      server.reply(404, {'detail': 'not active'});
+      server.reply(404, {'detail': "Feature flag with key 'ghost' not found"});
       final client = await _client(server);
 
       final result = await client.evaluateFlag('ghost', 'user-1');
@@ -418,7 +418,7 @@ void main() {
     });
 
     test('404 → null, never throws, not cached', () async {
-      server.reply(404, {'detail': 'Experiment not active'});
+      server.reply(404, {'detail': "No experiment has the key 'ghost'."});
       final client = await _client(server);
 
       expect(await client.getAssignment('ghost', 'user-1'), isNull);

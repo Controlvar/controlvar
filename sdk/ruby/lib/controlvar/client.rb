@@ -96,8 +96,10 @@ module Controlvar
     # @param experiment_key [String] experiment key
     # @param user_id        [String] user identifier
     # @param attributes     [Hash]   user attributes, sent as +context+ for targeting rules
-    # @return [Assignment, nil] nil on a network/HTTP failure (including 404 when
-    #   the experiment is not ACTIVE); a cached assignment is returned when present
+    # @return [Assignment, nil] nil on a network/HTTP failure (including 404 when no
+    #   experiment has the key, or for a draft with no control variant); a cached
+    #   assignment is returned when present. An experiment that is not ACTIVE
+    #   answers its control variant.
     def get_assignment(experiment_key, user_id, attributes = {})
       cache_key = assignment_cache_key(user_id, experiment_key)
       cached = @cache.get(cache_key)

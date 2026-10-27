@@ -43,7 +43,7 @@ const enabled = await client.getBooleanValue('dark-mode', false, ctx);        //
 // Experiments and tracking are not OpenFeature concepts: use the JS SDK client underneath.
 const assignment = await provider.client.getAssignment('checkout_flow', { userId: 'user-123', attributes: { plan: 'pro' } });
 await provider.client.track('user-123', 'purchase', { value: 49.99, experimentKey: 'checkout_flow' });
-await provider.client.track('user-123', 'page_view'); // no key → fans out to cached assignments + flags
+await provider.client.track('user-123', 'page_view'); // no key → fanned out by the JS SDK's rule
 ```
 
 ## Options
@@ -77,7 +77,8 @@ Every request carries `X-API-Key`, `Content-Type: application/json`, `Accept: ap
 | `provider.client.track` with a key | `POST /api/v1/tracking/track` | ignored |
 | `provider.client.track` without a key, `trackBatch` | `POST /api/v1/tracking/batch` `{events: [...]}` (≤ 100) | `{success_count, failure_count, errors}` |
 
-Errors: 401 bad key, 404 an experiment unknown or not ACTIVE, or an unknown flag key (never cached), 422 invalid event, 429 rate limited.
+Errors: 401 bad key, 404 an unknown experiment or flag key, or a draft experiment with no control variant (never cached), 422 invalid event, 429 rate limited.
+An experiment that is not ACTIVE is not an error: `getAssignment` resolves to its control variant with `assigned: false`.
 
 ## Contract smoke
 

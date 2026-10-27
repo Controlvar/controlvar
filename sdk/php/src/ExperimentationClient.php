@@ -100,8 +100,10 @@ class ExperimentationClient
      * @param string $experimentKey Experiment identifier
      * @param string $userId        Stable user identifier
      * @param array  $attributes    User attributes, sent as `context` for targeting rules
-     * @return Assignment|null null on a network/HTTP failure (including 404 when the
-     *                         experiment is not ACTIVE); a cached assignment is returned when present
+     * @return Assignment|null null on a network/HTTP failure (including 404 when no
+     *                         experiment has the key, or for a draft with no control
+     *                         variant); a cached assignment is returned when present. An
+     *                         experiment that is not ACTIVE answers its control variant.
      */
     public function getAssignment(string $experimentKey, string $userId, array $attributes = []): ?Assignment
     {

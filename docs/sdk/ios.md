@@ -56,7 +56,7 @@ do {
     let a = try await client.getAssignment("checkout_flow", user: user)
     headline = a.configuration?["headline"] as? String ?? headline
 } catch ExperimentationError.experimentNotFound {
-    // unknown or not ACTIVE (404): keep control
+    // no experiment has the key (404): keep control
 } catch {
     // network / server error and nothing cached: keep control
 }
@@ -145,8 +145,9 @@ let client = ExperimentationClient(config: config, session: .shared, offlineStor
   (and one exposure). **Failures are never cached** — the next call retries.
 - With `enableOfflineFallback` (default) every successful result is also written to
   `UserDefaults`; those entries have no TTL and survive relaunches.
-- **HTTP 404** (an experiment unknown or not ACTIVE, or an unknown flag key): throws `.flagNotFound(key)` /
-  `.experimentNotFound(key)`, removes the persisted entry and never serves a stale value.
+- **HTTP 404** (an unknown experiment or flag key, or a draft experiment with no control variant): throws
+  `.flagNotFound(key)` / `.experimentNotFound(key)`, removes the persisted entry and never serves a stale
+  value. An experiment that is not ACTIVE is not an error: it answers its control variant.
 - **Network error, timeout, 401, 422, 429, 5xx, undecodable body**: returns the persisted value
   for that user + key when offline fallback is on and one exists; otherwise throws
   `.networkError`, `.serverError(status, body)`, `.decodingError` or `.cancelled`.
@@ -168,6 +169,12 @@ was assigned to through this client (`experiment_key`) plus one per flag evaluat
 (`feature_flag_key`), taken from the in-memory cache. Nothing cached → nothing is sent and `true`
 is reported. `trackBatch` keeps keyed events as-is and fans out the unkeyed ones; requests are
 chunked at `ExperimentationClient.batchLimit` (100).
+
+This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
+control variant, and an event tracked without a key after the user's in-memory cache entries have
+expired (`cacheTTL`, 300 seconds by default) is not sent, so pass `experimentKey` on a conversion
+that can come later.
 
 Conversions are matched to metrics by **event name**: a metric on `purchase` counts every
 `purchase` event regardless of `event_type`.
@@ -209,11 +216,11 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `evaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
-| `getAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when the experiment is not ACTIVE |
+| `getAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
 
-Errors: 401 bad key, 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 422 invalid event, 429
+Errors: 401 bad key, 404 (an unknown experiment or flag key, or a draft experiment with no control variant), 422 invalid event, 429
 rate limited (`Retry-After`). These paths share the backend's per-IP `SDK_RATE_LIMIT_PER_MINUTE`
 ceiling (default 6000).
 

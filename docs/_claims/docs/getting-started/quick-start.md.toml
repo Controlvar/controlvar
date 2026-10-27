@@ -209,10 +209,11 @@ text = "Step 5: Assign users and track events"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The response carries variant_name, variant_id, is_control, configuration, and assigned with a reason (assigned, holdout, mutual_exclusion or targeting)."
+text = "The response carries variant_name, variant_id, is_control, configuration, and assigned with a reason (assigned, holdout, mutual_exclusion or targeting, or the status of an experiment that is not ACTIVE)."
 by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "docex:docs/getting-started/quick-start.md#\"assigned\": true",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
 ]
 
 [[unit]]

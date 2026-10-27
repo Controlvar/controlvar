@@ -42,7 +42,9 @@ class Assignment:
     returned the control variant instead, with no exposure recorded. ``reason``
     says why: ``"assigned"``, ``"holdout"``, ``"mutual_exclusion"`` or
     ``"targeting"``. Both are ``None`` when the server predates the fields; such
-    a server cannot tell you, so do not read ``None`` as either answer.
+    a server cannot tell you, so do not read ``None`` as either answer. For an
+    experiment that is not ACTIVE, ``assigned`` is ``False`` and ``reason`` is its
+    status (``"draft"``, ``"paused"``, ``"completed"`` or ``"archived"``).
     """
 
     experiment_key: str

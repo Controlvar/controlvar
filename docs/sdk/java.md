@@ -70,7 +70,7 @@ try (ExperimentationClient client = new ExperimentationClient(config)) {   // Au
             headline = (String) a.getConfiguration().getOrDefault("headline", headline);
         }
     } catch (ExperimentationException e) {
-        // 404 (not ACTIVE / unknown), 401, network: keep the control experience
+        // 404 (no experiment has the key), 401, network: keep the control experience
     }
 
     // 2. Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123
@@ -141,8 +141,8 @@ accepts a custom `OkHttpClient` (used with `MockWebServer`).
 - Successful evaluations and assignments are cached per **user + key** in two LRU caches
   (`AssignmentCache<FlagEvaluation>`, `AssignmentCache<ExperimentAssignment>`) for `cacheTtlMs`.
   A hit makes no request. **Failures are never cached** — the next call retries.
-- Non-2xx responses (401 bad key, 404 for an experiment unknown or not ACTIVE, or an unknown flag key, 422, 429 rate
-  limited, 5xx) and `IOException`s become `ExperimentationException`; `evaluateFeatureFlag` and
+- Non-2xx responses (401 bad key, 404 for an unknown experiment or flag key or a draft experiment with no control
+  variant, 422, 429 rate limited, 5xx) and `IOException`s become `ExperimentationException`; `evaluateFeatureFlag` and
   `getExperimentAssignment` **throw**, `isFeatureEnabled` returns `false`. There is no stale
   fallback beyond the TTL — a request that fails after the entry expired surfaces the error.
 - Async tracking (`trackEvent`, `trackBatch`) is fire-and-forget on OkHttp's dispatcher and
@@ -160,6 +160,12 @@ entry per experiment the user was assigned to through this client (`experiment_k
 flag evaluated for the user (`feature_flag_key`), taken from the caches. Nothing cached → nothing
 is sent. `trackBatch` puts keyed events in the batch as-is and fans out the unkeyed ones; requests
 are chunked at 100 events.
+
+This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
+control variant, and an event tracked without a key after the user's cache entries have expired
+(`cacheTtlMs`, 5 minutes by default) is not sent, so pass `experimentKey` on a conversion that can
+come later.
 
 Conversions are matched to metrics by **event name**: a metric on `purchase` counts every
 `purchase` event regardless of `event_type`.
@@ -220,11 +226,11 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `evaluateFeatureFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
-| `getExperimentAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when the experiment is not ACTIVE |
+| `getExperimentAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `trackEvent` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
 
-Errors: 401 bad key, 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 422 invalid event, 429
+Errors: 401 bad key, 404 (an unknown experiment or flag key, or a draft experiment with no control variant), 422 invalid event, 429
 rate limited (`Retry-After`). These paths share the backend's per-IP `SDK_RATE_LIMIT_PER_MINUTE`
 ceiling (default 6000).
 

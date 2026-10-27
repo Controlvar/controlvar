@@ -259,7 +259,7 @@ describe('useExperiment', () => {
     expect(latest()).toMatchObject({ variant: 'control', variantName: 'control', variantId: 'var-c', isControl: true, configuration: null });
   });
 
-  test('null assignment (experiment not ACTIVE / offline) → variant null, no error', async () => {
+  test('null assignment (unknown experiment key / offline) → variant null, no error', async () => {
     const client = makeClient({ getAssignment: jest.fn().mockResolvedValue(null) });
     const { latest } = renderHookInProvider(() => useExperiment('checkout-experiment'), { client, userId: 'u1' });
 

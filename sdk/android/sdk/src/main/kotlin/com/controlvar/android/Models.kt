@@ -199,7 +199,7 @@ sealed class ExperimentationException(message: String, cause: Throwable? = null)
     class FlagNotFoundException(flagKey: String) :
         ExperimentationException("Flag not found: $flagKey")
 
-    /** Non-2xx HTTP response: 401 bad key, 404 unknown/not ACTIVE, 422 invalid event, 429 rate limited. */
+    /** Non-2xx HTTP response: 401 bad key, 404 unknown key (or a draft with no control variant), 422 invalid event, 429 rate limited. */
     class ServerException(val statusCode: Int, message: String) :
         ExperimentationException("Server error $statusCode: $message")
 

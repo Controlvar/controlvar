@@ -144,7 +144,7 @@ by = [
 ]
 
 [[unit]]
-text = "client.track(event_name, ctx, TrackingEventDetails(value=…)) forwards to ExperimentationClient.track (fans out to the user's cached assignments and flags)."
+text = "client.track(event_name, ctx, TrackingEventDetails(value=…)) forwards to ExperimentationClient.track (an event with no key is fanned out by the Python SDK's rule)."
 by = [
     "test:sdk/openfeature-python/tests/test_provider.py::TestTracking::test_track_fans_out_to_cached_flags",
     "test:sdk/openfeature-python/tests/test_provider.py::TestTracking::test_track_never_raises",

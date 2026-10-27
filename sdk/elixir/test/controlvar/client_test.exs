@@ -84,7 +84,7 @@ defmodule Controlvar.ClientTest do
     end
 
     defp respond_post("/api/v1/tracking/assign", _body) do
-      {:error, {:api_error, 404, ~s({"detail":"Experiment not found or not active"})}}
+      {:error, {:api_error, 404, ~s({"detail":"No experiment has the key 'unknown-exp'."})}}
     end
 
     defp respond_post("/api/v1/tracking/track", _body), do: {:ok, %{"id" => "evt-1"}}
@@ -363,7 +363,7 @@ defmodule Controlvar.ClientTest do
               }} = Client.get_assignment(pid, "control-exp", "user-123")
     end
 
-    test "returns {:error, {:api_error, 404, _}} when the experiment is not ACTIVE" do
+    test "returns {:error, {:api_error, 404, _}} when no experiment has the key" do
       pid = start_client()
 
       assert {:error, {:api_error, 404, _body}} =

@@ -79,7 +79,7 @@ const enabled = await client.getBooleanValue('dark-mode', false, ctx);          
 // 4. Experiments and event tracking are outside OpenFeature: use the JS SDK client underneath.
 const assignment = await provider.client.getAssignment('checkout_flow', { userId: 'user-12345', attributes: { plan: 'pro' } });
 await provider.client.track('user-12345', 'purchase', { value: 49.99, experimentKey: 'checkout_flow' });
-await provider.client.track('user-12345', 'page_view'); // no key → fans out to the cached assignment + flags evaluated via OpenFeature
+await provider.client.track('user-12345', 'page_view'); // no key → fanned out by the JS SDK's rule to the assignment + flags evaluated via OpenFeature
 ```
 
 ### EvaluationContext mapping
@@ -152,7 +152,7 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json`, `Acc
 | Call | Method and path | Response used |
 |---|---|---|
 | every `resolve*Evaluation` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
-| `provider.client.getAssignment` / `getVariant` | `POST /api/v1/tracking/assign` `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when not ACTIVE |
+| `provider.client.getAssignment` / `getVariant` | `POST /api/v1/tracking/assign` `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `provider.client.track` with a key | `POST /api/v1/tracking/track` | ignored |
 | `provider.client.track` without a key, `trackBatch` | `POST /api/v1/tracking/batch` `{events: [...]}` (max 100 per request) | `{success_count, failure_count, errors}` |
 
@@ -259,7 +259,8 @@ a string, number or object call on a flag that is on returns the caller's defaul
   anything else (401, 5xx, timeout, network) → `GENERAL`; both return the default with reason
   `ERROR`.
 - `client.track(event_name, ctx, TrackingEventDetails(value=…, attributes=…))` forwards to
-  `ExperimentationClient.track`, which fans out to the user's cached assignments and flags.
+  `ExperimentationClient.track`, which fans an event with no key out by the Python SDK's rule
+  (see the Python SDK page).
 
 ### Resolution reasons
 
@@ -296,7 +297,7 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json`, `Acc
 |---|---|---|
 | every `resolve_*_details` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `provider.track` / `provider.client.track` | `POST /api/v1/tracking/track` (with a key) or `POST /api/v1/tracking/batch` (fan-out, max 100 per request) | ignored / `{success_count, failure_count, errors}` |
-| `provider.client.get_assignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when not ACTIVE |
+| `provider.client.get_assignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 
 ### Contract smoke (Python)
 
@@ -355,8 +356,9 @@ carries `X-API-Key: <key>`, `Content-Type: application/json`, `Accept: applicati
 | Track one event (`provider.client.track` with a key) | `POST /api/v1/tracking/track` | `{"event_type","event_name"?,"user_id","experiment_key"?,"feature_flag_key"?,"value"?: number,"metadata"?: object,"timestamp"?: ISO-8601}`; both keys are optional, and an event with neither counts in no experiment's results | stored event (ignored) |
 | Track up to 100 events (`track` without a key, `trackBatch`) | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` | `{"success_count","failure_count","errors": list\|null}` |
 
-Errors: 401 bad key; 404 an experiment unknown or not ACTIVE, or an unknown flag key (→
-`FLAG_NOT_FOUND`, never cached); 422 invalid event; 429 rate limited (`Retry-After` header).
+Errors: 401 bad key; 404 an unknown experiment or flag key, or a draft experiment with no control
+variant (→ `FLAG_NOT_FOUND`, never cached); 422 invalid event; 429 rate limited (`Retry-After`
+header).
 
 Successful evaluations are cached per user + flag for the configured TTL (`cacheTtlMs` /
 `cache_ttl`, default 5 minutes) and reported with reason `CACHED`; failures are never cached.

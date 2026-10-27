@@ -301,7 +301,7 @@ public class ExperimentationClientTests
     public async Task EvaluateFlagAsync_404ReturnsDisabledAndIsNotCached()
     {
         var (client, handler) = BuildClient();
-        handler.Respond(HttpStatusCode.NotFound, "{\"detail\":\"not active\"}");
+        handler.Respond(HttpStatusCode.NotFound, "{\"detail\":\"Feature flag with key 'ghost' not found\"}");
 
         var result = await client.EvaluateFlagAsync("ghost", "user-1");
 
@@ -479,7 +479,7 @@ public class ExperimentationClientTests
     public async Task GetAssignmentAsync_404ReturnsNullAndIsNotCached()
     {
         var (client, handler) = BuildClient();
-        handler.Respond(HttpStatusCode.NotFound, "{\"detail\":\"Experiment not active\"}");
+        handler.Respond(HttpStatusCode.NotFound, "{\"detail\":\"No experiment has the key 'ghost-exp'.\"}");
 
         var result = await client.GetAssignmentAsync("ghost-exp", "user-1");
 

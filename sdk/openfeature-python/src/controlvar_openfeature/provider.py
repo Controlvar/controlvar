@@ -199,8 +199,8 @@ class ExperimentationProvider(AbstractProvider):
         evaluation_context: Optional[EvaluationContext] = None,
         tracking_event_details: Optional[TrackingEventDetails] = None,
     ) -> None:
-        """OpenFeature tracking → ``ExperimentationClient.track`` (fans out to the user's
-        cached assignments and evaluated flags; never raises)."""
+        """OpenFeature tracking → ``ExperimentationClient.track`` (an event with no key is
+        fanned out by the Python SDK's rule; never raises)."""
         user_id = _targeting_key(evaluation_context)
         if user_id is None:
             logger.warning("track(%s) ignored: targeting_key is required", tracking_event_name)

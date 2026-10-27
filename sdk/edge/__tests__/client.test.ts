@@ -344,8 +344,8 @@ describe('getAssignment', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  test('returns null on 404 (experiment not ACTIVE) and never caches the failure', async () => {
-    mockJson({ detail: 'Experiment not found' }, 404);
+  test('returns null on 404 (no experiment has the key) and never caches the failure', async () => {
+    mockJson({ detail: "No experiment has the key 'checkout_flow'." }, 404);
     mockJson(assignBody());
     const client = makeClient();
     expect(await client.getAssignment('checkout_flow', 'user-1')).toBeNull();

@@ -49,7 +49,14 @@ Every request carries `X-API-Key`, `Content-Type: application/json`, `Accept: ap
 | `track` with a key | `POST /api/v1/tracking/track` | ignored |
 | `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` `{events: [...]}` (≤ 100) | `{success_count, failure_count, errors}` |
 
-Errors: 401 bad key, 404 an experiment unknown or not ACTIVE, or an unknown flag key (→ disabled / `null`, never cached), 429 rate limited.
+Errors: 401 bad key, 404 an unknown experiment or flag key, or a draft experiment with no control variant (→ disabled / `null`, never cached), 429 rate limited.
+An experiment that is not ACTIVE is not an error: it answers its control variant.
+
+This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
+control variant, and an event tracked without a key after the user's in-memory cache entries have
+expired (`cacheTtlMs`, 60 s by default) is not sent, so pass `experimentKey` on a conversion that
+can come later.
 
 ## Contract smoke
 

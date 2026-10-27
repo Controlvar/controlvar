@@ -71,7 +71,8 @@ export class ExperimentationProvider implements Provider {
    * The underlying JS SDK client. Use it for experiment assignment
    * (`getAssignment` / `getVariant`) and event tracking (`track` / `trackBatch`),
    * which have no OpenFeature equivalent. Flags evaluated through OpenFeature
-   * are cached here too, so a keyless `client.track(...)` fans out to them.
+   * are answered by this client too, so a keyless `client.track(...)` fans out
+   * to them by the JS SDK's rule.
    */
   readonly client: ExperimentationClient;
 

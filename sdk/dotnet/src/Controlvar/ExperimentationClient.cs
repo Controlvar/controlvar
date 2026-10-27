@@ -113,8 +113,9 @@ public class ExperimentationClient : IDisposable
     /// <param name="userId">The user ID.</param>
     /// <param name="attributes">Optional user attributes (sent as <c>context</c>).</param>
     /// <returns>
-    /// The <see cref="Assignment"/>, or <c>null</c> when the experiment is unknown / not ACTIVE
-    /// (404) or the request failed and nothing is cached. Never throws.
+    /// The <see cref="Assignment"/>, or <c>null</c> when no experiment has the key or a draft has
+    /// no control variant (404), or the request failed and nothing is cached. An experiment that
+    /// is not ACTIVE answers its control variant. Never throws.
     /// </returns>
     public async Task<Assignment?> GetAssignmentAsync(
         string experimentKey,

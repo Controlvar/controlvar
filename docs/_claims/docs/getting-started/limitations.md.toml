@@ -148,3 +148,20 @@ by = [
     "journey:sdk-python#quick-start-user-on",
     "journey:sdk-go#quick-start-user-on",
 ]
+
+[[unit]]
+text = "An event tracked without an experiment key counted, however late it comes | In the Go, Java, .NET, Ruby, PHP, Elixir, iOS, Android, Flutter, React Native and edge SDKs, an event tracked without a key reaches only the experiments and flags still in that client's cache (5 minutes by default, 60 seconds in the edge SDK), and is not sent at all once they have expired. Pass the experiment key on a conversion that can come later."
+by = [
+    "test:sdk/go/client_test.go::TestClient_Track_WithoutKey_NothingCached_SendsNothing",
+    "test:sdk/go/client_test.go::TestCache_Range",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::without a key and nothing cached sends nothing",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExperimentationClientTests.cs::TrackAsync_WithoutKeyAndNothingCached_SendsNothing",
+    "test:sdk/ruby/spec/controlvar/client_spec.rb::sends nothing when nothing is cached for the user",
+    "test:sdk/php/tests/ExperimentationClientTest.php::testTrackWithoutKeySendsNothingWhenNothingIsCached",
+    "test:sdk/elixir/test/controlvar/client_test.exs::sends nothing when nothing is cached for the user",
+    "test:sdk/ios/Tests/ControlvarTests/ExperimentationClientTests.swift::testTrack_withoutKey_andNothingCached_sendsNothing",
+    "test:sdk/android/sdk/src/test/kotlin/ExperimentationClientTest.kt::track without a key and nothing cached sends nothing",
+    "test:sdk/flutter/test/client_test.dart::nothing cached → no request, returns true",
+    "test:sdk/react-native/__tests__/client.test.ts::sends nothing when the user has no cached assignments or flags",
+    "test:sdk/edge/__tests__/client.test.ts::sends nothing when nothing is cached for the user",
+]

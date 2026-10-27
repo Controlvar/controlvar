@@ -331,6 +331,19 @@ text = "Batches are chunked at 100 events."
 by = ["test:sdk/go/client_test.go::TestClient_TrackBatch_ChunksAt100"]
 
 [[unit]]
+text = "This SDK reads only the variant from an answer: an assigned: false answer (a user the experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the control variant, and an event tracked without a key after the user's cache entries have expired (CacheTTL, 5 minutes by default) is not sent, so pass ExperimentKey on a conversion that can come later."
+by = [
+    "test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping",
+    "test:sdk/go/client_test.go::TestClient_GetAssignment_Sticky_CacheHit",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "test:sdk/go/client_test.go::TestCache_Range",
+    "test:sdk/go/client_test.go::TestClient_EvaluateFlag_CacheTTLExpiry",
+    "test:sdk/go/client_test.go::TestClient_Track_WithoutKey_FansOutToCachedEntries",
+    "test:sdk/go/client_test.go::TestClient_Track_WithoutKey_NothingCached_SendsNothing",
+]
+
+[[unit]]
 text = "Conversions are matched to metrics by event name: a metric whose event_name is purchase counts every purchase event regardless of event_type."
 by = ["test:backend/tests/integration/services/test_conversion_event_matching.py::TestConversionEventFilter::test_matches_both_producer_shapes_and_excludes_exposures"]
 

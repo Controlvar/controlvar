@@ -392,7 +392,7 @@ def test_every_story_has_a_rule() -> None:
     "true_text",
     [
         '`{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key',
-        "404 when the experiment is not ACTIVE",
+        "/assign/batch answers 404 when the experiment is not ACTIVE",
         "Errors: 401 bad key, 404 no ACTIVE experiment with that key, 422 invalid event",
         "**No Lambda function serves requests or processes events.** SDKs call the API",
         "The API does not publish tracking events to the stream today",

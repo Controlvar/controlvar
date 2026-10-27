@@ -50,7 +50,7 @@ do {
     let a = try await client.getAssignment("checkout_flow", user: user)
     print(a.variantName, a.isControl, a.configuration ?? [:])   // "treatment" false ["headline": ...]
 } catch ExperimentationError.experimentNotFound {
-    // experiment unknown or not ACTIVE (404): show the control experience
+    // no experiment has the key (404): show the control experience
 } catch {
     // network / server error with nothing cached
 }
@@ -108,8 +108,9 @@ Types: `User(id:attributes:)` (attributes → assignment `context`); `EvalResult
 - Successful results are cached in memory per **user + key** for `cacheTTL`; a hit makes no
   request, and concurrent calls for the same user + key share one in-flight request.
   **Failures are never cached.**
-- **404** (an experiment unknown or not ACTIVE, or an unknown flag key) throws `.flagNotFound(key)` /
-  `.experimentNotFound(key)` and never falls back to a persisted value (it is removed).
+- **404** (an unknown experiment or flag key, or a draft experiment with no control variant) throws
+  `.flagNotFound(key)` / `.experimentNotFound(key)` and never falls back to a persisted value (it is
+  removed). An experiment that is not ACTIVE is not an error: it answers its control variant.
 - **Any other failure** (network, timeout, 401, 5xx, decoding): with `enableOfflineFallback` the
   last persisted value for that user + key is returned if one exists; otherwise the call throws
   `.networkError(Error)`, `.serverError(Int, String)`, `.decodingError(Error)` or `.cancelled`.
@@ -124,6 +125,12 @@ user was assigned to through this client (`experiment_key`) plus one per flag ev
 user (`feature_flag_key`), taken from the in-memory cache. Nothing cached → nothing is sent (and
 `true` is reported). Metrics match events by **event name**.
 
+This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
+control variant, and an event tracked without a key after the user's in-memory cache entries have
+expired (`cacheTTL`, 300 seconds by default) is not sent, so pass `experimentKey` on a conversion
+that can come later.
+
 ## Consistent hash (compatibility utility)
 
 `FeatureFlagEvaluator.hashUser(userId, flagKey:)` = `MD5("{userId}:{flagKey}")`, first 4 bytes as
@@ -137,7 +144,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `evaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
-| `getAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when the experiment is not ACTIVE |
+| `getAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
 

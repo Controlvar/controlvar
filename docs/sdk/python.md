@@ -130,6 +130,9 @@ and `reason` says why. A server that predates the fields sends neither, so `assi
 (never `False`). Decide deliberately how to treat those rows rather than dropping them with an
 `assigned is True` filter.
 
+An experiment that is not ACTIVE answers every user with its control variant, `assigned` False and
+`reason` set to its status (`"draft"`, `"paused"`, `"completed"` or `"archived"`).
+
 ### Targeting context
 
 `user_attributes` is what the platform's targeting rules evaluate against. It is sent as `context`

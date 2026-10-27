@@ -92,6 +92,9 @@ and `reason` says why. A server that predates the fields sends neither, so `assi
 `undefined` (never `false`). Decide deliberately how to treat those rows rather than dropping them
 with an `assigned === true` filter.
 
+An experiment that is not ACTIVE answers every user with its control variant, `assigned: false` and
+`reason` set to its status (`'draft'`, `'paused'`, `'completed'` or `'archived'`).
+
 ## Backend endpoints used
 
 Every request carries `X-API-Key`, `Content-Type: application/json`, `Accept: application/json`.

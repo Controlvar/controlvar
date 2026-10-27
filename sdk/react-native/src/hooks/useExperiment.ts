@@ -35,7 +35,7 @@ function initialState(experimentKey: string, loading: boolean): ExperimentState 
  * @param experimentKey  The experiment key to retrieve an assignment for.
  * @returns `{ experimentKey, variant, variantId, variantName, isControl, configuration, loading, error }`
  *   — `variant` (alias of `variantName`) is `null` while loading or when the
- *   assignment failed (experiment not ACTIVE, network error with nothing persisted).
+ *   assignment failed (no experiment has the key, network error with nothing persisted).
  */
 export function useExperiment(experimentKey: string): ExperimentState {
   const { client, userId, attributes } = useExperimentationContext();

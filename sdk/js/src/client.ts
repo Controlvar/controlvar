@@ -200,7 +200,9 @@ export class ExperimentationClient {
   /**
    * Assign the user via `POST /api/v1/tracking/assign` (sticky on the server,
    * records the exposure). `user.attributes` is sent as `context`.
-   * Throws `ExperimentationError` (404 when the experiment is not ACTIVE).
+   * Throws `ExperimentationError` (404 when no experiment has the key, or for a
+   * draft with no control variant). An experiment that is not ACTIVE resolves to
+   * its control variant with `assigned: false` and `reason` its status.
    */
   async getAssignment(experimentKey: string, user: UserContext): Promise<Assignment> {
     const { userId, attributes } = requireUser(user);

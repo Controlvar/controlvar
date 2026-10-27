@@ -140,8 +140,8 @@ describe('useExperiment', () => {
     expect(result.current.configuration).toEqual({ steps: 3 });
   });
 
-  it('sets error and keeps the control defaults on a 404 (no active experiment)', async () => {
-    makeFetchMock({ detail: 'not found' }, 404);
+  it('sets error and keeps the control defaults on a 404 (no experiment has the key)', async () => {
+    makeFetchMock({ detail: "No experiment has the key 'checkout-experiment'." }, 404);
     const { result } = renderHook(() => useExperiment('checkout-experiment'), {
       wrapper: makeWrapper(),
     });

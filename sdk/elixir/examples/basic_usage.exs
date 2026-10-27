@@ -78,7 +78,7 @@ case Controlvar.get_assignment(client, "checkout-flow-experiment", user_id, %{
     IO.puts("  => User in variant #{variant} — configuration: #{inspect(configuration)}")
 
   {:error, {:api_error, 404, _body}} ->
-    IO.puts("  => Experiment not found or not ACTIVE — showing default checkout")
+    IO.puts("  => Experiment not found — showing default checkout")
 
   {:error, reason} ->
     IO.puts("  => Assignment error: #{inspect(reason)} — showing default checkout")

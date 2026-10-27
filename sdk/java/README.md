@@ -55,7 +55,7 @@ try (ExperimentationClient client = new ExperimentationClient(config)) {
         a.isControl();
         a.getConfiguration(); // Map<String,Object> or null
     } catch (ExperimentationException e) {
-        // 404 not ACTIVE, 401 bad key, network error -> show the control experience
+        // 404 unknown experiment key, 401 bad key, network error -> show the control experience
     }
 
     // Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123
@@ -139,9 +139,10 @@ scalar / null), `getConfigMap()`. `ExperimentAssignment` → `getExperimentKey()
 
 - Successful evaluations and assignments are cached per **user + key** for `cacheTtlMs`
   (default 5 min); a hit makes no request. **Failures are never cached.**
-- Network error, timeout, 401, 404 (an experiment unknown or not ACTIVE, or an unknown flag key), 429: `evaluateFeatureFlag` and
-  `getExperimentAssignment` throw `ExperimentationException` (`isApiError()` is true for HTTP
-  errors); `isFeatureEnabled` returns `false`. There is no stale fallback beyond the TTL.
+- Network error, timeout, 401, 404 (an unknown experiment or flag key, or a draft experiment with no control variant),
+  429: `evaluateFeatureFlag` and `getExperimentAssignment` throw `ExperimentationException` (`isApiError()` is true for
+  HTTP errors); `isFeatureEnabled` returns `false`. There is no stale fallback beyond the TTL. An experiment that is not
+  ACTIVE is not an error: it answers its control variant.
 - Async `trackEvent`/`trackBatch` swallow every error; use the `*Sync` variants to observe them.
 
 ## Tracking fan-out
@@ -151,6 +152,12 @@ With `experimentKey` and/or `featureFlagKey` set, `trackEvent` sends one
 entry per experiment the user was assigned to through this client (`experiment_key`) plus one per
 flag evaluated for the user (`feature_flag_key`), taken from the cache. Nothing cached → nothing is
 sent. Metrics match events by **event name**.
+
+This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
+control variant, and an event tracked without a key after the user's cache entries have expired
+(`cacheTtlMs`, 5 minutes by default) is not sent, so pass `experimentKey` on a conversion that can
+come later.
 
 ## Consistent hash (compatibility utility)
 
@@ -166,7 +173,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `evaluateFeatureFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
-| `getExperimentAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when the experiment is not ACTIVE |
+| `getExperimentAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `trackEvent` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
 

@@ -66,8 +66,9 @@ export interface ExperimentAssignment {
   assigned?: boolean;
   /**
    * Why the server decided as it did — `'assigned'`, `'holdout'`,
-   * `'mutual_exclusion'` or `'targeting'`. `undefined` while loading, on
-   * error, or when the server did not send one.
+   * `'mutual_exclusion'` or `'targeting'`, or the status of an experiment that
+   * is not ACTIVE (`'draft'`, `'paused'`, `'completed'` or `'archived'`).
+   * `undefined` while loading, on error, or when the server did not send one.
    */
   reason?: string;
 }
@@ -106,6 +107,10 @@ export interface ExperimentAssignResponse {
   configuration?: Record<string, unknown> | null;
   /** `false` when the user was not enrolled (control returned); absent on older servers. */
   assigned?: boolean;
-  /** `assigned` | `holdout` | `mutual_exclusion` | `targeting`; absent on older servers. */
+  /**
+   * `assigned` | `holdout` | `mutual_exclusion` | `targeting`, or the status of an
+   * experiment that is not ACTIVE (`draft` | `paused` | `completed` | `archived`);
+   * absent on older servers.
+   */
   reason?: string;
 }

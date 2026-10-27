@@ -140,7 +140,8 @@ curl -s -X POST localhost:8000/api/v1/tracking/assign \
 <!-- expect: "assigned": true -->
 
 The response carries `variant_name`, `variant_id`, `is_control`, `configuration`, and
-`assigned` with a `reason` (`assigned`, `holdout`, `mutual_exclusion` or `targeting`).
+`assigned` with a `reason` (`assigned`, `holdout`, `mutual_exclusion` or `targeting`, or the
+status of an experiment that is not ACTIVE).
 Assignments are sticky: the same `user_id` always gets the same variant.
 
 ```{.bash exec}

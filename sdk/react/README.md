@@ -90,6 +90,9 @@ recorded). Servers that predate the field are reported as `assigned: true` with 
 **When you export exposures to a warehouse, log only assignments with `assigned: true`**; the
 others were never in the experiment.
 
+An experiment that is not ACTIVE answers every user with its control variant, `assigned: false` and
+`reason` set to its status (`'draft'`, `'paused'`, `'completed'` or `'archived'`).
+
 ### `useTrackEvent(): (eventName, properties?, options?) => void`
 
 ```tsx
@@ -161,7 +164,7 @@ Every request carries `X-API-Key: <key>` and `Content-Type: application/json`.
 | SDK call | Method & path | Body / query | Response used |
 |---|---|---|---|
 | `evaluateFeatureFlag*`, `useFeatureFlag`, `useVariant`, `useMultipleFlags`, `ServerClient.getAll` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{key, enabled, config, reason}` (off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key) |
-| `assignExperiment`, `useExperiment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, variant_id, variant_name, is_control, configuration}` (404 when not ACTIVE) |
+| `assignExperiment`, `useExperiment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, variant_id, variant_name, is_control, configuration}` (404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false`) |
 | `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `trackEvent` without keys | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (≤ 100 per request) | ignored |
 

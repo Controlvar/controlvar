@@ -76,7 +76,7 @@ func main() {
 	user := &exp.User{ID: "user-123", Attributes: map[string]interface{}{"plan": "pro"}}
 
 	// 1. Assignment (POST /api/v1/tracking/assign: sticky per user and experiment).
-	// A nil assignment and an error: not ACTIVE (404), bad key (401), network error.
+	// A nil assignment and an error: no experiment has the key (404), bad key (401), network error.
 	// A service would fall back to control here; the quick start stops.
 	a, err := client.GetAssignment(ctx, "checkout_flow", user)
 	if err != nil {
@@ -168,7 +168,7 @@ func Float64(v float64) *float64
 ```go
 var apiErr *exp.APIError
 if _, err := client.GetAssignment(ctx, "exp", user); errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
-    // experiment unknown or not ACTIVE
+    // no experiment has the key, or a draft has no control variant
 }
 ```
 
@@ -195,6 +195,12 @@ Without a key it sends one `POST /api/v1/tracking/batch` with one entry per expe
 was assigned to through this client (`experiment_key`) plus one per flag evaluated for the user
 (`feature_flag_key`), all taken from the cache. Nothing cached → nothing is sent and `nil` is
 returned. Batches are chunked at 100 events.
+
+This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
+control variant, and an event tracked without a key after the user's cache entries have expired
+(`CacheTTL`, 5 minutes by default) is not sent, so pass `ExperimentKey` on a conversion that can
+come later.
 
 Conversions are matched to metrics by **event name**: a metric whose `event_name` is `purchase`
 counts every `purchase` event regardless of `event_type`.

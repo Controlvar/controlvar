@@ -47,7 +47,7 @@ At start-up it prints what those five devices get right now (flag on/off + `reas
 The employee's device gets `player_v2=ON(targeting_rule)`, and `ai_search` is ON only for iOS 17+ / US / premium.
 
 Exit codes: `0` ok · `2` bad or missing API key, or `--incident` without the server key · `3` catalogue not
-seeded / not ACTIVE · `4` API unreachable.
+seeded · `4` API unreachable.
 
 ### The incident model (`--incident android12`)
 

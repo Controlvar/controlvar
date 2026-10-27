@@ -28,7 +28,9 @@ when you report the failure.
 
 An assign call for a user who is not eligible (global holdout, mutual exclusion group or targeting
 rules) still answers 200 with the control variant, `assigned: false` and `reason` set to `holdout`,
-`mutual_exclusion` or `targeting`; nothing is recorded for that user. Otherwise `assigned` is `true`,
+`mutual_exclusion` or `targeting`; nothing is recorded for that user. An experiment that is not
+ACTIVE answers every user the same way, with `reason` set to its status (`draft`, `paused`,
+`completed` or `archived`). Otherwise `assigned` is `true`,
 `reason` is `assigned`, and every call, sticky ones included, records that the user saw the experiment.
 
 Conversions are matched to experiment metrics by `event_name` (exposures excluded), whatever `event_type`
@@ -385,7 +387,7 @@ client.trackBatch(List.of(...));     // chunked at 100; trackEventSync / trackBa
 
 | Method | Returns | On failure |
 |---|---|---|
-| `getExperimentAssignment(user, experimentKey)` | `ExperimentAssignment` (`getExperimentKey, getUserId, getVariantId, getVariantName, isControl, getConfiguration`) | throws `ExperimentationException` (unchecked; 404 when not ACTIVE, network errors) |
+| `getExperimentAssignment(user, experimentKey)` | `ExperimentAssignment` (`getExperimentKey, getUserId, getVariantId, getVariantName, isControl, getConfiguration`) | throws `ExperimentationException` (unchecked; 404 when no experiment has the key or a draft has no control variant, network errors); an experiment that is not ACTIVE returns its control variant |
 | `evaluateFeatureFlag(user, flagKey)` | `FlagEvaluation` (`getKey, isEnabled, getConfig, getConfigMap`) | throws `ExperimentationException` |
 | `isFeatureEnabled(user, flagKey)` | `boolean` | `false` |
 | `trackEvent(userId, eventName, properties[, experimentKey, featureFlagKey, value])`, `trackEvent(TrackEvent)` | `void` (async) | swallowed |

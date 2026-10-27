@@ -185,8 +185,10 @@ public class ExperimentationClient implements AutoCloseable {
      * @param user          the user to assign
      * @param experimentKey the experiment key (e.g., "checkout-button-color")
      * @return the assignment (never null)
-     * @throws ExperimentationException on a non-2xx response (404 when the experiment is
-     *                                  not ACTIVE or unknown) or a network error
+     * @throws ExperimentationException on a non-2xx response (404 when no experiment has the
+     *                                  key, or for a draft with no control variant) or a network
+     *                                  error; an experiment that is not ACTIVE answers its control
+     *                                  variant
      */
     public ExperimentAssignment getExperimentAssignment(User user, String experimentKey) {
         if (user == null) throw new IllegalArgumentException("user must not be null");

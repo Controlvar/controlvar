@@ -67,7 +67,7 @@ Only boolean flags carry a value: the evaluate endpoint returns `config: null` f
   `GENERAL`). Errors never raise and are never cached.
 - `variant` on the details is not set, because `config` is always `null`.
 - `client.track(event_name, ctx, TrackingEventDetails(value=…))` forwards to
-  `ExperimentationClient.track` (fans out to the user's cached assignments and flags).
+  `ExperimentationClient.track` (an event with no key is fanned out by the Python SDK's rule).
 
 ## Backend endpoints used
 
