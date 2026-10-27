@@ -16,7 +16,11 @@ are known:
 
 Events that must count nowhere are added: a purchase from a user with no
 assignment, one tagged with the control's variant from a user assigned to the
-treatment, one with no variant, and another event's value.
+treatment, one with no variant, another event's value, and an exposure event
+that carries the metric's event name and a value.
+
+A refund, a negative value, is added to its buyer's total: that has its own
+small experiment.
 
 Rows created here are deleted in fixture teardown because the shared test
 database is not truncated between tests.
@@ -35,7 +39,7 @@ from scipy import stats
 
 from backend.app.models.analysis_snapshot import AnalysisSnapshot
 from backend.app.models.assignment import Assignment
-from backend.app.models.event import Event
+from backend.app.models.event import Event, EventType
 from backend.app.models.experiment import (
     ExperimentStatus,
     ExperimentType,
@@ -178,13 +182,23 @@ def experiment(admin_client, db_session, make_experiment):
                 value=1000.0,
                 created_at=at,
             ),
-            # ... and an assigned user's purchase stored with no variant.
+            # ... an assigned user's purchase stored with no variant ...
             Event(
                 event_type="purchase",
                 event_name="purchase",
                 user_id=_user(exp, "control", 3),
                 experiment_id=exp.id,
                 variant_id=None,
+                value=1000.0,
+                created_at=at,
+            ),
+            # ... and an exposure that carries the metric's name and a value.
+            Event(
+                event_type=EventType.EXPOSURE.value,
+                event_name="purchase",
+                user_id=_user(exp, "control", 6),
+                experiment_id=exp.id,
+                variant_id=ids["control"],
                 value=1000.0,
                 created_at=at,
             ),
@@ -374,3 +388,31 @@ def test_values_that_are_not_finite_or_too_large_add_nothing(
 
     export = admin_client.get("/api/v1/export/variants", params={"format": "json"})
     assert export.status_code == 200, export.text
+
+
+@pytest.fixture
+def refund(admin_client, db_session, make_experiment):
+    exp = _make(db_session, make_experiment, 4)
+    # A buyer who pays 30 and is refunded 10, and a buyer of 5.
+    _track(admin_client, exp, _user(exp, "control", 0), 30.0)
+    _track(admin_client, exp, _user(exp, "control", 0), -10.0)
+    _track(admin_client, exp, _user(exp, "control", 1), 5.0)
+    _track(admin_client, exp, _user(exp, "treatment", 0), 12.0)
+    yield exp
+    _cleanup(db_session, exp)
+
+
+def test_a_refund_is_subtracted_from_its_buyers_total(admin_client, refund):
+    control_y = np.array([20.0, 5.0, 0.0, 0.0])
+    treatment_y = np.array([12.0, 0.0, 0.0, 0.0])
+
+    metric, control, treatment = _arms(_results(admin_client, refund))
+
+    assert metric["analysis"] == "mean"
+    # The refunded buyer is one buyer worth 30 - 10 = 20.
+    assert control["conversions"] == 2
+    assert control["mean"] == pytest.approx(6.25, rel=1e-12)
+    assert control["std_dev"] == pytest.approx(np.std(control_y, ddof=1), rel=1e-9)
+    welch = stats.ttest_ind(treatment_y, control_y, equal_var=False)
+    assert treatment["p_value"] == pytest.approx(welch.pvalue, rel=1e-9)
+    assert treatment["absolute_difference"] == pytest.approx(3.0 - 6.25, rel=1e-12)
