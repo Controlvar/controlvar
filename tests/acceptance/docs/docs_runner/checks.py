@@ -246,6 +246,10 @@ def describe_expect(step: Step) -> str:
         parts.append(
             f"the screen matches its ARIA snapshot ({len(expect_.aria.splitlines())} lines)"
         )
+    if expect_.aria_one_of is not None:
+        parts.append(
+            f"the screen matches one of its {len(expect_.aria_one_of)} ARIA snapshots"
+        )
     if expect_.exit is not None:
         bound = step.do.run.up_to_seconds if step.do.run is not None else None
         within = f" within {bound} s" if bound is not None else ""
