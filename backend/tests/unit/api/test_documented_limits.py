@@ -23,6 +23,7 @@ from backend.app.schemas.auth import LoginRequest
 from backend.app.schemas.experiment import ExperimentCreate
 from backend.app.schemas.feature_flag import FeatureFlagCreate, FeatureFlagUpdate
 from backend.app.schemas.results import SampleSizeResult
+from backend.app.schemas.tracking import AssignmentRequest
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
@@ -146,6 +147,19 @@ def test_the_results_use_one_proportion_test_for_every_metric():
     body = source.split("def get_experiment_results", 1)[1].split("\n    def ", 1)[0]
     assert "binomial_metric_result(" in body
     assert "mean_metric_result(" not in body and "metric_type" not in body
+
+
+def test_no_call_says_that_two_user_ids_are_one_user(routes):
+    """There is no identify or alias call: an assignment names one user id,
+    and no route joins two, so a user who signs in under a new id is a new
+    user to ``/tracking/assign``."""
+    assert set(AssignmentRequest.model_fields) == {
+        "experiment_key",
+        "user_id",
+        "context",
+    }
+    pattern = re.compile(r"identify|alias|merge", re.I)
+    assert [path for _, path in routes if pattern.search(path)] == []
 
 
 # ---------------------------------------------------------------------------
@@ -365,3 +379,70 @@ def test_only_analysis_history_and_evaluation_counters_are_deleted_by_age():
         for name in _deletes_by_age(ast.parse(text))
     }
     assert found == AGE_DELETIONS
+
+
+# ---------------------------------------------------------------------------
+# SDKs
+# ---------------------------------------------------------------------------
+#: Where each native mobile SDK builds two requests: its file, then the code
+#: that evaluates a flag and the code that assigns a user to an experiment,
+#: each as (the line that starts it, the line after it) pairs.
+NATIVE_SDKS = {
+    "ios": (
+        "sdk/ios/Sources/Controlvar/ExperimentationClient.swift",
+        [("public func evaluateFlag(", "// MARK: - Experiments")],
+        [("public func getAssignment(", "// MARK: - Tracking")],
+    ),
+    "android": (
+        "sdk/android/sdk/src/main/kotlin/com/controlvar/android/ExperimentationClient.kt",
+        [
+            ("suspend fun evaluateFlag(", "suspend fun getAssignment("),
+            ("private fun evaluateFlagPath(", "private fun send("),
+        ],
+        [("suspend fun getAssignment(", "suspend fun track(")],
+    ),
+    "react-native": (
+        "sdk/react-native/src/client.ts",
+        [("async evaluateFlag(", "async isFeatureEnabled(")],
+        [("async getAssignment(", "async getVariant(")],
+    ),
+    "flutter": (
+        "sdk/flutter/lib/src/client.dart",
+        [("Future<EvalResult> evaluateFlag(", "Future<bool> isEnabled(")],
+        [("Future<Assignment?> getAssignment(", "Future<String?> getVariant(")],
+    ),
+}
+
+#: A block comment, or a line comment (not the `//` of a URL's scheme).
+_COMMENT = re.compile(r"/\*.*?\*/|(?<![:\w])//[^\n]*", re.S)
+_CONTEXT = re.compile(r"\bcontext\b", re.I)
+
+
+def _native_code(rel: str, bounds) -> str:
+    text = (ROOT / rel).read_text(encoding="utf-8")
+    parts = []
+    for start, end in bounds:
+        assert text.count(start) == 1, f"{rel}: {start!r} is not there once"
+        assert text.count(end) == 1, f"{rel}: {end!r} is not there once"
+        head = text.index(start)
+        tail = text.index(end)
+        assert head < tail, f"{rel}: {end!r} comes before {start!r}"
+        parts.append(_COMMENT.sub("", text[head:tail]))
+    return "\n".join(parts)
+
+
+@pytest.mark.parametrize("sdk", sorted(NATIVE_SDKS))
+def test_the_native_sdks_send_no_context_on_flag_evaluation(sdk):
+    """iOS, Android, React Native and Flutter evaluate a flag with the user id
+    alone (#438), so a flag rule on attributes cannot match from them; each
+    sends the attributes as the context of an experiment assignment. When this
+    fails, the SDK has started to send a context on flag evaluation: say so on
+    the pages whose registries name this test."""
+    rel, evaluate, assign = NATIVE_SDKS[sdk]
+    evaluation = _native_code(rel, evaluate)
+    assert "feature-flags/evaluate" in evaluation, f"{sdk}: no evaluate request read"
+    assert not _CONTEXT.search(evaluation), f"{sdk} sends a context on flag evaluation"
+    # The same scan finds the context the SDK does send, so it reads real code.
+    assignment = _native_code(rel, assign)
+    assert "tracking/assign" in assignment, f"{sdk}: no assign request read"
+    assert _CONTEXT.search(assignment), f"{sdk}: no context on assignment"

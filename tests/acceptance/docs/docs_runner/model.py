@@ -52,8 +52,11 @@ structural expectation (``url``, ``status``, ``visible``, ``text``,
 it, and the step then needs a structural expectation and no ``aria``. A step
 with ``snapshot: false`` keeps no screenshot and no ARIA snapshot, whether it
 passes or fails. ``aria`` is Playwright's ARIA snapshot template: it must parse
-as a YAML list. ``api``, ``ref``, ``crawl`` and ``keep`` steps take no
-snapshot. ``fail`` says what failure looks like; a step without it is refused.
+as a YAML list. ``aria_one_of`` takes its place on a screen that shows one of
+several answers the API may give (the arm a bandit gave a new visitor): two to
+four templates, each pairing what the page shows for one answer, and the
+screen must match one of them. ``api``, ``ref``, ``crawl`` and ``keep`` steps
+take no snapshot. ``fail`` says what failure looks like; a step without it is refused.
 Names, labels, options, ``text``, ``goto``, ``open`` and ``search`` are one
 line each.
 
@@ -153,6 +156,18 @@ What an API answers can be kept for later steps and checked against an oracle
   it is shown. ``expect.number`` does the same for the one element of a role
   and name, reading its text again until it agrees or stops changing
   (``checks.settle``).
+* ``expect.delta`` on an api step: ``{<dotted path>: {since: <saved name>,
+  by: <whole number>}}``, the number at each JSON path is exactly the number
+  an earlier api step saved under that name plus ``by`` (``by: 0``, the same
+  number). A cell of ``expect.cells`` may give ``delta`` instead of
+  ``oracle``: the cell shows that number. A count read before an action and
+  again after it, one more in the arm the action counts in and none more in
+  the other, is checked this way, whatever the count was before.
+* ``visitor`` (a journey field, demo-local only): ShopLab's visitor id, put
+  into the storefront's localStorage before the journey's first page
+  (``values.storage_state``), so the storefront's visitor is the one the
+  journey chose. It is a UUIDv4 chosen offline with ``values.choose_visitor``
+  and outside the demo's global holdout (the loader refuses one inside it).
 * ``expect.after`` on an api step: ``{<dotted path>: <saved name>}``, the time
   at each JSON path is later than the time an earlier step saved under that
   name (both ISO 8601, read on the stack's own clock; one written without a
@@ -242,6 +257,7 @@ from pydantic import (
 
 from docs_runner.redaction import credential_key, credential_path
 from docs_runner.sdk import required_placeholders
+from docs_runner.values import is_uuid_v4
 
 STACKS = (
     "compose-dev",
@@ -287,6 +303,9 @@ Countable = Literal["events"]
 RELAUNCH_STACKS = ("compose-demo",)
 #: How a ``relaunch`` step starts the stack again: as the recovery note says.
 Relaunch = Literal["recovery"]
+#: The stacks a journey's ``visitor`` is seeded on: the one demo/setup-local.sh
+#: starts, whose ShopLab storefront and demo holdout the visitor is chosen for.
+VISITOR_STACKS = ("demo-local",)
 Profile = Literal["core", "full"]
 
 #: Who an ``api`` step calls as: nobody, or one of the four role accounts the
@@ -388,12 +407,14 @@ GUIDE_PATTERN = r"^[^/\s][^\s]*\.(?:md|tsx)$"
 SCREEN_ACTIONS = ("goto", "open", "click", "fill", "select")
 #: The actions in the browser; each but ``keep`` keeps its screen as a screenshot.
 BROWSER_ACTIONS = (*SCREEN_ACTIONS, "search", "keep")
+#: A screen step's ARIA snapshot: one template, or one of several.
+ARIA_EXPECTS = ("aria", "aria_one_of")
 #: What a step on a screen may expect, and what an ``api`` step may.
-BROWSER_EXPECTS = ("url", "status", "visible", "text", "number", "cells", "aria")
+BROWSER_EXPECTS = ("url", "status", "visible", "text", "number", "cells", *ARIA_EXPECTS)
 #: A screen step's structural expectations: all but the ARIA snapshot.
-STRUCTURAL_EXPECTS = tuple(name for name in BROWSER_EXPECTS if name != "aria")
+STRUCTURAL_EXPECTS = tuple(name for name in BROWSER_EXPECTS if name not in ARIA_EXPECTS)
 #: What an api step may expect of its answer; ``after`` compares times in it.
-API_ANSWER_EXPECTS = ("status", "json", "computed")
+API_ANSWER_EXPECTS = ("status", "json", "computed", "delta")
 API_EXPECTS = (*API_ANSWER_EXPECTS, "after")
 SEARCH_EXPECTS = ("found",)
 #: What a ``run`` or ``finish`` step may expect: how its block ended.
@@ -812,8 +833,17 @@ class Computed(_Strict):
     rel: StrictFloat = Field(ge=0, le=0.01)
 
 
+class Delta(_Strict):
+    """A number exactly ``by`` more than the number an earlier api step saved
+    as ``since`` (``by: 0``: the same number; ``by: -1``: one fewer)."""
+
+    since: Name
+    by: StrictInt
+
+
 class Cell(_Quoted):
-    """A table cell shows an oracle's number, at the precision it shows.
+    """A table cell shows an oracle's number, or a saved number moved by
+    ``delta``, at the precision it shows.
 
     The cell is the one under the column headed ``column``, in the one row
     that has a cell reading exactly ``row`` (a variant's name, say).
@@ -821,7 +851,17 @@ class Cell(_Quoted):
 
     row: OneLine
     column: OneLine
-    oracle: Oracle
+    oracle: Optional[Oracle] = None
+    delta: Optional[Delta] = None
+
+    @model_validator(mode="after")
+    def _oracle_or_delta(self) -> "Cell":
+        if (self.oracle is None) == (self.delta is None):
+            raise ValueError(
+                "a cell shows exactly one of an oracle's number (oracle) or a saved"
+                " number moved by delta"
+            )
+        return self
 
 
 class Poll(_Strict):
@@ -851,12 +891,18 @@ class Expect(_Strict):
     text: Optional[OneLine] = None
     json_: Optional[Dict[str, Any]] = Field(default=None, alias="json", min_length=1)
     computed: Optional[Dict[StrictStr, Computed]] = Field(default=None, min_length=1)
+    #: The number at each JSON path is a saved number moved by an exact amount.
+    delta: Optional[Dict[JsonPath, Delta]] = Field(default=None, min_length=1)
     #: The time at each JSON path is later than the time saved under the name.
     after: Optional[Dict[JsonPath, Name]] = Field(default=None, min_length=1)
     number: Optional[NumberExpect] = None
     cells: Optional[List[Cell]] = Field(default=None, min_length=1)
     found: Optional[StrictStr] = Field(default=None, pattern=r"^/\S*$")
     aria: Optional[StrictStr] = Field(default=None, min_length=1)
+    #: Or one of these, each pairing what the screen shows for one answer.
+    aria_one_of: Optional[List[StrictStr]] = Field(
+        default=None, min_length=2, max_length=4
+    )
     #: A ``run`` or ``finish`` step: the status its block must end with.
     exit: Optional[StrictInt] = Field(default=None, ge=0, le=255)
     #: And lines its output must hold, each word for word.
@@ -866,22 +912,25 @@ class Expect(_Strict):
     def _something(self) -> "Expect":
         if not self.given():
             raise ValueError("expect names nothing to check")
+        if self.aria is not None and self.aria_one_of is not None:
+            raise ValueError("give aria or aria_one_of, not both")
         return self
 
-    @field_validator("aria")
+    @field_validator("aria", "aria_one_of")
     @classmethod
-    def _aria_parses(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return value
-        try:
-            nodes = yaml.safe_load(value)
-        except yaml.YAMLError:
-            nodes = None
-        if not isinstance(nodes, list) or not nodes:
-            raise ValueError(
-                "aria must be an ARIA snapshot template: a non-empty YAML list of"
-                ' nodes, such as - heading "Title" [level=1]'
-            )
+    def _aria_parses(cls, value: Any) -> Any:
+        for template in [value] if isinstance(value, str) else value or []:
+            try:
+                nodes = yaml.safe_load(template)
+            except yaml.YAMLError:
+                nodes = None
+            if not isinstance(nodes, list) or not nodes:
+                raise ValueError(
+                    "aria must be an ARIA snapshot template: a non-empty YAML list of"
+                    ' nodes, such as - heading "Title" [level=1]'
+                )
+        if isinstance(value, list) and len(set(value)) < len(value):
+            raise ValueError("aria_one_of gives one template twice")
         return value
 
     def given(self) -> List[str]:
@@ -971,7 +1020,20 @@ class Journey(_Strict):
     )
     #: The launch walkthroughs this journey records, each a segment of its steps.
     recordings: List[Recording] = Field(default_factory=list)
+    #: demo-local only: ShopLab's visitor, seeded before the first page.
+    visitor: Optional[StrictStr] = None
     steps: List[Step] = Field(min_length=1)
+
+    @field_validator("visitor")
+    @classmethod
+    def _visitor_is_a_uuid_v4(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not is_uuid_v4(value):
+            raise ValueError(
+                "not a UUIDv4 in lower case, as the storefront makes them: it"
+                " drops any other id and makes up its own"
+                " (demo/shoplab/src/lib/visitor.ts)"
+            )
+        return value
 
     @model_validator(mode="after")
     def _unique_step_ids(self) -> "Journey":

@@ -79,7 +79,7 @@ const isEnabled = await client.isFeatureEnabled('dark_mode', user);   // false o
 // Track a conversion for one experiment (POST /api/v1/tracking/track)
 await client.track('user-123', 'purchase', { value: 49.99, experimentKey: 'checkout_button_color' });
 
-// Track without a key: fans out to every cached assignment and flag for the user (see below)
+// Track without a key: sent to every experiment and flag answered for the user (see below)
 await client.track('user-123', 'page_view', { properties: { page: '/checkout' } });
 ```
 
@@ -114,7 +114,7 @@ const client = new ExperimentationClient({
 | `cacheTtlMs` | `number` | `300000` | TTL of successful evaluations/assignments, per user + key |
 | `defaultVariant` | `string` | `'control'` | Variant name `getVariant` returns on failure |
 | `fetch` | `typeof fetch` | global `fetch` | Custom fetch implementation |
-| `onError` | `(error: ExperimentationError, op: 'track' \| 'trackBatch' \| 'refresh' \| 'flush' \| 'evaluate') => void` | — | Only way to observe swallowed failures; a throwing handler is itself swallowed. `'refresh'`, `'flush'` and `'evaluate'` occur only in local mode |
+| `onError` | `(error: ExperimentationError, op: 'track' \| 'trackBatch' \| 'refresh' \| 'flush' \| 'evaluate' \| 'reportError') => void` | — | Only way to observe swallowed failures; a throwing handler is itself swallowed. `'refresh'`, `'flush'` and `'evaluate'` occur only in local mode |
 | `evaluation` | `'server' \| 'local'` | `'server'` | `'local'`: answer flags in-process from `GET /api/v1/sdk/ruleset`; needs a key with the `sdk:ruleset` scope; throws in a browser |
 | `refreshIntervalMs` | `number` | `30000` | Local mode: ruleset refresh interval (minimum 5000, ±10% jitter) |
 | `maxStaleMs` | `number` | none | Local mode: evaluate on the server once the ruleset has not been refreshed for this long |
@@ -163,10 +163,11 @@ turn that into their safe default.
 | `getAllFlags` | `(userId, attributes?) => Promise<Record<string, boolean>>` | `{ flagKey: enabled }`; `attributes` sent as `context`; not cached, not part of the fan-out | Rejects |
 | `track` | `(userId, eventName, options?: TrackOptions) => Promise<void>` | — | Never rejects; `onError(err, 'track')` |
 | `trackBatch` | `(events: TrackEvent[]) => Promise<BatchResult>` | `{ successCount, failureCount, errors }` | Never rejects; a failed chunk counts all its events as failures and calls `onError(err, 'trackBatch')` |
+| `reportError` | `(report: ErrorReport) => Promise<boolean>` | `true` when the server stored the report (201); see [Reporting errors](#reporting-errors) | `false`; never rejects; `onError(err, 'reportError')` |
 | `fetchAssignments` | `(userId, { activeOnly?: boolean } = { activeOnly: true }) => Promise<AssignmentRecord[]>` | Server-side assignment rows (raw objects); not cached | Rejects |
 | `getAssignments` | `(userId) => Assignment[]` | Cached, unexpired assignments in assignment order (no network) | — |
 | `getEvaluatedFlags` | `(userId) => string[]` | Keys of cached, successfully evaluated flags (no network) | — |
-| `clearCache` | `() => void` | Drops both caches | — |
+| `clearCache` | `() => void` | Drops both caches; keeps the keys a key-less `track` is sent to | — |
 | `ready` | `({ timeoutMs? }?) => Promise<ReadyResult>` | `{ ok: true, rulesetVersion }` or `{ ok: false, error }`; `{ ok: true, rulesetVersion: null }` at once in server mode | Never rejects |
 | `status` | `() => LocalEvaluationStatus` | `{ evaluation, ready, rulesetVersion, lastRefreshAt, lastError, serverEvaluatedFlags }` | — |
 | `close` | `() => Promise<void>` | Local mode: stops the ruleset refresh and sends the remaining evaluation counts; later calls are evaluated by the server. A no-op in server mode | Never rejects |
@@ -192,14 +193,47 @@ ISO-8601). `TrackEvent` = `TrackOptions & { userId, eventName }`.
 
 - With `experimentKey` and/or `featureFlagKey`: exactly one `POST /api/v1/tracking/track`.
 - Without a key: one `POST /api/v1/tracking/batch` (chunked at 100) containing one entry per
-  experiment the user has been assigned to in this client (`experiment_key`) plus one per flag
-  evaluated for the user (`feature_flag_key`), taken from the cache. **If nothing is cached, nothing
-  is sent.** This is what makes a single `track(userId, 'purchase', …)` count as a conversion for
-  every experiment the user is in.
-- `trackBatch` applies the same expansion to keyless entries, then sends everything in chunks of 100
-  and sums the server's `success_count` / `failure_count` / `errors`.
+  experiment (`experiment_key`) and one per flag (`feature_flag_key`) this client answered for the
+  user in the last 24 hours, whether or not the answer is still cached. This is what makes a single
+  `track(userId, 'purchase', …)` count as a conversion for every experiment the user is in.
+- An experiment that is not running (its latest answer has `reason` `draft`, `paused`, `completed`
+  or `archived`) gets no entry. An answer with `assigned: false` for `holdout`,
+  `mutual_exclusion` or `targeting` keeps its entry: holdout results count those users' events.
+- An experiment whose assignment is later answered 404 loses its entry at once, so key-less events
+  stop reaching it; any other failure (a 5xx, a network error) keeps it.
+- With nothing to attribute it to, the event is still sent: one `POST /api/v1/tracking/track` with
+  no key. The server stores it as history, which counts in holdout results and as CUPED history,
+  never in an experiment's results.
+- The keys live in this client's memory, for up to 10,000 users (the user answered least recently
+  is dropped first). `clearCache()` keeps them, and another process does not have them. On a
+  server, the process that records a purchase is often not the one that assigned the user, so pass
+  `experimentKey` on conversions there.
+- `trackBatch` applies the same expansion to keyless entries (one with nothing to attribute it to
+  is sent with no key), then sends everything in chunks of 100 and sums the server's
+  `success_count` / `failure_count` / `errors`.
 
 Conversions are matched to metrics by **event name**.
+
+### Reporting errors
+
+`reportError(report)` sends one `POST /api/v1/tracking/errors` for an error that happened while a
+flag or experiment was active, in either evaluation mode. `report` is an `ErrorReport`: `errorType`
+and `message`, and optionally `featureFlagKey`, `experimentKey`, `userId`, `stackTrace`, `metadata`
+and `timestamp`. The server needs `featureFlagKey` or `experimentKey`, and the SDK sends the report
+without checking it.
+
+- `true` means the server stored the report: it answered 201. `false` means it did not: any other
+  answer (401, 404, 422, a 429 after its one retry, 5xx) or a network failure, which is also passed
+  to `onError(err, 'reportError')`. `reportError` never rejects.
+- A stored report counts toward the flag's error rate and automatic rollback only when it names
+  that flag in `featureFlagKey` (a report with only `experimentKey` is stored, but counts toward no
+  flag's rate) and the client's key is a server-side key: one with the `sdk:ruleset` scope, created
+  by a user who can change feature flags. A report sent with any other key is stored too and still
+  resolves `true`; the flag's safety check shows those reports as `uncounted_error_count`. See
+  [Which errors count](../feature-flags/safety.md#which-errors-count).
+- The error rate divides the counted errors by the flag's evaluations in the check's 15-minute
+  window. With no evaluations in the window it reads 0, so an error-rate threshold cannot fire: in
+  local mode the counts reach the server every 60 seconds and on `close()`.
 
 ### Caching, dedupe and retries
 
@@ -251,6 +285,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | `fetchAssignments` | `GET /api/v1/tracking/assignments/{user_id}?active_only=true` | — | list of assignment rows |
 | local mode: ruleset refresh | `GET /api/v1/sdk/ruleset` (beta) | `If-None-Match: "<version>"` | the ruleset, `ETag`; `304` when unchanged |
 | local mode: evaluation counts | `POST /api/v1/tracking/evaluations` (beta) | `{"evaluations":[{"flag_key","count","enabled_count","window_start","window_end"}]}` | `{"accepted","errors"}` |
+| `reportError` | `POST /api/v1/tracking/errors` | `{"error_type","message","feature_flag_key"?,"experiment_key"?,"user_id"?,"stack_trace"?,"metadata"?,"timestamp"?}` | 201 and the stored report (only the status is read) |
 
 Errors: 401 bad key; 404 an unknown experiment or flag key, or a draft experiment with no control variant; 422 invalid event; 429
 rate limited (`Retry-After` header, retried once).
@@ -262,7 +297,7 @@ rate limited (`Retry-After` header, retried once).
 ```typescript
 import type {
   ClientConfig, UserContext, Assignment, FlagEvaluation,
-  TrackOptions, TrackEvent, BatchResult, AssignmentRecord,
+  TrackOptions, TrackEvent, BatchResult, AssignmentRecord, ErrorReport,
 } from '@controlvar/js-sdk';
 
 interface Assignment {
@@ -378,8 +413,8 @@ Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY
 With a seeded backend (`python backend/scripts/seed_sdk_contract.py`):
 `python tests/sdk-contract/live/run_live_contract.py --sdk js --strict`. That also runs
 `examples/local_eval_smoke.mjs` with the seed's `sdk:ruleset` key (the `js (local)` row): 40
-evaluations answered locally, the counts sent on `close()`, then two error reports sent with the
-same key, and the runner checks in the database that no evaluate call was made, that the safety
+evaluations answered locally, the counts sent on `close()`, then two error reports sent with
+`reportError` and the same key, and the runner checks in the database that no evaluate call was made, that the safety
 monitor's denominator grew by exactly 40 and that both reports were counted.
 
 ---

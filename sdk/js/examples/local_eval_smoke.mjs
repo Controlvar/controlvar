@@ -4,14 +4,15 @@
  * evaluations made no evaluate call, and that the counts sent on close() are the safety
  * monitor's denominator for the errors reported afterwards.
  *
- * The errors are reported with the same sdk:ruleset key, the way a server forwards them: only
- * reports sent with a server-side key count toward a flag's error rate and automatic rollback.
+ * The errors are reported with client.reportError() and the same sdk:ruleset key, the way a server
+ * forwards them: only reports sent with a server-side key count toward a flag's error rate and
+ * automatic rollback.
  *
  * Run from the repo root:
  *   cd sdk/js && npm run build --silent && node examples/local_eval_smoke.mjs
  *
  * Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_LOCAL_API_KEY (a key
- *      with the sdk:ruleset scope, required; also used for POST /api/v1/tracking/errors),
+ *      with the sdk:ruleset scope, required; also the key reportError sends),
  *      CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default
  *      local-smoke-<uuid>), LOCAL_EVALUATIONS (default 40), LOCAL_ERRORS (default 2).
  *
@@ -65,17 +66,13 @@ try {
   // Errors against the same flag, reported with the server-side key: the safety monitor
   // divides these by the counts above.
   for (let i = 0; i < errorsToPost; i++) {
-    const response = await fetch(`${apiUrl}/api/v1/tracking/errors`, {
-      method: 'POST',
-      headers: { 'X-API-Key': localKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        feature_flag_key: flagKey,
-        user_id: userId,
-        error_type: 'local_smoke',
-        message: `local-evaluation smoke error ${i + 1}`,
-      }),
+    const stored = await client.reportError({
+      featureFlagKey: flagKey,
+      userId,
+      errorType: 'local_smoke',
+      message: `local-evaluation smoke error ${i + 1}`,
     });
-    if (response.status !== 201) fail(`POST /api/v1/tracking/errors answered ${response.status}`);
+    if (!stored) fail(`reportError ${i + 1} was not stored: ${swallowed[swallowed.length - 1] || 'no detail'}`);
   }
 
   process.stdout.write(

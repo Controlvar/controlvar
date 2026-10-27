@@ -993,6 +993,21 @@ by = [
 ]
 
 [[unit]]
+text = "A server that uses the JavaScript or Python SDK sends the same request with reportError or report_error (see Reporting errors)."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_posts_one_report_with_the_server_field_names_and_returns_true_on_201",
+]
+
+[[unit]]
+text = "Their true means the report was stored (201); whether it counts depends on the key, as above."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::resolves false on a 2xx that is not 201: true means stored, and only 201 says so",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_false_on_a_2xx_that_is_not_201",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_stored_source_follows_the_presented_key",
+]
+
+[[unit]]
 text = "POST /api/v1/tracking/errors/batch accepts {\"errors\": [...]} (up to 100) and returns {\"success_count\", \"failure_count\", \"errors\"}."
 by = [
     "test:backend/tests/integration/api/test_client_errors_api.py::TestReportErrorsBatch::test_batch_writes_rows_and_counts",

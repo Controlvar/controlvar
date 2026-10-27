@@ -66,6 +66,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
 
+      # The installs the last step replays run the real jq, the one this image ships; the
+      # installer accepts 1.7 or later (checks.sh). This line is how a later image with
+      # another jq shows in the log.
+      - name: The jq the last step runs with
+        run: jq --version
+
       # The runner's own AWS CLI, with no credential of any kind: rollback.yml's
       # and deploy.yml's exact create-deployment flags, with the alarm override
       # carrying each workflow's own single-quoted JSON value (#777), must
@@ -95,3 +101,21 @@ jobs:
       # the suite used to exit 0 with two of them skipped.
       - name: No CDK test was skipped
         run: python3 scripts/check_junit_skips.py cdk-junit.xml infrastructure/tests
+
+      # The AWS installer beta's tests run against a fake aws
+      # (backend/tests/installer_sweeps/harness). Here the runner's own CLI,
+      # with no credential of any kind, is pointed at a stub on 127.0.0.1 that
+      # serves the fake's own response for every call the beta makes, and must
+      # print what the fake prints (gate H6). It runs outside pytest, because
+      # every pytest session blocks the real CLI (backend/tests/no_real_aws.py),
+      # and after the CDK tests whatever their result, so a failure in one does
+      # not hide the other. The script refuses to start if a key is set.
+      - name: The fake aws answers as the runner's AWS CLI does
+        if: ${{ !cancelled() }}
+        env:
+          AWS_CONFIG_FILE: /dev/null
+          AWS_SHARED_CREDENTIALS_FILE: /dev/null
+          AWS_EC2_METADATA_DISABLED: 'true'
+        run: |
+          aws --version
+          python3 scripts/check_installer_cli.py

@@ -89,6 +89,16 @@ name: Docs journeys
 # would post. Every text it posts is rendered from .github/qa-templates/ by
 # scripts/qa_render.py and posted with --body-file
 # (backend/tests/unit/scripts/test_docs_journeys_workflow.py pins all of this).
+#
+# The `report-alarm` job runs after the report in every run not cancelled as a
+# whole, and keeps one rolling alarm issue, docs-journeys-alarm-issue.tmpl,
+# for a run whose report did not decide for every guide: the report job
+# failed, was cancelled (its timeout) or did not run, or the journeys or demo
+# job wrote no verdicts. It is healthy only when the report job's result is
+# `success` and both jobs' `verdicts` outputs are `true`; any other value,
+# empty included, opens the alarm or comments on it. A healthy scheduled run on
+# main closes it. The same posting rule holds: only a scheduled run on main
+# posts (scripts/docs_journeys_report.py alarm decides).
 
 on:
   schedule:
@@ -396,6 +406,70 @@ jobs:
                 ;;
               *)
                 printf '%s\n' '::error title=Docs journeys::the report wrote an unknown action'
+                exit 1
+                ;;
+            esac
+          done
+
+  report-alarm:
+    name: Docs journeys alarm
+    needs: [journeys, demo, report]
+    # Not `success()`: a report that failed, was cancelled or was skipped is
+    # what this job is for. `!cancelled()` leaves out only a run cancelled as a
+    # whole. Measured: with both journeys jobs skipped, the report was skipped
+    # and this job ran (run 40521602088).
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts
+            .github/qa-templates
+
+      - name: Decide the alarm
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REPORT_RESULT: ${{ needs.report.result }}
+          JOURNEYS_VERDICTS: ${{ needs.journeys.outputs.verdicts }}
+          DEMO_VERDICTS: ${{ needs.demo.outputs.verdicts }}
+        run: >-
+          python3 scripts/docs_journeys_report.py alarm
+          --report-result "$REPORT_RESULT"
+          --journeys-verdicts "$JOURNEYS_VERDICTS"
+          --demo-verdicts "$DEMO_VERDICTS"
+          --event "$EVENT" --ref "$REF" --out "$RUNNER_TEMP/docs-alarm"
+
+      - name: Post to the docs-journey-failure issues
+        if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for DIR in "$RUNNER_TEMP"/docs-alarm/posts/*/; do
+            [ -d "$DIR" ] || continue
+            ACTION="$(head -n 1 "$DIR/action")"
+            case "$ACTION" in
+              open)
+                gh label create docs-journey-failure --repo "$GITHUB_REPOSITORY" --color B60205 --description "Docs journey failed" > /dev/null 2>&1 || true
+                gh issue create --repo "$GITHUB_REPOSITORY" --title "$(head -n 1 "$DIR/title.txt")" --label docs-journey-failure --body-file "$DIR/body.md" > /dev/null
+                ;;
+              comment)
+                gh issue comment "$(head -n 1 "$DIR/issue")" --repo "$GITHUB_REPOSITORY" --body-file "$DIR/body.md" > /dev/null
+                ;;
+              close)
+                ISSUE="$(head -n 1 "$DIR/issue")"
+                gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/$ISSUE" -f state=closed -f state_reason=completed > /dev/null
+                ;;
+              *)
+                printf '%s\n' '::error title=Docs journeys alarm::the alarm wrote an unknown action'
                 exit 1
                 ;;
             esac

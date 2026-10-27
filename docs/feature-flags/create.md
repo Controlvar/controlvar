@@ -547,6 +547,10 @@ A report sent with `$KEY`, or with any other key without the `sdk:ruleset` scope
 rollback: the flag's safety check shows it in `details.uncounted_error_count` (see
 [Which errors count](safety.md#which-errors-count)).
 
+A server that uses the JavaScript or Python SDK sends the same request with `reportError` or
+`report_error` (see [Reporting errors](../sdk/javascript.md#reporting-errors)). Their `true`
+means the report was stored (`201`); whether it counts depends on the key, as above.
+
 `POST /api/v1/tracking/errors/batch` accepts `{"errors": [...]}` (up to 100) and returns
 `{"success_count", "failure_count", "errors"}`. At least one of `feature_flag_key` /
 `experiment_key` is required; unknown keys return `404` (single) or are listed per item

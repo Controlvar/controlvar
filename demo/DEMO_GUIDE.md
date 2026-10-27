@@ -76,7 +76,7 @@ Run pieces by hand: `python backend/scripts/seed_shoplab.py` (seeds experiments,
 
 ---
 
-### Scene 0b — StreamPulse: feature flags on mobile (5 min)
+### Scene 0b — StreamPulse: device targeting (web SDK) (5 min)
 
 StreamPulse (`demo/streampulse`, http://localhost:3300) is a simulated music app: a phone frame with seven screens and a
 device picker. Every flag and experiment is evaluated for the chosen device through the React SDK, with the device's
@@ -104,7 +104,9 @@ of devices through the same API, and a scripted "rollout story" walks the platfo
 **Key talking points:**
 - Server-side targeting with 20+ operators, including semantic versions
 - Rollout schedules and safety monitoring work together: expand automatically, retreat automatically
-- Kill switches take effect without a release, which is the whole point on mobile
+- Kill switches take effect without a release, which is the whole point in a native app
+- Native apps: kill switches and percentage rollouts work; attribute rules do not until
+  [#438](https://github.com/Controlvar/controlvar/issues/438).
 
 Run pieces by hand: `python backend/scripts/seed_streampulse.py`, `cd demo/streampulse && npm run dev`,
 `python demo/streampulse/simulator/traffic.py --rate 3`, `python demo/streampulse/simulator/rollout_story.py --auto`.
@@ -265,7 +267,7 @@ See `demo/streampulse/README.md`.
 | Page | URL |
 |------|-----|
 | ShopLab storefront | http://localhost:3200 |
-| StreamPulse mobile demo | http://localhost:3300 |
+| StreamPulse device-targeting demo | http://localhost:3300 |
 | Home | http://localhost:3100 |
 | Feature Flags | http://localhost:3100/feature-flags |
 | Experiments | http://localhost:3100/experiments |

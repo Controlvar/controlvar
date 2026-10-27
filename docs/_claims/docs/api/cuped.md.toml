@@ -148,16 +148,26 @@ text = "Events during the experiment still need the experiment's key, as they al
 by = ["test:backend/tests/integration/api/test_tracking_untagged_events.py::test_an_untagged_event_after_assignment_counts_nowhere"]
 
 [[unit]]
-text = "The SDKs' track() without a key sends one event for each experiment and flag cached for the user, and those tagged events count as history for a later experiment."
+text = "The SDKs' track() without a key sends one event for each experiment and flag that SDK answered for the user (in the last 24 hours for the JavaScript, Python and React SDKs, while the answer is cached for the others), and those tagged events count as history for a later experiment."
 by = [
-    "test:sdk/js/__tests__/client.test.ts",
+    "test:sdk/js/__tests__/client.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
+    "test:sdk/js/__tests__/client.test.ts::does not send to a key answered more than 24 hours ago: the event goes once with no key",
     "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_fans_out_to_cached_assignment_and_flag",
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_a_purchase_301_seconds_after_the_assignment_reaches_the_experiment",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
+    "test:sdk/go/client_test.go::TestClient_Track_WithoutKey_FansOutToCachedEntries",
     "test:backend/tests/integration/services/test_cuped_covariate_window.py::test_w5_a_fanned_out_copy_counts_once",
 ]
 
 [[unit]]
-text = "An SDK user with nothing cached sends no history, which is usual before a user's first assignment."
-by = ["test:sdk/js/__tests__/client.test.ts"]
+text = "With nothing to attribute it to, the JavaScript, Python and React SDKs send the event once with no key, which stores it as history; the other SDKs send nothing then, which is usual before a user's first assignment."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::sends the event once to /api/v1/tracking/track with no key when nothing is attributed to the user",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_nothing_attributed_sends_the_event_once_to_track_with_no_key",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::sends the event once to /api/v1/tracking/track with no key and resolves when nothing is attributed to the user",
+    "test:backend/tests/integration/api/test_cuped_history_sent_by_tracking.py::test_history_is_matched_by_exact_id_and_dated_in_utc",
+    "test:sdk/go/client_test.go::TestClient_Track_WithoutKey_NothingCached_SendsNothing",
+]
 
 [[unit]]
 text = "Each result's covariate_coverage_pct shows how many users had history."

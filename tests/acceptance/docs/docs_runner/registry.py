@@ -22,6 +22,15 @@ Set by the runner, never written in a journey file:
   (one fault never shows as ten);
 * ``doc-examples``: the step is ``ref: doc-examples``, so its shell blocks are
   run by Doc Examples (``scripts/doc_examples.py``), not by this runner.
+
+A journey whose verdict must be PASS or FAIL, never PARTIAL, is named in
+``EVERY_STEP_RUN``: the loader refuses a ``not_run`` or a ``ref:
+doc-examples`` on any of its steps, so each is run by this runner every time,
+and a step that fails today is FAIL, not waived. A PARTIAL verdict does not
+turn the run red, which is why the list is needed where a release counts on a
+journey passing. Each name is a journey file's (``journeys/<name>.yaml``); a
+unit test holds the list and that each file exists, so a renamed journey does
+not leave it.
 """
 
 from __future__ import annotations
@@ -38,6 +47,8 @@ DOC_EXAMPLES = "doc-examples"
 DECLARED: Tuple[str, ...] = (NEEDS_AWS, NEEDS_FOUNDER_ACCOUNT)
 #: Reasons only the runner sets.
 RUNTIME: Tuple[str, ...] = (EARLIER_STEP_FAILED, DOC_EXAMPLES)
+#: Journeys every step of which this runner runs: no ``not_run``, no ``ref:``.
+EVERY_STEP_RUN: Tuple[str, ...] = ("demo-shoplab",)
 
 WAIVED = re.compile(r"waived #[1-9][0-9]*")
 

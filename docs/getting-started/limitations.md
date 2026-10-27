@@ -15,6 +15,10 @@ the row links it.
 |---|---|
 | A revenue, count or duration metric analysed by its values | Every metric is analysed as a conversion: whether each user sent the metric's event. A metric's type is stored, and its events' values are not analysed. |
 | A traffic allocation for the experiment as a whole | There is none. Variant weights must add up to exactly 100%, or the request is refused with `422`. Users are left out only by targeting rules, a mutual exclusion group or the global holdout. |
+| One user known by two ids, such as a visitor who signs in | No identify or alias call: a user who signs in under a new id mid-funnel gets a second assignment. Assign with the id you will track purchases with. |
+| A bandit that moves traffic toward the better variant of a lower-is-better metric | A bandit (an experiment whose `optimization_type` is not `fixed`) moves traffic toward the variant whose users send the primary metric's event most often. It does not read the metric's `lower_is_better`, so on a metric such as uninstalls or errors it moves traffic toward the worse variant. Use a fixed split for such a metric ([#1385](https://github.com/Controlvar/controlvar/issues/1385)). |
+| An LLM experiment that picks the variant with the lowest value | An LLM experiment's winner is the variant with the highest mean of the metric it is compared on: the business metric when every variant has one, otherwise the judge score. There is no lower-is-better setting for it. |
+| A warehouse analysis of a metric where lower is better | A warehouse analysis treats every metric as higher is better: a warehouse metric source has no lower-is-better setting, so its results report `lower_is_better: false` and name a winner only for a significant increase ([#1386](https://github.com/Controlvar/controlvar/issues/1386)). |
 
 ## Deployments
 
@@ -47,5 +51,6 @@ the row links it.
 
 | What you might expect | What happens instead |
 |---|---|
+| Flag targeting from a native mobile SDK | iOS, Android, React Native and Flutter send only the user id on flag evaluation, so rules on attributes do not match ([#438](https://github.com/Controlvar/controlvar/issues/438)). Experiment assignment sends them. |
 | Every SDK on a package registry | The JavaScript SDK is on npm and the Python SDK is on PyPI. The Go SDK installs by module path, and every other SDK installs from a clone of this repository. |
 | An event tracked without an experiment key counted, however late it comes | In the Go, Java, .NET, Ruby, PHP, Elixir, iOS, Android, Flutter, React Native and edge SDKs, an event tracked without a key reaches only the experiments and flags still in that client's cache (5 minutes by default, 60 seconds in the edge SDK), and is not sent at all once they have expired. Pass the experiment key on a conversion that can come later. |
