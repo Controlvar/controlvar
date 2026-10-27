@@ -147,6 +147,9 @@ VIEWPORT = {"width": 1280, "height": 720}
 TITLE_CARD_MS = 1500
 #: The longest line a walkthrough's caption bar draws.
 CAPTION_CHARS = 180
+#: How long one try of an ``aria_one_of`` template waits before the next is
+#: tried; the rounds of tries end at the step's timeout.
+ONE_OF_MS = 500
 #: The kinds of step that do nothing on the screen: their caption shows their result.
 OFF_SCREEN = (
     "api",
@@ -1169,6 +1172,21 @@ class JourneyRunner:
         self.secrets[keep.secret] = value
         return f"kept {where} as {keep.secret} ({len(value)} characters)"
 
+    def _one_aria(self, page: Page, templates: List[str]) -> Optional[int]:
+        """The number (from 1) of the first template the screen matches, None if
+        none has by the step's timeout: each round tries each one briefly."""
+        body = page.locator("body")
+        deadline = time.monotonic() + self.settings.timeout_ms / 1000
+        while True:
+            for number, template in enumerate(templates, 1):
+                try:
+                    expect(body).to_match_aria_snapshot(template, timeout=ONE_OF_MS)
+                    return number
+                except AssertionError:
+                    pass
+            if time.monotonic() >= deadline:
+                return None
+
     @staticmethod
     def _holds(check, failure) -> None:
         """Run a Playwright expectation; a failure says *failure*, not the call log.
@@ -1422,6 +1440,14 @@ class JourneyRunner:
                     f"the screen at {here()} does not match its expected ARIA snapshot"
                 ),
             )
+        one_of = None
+        if wanted.aria_one_of is not None:
+            one_of = self._one_aria(page, wanted.aria_one_of)
+            if one_of is None:
+                raise StepFailed(
+                    f"the screen at {here()} matches none of its"
+                    f" {len(wanted.aria_one_of)} ARIA snapshots"
+                )
         shown_cells = []
         for cell in wanted.cells or []:
             text = self._cell_text(page, cell, here())
@@ -1433,6 +1459,8 @@ class JourneyRunner:
                 )
             shown_cells.append(f"{cell.column} {one_line(text, 40)}")
         observed = f"at {here()}"
+        if one_of is not None:
+            observed += f" (its ARIA snapshot {one_of} of {len(wanted.aria_one_of)})"
         if wanted.number is not None:
             observed += f" ({shown_number}, its oracle's)"
         if shown_cells:
@@ -1687,10 +1715,13 @@ class JourneyRunner:
         expected_snapshot = ""
         if step.expect is not None:
             expected_snapshot = STRUCTURAL_ONLY
-            if step.expect.aria is not None:
+            aria = step.expect.aria
+            if step.expect.aria_one_of is not None:
+                aria = "\n# or\n".join(t.rstrip("\n") for t in step.expect.aria_one_of)
+            if aria is not None:
                 expected_snapshot = self._write(
                     self._name(journey_id, number, step, ".expected.aria.yml"),
-                    step.expect.aria.rstrip("\n") + "\n",
+                    aria.rstrip("\n") + "\n",
                 )
         elif step.do.crawl == "nav":
             expected_snapshot = self._expected_nav(

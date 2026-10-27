@@ -18,6 +18,13 @@
 # first run. products-direct (#1172) was added on 2026-10-14: it opens /products
 # as the first page of a load, as an address typed or a reload does, and its
 # expectation is the products step's.
+#
+# The products sort (shoplab_plp_sort) is a bandit, and the tracking API routes
+# a new visitor by the bandit's current weights, so the journey's fresh visitor
+# lands in any arm (#1375). The products step therefore checks the pair: the
+# arm the panel shows the API gave this visitor, and the sort label for that
+# arm (demo/shoplab/src/lib/sorting.ts). The panel is still open there, because
+# the header's link does not reload the page.
 guide: demo/shoplab/README.md
 stack: demo-local
 profile: full
@@ -87,12 +94,41 @@ steps:
         quote: false
         reason: the storefront header's link to /products, the page the README's table names
     expect:
-      text: Recommended for you
-      aria: |
-        - main:
-          - heading "All products" [level=1]
-          - paragraph: 12 items
-    fail: the product list does not open from the header, or is not sorted by the bandit's ml_personalized algorithm, the arm its seeded history favours
+      aria_one_of:
+        - |
+          - main:
+            - heading "All products" [level=1]
+            - paragraph: 12 items
+            - paragraph: Sorted by Relevance
+          - complementary "Controlvar panel":
+            - list:
+              - listitem:
+                - text: Product sort (bandit)
+                - code: shoplab_plp_sort
+                - text: relevance
+        - |
+          - main:
+            - heading "All products" [level=1]
+            - paragraph: 12 items
+            - paragraph: "Sorted by Price: low to high"
+          - complementary "Controlvar panel":
+            - list:
+              - listitem:
+                - text: Product sort (bandit)
+                - code: shoplab_plp_sort
+                - text: price_low_high
+        - |
+          - main:
+            - heading "All products" [level=1]
+            - paragraph: 12 items
+            - paragraph: Sorted by Recommended for you
+          - complementary "Controlvar panel":
+            - list:
+              - listitem:
+                - text: Product sort (bandit)
+                - code: shoplab_plp_sort
+                - text: ml_personalized
+    fail: the product list does not open from the header, or is not sorted by the arm of the products-sort bandit that the panel shows the API gave this visitor
   - id: products-direct
     doc: what-each-page-demonstrates
     do:

@@ -139,6 +139,7 @@ from docs_runner import guide as guides
 from docs_runner.model import (
     API_ANSWER_EXPECTS,
     API_EXPECTS,
+    ARIA_EXPECTS,
     BROWSER_EXPECTS,
     COMPOSE_STACKS,
     GUIDE_PATTERN,
@@ -533,17 +534,18 @@ def _expect_problems(label: str, step: Step, stack: Optional[str]) -> List[str]:
     wrong = [name for name in given if name not in BROWSER_EXPECTS + ("found",)]
     if wrong:
         found.append(f"{label}: a step in a browser cannot expect {wrong}")
+    aria = [name for name in given if name in ARIA_EXPECTS]
     if step.snapshot is not False:
-        if "aria" not in given:
+        if not aria:
             found.append(
                 f"{label}: a step on one screen needs expect.aria, its ARIA snapshot"
-                " written before the run, beside any structural expect; or"
-                " snapshot: false with a snapshot_reason"
+                " written before the run, beside any structural expect (or"
+                " aria_one_of); or snapshot: false with a snapshot_reason"
             )
     else:
-        if "aria" in given:
+        if aria:
             found.append(
-                f"{label}: snapshot: false drops the ARIA snapshot, but expect.aria"
+                f"{label}: snapshot: false drops the ARIA snapshot, but expect.{aria[0]}"
                 " gives one; remove one of the two"
             )
         if not [name for name in given if name in STRUCTURAL_EXPECTS]:
