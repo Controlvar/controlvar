@@ -156,6 +156,11 @@ def _oracle_call(oracle) -> str:
     return f"{oracle.name}({args})"
 
 
+def _moved(delta) -> str:
+    """``the number saved as before-one-page +1``: a delta, for the log."""
+    return f"the number saved as {delta.since} {delta.by:+d}"
+
+
 def describe_expect(step: Step) -> str:
     if step.do.crawl is not None:
         return CRAWL_EXPECTS[step.do.crawl]
@@ -229,6 +234,8 @@ def describe_expect(step: Step) -> str:
                 f"json {path} = {_oracle_call(computed.oracle)} within"
                 f" {computed.rel:g} of it"
             )
+    for path, delta in (expect_.delta or {}).items():
+        parts.append(f"json {path} = {_moved(delta)} exactly")
     if expect_.number is not None:
         number = expect_.number
         parts.append(
@@ -236,10 +243,8 @@ def describe_expect(step: Step) -> str:
             f" {_oracle_call(number.oracle)}"
         )
     for cell in expect_.cells or []:
-        parts.append(
-            f'the {cell.column} of the row "{cell.row}" shows'
-            f" {_oracle_call(cell.oracle)}"
-        )
+        shown = _oracle_call(cell.oracle) if cell.oracle else _moved(cell.delta)
+        parts.append(f'the {cell.column} of the row "{cell.row}" shows {shown}')
     if expect_.found is not None:
         parts.append(f"{expect_.found} among the first {SEARCH_TOP} results")
     if expect_.aria is not None:
@@ -382,3 +387,30 @@ def within(seen: Any, wanted: float, rel: float) -> bool:
     if isinstance(seen, bool) or not isinstance(seen, (int, float)):
         return False
     return abs(seen - wanted) <= rel * abs(wanted)
+
+
+def moved_to(before: Any, since: str, by: int) -> float:
+    """The number a delta expects: *before* (the number saved as *since*) plus *by*.
+
+    StepFailed when nothing was saved as *since* that is a number (``None``,
+    a string, a boolean): a delta counts from a number, never from text.
+    """
+    if isinstance(before, bool) or not isinstance(before, (int, float)):
+        raise StepFailed(f"no number is saved as {since!r} to count {by:+d} from")
+    return before + by
+
+
+def delta_problem(seen: Any, before: Any, since: str, by: int) -> str:
+    """What is wrong with *seen* as the number saved as *since* moved by *by*, or "".
+
+    *seen* must be a number (not a boolean) exactly equal to ``before + by``.
+    """
+    wanted = moved_to(before, since, by)
+    if isinstance(seen, bool) or not isinstance(seen, (int, float)):
+        return f"is {json.dumps(seen)}, not a number"
+    if seen != wanted:
+        return (
+            f"= {json.dumps(seen)}; {since} was {json.dumps(before)}, so"
+            f" {by:+d} is {json.dumps(wanted)}"
+        )
+    return ""

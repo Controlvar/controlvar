@@ -78,6 +78,17 @@ YAML, or not a mapping, stops at that. Refused, besides what ``model`` refuses:
   is not on a screen, or either naming an oracle not in ``ORACLES``;
 * ``after`` on a step that is not an ``api`` step, or naming a value no earlier
   step saves, or a secret;
+* ``delta`` on a step that is not an ``api`` step (a cell's own ``delta`` is
+  for a screen step), or one, on a step or a cell, counting from a value no
+  earlier step saves, or from a secret; and a cell with both an ``oracle`` and
+  a ``delta``, or neither (the model's);
+* a ``visitor`` that is not a UUIDv4 in lower case (the model's: the
+  storefront would drop it and make up its own), on any stack but demo-local
+  (``model.VISITOR_STACKS``), or inside the demo's global holdout
+  (``values.in_demo_holdout``: the API would answer it control in every
+  experiment and count it in none);
+* in a journey named in ``registry.EVERY_STEP_RUN``, a step that declares
+  ``not_run`` or is ``ref: doc-examples``: its verdict must be PASS or FAIL;
 * ``poll`` on a step that is not an ``api`` step, or on one whose method is not
   ``GET`` (sending a change again would repeat it). A poll is not a sleep: it
   waits for what the step expects, up to a bound (``waiting.py``), and the
@@ -153,6 +164,7 @@ from docs_runner.model import (
     SITE_STACKS,
     STACKS,
     STRUCTURAL_EXPECTS,
+    VISITOR_STACKS,
     Journey,
     Recording,
     Step,
@@ -681,7 +693,7 @@ def _step_problems(
         if step.expect.number is not None:
             named.append(step.expect.number.oracle.name)
         named.extend(c.oracle.name for c in (step.expect.computed or {}).values())
-        named.extend(c.oracle.name for c in step.expect.cells or [])
+        named.extend(c.oracle.name for c in step.expect.cells or [] if c.oracle)
         for oracle in named:
             if oracle not in context.oracles:
                 found.append(f"{label}: no oracle named {oracle!r}")
@@ -839,6 +851,12 @@ def _uses(step: Step) -> List[Tuple[str, str]]:
                 used.append(("value", name))
             for name in (step.expect.after or {}).values():
                 used.append(("value", name))
+            for delta in (step.expect.delta or {}).values():
+                used.append(("delta", delta.since))
+    if step.expect is not None:
+        for cell in step.expect.cells or []:
+            if cell.delta is not None:
+                used.append(("delta", cell.delta.since))
     if do.goto is not None:
         for name in values.placeholders(do.goto):
             used.append(("value", name))
@@ -873,7 +891,12 @@ def _value_problems(
                     f"{label}: the key {name!r} is not a secret; save the API key"
                     " with secret: true"
                 )
-            elif what != "key" and saved[name]:
+            elif what == "delta" and saved[name]:
+                found.append(
+                    f"{label}: {name!r} is a secret; a delta counts from a number"
+                    " an api step saved, never from a secret"
+                )
+            elif what not in ("key", "delta") and saved[name]:
                 found.append(
                     f"{label}: {name!r} is a secret; a secret is sent only as a key,"
                     " never put into a path, a body or an address"
@@ -1031,6 +1054,47 @@ def _segment_problems(
     return found
 
 
+def _visitor_problems(visitor: Optional[str], stack: Optional[str]) -> List[str]:
+    """A seeded visitor on a stack with no storefront, or one the holdout keeps out."""
+    if visitor is None:
+        return []
+    found: List[str] = []
+    if stack is not None and stack not in VISITOR_STACKS:
+        found.append(
+            f"visitor is ShopLab's, seeded on the storefront the stack"
+            f" {', '.join(VISITOR_STACKS)} serves at {values.STOREFRONT}; {stack}"
+            " serves none"
+        )
+    if values.in_demo_holdout(visitor):
+        bucket = values.holdout_bucket(visitor, values.DEMO_HOLDOUT_SALT)
+        found.append(
+            f"visitor {visitor} is in the demo's global holdout (bucket {bucket}"
+            f" under {values.DEMO_HOLDOUT_SALT}, below"
+            f" {values.DEMO_HOLDOUT_PERCENTAGE}): the API answers it control in"
+            " every experiment and counts it in none; choose one with"
+            " values.choose_visitor"
+        )
+    return found
+
+
+def _every_step_run_problems(stem: str, steps: Sequence[Tuple[int, Step]]) -> List[str]:
+    """A step not run here in a journey ``registry.EVERY_STEP_RUN`` names."""
+    if stem not in registry.EVERY_STEP_RUN:
+        return []
+    found: List[str] = []
+    rule = (
+        f"{stem} is in registry.EVERY_STEP_RUN, so this runner runs every step of"
+        " it and its verdict is PASS or FAIL, never PARTIAL"
+    )
+    for index, step in steps:
+        label = f"step {index + 1} ({step.id})"
+        if step.not_run is not None:
+            found.append(f"{label}: not_run {step.not_run!r}, but {rule}")
+        if step.do.kind == "ref":
+            found.append(f"{label}: ref: doc-examples, but {rule}")
+    return found
+
+
 def semantic_problems(
     *,
     guide_path: Optional[str],
@@ -1043,6 +1107,7 @@ def semantic_problems(
     passwords: Sequence[str] = (),
     video: Optional[bool] = None,
     recordings: Sequence[Recording] = (),
+    visitor: Optional[str] = None,
 ) -> List[str]:
     """Refusals against the guide, the inventory and the registry.
 
@@ -1070,6 +1135,8 @@ def semantic_problems(
     found.extend(
         _recording_problems(steps, recordings, guide_path, video, context, complete)
     )
+    found.extend(_visitor_problems(visitor, stack))
+    found.extend(_every_step_run_problems(stem, steps))
     if complete:
         found.extend(_value_problems(steps, passwords))
         found.extend(_sdk_journey_problems(steps))
@@ -1121,6 +1188,7 @@ def _parts(data: Dict[str, Any]) -> Dict[str, Any]:
     written = data.get("written")
     passwords = data.get("passwords")
     video = data.get("video")
+    visitor = data.get("visitor")
     recordings: List[Recording] = []
     raw_recordings = data.get("recordings")
     for raw in raw_recordings if isinstance(raw_recordings, list) else []:
@@ -1153,6 +1221,8 @@ def _parts(data: Dict[str, Any]) -> Dict[str, Any]:
         ),
         "video": video if isinstance(video, bool) else None,
         "recordings": recordings,
+        # One the model refused as not a UUIDv4 is left to the model's message.
+        "visitor": visitor if values.is_uuid_v4(visitor) else None,
     }
 
 
@@ -1184,6 +1254,7 @@ def load(path: Path, context: Context) -> Journey:
             "passwords": list(journey.passwords),
             "video": journey.video,
             "recordings": list(journey.recordings),
+            "visitor": journey.visitor,
         }
     else:
         parts = _parts(data)
