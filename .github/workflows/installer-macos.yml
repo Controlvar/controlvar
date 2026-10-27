@@ -1,0 +1,78 @@
+name: Installer on macOS
+
+# The AWS installer beta (deploy/aws-installer/) runs on a reader's own computer,
+# and a Mac's /bin/bash is 3.2, with the BSD date, sed, stat and xargs. Unit Tests
+# runs the installer's harness and fault sweeps (backend/tests/installer_sweeps) on
+# Linux, with bash 5 and the GNU tools; this job runs the same tests here, with
+# every bash a run starts being /bin/bash (INSTALLER_TEST_BASH).
+#
+# Not a required check: it is path-filtered, and a required check that does not
+# report blocks a pull request for ever. The rule instead: a pull request that runs
+# this job merges only with it green at its head.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - deploy/aws-installer/**
+      - backend/tests/installer_sweeps/**
+      - .github/workflows/installer-macos.yml
+  push:
+    branches: [main]
+    paths:
+      - deploy/aws-installer/**
+      - backend/tests/installer_sweeps/**
+      - .github/workflows/installer-macos.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Keyed on the pull request NUMBER, not head_ref: two forks' `patch-1`
+  # branches share a head_ref and would cancel each other's runs (#75).
+  group: installer-macos-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  installer-macos:
+    name: AWS installer on macOS (bash 3.2)
+    runs-on: macos-latest
+    # Its first run took 19.4 minutes (16.3 of them the tests); twice that and a little.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      # What the image puts first on PATH is part of what this job proves.
+      - name: The shell and tools the tests run with
+        run: |
+          /bin/bash -c 'printf "/bin/bash %s\n" "$BASH_VERSION"'
+          for tool in bash sed date stat xargs grep tr jq openssl; do
+            printf '%s: %s\n' "$tool" "$(command -v "$tool" || printf missing)"
+          done
+          jq --version
+
+      - name: Installer tests, every bash /bin/bash
+        env:
+          INSTALLER_TEST_BASH: /bin/bash
+          APP_ENV: test
+          TESTING: 'true'
+          POSTGRES_SERVER: 127.0.0.1
+          POSTGRES_PORT: '1'
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: '1'
+          REDIS_URL: redis://127.0.0.1:1
+        run: python -m pytest backend/tests/installer_sweeps/ -p no:cov -q --tb=short --junitxml=mac-junit.xml
+
+      - name: No installer test was skipped
+        run: python3 scripts/check_junit_skips.py mac-junit.xml backend/tests/installer_sweeps

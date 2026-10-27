@@ -1,0 +1,1234 @@
+# What verifies each unit of docs/self-hosting/aws-install.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/self-hosting/aws-install.md"
+
+[[unit]]
+text = "Install on AWS with one command (beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "deploy/aws-installer/controlvar-aws is a script with two commands."
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_help_says_beta_and_lists_only_the_options"]
+
+[[unit]]
+text = "install runs the steps of AWS CDK Deployment for you, in your own AWS account, and creates the first administrator."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_clean_run_installs",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_clean_runs_changes_are_pinned_in_order",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_migration_task_names_the_first_administrator",
+]
+
+[[unit]]
+text = "uninstall removes what install made, except the CDK's setup stack, and shows what AWS keeps."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_clean_uninstall_removes_the_install",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_kept_list_is_exactly_the_residue_both_ways",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_step_5_says_it_keeps_the_cdks_setup_stack",
+]
+
+[[unit]]
+text = "Beta: one real run so far, and it bills your AWS account"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The installer runs this site's AWS CDK steps for you, and removes what it made."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_clean_runs_changes_are_pinned_in_order",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_clean_uninstalls_deletes_are_pinned_in_order",
+]
+
+[[unit]]
+text = "As of v0.37.0 it has been run end to end once, in a test account, and its options and messages may still change."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "From the moment you confirm, it creates resources that AWS bills for, until you uninstall."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_nothing_changes_before_the_confirmation",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_clean_runs_changes_are_pinned_in_order",
+]
+
+[[unit]]
+text = "With everything up they cost about $10 a day, at us-west-2 list prices on 2026-10-17."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "It is not for production data."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "There are no upgrades."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_a_second_install_over_a_started_record_refuses_and_reads_nothing",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_reinstall_after_an_uninstall_starts_afresh",
+]
+
+[[unit]]
+text = "To move to a new release, uninstall and install again."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The installer is in releases from v0.37.0 on."
+by = ["untested:T"]
+
+[[unit]]
+text = "It installs the core profile in us-west-2, in the shape staging has in What Gets Deployed, and the platform answers at a name you choose in your own Route 53 zone."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_full_profile_stops_before_the_deploy",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_every_regional_call_is_in_us_west_2",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_success_needs_the_schema",
+    "test:infrastructure/tests/test_installer_names.py::test_every_name_the_beta_uses_is_the_synths",
+]
+
+[[unit]]
+text = "It does not install the demo apps."
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_the_clean_runs_changes_are_pinned_in_order"]
+count = 2
+
+[[unit]]
+text = "To try the platform with demo data, use the Quick Start."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "What you need"
+by = ["exempt:label"]
+
+[[unit]]
+text = "You need | How to check it"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An AWS account that you administer. A new, empty one is best | Its ID is in the AWS console, and aws sts get-caller-identity prints it once you are signed in"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "An IAM Identity Center profile in your AWS CLI, with AdministratorAccess | aws configure sso makes one, and this page calls it controlvar-install. aws sso login --profile controlvar-install signs in"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A public Route 53 hosted zone in that account, delegated so that the internet resolves it | dig +short NS example.com @1.1.1.1 prints the zone's four name servers"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "An email address that receives mail | Send it a message"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If you have no IAM Identity Center profile yet, AWS's guides to setting it up and to signing in with it from the AWS CLI come first."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Run the installer from a Mac or a Linux computer, in a terminal."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Install these tools on it: AWS CLI 2.28.24 or later, Node.js 22 or later with npm, Python 3.11 or later, jq 1.7 or later, cosign 3.1.3 or later, crane 0.22.1 or later, git, dig, curl and openssl."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Let your network reach AWS, ghcr.io, Sigstore, npm, PyPI and 1.1.1.1."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "What the installer checks"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Before it creates anything, the installer makes these checks."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_nothing_changes_before_the_confirmation",
+]
+
+[[unit]]
+text = "If one fails it says why, creates nothing and exits with code 2."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_nothing_changes_before_the_confirmation",
+]
+
+[[unit]]
+text = "Every tool above is installed, and none is older than the version given."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "The profile signs in through IAM Identity Center and no other way."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_a_profile_that_is_not_identity_center_is_refused"]
+
+[[unit]]
+text = "A profile with access keys, a credential_process, a role to assume or a source profile is refused, and the installer reads no access keys from your shell."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_a_profile_that_is_not_identity_center_is_refused",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_installer_reads_only_its_own_copy_of_the_profile",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_every_aws_child_runs_with_exactly_the_allowed_environment",
+]
+
+[[unit]]
+text = "The sign-in was renewed in the last 15 minutes, still has more than 30 minutes left, and belongs to the account you typed with --account."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_the_token_rule_refuses_a_stale_sign_in_at_the_checks",
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_only_the_typed_account",
+]
+
+[[unit]]
+text = "The account has us-west-2 and us-east-1 enabled."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "The account holds no stack whose name starts with experimentation-, in any region the account has enabled."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_an_account_with_this_apps_stacks_is_refused_before_the_prompt"]
+
+[[unit]]
+text = "If the account denies the installer the look in a region other than us-west-2, that region is shown as not checked."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_an_account_with_this_apps_stacks_is_refused_before_the_prompt"]
+
+[[unit]]
+text = "None of the names the install uses for its two image repositories and its secrets is taken already, a secret waiting for deletion included."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "If the account has the CDK's setup stack, CDKToolkit, in us-west-2, it is complete."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "The installer can read your account in us-west-2, us-east-1 and the global services."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_faults.py::test_a_failed_read_in_the_record_of_the_account_refuses_the_install",
+    "test:backend/tests/installer_sweeps/test_install_faults.py::test_any_failing_call_stops_the_install",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_every_regional_call_is_in_us_west_2",
+]
+
+[[unit]]
+text = "An account that answers AccessDenied to one of those reads is refused, because uninstall could not then show what the install left."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_faults.py::test_a_failed_read_in_the_record_of_the_account_refuses_the_install",
+    "test:backend/tests/installer_sweeps/test_install_faults.py::test_any_failing_call_stops_the_install",
+]
+
+[[unit]]
+text = "Your sign-in is allowed to do what the install does."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "The installer asks IAM to simulate those actions, and refuses if one is denied."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "The Fargate vCPU quota is at least 3."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "Below 11 the installer warns that the API cannot scale out fully, as it did in the run on 2026-10-27."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "The account's limits for Elastic IP addresses, VPCs and Application Load Balancers leave room for the install, and us-west-2 offers the database and cache engines it uses."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "The name you pass with --domain is one name directly below exactly one public Route 53 zone of the account, such as app.example.com in the zone example.com."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_a_zone_that_cannot_take_the_install_is_refused_before_any_write"]
+
+[[unit]]
+text = "The zone's four name servers answer from 1.1.1.1, and nothing exists at the name."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_a_zone_that_cannot_take_the_install_is_refused_before_any_write"]
+
+[[unit]]
+text = "The top of the zone, a name with fewer than three parts, a private zone and a name at or under example.com, example.net or example.org are refused."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules",
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_a_zone_that_cannot_take_the_install_is_refused_before_any_write",
+]
+
+[[unit]]
+text = "--alarm-email and --admin-email are not at example.com, example.net or example.org, and the first administrator's address is one the platform's sign-in accepts."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_a_bad_address_is_refused_before_any_aws_call",
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_the_first_administrators_address_is_never_weaker_than_the_apis",
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_the_seven_are_refused_before_aws",
+]
+
+[[unit]]
+text = "~/.cdk.json is absent or holds only {}, because the CDK reads every setting in it as a default."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_a_cdk_json_with_anything_in_it_is_refused_before_any_aws_call"]
+
+[[unit]]
+text = "Move it aside while the installer runs."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "This computer holds no record of a started install in this account and region."
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_a_second_install_over_a_started_record_refuses_and_reads_nothing"]
+
+[[unit]]
+text = "The folder is a clone that holds the tag of the release its VERSION file names, 0.36.1 or later, because the installer installs that release's published images and copies its CDK from the tag."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_an_image_that_is_not_this_releases_is_refused",
+]
+
+[[unit]]
+text = "If you do not have a zone yet"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The installer writes only into a public Route 53 hosted zone in the account you install into, and only at a name below the top of the zone."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_a_zone_that_cannot_take_the_install_is_refused_before_any_write",
+    "test:backend/tests/unit/infrastructure/test_installer_install_static.py::test_no_record_is_ever_upserted",
+]
+
+[[unit]]
+text = "If you have none, make a zone for the install and delegate it from the domain you own."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "AWS lists a hosted zone at $0.50 a month, and does not charge for one that is deleted within 12 hours of its creation."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "AWS records the certificate's name in public Certificate Transparency logs, so choose a name you are happy to have public, and uninstall does not remove it from them."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "In the account you install into, make the zone."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The block stops if a zone of that name already exists, and writes the zone's four name servers to zone-ns.txt:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Then delegate the zone from the domain you own."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If that domain is in a Route 53 hosted zone, in this account or another, sign in to the account that holds it, set AWS_PROFILE to a profile for that account and PARENT_ZONE_ID to the zone's ID, and add one NS record with the four name servers."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The change batch uses CREATE, so it cannot replace a record that exists, and the block stops unless the batch holds one change with four servers:"
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "If the domain is with another DNS provider, add an NS record for install.example.com there, with the same four name servers."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Do not ask a public resolver for the name before the change is in place: it may keep the answer \"not found\" for up to 15 minutes."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Then check that the internet sees the delegation:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints the same four name servers."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Use a name directly below the zone, such as app.install.example.com, as --domain."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "What it creates and costs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "In your account, in us-west-2, install creates:"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_clean_runs_changes_are_pinned_in_order",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_every_regional_call_is_in_us_west_2",
+]
+
+[[unit]]
+text = "the CDK's setup stack, CDKToolkit, if the account has none, which uninstall keeps;"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_install_plan_says_uninstall_keeps_the_cdks_setup_stack",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_cdktoolkit_is_never_touched_while_a_stack_remains",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_step_5_says_it_keeps_the_cdks_setup_stack",
+]
+
+[[unit]]
+text = "two image repositories, with the signed release images copied into them after the installer verifies their signatures with cosign;"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_an_image_cosign_refuses_is_never_copied",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_images_are_verified_and_copied_by_digest",
+]
+
+[[unit]]
+text = "two secrets, the API's JWT secret and the first administrator's password;"
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_secret_values_are_exact_and_nowhere_else"]
+
+[[unit]]
+text = "one certificate for your name, validated by a DNS record in your zone;"
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_one_name_one_alias_create_only"]
+
+[[unit]]
+text = "the nine staging stacks of the core profile (What Gets Deployed): a network with one NAT gateway, Aurora PostgreSQL, Redis, the API and the dashboard behind a load balancer, and alarms that email you;"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_deploy_deploys_the_assembly_the_target_check_read",
+    "test:infrastructure/tests/test_installer_names.py::test_every_name_the_beta_uses_is_the_synths",
+    "test:infrastructure/tests/test_installer_names.py::test_the_target_check_passes_the_real_assembly",
+]
+
+[[unit]]
+text = "two records in your zone, one for the certificate's validation and one that points your name at the load balancer;"
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_one_name_one_alias_create_only"]
+
+[[unit]]
+text = "the ECS service-linked role, if the account has none;"
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_the_service_linked_role_is_ensured_before_the_deploy"]
+
+[[unit]]
+text = "the first administrator, whose password the installer makes;"
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_the_migration_task_names_the_first_administrator"]
+
+[[unit]]
+text = "a test flag in the new install, made by the installer's last check, which also makes an API key and revokes it."
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_the_clean_runs_changes_are_pinned_in_order"]
+
+[[unit]]
+text = "The installer sets no budget alert."
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_the_clean_runs_changes_are_pinned_in_order"]
+
+[[unit]]
+text = "Set one in AWS Budgets if you want a warning before the bill does."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Names you will see"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The names say staging because the installer builds staging's shape, whatever you call your install."
+by = ["test:infrastructure/tests/test_installer_names.py::test_every_name_the_beta_uses_is_the_synths"]
+
+[[unit]]
+text = "In the AWS console you will find the stacks experimentation-<stack>-staging, the secrets under /staging/experimentation/, the image repositories experimentation-platform/backend and experimentation-platform/web, the ECS cluster and load balancer experimentation-staging, and the alarm topic experimentation-alerts-staging."
+by = [
+    "test:infrastructure/tests/test_installer_names.py::test_every_name_the_beta_uses_is_the_synths",
+    "test:backend/tests/unit/infrastructure/test_installer_install_static.py::test_only_lib_names_sh_spells_an_infrastructure_name",
+]
+
+[[unit]]
+text = "Cost"
+by = ["exempt:label"]
+
+[[unit]]
+text = "With everything up, the resources cost about $0.42 an hour, or about $10 a day, at us-west-2 list prices on 2026-10-17."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "Aurora, Redis, the NAT gateway, the endpoints, the load balancer and the Fargate tasks bill by the hour whether or not anyone uses the platform."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "These are list prices, not your bill."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Install"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Get the release you will install."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The installer installs the release that the clone's VERSION file names, and the clone must hold that release's tag:"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_an_image_that_is_not_this_releases_is_refused",
+]
+
+[[unit]]
+text = "Sign in just before you install."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The installer refuses a sign-in that was not renewed in the last 15 minutes, and says so before it changes anything:"
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_the_token_rule_refuses_a_stale_sign_in_at_the_checks"]
+
+[[unit]]
+text = "The command"
+by = ["exempt:label"]
+
+[[unit]]
+text = "--help says that the installer is a beta."
+by = ["docex:docs/self-hosting/aws-install.md#beta"]
+
+[[unit]]
+text = "It lists these seven options and --help, and no others:"
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_help_says_beta_and_lists_only_the_options"]
+
+[[unit]]
+text = "Option | Used with | What it takes"
+by = ["exempt:label"]
+
+[[unit]]
+text = "--account ID | install, uninstall | Required. The 12-digit ID of the account you mean, typed by you. The installer refuses the run if your sign-in is for another account"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_only_the_typed_account",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_help_says_beta_and_lists_only_the_options",
+]
+
+[[unit]]
+text = "--domain HOST | install | Required. The name the platform will answer at, directly below a public Route 53 zone of the account, not the top of the zone"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_a_zone_that_cannot_take_the_install_is_refused_before_any_write",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_help_says_beta_and_lists_only_the_options",
+]
+
+[[unit]]
+text = "--alarm-email ADDRESS | install | Required. The address AWS emails when an alarm fires"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_a_bad_address_is_refused_before_any_aws_call",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_help_says_beta_and_lists_only_the_options",
+]
+
+[[unit]]
+text = "--admin-email ADDRESS | install | The first administrator's sign-in. It is the alarm address when you do not pass it"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_the_first_administrators_address_is_never_weaker_than_the_apis",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_migration_task_names_the_first_administrator",
+]
+
+[[unit]]
+text = "--aws-profile NAME | install, uninstall | An IAM Identity Center profile with AdministratorAccess. It is AWS_PROFILE when you do not pass it"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_a_profile_that_is_not_identity_center_is_refused",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_a_default_profile_is_copied_under_the_installers_own_name",
+]
+
+[[unit]]
+text = "--plan-only | install, uninstall | Run the checks, print the plan and stop. It creates and deletes nothing in your AWS account, and exits 0 if every check passes"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_plan_only_reads_and_writes_nothing",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_plan_only_reads_and_deletes_nothing",
+]
+
+[[unit]]
+text = "--yes | install, uninstall | Confirm without typing the account ID. The plan still prints"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_with_no_terminal_and_no_yes_nothing_changes",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_typed_account_id_confirms_and_the_password_shows_once_on_the_terminal",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_typed_account_id_confirms",
+]
+
+[[unit]]
+text = "Any other option is refused with exit code 2 before the installer changes anything."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "There is no --region, --profile or --size: the beta installs the core profile, in staging's shape, in us-west-2 only."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "Type the account ID yourself."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Do not fill --account from your sign-in, with aws sts get-caller-identity or any other command: the installer compares the two, and a command that fills one from the other checks nothing."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Check first, then install"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Run the installer with --plan-only first."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It makes every check, prints what the install would create and what it would cost, and stops."
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_plan_only_reads_and_writes_nothing"]
+
+[[unit]]
+text = "Replace the example values with yours."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The installer refuses the account, the name and the address as they are written here."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_a_bad_address_is_refused_before_any_aws_call",
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_only_the_typed_account",
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_a_zone_that_cannot_take_the_install_is_refused_before_any_write",
+]
+
+[[unit]]
+text = "Then run the same command without --plan-only."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints the plan again and asks you to type the account ID."
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_the_typed_account_id_confirms_and_the_password_shows_once_on_the_terminal"]
+
+[[unit]]
+text = "Without a terminal, pass --yes to confirm without typing."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The plan looks like this."
+by = ["exempt:label"]
+
+[[unit]]
+text = "The values are examples."
+by = ["exempt:example"]
+
+[[unit]]
+text = "The lines are those of the install of the run on 2026-10-27, with its account, name, addresses and version replaced."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "On a computer that has not run the installer before, the first run also prints that it is installing the pinned CDK and its Python packages:"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_tools_are_reused_while_their_locks_are_the_clones",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_a_tool_installed_from_other_locks_is_installed_again",
+]
+
+[[unit]]
+text = "An account that has no CDK setup stack gets \"the CDK's setup stack (uninstall keeps it: other CDK apps may use it)\" at the start of the list of what the install creates, in place of the line that says the account already has it."
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_the_install_plan_says_uninstall_keeps_the_cdks_setup_stack"]
+
+[[unit]]
+text = "The installer then prints one line for each of its nine steps, with the time the step took, and a line a minute while AWS creates the stacks, such as 02:41 UTC 6 of 9 done; creating compute."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_address_is_checked_through_the_zones_own_server",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_a_session_check_that_cannot_sign_in_stops_before_the_stacks",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_watcher_stops_a_create_that_runs_past_its_cap",
+]
+
+[[unit]]
+text = "The step lines of the install of the run on 2026-10-27 looked like this, with the account's name and the version replaced:"
+by = ["exempt:intent"]
+
+[[unit]]
+text = "The plan's \"About 40 minutes\" is an estimate: the install of the run on 2026-10-27 took 29."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "What has been tested has the times of the one real run, for install and for uninstall."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The installer prints plain lines: no colour, no redrawing and no spinner."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_nothing_printed_is_a_terminal_effect",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_nothing_uninstall_prints_is_a_terminal_effect",
+]
+
+[[unit]]
+text = "Errors go to standard error, and everything else to standard output."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "Keep your computer awake and online until it finishes."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If you press Ctrl-C, AWS carries on creating the stacks that it started, and the installer stops with exit code 130."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_an_interrupt_leaves_a_usable_record_and_no_child",
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules",
+]
+
+[[unit]]
+text = "Run uninstall next."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Where it keeps its record"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The installer keeps a record of the install in ~/.controlvar-aws/123456789012-us-west-2/, with the account ID and us-west-2 in the folder's name."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_childrens_home_holds_only_the_sign_in_cache",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_record_keeps_its_logs_and_both_records_of_the_account",
+]
+
+[[unit]]
+text = "It holds what the installer made, the CDK copied from the release's tag, and a log of each run."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_record_keeps_its_logs_and_both_records_of_the_account",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_clone_is_left_as_it_was",
+]
+
+[[unit]]
+text = "The log holds your account ID and email address, so remove them before you share it, and it holds no password, token or key."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_secret_values_are_exact_and_nowhere_else",
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_the_token_rule_prints_only_the_expiry",
+]
+
+[[unit]]
+text = "Uninstall needs this record and this release's files."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_lost_or_foreign_record_deletes_nothing",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_another_releases_folder_deletes_nothing",
+]
+
+[[unit]]
+text = "Keep the folder, and the clone, until you uninstall."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The record belongs to one computer: run uninstall on the computer that ran install."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_lost_or_foreign_record_deletes_nothing"]
+
+[[unit]]
+text = "After the install"
+by = ["exempt:label"]
+
+[[unit]]
+text = "When the install is done, the installer prints the address, the sign-in and the password of the first administrator."
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_the_typed_account_id_confirms_and_the_password_shows_once_on_the_terminal"]
+
+[[unit]]
+text = "The values are examples, and the lines are those of the run on 2026-10-27, with the version replaced, except the password line, which the run did not print because it had no terminal:"
+by = ["exempt:intent"]
+
+[[unit]]
+text = "The installer makes the password and shows it once, on your terminal."
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_the_typed_account_id_confirms_and_the_password_shows_once_on_the_terminal"]
+
+[[unit]]
+text = "It never writes the password to the log."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_secret_values_are_exact_and_nowhere_else",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_typed_account_id_confirms_and_the_password_shows_once_on_the_terminal",
+]
+
+[[unit]]
+text = "As of v0.37.0, without a terminal, as in the run on 2026-10-27, the installer prints the aws secretsmanager get-secret-value command that reads it instead, in place of the password and the line under it:"
+by = ["exempt:intent"]
+
+[[unit]]
+text = "Open the address and sign in with that email and password."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Change the password: More > Change password."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Do not rely on the copy in Secrets Manager afterwards: it is the first password."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Add a second administrator, so the install does not depend on one account."
+by = [
+    "test:backend/tests/integration/api/test_users_api.py::TestCreateUserHashesPassword::test_created_user_can_log_in_with_the_password_sent",
+    "test:backend/tests/unit/api/test_users.py::test_create_user_with_role",
+    "test:backend/tests/unit/api/test_users.py::test_update_user_superuser",
+]
+
+[[unit]]
+text = "Open Admin > Users > Invite User, and choose the role Admin (superuser)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Confirm the alarm email, below."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "If the address does not open at once, wait up to 15 minutes."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Your computer may hold an earlier answer that the name does not exist."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Confirm the alarm email"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The alarms do nothing until you confirm the subscription."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "SNS emails a confirmation link to your alarm address."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Until it is confirmed, the alarms fire and nobody is told, and the link does not last for ever, so confirm it the same day."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "As of v0.37.0, the installer says this in its summary too."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "Do not just click the link: a subscription confirmed that way can be cancelled by the unsubscribe link in any alarm email, by anyone the email reaches."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Instead, copy the Token= value out of the link and confirm it with --authenticate-on-unsubscribe true, after which unsubscribing takes an authenticated AWS call:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The last command must show the email subscription with a real ARN, not PendingConfirmation."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Uninstall"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Uninstall deletes the install and everything in it, its data included."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_clean_uninstall_removes_the_install",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_clean_uninstalls_deletes_are_pinned_in_order",
+]
+
+[[unit]]
+text = "It keeps no backup."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_clean_uninstall_removes_the_install",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_clean_uninstalls_deletes_are_pinned_in_order",
+]
+
+[[unit]]
+text = "It deletes only what install made, and never the CDK's setup stack: your zone, its other records and everything else in the account are left alone."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_nothing_the_install_did_not_make_is_deleted",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_cdktoolkit_is_never_touched_while_a_stack_remains",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_step_5_says_it_keeps_the_cdks_setup_stack",
+]
+
+[[unit]]
+text = "Sign in again, then run it from the computer that ran install, in the clone you installed from:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "--plan-only works here too: it makes the checks, prints the plan and deletes nothing."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_plan_only_reads_and_deletes_nothing"]
+
+[[unit]]
+text = "The plan says \"This deletes the install in account 123456789012, us-west-2, at https://app.example.com\", then lists what it deletes, with its data and with no backup kept."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_plan_lists_the_cdks_setup_stack_as_kept_not_deleted",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_clean_uninstall_removes_the_install",
+]
+
+[[unit]]
+text = "It lists what it keeps: the zone, and the CDK's setup stack, which uninstall never deletes."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_plan_lists_the_cdks_setup_stack_as_kept_not_deleted"]
+
+[[unit]]
+text = "It says how long the deletion takes, and asks you to type the account ID."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_without_the_typed_account_id_nothing_is_deleted",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_typed_account_id_confirms",
+]
+
+[[unit]]
+text = "These are the plan's lines in the run on 2026-10-27, with its account, name and record folder replaced:"
+by = ["exempt:intent"]
+
+[[unit]]
+text = "Uninstall then runs six steps:"
+by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_clean_uninstalls_deletes_are_pinned_in_order"]
+
+[[unit]]
+text = "It deletes the record that points your name at the load balancer."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_clean_uninstalls_deletes_are_pinned_in_order"]
+
+[[unit]]
+text = "It deletes the nine stacks."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_nine_stacks_go_in_the_teardown_order_from_the_checked_assembly"]
+
+[[unit]]
+text = "The resources that bill by the hour go with them."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "It deletes the certificate and its validation record."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_clean_uninstalls_deletes_are_pinned_in_order"]
+
+[[unit]]
+text = "It deletes the secrets, the image repositories, the log groups and the task definitions that the install made."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_clean_uninstalls_deletes_are_pinned_in_order",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_nothing_the_install_did_not_make_is_deleted",
+]
+
+[[unit]]
+text = "It checks the CDK's setup stack, which uninstall keeps: it deletes neither the stack nor its bucket, whether the install made them or the account had them before."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_step_5_says_it_keeps_the_cdks_setup_stack",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_cdktoolkit_is_never_touched_while_a_stack_remains",
+]
+
+[[unit]]
+text = "It compares your account with the record made before the install."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_kept_list_is_exactly_the_residue_both_ways"]
+
+[[unit]]
+text = "At the end it prints what the account holds now that it did not hold before."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_kept_list_is_exactly_the_residue_both_ways",
+    "test:backend/tests/installer_sweeps/test_sweep_verdict.py::test_no_difference_is_clean",
+]
+
+[[unit]]
+text = "These are the things AWS keeps, and nothing else, when the report says Not explained: none."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_kept_list_is_exactly_the_residue_both_ways",
+    "test:backend/tests/installer_sweeps/test_sweep_verdict.py::test_the_runs_residue_is_pending_and_fully_explained",
+]
+
+[[unit]]
+text = "The report below is made from the lines of the runs on 2026-10-27, with the counts as examples."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "The line that starts Kept by the installer is printed when this install made the CDK's setup stack:"
+by = [
+    "test:backend/tests/installer_sweeps/test_sweep_verdict.py::test_also_kept_lines_are_exact",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_state_line_does_not_say_the_kept_stack_waits_to_be_deleted",
+]
+
+[[unit]]
+text = "What cdk destroy leaves behind and bills says what each of these is."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The CDK's setup stack and its bucket stay because other CDK apps in the account may use them."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Removing what is left says how to remove them when nothing else does."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "If the report names anything under Not explained, the installer has left it alone, because someone else may have made it."
+by = [
+    "test:backend/tests/installer_sweeps/test_sweep_verdict.py::test_anything_off_the_list_is_not_explained_and_counted",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_nothing_the_install_did_not_make_is_deleted",
+]
+
+[[unit]]
+text = "Look at it before you delete it."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "If uninstall ends FAILED over a backup"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An uninstall can end FAILED, with exit code 1, after it has removed everything the install made."
+by = [
+    "test:backend/tests/installer_sweeps/test_sweep_verdict.py::test_anything_off_the_list_is_not_explained_and_counted",
+    "test:backend/tests/installer_sweeps/test_sweep_verdict.py::test_residue_outranks_incomplete",
+]
+
+[[unit]]
+text = "On 2026-10-27 the report had one line under Not explained, the cache's own automatic backup, of this form:"
+by = ["exempt:intent"]
+
+[[unit]]
+text = "As of v0.37.0, the cache takes an automatic backup in a daily window, 02:00 to 03:00 UTC, so the line can appear whenever the cache existed during that window: always for an install kept for a day or more, and for a shorter one only if it overlapped the window."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "In the one run measured, on 2026-10-27, AWS removed the backup by itself; it was gone about 17 minutes after the cache's stack was deleted."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "Do not run uninstall again: it refuses, because the install is already removed."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_record_already_uninstalled_deletes_nothing"]
+
+[[unit]]
+text = "To check that the backup has gone, read the account's cache backups; the list has no backup of this cache once AWS has removed it:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Issue 1380 tracks the report."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Remove the zone"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The installer never deletes your zone."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_nothing_the_install_did_not_make_is_deleted",
+    "test:backend/tests/unit/infrastructure/test_installer_install_static.py::test_no_record_is_ever_upserted",
+]
+
+[[unit]]
+text = "If you made a zone only for this install, delete it after uninstall: first the delegation record in the domain you own, then the zone."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Route 53 refuses to delete a zone that still holds records other than its own NS and SOA records."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "First, in the account you installed into, read the zone's four name servers:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If the domain you own is in a Route 53 hosted zone, sign in to the account that holds it, and set AWS_PROFILE to a profile for that account."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The next block reads the delegation record back, compares its four name servers with the ones above, and deletes the record only when they are the same, so it cannot delete a record that someone else changed:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "With another DNS provider, delete the NS record for install.example.com there."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Then, in the account you installed into, delete the zone:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If uninstall stops at the network"
+by = ["exempt:label"]
+
+[[unit]]
+text = "If the installer finds a stack in DELETE_FAILED, it stops, names the stack and says what to do."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_failure_is_named_and_a_run_again_completes"]
+
+[[unit]]
+text = "The network can fail to delete when GuardDuty, with runtime monitoring for Fargate turned on in your account, has put its own interface endpoint and a managed group, whose name starts with GuardDutyManaged, in the network."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "The installer did not make them, so it does not delete them."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_guarddutys_own_endpoint_and_group_are_never_deleted"]
+
+[[unit]]
+text = "The message names the endpoint and the group by ID and prints the commands that list and delete them."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_network_message_prints_the_commands_that_delete_guarddutys_two",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_network_message_names_the_group_as_the_console_does",
+]
+
+[[unit]]
+text = "Check that they are the only two things it names, delete those two yourself, and run uninstall again."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It continues with the network."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_failure_is_named_and_a_run_again_completes"]
+
+[[unit]]
+text = "Anything else in the list is not GuardDuty's: do not delete it, and look at what it is first."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "If something goes wrong"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The installer's exit code tells you whether anything was made:"
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "Code | Means | What to do"
+by = ["exempt:label"]
+
+[[unit]]
+text = "0 | Done. After uninstall, the account holds only what AWS keeps and what the report lists as kept by the installer | Nothing"
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_clean_uninstall_removes_the_install",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_plan_only_reads_and_writes_nothing",
+]
+
+[[unit]]
+text = "1 | Failed after something was made. The message lists what exists and what it bills | Run uninstall, then install again. If uninstall fails part-way, its message says to run it again, and it continues. An uninstall that removed everything can also end 1, with a line under Not explained: look at each line, and see If uninstall ends FAILED over a backup"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_failure_is_named_and_a_run_again_completes",
+    "test:backend/tests/installer_sweeps/test_sweep_verdict.py::test_anything_off_the_list_is_not_explained_and_counted",
+]
+
+[[unit]]
+text = "2 | Refused, and nothing was changed. A declined confirmation is 2 as well | Read the message, fix the cause and run the command again. It is safe to repeat"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_a_declined_confirmation_changes_nothing",
+]
+
+[[unit]]
+text = "130 | You pressed Ctrl-C, or the installer was stopped. AWS carries on with the stacks it started | If the message says something was made, run uninstall. Otherwise run the command again when you are ready"
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_an_interrupt_leaves_a_usable_record_and_no_child",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_an_interrupt_during_the_destroy_then_a_run_again_completes",
+]
+
+[[unit]]
+text = "The installer uses no other exit code."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "Every message has three parts: what happened, what exists in your account and what it bills, and the next step."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "It ends with the path of the log."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "The first word names the code: REFUSED for 2, FAILED for 1 and STOPPED for 130."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules"]
+
+[[unit]]
+text = "Install never continues."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_a_second_install_over_a_started_record_refuses_and_reads_nothing",
+    "test:backend/tests/installer_sweeps/test_uninstall_halfbuilt.py::test_after_any_failed_change_a_second_install_refuses",
+]
+
+[[unit]]
+text = "If an install stops after it made something, it does not pick up where it stopped."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_halfbuilt.py::test_after_any_failed_change_a_second_install_refuses"]
+
+[[unit]]
+text = "Run uninstall, then install again."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "An install on a computer that holds the record of a started install refuses with exit code 2, before it makes any call to AWS, until you have run uninstall."
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_a_second_install_over_a_started_record_refuses_and_reads_nothing"]
+
+[[unit]]
+text = "Uninstall continues."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_halfbuilt.py::test_uninstall_from_any_failed_change_leaves_only_the_kept_list",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_failure_is_named_and_a_run_again_completes",
+]
+
+[[unit]]
+text = "Uninstall can be run again from any half-built state."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_halfbuilt.py::test_uninstall_from_any_failed_change_leaves_only_the_kept_list"]
+
+[[unit]]
+text = "It deletes what is left of the install and nothing else."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_halfbuilt.py::test_uninstall_from_any_failed_change_leaves_only_the_kept_list",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_nothing_the_install_did_not_make_is_deleted",
+]
+
+[[unit]]
+text = "A sign-in that stops working."
+by = ["exempt:label"]
+
+[[unit]]
+text = "The installer checks your sign-in again before it creates the nine stacks and before it deletes them."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_a_sign_in_that_ended_during_prepare_stops_before_the_stacks",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_sign_in_that_ends_stops_before_the_stacks_are_deleted",
+]
+
+[[unit]]
+text = "If it has stopped working, the installer stops with exit code 1 and says so."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_a_sign_in_that_ended_during_prepare_stops_before_the_stacks",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_sign_in_that_ends_stops_before_the_stacks_are_deleted",
+]
+
+[[unit]]
+text = "Sign in again, then run uninstall after an install, or run uninstall again after an uninstall."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A lost record."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Uninstall needs the record folder."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_lost_or_foreign_record_deletes_nothing"]
+
+[[unit]]
+text = "On a computer without it, uninstall refuses and deletes nothing, and points you at the computer that made the install or at Destroying an environment to remove the stacks by hand."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_lost_or_foreign_record_deletes_nothing"]
+
+[[unit]]
+text = "Removing what is left covers the rest."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "What the beta does not do"
+by = ["exempt:label"]
+
+[[unit]]
+text = "It installs in us-west-2 only, and only the core profile."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_every_regional_call_is_in_us_west_2",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_full_profile_stops_before_the_deploy",
+]
+
+[[unit]]
+text = "It needs a public Route 53 zone in the same account."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_a_zone_that_cannot_take_the_install_is_refused_before_any_write"]
+
+[[unit]]
+text = "It does not handle a zone in another account, other DNS providers, or the top of a zone."
+by = ["test:backend/tests/installer_sweeps/test_install_checks.py::test_a_zone_that_cannot_take_the_install_is_refused_before_any_write"]
+
+[[unit]]
+text = "It does not continue an install that failed, and it does not upgrade one."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_a_second_install_over_a_started_record_refuses_and_reads_nothing",
+    "test:backend/tests/installer_sweeps/test_uninstall_halfbuilt.py::test_after_any_failed_change_a_second_install_refuses",
+]
+
+[[unit]]
+text = "Use the Quick Start for those."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "It does not estimate the cost before you start, beyond the figures in the plan, and it sets no budget alert."
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_the_clean_runs_changes_are_pinned_in_order"]
+
+[[unit]]
+text = "What has been tested"
+by = ["exempt:label"]
+
+[[unit]]
+text = "CI runs every step and every refusal of the installer against a fake AWS CLI, on Linux and on macOS."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_has_a_case",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_clean_run_under_every_bash",
+]
+
+[[unit]]
+text = "A separate CI step checks that the fake prints what the real AWS CLI prints for every call the installer makes."
+by = ["test:backend/tests/unit/infrastructure/test_installer_cli_check.py::test_the_check_runs_in_the_cdk_job_with_no_credential"]
+
+[[unit]]
+text = "The one real run:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "As of v0.37.0, the installer has run end to end once: on 2026-10-27, on an AWS account made for testing, in us-west-2, from a Mac, with release v0.36.4 and the installer from commit cec53940."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "As of v0.37.0, install took 29 minutes in that run, 23 of them to create the nine stacks, and the first administrator signed in with the password in Secrets Manager."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "As of v0.37.0, uninstall took 29 minutes in that run, 26 of them to delete the nine stacks; its comparison of the account with its state before the install found what AWS keeps, and one automatic backup of the cache that AWS removed by itself soon after, so the report ended FAILED (see If uninstall ends FAILED over a backup)."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "As of v0.37.0, that run also stopped an install with Ctrl-C while the images were copied, with exit code 130 and a record that uninstall could use; uninstall removed what the install had made in about 2 minutes, and kept the CDK's setup stack, which the install had made."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "As of v0.37.0, the files under deploy/aws-installer/ are the ones that ran."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "As of v0.37.0, the installer has not been run on AWS in another region, with a zone in another account, through an uninstall that stops at the network, through a sign-in that ends in the middle of a run, or on a computer running Linux."
+by = ["exempt:intent"]

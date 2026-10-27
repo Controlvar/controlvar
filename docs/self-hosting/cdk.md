@@ -1,5 +1,7 @@
 # AWS CDK Deployment
 
+To have a script run this page's steps for you, see [Install on AWS with one command (beta)](aws-install.md).
+
 The platform's AWS infrastructure is defined as code using **AWS CDK v2**, in **Python**: the app is `infrastructure/cdk/app.py`, and `infrastructure/cdk/cdk.json` runs it with `python3 app.py`. `cdk deploy --all` provisions the API, the dashboard and the data stores they need in your AWS account.
 
 **The Fargate stack runs two services behind one Application Load Balancer**: the API, and the dashboard as its own ECS service (`experimentation-dashboard-<env>`). The HTTPS listener sends `/api/*`, `/health`, `/health/*` and `/metrics` to the API and everything else to the dashboard. `cdk deploy` starts the dashboard on the `experimentation-platform/web:bootstrap` image, which you push before the first deploy ([deployment guide §1.3](../deployment/deployment-guide.md)). After that, the Deploy workflow rolls each release onto the dashboard: it registers a dashboard task definition with the release's image, rolls the dashboard service once the API is serving the same release, and smoke-tests it through the public URL.
@@ -791,7 +793,10 @@ the roles it holds. The stack keeps its bucket when it is deleted. Empty the
 bucket of every object version, delete markers included (the S3 console's Empty
 action does this), then delete the `CDKToolkit` stack, then delete the bucket.
 If you are not sure that no other CDK app uses the account and region, leave
-`CDKToolkit` in place: it costs pennies of storage.
+`CDKToolkit` in place: it costs pennies of storage. The
+[AWS installer (beta)](aws-install.md) never deletes `CDKToolkit`, whether it
+made the stack or the account had it before, so this is where to remove it after
+an uninstall.
 
 ### Moving an environment deployed before the rename
 

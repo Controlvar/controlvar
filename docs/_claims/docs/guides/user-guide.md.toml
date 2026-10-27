@@ -524,6 +524,13 @@ text = "Existing data is preserved."
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "Events the SDKs send while an experiment is paused, completed or archived (through /tracking/track and /tracking/batch) are stored, but they count in no variant's results."
+by = [
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_converting_users_per_variant_across_pause_resume_and_complete",
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_each_status_and_route_stores_the_variant_only_while_active",
+]
+
+[[unit]]
 text = "Use the Sample Size tab to confirm the smallest variant has reached the planned sample before deciding."
 by = ["exempt:advice"]
 

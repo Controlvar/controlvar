@@ -113,6 +113,32 @@ def _event_model(
     return UntaggedEventCreate
 
 
+def _variant_at_receipt(db: Session, experiment: Experiment, user_id: str) -> Any:
+    """The variant ``/track`` and ``/batch`` tag an event with.
+
+    The user's stored assignment, while the experiment is ACTIVE; otherwise
+    ``None``. The status is the one read when the event is received. For a
+    draft, paused, completed or archived experiment the event is stored with
+    its ``experiment_id`` and no variant, so it counts in no variant's
+    results: an event received while the experiment is not running is not
+    taken as evidence about the variant the user was assigned. The assignment
+    rows are kept, and ``backend/scripts/retag_events_from_assignments.py``
+    can tag such events from them afterwards.
+    """
+    if experiment.status != ExperimentStatus.ACTIVE:
+        return None
+    assignment = (
+        db.query(Assignment)
+        .filter(
+            Assignment.experiment_id == experiment.id,
+            Assignment.user_id == user_id,
+        )
+        .order_by(Assignment.created_at.desc())
+        .first()
+    )
+    return assignment.variant_id if assignment else None
+
+
 def _event_response(event: Event) -> EventResponse:
     """Build the public response model from a stored Event row."""
     return EventResponse(
@@ -494,6 +520,11 @@ async def track_event(
     - A feature flag (using feature_flag_key)
     - Or both
 
+    While the experiment is running (ACTIVE), the event is tagged with the
+    variant the user is assigned to. An event for a draft, paused, completed
+    or archived experiment is stored with the experiment and no variant, so
+    it counts in no variant's results.
+
     Additional data can be included:
     - Numeric value (for revenue, durations, counts)
     - Metadata (additional contextual information)
@@ -520,20 +551,7 @@ async def track_event(
 
         if experiment:
             experiment_id = experiment.id
-
-            # Find variant if user has an assignment
-            assignment = (
-                db.query(Assignment)
-                .filter(
-                    Assignment.experiment_id == experiment_id,
-                    Assignment.user_id == request.user_id,
-                )
-                .order_by(Assignment.created_at.desc())
-                .first()
-            )
-
-            if assignment:
-                variant_id = assignment.variant_id
+            variant_id = _variant_at_receipt(db, experiment, request.user_id)
 
     # Find feature flag ID if specified
     feature_flag_id = None
@@ -706,6 +724,10 @@ async def track_events_batch(
     The batch can contain up to 100 events. If any events fail validation,
     the response will include details about which events failed and why.
 
+    Each event is tagged as ``/track`` tags it: with the user's variant while
+    the experiment is running (ACTIVE), and with no variant for a draft,
+    paused, completed or archived experiment.
+
     **Authentication**: Requires a valid API key in the X-API-Key header.
 
     Returns:
@@ -746,20 +768,9 @@ async def track_events_batch(
 
                 if experiment:
                     experiment_id = experiment.id
-
-                    # Find variant if user has an assignment
-                    assignment = (
-                        db.query(Assignment)
-                        .filter(
-                            Assignment.experiment_id == experiment_id,
-                            Assignment.user_id == event_request.user_id,
-                        )
-                        .order_by(Assignment.created_at.desc())
-                        .first()
+                    variant_id = _variant_at_receipt(
+                        db, experiment, event_request.user_id
                     )
-
-                    if assignment:
-                        variant_id = assignment.variant_id
 
             # Find feature flag ID if specified
             feature_flag_id = None
