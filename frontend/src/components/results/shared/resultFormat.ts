@@ -53,6 +53,34 @@ export function formatRate(v: number | null | undefined, sampleSize: number): st
   return `${(v * 100).toFixed(2)}%`;
 }
 
+/**
+ * The metric's direction as the response gives it: true when a decrease is
+ * the good direction (errors, latency, uninstalls). Undefined when the
+ * response does not carry it, as from a server older than the direction:
+ * the table then does not call a change better or worse.
+ */
+export function metricLowerIsBetter(metric: MetricResult): boolean | undefined {
+  return typeof metric.lower_is_better === 'boolean' ? metric.lower_is_better : undefined;
+}
+
+/**
+ * Whether a treatment's change is better or worse in the metric's direction.
+ * Only a significant change gets a verdict, from the same `is_significant` as
+ * the badge and the recommendation; null for the control, a change that is
+ * not significant, not finite or zero, and a response without the direction.
+ */
+export function changeVerdict(
+  metric: MetricResult,
+  variant: VariantResult,
+): 'better' | 'worse' | null {
+  const lowerIsBetter = metricLowerIsBetter(metric);
+  if (lowerIsBetter === undefined || variant.is_control || !variant.is_significant) return null;
+  const pct = variant.relative_improvement_pct;
+  if (!isFiniteNumber(pct) || pct === 0) return null;
+  const fell = pct < 0;
+  return fell === lowerIsBetter ? 'better' : 'worse';
+}
+
 /** A signed percentage with a real minus sign, so the direction is in the text. */
 export function formatSignedPct(v: number, digits = 1): string {
   if (v > 0) return `+${v.toFixed(digits)}%`;

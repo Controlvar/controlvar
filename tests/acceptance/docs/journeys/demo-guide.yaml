@@ -126,7 +126,7 @@ steps:
           - button "Powered by Controlvar"
     fail: ShopLab does not answer at the address the guide gives, or has no Controlvar panel
   - id: streampulse-address
-    doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
+    doc: scene-0b-streampulse-device-targeting-web-sdk-5-min
     do:
       open: http://localhost:3300
     expect:
@@ -135,7 +135,7 @@ steps:
         - heading "StreamPulse" [level=1]
     fail: StreamPulse does not answer at the address the guide gives
   - id: premium-iphone
-    doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
+    doc: scene-0b-streampulse-device-targeting-web-sdk-5-min
     do:
       click:
         role: radio
@@ -145,7 +145,7 @@ steps:
         - radio "iPhone 15 · iOS 17.4 · US · premium" [checked]
     fail: the guide's iPhone preset cannot be picked
   - id: search-tab
-    doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
+    doc: scene-0b-streampulse-device-targeting-web-sdk-5-min
     do:
       click:
         role: tab
@@ -165,7 +165,7 @@ steps:
                   - text: "on: matched a targeting rule on"
     fail: the Search tab does not show AI search ✨ for the iPhone 15 · iOS 17.4 · US · premium device, or the panel does not say a targeting rule turned streampulse_ai_search on
   - id: pixel
-    doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
+    doc: scene-0b-streampulse-device-targeting-web-sdk-5-min
     do:
       click:
         role: radio
@@ -177,7 +177,7 @@ steps:
         - radio "Pixel 7 · Android 14 · DE · free" [checked]
     fail: the guide's Pixel preset cannot be picked
   - id: keyword-search
-    doc: scene-0b-streampulse-feature-flags-on-mobile-5-min
+    doc: scene-0b-streampulse-device-targeting-web-sdk-5-min
     do:
       click:
         role: tab

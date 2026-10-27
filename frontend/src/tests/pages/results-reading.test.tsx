@@ -144,6 +144,8 @@ function results(overrides: Record<string, unknown> = {}) {
         metric_name: 'Checkout',
         metric_type: 'conversion',
         is_primary: true,
+        // The API always sends the direction; without it the table judges nothing.
+        lower_is_better: false,
         variants: [
           variant('v-ctrl', 'control', true, null, false),
           variant('v-up', 'better', false, 12.5, true),

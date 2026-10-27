@@ -12,8 +12,8 @@
 # scripts/doc_examples.py), and each page's residual counts can only fall.
 
 [meta]
-documents = 53
-exec = 304
+documents = 54
+exec = 305
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -133,6 +133,7 @@ universe = [
     "docs/security/hardening-changes.md",
     "docs/security/incident-response.md",
     "docs/security/model.md",
+    "docs/self-hosting/aws-install.md",
     "docs/self-hosting/cdk.md",
     "docs/self-hosting/kubernetes.md",
     "docs/self-hosting/migrations.md",
@@ -575,6 +576,18 @@ environment = "stack"
 exec = 7
 skip = 11
 expects = 6
+
+# The beta AWS installer's page. One block runs: the installer's --help, which
+# needs no AWS account and no network. Every block that installs, uninstalls or
+# reads the account is a skip. The runner's rule against calling aws (in
+# scripts/doc_examples.py) does not see the installer's launcher, so
+# backend/tests/unit/docs/test_aws_install_page.py pins those blocks as skips.
+[[document]]
+path = "docs/self-hosting/aws-install.md"
+environment = "bare"
+exec = 1
+skip = 13
+expects = 8
 
 # The contributor pages: the Quick Start's stack and a development virtual
 # environment at the repository root (stack-dev; CI's dev shards build it).

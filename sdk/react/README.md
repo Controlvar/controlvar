@@ -120,10 +120,21 @@ HOC that injects `flagEvaluation: FeatureFlagEvaluation` into `Component`.
 
 - **with** `experimentKey` and/or `featureFlagKey` → one `POST /api/v1/tracking/track` with
   `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata, timestamp?}`;
-- **without** keys → one `POST /api/v1/tracking/batch` containing one entry per experiment the
-  user has been assigned to (`experiment_key`) **plus** one per flag evaluated for the user
-  (`feature_flag_key`), taken from the client's cache (successful, unexpired results only);
-- if nothing is cached for the user, nothing is sent and the call resolves.
+- **without** keys → one `POST /api/v1/tracking/batch` containing one entry per experiment
+  (`experiment_key`) **plus** one per flag (`feature_flag_key`) the client answered for the user in
+  the last 24 hours, whether or not the answer is still cached. An experiment whose latest answer
+  has `reason` `'draft'`, `'paused'`, `'completed'` or `'archived'` gets no entry; `assigned: false`
+  answers for `'holdout'`, `'mutual_exclusion'` or `'targeting'` keep theirs;
+- **without** keys and with nothing to attribute it to → one `POST /api/v1/tracking/track` with no
+  key, which the server stores as history (it counts in holdout results and as CUPED history, never
+  in an experiment's results).
+
+The keys live in the client's memory, for up to 10,000 users; `clearCache()` keeps them. A page
+reload starts with none, and the page's hooks record them again as they answer.
+
+Pass `experimentKey` for an event that is the outcome of one experiment's surface (a click in the
+sorted list). Leave it out for an outcome of the whole visit (a purchase), which counts for every
+experiment the user is in.
 
 ## Clients
 

@@ -55,6 +55,32 @@ by = [
 ]
 
 [[unit]]
+text = "One user known by two ids, such as a visitor who signs in | No identify or alias call: a user who signs in under a new id mid-funnel gets a second assignment. Assign with the id you will track purchases with."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_no_call_says_that_two_user_ids_are_one_user",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_assignment_hashes_the_experiment_key_and_the_user",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky",
+]
+
+[[unit]]
+text = "A bandit that moves traffic toward the better variant of a lower-is-better metric | A bandit (an experiment whose optimization_type is not fixed) moves traffic toward the variant whose users send the primary metric's event most often. It does not read the metric's lower_is_better, so on a metric such as uninstalls or errors it moves traffic toward the worse variant. Use a fixed split for such a metric (#1385)."
+by = ["test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditDoesNotReadTheDirection::test_traffic_moves_to_more_converting_users_on_a_lower_is_better_primary"]
+
+[[unit]]
+text = "An LLM experiment that picks the variant with the lowest value | An LLM experiment's winner is the variant with the highest mean of the metric it is compared on: the business metric when every variant has one, otherwise the judge score. There is no lower-is-better setting for it."
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_is_variant_with_higher_business_metric",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_based_on_auto_eval_when_no_business_metric",
+]
+
+[[unit]]
+text = "A warehouse analysis of a metric where lower is better | A warehouse analysis treats every metric as higher is better: a warehouse metric source has no lower-is-better setting, so its results report lower_is_better: false and name a winner only for a significant increase (#1386)."
+by = [
+    "test:modules/backend/tests/unit/test_warehouse_lower_is_better.py::test_a_warehouse_result_names_a_winner_only_for_a_significant_increase",
+    "test:modules/backend/tests/unit/test_warehouse_lower_is_better.py::test_a_warehouse_metric_source_has_no_lower_is_better_setting",
+]
+
+[[unit]]
 text = "Deployments"
 by = ["exempt:label"]
 
@@ -121,6 +147,17 @@ by = [
 [[unit]]
 text = "SDKs"
 by = ["exempt:label"]
+
+[[unit]]
+text = "Flag targeting from a native mobile SDK | iOS, Android, React Native and Flutter send only the user id on flag evaluation, so rules on attributes do not match (#438). Experiment assignment sends them."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_native_sdks_send_no_context_on_flag_evaluation",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
+    "test:sdk/ios/Tests/ControlvarTests/ExperimentationClientTests.swift::testGetAssignment_postsExperimentKeyUserIdAndContext",
+    "test:sdk/android/sdk/src/test/kotlin/ExperimentationClientTest.kt::getAssignment sends POST tracking assign with experiment_key, user_id and context",
+    "test:sdk/react-native/__tests__/client.test.ts::sends the user attributes as `context`",
+    "test:sdk/flutter/test/client_test.dart::POSTs experiment_key, user_id and context to /api/v1/tracking/assign",
+]
 
 [[unit]]
 text = "Every SDK on a package registry | The JavaScript SDK is on npm and the Python SDK is on PyPI. The Go SDK installs by module path, and every other SDK installs from a clone of this repository."

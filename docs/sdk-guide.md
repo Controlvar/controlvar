@@ -48,8 +48,9 @@ JavaScript, Python and React SDKs send it on both calls; each SDK's page says wh
 ## SDK status
 
 Every SDK uses the contract above: the server decides assignment and flag
-evaluation, results are cached per user + key, and `track` fans out to the user's cached assignments and
-flags when no key is given. The cached assignments include answers with `"assigned": false` (a user the
+evaluation, results are cached per user + key, and `track` fans out to the user's assignments and flags
+when no key is given: those answered in the last 24 hours in the JavaScript, Python and React SDKs, the
+cached ones in the others. They include answers with `"assigned": false` (a user the
 global holdout kept out, for example): holdout results count those users' events like everyone else's. The MD5 consistent hash remains exported by each SDK as a compatibility utility
 (the golden-vector tests still cover it). It is not the function the server buckets flag rollouts with,
 and nothing uses it to decide a flag or a variant; local evaluation (JavaScript and Python, opt-in) uses
@@ -144,7 +145,7 @@ client.track("user-123", "purchase", event_value=49.99,
              properties={"payment_method": "card"},
              experiment_key="checkout_button_color")
 
-# Track without a key: fans out to every cached assignment and flag for the user
+# Track without a key: sent to every experiment and flag answered for the user
 client.track("user-123", "page_view", properties={"page": "/checkout"})
 ```
 
@@ -240,7 +241,7 @@ const isEnabled = await client.isFeatureEnabled('dark_mode', user); // false on 
 // Track for a specific experiment (POST /api/v1/tracking/track)
 await client.track('user-123', 'purchase', { value: 49.99, experimentKey: 'checkout_button_color' });
 
-// Track without a key: fans out to every cached assignment and flag for the user
+// Track without a key: sent to every experiment and flag answered for the user
 await client.track('user-123', 'page_view', { properties: { page: '/checkout' } });
 ```
 

@@ -51,6 +51,16 @@ const controlAssignment: ExperimentAssignResponse = {
 
 const expectedHeaders = { 'X-API-Key': 'test-api-key', 'Content-Type': 'application/json' };
 
+/** A fixed clock start for the tests that move `Date.now`. */
+const T0 = 1_700_000_000_000;
+const SECOND = 1_000;
+const HOUR = 3_600 * SECOND;
+const BATCH_URL = 'https://api.example.com/api/v1/tracking/batch';
+const TRACK_URL = 'https://api.example.com/api/v1/tracking/track';
+type Body = { experiment_key?: string; feature_flag_key?: string };
+/** The batch's entries as `experiment_key`, or `flag:<feature_flag_key>`. */
+const batchKeys = (body: { events: Body[] }) => body.events.map(e => e.experiment_key ?? `flag:${e.feature_flag_key}`);
+
 function jsonResponse(body: unknown, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: () => Promise.resolve(body) };
 }
@@ -1022,21 +1032,42 @@ describe('trackEvent with explicit keys', () => {
 // ─── trackEvent — fan-out ─────────────────────────────────────────────────────
 
 describe('trackEvent fan-out (no explicit keys)', () => {
-  it('sends nothing and resolves when nothing is cached for the user', async () => {
+  it('sends the event once to /api/v1/tracking/track with no key and resolves when nothing is attributed to the user', async () => {
     const fetchMock = mockFetch({});
     const client = new ExperimentationClient(baseConfig);
-    await expect(client.trackEvent('user-123', 'page_view', { page: '/' })).resolves.toBeUndefined();
-    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(
+      client.trackEvent('user-123', 'page_view', { page: '/' }, { value: 2 })
+    ).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const { url, init, body } = call(fetchMock);
+    expect(url).toBe('https://api.example.com/api/v1/tracking/track');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual(expectedHeaders);
+    expect(body).toEqual({
+      event_type: 'page_view',
+      event_name: 'page_view',
+      user_id: 'user-123',
+      value: 2,
+      metadata: { page: '/' },
+    });
   });
 
-  it('sends nothing when the only cached data belongs to another user', async () => {
+  it("never sends another user's keys: the event goes once to /api/v1/tracking/track with no key", async () => {
     const fetchMock = mockFetch(assignment);
     const client = new ExperimentationClient(baseConfig);
     await client.assignExperiment({ userId: 'someone-else' }, 'checkout');
     fetchMock.mockClear();
 
     await client.trackEvent('user-123', 'page_view');
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(call(fetchMock).url).toBe('https://api.example.com/api/v1/tracking/track');
+    expect(call(fetchMock).body).toEqual({ event_type: 'page_view', event_name: 'page_view', user_id: 'user-123' });
+  });
+
+  it('does NOT throw when the untagged send fails', async () => {
+    global.fetch = jest.fn().mockRejectedValue(new Error('Network failure'));
+    const client = new ExperimentationClient(baseConfig);
+    await expect(client.trackEvent('user-123', 'page_view')).resolves.toBeUndefined();
   });
 
   it('POSTs one entry per cached assignment to /api/v1/tracking/batch', async () => {
@@ -1169,15 +1200,19 @@ describe('trackEvent fan-out (no explicit keys)', () => {
     expect(call(fetchMock, 1).body.events).toHaveLength(1);
   });
 
-  it('sends nothing after clearCache', async () => {
-    const fetchMock = mockFetch(assignment);
+  it('still fans out to the attributed keys after clearCache, which empties only the cache', async () => {
+    const fetchMock = mockFetchSequence({ body: assignment }, { body: flagOn }, { body: {} });
     const client = new ExperimentationClient(baseConfig);
     await client.assignExperiment(user, 'checkout');
+    await client.evaluateFeatureFlag(user, 'new-search');
     client.clearCache();
-    fetchMock.mockClear();
+    expect(client.getAssignments('user-123')).toEqual([]);
+    expect(client.getEvaluatedFlags('user-123')).toEqual([]);
 
     await client.trackEvent('user-123', 'click');
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(call(fetchMock, 2).url).toBe(BATCH_URL);
+    expect(batchKeys(call(fetchMock, 2).body)).toEqual(['checkout', 'flag:new-search']);
   });
 
   it('does NOT throw when the batch request fails', async () => {
@@ -1185,6 +1220,212 @@ describe('trackEvent fan-out (no explicit keys)', () => {
     const client = new ExperimentationClient(baseConfig);
     await client.assignExperiment(user, 'checkout');
     await expect(client.trackEvent('user-123', 'click')).resolves.toBeUndefined();
+  });
+});
+
+// ─── trackEvent — late conversions (the attributed keys outlive the cache) ────
+
+describe('trackEvent after the cache TTL', () => {
+  it('sends an untagged purchase made 301 s after the assignment to the experiment', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence({ body: assignment }, { body: { success_count: 1 } });
+    const client = new ExperimentationClient(baseConfig);
+    await client.assignExperiment(user, 'checkout');
+    now.mockReturnValue(T0 + 301 * SECOND); // past the 300 s cache TTL
+    expect(client.getAssignments('user-123')).toEqual([]);
+
+    await client.trackEvent('user-123', 'purchase', undefined, { value: 120 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(call(fetchMock, 1).url).toBe(BATCH_URL);
+    expect(call(fetchMock, 1).body).toEqual({
+      events: [
+        { event_type: 'purchase', event_name: 'purchase', user_id: 'user-123', experiment_key: 'checkout', value: 120 },
+      ],
+    });
+  });
+
+  it('control: sends the same purchase at +299 s, while the assignment is still cached', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence({ body: assignment }, { body: { success_count: 1 } });
+    const client = new ExperimentationClient(baseConfig);
+    await client.assignExperiment(user, 'checkout');
+    now.mockReturnValue(T0 + 299 * SECOND);
+    expect(client.getAssignments('user-123').map(a => a.experimentKey)).toEqual(['checkout']);
+
+    await client.trackEvent('user-123', 'purchase', undefined, { value: 120 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(call(fetchMock, 1).url).toBe(BATCH_URL);
+    expect(batchKeys(call(fetchMock, 1).body)).toEqual(['checkout']);
+  });
+
+  it('sends to exactly n experiments plus m flags past the TTL, each once, experiments first', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence(
+      { body: { ...assignment, experiment_key: 'hero' } },
+      { body: { ...assignment, experiment_key: 'checkout' } },
+      { body: flagOn },
+      { body: { ...assignment, experiment_key: 'sort' } },
+      { body: flagOff },
+      { body: { ...assignment, experiment_key: 'checkout' } },
+      { body: { success_count: 5 } }
+    );
+    const client = new ExperimentationClient(baseConfig);
+    await client.assignExperiment(user, 'hero');
+    await client.assignExperiment(user, 'checkout');
+    await client.evaluateFeatureFlag(user, 'new-search');
+    await client.assignExperiment(user, 'sort');
+    await client.evaluateFeatureFlag(user, 'free-shipping');
+    now.mockReturnValue(T0 + 400 * SECOND);
+    await client.assignExperiment(user, 'checkout'); // answered again: still one entry, in its first place
+    now.mockReturnValue(T0 + 800 * SECOND);
+
+    await client.trackEvent('user-123', 'purchase');
+
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+    const { events } = call(fetchMock, 6).body;
+    expect(events).toHaveLength(5);
+    expect(batchKeys({ events })).toEqual(['hero', 'checkout', 'sort', 'flag:new-search', 'flag:free-shipping']);
+  });
+
+  it.each(['holdout', 'mutual_exclusion', 'targeting'])(
+    'still sends to an experiment answered assigned: false with reason %s, past the TTL',
+    async reason => {
+      const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+      const fetchMock = mockFetchSequence(
+        { body: { ...controlAssignment, experiment_key: 'hero', assigned: false, reason } },
+        { body: { success_count: 1 } }
+      );
+      const client = new ExperimentationClient(baseConfig);
+      await client.assignExperiment(user, 'hero');
+      now.mockReturnValue(T0 + 301 * SECOND);
+
+      await client.trackEvent('user-123', 'purchase');
+
+      expect(call(fetchMock, 1).url).toBe(BATCH_URL);
+      expect(batchKeys(call(fetchMock, 1).body)).toEqual(['hero']);
+    }
+  );
+
+  it.each(['draft', 'paused', 'completed', 'archived'])(
+    'does not send to an experiment whose latest answer has reason %s',
+    async reason => {
+      const fetchMock = mockFetchSequence(
+        { body: { ...controlAssignment, experiment_key: 'checkout', assigned: false, reason } },
+        { body: { ...assignment, experiment_key: 'hero' } },
+        { body: { success_count: 1 } }
+      );
+      const client = new ExperimentationClient(baseConfig);
+      await client.assignExperiment(user, 'checkout');
+      await client.assignExperiment(user, 'hero');
+
+      await client.trackEvent('user-123', 'purchase');
+
+      expect(call(fetchMock, 2).url).toBe(BATCH_URL);
+      expect(batchKeys(call(fetchMock, 2).body)).toEqual(['hero']);
+    }
+  );
+
+  it('follows the latest answer: a paused answer stops the fan-out, a later running answer restores it', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence(
+      { body: { ...assignment, assigned: true, reason: 'assigned' } },
+      { body: { ...controlAssignment, assigned: false, reason: 'paused' } },
+      { body: {} },
+      { body: { ...assignment, assigned: true, reason: 'assigned' } },
+      { body: { success_count: 1 } }
+    );
+    const client = new ExperimentationClient(baseConfig);
+    await client.assignExperiment(user, 'checkout');
+    now.mockReturnValue(T0 + 301 * SECOND);
+    await client.assignExperiment(user, 'checkout'); // the experiment was paused meanwhile
+
+    await client.trackEvent('user-123', 'purchase');
+    expect(call(fetchMock, 2).url).toBe(TRACK_URL);
+    expect(call(fetchMock, 2).body).not.toHaveProperty('experiment_key');
+
+    now.mockReturnValue(T0 + 602 * SECOND);
+    await client.assignExperiment(user, 'checkout'); // resumed
+    await client.trackEvent('user-123', 'purchase');
+    expect(call(fetchMock, 4).url).toBe(BATCH_URL);
+    expect(batchKeys(call(fetchMock, 4).body)).toEqual(['checkout']);
+  });
+
+  it('drops an experiment whose assignment is later answered 404: the event goes once with no key', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence(
+      { body: assignment },
+      { body: { detail: "Active experiment with key 'checkout' not found" }, status: 404 },
+      { body: {} }
+    );
+    const client = new ExperimentationClient(baseConfig);
+    await client.assignExperiment(user, 'checkout');
+    now.mockReturnValue(T0 + 301 * SECOND); // the cache has expired; the server now answers 404
+    await expect(client.assignExperiment(user, 'checkout')).rejects.toThrow('API error: 404');
+    now.mockReturnValue(T0 + 3600 * SECOND);
+
+    await client.trackEvent('user-123', 'purchase');
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(call(fetchMock, 2).url).toBe(TRACK_URL);
+    expect(call(fetchMock, 2).body).toEqual({ event_type: 'purchase', event_name: 'purchase', user_id: 'user-123' });
+  });
+
+  it.each([
+    ['a 500', { body: {}, status: 500 }],
+    ['a network failure', new Error('ECONNRESET')],
+  ])('keeps the key when the later assignment fails with %s', async (_label, failure) => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence({ body: assignment }, failure as { body: unknown; status?: number } | Error, { body: {} });
+    const client = new ExperimentationClient(baseConfig);
+    await client.assignExperiment(user, 'checkout');
+    now.mockReturnValue(T0 + 301 * SECOND);
+    await expect(client.assignExperiment(user, 'checkout')).rejects.toThrow();
+
+    await client.trackEvent('user-123', 'purchase');
+
+    expect(call(fetchMock, 2).url).toBe(BATCH_URL);
+    expect(batchKeys(call(fetchMock, 2).body)).toEqual(['checkout']);
+  });
+
+  it('sends to a key answered 24 hours less 1 s ago', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence({ body: assignment }, { body: { success_count: 1 } });
+    const client = new ExperimentationClient(baseConfig);
+    await client.assignExperiment(user, 'checkout');
+    now.mockReturnValue(T0 + 24 * HOUR - SECOND);
+
+    await client.trackEvent('user-123', 'purchase');
+
+    expect(call(fetchMock, 1).url).toBe(BATCH_URL);
+    expect(batchKeys(call(fetchMock, 1).body)).toEqual(['checkout']);
+  });
+
+  it('does not send to a key answered more than 24 hours ago: the event goes once with no key', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence({ body: assignment }, { body: {} });
+    const client = new ExperimentationClient(baseConfig);
+    await client.assignExperiment(user, 'checkout');
+    now.mockReturnValue(T0 + 24 * HOUR + SECOND);
+
+    await client.trackEvent('user-123', 'purchase');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(call(fetchMock, 1).url).toBe(TRACK_URL);
+    expect(call(fetchMock, 1).body).toEqual({ event_type: 'purchase', event_name: 'purchase', user_id: 'user-123' });
+  });
+
+  it('another client instance has none of them: its event goes once with no key', async () => {
+    const fetchMock = mockFetchSequence({ body: assignment }, { body: {} });
+    const assigning = new ExperimentationClient(baseConfig);
+    const tracking = new ExperimentationClient(baseConfig); // say, after a page reload
+    await assigning.assignExperiment(user, 'checkout');
+
+    await tracking.trackEvent('user-123', 'purchase');
+
+    expect(call(fetchMock, 1).url).toBe(TRACK_URL);
+    expect(call(fetchMock, 1).body).toEqual({ event_type: 'purchase', event_name: 'purchase', user_id: 'user-123' });
   });
 });
 

@@ -74,11 +74,12 @@ default_variant="control", transport=None)`. Instances are thread-safe.
 | `get_feature_flag(flag_key, user_id, user_attributes=None)` | `FlagEvaluation(key, enabled, config, reason)` | raises `ExperimentationError` (`status == 404` when the flag key is unknown; a flag that is not ACTIVE returns `enabled=False`, `reason="inactive"`) |
 | `is_feature_enabled(flag_key, user_id, user_attributes=None)` | `bool` | returns `False` |
 | `get_all_flags(user_id, user_attributes=None)` | `dict[str, bool]` (not cached) | raises `ExperimentationError` |
-| `track(user_id, event_name, event_value=None, properties=None, experiment_key=None, feature_flag_key=None, event_type=None, timestamp=None)` | `bool` — `True` when accepted | never raises; `False` on failure or when nothing was sent |
+| `track(user_id, event_name, event_value=None, properties=None, experiment_key=None, feature_flag_key=None, event_type=None, timestamp=None)` | `bool` — `True` when sent and answered 2xx | never raises; `False` on failure |
 | `track_batch(events)` | `BatchResult(success_count, failure_count, errors)`; `.ok` | never raises; a failed chunk counts all its events as failures |
+| `report_error(error_type, message, *, feature_flag_key=None, experiment_key=None, user_id=None, stack_trace=None, metadata=None, timestamp=None)` | `bool` — `True` when the server stored the report (201) | never raises; `False` and a logged warning otherwise |
 | `get_assignments(user_id, active_only=True)` | `list[dict]` from the server | raises `ExperimentationError` |
 | `cached_assignments(user_id)` / `cached_flags(user_id)` | cached, unexpired entries | — |
-| `clear_cache()` | — | — |
+| `clear_cache()` | — (keeps the keys a key-less `track` is sent to) | — |
 | `ready(timeout_seconds=None)`, `status()`, `close()` / `with` | local mode: readiness, ruleset state, shutdown (sends evaluation counts) | never raise |
 | `consistent_hash(user_id, flag_key)` / `md5_hex(user_id, flag_key)` | cross-SDK MD5 bucket in `[0, 1)` / hex digest | pure functions; **not** the flag bucketing function |
 
@@ -92,6 +93,11 @@ retried once after `Retry-After` seconds (capped at 5 s).
 `FlagEvaluation.reason` (`targeting_rule` / `rollout` / `inactive` / `error`, or `None`) says why
 the server decided. Caches are keyed by user + key only — call `clear_cache()` after changing a
 user's attributes.
+
+`report_error` returns `True` when the server stored the report. A stored report counts toward the
+flag's error rate and automatic rollback only when the client's key has the `sdk:ruleset` scope and
+was created by a user who can change feature flags; the flag's safety check shows the others as
+`uncounted_error_count`.
 
 ### Enrolment: `assigned` and `reason`
 
@@ -110,9 +116,15 @@ An experiment that is not ACTIVE answers every user with its control variant, `a
 
 - **with** `experiment_key` and/or `feature_flag_key` → one `POST /api/v1/tracking/track`;
 - **without** a key → one `POST /api/v1/tracking/batch` (chunks of 100) containing one entry per
-  experiment the user has been assigned to in this client (`experiment_key`) plus one per flag
-  evaluated for the user (`feature_flag_key`), taken from the cache (successful, unexpired only);
-- nothing cached for the user → nothing is sent and `track` returns `False`.
+  experiment (`experiment_key`) and one per flag (`feature_flag_key`) this client answered for the
+  user in the last 24 hours, cached or not, except an experiment whose latest answer has `reason`
+  `"draft"`, `"paused"`, `"completed"` or `"archived"`;
+- nothing to attribute it to → one `POST /api/v1/tracking/track` with no key, stored as history (it
+  counts in holdout results and as CUPED history, never in an experiment's results);
+- `track` returns `True` when the event was sent and the server answered 2xx, `False` otherwise.
+
+The keys live in this client's memory, for up to 10,000 users; `clear_cache()` keeps them, and
+another process does not have them. In a server, pass `experiment_key` on conversions.
 
 `event_type` defaults to `event_name`; `properties` is sent as `metadata`; `timestamp` may be a
 `datetime` (naive values are treated as UTC) or an ISO-8601 string.

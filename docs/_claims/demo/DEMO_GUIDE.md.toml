@@ -261,7 +261,7 @@ text = "See demo/shoplab/README.md."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "Scene 0b — StreamPulse: feature flags on mobile (5 min)"
+text = "Scene 0b — StreamPulse: device targeting (web SDK) (5 min)"
 by = ["exempt:label"]
 
 [[unit]]
@@ -442,11 +442,20 @@ by = [
 ]
 
 [[unit]]
-text = "Kill switches take effect without a release, which is the whole point on mobile"
+text = "Kill switches take effect without a release, which is the whole point in a native app"
 by = [
     "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
     "journey:demo-streampulse#recs-off-evaluated",
     "journey:demo-streampulse#refresh-now",
+]
+
+[[unit]]
+text = "Native apps: kill switches and percentage rollouts work; attribute rules do not until #438."
+by = [
+    "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_rollout_percentage_is_the_share_of_users_turned_on",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_native_sdks_send_no_context_on_flag_evaluation",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
 ]
 
 [[unit]]
@@ -1117,7 +1126,7 @@ text = "ShopLab storefront | http://localhost:3200"
 by = ["journey:demo-guide#shoplab-address"]
 
 [[unit]]
-text = "StreamPulse mobile demo | http://localhost:3300"
+text = "StreamPulse device-targeting demo | http://localhost:3300"
 by = ["journey:demo-guide#streampulse-address"]
 
 [[unit]]
