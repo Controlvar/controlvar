@@ -59,6 +59,9 @@ pinned rather than reviewed once:
   alarm's own ``posts/``, and no other job posts; every ``needs.<job>`` reference
   in the workflow names a job the referring job waits for, and an output that
   job declares;
+* no job and no step carries ``continue-on-error``, whatever its value: a step
+  that fails under it leaves its job a ``success``, and the alarm reads the
+  report job's ``success`` as a report that decided;
 * the two posting steps, run under ``bash -e`` with a fake ``gh`` first on
   ``PATH``, make exactly the ``gh`` calls each post asks for: the alarm closes
   its issue without a comment, and an unknown action fails the step.
@@ -498,6 +501,13 @@ def workflow_problems(doc: Dict[Any, Any], text: str) -> List[str]:
             found.append(f"{job_id}'s permissions are {job.get('permissions')}")
         if "environment" in job or "uses" in job or "secrets" in job:
             found.append(f"{job_id} is bound to an environment or calls a workflow")
+        # Any value, an expression included: the key is never written.
+        if "continue-on-error" in job:
+            found.append(f"{job_id} carries continue-on-error")
+        for index, step in enumerate(job.get("steps") or []):
+            if "continue-on-error" in step:
+                name = step.get("name") or step.get("uses") or f"step {index + 1}"
+                found.append(f"{job_id}: {name!r} carries continue-on-error")
     if _condition(jobs.get("report") or {}) != REPORT_IF:
         found.append("the report job does not run only after verdicts were written")
     if (jobs.get("report") or {}).get("needs") != ["journeys", "demo"]:
@@ -1470,6 +1480,44 @@ PLANTS: List[tuple] = [
         "alarm-job-dropped",
         lambda doc, text: (doc["jobs"].pop(ALARM_JOB) and doc, text),
         "there is no report-alarm job",
+    ),
+    (
+        "report-decides-on-error",
+        _step_set("Decide and render", "continue-on-error", True),
+        "report: 'Decide and render' carries continue-on-error",
+    ),
+    (
+        "report-job-continues-on-error-by-an-expression",
+        _set(
+            ["jobs", "report", "continue-on-error"],
+            "${{ github.event_name != 'schedule' }}",
+        ),
+        "report carries continue-on-error",
+    ),
+    (
+        "alarm-decides-on-error",
+        _alarm_step(ALARM_DECIDE, lambda s: s.update({"continue-on-error": True})),
+        "report-alarm: 'Decide the alarm' carries continue-on-error",
+    ),
+    (
+        "alarm-posts-on-error-by-an-expression",
+        _alarm_step(
+            POST,
+            lambda s: s.update(
+                {"continue-on-error": "${{ github.event_name == 'schedule' }}"}
+            ),
+        ),
+        f"report-alarm: {POST!r} carries continue-on-error",
+    ),
+    (
+        "alarm-job-continues-on-error",
+        _set(["jobs", ALARM_JOB, "continue-on-error"], True),
+        "report-alarm carries continue-on-error",
+    ),
+    (
+        "walk-continue-on-error-false",
+        _step_set(WALK, "continue-on-error", False),
+        f"journeys: {WALK!r} carries continue-on-error",
     ),
 ]
 
