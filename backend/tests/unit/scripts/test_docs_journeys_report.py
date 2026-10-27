@@ -1456,3 +1456,295 @@ def test_the_run_being_reported_is_not_read_as_its_own_history(tmp_path):
         f"artifacts {NIGHT_22}",
         f"download {NIGHT_22} {JOURNEYS}",
     ]
+
+
+# ---------------------------------------------------------------------------
+# The alarm: one issue when the report did not decide for every guide. On
+# 2026-10-23 the report job failed inside an already red run, and nobody
+# heard: no issue opened, and nothing said that none could.
+# ---------------------------------------------------------------------------
+ALARM_TITLE = "Docs journeys report is red"
+ALARM_ENV = {**ENV, "GITHUB_SHA": SHA}
+ALARM_LINK = "https://github.com/Controlvar/controlvar/actions/runs/9"
+TODAY = "2026-10-23"
+#: Each way a run can be unhealthy: the report job's result, the journeys
+#: job's and the demo job's ``verdicts`` outputs, as GitHub gives them.
+NOT_HEALTHY = {
+    "report-failed": ("failure", "true", "true"),
+    "report-cancelled": ("cancelled", "true", "true"),
+    "report-skipped": ("skipped", "", ""),
+    "report-result-empty": ("", "true", "true"),
+    "journeys-wrote-none": ("success", "", "true"),
+    "demo-wrote-none": ("success", "true", ""),
+    "demo-output-not-true": ("success", "true", "false"),
+    "a-capital-letter": ("Success", "true", "true"),
+    "a-capital-output": ("success", "True", "true"),
+}
+HEALTHY_NIGHT = ("success", "true", "true")
+
+
+@pytest.fixture(autouse=True)
+def today(monkeypatch):
+    monkeypatch.setattr(djr, "utc_date", lambda: TODAY, raising=False)
+
+
+def alarm_main(
+    root: Path,
+    gh: Any,
+    night: tuple = HEALTHY_NIGHT,
+    event: str = "schedule",
+    ref: str = "refs/heads/main",
+    env: Optional[Dict[str, str]] = None,
+) -> int:
+    """``alarm`` as the alarm job runs it."""
+    report_result, journeys, demo = night
+    return djr.main(
+        [
+            "alarm",
+            "--report-result",
+            report_result,
+            "--journeys-verdicts",
+            journeys,
+            "--demo-verdicts",
+            demo,
+            "--event",
+            event,
+            "--ref",
+            ref,
+            "--out",
+            str(root / "out"),
+        ],
+        ALARM_ENV if env is None else env,
+        gh,
+    )
+
+
+def alarm_body() -> str:
+    return qa_render.render(
+        djr.ALARM, {"date": TODAY, "sha": SHA, "run_link": ALARM_LINK}
+    ).body
+
+
+def alarm_issue(number: int = 90, login: str = "app/github-actions") -> Dict[str, Any]:
+    return {"number": number, "title": ALARM_TITLE, "author": {"login": login}}
+
+
+def guide_issue() -> Dict[str, Any]:
+    return {"number": 77, "title": TITLE, "author": BOT}
+
+
+@pytest.mark.parametrize("night", list(NOT_HEALTHY.values()), ids=list(NOT_HEALTHY))
+def test_a_run_is_healthy_only_when_the_report_succeeded_with_both_verdicts(night):
+    """Fails closed: one exact triple is healthy, and an empty value (a
+    misspelt ``needs`` reference gives one, with no error) is not."""
+    assert djr.healthy(*HEALTHY_NIGHT) is True
+    assert djr.healthy(*night) is False
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("night", list(NOT_HEALTHY.values()), ids=list(NOT_HEALTHY))
+def test_a_run_whose_report_did_not_decide_opens_the_alarm(tmp_path, capsys, night):
+    """The 2026-10-23 night: the report failed, and now that opens one issue
+    rendered from the alarm template."""
+    assert alarm_main(tmp_path, FakeGh(), night) == 0
+    assert posts(tmp_path) == [
+        {"action": "open\n", "title.txt": ALARM_TITLE + "\n", "body.md": alarm_body()}
+    ]
+    out = capsys.readouterr().out
+    assert "not healthy: the report did not decide for every guide" in out
+    assert "a scheduled run on main: 1 post(s)\nopen the alarm issue\n" in out
+
+
+def test_the_alarm_is_the_rendered_template():
+    """Its title is the template's first line, and its body names the run,
+    its commit and its date."""
+    rendered = qa_render.render(
+        djr.ALARM, {"date": TODAY, "sha": SHA, "run_link": ALARM_LINK}
+    )
+    assert rendered.title == ALARM_TITLE
+    assert qa_render.render_title(djr.ALARM, {}) == ALARM_TITLE
+    assert f"Docs journeys, {TODAY}, commit {SHA}:" in rendered.body
+    assert ALARM_LINK in rendered.body
+
+
+def test_the_alarm_is_never_taken_for_a_guides_issue():
+    """The alarm shares the label: its title must never parse as a guide's."""
+    assert djr._TITLE.match(qa_render.render_title(djr.ALARM, {})) is None
+
+
+@pytest.mark.regression
+def test_an_open_alarm_gets_a_comment_not_a_second_issue(tmp_path):
+    gh = FakeGh(issues=[alarm_issue(90)])
+    assert alarm_main(tmp_path, gh, NOT_HEALTHY["report-failed"]) == 0
+    assert posts(tmp_path) == [
+        {"action": "comment\n", "issue": "90\n", "body.md": alarm_body()}
+    ]
+
+
+@pytest.mark.regression
+def test_a_healthy_scheduled_run_closes_the_alarm_without_a_comment(tmp_path, capsys):
+    assert alarm_main(tmp_path, FakeGh(issues=[alarm_issue(90)])) == 0
+    assert posts(tmp_path) == [{"action": "close\n", "issue": "90\n"}]
+    assert "close the alarm issue #90, without a comment" in capsys.readouterr().out
+
+
+def test_a_healthy_run_with_no_alarm_posts_nothing(tmp_path, capsys):
+    assert alarm_main(tmp_path, FakeGh()) == 0
+    assert posts(tmp_path) == []
+    out = capsys.readouterr().out
+    assert "healthy: the report decided for every guide" in out
+    assert "healthy; no alarm issue is open" in out
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "night", [HEALTHY_NIGHT, NOT_HEALTHY["report-failed"]], ids=["healthy", "not"]
+)
+def test_the_alarm_never_comments_on_or_closes_a_guides_issue(tmp_path, night):
+    """The per-guide issues carry the same label. A healthy night with a
+    guide's issue open leaves it alone; an unhealthy one opens the alarm
+    beside it, and does not comment on it."""
+    gh = FakeGh(issues=[guide_issue()])
+    assert alarm_main(tmp_path, gh, night) == 0
+    found = posts(tmp_path)
+    assert all("issue" not in post for post in found)
+    assert [post["action"] for post in found] == (
+        [] if night == HEALTHY_NIGHT else ["open\n"]
+    )
+    assert [call[:2] for call in gh.calls] == [["issue", "list"]]
+
+
+@pytest.mark.parametrize(
+    "issue",
+    [
+        alarm_issue(90, login="someone"),
+        {**alarm_issue(90), "title": ALARM_TITLE + " again"},
+        {**alarm_issue(90), "title": "[x] " + ALARM_TITLE},
+    ],
+    ids=["by-a-person", "longer-title", "prefixed-title"],
+)
+def test_the_alarm_is_found_by_its_exact_title_and_a_bot_author(tmp_path, issue):
+    """A healthy night closes only the workflow's own alarm, by its exact title."""
+    assert alarm_main(tmp_path, FakeGh(issues=[issue])) == 0
+    assert posts(tmp_path) == []
+
+
+def test_of_two_open_alarms_the_oldest_is_the_one(tmp_path):
+    gh = FakeGh(issues=[alarm_issue(120), alarm_issue(90)])
+    assert alarm_main(tmp_path, gh, NOT_HEALTHY["report-failed"]) == 0
+    assert [post["issue"] for post in posts(tmp_path)] == ["90\n"]
+
+
+@pytest.mark.regression
+def test_the_alarms_listing_that_fails_once_is_tried_again(tmp_path, clock):
+    gh = FakeGh(issues=[alarm_issue(90)], failures={"issue list": ["HTTP 502"]})
+    assert alarm_main(tmp_path, gh, NOT_HEALTHY["report-failed"]) == 0
+    assert [post["action"] for post in posts(tmp_path)] == ["comment\n"]
+    assert clock.slept == [djr.BACKOFF_S[0]]
+
+
+def test_an_alarm_listing_that_never_answers_fails_the_job_and_posts_nothing(
+    tmp_path, capsys
+):
+    """No list, no decision: an unhealthy night must not open a second alarm
+    because it could not see the first, and a healthy one must not guess."""
+    gh = FakeGh(failures={"issue list": ["HTTP 502"] * djr.ATTEMPTS})
+    assert alarm_main(tmp_path, gh, NOT_HEALTHY["report-failed"]) == 1
+    assert posts(tmp_path) == []
+    assert (
+        "::error title=Docs journeys::the open docs-journey-failure issues could"
+        " not be listed (HTTP 502; 3 of 3 attempts)" in capsys.readouterr().out
+    )
+
+
+@pytest.mark.parametrize(
+    "event, ref",
+    [
+        ("workflow_dispatch", "refs/heads/main"),
+        ("schedule", "refs/heads/feature"),
+        ("workflow_dispatch", "refs/tags/v1.2.3"),
+    ],
+)
+@pytest.mark.parametrize(
+    "night, issues, would",
+    [
+        (NOT_HEALTHY["report-skipped"], [], "would: open the alarm issue"),
+        (
+            NOT_HEALTHY["report-failed"],
+            [alarm_issue(90)],
+            "would: comment on the alarm issue #90",
+        ),
+        (
+            HEALTHY_NIGHT,
+            [alarm_issue(90)],
+            "would: close the alarm issue #90, without a comment",
+        ),
+    ],
+    ids=["open", "comment", "close"],
+)
+def test_a_run_that_is_not_scheduled_on_main_never_posts_the_alarm(
+    tmp_path, capsys, event, ref, night, issues, would
+):
+    """A dispatch never opens, comments on or closes the alarm: it prints
+    what a scheduled run on main would do."""
+    assert alarm_main(tmp_path, FakeGh(issues=issues), night, event, ref) == 0
+    assert posts(tmp_path) == []
+    out = capsys.readouterr().out
+    assert f"dry run: a {event} run on {ref} posts nothing" in out
+    assert would in out
+
+
+@pytest.mark.parametrize(
+    "night, line",
+    [
+        (
+            ("skipped", "", ""),
+            "the report job: skipped; the journeys job's verdicts: not written;"
+            " the demo job's verdicts: not written",
+        ),
+        (
+            ("", "true", "x"),
+            "the report job: none; the journeys job's verdicts: written;"
+            " the demo job's verdicts: not written",
+        ),
+        (
+            ("success; rm -rf", "true", "true"),
+            "the report job: other; the journeys job's verdicts: written;"
+            " the demo job's verdicts: written",
+        ),
+    ],
+)
+def test_the_alarm_prints_the_jobs_results_from_a_closed_set(
+    tmp_path, capsys, night, line
+):
+    assert alarm_main(tmp_path, FakeGh(), night) == 0
+    out = capsys.readouterr().out
+    assert line + "\n" in out
+    assert "rm -rf" not in out
+
+
+@pytest.mark.parametrize(
+    "drop", ["GITHUB_SHA", "GITHUB_RUN_ID"], ids=["no-commit", "no-run"]
+)
+def test_an_alarm_that_cannot_be_rendered_fails_the_job(tmp_path, capsys, drop):
+    """A value qa_render refuses is a red job, not a silent night."""
+    env = {k: v for k, v in ALARM_ENV.items() if k != drop}
+    assert alarm_main(tmp_path, FakeGh(), NOT_HEALTHY["report-failed"], env=env) == 1
+    assert posts(tmp_path) == []
+    assert "::error title=Docs journeys::" in capsys.readouterr().out
+
+
+def test_the_report_passes_over_the_alarm_issue(tmp_path):
+    """The per-guide report lists the same label: the alarm is not a guide's
+    issue, so it is never read as one (FakeGh has no view of it)."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("PASS"))
+    gh = FakeGh(issues=[alarm_issue(90)])
+    assert report_main(tmp_path, gh) == 0
+    assert posts(tmp_path) == []
+    assert [call[:2] for call in gh.calls] == [["issue", "list"]]
+
+
+def test_the_alarms_reads_end_inside_the_alarm_jobs_timeout():
+    jobs = yaml.safe_load(WORKFLOW_FILE.read_text(encoding="utf-8"))["jobs"]
+    timeout_s = int(jobs["report-alarm"]["timeout-minutes"]) * 60
+    assert djr.GH_BUDGET_S + djr.GH_TIMEOUT_S <= timeout_s - 120
