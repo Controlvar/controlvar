@@ -736,7 +736,7 @@ cv_un_count() {
 # cv_un_report: the end report, from the verdict's four lists. Each line of kept.txt and
 # lag.txt is "<file><TAB><+ or -><TAB><line>".
 cv_un_report() {
-    local v="$CV_RECORD/verdict" n first keys lag line t="$CV_TAB"
+    local v="$CV_RECORD/verdict" n first keys lag line i parts=() t="$CV_TAB"
     cv_out "Uninstalled. The account now, against the record made before the install (${STARTED:-earlier}):"
     if [ -s "$v/kept.txt" ] || [ -s "$v/lag.txt" ]; then
         cv_out "Left by AWS; the installer cannot remove these, and they cost nothing or AWS removes them in time:"
@@ -760,14 +760,27 @@ cv_un_report() {
     if [ "$n" -gt 0 ]; then cv_out "  $n DynamoDB backup(s) of the deleted tables (AWS removes them after 35 days)"; fi
     n=$(cv_un_count "$v/kept.txt" "^us-west-2/sns-subscriptions.txt$t\\+$t")
     if [ "$n" -gt 0 ]; then cv_out "  the alarm subscription, never confirmed: AWS still lists it, with nothing to unsubscribe"; fi
+    # What AWS is still clearing: the revisions ECS is deleting, the cache's automatic
+    # backups and the tag index, each counted only as it appears (+), joined "a, b and c".
     n=$(cv_un_count "$v/kept.txt" "^us-west-2/ecs-td-delete-in-progress.txt$t\\+$t")
+    if [ "$n" -gt 0 ]; then parts+=("$n task definition(s)"); fi
+    n=$(cv_un_count "$v/kept.txt" "^us-west-2/elasticache-snapshots.txt$t\\+$t")
+    if [ "$n" -gt 0 ]; then parts+=("$n cache backup(s)"); fi
     lag=$(cv_un_count "$v/lag.txt" '.')
-    if [ "$n" -gt 0 ] || [ "$lag" -gt 0 ]; then
-        line=""
-        if [ "$n" -gt 0 ]; then line="$n task definition(s)"; fi
-        if [ "$lag" -gt 0 ]; then
-            line="${line:+$line and }$lag tag-index entr$([ "$lag" -eq 1 ] && printf 'y' || printf 'ies')"
-        fi
+    if [ "$lag" -gt 0 ]; then
+        parts+=("$lag tag-index entr$([ "$lag" -eq 1 ] && printf 'y' || printf 'ies')")
+    fi
+    if [ "${#parts[@]}" -gt 0 ]; then
+        line=${parts[0]}
+        i=1
+        while [ "$i" -lt "${#parts[@]}" ]; do
+            if [ "$i" -eq $((${#parts[@]} - 1)) ]; then
+                line="$line and ${parts[$i]}"
+            else
+                line="$line, ${parts[$i]}"
+            fi
+            i=$((i + 1))
+        done
         cv_out "  $line AWS is still clearing (minutes to hours)"
     fi
     n=$(grep -v "^us-west-2/kms-aliases.txt$t" "$v/kept.txt" 2> /dev/null | grep -c -- "$t-$t") || n=0

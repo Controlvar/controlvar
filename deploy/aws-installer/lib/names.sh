@@ -134,3 +134,9 @@ NAMES_WEB_REPOSITORY="experimentation-platform/web"
 
 # The alarm topic: monitoring_stack.py.
 NAMES_ALARM_TOPIC="experimentation-alerts-staging"
+
+# The cache's replication group: elasticache_redis_stack.py's f"{construct_id}-redis", the
+# construct id from app.py. It has one node, <group>-001 (num_cache_clusters 1), whose
+# automatic backups AWS names automatic.<group>-001-<yyyy-mm-dd-hh-mm> and removes by
+# itself some minutes after the group is deleted (lib/sweep.sh's kept list).
+NAMES_REDIS_GROUP="experimentation-redis-staging-redis"

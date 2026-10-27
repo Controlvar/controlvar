@@ -1838,6 +1838,16 @@ MECHANISMS: Dict[str, Mechanism] = {
             "The upgrade waits at most 30 seconds for the lock on users, so that it never holds up the API's writes for long.",
         ),
     ),
+    # The AWS installer page's cache backup: its window against the Redis stack, and
+    # the report line's file and group against the sweep, names.sh and the stack.
+    "aws-install-cache-backup": Mechanism(
+        "backend/tests/unit/docs/test_aws_install_page.py"
+        "::test_the_cache_backup_the_page_names_is_the_one_the_files_make",
+        holds=_whole(
+            "docs/self-hosting/aws-install.md",
+            "The cache takes an automatic backup in a daily window, 02:00 to 03:00 UTC.",
+        ),
+    ),
 }
 
 #: The mobile and not-yet-published SDK pages (#1107): their registries wait

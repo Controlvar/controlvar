@@ -449,6 +449,32 @@ BATCH.add(
     stub_sweep="state",
 )
 
+#: The cache's automatic backup the run of 2026-10-27 found: taken while the install
+#: stood, and still listed when uninstall compares the account, because AWS deletes it
+#: some minutes after the cache.
+CACHE_BACKUP = {
+    "SnapshotName": "automatic.experimentation-redis-staging-redis-001-2026-10-27-02-40",
+    "ReplicationGroupId": "experimentation-redis-staging-redis",
+    "SnapshotStatus": "available",
+    "SnapshotSource": "automated",
+    "SnapshotRetentionLimit": 3,
+    "SnapshotWindow": "02:00-03:00",
+}
+
+BATCH.add(
+    "cache-backup",
+    prepare=_installed(
+        _state(
+            lambda s: (
+                _us_west_2(s)
+                .setdefault("cache_snapshots", [])
+                .append(dict(CACHE_BACKUP))
+            )
+        )
+    ),
+    stub_sweep="state",
+)
+
 INSIGHTS_LOG_GROUP = "/aws/ecs/containerinsights/experimentation-staging/performance"
 #: A revision of the API's own family, deregistered before the install.
 OLD_REVISION = {
@@ -806,6 +832,27 @@ def test_the_kept_list_is_exactly_the_residue_both_ways(clean, before):
         "Kept by the installer: the CDK's setup stack (CDKToolkit)",
     ):
         assert line in out, line
+
+
+@pytest.mark.regression
+def test_the_caches_automatic_backup_still_listed_is_a_clean_uninstall(ran, before):
+    """The cache's automatic backup, which AWS is still deleting when uninstall compares
+    the account, is counted with what AWS is still clearing, and the uninstall ends with
+    exit 0. It used to be "Not explained: 1." and FAILED, exit 1."""
+    one = ran["cache-backup"]
+    done = one.done
+    assert (done.code, done.err) == (0, ""), done.err
+    assert DONE in done.out and NOTHING_EXPLAINED in done.out, done.out
+    assert (
+        "  4 task definition(s), 1 cache backup(s) and 10 tag-index entries AWS is still clearing (minutes to hours)"
+        in done.out
+    ), done.out
+    assert kept_list_is_the_residue(one.world, before) == []
+    assert (
+        "us-west-2/elasticache-snapshots.txt",
+        "+",
+        f"{CACHE_BACKUP['SnapshotName']}\t{CACHE_BACKUP['SnapshotSource']}",
+    ) in report_lines(one.world, "kept")
 
 
 def test_the_nine_stacks_go_in_the_teardown_order_from_the_checked_assembly(clean):
