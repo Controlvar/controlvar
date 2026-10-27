@@ -1,0 +1,156 @@
+name: Demo Apps
+
+# The demo apps' own tests on the pull requests that change them. The ShopLab
+# and StreamPulse jest suites and their simulators' pytest suites ran only in
+# rc-evidence.yml, at a release tag, so a pull request under demo/ went green
+# without any of them running.
+#
+# Each job runs its suite through `scripts/rc_evidence.py --suite`, the same
+# command rc-evidence.yml runs, so the two cannot drift apart: the suites are
+# SUITES in that script (demo-shoplab, demo-streampulse, demo-simulators), and
+# each job installs what rc-evidence's job for that suite installs.
+#
+# It runs only when a path below changes: the demo apps, the script, the Node
+# version, this file, and what the simulators' pytest session loads from
+# outside demo/ (the root conftest.py and pyproject.toml, the four plugins
+# conftest.py names and the two packages they live in, and the requirements
+# the simulators job installs). It does not run for a change under sdk/react/
+# alone: the jest suites replace the React SDK with a mock, so they would pass
+# whatever the SDK did, and a green run would say nothing about it.
+#
+# It is not a required check, and branch protection does not list it. A
+# path-filtered workflow does not run at all on a pull request that touches
+# none of its paths, so a required check would wait for ever.
+#
+# It adds no suite to core-build: none of these suites is under backend/tests
+# or tests/sdk-contract. core-build's unit session does read this file, in
+# the workflow-shape tests that read every workflow and in the cases
+# test_ci_concurrency.py has for it: seven cases, about 0.1 s.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'demo/**'
+      - 'scripts/rc_evidence.py'
+      - '.nvmrc'
+      - '.github/workflows/demo-apps.yml'
+      - 'conftest.py'
+      - 'pyproject.toml'
+      - 'backend/__init__.py'
+      - 'backend/tests/__init__.py'
+      - 'backend/tests/no_real_aws.py'
+      - 'backend/tests/benchmark_gate.py'
+      - 'backend/tests/no_outbound_network.py'
+      - 'backend/tests/shard.py'
+      - 'backend/requirements.txt'
+  # `branches: [main]`, or a push to a pull request's branch would run it a
+  # second time on the same commit. The same paths as above.
+  push:
+    branches: [main]
+    paths:
+      - 'demo/**'
+      - 'scripts/rc_evidence.py'
+      - '.nvmrc'
+      - '.github/workflows/demo-apps.yml'
+      - 'conftest.py'
+      - 'pyproject.toml'
+      - 'backend/__init__.py'
+      - 'backend/tests/__init__.py'
+      - 'backend/tests/no_real_aws.py'
+      - 'backend/tests/benchmark_gate.py'
+      - 'backend/tests/no_outbound_network.py'
+      - 'backend/tests/shard.py'
+      - 'backend/requirements.txt'
+  workflow_dispatch:
+
+# A pull request is keyed on its number: a newer push to it cancels the run in
+# flight. A push to main, or a dispatch, is keyed on its commit and never
+# cancelled. Keyed on the ref, cancel-in-progress false would still not be
+# enough: a run that is waiting is replaced by the next one to queue, so of
+# three quick merges the middle one would never be tested on main.
+concurrency:
+  group: demo-apps-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  jest:
+    name: demo jest (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: demo-shoplab
+            dir: demo/shoplab
+          - suite: demo-streampulse
+            dir: demo/streampulse
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install the app's packages
+        env:
+          DIR: ${{ matrix.dir }}
+        run: cd "$DIR" && npm ci
+
+      - name: Run the suite, as rc-evidence runs it
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: python scripts/rc_evidence.py --suite "$SUITE" --junit-dir "$RUNNER_TEMP/junit"
+
+      - name: Upload the JUnit report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: demo-apps-junit-${{ matrix.suite }}
+          path: ${{ runner.temp }}/junit
+          retention-days: 30
+          if-no-files-found: warn
+
+  simulators:
+    name: demo simulators
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      # What rc-evidence.yml installs for its demo-simulators suite.
+      - name: Install dependencies
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Run the simulators' tests, as rc-evidence runs them
+        env:
+          APP_ENV: test
+          TESTING: 'true'
+        run: python scripts/rc_evidence.py --suite demo-simulators --junit-dir "$RUNNER_TEMP/junit"
+
+      - name: Upload the JUnit reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: demo-apps-junit-demo-simulators
+          path: ${{ runner.temp }}/junit
+          retention-days: 30
+          if-no-files-found: warn

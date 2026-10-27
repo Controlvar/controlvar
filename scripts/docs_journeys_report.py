@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: 2026 The Controlvar authors
 # SPDX-License-Identifier: Apache-2.0
 """What the docs journeys' runs add up to: one rolling issue per failing guide,
-and the launch walkthroughs a run keeps.
+one rolling alarm when the report cannot decide, and the launch walkthroughs a
+run keeps.
 
-Two commands read with ``gh`` only, and one reads the run directory:
+Three commands read with ``gh`` only, and one reads the run directory:
 
 ``deployed``
     Run by ``docs-journeys.yml`` before the journeys: which commit the
@@ -41,12 +42,41 @@ issues, decides what to post for each guide, renders the text with
   differs from the step the issue or its latest comment names;
 * the first run in which the guide passes (or is PARTIAL: nothing failed)
   comments its report header and closes the issue;
-* a run with no verdicts (the journeys did not start), or one in which the
-  guide did not run, counts as neither a failure nor a pass.
+* a run with no verdicts (the journeys did not start, or its artifacts are
+  gone), or one in which the guide did not run, counts as neither a failure
+  nor a pass. A run whose verdicts artifact is listed but cannot be downloaded
+  or read is refused (exit 1), never passed over: passing over a red night
+  would start the count again, and the issue would not open.
+
+The earlier runs are read only as far as a decision needs them: only for a
+guide that failed in this run and has no open issue, newest first, up to the
+first run in which it did not fail or the ``OPEN_AFTER - 1``-th in which it
+did. The report prints the runs it read and the one it refused, by run id.
+
+Every ``gh`` read is tried up to ``ATTEMPTS`` times, ``BACKOFF_S`` apart, and
+no attempt starts once one command's reads have taken ``GH_BUDGET_S``, so the
+step ends inside the report job's ``timeout-minutes`` and prints why instead of
+being cancelled. Each attempt at a download gets a directory of its own. A
+read that fails names what it was reading (an earlier run's id and artifact)
+and a reason from a closed set (``failure_reason``), never ``gh``'s output.
 
 Only a scheduled run on ``main`` posts. Any other run (a dispatch, a run on
 another branch) decides the same way, as if it were the next scheduled run, and
 prints what it would post: a dry run.
+
+``alarm``
+    Run by ``docs-journeys.yml``'s ``report-alarm`` job after the ``report``
+    job, in every run not cancelled as a whole, with the report job's result
+    and each journeys job's ``verdicts`` output as GitHub gives them. The run
+    is healthy only when they are exactly ``success``, ``true`` and ``true``;
+    any other value, an empty one included, means the report did not decide
+    for every guide (it failed, was cancelled, did not run, or a job wrote no
+    verdicts). It keeps one rolling alarm issue (``ALARM``), labelled like the
+    per-guide issues and found by its exact title and a bot author, never by
+    the label alone: a run that is not healthy opens it, or comments its body
+    on it while it is open; a healthy run closes it, without a comment. It
+    writes its post under ``--out`` as ``report`` does, and only a scheduled
+    run on ``main`` posts it: any other run prints what it would do.
 
 ``recordings``
     Run by ``docs-journeys.yml`` after the journeys, in every run that records
@@ -67,13 +97,16 @@ Text is rendered only from ``docs-journey-issue.tmpl`` (the issue, and the
 comment when the failing step changes; its body is the guide's
 ``docs-guide-fail.tmpl`` header) and ``docs-guide-pass.tmpl`` or
 ``docs-guide-partial.tmpl`` (the closing comment: the guide's header in the
-run that recovered). Printed text is guide paths, step numbers, counts and
-fixed sentences only.
+run that recovered), and ``docs-journeys-alarm-issue.tmpl`` (the alarm, and
+its comments). Printed text is guide paths, step numbers, run ids, artifact
+names, counts, the reasons ``failure_reason`` names, job results from a closed
+set and fixed sentences only.
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import json
 import os
 import re
@@ -81,9 +114,22 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, NamedTuple, Optional, Sequence
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Sequence,
+    TypeVar,
+)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -112,33 +158,123 @@ FAIL, PASS, PARTIAL = "FAIL", "PASS", "PARTIAL"
 WORDS = (FAIL, PASS, PARTIAL)
 #: The closing comment's template, by the verdict of the run that recovered.
 RECOVERED = {PASS: "docs-guide-pass.tmpl", PARTIAL: "docs-guide-partial.tmpl"}
+#: The alarm: one issue when the report did not decide for every guide.
+ALARM = "docs-journeys-alarm-issue.tmpl"
+#: A healthy run, as the alarm job is given it: the report job's result, then
+#: the journeys job's and the demo job's ``verdicts`` outputs. Nothing else is.
+HEALTHY = ("success", "true", "true")
+#: The results GitHub gives a job in ``needs``; any other value prints as "other".
+RESULTS = ("success", "failure", "cancelled", "skipped")
+#: Each ``gh`` read is tried this many times, the pauses between tries this
+#: long (seconds). On 2026-10-23 one failed download ended the report.
+ATTEMPTS = 3
+BACKOFF_S = (5, 20)
+#: One ``gh`` call's ceiling (seconds).
+GH_TIMEOUT_S = 120
+#: No attempt starts once one command's reads have taken this long (seconds),
+#: so the reads end within GH_BUDGET_S + GH_TIMEOUT_S (7 min), inside the
+#: report job's 10 minutes with its checkout and downloads before them.
+GH_BUDGET_S = 300
 
 Gh = Callable[[List[str]], str]
+T = TypeVar("T")
 
 
 class GhError(RuntimeError):
-    """A ``gh`` call failed; the message names the command, never its output."""
+    """A ``gh`` call failed: the command and a reason (``failure_reason``),
+    never its output."""
+
+    def __init__(self, command: str, reason: str):
+        super().__init__(f"gh {command} failed ({reason})")
+        self.command = command
+        self.reason = reason
+
+
+class ReadError(RuntimeError):
+    """A read that failed every attempt it had: what was being read, the last
+    reason and the attempts made."""
 
 
 class VerdictsError(ValueError):
     """A ``verdicts.json`` that is not what the runner writes."""
 
 
+_HTTP_STATUS = re.compile(r"\bHTTP ([1-5][0-9][0-9])\b")
+
+
+def failure_reason(stderr: str, code: int) -> str:
+    """A failed call's class, from the first 2 KB of its stderr: ``HTTP <nnn>``,
+    ``file exists``, ``no artifact matches`` or ``exit <code>``; never the
+    text itself."""
+    head = (stderr or "")[:2048]
+    status = _HTTP_STATUS.search(head)
+    if status:
+        return f"HTTP {status.group(1)}"
+    for phrase in ("file exists", "no artifact matches"):
+        if phrase in head:
+            return phrase
+    return f"exit {int(code)}"
+
+
 def run_gh(args: List[str]) -> str:
-    """``gh <args>``, its stdout."""
+    """``gh <args>``, its stdout; GhError with a reason when it fails."""
+    command = " ".join(args[:2])
     try:
         done = subprocess.run(
-            ["gh", *args], capture_output=True, text=True, timeout=120, check=False
+            ["gh", *args],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=GH_TIMEOUT_S,
+            check=False,
         )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise GhError(f"gh {' '.join(args[:2])}: {type(error).__name__}") from None
+    except subprocess.TimeoutExpired:
+        raise GhError(command, "timeout") from None
+    except OSError:
+        raise GhError(command, "gh did not start") from None
     if done.returncode != 0:
-        raise GhError(f"gh {' '.join(args[:2])} failed (exit {done.returncode})")
+        raise GhError(command, failure_reason(done.stderr, done.returncode))
     return done.stdout
 
 
 def gh_json(gh: Gh, args: List[str]) -> Any:
-    return json.loads(gh(args) or "null")
+    try:
+        return json.loads(gh(args) or "null")
+    except ValueError:
+        raise GhError(" ".join(args[:2]), "not JSON") from None
+
+
+class Reads:
+    """One command's ``gh`` reads: each retried, all inside one time budget.
+
+    An attempt starts only while ``GH_BUDGET_S`` lasts, so however many reads
+    a night needs they end within ``GH_BUDGET_S + GH_TIMEOUT_S``.
+    """
+
+    def __init__(self, gh: Gh):
+        self.gh = gh
+        self.deadline = time.monotonic() + GH_BUDGET_S
+
+    def retried(self, what: str, attempt: Callable[[int], T]) -> T:
+        """``attempt(1)``, ``attempt(2)``, ... until one returns; ReadError
+        naming *what* when none does."""
+        made, reason = 0, "no time left"
+        for number in range(1, ATTEMPTS + 1):
+            pause = BACKOFF_S[number - 2] if number > 1 else 0
+            if time.monotonic() + pause >= self.deadline:
+                break
+            if pause:
+                time.sleep(pause)
+            made = number
+            try:
+                return attempt(number)
+            except GhError as error:
+                reason = error.reason
+        ran_out = "" if made == ATTEMPTS else f"; the {GH_BUDGET_S} s for reads ran out"
+        raise ReadError(f"{what} ({reason}; {made} of {ATTEMPTS} attempts{ran_out})")
+
+    def json(self, args: List[str], what: str) -> Any:
+        return self.retried(what, lambda _number: gh_json(self.gh, args))
 
 
 # ---------------------------------------------------------------------------
@@ -153,10 +289,11 @@ class DeployedError(RuntimeError):
     """No deployment of the site can be named."""
 
 
-def deployed(gh: Gh, repo: str) -> tuple:
+def deployed(reads: Reads, repo: str) -> tuple:
     """(sha, ref) of the live deployment of the documentation site."""
-    deployments = gh_json(
-        gh, ["api", f"repos/{repo}/deployments?environment={ENVIRONMENT}&per_page=30"]
+    deployments = reads.json(
+        ["api", f"repos/{repo}/deployments?environment={ENVIRONMENT}&per_page=30"],
+        f"the {ENVIRONMENT} deployments could not be listed",
     )
     # Newest first by date, not by the order the API lists them in.
     newest_first = sorted(
@@ -165,9 +302,9 @@ def deployed(gh: Gh, repo: str) -> tuple:
         reverse=True,
     )
     for deployment in newest_first:
-        statuses = gh_json(
-            gh,
+        statuses = reads.json(
             ["api", f"repos/{repo}/deployments/{deployment['id']}/statuses?per_page=1"],
+            f"the status of deployment {deployment['id']} could not be read",
         )
         if statuses and statuses[0].get("state") == "success":
             sha, ref = str(deployment.get("sha")), str(deployment.get("ref"))
@@ -180,7 +317,7 @@ def deployed(gh: Gh, repo: str) -> tuple:
 def deployed_command(
     args: argparse.Namespace, env: Mapping[str, str], gh: Gh = run_gh
 ) -> int:
-    sha, ref = deployed(gh, env["GITHUB_REPOSITORY"])
+    sha, ref = deployed(Reads(gh), env["GITHUB_REPOSITORY"])
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "sha").write_text(sha + "\n", encoding="ascii")
     (args.out / "ref").write_text(ref + "\n", encoding="ascii")
@@ -253,10 +390,9 @@ class Run(NamedTuple):
     conclusion: str
 
 
-def scheduled_runs(gh: Gh, repo: str, limit: int = HISTORY_LIMIT) -> List[Run]:
+def scheduled_runs(reads: Reads, repo: str, limit: int = HISTORY_LIMIT) -> List[Run]:
     """The workflow's scheduled runs on main, newest first."""
-    items = gh_json(
-        gh,
+    items = reads.json(
         [
             "run",
             "list",
@@ -273,6 +409,7 @@ def scheduled_runs(gh: Gh, repo: str, limit: int = HISTORY_LIMIT) -> List[Run]:
             "--json",
             "databaseId,status,conclusion,createdAt",
         ],
+        f"the scheduled runs of {WORKFLOW} on {BRANCH} could not be listed",
     )
     items = sorted(
         items or [], key=lambda item: item.get("createdAt", ""), reverse=True
@@ -287,28 +424,16 @@ def scheduled_runs(gh: Gh, repo: str, limit: int = HISTORY_LIMIT) -> List[Run]:
     ]
 
 
-def run_verdicts(
-    gh: Gh, repo: str, run: Run, scratch: Path
-) -> Optional[Dict[str, Verdict]]:
-    """A finished run's verdicts, every job's together, or None when it left
-    none (or is unfinished, or one of them cannot be read)."""
-    if run.status != "completed":
-        return None
-    listing = gh_json(
-        gh, ["api", f"repos/{repo}/actions/runs/{run.run_id}/artifacts?per_page=100"]
-    )
-    names = {
-        artifact.get("name")
-        for artifact in (listing or {}).get("artifacts", [])
-        if not artifact.get("expired")
-    }
-    present = [name for name in ARTIFACTS if name in names]
-    if not present:
-        return None
-    parts = []
-    for name in present:
-        target = scratch / str(run.run_id) / name
-        gh(
+def download(reads: Reads, repo: str, run: Run, name: str, scratch: Path) -> Path:
+    """The directory *run*'s artifact *name* was downloaded into.
+
+    Each attempt gets a directory of its own: ``gh run download`` into one that
+    already holds the artifact's files fails with "file exists".
+    """
+
+    def attempt(number: int) -> Path:
+        target = scratch / str(run.run_id) / name / str(number)
+        reads.gh(
             [
                 "run",
                 "download",
@@ -321,28 +446,119 @@ def run_verdicts(
                 str(target),
             ]
         )
+        return target
+
+    return reads.retried(
+        f"run {run.run_id}: artifact {name} could not be downloaded", attempt
+    )
+
+
+def run_verdicts(
+    reads: Reads, repo: str, run: Run, scratch: Path
+) -> Optional[Dict[str, Verdict]]:
+    """A finished run's verdicts, every job's together, or None when it is
+    unfinished or left none (no verdicts artifact listed, or only expired ones).
+
+    A listed artifact that cannot be downloaded or read is refused
+    (ReadError), never taken for "left none".
+    """
+    if run.status != "completed":
+        return None
+    listing = reads.json(
+        ["api", f"repos/{repo}/actions/runs/{run.run_id}/artifacts?per_page=100"],
+        f"run {run.run_id}: its artifacts could not be listed",
+    )
+    names = {
+        artifact.get("name")
+        for artifact in (listing or {}).get("artifacts", [])
+        if not artifact.get("expired")
+    }
+    present = [name for name in ARTIFACTS if name in names]
+    if not present:
+        return None
+    parts = []
+    for name in present:
+        target = download(reads, repo, run, name, scratch)
         try:
             parts.append(read_verdicts(target / "verdicts.json"))
-        except VerdictsError:
-            return None
+        except VerdictsError as error:
+            raise ReadError(f"run {run.run_id}: artifact {name}: {error}") from None
     try:
         return merge_verdicts(parts)
-    except VerdictsError:
-        return None
+    except VerdictsError as error:
+        raise ReadError(f"run {run.run_id}: {error}") from None
+
+
+class History:
+    """The scheduled runs on main before this one, newest first, each read the
+    first time a guide's count reaches it, and read once.
+
+    ``read`` and ``refused`` are the run ids, in the order they were reached.
+    """
+
+    def __init__(self, reads: Reads, repo: str, this_run: str, scratch: Path):
+        self.reads = reads
+        self.repo = repo
+        self.this_run = this_run
+        self.scratch = scratch
+        self.runs: Optional[List[Run]] = None
+        self.verdicts: Dict[int, Optional[Dict[str, Verdict]]] = {}
+        self.read: List[int] = []
+        self.refused: List[int] = []
+
+    def __iter__(self) -> Iterator[Optional[Dict[str, Verdict]]]:
+        if self.runs is None:
+            self.runs = [
+                run
+                for run in scheduled_runs(self.reads, self.repo)
+                if str(run.run_id) != self.this_run
+            ]
+        for run in self.runs:
+            if run.run_id not in self.verdicts:
+                try:
+                    found = run_verdicts(self.reads, self.repo, run, self.scratch)
+                except ReadError as error:
+                    self.refused.append(run.run_id)
+                    raise ReadError(
+                        f"{error}. A scheduled run that cannot be read is not"
+                        " passed over, so nothing is decided"
+                    ) from None
+                self.verdicts[run.run_id] = found
+                self.read.append(run.run_id)
+            yield self.verdicts[run.run_id]
+
+    def line(self) -> str:
+        read = ", ".join(str(run_id) for run_id in self.read)
+        refused = ", ".join(str(run_id) for run_id in self.refused) or "none"
+        return (
+            f"scheduled runs read before it: {len(self.read)}"
+            + (f" ({read})" if read else "")
+            + f"; refused: {refused}"
+        )
 
 
 def failed_in_a_row(
-    journey: str, history: Sequence[Optional[Mapping[str, Verdict]]]
+    journey: str,
+    history: Iterable[Optional[Mapping[str, Verdict]]],
+    limit: Optional[int] = None,
 ) -> int:
     """Runs before this one, newest first, in which *journey* failed, back to
-    the last one in which it did not; a run without it is passed over."""
+    the last one in which it did not; a run without it is passed over.
+
+    With *limit*, the count stops there, and no run past the one that reached
+    it is read.
+    """
     count = 0
+    if limit is not None and limit <= 0:
+        return count
     for verdicts in history:
         if verdicts is None or journey not in verdicts:
             continue
         if verdicts[journey].word != FAIL:
             break
         count += 1
+        if limit is not None and count >= limit:
+            break
     return count
 
 
@@ -370,10 +586,9 @@ def _named_step(text: str) -> Optional[int]:
     return int(match.group(1)) if match else None
 
 
-def open_issues(gh: Gh, repo: str) -> Dict[str, OpenIssue]:
+def open_issues(reads: Reads, repo: str) -> Dict[str, OpenIssue]:
     """The open issues this workflow filed, by guide path (the newest per guide)."""
-    issues = gh_json(
-        gh,
+    issues = reads.json(
         [
             "issue",
             "list",
@@ -388,6 +603,7 @@ def open_issues(gh: Gh, repo: str) -> Dict[str, OpenIssue]:
             "--json",
             "number,title,author",
         ],
+        f"the open {LABEL} issues could not be listed",
     )
     found: Dict[str, OpenIssue] = {}
     for issue in sorted(issues or [], key=lambda item: int(item["number"])):
@@ -396,8 +612,7 @@ def open_issues(gh: Gh, repo: str) -> Dict[str, OpenIssue]:
             continue
         number = int(issue["number"])
         view = (
-            gh_json(
-                gh,
+            reads.json(
                 [
                     "issue",
                     "view",
@@ -407,6 +622,7 @@ def open_issues(gh: Gh, repo: str) -> Dict[str, OpenIssue]:
                     "--json",
                     "body,comments",
                 ],
+                f"issue #{number} could not be read",
             )
             or {}
         )
@@ -428,7 +644,7 @@ class Post(NamedTuple):
     guide: str
     issue: Optional[int]
     title: Optional[str]
-    body: str
+    body: Optional[str]  # None: closed without a comment (the alarm)
 
 
 class Line(NamedTuple):
@@ -440,10 +656,14 @@ class Line(NamedTuple):
 
 def decide(
     current: Mapping[str, Verdict],
-    history: Sequence[Optional[Mapping[str, Verdict]]],
+    history: Iterable[Optional[Mapping[str, Verdict]]],
     issues: Mapping[str, OpenIssue],
 ) -> List[Post | Line]:
-    """What to post for this run, guide by guide; ``Line`` for nothing."""
+    """What to post for this run, guide by guide; ``Line`` for nothing.
+
+    *history* is read only for a failing guide with no open issue, and only
+    until its count is decided: a count below ``OPEN_AFTER`` is exact.
+    """
     out: List[Post | Line] = []
     for journey in sorted(current):
         verdict = current[journey]
@@ -453,7 +673,7 @@ def decide(
                 raise VerdictsError(f"{journey}: a FAIL without its header's values")
             rendered = qa_render.render(ISSUE, verdict.values)
             if issue is None:
-                streak = failed_in_a_row(journey, history) + 1
+                streak = failed_in_a_row(journey, history, OPEN_AFTER - 1) + 1
                 if streak >= OPEN_AFTER:
                     out.append(
                         Post("open", verdict.guide, None, rendered.title, rendered.body)
@@ -517,7 +737,8 @@ def write_posts(items: Sequence[Post | Line], out: Path) -> int:
             (target / "issue").write_text(f"{item.issue}\n", encoding="ascii")
         if item.title is not None:
             (target / "title.txt").write_text(item.title + "\n", encoding="ascii")
-        (target / "body.md").write_text(item.body, encoding="ascii")
+        if item.body is not None:
+            (target / "body.md").write_text(item.body, encoding="ascii")
     return count
 
 
@@ -534,15 +755,14 @@ def report(args: argparse.Namespace, env: Mapping[str, str], gh: Gh = run_gh) ->
         getattr(args, "verdicts_dir", None),
     )
     current = merge_verdicts([read_verdicts(path) for path in paths])
-    history: List[Optional[Dict[str, Verdict]]] = []
-    if any(verdict.word == FAIL for verdict in current.values()):
-        with tempfile.TemporaryDirectory() as scratch:
-            for run in scheduled_runs(gh, repo):
-                if str(run.run_id) == this_run:
-                    continue
-                history.append(run_verdicts(gh, repo, run, Path(scratch)))
-    issues = open_issues(gh, repo)
-    items = decide(current, history, issues)
+    reads = Reads(gh)
+    issues = open_issues(reads, repo)
+    with tempfile.TemporaryDirectory() as scratch:
+        history = History(reads, repo, this_run, Path(scratch))
+        try:
+            items = decide(current, history, issues)
+        finally:
+            print(history.line())
     posts = write_posts(items, out) if counted else 0
     if counted:
         print(f"a scheduled run on {BRANCH}: {posts} post(s)")
@@ -551,12 +771,130 @@ def report(args: argparse.Namespace, env: Mapping[str, str], gh: Gh = run_gh) ->
             f"dry run: a {args.event} run on {args.ref} posts nothing; a scheduled run"
             f" on {BRANCH} with these results would do this"
         )
-    print(
-        f"guides in this run: {len(current)}; scheduled runs read before it:"
-        f" {len(history)}; open issues: {len(issues)}"
-    )
+    print(f"guides in this run: {len(current)}; open issues: {len(issues)}")
     for item in items:
         print(("would: " if not counted else "") + describe(item))
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# alarm: the report did not decide for every guide
+# ---------------------------------------------------------------------------
+def healthy(report_result: str, journeys_verdicts: str, demo_verdicts: str) -> bool:
+    """True only for exactly ``HEALTHY``: the report job succeeded and both
+    jobs wrote verdicts. Any other value, an empty one included (a misspelt
+    ``needs`` reference gives one), is not healthy."""
+    return (report_result, journeys_verdicts, demo_verdicts) == HEALTHY
+
+
+def alarm_issue(reads: Reads, repo: str, title: str) -> Optional[int]:
+    """The oldest open issue titled exactly *title* that this workflow filed,
+    or None. The per-guide issues carry the same label, so the label alone
+    never finds it."""
+    issues = reads.json(
+        [
+            "issue",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            "open",
+            "--label",
+            LABEL,
+            "--limit",
+            "100",
+            "--json",
+            "number,title,author",
+        ],
+        f"the open {LABEL} issues could not be listed",
+    )
+    numbers = [
+        int(issue["number"])
+        for issue in issues or []
+        if str(issue.get("title") or "") == title and _login(issue) in BOT_LOGINS
+    ]
+    return min(numbers) if numbers else None
+
+
+def utc_date() -> str:
+    return _dt.datetime.now(_dt.timezone.utc).date().isoformat()
+
+
+def alarm_values(env: Mapping[str, str]) -> Dict[str, str]:
+    """The alarm's placeholders, from the run itself; ``qa_render`` checks each."""
+    prefix = qa_render.run_link_prefix(env) or ""
+    return {
+        "date": utc_date(),
+        "sha": env.get("GITHUB_SHA", ""),
+        "run_link": prefix + env.get("GITHUB_RUN_ID", ""),
+    }
+
+
+def decide_alarm(
+    is_healthy: bool, issue: Optional[int], rendered: Optional[qa_render.Rendered]
+) -> Post | Line:
+    """Open the alarm, comment on it, close it, or nothing."""
+    if not is_healthy:
+        if rendered is None:
+            raise qa_render.RenderError("the alarm has no rendered text")
+        if issue is None:
+            return Post("open", "", None, rendered.title, rendered.body)
+        return Post("comment", "", issue, None, rendered.body)
+    if issue is not None:
+        return Post("close", "", issue, None, None)
+    return Line("", "healthy; no alarm issue is open")
+
+
+def describe_alarm(item: Post | Line) -> str:
+    if isinstance(item, Line):
+        return item.text
+    if item.action == "open":
+        return "open the alarm issue"
+    if item.action == "comment":
+        return f"comment on the alarm issue #{item.issue}"
+    return f"close the alarm issue #{item.issue}, without a comment"
+
+
+def _shown(value: str) -> str:
+    """A job result as printed: one of ``RESULTS``, "none" or "other"."""
+    if value in RESULTS:
+        return value
+    return "none" if value == "" else "other"
+
+
+def alarm_command(
+    args: argparse.Namespace, env: Mapping[str, str], gh: Gh = run_gh
+) -> int:
+    repo = env["GITHUB_REPOSITORY"]
+    counted = args.event == "schedule" and args.ref == f"refs/heads/{BRANCH}"
+    out: Path = args.out
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "posts").mkdir(exist_ok=True)
+    is_healthy = healthy(args.report_result, args.journeys_verdicts, args.demo_verdicts)
+    print(
+        f"the report job: {_shown(args.report_result)};"
+        " the journeys job's verdicts:"
+        f" {'written' if args.journeys_verdicts == 'true' else 'not written'};"
+        " the demo job's verdicts:"
+        f" {'written' if args.demo_verdicts == 'true' else 'not written'}"
+    )
+    print(
+        "healthy: the report decided for every guide"
+        if is_healthy
+        else "not healthy: the report did not decide for every guide"
+    )
+    title = qa_render.render_title(ALARM, {})
+    rendered = None if is_healthy else qa_render.render(ALARM, alarm_values(env))
+    issue = alarm_issue(Reads(gh), repo, title)
+    item = decide_alarm(is_healthy, issue, rendered)
+    if counted:
+        print(f"a scheduled run on {BRANCH}: {write_posts([item], out)} post(s)")
+    else:
+        print(
+            f"dry run: a {args.event} run on {args.ref} posts nothing; a scheduled run"
+            f" on {BRANCH} with these results would do this"
+        )
+    print(("would: " if not counted else "") + describe_alarm(item))
     return 0
 
 
@@ -778,6 +1116,13 @@ def main(
     rep.add_argument("--out", required=True, type=Path)
     dep = commands.add_parser("deployed")
     dep.add_argument("--out", required=True, type=Path)
+    ala = commands.add_parser("alarm")
+    ala.add_argument("--report-result", required=True)
+    ala.add_argument("--journeys-verdicts", required=True)
+    ala.add_argument("--demo-verdicts", required=True)
+    ala.add_argument("--event", required=True)
+    ala.add_argument("--ref", required=True)
+    ala.add_argument("--out", required=True, type=Path)
     rec = commands.add_parser("recordings")
     rec.add_argument("--run-dir", required=True, type=Path)
     rec.add_argument("--registry", type=Path, default=RECORDINGS_TOML)
@@ -787,8 +1132,16 @@ def main(
     try:
         if args.command == "deployed":
             return deployed_command(args, env, gh)
+        if args.command == "alarm":
+            return alarm_command(args, env, gh)
         return report(args, env, gh)
-    except (GhError, DeployedError, VerdictsError, qa_render.RenderError) as error:
+    except (
+        GhError,
+        ReadError,
+        DeployedError,
+        VerdictsError,
+        qa_render.RenderError,
+    ) as error:
         print(f"::error title=Docs journeys::{error}")
         return 1
 

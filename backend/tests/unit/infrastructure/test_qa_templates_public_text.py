@@ -224,6 +224,9 @@ TEMPLATES: Dict[str, Template] = {
     "docs-journey-issue.tmpl": Template(
         "red", frozenset({"guide_path"}), _DOCS_GUIDE_FAIL
     ),
+    "docs-journeys-alarm-issue.tmpl": Template(
+        "red", frozenset(), frozenset({"date", "sha", "run_link"})
+    ),
     "docs-defect-issue.tmpl": Template(
         "fails",
         frozenset({"heading_guide", "step_number", "heading_step"}),

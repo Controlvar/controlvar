@@ -79,7 +79,15 @@ and time, and the apps' key files between the two starts); the accounts'
 sign-ins are dropped after it, its ``down -v`` having made the accounts anew.
 Values an api step saves (``values.py``) are the
 journey's own, cleared when the next journey starts; a value saved as a secret
-is kept with the journey's other secrets and goes to the redactor.
+is kept with the journey's other secrets and goes to the redactor. A value
+saved that is a number is kept as one too, for a ``delta`` to count from; an
+api step's file then holds, for each delta path, the value, the number it
+counted from and by how much.
+
+A journey with a ``visitor`` starts its browser with that id in ShopLab's
+localStorage, on the address the stack serves the storefront on
+(``values.storage_state``); on a stack that serves none, the journey's first
+step that runs fails saying so, and the steps after it are NOT RUN.
 
 The two crawls visit the nav pages once per journey and share what they saw.
 A page or link that answers 5xx or nothing is asked once more,
@@ -115,9 +123,11 @@ from docs_runner.checks import (
     StepFailed,
     agrees,
     agrees_or_not,
+    delta_problem,
     describe_action,
     describe_expect,
     json_at,
+    moved_to,
     one_line,
     same_json,
     seconds_after,
@@ -147,6 +157,12 @@ VIEWPORT = {"width": 1280, "height": 720}
 TITLE_CARD_MS = 1500
 #: The longest line a walkthrough's caption bar draws.
 CAPTION_CHARS = 180
+#: How long one try of an ``aria_one_of`` template waits before the next is
+#: tried. A new round of tries starts while the step's timeout has not passed,
+#: so a screen that matches none fails up to one round after the timeout (a
+#: demo run measured 30244 ms at a 30000 ms timeout), and a screen that settles
+#: in the last round after its own template's turn is not caught.
+ONE_OF_MS = 500
 #: The kinds of step that do nothing on the screen: their caption shows their result.
 OFF_SCREEN = (
     "api",
@@ -230,6 +246,9 @@ class _Judged:
     problems: List[str]
     #: For each ``after`` path, how many seconds later than its saved time.
     later: List[str]
+    #: For each ``delta`` path that moved as expected: the number seen, and by
+    #: how much from which saved number.
+    moved: List[str] = dataclasses.field(default_factory=list)
 
 
 #: The count MkDocs Material shows above the search results once they are in.
@@ -370,6 +389,11 @@ class JourneyRunner:
         self.secrets: Dict[str, str] = {}
         #: The current journey's saved values (``values.py``), by name.
         self.values: Dict[str, str] = {}
+        #: Those of them that are numbers, as numbers: what a delta counts from.
+        self.numbers: Dict[str, float] = {}
+        #: Why the current journey's visitor could not be seeded, or "": its
+        #: first step that runs fails saying so (``_seed``).
+        self.unseeded = ""
         #: The current journey's guide: an sdk step reads its blocks from it.
         self.guide: Optional[Guide] = None
         #: What the crawls saw, per site and source: (nav pages, visit per page).
@@ -507,7 +531,11 @@ class JourneyRunner:
             if reveals_credential(step) and isinstance(document, dict):
                 self.redactor.add_all(document.get("key"))
         if document is None and (
-            expect_.json_ or expect_.computed or expect_.after or step.save
+            expect_.json_
+            or expect_.computed
+            or expect_.after
+            or expect_.delta
+            or step.save
         ):
             problems.append("the answer is not JSON")
         secret_paths = {s.path for s in (step.save or {}).values() if s.secret}
@@ -539,6 +567,33 @@ class JourneyRunner:
                 problems.append(
                     f"json {path} = {json.dumps(value)}; {computed.oracle.name}"
                     f" gives {oracle!r}"
+                )
+        moved: List[str] = []
+        for path, delta in (expect_.delta or {}).items():
+            before = self.numbers.get(delta.since)
+            try:
+                value = json_at(document, path)
+            except KeyError:
+                seen[path] = "(absent)"
+                problems.append(f"json {path} absent")
+                continue
+            shown = redaction.scrub(path, value, redactor=self.redactor)
+            seen[path] = {
+                "value": shown,
+                "since": delta.since,
+                "before": before,
+                "by": delta.by,
+            }
+            try:
+                problem = delta_problem(shown, before, delta.since, delta.by)
+            except StepFailed as error:
+                problems.append(f"json {path}: {error}")
+                continue
+            if problem:
+                problems.append(f"json {path} {problem}")
+            else:
+                moved.append(
+                    f"{path} {json.dumps(shown)}, {delta.by:+d} from {delta.since}"
                 )
         for path, name in (expect_.after or {}).items():
             if name not in self.values:
@@ -574,7 +629,7 @@ class JourneyRunner:
                 problems.append(
                     f"json {path} is {shown_seconds(-seconds)} s before {name}"
                 )
-        return _Judged(answer.status, document, seen, problems, later)
+        return _Judged(answer.status, document, seen, problems, later, moved)
 
     def _api_step(
         self, step: Step, running: Running, api, journey_id: str, number: int
@@ -630,6 +685,10 @@ class JourneyRunner:
                 problems.append(
                     f"json {save.path}: {error}, so nothing is saved as {name}"
                 )
+                continue
+            amount = values.as_number(value)
+            if amount is not None:
+                self.numbers[name] = amount
         if polled is not None:
             seen["poll"] = {
                 "up_to_seconds": step.poll.up_to_seconds,
@@ -645,7 +704,9 @@ class JourneyRunner:
         if problems:
             observed = "; ".join(problems)
         else:
-            observed = "; ".join([f"status {judged.status}", *judged.later])
+            observed = "; ".join(
+                [f"status {judged.status}", *judged.later, *judged.moved]
+            )
         if polled is not None:
             ended = waiting.describe(polled, step.poll.up_to_seconds)
             joiner = "; the last answer: " if problems else ": "
@@ -1169,6 +1230,23 @@ class JourneyRunner:
         self.secrets[keep.secret] = value
         return f"kept {where} as {keep.secret} ({len(value)} characters)"
 
+    def _one_aria(self, page: Page, templates: List[str]) -> Optional[int]:
+        """The number (from 1) of the first template the screen matches, or None.
+
+        Each round tries each template for ONE_OF_MS; rounds start until the
+        step's timeout has passed, so None comes up to one round after it."""
+        body = page.locator("body")
+        deadline = time.monotonic() + self.settings.timeout_ms / 1000
+        while True:
+            for number, template in enumerate(templates, 1):
+                try:
+                    expect(body).to_match_aria_snapshot(template, timeout=ONE_OF_MS)
+                    return number
+                except AssertionError:
+                    pass
+            if time.monotonic() >= deadline:
+                return None
+
     @staticmethod
     def _holds(check, failure) -> None:
         """Run a Playwright expectation; a failure says *failure*, not the call log.
@@ -1422,9 +1500,33 @@ class JourneyRunner:
                     f"the screen at {here()} does not match its expected ARIA snapshot"
                 ),
             )
+        one_of = None
+        if wanted.aria_one_of is not None:
+            one_of = self._one_aria(page, wanted.aria_one_of)
+            if one_of is None:
+                raise StepFailed(
+                    f"the screen at {here()} matches none of its"
+                    f" {len(wanted.aria_one_of)} ARIA snapshots"
+                )
         shown_cells = []
         for cell in wanted.cells or []:
             text = self._cell_text(page, cell, here())
+            if cell.delta is not None:
+                delta = cell.delta
+                before = self.numbers.get(delta.since)
+                moved = moved_to(before, delta.since, delta.by)
+                if not agrees(text, moved):
+                    raise StepFailed(
+                        f'the {cell.column} of the row "{cell.row}" shows'
+                        f" {one_line(text, 40)!r}; {delta.since} was"
+                        f" {json.dumps(before)}, so {delta.by:+d} is"
+                        f" {json.dumps(moved)}"
+                    )
+                shown_cells.append(
+                    f"{cell.column} {one_line(text, 40)}, {delta.by:+d} from"
+                    f" {delta.since}"
+                )
+                continue
             oracle = self._oracle(cell.oracle)
             if not agrees(text, oracle):
                 raise StepFailed(
@@ -1433,10 +1535,17 @@ class JourneyRunner:
                 )
             shown_cells.append(f"{cell.column} {one_line(text, 40)}")
         observed = f"at {here()}"
+        if one_of is not None:
+            observed += f" (its ARIA snapshot {one_of} of {len(wanted.aria_one_of)})"
         if wanted.number is not None:
             observed += f" ({shown_number}, its oracle's)"
         if shown_cells:
-            observed += " (" + ", ".join(shown_cells) + ", each its oracle's)"
+            each = (
+                "each its oracle's"
+                if all(cell.delta is None for cell in wanted.cells)
+                else "each as expected"
+            )
+            observed += " (" + ", ".join(shown_cells) + f", {each})"
         if response is not None:
             observed += f" (status {response.status})"
         return observed
@@ -1476,6 +1585,28 @@ class JourneyRunner:
         return str(text)
 
     # -- one journey -------------------------------------------------------
+    @staticmethod
+    def _seed(
+        journey: Journey, running: Running
+    ) -> Tuple[Optional[Dict[str, Any]], str]:
+        """The browser's storage before the journey's first page, and why it
+        could not be made ("" when it could, or when there is nothing to seed).
+
+        A journey's ``visitor`` goes into ShopLab's localStorage on the address
+        the stack serves the storefront on (``values.storage_state``).
+        """
+        if journey.visitor is None:
+            return None, ""
+        port = int(LOCAL_URL.match(values.STOREFRONT)["port"])
+        served = running.published.get(port)
+        if not served:
+            return None, (
+                f"the visitor cannot be seeded: the {running.name} stack serves"
+                f" nothing on port {port}, where the storefront is"
+                f" ({values.STOREFRONT})"
+            )
+        return values.storage_state(served, journey.visitor), ""
+
     def run(
         self, journey: Journey, journey_id: str, running: Running, guide: Guide
     ) -> List[Record]:
@@ -1504,8 +1635,12 @@ class JourneyRunner:
             ]
         self.walkthrough = None
         self.values = {}
+        self.numbers = {}
         self.guide = guide
         self.background = {}
+        seeded, self.unseeded = self._seed(journey, running)
+        if seeded is not None:
+            options["storage_state"] = seeded
         context = self.browser.new_context(**options)
         context.set_default_timeout(settings.timeout_ms)
         page = context.new_page()
@@ -1687,10 +1822,13 @@ class JourneyRunner:
         expected_snapshot = ""
         if step.expect is not None:
             expected_snapshot = STRUCTURAL_ONLY
-            if step.expect.aria is not None:
+            aria = step.expect.aria
+            if step.expect.aria_one_of is not None:
+                aria = "\n# or\n".join(t.rstrip("\n") for t in step.expect.aria_one_of)
+            if aria is not None:
                 expected_snapshot = self._write(
                     self._name(journey_id, number, step, ".expected.aria.yml"),
-                    step.expect.aria.rstrip("\n") + "\n",
+                    aria.rstrip("\n") + "\n",
                 )
         elif step.do.crawl == "nav":
             expected_snapshot = self._expected_nav(
@@ -1816,6 +1954,11 @@ class JourneyRunner:
         snapshot = ""
         self.waited = 0.0
         try:
+            if self.unseeded:
+                # The journey's visitor is not in the browser: the first step
+                # that runs says so, and the guide stops there.
+                unseeded, self.unseeded = self.unseeded, ""
+                raise StepFailed(unseeded)
             if step.do.kind == "api":
                 observed, snapshot = self._api_step(
                     step, running, api, journey_id, number

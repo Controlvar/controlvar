@@ -96,6 +96,7 @@ class FakeServer {
         return response(step);
       }
       if (url.includes(EVALUATIONS_PATH)) return response({ status: this.evaluationsStatus, body: { accepted: 0, errors: [] } });
+      if (url.includes('/tracking/errors')) return response({ status: 201, body: { id: 'err-1' } });
       if (url.includes('/feature-flags/evaluate/')) return response(this.evaluate(url));
       if (url.includes('/feature-flags/user/')) return response(this.userFlags(url));
       return response({ body: { success_count: 1, failure_count: 0, errors: [] } });
@@ -262,6 +263,26 @@ describe('answers', () => {
     expect(batch[0].body).toEqual({
       events: [{ event_type: 'page_view', event_name: 'page_view', user_id: 'user-1', feature_flag_key: 'us-only' }],
     });
+  });
+
+  test('reportError sends the report with the same key in local mode, before and after close()', async () => {
+    const server = new FakeServer(ok());
+    const { client, errors } = localClient(server);
+    track(client);
+    await client.ready();
+    const report = { errorType: 'crash', message: 'boom', featureFlagKey: 'us-only', userId: 'user-1' };
+    await expect(client.reportError(report)).resolves.toBe(true);
+    await client.close();
+    await expect(client.reportError(report)).resolves.toBe(true);
+
+    const sent = server.requests('/api/v1/tracking/errors');
+    expect(sent).toHaveLength(2);
+    for (const request of sent) {
+      expect(request.method).toBe('POST');
+      expect(request.headers['X-API-Key']).toBe('scoped-key');
+      expect(request.body).toEqual({ error_type: 'crash', message: 'boom', feature_flag_key: 'us-only', user_id: 'user-1' });
+    }
+    expect(errors).toEqual([]);
   });
 
   test('getAllFlags: every active flag locally, inactive omitted', async () => {

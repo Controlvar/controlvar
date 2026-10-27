@@ -15,17 +15,26 @@ branch run counted as a night would open an issue early), the open issues
 labelled ``docs-journey-failure`` (any other open issue taken for one of ours
 would be commented on and closed), and the ``github-pages`` deployments. A
 fake that answers whatever it is asked would pass with the filters gone.
+
+The reads: a call the fake is told to fail fails, as often as it is told, with
+the reason given, and a download into a directory that already holds the
+files fails with "file exists", as ``gh`` does. The 2026-10-23 night, when one
+failed download ended the report and nobody heard, is replayed here. Time is a
+fake clock (``FakeTime``): no test waits for a retry.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
+import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import pytest
+import yaml
 
 pytestmark = pytest.mark.unit
 
@@ -133,6 +142,24 @@ def require_flags(args: List[str], flags: Dict[str, str]) -> None:
             raise AssertionError(f"gh {' '.join(args[:2])} without {flag} {value}")
 
 
+def call_kind(args: List[str]) -> str:
+    """The name a test fails a call by: ``run list``, ``issue list``, ``issue
+    view``, ``artifacts <run id>``, ``download <run id> <artifact>``,
+    ``deployments`` or ``statuses``."""
+    if args[:2] == ["run", "download"]:
+        return f"download {args[2]} {args[args.index('--name') + 1]}"
+    if args[0] == "api" and "/artifacts" in args[1]:
+        return f"artifacts {args[1].split('/runs/')[1].split('/')[0]}"
+    if args[0] == "api":
+        return "statuses" if "/statuses" in args[1] else "deployments"
+    return " ".join(args[:2])
+
+
+def gh_fails(args: List[str], reason: str) -> Exception:
+    """The error ``run_gh`` raises for a failed call."""
+    return djr.GhError(" ".join(args[:2]), reason)
+
+
 class FakeGh:
     """``gh`` as the script calls it, answering from tables; records each call.
 
@@ -140,6 +167,10 @@ class FakeGh:
     rules rest on (``RUN_LIST_FLAGS``, ``ISSUE_LIST_FLAGS``, the deployments'
     environment): a call without them raises, as an unfiltered listing would
     quietly answer with other workflows', branches' or issues' rows.
+
+    ``failures`` maps a ``call_kind`` to the reasons its next calls fail with,
+    one per call; a failed download leaves a partly written file behind, so a
+    second download into the same directory fails with "file exists".
     """
 
     def __init__(
@@ -150,6 +181,7 @@ class FakeGh:
         views: Optional[Dict[int, Dict[str, Any]]] = None,
         deployments: Optional[List[Dict[str, Any]]] = None,
         statuses: Optional[Dict[int, List[Dict[str, Any]]]] = None,
+        failures: Optional[Dict[str, List[str]]] = None,
     ):
         self.runs = runs or []
         self.artifacts = artifacts or {}  # run id -> journeys (verdicts.json body)
@@ -157,24 +189,47 @@ class FakeGh:
         self.views = views or {}
         self.deployments = deployments or []
         self.statuses = statuses or {}
+        self.failures = {
+            kind: list(reasons) for kind, reasons in (failures or {}).items()
+        }
         self.calls: List[List[str]] = []
 
     def __call__(self, args: List[str]) -> str:
         self.calls.append(args)
+        pending = self.failures.get(call_kind(args))
+        if pending:
+            if args[:2] == ["run", "download"]:
+                target = Path(args[args.index("--dir") + 1])
+                target.mkdir(parents=True, exist_ok=True)
+                (target / "verdicts.json").write_text('{"journ')
+            raise gh_fails(args, pending.pop(0))
         if args[:2] == ["run", "list"]:
             require_flags(args, RUN_LIST_FLAGS)
             return json.dumps(self.runs)
         if args[:2] == ["run", "download"]:
-            run_id = int(args[2])
-            target = Path(args[args.index("--dir") + 1])
-            target.mkdir(parents=True, exist_ok=True)
-            (target / "verdicts.json").write_text(
-                json.dumps({"journeys": self.artifacts[run_id]})
-            )
-            return ""
+            return self.download(args)
+        return self.answer(args)
+
+    def artifact_names(self, run_id: int) -> List[str]:
+        """The verdicts artifacts *run_id* left."""
+        return ["docs-journeys-verdicts"] if run_id in self.artifacts else []
+
+    def journeys(self, name: str) -> Dict[int, Dict[str, Any]]:
+        """Each run's journeys in the artifact *name*."""
+        return self.artifacts
+
+    def download(self, args: List[str]) -> str:
+        target = Path(args[args.index("--dir") + 1])
+        if (target / "verdicts.json").exists():
+            raise gh_fails(args, "file exists")
+        journeys = self.journeys(args[args.index("--name") + 1])[int(args[2])]
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "verdicts.json").write_text(json.dumps({"journeys": journeys}))
+        return ""
+
+    def answer(self, args: List[str]) -> str:
         if args[0] == "api" and "/artifacts" in args[1]:
-            run_id = int(args[1].split("/runs/")[1].split("/")[0])
-            names = ["docs-journeys-verdicts"] if run_id in self.artifacts else []
+            names = self.artifact_names(int(args[1].split("/runs/")[1].split("/")[0]))
             return json.dumps(
                 {"artifacts": [{"name": n, "expired": False} for n in names]}
             )
@@ -232,6 +287,30 @@ def posts(tmp_path: Path) -> List[Dict[str, str]]:
     return found
 
 
+class FakeTime:
+    """``time`` as the script sees it: a clock that moves only when the script
+    sleeps, or when a fake call says it took time."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+        self.slept: List[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+@pytest.fixture(autouse=True)
+def clock(monkeypatch) -> FakeTime:
+    """Every test runs on the fake clock, so a retry costs no real time."""
+    fake = FakeTime()
+    monkeypatch.setattr(djr, "time", fake, raising=False)
+    return fake
+
+
 # ---------------------------------------------------------------------------
 # The published site's source
 # ---------------------------------------------------------------------------
@@ -258,7 +337,7 @@ def test_the_live_deployment_is_the_newest_successful_one(tmp_path):
             1: [{"state": "inactive"}],
         },
     )
-    assert djr.deployed(gh, REPO) == (GOOD_SHA, "v0.25.1")
+    assert djr.deployed(djr.Reads(gh), REPO) == (GOOD_SHA, "v0.25.1")
     args = argparse.Namespace(out=tmp_path / "dep")
     assert djr.deployed_command(args, ENV, gh) == 0
     assert (tmp_path / "dep" / "sha").read_text() == GOOD_SHA + "\n"
@@ -286,7 +365,7 @@ def test_when_every_deployment_succeeded_the_newest_is_live(order):
     not the order the listing happens to come in."""
     deployments, statuses = _all_success()
     gh = FakeGh(deployments=[deployments[i] for i in order], statuses=statuses)
-    assert djr.deployed(gh, REPO) == (GOOD_SHA, "v0.25.1")
+    assert djr.deployed(djr.Reads(gh), REPO) == (GOOD_SHA, "v0.25.1")
 
 
 def test_a_newer_deployment_still_in_progress_is_passed_over():
@@ -301,7 +380,7 @@ def test_a_newer_deployment_still_in_progress_is_passed_over():
         deployments=[newest, *deployments],
         statuses={**statuses, 7: [{"state": "in_progress"}]},
     )
-    assert djr.deployed(gh, REPO) == (GOOD_SHA, "v0.25.1")
+    assert djr.deployed(djr.Reads(gh), REPO) == (GOOD_SHA, "v0.25.1")
 
 
 @pytest.mark.parametrize(
@@ -328,7 +407,9 @@ def test_a_newer_deployment_still_in_progress_is_passed_over():
 )
 def test_no_live_deployment_fails(deployments, statuses, message):
     with pytest.raises(djr.DeployedError, match=message):
-        djr.deployed(FakeGh(deployments=deployments, statuses=statuses), REPO)
+        djr.deployed(
+            djr.Reads(FakeGh(deployments=deployments, statuses=statuses)), REPO
+        )
 
 
 def test_no_live_deployment_exits_1(tmp_path, capsys):
@@ -567,7 +648,7 @@ def test_the_history_is_the_scheduled_runs_of_the_workflow_on_main():
     """Each filter is what keeps a dispatch, a branch run or another workflow's
     run out of the count of red nights."""
     gh = FakeGh(runs=[run(2), run(1)])
-    assert [r.run_id for r in djr.scheduled_runs(gh, REPO)] == [2, 1]
+    assert [r.run_id for r in djr.scheduled_runs(djr.Reads(gh), REPO)] == [2, 1]
     (call,) = gh.calls
     assert call[:2] == ["run", "list"]
     for flag, value in RUN_LIST_FLAGS.items():
@@ -576,7 +657,7 @@ def test_the_history_is_the_scheduled_runs_of_the_workflow_on_main():
 
 def test_only_open_issues_with_the_label_are_ours():
     gh = FakeGh()
-    assert djr.open_issues(gh, REPO) == {}
+    assert djr.open_issues(djr.Reads(gh), REPO) == {}
     (call,) = gh.calls
     assert call[:2] == ["issue", "list"]
     for flag, value in ISSUE_LIST_FLAGS.items():
@@ -586,7 +667,7 @@ def test_only_open_issues_with_the_label_are_ours():
 def test_the_deployments_asked_for_are_the_pages_environment():
     deployments, statuses = _all_success()
     gh = FakeGh(deployments=deployments, statuses=statuses)
-    djr.deployed(gh, REPO)
+    djr.deployed(djr.Reads(gh), REPO)
     assert gh.calls[0][1] == (
         f"repos/{REPO}/deployments?environment=github-pages&per_page=30"
     )
@@ -620,24 +701,12 @@ class TwoJobGh(FakeGh):
         super().__init__(*args, **kwargs)
         self.demo = demo
 
-    def __call__(self, args: List[str]) -> str:
-        if args[0] == "api" and "/artifacts" in args[1]:
-            self.calls.append(args)
-            run_id = int(args[1].split("/runs/")[1].split("/")[0])
-            names = ["docs-journeys-verdicts"] if run_id in self.artifacts else []
-            names += ["docs-journeys-demo-verdicts"] if run_id in self.demo else []
-            return json.dumps(
-                {"artifacts": [{"name": n, "expired": False} for n in names]}
-            )
-        if args[:2] == ["run", "download"] and "docs-journeys-demo-verdicts" in args:
-            self.calls.append(args)
-            target = Path(args[args.index("--dir") + 1])
-            target.mkdir(parents=True, exist_ok=True)
-            (target / "verdicts.json").write_text(
-                json.dumps({"journeys": self.demo[int(args[2])]})
-            )
-            return ""
-        return super().__call__(args)
+    def artifact_names(self, run_id: int) -> List[str]:
+        names = super().artifact_names(run_id)
+        return names + (["docs-journeys-demo-verdicts"] if run_id in self.demo else [])
+
+    def journeys(self, name: str) -> Dict[int, Dict[str, Any]]:
+        return self.demo if name == "docs-journeys-demo-verdicts" else self.artifacts
 
 
 def demo_verdict(word: str) -> Dict[str, Any]:
@@ -745,3 +814,937 @@ def test_a_history_that_reads_only_the_journeys_artifact_would_open_nothing(
     )
     assert djr.report(args, ENV, gh) == 0
     assert posts(tmp_path) == []
+
+
+# ---------------------------------------------------------------------------
+# Reading the earlier runs: tried again, inside the job's time, each download
+# in a directory of its own, and an unreadable run refused by name. On
+# 2026-10-23, the second red night in a row, one download failed and the
+# report ended with "gh run download failed (exit 1)", naming nothing.
+# ---------------------------------------------------------------------------
+NIGHT_22, NIGHT_21, NIGHT_20 = 18000000022, 18000000021, 18000000020
+JOURNEYS = "docs-journeys-verdicts"
+WORKFLOW_FILE = REPO_ROOT / ".github" / "workflows" / "docs-journeys.yml"
+
+
+def night(run_id: int) -> Dict[str, Any]:
+    """A finished scheduled run, of the day its id ends in."""
+    return {
+        "databaseId": run_id,
+        "status": "completed",
+        "conclusion": "failure",
+        "createdAt": f"2026-10-{run_id % 100:02d}T03:41:00Z",
+    }
+
+
+def report_main(root: Path, gh: Any) -> int:
+    """``report`` as the workflow runs it, on *root*'s ``now`` verdicts."""
+    return djr.main(
+        [
+            "report",
+            "--verdicts",
+            str(root / "now" / "verdicts.json"),
+            "--event",
+            "schedule",
+            "--ref",
+            "refs/heads/main",
+            "--out",
+            str(root / "out"),
+        ],
+        ENV,
+        gh,
+    )
+
+
+def downloads(gh: FakeGh) -> List[List[str]]:
+    return [call for call in gh.calls if call[:2] == ["run", "download"]]
+
+
+def history_reads(gh: FakeGh) -> List[str]:
+    """Each earlier run's artifact listing and download, in order."""
+    return [
+        call_kind(call)
+        for call in gh.calls
+        if call[:2] == ["run", "download"] or "/actions/runs/" in " ".join(call)
+    ]
+
+
+@pytest.mark.regression
+def test_a_history_download_that_fails_once_still_opens_the_issue(
+    tmp_path, capsys, clock
+):
+    """The 2026-10-23 night with the download failing once: it is tried again,
+    in a directory of its own, and the second red night opens the issue."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
+    gh = FakeGh(
+        runs=[night(NIGHT_22), night(NIGHT_21)],
+        artifacts={
+            NIGHT_22: {"docs-site": verdict("FAIL", 3)},
+            NIGHT_21: {"docs-site": verdict("PASS")},
+        },
+        failures={f"download {NIGHT_22} {JOURNEYS}": ["exit 1"]},
+    )
+    assert report_main(tmp_path, gh) == 0, capsys.readouterr().out
+    assert [p["action"] for p in posts(tmp_path)] == ["open\n"]
+    directories = [call[call.index("--dir") + 1] for call in downloads(gh)]
+    assert len(directories) == 2 and directories[0] != directories[1]
+    assert clock.slept == [5]
+
+
+@pytest.mark.regression
+def test_an_unreadable_history_run_is_named_and_not_passed_over(
+    tmp_path, capsys, clock
+):
+    """Still failing after three tries: the report refuses, naming the run and
+    the artifact. Passed over, the night before would count as not run, the
+    count would reach the PASS before it and stop at 1, and no issue would
+    open, in silence."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
+    gh = FakeGh(
+        runs=[night(NIGHT_22), night(NIGHT_21)],
+        artifacts={
+            NIGHT_22: {"docs-site": verdict("FAIL", 3)},
+            NIGHT_21: {"docs-site": verdict("PASS")},
+        },
+        failures={f"download {NIGHT_22} {JOURNEYS}": ["HTTP 502"] * 3},
+    )
+    assert report_main(tmp_path, gh) == 1
+    out = capsys.readouterr().out
+    assert (
+        f"::error title=Docs journeys::run {NIGHT_22}: artifact {JOURNEYS} could"
+        " not be downloaded (HTTP 502; 3 of 3 attempts). A scheduled run that"
+        " cannot be read is not passed over, so nothing is decided\n"
+    ) in out
+    assert "in a row" not in out
+    assert posts(tmp_path) == []
+    assert f"artifacts {NIGHT_21}" not in history_reads(gh)
+    assert len({call[call.index("--dir") + 1] for call in downloads(gh)}) == 3
+    assert clock.slept == [5, 20]
+
+
+@pytest.mark.regression
+def test_the_refusal_names_the_run_and_artifact_and_no_address(
+    tmp_path, capsys, monkeypatch
+):
+    """Through the real ``run_gh``: what ``gh`` says, the address in it
+    included, never reaches the log; the class of the failure does."""
+    fake = FakeGh(
+        runs=[night(NIGHT_22), night(NIGHT_21)],
+        artifacts={
+            NIGHT_22: {"docs-site": verdict("FAIL", 3)},
+            NIGHT_21: {"docs-site": verdict("PASS")},
+        },
+    )
+    said = (
+        "HTTP 403: Forbidden (https://api.github.com/repos/Controlvar/controlvar"
+        "/actions/artifacts/1/zip)"
+    )
+
+    def gh_process(argv: List[str], **kwargs: Any) -> subprocess.CompletedProcess:
+        if argv[1:3] == ["run", "download"]:
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr=said)
+        return subprocess.CompletedProcess(argv, 0, stdout=fake(argv[1:]), stderr="")
+
+    monkeypatch.setattr(djr.subprocess, "run", gh_process)
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
+    code = djr.main(
+        [
+            "report",
+            "--verdicts",
+            str(tmp_path / "now" / "verdicts.json"),
+            "--event",
+            "schedule",
+            "--ref",
+            "refs/heads/main",
+            "--out",
+            str(tmp_path / "out"),
+        ],
+        ENV,
+    )
+    out = capsys.readouterr().out
+    assert code == 1
+    assert (
+        f"::error title=Docs journeys::run {NIGHT_22}: artifact {JOURNEYS} could"
+        " not be downloaded (HTTP 403; 3 of 3 attempts)"
+    ) in out
+    for word in ("https", "api.github.com", "Forbidden", "/zip"):
+        assert word not in out
+
+
+@pytest.mark.parametrize(
+    "said, reason",
+    [
+        (
+            "HTTP 404: Not Found (https://api.github.com/repos/Controlvar/"
+            "controlvar/actions/artifacts/1/zip)",
+            "HTTP 404",
+        ),
+        (
+            "error extracting zip archive: open /tmp/s/verdicts.json: file exists",
+            "file exists",
+        ),
+        (
+            "no artifact matches any of the names or patterns provided",
+            "no artifact matches",
+        ),
+        ("error connecting to api.github.com", "exit 1"),
+        ("x" * 4096 + " HTTP 500", "exit 1"),
+    ],
+    ids=["http-status", "file-exists", "no-artifact", "anything-else", "past-2-kb"],
+)
+def test_a_failed_call_is_named_by_its_class_never_its_output(
+    monkeypatch, said, reason
+):
+    """The classes ``gh`` 2.90's failures were measured in; anything else is
+    its exit status. Only the first 2 KB of what it says is looked at."""
+
+    def gh_process(argv: List[str], **kwargs: Any) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess(argv, 1, stdout="", stderr=said)
+
+    monkeypatch.setattr(djr.subprocess, "run", gh_process)
+    with pytest.raises(djr.GhError) as raised:
+        djr.run_gh(["run", "download", "1", "--name", JOURNEYS])
+    assert str(raised.value) == f"gh run download failed ({reason})"
+    assert raised.value.reason == reason
+
+
+@pytest.mark.parametrize(
+    "error, reason",
+    [
+        (subprocess.TimeoutExpired(["gh"], 120), "timeout"),
+        (FileNotFoundError(2, "No such file or directory"), "gh did not start"),
+    ],
+    ids=["timeout", "no-gh"],
+)
+def test_a_call_that_does_not_finish_is_named_by_its_class(monkeypatch, error, reason):
+    def gh_process(argv: List[str], **kwargs: Any) -> subprocess.CompletedProcess:
+        raise error
+
+    monkeypatch.setattr(djr.subprocess, "run", gh_process)
+    with pytest.raises(djr.GhError) as raised:
+        djr.run_gh(["run", "list"])
+    assert str(raised.value) == f"gh run list failed ({reason})"
+
+
+def test_each_call_is_bounded_by_the_timeout_the_budget_counts_on(monkeypatch):
+    seen: Dict[str, Any] = {}
+
+    def gh_process(argv: List[str], **kwargs: Any) -> subprocess.CompletedProcess:
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(argv, 0, stdout="[]", stderr="")
+
+    monkeypatch.setattr(djr.subprocess, "run", gh_process)
+    assert djr.run_gh(["run", "list"]) == "[]"
+    assert seen["timeout"] == djr.GH_TIMEOUT_S
+
+
+def test_the_report_prints_the_runs_it_read_and_the_run_it_refused(tmp_path, capsys):
+    """Run 22 did not run the guide, so the count goes on to run 21: both are
+    read, by id. When run 21 cannot be read, it is the one refused, not read."""
+    artifacts = {
+        NIGHT_22: {"other": verdict("PASS")},
+        NIGHT_21: {"docs-site": verdict("FAIL")},
+        NIGHT_20: {"docs-site": verdict("PASS")},
+    }
+    runs = [night(NIGHT_22), night(NIGHT_21), night(NIGHT_20)]
+    verdicts_file(tmp_path / "read", "now", docs_site=verdict("FAIL"))
+    assert report_main(tmp_path / "read", FakeGh(runs=runs, artifacts=artifacts)) == 0
+    assert (
+        f"scheduled runs read before it: 2 ({NIGHT_22}, {NIGHT_21}); refused: none\n"
+    ) in capsys.readouterr().out
+    verdicts_file(tmp_path / "refused", "now", docs_site=verdict("FAIL"))
+    gh = FakeGh(
+        runs=runs,
+        artifacts=artifacts,
+        failures={f"download {NIGHT_21} {JOURNEYS}": ["HTTP 404"] * 3},
+    )
+    assert report_main(tmp_path / "refused", gh) == 1
+    assert (
+        f"scheduled runs read before it: 1 ({NIGHT_22}); refused: {NIGHT_21}\n"
+    ) in capsys.readouterr().out
+
+
+def test_the_history_is_read_only_as_far_as_the_decision_needs(tmp_path):
+    """The night before failed too: the second red night in a row, which no
+    older night can change, so only that night is read."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
+    gh = FakeGh(
+        runs=[night(NIGHT_22), night(NIGHT_21), night(NIGHT_20)],
+        artifacts={
+            NIGHT_22: {"docs-site": verdict("FAIL")},
+            NIGHT_21: {"docs-site": verdict("PASS")},
+            NIGHT_20: {"docs-site": verdict("FAIL")},
+        },
+    )
+    assert report_main(tmp_path, gh) == 0
+    assert [p["action"] for p in posts(tmp_path)] == ["open\n"]
+    assert history_reads(gh) == [
+        f"artifacts {NIGHT_22}",
+        f"download {NIGHT_22} {JOURNEYS}",
+    ]
+
+
+def test_a_failing_guide_with_its_issue_open_reads_no_history(tmp_path):
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL", 2))
+    issues, views = open_issue(2)
+    gh = FakeGh(
+        runs=[night(NIGHT_22)],
+        artifacts={NIGHT_22: {"docs-site": verdict("FAIL")}},
+        issues=issues,
+        views=views,
+    )
+    assert report_main(tmp_path, gh) == 0
+    assert [call[:2] for call in gh.calls] == [["issue", "list"], ["issue", "view"]]
+
+
+def test_a_night_read_for_one_guide_is_not_read_again_for_another(tmp_path):
+    verdicts_file(
+        tmp_path, "now", docs_site=verdict("FAIL"), demo_guide=demo_verdict("FAIL")
+    )
+    gh = FakeGh(
+        runs=[night(NIGHT_22)],
+        artifacts={
+            NIGHT_22: {
+                "docs-site": verdict("FAIL"),
+                "demo-guide": demo_verdict("FAIL"),
+            }
+        },
+    )
+    assert report_main(tmp_path, gh) == 0
+    assert [p["action"] for p in posts(tmp_path)] == ["open\n", "open\n"]
+    assert history_reads(gh) == [
+        f"artifacts {NIGHT_22}",
+        f"download {NIGHT_22} {JOURNEYS}",
+    ]
+
+
+def test_a_run_that_left_no_verdicts_is_passed_over(tmp_path):
+    """No verdicts artifact listed (the journeys did not start): neither a
+    failure nor a pass, as before; the count goes on past it. An artifact that
+    is listed but expired is test_an_expired_artifact_counts_as_not_run."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
+    gh = FakeGh(
+        runs=[night(NIGHT_22), night(NIGHT_21)],
+        artifacts={NIGHT_21: {"docs-site": verdict("FAIL")}},
+    )
+    assert report_main(tmp_path, gh) == 0
+    assert [p["action"] for p in posts(tmp_path)] == ["open\n"]
+
+
+def test_a_malformed_verdicts_file_of_an_earlier_run_is_refused(tmp_path, capsys):
+    class Garbled(FakeGh):
+        def download(self, args: List[str]) -> str:
+            target = Path(args[args.index("--dir") + 1])
+            target.mkdir(parents=True)
+            (target / "verdicts.json").write_text("not json")
+            return ""
+
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
+    gh = Garbled(
+        runs=[night(NIGHT_22), night(NIGHT_21)],
+        artifacts={
+            NIGHT_22: {"docs-site": verdict("FAIL")},
+            NIGHT_21: {"docs-site": verdict("PASS")},
+        },
+    )
+    assert report_main(tmp_path, gh) == 1
+    assert (
+        f"::error title=Docs journeys::run {NIGHT_22}: artifact {JOURNEYS}:"
+        " verdicts.json: JSONDecodeError. A scheduled run that cannot be read is"
+        " not passed over"
+    ) in capsys.readouterr().out
+
+
+def every_read_once() -> FakeGh:
+    """A night that makes each kind of read once: README.md fails at the step
+    its open issue names (the issue is listed and read); the demo guide fails
+    with no issue open (the night before is listed, and its verdicts read)."""
+    issues, views = open_issue(2)
+    return FakeGh(
+        runs=[night(NIGHT_22)],
+        artifacts={NIGHT_22: {"demo-guide": demo_verdict("FAIL")}},
+        issues=issues,
+        views=views,
+    )
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "issue list",
+        "issue view",
+        "run list",
+        f"artifacts {NIGHT_22}",
+        f"download {NIGHT_22} {JOURNEYS}",
+    ],
+)
+def test_every_read_that_fails_once_is_tried_again(tmp_path, capsys, kind):
+    """A moment's failure of any read, on any night, red or green: the report
+    still decides."""
+    verdicts_file(
+        tmp_path, "now", docs_site=verdict("FAIL", 2), demo_guide=demo_verdict("FAIL")
+    )
+    gh = every_read_once()
+    gh.failures = {kind: ["HTTP 502"]}
+    assert report_main(tmp_path, gh) == 0, capsys.readouterr().out
+    opened = posts(tmp_path)
+    assert [p["action"] for p in opened] == ["open\n"]
+    assert "demo/DEMO_GUIDE.md" in opened[0]["title.txt"]
+    assert sorted({call_kind(call) for call in gh.calls}) == sorted(
+        [
+            "issue list",
+            "issue view",
+            "run list",
+            f"artifacts {NIGHT_22}",
+            f"download {NIGHT_22} {JOURNEYS}",
+        ]
+    )
+
+
+@pytest.mark.parametrize("kind", ["deployments", "statuses"])
+def test_the_published_sites_reads_are_tried_again(tmp_path, kind):
+    deployments, statuses = _all_success()
+    gh = FakeGh(
+        deployments=deployments, statuses=statuses, failures={kind: ["HTTP 502"]}
+    )
+    assert djr.main(["deployed", "--out", str(tmp_path / "d")], ENV, gh) == 0
+    assert (tmp_path / "d" / "sha").read_text() == GOOD_SHA + "\n"
+
+
+class SlowGh(FakeGh):
+    """GitHub at its slowest: each call fails its first two tries, each one
+    after ``GH_TIMEOUT_S`` (it hung until gh's timeout), then answers in a
+    second."""
+
+    def __init__(self, clock: FakeTime, **kwargs: Any):
+        super().__init__(**kwargs)
+        self.clock = clock
+        self.tries: Dict[str, int] = {}
+
+    def __call__(self, args: List[str]) -> str:
+        kind = call_kind(args)
+        self.tries[kind] = self.tries.get(kind, 0) + 1
+        if self.tries[kind] <= 2:
+            self.calls.append(args)
+            self.clock.now += djr.GH_TIMEOUT_S
+            raise gh_fails(args, "timeout")
+        self.clock.now += 1
+        return super().__call__(args)
+
+
+def report_job_timeout_s() -> int:
+    """The report job's ``timeout-minutes``, in seconds."""
+    jobs = yaml.safe_load(WORKFLOW_FILE.read_text(encoding="utf-8"))["jobs"]
+    return int(jobs["report"]["timeout-minutes"]) * 60
+
+
+def test_the_reads_end_inside_the_report_jobs_timeout(tmp_path, capsys, clock):
+    """However slow GitHub is, the reads stop in time for the step to say why
+    before the job is cancelled: 2 minutes of the job are left for its
+    checkout, its downloads and its posting."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
+    gh = SlowGh(
+        clock,
+        runs=[night(NIGHT_22), night(NIGHT_21)],
+        artifacts={
+            NIGHT_22: {"docs-site": verdict("FAIL")},
+            NIGHT_21: {"docs-site": verdict("PASS")},
+        },
+    )
+    start = clock.now
+    assert report_main(tmp_path, gh) == 1
+    assert f"; the {djr.GH_BUDGET_S} s for reads ran out)" in capsys.readouterr().out
+    assert clock.now - start <= djr.GH_BUDGET_S + djr.GH_TIMEOUT_S
+    assert djr.GH_BUDGET_S + djr.GH_TIMEOUT_S <= report_job_timeout_s() - 120
+
+
+def test_three_tries_five_then_twenty_seconds_apart():
+    assert (djr.ATTEMPTS, djr.BACKOFF_S) == (3, (5, 20))
+
+
+# ---------------------------------------------------------------------------
+# One issue per guide: what one night opens, the next night finds
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "guide",
+    [
+        "README.md",
+        "demo/shoplab/README.md",
+        "frontend/src/components/experiments/FirstRunChecklist.tsx",
+    ],
+)
+def test_the_rendered_title_gives_back_its_guide_and_the_body_its_step(guide):
+    rendered = qa_render.render(djr.ISSUE, {**fail_values(4), "guide_path": guide})
+    match = djr._TITLE.match(rendered.title or "")
+    assert match is not None and match.group("guide") == guide
+    assert djr._named_step(rendered.body) == 4
+
+
+def test_the_issue_one_night_opens_is_the_one_the_next_night_finds(tmp_path, capsys):
+    """Night one opens the issue. Night two, failing at the same step, finds
+    it by its title and author and adds nothing: one issue, not one a night."""
+    verdicts_file(tmp_path / "one", "now", docs_site=verdict("FAIL", 3))
+    gh = FakeGh(
+        runs=[night(NIGHT_22)], artifacts={NIGHT_22: {"docs-site": verdict("FAIL")}}
+    )
+    assert report_main(tmp_path / "one", gh) == 0
+    (opened,) = posts(tmp_path / "one")
+    title = opened["title.txt"].rstrip("\n")
+    issues = [{"number": 101, "title": title, "author": BOT}]
+    views = {101: {"body": opened["body.md"], "comments": []}}
+    verdicts_file(tmp_path / "two", "now", docs_site=verdict("FAIL", 3))
+    assert report_main(tmp_path / "two", FakeGh(issues=issues, views=views)) == 0
+    assert posts(tmp_path / "two") == []
+    assert "README.md: FAIL at step 3, as issue #101 says" in capsys.readouterr().out
+
+
+def test_the_label_the_script_reads_is_the_one_the_workflow_posts_with():
+    text = WORKFLOW_FILE.read_text(encoding="utf-8")
+    posted = re.findall(r"--label (\S+)", text)
+    created = re.findall(r"gh label create (\S+)", text)
+    assert posted and created, "the workflow names no label: the scan is broken"
+    assert set(posted) | set(created) == {djr.LABEL}
+
+
+# ---------------------------------------------------------------------------
+# PARTIAL in the count of failed nights: unchanged, and pinned
+# ---------------------------------------------------------------------------
+def test_a_partial_night_ends_the_count_of_failed_nights(tmp_path, capsys):
+    """FAIL, then PARTIAL (nothing failed), then FAIL: the PARTIAL night ends
+    the count as a pass does, so tonight is the first red night again. A
+    PARTIAL night also closes an open issue
+    (test_a_recovered_guide_comments_its_header_and_closes)."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL", 3))
+    gh = FakeGh(
+        runs=[night(NIGHT_22), night(NIGHT_21)],
+        artifacts={
+            NIGHT_22: {"docs-site": verdict("PARTIAL")},
+            NIGHT_21: {"docs-site": verdict("FAIL", 3)},
+        },
+    )
+    assert report_main(tmp_path, gh) == 0
+    assert posts(tmp_path) == []
+    assert (
+        "README.md: FAIL at step 3; failed 1 scheduled run(s) in a row"
+        in capsys.readouterr().out
+    )
+
+
+# ---------------------------------------------------------------------------
+# Branches the report claims and nothing else pins
+# ---------------------------------------------------------------------------
+class HtmlGh(FakeGh):
+    """A fake whose *kind* of call exits 0 and prints a page, not JSON."""
+
+    def __init__(self, *args: Any, kind: str, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.kind = kind
+
+    def __call__(self, args: List[str]) -> str:
+        if call_kind(args) == self.kind:
+            self.calls.append(args)
+            return "<html>"
+        return super().__call__(args)
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("kind", ["run list", f"artifacts {NIGHT_22}"])
+def test_a_read_that_exits_0_with_a_page_is_refused_not_read_as_empty(
+    tmp_path, capsys, kind
+):
+    """gh exits 0 and prints HTML (a proxy, a captive portal). Read as null the
+    run list is empty and the history is passed over, in silence."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
+    gh = HtmlGh(
+        runs=[night(NIGHT_22), night(NIGHT_21)],
+        artifacts={
+            NIGHT_22: {"docs-site": verdict("FAIL", 3)},
+            NIGHT_21: {"docs-site": verdict("FAIL", 3)},
+        },
+        kind=kind,
+    )
+    assert report_main(tmp_path, gh) == 1
+    out = capsys.readouterr().out
+    assert "(not JSON; 3 of 3 attempts)" in out
+    assert "::error title=Docs journeys::" in out
+    assert posts(tmp_path) == []
+
+
+class ExpiredGh(FakeGh):
+    """A fake whose artifacts of the runs in ``expired`` are listed as expired."""
+
+    def __init__(self, *args: Any, expired: Iterable[int], **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.expired = set(expired)
+
+    def answer(self, args: List[str]) -> str:
+        found = super().answer(args)
+        if args[0] == "api" and "/artifacts" in args[1]:
+            run_id = int(args[1].split("/runs/")[1].split("/")[0])
+            listing = json.loads(found)
+            for artifact in listing["artifacts"]:
+                artifact["expired"] = run_id in self.expired
+            return json.dumps(listing)
+        return found
+
+
+@pytest.mark.regression
+def test_an_expired_artifact_counts_as_not_run(tmp_path, capsys):
+    """Run 22 failed but its artifact has expired: it is neither a failure nor
+    a pass, so the count goes on to run 21, a PASS, and stops at 1: no issue.
+    Read as a FAIL, run 22 would be the second red night and open one."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
+    gh = ExpiredGh(
+        runs=[night(NIGHT_22), night(NIGHT_21)],
+        artifacts={
+            NIGHT_22: {"docs-site": verdict("FAIL", 3)},
+            NIGHT_21: {"docs-site": verdict("PASS")},
+        },
+        expired=[NIGHT_22],
+    )
+    assert report_main(tmp_path, gh) == 0
+    assert posts(tmp_path) == []
+    assert history_reads(gh) == [
+        f"artifacts {NIGHT_22}",
+        f"artifacts {NIGHT_21}",
+        f"download {NIGHT_21} {JOURNEYS}",
+    ]
+    assert (
+        f"scheduled runs read before it: 2 ({NIGHT_22}, {NIGHT_21}); refused: none\n"
+    ) in capsys.readouterr().out
+
+
+@pytest.mark.regression
+def test_a_journey_in_both_artifacts_of_an_earlier_run_is_refused(tmp_path, capsys):
+    """Run 22 left 'docs-site' in both jobs' artifacts: which one is right is
+    not for the report to guess, and passing the run over restarts the count."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
+    gh = TwoJobGh(
+        runs=[night(NIGHT_22), night(NIGHT_21)],
+        artifacts={
+            NIGHT_22: {"docs-site": verdict("FAIL", 3)},
+            NIGHT_21: {"docs-site": verdict("FAIL", 3)},
+        },
+        demo={NIGHT_22: {"docs-site": verdict("FAIL", 3)}},
+    )
+    assert report_main(tmp_path, gh) == 1
+    out = capsys.readouterr().out
+    assert f"::error title=Docs journeys::run {NIGHT_22}:" in out
+    assert "'docs-site' is in two" in out
+    assert f"refused: {NIGHT_22}\n" in out
+    assert posts(tmp_path) == []
+    assert f"artifacts {NIGHT_21}" not in history_reads(gh)
+
+
+@pytest.mark.regression
+def test_the_run_being_reported_is_not_read_as_its_own_history(tmp_path):
+    """GITHUB_RUN_ID (9) is listed as the newest scheduled run, and by then
+    has verdicts of its own: it is skipped, and the night before decides."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
+    this_run = {**night(9), "createdAt": "2026-10-23T03:41:00Z"}
+    gh = FakeGh(
+        runs=[this_run, night(NIGHT_22)],
+        artifacts={
+            9: {"docs-site": verdict("FAIL", 3)},
+            NIGHT_22: {"docs-site": verdict("PASS")},
+        },
+    )
+    assert report_main(tmp_path, gh) == 0
+    assert posts(tmp_path) == []
+    assert history_reads(gh) == [
+        f"artifacts {NIGHT_22}",
+        f"download {NIGHT_22} {JOURNEYS}",
+    ]
+
+
+# ---------------------------------------------------------------------------
+# The alarm: one issue when the report did not decide for every guide. On
+# 2026-10-23 the report job failed inside an already red run, and nobody
+# heard: no issue opened, and nothing said that none could.
+# ---------------------------------------------------------------------------
+ALARM_TITLE = "Docs journeys report is red"
+ALARM_ENV = {**ENV, "GITHUB_SHA": SHA}
+ALARM_LINK = "https://github.com/Controlvar/controlvar/actions/runs/9"
+TODAY = "2026-10-23"
+#: Each way a run can be unhealthy: the report job's result, the journeys
+#: job's and the demo job's ``verdicts`` outputs, as GitHub gives them.
+NOT_HEALTHY = {
+    "report-failed": ("failure", "true", "true"),
+    "report-cancelled": ("cancelled", "true", "true"),
+    "report-skipped": ("skipped", "", ""),
+    "report-result-empty": ("", "true", "true"),
+    "journeys-wrote-none": ("success", "", "true"),
+    "demo-wrote-none": ("success", "true", ""),
+    "demo-output-not-true": ("success", "true", "false"),
+    "a-capital-letter": ("Success", "true", "true"),
+    "a-capital-output": ("success", "True", "true"),
+}
+HEALTHY_NIGHT = ("success", "true", "true")
+
+
+@pytest.fixture(autouse=True)
+def today(monkeypatch):
+    monkeypatch.setattr(djr, "utc_date", lambda: TODAY, raising=False)
+
+
+def alarm_main(
+    root: Path,
+    gh: Any,
+    night: tuple = HEALTHY_NIGHT,
+    event: str = "schedule",
+    ref: str = "refs/heads/main",
+    env: Optional[Dict[str, str]] = None,
+) -> int:
+    """``alarm`` as the alarm job runs it."""
+    report_result, journeys, demo = night
+    return djr.main(
+        [
+            "alarm",
+            "--report-result",
+            report_result,
+            "--journeys-verdicts",
+            journeys,
+            "--demo-verdicts",
+            demo,
+            "--event",
+            event,
+            "--ref",
+            ref,
+            "--out",
+            str(root / "out"),
+        ],
+        ALARM_ENV if env is None else env,
+        gh,
+    )
+
+
+def alarm_body() -> str:
+    return qa_render.render(
+        djr.ALARM, {"date": TODAY, "sha": SHA, "run_link": ALARM_LINK}
+    ).body
+
+
+def alarm_issue(number: int = 90, login: str = "app/github-actions") -> Dict[str, Any]:
+    return {"number": number, "title": ALARM_TITLE, "author": {"login": login}}
+
+
+def guide_issue() -> Dict[str, Any]:
+    return {"number": 77, "title": TITLE, "author": BOT}
+
+
+@pytest.mark.parametrize("night", list(NOT_HEALTHY.values()), ids=list(NOT_HEALTHY))
+def test_a_run_is_healthy_only_when_the_report_succeeded_with_both_verdicts(night):
+    """Fails closed: one exact triple is healthy, and an empty value (a
+    misspelt ``needs`` reference gives one, with no error) is not."""
+    assert djr.healthy(*HEALTHY_NIGHT) is True
+    assert djr.healthy(*night) is False
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("night", list(NOT_HEALTHY.values()), ids=list(NOT_HEALTHY))
+def test_a_run_whose_report_did_not_decide_opens_the_alarm(tmp_path, capsys, night):
+    """The 2026-10-23 night: the report failed, and now that opens one issue
+    rendered from the alarm template."""
+    assert alarm_main(tmp_path, FakeGh(), night) == 0
+    assert posts(tmp_path) == [
+        {"action": "open\n", "title.txt": ALARM_TITLE + "\n", "body.md": alarm_body()}
+    ]
+    out = capsys.readouterr().out
+    assert "not healthy: the report did not decide for every guide" in out
+    assert "a scheduled run on main: 1 post(s)\nopen the alarm issue\n" in out
+
+
+def test_the_alarm_is_the_rendered_template():
+    """Its title is the template's first line, and its body names the run,
+    its commit and its date."""
+    rendered = qa_render.render(
+        djr.ALARM, {"date": TODAY, "sha": SHA, "run_link": ALARM_LINK}
+    )
+    assert rendered.title == ALARM_TITLE
+    assert qa_render.render_title(djr.ALARM, {}) == ALARM_TITLE
+    assert f"Docs journeys, {TODAY}, commit {SHA}:" in rendered.body
+    assert ALARM_LINK in rendered.body
+
+
+def test_the_alarm_is_never_taken_for_a_guides_issue():
+    """The alarm shares the label: its title must never parse as a guide's."""
+    assert djr._TITLE.match(qa_render.render_title(djr.ALARM, {})) is None
+
+
+@pytest.mark.regression
+def test_an_open_alarm_gets_a_comment_not_a_second_issue(tmp_path):
+    gh = FakeGh(issues=[alarm_issue(90)])
+    assert alarm_main(tmp_path, gh, NOT_HEALTHY["report-failed"]) == 0
+    assert posts(tmp_path) == [
+        {"action": "comment\n", "issue": "90\n", "body.md": alarm_body()}
+    ]
+
+
+@pytest.mark.regression
+def test_a_healthy_scheduled_run_closes_the_alarm_without_a_comment(tmp_path, capsys):
+    assert alarm_main(tmp_path, FakeGh(issues=[alarm_issue(90)])) == 0
+    assert posts(tmp_path) == [{"action": "close\n", "issue": "90\n"}]
+    assert "close the alarm issue #90, without a comment" in capsys.readouterr().out
+
+
+def test_a_healthy_run_with_no_alarm_posts_nothing(tmp_path, capsys):
+    assert alarm_main(tmp_path, FakeGh()) == 0
+    assert posts(tmp_path) == []
+    out = capsys.readouterr().out
+    assert "healthy: the report decided for every guide" in out
+    assert "healthy; no alarm issue is open" in out
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "night", [HEALTHY_NIGHT, NOT_HEALTHY["report-failed"]], ids=["healthy", "not"]
+)
+def test_the_alarm_never_comments_on_or_closes_a_guides_issue(tmp_path, night):
+    """The per-guide issues carry the same label. A healthy night with a
+    guide's issue open leaves it alone; an unhealthy one opens the alarm
+    beside it, and does not comment on it."""
+    gh = FakeGh(issues=[guide_issue()])
+    assert alarm_main(tmp_path, gh, night) == 0
+    found = posts(tmp_path)
+    assert all("issue" not in post for post in found)
+    assert [post["action"] for post in found] == (
+        [] if night == HEALTHY_NIGHT else ["open\n"]
+    )
+    assert [call[:2] for call in gh.calls] == [["issue", "list"]]
+
+
+@pytest.mark.parametrize(
+    "issue",
+    [
+        alarm_issue(90, login="someone"),
+        {**alarm_issue(90), "title": ALARM_TITLE + " again"},
+        {**alarm_issue(90), "title": "[x] " + ALARM_TITLE},
+    ],
+    ids=["by-a-person", "longer-title", "prefixed-title"],
+)
+def test_the_alarm_is_found_by_its_exact_title_and_a_bot_author(tmp_path, issue):
+    """A healthy night closes only the workflow's own alarm, by its exact title."""
+    assert alarm_main(tmp_path, FakeGh(issues=[issue])) == 0
+    assert posts(tmp_path) == []
+
+
+def test_of_two_open_alarms_the_oldest_is_the_one(tmp_path):
+    gh = FakeGh(issues=[alarm_issue(120), alarm_issue(90)])
+    assert alarm_main(tmp_path, gh, NOT_HEALTHY["report-failed"]) == 0
+    assert [post["issue"] for post in posts(tmp_path)] == ["90\n"]
+
+
+@pytest.mark.regression
+def test_the_alarms_listing_that_fails_once_is_tried_again(tmp_path, clock):
+    gh = FakeGh(issues=[alarm_issue(90)], failures={"issue list": ["HTTP 502"]})
+    assert alarm_main(tmp_path, gh, NOT_HEALTHY["report-failed"]) == 0
+    assert [post["action"] for post in posts(tmp_path)] == ["comment\n"]
+    assert clock.slept == [djr.BACKOFF_S[0]]
+
+
+def test_an_alarm_listing_that_never_answers_fails_the_job_and_posts_nothing(
+    tmp_path, capsys
+):
+    """No list, no decision: an unhealthy night must not open a second alarm
+    because it could not see the first, and a healthy one must not guess."""
+    gh = FakeGh(failures={"issue list": ["HTTP 502"] * djr.ATTEMPTS})
+    assert alarm_main(tmp_path, gh, NOT_HEALTHY["report-failed"]) == 1
+    assert posts(tmp_path) == []
+    assert (
+        "::error title=Docs journeys::the open docs-journey-failure issues could"
+        " not be listed (HTTP 502; 3 of 3 attempts)" in capsys.readouterr().out
+    )
+
+
+@pytest.mark.parametrize(
+    "event, ref",
+    [
+        ("workflow_dispatch", "refs/heads/main"),
+        ("schedule", "refs/heads/feature"),
+        ("workflow_dispatch", "refs/tags/v1.2.3"),
+    ],
+)
+@pytest.mark.parametrize(
+    "night, issues, would",
+    [
+        (NOT_HEALTHY["report-skipped"], [], "would: open the alarm issue"),
+        (
+            NOT_HEALTHY["report-failed"],
+            [alarm_issue(90)],
+            "would: comment on the alarm issue #90",
+        ),
+        (
+            HEALTHY_NIGHT,
+            [alarm_issue(90)],
+            "would: close the alarm issue #90, without a comment",
+        ),
+    ],
+    ids=["open", "comment", "close"],
+)
+def test_a_run_that_is_not_scheduled_on_main_never_posts_the_alarm(
+    tmp_path, capsys, event, ref, night, issues, would
+):
+    """A dispatch never opens, comments on or closes the alarm: it prints
+    what a scheduled run on main would do."""
+    assert alarm_main(tmp_path, FakeGh(issues=issues), night, event, ref) == 0
+    assert posts(tmp_path) == []
+    out = capsys.readouterr().out
+    assert f"dry run: a {event} run on {ref} posts nothing" in out
+    assert would in out
+
+
+@pytest.mark.parametrize(
+    "night, line",
+    [
+        (
+            ("skipped", "", ""),
+            "the report job: skipped; the journeys job's verdicts: not written;"
+            " the demo job's verdicts: not written",
+        ),
+        (
+            ("", "true", "x"),
+            "the report job: none; the journeys job's verdicts: written;"
+            " the demo job's verdicts: not written",
+        ),
+        (
+            ("success; rm -rf", "true", "true"),
+            "the report job: other; the journeys job's verdicts: written;"
+            " the demo job's verdicts: written",
+        ),
+    ],
+)
+def test_the_alarm_prints_the_jobs_results_from_a_closed_set(
+    tmp_path, capsys, night, line
+):
+    assert alarm_main(tmp_path, FakeGh(), night) == 0
+    out = capsys.readouterr().out
+    assert line + "\n" in out
+    assert "rm -rf" not in out
+
+
+@pytest.mark.parametrize(
+    "drop", ["GITHUB_SHA", "GITHUB_RUN_ID"], ids=["no-commit", "no-run"]
+)
+def test_an_alarm_that_cannot_be_rendered_fails_the_job(tmp_path, capsys, drop):
+    """A value qa_render refuses is a red job, not a silent night."""
+    env = {k: v for k, v in ALARM_ENV.items() if k != drop}
+    assert alarm_main(tmp_path, FakeGh(), NOT_HEALTHY["report-failed"], env=env) == 1
+    assert posts(tmp_path) == []
+    assert "::error title=Docs journeys::" in capsys.readouterr().out
+
+
+def test_the_report_passes_over_the_alarm_issue(tmp_path):
+    """The per-guide report lists the same label: the alarm is not a guide's
+    issue, so it is never read as one (FakeGh has no view of it)."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("PASS"))
+    gh = FakeGh(issues=[alarm_issue(90)])
+    assert report_main(tmp_path, gh) == 0
+    assert posts(tmp_path) == []
+    assert [call[:2] for call in gh.calls] == [["issue", "list"]]
+
+
+def test_the_alarms_reads_end_inside_the_alarm_jobs_timeout():
+    jobs = yaml.safe_load(WORKFLOW_FILE.read_text(encoding="utf-8"))["jobs"]
+    timeout_s = int(jobs["report-alarm"]["timeout-minutes"]) * 60
+    assert djr.GH_BUDGET_S + djr.GH_TIMEOUT_S <= timeout_s - 120

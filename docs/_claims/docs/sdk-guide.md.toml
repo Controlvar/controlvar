@@ -224,17 +224,20 @@ text = "SDK status"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Every SDK uses the contract above: the server decides assignment and flag evaluation, results are cached per user + key, and track fans out to the user's cached assignments and flags when no key is given."
+text = "Every SDK uses the contract above: the server decides assignment and flag evaluation, results are cached per user + key, and track fans out to the user's assignments and flags when no key is given: those answered in the last 24 hours in the JavaScript, Python and React SDKs, the cached ones in the others."
 by = [
     "test:backend/tests/unit/scripts/test_run_live_contract.py::test_a_smoke_must_report_a_sticky_assignment_an_enabled_flag_and_both_tracks",
     "test:backend/tests/unit/scripts/test_run_live_contract.py::test_each_sdk_runs_its_own_contract_smoke",
     "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/batch with one entry per assignment plus one per evaluated flag",
+    "test:sdk/js/__tests__/client.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
     "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_fans_out_to_cached_assignment_and_flag",
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_a_purchase_301_seconds_after_the_assignment_reaches_the_experiment",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
     "test:sdk/go/client_test.go::TestClient_Track_WithoutKey_FansOutToCachedEntries",
 ]
 
 [[unit]]
-text = "The cached assignments include answers with \"assigned\": false (a user the global holdout kept out, for example): holdout results count those users' events like everyone else's."
+text = "They include answers with \"assigned\": false (a user the global holdout kept out, for example): holdout results count those users' events like everyone else's."
 by = [
     "test:sdk/js/__tests__/client.test.ts::fans out to an assignment the global holdout answered (assigned: false)",
     "test:backend/tests/integration/api/test_holdout_results.py::TestUntagged::test_an_untagged_event_counts_like_a_tagged_one",
