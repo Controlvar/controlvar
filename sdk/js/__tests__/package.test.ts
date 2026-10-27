@@ -8,7 +8,7 @@
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import * as sdk from '../src';
-import type { AssignResponse, BatchResponse, FlagEvaluateResponse, TrackBody } from '../src';
+import type { AssignResponse, BatchResponse, ErrorReport, FlagEvaluateResponse, TrackBody } from '../src';
 
 const SDK = join(__dirname, '..');
 const pkg = JSON.parse(readFileSync(join(SDK, 'package.json'), 'utf8'));
@@ -66,6 +66,9 @@ describe('the package', () => {
       { event_type: 'purchase', event_name: 'purchase', user_id: 'u' },
     ];
     expect(wire).toHaveLength(4);
+    // reportError's argument is exported too, so callers can type the report they build.
+    const report: ErrorReport = { errorType: 'crash', message: 'boom', featureFlagKey: 'f' };
+    expect(report.errorType).toBe('crash');
   });
 
   test('nothing in the SDK calls consistentHash', () => {

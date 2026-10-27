@@ -127,6 +127,9 @@ function SearchPage() {
 | `error` | `Error \| null` | Set when the request failed (flag is reported off) |
 | `reason` | `string \| undefined` | Why the server decided: `targeting_rule`, `rollout`, `inactive` or `error`; `undefined` while loading, on error, or from servers that do not send it |
 
+A flag change reaches an open page when a hook re-mounts after `cacheTtlMs`, or on reload; the SDK
+neither polls nor streams.
+
 ### `useVariant(flagKey): string | null`
 
 Shorthand for `useFeatureFlag(flagKey).variant`.
@@ -188,9 +191,20 @@ track('page_view', { page: '/products' });   // no key: fanned out, see below
 
 **Fan-out rule.** With `experimentKey` and/or `featureFlagKey` the SDK sends one
 `POST /api/v1/tracking/track`. Without a key it sends one `POST /api/v1/tracking/batch` containing
-one entry per experiment the user has been assigned to in this client plus one per flag evaluated
-for the user (from the cache). If nothing is cached, nothing is sent. This is what makes a single
-`track('purchase', …)` count as a conversion for every experiment the user is in.
+one entry per experiment and one per flag the client answered for the user in the last 24 hours,
+whether or not the answer is still cached; an experiment whose latest answer says it is a draft,
+paused, completed or archived (`reason`) gets no entry. An experiment whose assignment is later
+answered 404 loses its entry at once; any other failure (a 5xx, a network error) keeps it. This is
+what makes a single `track('purchase', …)` count as a conversion for every experiment the user is
+in. With nothing to
+attribute it to, the event is sent once with no key: the server stores it as history, which counts
+in holdout results and as CUPED history, never in an experiment's results. The keys live in the
+client's memory (up to 10,000 users) and survive `clearCache()`; a page reload starts with none, and
+the page's hooks record them again as they answer.
+
+Pass `experimentKey` for an event that is the outcome of one experiment's surface (a click in the
+sorted list). Leave it out for an outcome of the whole visit (a purchase), which counts for every
+experiment the user is in.
 
 Conversions are matched to metrics by **event name**: an experiment metric whose `event_name` is
 `purchase` counts every `purchase` event, whatever `event_type` was sent.

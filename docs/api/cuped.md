@@ -65,10 +65,13 @@ is never read.
 Events during the experiment still need the experiment's key, as they always have: an event
 without one counts in no experiment's results.
 
-The SDKs' `track()` without a key sends one event for each experiment and flag cached for the
-user, and those tagged events count as history for a later experiment. **An SDK user with
-nothing cached sends no history**, which is usual before a user's first assignment. Each
-result's `covariate_coverage_pct` shows how many users had history.
+The SDKs' `track()` without a key sends one event for each experiment and flag that SDK
+answered for the user (in the last 24 hours for the JavaScript, Python and React SDKs, while
+the answer is cached for the others), and those tagged events count as history for a later
+experiment. **With nothing to attribute it to, the JavaScript, Python and React SDKs send the
+event once with no key**, which stores it as history; the other SDKs send nothing then, which
+is usual before a user's first assignment. Each result's `covariate_coverage_pct` shows how
+many users had history.
 
 Run the commands on this page in one terminal, in order, against the stack from the
 [Quick Start](../getting-started/quick-start.md). Each uses the shell variables set by the

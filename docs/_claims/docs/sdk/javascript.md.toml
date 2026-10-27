@@ -167,9 +167,11 @@ by = [
 ]
 
 [[unit]]
-text = "onError | (error: ExperimentationError, op: 'track' | 'trackBatch' | 'refresh' | 'flush' | 'evaluate') => void | — | Only way to observe swallowed failures; a throwing handler is itself swallowed. 'refresh', 'flush' and 'evaluate' occur only in local mode"
+text = "onError | (error: ExperimentationError, op: 'track' | 'trackBatch' | 'refresh' | 'flush' | 'evaluate' | 'reportError') => void | — | Only way to observe swallowed failures; a throwing handler is itself swallowed. 'refresh', 'flush' and 'evaluate' occur only in local mode"
 by = [
     "test:sdk/js/__tests__/client.test.ts::reports swallowed failures through onError",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on %s and passes the failure to onError as reportError",
+    "test:sdk/js/__tests__/client.test.ts::never rejects, even with a throwing onError handler or no report at all",
     "test:sdk/js/__tests__/client.test.ts::survives a throwing onError handler",
     "test:sdk/js/__tests__/local.test.ts::a failed report goes to onError as flush",
     "test:sdk/js/__tests__/local.test.ts::is reported as evaluate, and the call goes to the server",
@@ -337,6 +339,14 @@ by = [
 ]
 
 [[unit]]
+text = "reportError | (report: ErrorReport) => Promise<boolean> | true when the server stored the report (201); see Reporting errors | false; never rejects; onError(err, 'reportError')"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on %s and passes the failure to onError as reportError",
+    "test:sdk/js/__tests__/client.test.ts::never rejects, even with a throwing onError handler or no report at all",
+]
+
+[[unit]]
 text = "fetchAssignments | (userId, { activeOnly?: boolean } = { activeOnly: true }) => Promise<AssignmentRecord[]> | Server-side assignment rows (raw objects); not cached | Rejects"
 by = ["test:sdk/js/__tests__/client.test.ts::fetchAssignments GETs /api/v1/tracking/assignments/{user_id}?active_only=true"]
 
@@ -349,8 +359,11 @@ text = "getEvaluatedFlags | (userId) => string[] | Keys of cached, successfully 
 by = ["test:sdk/js/__tests__/client.test.ts::getEvaluatedFlags returns cached flag keys for the user only"]
 
 [[unit]]
-text = "clearCache | () => void | Drops both caches | —"
-by = ["test:sdk/js/__tests__/client.test.ts::clearCache empties both caches"]
+text = "clearCache | () => void | Drops both caches; keeps the keys a key-less track is sent to | —"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::clearCache empties both caches",
+    "test:sdk/js/__tests__/client.test.ts::still sends to the attributed keys after clearCache, which empties only the cache",
+]
 
 [[unit]]
 text = "ready | ({ timeoutMs? }?) => Promise<ReadyResult> | { ok: true, rulesetVersion } or { ok: false, error }; { ok: true, rulesetVersion: null } at once in server mode | Never rejects"
@@ -429,7 +442,7 @@ by = [
 text = "TrackEvent = TrackOptions & { userId, eventName }."
 by = [
     "test:sdk/js/__tests__/client.test.ts::POSTs keyed events to /api/v1/tracking/batch and aggregates the server counts",
-    "test:sdk/js/__tests__/client.test.ts::expands keyless entries with the fan-out rule and drops those with nothing cached",
+    "test:sdk/js/__tests__/client.test.ts::expands keyless entries with the fan-out rule and sends those with nothing attributed once with no key",
 ]
 
 [[unit]]
@@ -444,20 +457,75 @@ by = [
 ]
 
 [[unit]]
-text = "Without a key: one POST /api/v1/tracking/batch (chunked at 100) containing one entry per experiment the user has been assigned to in this client (experiment_key) plus one per flag evaluated for the user (feature_flag_key), taken from the cache."
+text = "Without a key: one POST /api/v1/tracking/batch (chunked at 100) containing one entry per experiment (experiment_key) and one per flag (feature_flag_key) this client answered for the user in the last 24 hours, whether or not the answer is still cached."
 by = [
     "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/batch with one entry per assignment plus one per evaluated flag",
     "test:sdk/js/__tests__/client.test.ts::splits more than 100 entries into multiple batch requests",
-    "test:sdk/js/__tests__/client.test.ts::does not fan out to a failed assignment or an expired one",
-    "test:sdk/js/__tests__/client.test.ts::fans out to an assignment the global holdout answered (assigned: false)",
+    "test:sdk/js/__tests__/client.test.ts::does not fan out to a failed assignment, and still fans out to one past the cache TTL",
+    "test:sdk/js/__tests__/client.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
+    "test:sdk/js/__tests__/client.test.ts::sends to exactly n experiments plus m flags past the TTL, each once, experiments first",
+    "test:sdk/js/__tests__/client.test.ts::sends to a key answered 24 hours less 1 s ago",
+    "test:sdk/js/__tests__/client.test.ts::does not send to a key answered more than 24 hours ago: the event goes once with no key",
+    "test:sdk/js/__tests__/attribution.test.ts::drops a key once its latest answer is more than 24 hours old",
 ]
 
 [[unit]]
-text = "If nothing is cached, nothing is sent."
+text = "An experiment that is not running (its latest answer has reason draft, paused, completed or archived) gets no entry."
 by = [
-    "test:sdk/js/__tests__/client.test.ts::sends nothing when nothing is cached for the user",
-    "test:sdk/js/__tests__/client.test.ts::sends nothing when only another user has cached data",
+    "test:sdk/js/__tests__/client.test.ts::does not send to an experiment whose latest answer has reason %s",
+    "test:sdk/js/__tests__/client.test.ts::follows the latest answer: a paused answer stops the fan-out, a later running answer restores it",
 ]
+
+[[unit]]
+text = "An answer with assigned: false for holdout, mutual_exclusion or targeting keeps its entry: holdout results count those users' events."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::fans out to an assignment the global holdout answered (assigned: false)",
+    "test:sdk/js/__tests__/client.test.ts::still sends to an experiment answered assigned: false with reason %s, past the TTL",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestUntagged::test_an_untagged_event_counts_like_a_tagged_one",
+]
+
+[[unit]]
+text = "An experiment whose assignment is later answered 404 loses its entry at once, so key-less events stop reaching it; any other failure (a 5xx, a network error) keeps it."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::drops an experiment whose assignment is later answered 404: the event goes once with no key",
+    "test:sdk/js/__tests__/client.test.ts::keeps the key when the later assignment fails with %s",
+    "test:sdk/js/__tests__/attribution.test.ts::forgetExperiment drops that experiment only, and the user once nothing is left",
+]
+
+[[unit]]
+text = "With nothing to attribute it to, the event is still sent: one POST /api/v1/tracking/track with no key."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::sends the event once to /api/v1/tracking/track with no key when nothing is attributed to the user",
+    "test:sdk/js/__tests__/client.test.ts::never sends another user's keys: that user's event goes once to /api/v1/tracking/track with no key",
+]
+
+[[unit]]
+text = "The server stores it as history, which counts in holdout results and as CUPED history, never in an experiment's results."
+by = [
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::TestUntaggedTrack::test_an_event_with_no_key_is_stored_as_history",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestUntagged::test_an_untagged_event_counts_like_a_tagged_one",
+    "test:backend/tests/integration/api/test_cuped_history_sent_by_tracking.py::test_history_is_matched_by_exact_id_and_dated_in_utc",
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::test_an_untagged_event_after_assignment_counts_nowhere",
+]
+
+[[unit]]
+text = "The keys live in this client's memory, for up to 10,000 users (the user answered least recently is dropped first)."
+by = [
+    "test:sdk/js/__tests__/attribution.test.ts::keeps at most MAX_ATTRIBUTED_USERS users: one more drops the least recently answered",
+    "test:sdk/js/__tests__/attribution.test.ts::a new answer makes its user the most recently answered, so another user is dropped first",
+    "test:sdk/js/__tests__/attribution.test.ts::keeps 10,000 users for 24 hours and skips the four lifecycle reasons",
+]
+
+[[unit]]
+text = "clearCache() keeps them, and another process does not have them."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::still sends to the attributed keys after clearCache, which empties only the cache",
+    "test:sdk/js/__tests__/client.test.ts::another client instance has none of them: its event goes once with no key",
+]
+
+[[unit]]
+text = "On a server, the process that records a purchase is often not the one that assigned the user, so pass experimentKey on conversions there."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "This is what makes a single track(userId, 'purchase', …) count as a conversion for every experiment the user is in."
@@ -468,9 +536,10 @@ by = [
 ]
 
 [[unit]]
-text = "trackBatch applies the same expansion to keyless entries, then sends everything in chunks of 100 and sums the server's success_count / failure_count / errors."
+text = "trackBatch applies the same expansion to keyless entries (one with nothing to attribute it to is sent with no key), then sends everything in chunks of 100 and sums the server's success_count / failure_count / errors."
 by = [
-    "test:sdk/js/__tests__/client.test.ts::expands keyless entries with the fan-out rule and drops those with nothing cached",
+    "test:sdk/js/__tests__/client.test.ts::expands keyless entries with the fan-out rule and sends those with nothing attributed once with no key",
+    "test:sdk/js/__tests__/client.test.ts::expands keyless entries to the keys attributed past the cache TTL",
     "test:sdk/js/__tests__/client.test.ts::chunks at 100 events per request",
     "test:sdk/js/__tests__/client.test.ts::collects server-reported per-event errors",
 ]
@@ -478,6 +547,87 @@ by = [
 [[unit]]
 text = "Conversions are matched to metrics by event name."
 by = ["test:backend/tests/integration/services/test_conversion_event_matching.py::TestConversionEventFilter::test_matches_both_producer_shapes_and_excludes_exposures"]
+
+[[unit]]
+text = "Reporting errors"
+by = ["exempt:label"]
+
+[[unit]]
+text = "reportError(report) sends one POST /api/v1/tracking/errors for an error that happened while a flag or experiment was active, in either evaluation mode."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/js/__tests__/local.test.ts::reportError sends the report with the same key in local mode, before and after close()",
+]
+
+[[unit]]
+text = "report is an ErrorReport: errorType and message, and optionally featureFlagKey, experimentKey, userId, stackTrace, metadata and timestamp."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/js/__tests__/client.test.ts::sends only the fields given, and a string timestamp as it is",
+]
+
+[[unit]]
+text = "The server needs featureFlagKey or experimentKey, and the SDK sends the report without checking it."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::does not check the report itself: one with no key is sent, and the 422 resolves false",
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportError::test_missing_both_keys_returns_422",
+]
+
+[[unit]]
+text = "true means the server stored the report: it answered 201."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on a 2xx that is not 201: true means stored, and only 201 says so",
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportError::test_writes_row_with_resolved_flag_id",
+]
+
+[[unit]]
+text = "false means it did not: any other answer (401, 404, 422, a 429 after its one retry, 5xx) or a network failure, which is also passed to onError(err, 'reportError')."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::resolves false on %s and passes the failure to onError as reportError",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on a 429 that is still a 429 after its one retry",
+    "test:sdk/js/__tests__/client.test.ts::resolves true when the retry after a 429 is answered 201",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on a network failure and passes it to onError",
+]
+
+[[unit]]
+text = "reportError never rejects."
+by = ["test:sdk/js/__tests__/client.test.ts::never rejects, even with a throwing onError handler or no report at all"]
+
+[[unit]]
+text = "A stored report counts toward the flag's error rate and automatic rollback only when it names that flag in featureFlagKey (a report with only experimentKey is stored, but counts toward no flag's rate) and the client's key is a server-side key: one with the sdk:ruleset scope, created by a user who can change feature flags."
+by = [
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportError::test_experiment_only_report",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_server_side_key_rolls_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_key_without_the_scope_does_not_roll_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count",
+]
+
+[[unit]]
+text = "A report sent with any other key is stored too and still resolves true; the flag's safety check shows those reports as uncounted_error_count."
+by = [
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_check_endpoint_shows_the_reports_it_does_not_count",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_stored_source_follows_the_presented_key",
+]
+
+[[unit]]
+text = "See Which errors count."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The error rate divides the counted errors by the flag's evaluations in the check's 15-minute window."
+by = [
+    "test:backend/tests/integration/api/test_flag_evaluations_api.py::test_the_check_reports_errors_with_zero_evaluations",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetErrorMetrics::test_computes_rate_and_error_type_breakdown",
+]
+
+[[unit]]
+text = "With no evaluations in the window it reads 0, so an error-rate threshold cannot fire: in local mode the counts reach the server every 60 seconds and on close()."
+by = [
+    "test:backend/tests/integration/api/test_flag_evaluations_api.py::test_the_check_reports_errors_with_zero_evaluations",
+    "test:sdk/js/__tests__/local.test.ts::counts are sent every 60 seconds, and only when there are some",
+    "test:sdk/js/__tests__/local.test.ts::close() sends one entry per flag; deferred evaluations are not counted",
+]
 
 [[unit]]
 text = "Caching, dedupe and retries"
@@ -633,6 +783,13 @@ by = [
 ]
 
 [[unit]]
+text = "reportError | POST /api/v1/tracking/errors | {\"error_type\",\"message\",\"feature_flag_key\"?,\"experiment_key\"?,\"user_id\"?,\"stack_trace\"?,\"metadata\"?,\"timestamp\"?} | 201 and the stored report (only the status is read)"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "Errors: 401 bad key; 404 an unknown experiment or flag key, or a draft experiment with no control variant; 422 invalid event; 429 rate limited (Retry-After header, retried once)."
 by = [
     "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 401 for a bad key",
@@ -777,7 +934,7 @@ by = [
 ]
 
 [[unit]]
-text = "That also runs examples/local_eval_smoke.mjs with the seed's sdk:ruleset key (the js (local) row): 40 evaluations answered locally, the counts sent on close(), then two error reports sent with the same key, and the runner checks in the database that no evaluate call was made, that the safety monitor's denominator grew by exactly 40 and that both reports were counted."
+text = "That also runs examples/local_eval_smoke.mjs with the seed's sdk:ruleset key (the js (local) row): 40 evaluations answered locally, the counts sent on close(), then two error reports sent with reportError and the same key, and the runner checks in the database that no evaluate call was made, that the safety monitor's denominator grew by exactly 40 and that both reports were counted."
 by = [
     "test:backend/tests/unit/scripts/test_run_live_contract.py::test_each_sdk_runs_its_own_contract_smoke",
     "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestContractSeed::test_the_seed_writes_a_plain_and_a_scoped_key",

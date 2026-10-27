@@ -311,6 +311,7 @@ SUITES: Dict[str, Tuple[Invocation, ...]] = {
             (
                 "backend/tests/unit/",
                 "backend/tests/realistic/",
+                "backend/tests/installer_sweeps/",
                 "--ignore=backend/tests/unit/chart",
             ),
         ),
