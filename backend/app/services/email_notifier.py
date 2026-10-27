@@ -14,6 +14,7 @@ Design rules:
 
 import logging
 import smtplib
+import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Dict, List, Optional
@@ -47,6 +48,15 @@ except ImportError:
 SMTP_AVAILABLE = True
 
 
+def _smtp_tls_context(ca_file: str) -> ssl.SSLContext:
+    """Build the SMTP trust context at send time."""
+    ca_file = ca_file.strip()
+    context = ssl.create_default_context(cafile=ca_file or None)
+    if ca_file and context.cert_store_stats()["x509"] == 0:
+        raise ValueError("SMTP_CA_FILE holds no certificate")
+    return context
+
+
 # ---------------------------------------------------------------------------
 # EmailNotifier
 # ---------------------------------------------------------------------------
@@ -62,6 +72,7 @@ class EmailNotifier:
         self._smtp_port: int = getattr(settings, "SMTP_PORT", 587)
         self._smtp_username: str = getattr(settings, "SMTP_USERNAME", "")
         self._smtp_password: str = getattr(settings, "SMTP_PASSWORD", "")
+        self._smtp_ca_file: str = getattr(settings, "SMTP_CA_FILE", "")
         self._from_address: str = getattr(
             settings, "EMAIL_FROM_ADDRESS", "platform@example.com"
         )
@@ -329,7 +340,13 @@ class EmailNotifier:
             logger.debug("SMTP_HOST is not configured — skipping SMTP")
             return False
 
+        step = "tls-setup"
+        primary_failure = None
         try:
+            has_credentials = bool(self._smtp_username and self._smtp_password)
+            needs_tls = has_credentials or bool(self._smtp_ca_file.strip())
+            context = _smtp_tls_context(self._smtp_ca_file) if needs_tls else None
+
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = f"{self._from_name} <{self._from_address}>"
@@ -338,18 +355,52 @@ class EmailNotifier:
             part = MIMEText(html_body, "html")
             msg.attach(part)
 
+            step = "connect"
             with smtplib.SMTP(self._smtp_host, self._smtp_port) as server:
-                server.ehlo()
-                if self._smtp_username and self._smtp_password:
-                    server.starttls()
-                    server.login(self._smtp_username, self._smtp_password)
-                server.sendmail(self._from_address, to_addresses, msg.as_string())
+                try:
+                    server.ehlo()
+                    if needs_tls:
+                        step = "starttls"
+                        server.starttls(context=context)
+                    if has_credentials:
+                        step = "login"
+                        server.login(self._smtp_username, self._smtp_password)
+                    step = "send"
+                    server.sendmail(self._from_address, to_addresses, msg.as_string())
+                    step = "quit"
+                except Exception as exc:
+                    primary_failure = exc
+                    raise
 
             logger.debug("Email sent via SMTP to %s", to_addresses)
             return True
 
-        except Exception:
-            logger.exception("Error sending email via SMTP")
+        except Exception as exc:
+            failure = primary_failure if primary_failure is not None else exc
+            if step == "login":
+                detail = "Check SMTP login settings"
+            elif step == "tls-setup":
+                detail = "Check SMTP_CA_FILE readability and PEM certificates"
+            elif isinstance(failure, ssl.SSLCertVerificationError):
+                detail = "Check SMTP_HOST and certificate trust"
+            elif isinstance(failure, smtplib.SMTPNotSupportedError):
+                detail = "Use a STARTTLS port, usually 587"
+            elif isinstance(failure, ssl.SSLError):
+                detail = "Check STARTTLS and TLS certificate settings"
+            elif step == "quit":
+                detail = "Server accepted message; confirm delivery before retrying"
+            else:
+                detail = "Check SMTP connection and server settings"
+            logger.error(
+                "SMTP step=%s host=%s port=%s error=%s; %s; SMTP_CA_FILE=%s",
+                step,
+                ascii(self._smtp_host[:200]),
+                self._smtp_port,
+                type(failure).__name__,
+                detail,
+                ascii(self._smtp_ca_file[:200]),
+                extra={"smtp_step": step},
+            )
             return False
 
     # ------------------------------------------------------------------

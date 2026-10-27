@@ -71,8 +71,8 @@ INVENTORY: Dict[str, str] = {
     # Raw SQL in an f-string (FROM {schema}.assignments).
     "backend/app/api/v1/endpoints/results.py::_compute_dimensional_breakdown": READS,
     "backend/app/api/v1/endpoints/results.py::get_sample_size_status": READS,
-    "backend/app/api/v1/endpoints/tracking.py::track_event": READS,
-    "backend/app/api/v1/endpoints/tracking.py::track_events_batch": READS,
+    # /track and /batch read the user's stored variant through it.
+    "backend/app/api/v1/endpoints/tracking.py::_variant_at_receipt": READS,
     "backend/app/core/bandit_scheduler.py::BanditScheduler._count_assignments_by_variant": READS,
     "backend/app/core/bandit_scheduler.py::BanditScheduler._stats_from_postgres": READS,
     "backend/app/services/analysis_service.py::AnalysisService._bayesian_observations": READS,

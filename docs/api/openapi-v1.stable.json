@@ -13844,7 +13844,7 @@
   "info": {
     "description": "API for managing experiments and feature flags in test environment",
     "title": "Controlvar",
-    "version": "0.36.3"
+    "version": "0.37.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -26068,7 +26068,7 @@
     },
     "/api/v1/tracking/batch": {
       "post": {
-        "description": "Track multiple events in a single batch operation.\n\nThis endpoint allows tracking multiple events in a single request,\nimproving performance for high-volume event tracking.\n\nThe batch can contain up to 100 events. If any events fail validation,\nthe response will include details about which events failed and why.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nReturns:\n    EventBatchResponse: Results of the batch processing operation\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 413: If the batch size exceeds the limit\n    HTTPException 422: If the batch request format is invalid",
+        "description": "Track multiple events in a single batch operation.\n\nThis endpoint allows tracking multiple events in a single request,\nimproving performance for high-volume event tracking.\n\nThe batch can contain up to 100 events. If any events fail validation,\nthe response will include details about which events failed and why.\n\nEach event is tagged as ``/track`` tags it: with the user's variant while\nthe experiment is running (ACTIVE), and with no variant for a draft,\npaused, completed or archived experiment.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nReturns:\n    EventBatchResponse: Results of the batch processing operation\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 413: If the batch size exceeds the limit\n    HTTPException 422: If the batch request format is invalid",
         "operationId": "track_events_batch_api_v1_tracking_batch_post",
         "requestBody": {
           "content": {
@@ -26310,7 +26310,7 @@
     },
     "/api/v1/tracking/track": {
       "post": {
-        "description": "Track an event for an experiment.\n\nThis endpoint records a user interaction event associated with an experiment.\nEvents are used to measure experiment metrics and outcomes.\n\nEvent tracking can be associated with:\n- A specific experiment (using experiment_key)\n- A feature flag (using feature_flag_key)\n- Or both\n\nAdditional data can be included:\n- Numeric value (for revenue, durations, counts)\n- Metadata (additional contextual information)\n- Custom timestamp (defaults to server time if not provided)\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nReturns:\n    EventResponse: Confirmation of successful event tracking with event ID\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 422: If the event data is invalid",
+        "description": "Track an event for an experiment.\n\nThis endpoint records a user interaction event associated with an experiment.\nEvents are used to measure experiment metrics and outcomes.\n\nEvent tracking can be associated with:\n- A specific experiment (using experiment_key)\n- A feature flag (using feature_flag_key)\n- Or both\n\nWhile the experiment is running (ACTIVE), the event is tagged with the\nvariant the user is assigned to. An event for a draft, paused, completed\nor archived experiment is stored with the experiment and no variant, so\nit counts in no variant's results.\n\nAdditional data can be included:\n- Numeric value (for revenue, durations, counts)\n- Metadata (additional contextual information)\n- Custom timestamp (defaults to server time if not provided)\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nReturns:\n    EventResponse: Confirmation of successful event tracking with event ID\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 422: If the event data is invalid",
         "operationId": "track_event_api_v1_tracking_track_post",
         "requestBody": {
           "content": {

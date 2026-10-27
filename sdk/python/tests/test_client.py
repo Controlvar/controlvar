@@ -444,24 +444,37 @@ class TestTrackFanOut:
             ]
         }
 
-    def test_nothing_cached_sends_nothing(self, client, transport):
-        assert client.track("user-1", "page_view") is False
-        assert transport.requests == []
+    def test_nothing_attributed_sends_the_event_once_to_track_with_no_key(self, client, transport):
+        transport.route("POST", "/api/v1/tracking/track", json={"id": "evt-1"})
+        assert client.track("user-1", "page_view", event_value=2, properties={"page": "/"}) is True
+        assert transport.calls() == ["POST /api/v1/tracking/track"]
+        assert transport.last.json() == {
+            "event_type": "page_view",
+            "event_name": "page_view",
+            "user_id": "user-1",
+            "value": 2.0,
+            "metadata": {"page": "/"},
+        }
 
-    def test_fan_out_is_per_user(self, client, transport):
+    def test_another_users_keys_never_go_out_with_this_users_event(self, client, transport):
         assign_route(transport)
+        transport.route("POST", "/api/v1/tracking/track", json={})
         client.get_assignment("checkout_flow", "user-1")
-        assert client.track("user-2", "page_view") is False
-        assert transport.calls() == ["POST /api/v1/tracking/assign"]
+        assert client.track("user-2", "page_view") is True
+        assert transport.calls() == ["POST /api/v1/tracking/assign", "POST /api/v1/tracking/track"]
+        assert transport.last.json() == {"event_type": "page_view", "event_name": "page_view", "user_id": "user-2"}
 
-    def test_expired_entries_are_not_fanned_out(self, client, transport):
+    def test_entries_past_the_cache_ttl_are_still_fanned_out(self, client, transport):
         flag_route(transport)
+        batch_route(transport)
         with mock.patch("controlvar.cache._now") as now:
             now.return_value = 0.0
             client.get_feature_flag("new_search", "user-1")
             now.return_value = 400.0
-            assert client.track("user-1", "page_view") is False
-        assert transport.calls() == ["GET /api/v1/feature-flags/evaluate/new_search"]
+            assert client.cached_flags("user-1") == []
+            assert client.track("user-1", "page_view") is True
+        assert transport.calls() == ["GET /api/v1/feature-flags/evaluate/new_search", "POST /api/v1/tracking/batch"]
+        assert [e["feature_flag_key"] for e in transport.last.json()["events"]] == ["new_search"]
 
     def test_chunks_at_batch_limit(self, client, transport):
         for i in range(150):
@@ -476,11 +489,234 @@ class TestTrackFanOut:
         assert batches[0].json()["events"][0]["feature_flag_key"] == "flag-0"
         assert batches[1].json()["events"][-1]["feature_flag_key"] == "flag-149"
 
-    def test_reports_failures_from_batch_body(self, client, transport):
+    def test_a_batch_answered_2xx_returns_true_even_when_an_entry_failed(self, client, transport):
+        # True means "sent and answered 2xx". A failed entry (for example a key the
+        # server no longer has) is in the batch's body; track_batch reports it.
         assign_route(transport)
         client.get_assignment("checkout_flow", "user-1")
         batch_route(transport, success_count=0, failure_count=1, errors=[{"index": 0, "error": "nope"}])
+        assert client.track("user-1", "page_view") is True
+
+    @pytest.mark.parametrize("status", [401, 422, 500])
+    def test_a_fan_out_answered_non_2xx_returns_false(self, client, transport, status):
+        assign_route(transport)
+        client.get_assignment("checkout_flow", "user-1")
+        transport.route("POST", "/api/v1/tracking/batch", status=status, json={"detail": "no"})
         assert client.track("user-1", "page_view") is False
+
+    def test_a_failed_chunk_does_not_stop_the_next_one(self, client, transport):
+        for i in range(150):
+            flag_route(transport, key=f"flag-{i}")
+            client.get_feature_flag(f"flag-{i}", "user-1")
+        transport.respond(500, json={"detail": "no"}).respond(200, json=BATCH_OK)
+        assert client.track("user-1", "page_view") is False
+        batches = [r for r in transport.requests if r.path == "/api/v1/tracking/batch"]
+        assert [len(b.json()["events"]) for b in batches] == [BATCH_LIMIT, 50]
+
+    @pytest.mark.parametrize("status", [401, 422, 500])
+    def test_an_untagged_send_answered_non_2xx_returns_false(self, client, transport, status):
+        transport.route("POST", "/api/v1/tracking/track", status=status, json={"detail": "no"})
+        assert client.track("user-1", "page_view") is False
+        assert transport.calls() == ["POST /api/v1/tracking/track"]
+
+
+def batch_keys(request) -> list:
+    """A batch's entries as ``experiment_key``, or ``flag:<feature_flag_key>``."""
+    return [e.get("experiment_key") or f"flag:{e['feature_flag_key']}" for e in request.json()["events"]]
+
+
+class TestLateConversions:
+    """A key-less track() reaches the keys this client answered for the user in the
+    last 24 hours, whether or not the answer is still in the 300 s cache."""
+
+    @pytest.mark.regression
+    def test_a_purchase_301_seconds_after_the_assignment_reaches_the_experiment(self, client, transport):
+        assign_route(transport)
+        batch_route(transport, success_count=1)
+        with mock.patch("controlvar.cache._now") as now:
+            now.return_value = 1000.0
+            client.get_assignment("checkout_flow", "user-1")
+            now.return_value = 1301.0  # past the 300 s cache TTL
+            assert client.cached_assignments("user-1") == []
+            assert client.track("user-1", "purchase", event_value=120) is True
+        assert transport.calls() == ["POST /api/v1/tracking/assign", "POST /api/v1/tracking/batch"]
+        assert transport.last.json() == {
+            "events": [
+                {
+                    "event_type": "purchase",
+                    "event_name": "purchase",
+                    "user_id": "user-1",
+                    "value": 120.0,
+                    "experiment_key": "checkout_flow",
+                }
+            ]
+        }
+
+    def test_control_the_same_purchase_at_299_seconds_while_still_cached(self, client, transport):
+        assign_route(transport)
+        batch_route(transport, success_count=1)
+        with mock.patch("controlvar.cache._now") as now:
+            now.return_value = 1000.0
+            client.get_assignment("checkout_flow", "user-1")
+            now.return_value = 1299.0
+            assert [a.experiment_key for a in client.cached_assignments("user-1")] == ["checkout_flow"]
+            assert client.track("user-1", "purchase", event_value=120) is True
+        assert transport.calls() == ["POST /api/v1/tracking/assign", "POST /api/v1/tracking/batch"]
+        assert batch_keys(transport.last) == ["checkout_flow"]
+
+    def test_n_experiments_plus_m_flags_each_once_experiments_first(self, client, transport):
+        for key in ("hero", "checkout_flow"):
+            transport.respond(200, json={**ASSIGN_RESPONSE, "experiment_key": key})
+        transport.respond(200, json={**FLAG_RESPONSE, "key": "new_search"})
+        transport.respond(200, json={**ASSIGN_RESPONSE, "experiment_key": "sort"})
+        transport.respond(200, json={**FLAG_RESPONSE, "key": "free_shipping"})
+        transport.respond(200, json={**ASSIGN_RESPONSE, "experiment_key": "checkout_flow"})
+        batch_route(transport, success_count=5)
+        with mock.patch("controlvar.cache._now") as now:
+            now.return_value = 0.0
+            client.get_assignment("hero", "user-1")
+            client.get_assignment("checkout_flow", "user-1")
+            client.get_feature_flag("new_search", "user-1")
+            client.get_assignment("sort", "user-1")
+            client.get_feature_flag("free_shipping", "user-1")
+            now.return_value = 400.0
+            client.get_assignment("checkout_flow", "user-1")  # answered again: one entry, first place
+            now.return_value = 800.0
+            assert client.track("user-1", "purchase") is True
+        assert transport.calls()[-1] == "POST /api/v1/tracking/batch"
+        assert len(transport.last.json()["events"]) == 5
+        assert batch_keys(transport.last) == ["hero", "checkout_flow", "sort", "flag:new_search", "flag:free_shipping"]
+
+    @pytest.mark.parametrize("reason", ["holdout", "mutual_exclusion", "targeting"])
+    def test_an_assigned_false_answer_is_kept_past_the_ttl(self, client, transport, reason):
+        assign_route(transport, variant_name="control", is_control=True, assigned=False, reason=reason)
+        batch_route(transport, success_count=1)
+        with mock.patch("controlvar.cache._now") as now:
+            now.return_value = 0.0
+            client.get_assignment("checkout_flow", "user-1")
+            now.return_value = 301.0
+            assert client.track("user-1", "purchase") is True
+        assert transport.calls()[-1] == "POST /api/v1/tracking/batch"
+        assert batch_keys(transport.last) == ["checkout_flow"]
+
+    @pytest.mark.parametrize("reason", ["draft", "paused", "completed", "archived"])
+    def test_an_experiment_whose_latest_answer_has_a_lifecycle_reason_is_skipped(self, client, transport, reason):
+        transport.respond(
+            200,
+            json={**ASSIGN_RESPONSE, "variant_name": "control", "is_control": True, "assigned": False, "reason": reason},
+        )
+        transport.respond(200, json={**ASSIGN_RESPONSE, "experiment_key": "hero"})
+        batch_route(transport, success_count=1)
+        client.get_assignment("checkout_flow", "user-1")
+        client.get_assignment("hero", "user-1")
+        assert client.track("user-1", "purchase") is True
+        assert transport.calls()[-1] == "POST /api/v1/tracking/batch"
+        assert batch_keys(transport.last) == ["hero"]
+
+    def test_the_latest_answer_decides_paused_stops_and_resumed_restores(self, client, transport):
+        transport.route("POST", "/api/v1/tracking/track", json={})
+        batch_route(transport, success_count=1)
+        running = {**ASSIGN_RESPONSE, "assigned": True, "reason": "assigned"}
+        paused = {**ASSIGN_RESPONSE, "variant_name": "control", "is_control": True, "assigned": False, "reason": "paused"}
+        with mock.patch("controlvar.cache._now") as now:
+            now.return_value = 0.0
+            transport.respond(200, json=running)
+            client.get_assignment("checkout_flow", "user-1")
+            now.return_value = 301.0
+            transport.respond(200, json=paused)
+            client.get_assignment("checkout_flow", "user-1")
+            assert client.track("user-1", "purchase") is True
+            assert transport.calls()[-1] == "POST /api/v1/tracking/track"
+            assert "experiment_key" not in transport.last.json()
+
+            now.return_value = 602.0
+            transport.respond(200, json=running)
+            client.get_assignment("checkout_flow", "user-1")
+            assert client.track("user-1", "purchase") is True
+        assert transport.calls()[-1] == "POST /api/v1/tracking/batch"
+        assert batch_keys(transport.last) == ["checkout_flow"]
+
+    @pytest.mark.regression
+    def test_an_experiment_whose_assignment_is_later_answered_404_is_dropped(self, client, transport):
+        transport.route("POST", "/api/v1/tracking/track", json={})
+        with mock.patch("controlvar.cache._now") as now:
+            now.return_value = 0.0
+            transport.respond(200, json=ASSIGN_RESPONSE)
+            client.get_assignment("checkout_flow", "user-1")
+            now.return_value = 301.0  # the cache has expired; the server now answers 404
+            transport.respond(404, json={"detail": "Active experiment with key 'checkout_flow' not found"})
+            assert client.get_variant("checkout_flow", "user-1") == "control"
+            now.return_value = 3600.0
+            assert client.track("user-1", "purchase") is True
+        assert transport.calls() == [
+            "POST /api/v1/tracking/assign",
+            "POST /api/v1/tracking/assign",
+            "POST /api/v1/tracking/track",
+        ]
+        assert transport.last.json() == {"event_type": "purchase", "event_name": "purchase", "user_id": "user-1"}
+
+    @pytest.mark.parametrize("failure", [500, TransportError("reset")], ids=["500", "network"])
+    def test_the_key_is_kept_when_the_later_assignment_fails_otherwise(self, client, transport, failure):
+        batch_route(transport, success_count=1)
+        with mock.patch("controlvar.cache._now") as now:
+            now.return_value = 0.0
+            transport.respond(200, json=ASSIGN_RESPONSE)
+            client.get_assignment("checkout_flow", "user-1")
+            now.return_value = 301.0
+            if isinstance(failure, int):
+                transport.respond(failure, json={"detail": "no"})
+            else:
+                transport.fail(failure)
+            assert client.get_variant("checkout_flow", "user-1") == "control"
+            assert client.track("user-1", "purchase") is True
+        assert transport.calls()[-1] == "POST /api/v1/tracking/batch"
+        assert batch_keys(transport.last) == ["checkout_flow"]
+
+    def test_a_key_answered_24_hours_less_1_second_ago_is_kept(self, client, transport):
+        assign_route(transport)
+        batch_route(transport, success_count=1)
+        with mock.patch("controlvar.cache._now") as now:
+            now.return_value = 0.0
+            client.get_assignment("checkout_flow", "user-1")
+            now.return_value = 24 * 3600 - 1.0
+            assert client.track("user-1", "purchase") is True
+        assert transport.calls()[-1] == "POST /api/v1/tracking/batch"
+        assert batch_keys(transport.last) == ["checkout_flow"]
+
+    def test_a_key_answered_more_than_24_hours_ago_is_dropped_and_the_event_goes_with_no_key(
+        self, client, transport
+    ):
+        assign_route(transport)
+        transport.route("POST", "/api/v1/tracking/track", json={})
+        with mock.patch("controlvar.cache._now") as now:
+            now.return_value = 0.0
+            client.get_assignment("checkout_flow", "user-1")
+            now.return_value = 24 * 3600 + 1.0
+            assert client.track("user-1", "purchase") is True
+        assert transport.calls() == ["POST /api/v1/tracking/assign", "POST /api/v1/tracking/track"]
+        assert transport.last.json() == {"event_type": "purchase", "event_name": "purchase", "user_id": "user-1"}
+
+    def test_clear_cache_keeps_the_attributed_keys(self, client, transport):
+        assign_route(transport)
+        flag_route(transport)
+        batch_route(transport, success_count=2)
+        client.get_assignment("checkout_flow", "user-1")
+        client.get_feature_flag("new_search", "user-1")
+        client.clear_cache()
+        assert client.cached_assignments("user-1") == [] and client.cached_flags("user-1") == []
+        assert client.track("user-1", "purchase") is True
+        assert transport.calls()[-1] == "POST /api/v1/tracking/batch"
+        assert batch_keys(transport.last) == ["checkout_flow", "flag:new_search"]
+
+    def test_another_client_instance_has_none_of_them(self, client, transport):
+        # Say, an order service: its event reaches no experiment unless it names one.
+        assign_route(transport)
+        transport.route("POST", "/api/v1/tracking/track", json={})
+        client.get_assignment("checkout_flow", "user-1")
+        order_service = ExperimentationClient(API_URL, API_KEY, transport=transport)
+        assert order_service.track("user-1", "purchase") is True
+        assert transport.calls() == ["POST /api/v1/tracking/assign", "POST /api/v1/tracking/track"]
+        assert transport.last.json() == {"event_type": "purchase", "event_name": "purchase", "user_id": "user-1"}
 
 
 class TestTrackNeverRaises:
@@ -534,6 +770,13 @@ class TestTrackBatch:
         assert result.errors[0]["count"] == 3
         assert result.errors[0]["status"] == 500
 
+    def test_an_entry_with_no_key_is_sent_as_given_never_fanned_out(self, client, transport):
+        assign_route(transport)
+        batch_route(transport, success_count=1)
+        client.get_assignment("checkout_flow", "user-1")
+        client.track_batch([{"event_type": "purchase", "user_id": "user-1"}])
+        assert transport.last.json() == {"events": [{"event_type": "purchase", "user_id": "user-1"}]}
+
     def test_empty_batch_sends_nothing(self, client, transport):
         assert client.track_batch([]) == BatchResult()
         assert transport.requests == []
@@ -542,6 +785,111 @@ class TestTrackBatch:
         batch_route(transport)
         client.track_batch([{"event_type": "e", "user_id": "u", "experiment_key": "x", "timestamp": datetime(2026, 3, 1)}])
         assert transport.last.json()["events"][0]["timestamp"] == "2026-03-01T00:00:00+00:00"
+
+
+# ------------------------------------------------------------------------ report_error
+
+ERRORS_PATH = "/api/v1/tracking/errors"
+STORED = {"id": "err-1", "error_type": "crash", "timestamp": "2026-10-26T10:00:00"}
+
+
+class TestReportError:
+    @pytest.fixture(autouse=True)
+    def no_sleep(self, client):
+        client._sleep = mock.Mock()
+        return client._sleep
+
+    def test_posts_one_report_with_the_server_field_names_and_returns_true_on_201(self, client, transport):
+        transport.route("POST", ERRORS_PATH, status=201, json=STORED)
+        stored = client.report_error(
+            "crash",
+            "TypeError in checkout",
+            feature_flag_key="new-checkout",
+            experiment_key="checkout",
+            user_id="user-1",
+            stack_trace="at pay (checkout.py:12)",
+            metadata={"os": "linux", "release": "3.2.1"},
+            timestamp=datetime(2026, 10, 26, 9, 59, tzinfo=timezone.utc),
+        )
+        assert stored is True
+        assert transport.calls() == [f"POST {ERRORS_PATH}"]
+        assert transport.last.headers["X-API-Key"] == API_KEY
+        assert transport.last.json() == {
+            "error_type": "crash",
+            "message": "TypeError in checkout",
+            "feature_flag_key": "new-checkout",
+            "experiment_key": "checkout",
+            "user_id": "user-1",
+            "stack_trace": "at pay (checkout.py:12)",
+            "metadata": {"os": "linux", "release": "3.2.1"},
+            "timestamp": "2026-10-26T09:59:00+00:00",
+        }
+
+    def test_sends_only_the_fields_given_a_naive_datetime_as_utc_and_a_string_as_it_is(self, client, transport):
+        transport.route("POST", ERRORS_PATH, status=201, json=STORED)
+        client.report_error("crash", "boom", feature_flag_key="f", timestamp=datetime(2026, 1, 2, 3, 4, 5))
+        assert transport.last.json() == {
+            "error_type": "crash",
+            "message": "boom",
+            "feature_flag_key": "f",
+            "timestamp": "2026-01-02T03:04:05+00:00",
+        }
+        client.report_error("crash", "boom", experiment_key="x", timestamp="2026-01-02T03:04:05Z")
+        assert transport.last.json()["timestamp"] == "2026-01-02T03:04:05Z"
+
+    def test_the_target_and_the_rest_are_keyword_only(self, client):
+        with pytest.raises(TypeError):
+            client.report_error("crash", "boom", "a-flag")  # type: ignore[misc]
+
+    def test_does_not_check_the_report_itself_and_a_422_returns_false(self, client, transport, caplog):
+        transport.route("POST", ERRORS_PATH, status=422, json={"detail": "At least one of feature_flag_key or experiment_key is required"})
+        with caplog.at_level("WARNING", logger="controlvar.client"):
+            assert client.report_error("crash", "boom") is False
+        assert transport.last.json() == {"error_type": "crash", "message": "boom"}
+        assert "HTTP 422" in caplog.text
+
+    @pytest.mark.parametrize("status", [401, 404, 422, 500, 503])
+    def test_returns_false_without_raising_on(self, client, transport, status):
+        transport.route("POST", ERRORS_PATH, status=status, json={"detail": "no"})
+        assert client.report_error("crash", "boom", feature_flag_key="f") is False
+
+    def test_returns_false_on_a_2xx_that_is_not_201(self, client, transport):
+        transport.route("POST", ERRORS_PATH, status=200, json=STORED)
+        assert client.report_error("crash", "boom", feature_flag_key="f") is False
+
+    def test_returns_false_on_a_429_that_is_still_a_429_after_its_one_retry(self, client, transport, no_sleep):
+        transport.respond(429, headers={"Retry-After": "1"}).respond(429, headers={"Retry-After": "1"})
+        assert client.report_error("crash", "boom", feature_flag_key="f") is False
+        assert len(transport.requests) == 2
+        no_sleep.assert_called_once_with(1.0)
+
+    def test_returns_true_when_the_retry_after_a_429_is_answered_201(self, client, transport):
+        transport.respond(429, headers={"Retry-After": "1"}).respond(201, json=STORED)
+        assert client.report_error("crash", "boom", feature_flag_key="f") is True
+        assert len(transport.requests) == 2
+
+    @pytest.mark.parametrize("exc", [TransportError("down"), RuntimeError("boom"), TimeoutError("slow")])
+    def test_returns_false_on_a_network_failure(self, client, transport, exc):
+        transport.fail(exc)
+        assert client.report_error("crash", "boom", feature_flag_key="f") is False
+
+    def test_returns_false_when_the_metadata_cannot_be_sent(self, client, transport):
+        assert client.report_error("crash", "boom", feature_flag_key="f", metadata={"obj": object()}) is False
+        assert transport.requests == []
+
+    def test_works_in_local_mode_before_and_after_close_with_the_same_key(self, transport, monkeypatch):
+        # Local mode is server-side code: errors are reported with the same sdk:ruleset key.
+        from controlvar.local import LocalEvaluation
+
+        monkeypatch.setattr(LocalEvaluation, "_start_thread", lambda self: None)
+        local = ExperimentationClient(API_URL, "sk-scoped", transport=transport, evaluation="local")
+        transport.route("POST", ERRORS_PATH, status=201, json=STORED)
+        assert local.report_error("crash", "boom", feature_flag_key="f") is True
+        local.close()
+        assert local.report_error("crash", "boom", feature_flag_key="f") is True
+        sent = [r for r in transport.requests if r.path == ERRORS_PATH]
+        assert len(sent) == 2
+        assert all(r.headers["X-API-Key"] == "sk-scoped" for r in sent)
 
 
 # ------------------------------------------------------------------------------- 429
