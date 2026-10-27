@@ -4,7 +4,7 @@
 document = "demo/streampulse/README.md"
 
 [[unit]]
-text = "StreamPulse — mobile feature-flag demo for Controlvar"
+text = "StreamPulse — device-targeting demo for Controlvar (web SDK)"
 by = ["exempt:label"]
 
 [[unit]]
@@ -47,6 +47,23 @@ by = [
 [[unit]]
 text = "No audio, no images, no external fonts or CDNs."
 by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_app_loads_no_image_font_audio_or_cdn"]
+
+[[unit]]
+text = "The phone is drawn in the browser and uses the React SDK, which sends the device's attributes with every flag evaluation."
+by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_builds_against_the_react_sdk_source_with_its_own_react",
+    "test:demo/streampulse/src/__tests__/StreamPulseApp.test.tsx::mounts the SDK provider once for the default device with the device as user + attributes and a 5 s cache",
+    "test:demo/streampulse/src/__tests__/devices.test.ts::maps a device to the SDK user: id = device_id, every attribute as targeting context",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::appends context=<url-encoded JSON of user.attributes> when the user has attributes",
+    "journey:demo-streampulse#rule-matches-the-premium-iphone",
+]
+
+[[unit]]
+text = "The native iOS, Android, React Native and Flutter SDKs do not send attributes on flag evaluation yet (#438), so a rule like the Search tab's would not match from them."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_native_sdks_send_no_context_on_flag_evaluation",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
+]
 
 [[unit]]
 text = "Screens ↔ platform features"
@@ -122,9 +139,14 @@ by = [
 ]
 
 [[unit]]
-text = "Every tracked event is sent with an explicit experimentKey / featureFlagKey (see the table); screen_view {screen} has no key and is fanned out by the SDK to everything cached for the device."
+text = "Every tracked event is sent with an explicit experimentKey / featureFlagKey (see the table); screen_view {screen} has no key and is fanned out by the SDK to every experiment and flag it answered for the device since the page was loaded (up to 24 hours; \"Refresh now\" clears only the cache, so it keeps them)."
 by = [
     "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::POSTs one entry per cached assignment to /api/v1/tracking/batch",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::does not send to a key answered more than 24 hours ago: the event goes once with no key",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::still fans out to the attributed keys after clearCache, which empties only the cache",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::another client instance has none of them: its event goes once with no key",
+    "test:demo/streampulse/src/__tests__/ControlvarPanel.test.tsx::\"Refresh now\" clears the SDK cache and asks the page to re-evaluate; links point at the dashboard",
     "test:demo/streampulse/src/__tests__/screens.test.tsx::flag on: \"AI search ✨\" with explanations; search {query, engine: ai, results} attributed to the flag",
 ]
 

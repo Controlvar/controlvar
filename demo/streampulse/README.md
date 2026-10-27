@@ -1,4 +1,4 @@
-# StreamPulse — mobile feature-flag demo for Controlvar
+# StreamPulse — device-targeting demo for Controlvar (web SDK)
 
 StreamPulse is a web page that renders a phone. Pick a simulated device (OS, OS version, app
 version, region, tier, employee) and the phone shows, screen by screen, which feature flags and
@@ -10,6 +10,11 @@ on the way.
 It exercises the feature-flag path of the platform: targeting rules with device context, gradual
 rollout schedules, safety monitoring + auto-rollback, kill switches, mutual exclusion groups, the
 global holdout and Bayesian A/B analysis. No audio, no images, no external fonts or CDNs.
+
+The phone is drawn in the browser and uses the React SDK, which sends the device's attributes with
+every flag evaluation. The native iOS, Android, React Native and Flutter SDKs do not send attributes
+on flag evaluation yet ([#438](https://github.com/Controlvar/controlvar/issues/438)), so a rule like
+the Search tab's would not match from them.
 
 ## Screens ↔ platform features
 
@@ -25,7 +30,9 @@ global holdout and Bayesian A/B analysis. No audio, no images, no external fonts
 | Every screen | all of the above | — | **Global holdout** `streampulse-holdout` (2 %): held-out devices see control everywhere with the reason `holdout` |
 
 Every tracked event is sent with an explicit `experimentKey` / `featureFlagKey` (see the table);
-`screen_view {screen}` has no key and is fanned out by the SDK to everything cached for the device.
+`screen_view {screen}` has no key and is fanned out by the SDK to every experiment and flag it
+answered for the device since the page was loaded (up to 24 hours; "Refresh now" clears only the
+cache, so it keeps them).
 
 The right-hand side has two panels:
 

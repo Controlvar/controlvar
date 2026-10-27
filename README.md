@@ -63,9 +63,10 @@ a customer app would. `./demo/setup-local.sh` starts everything.
 
 - **ShopLab** (`demo/shoplab`, http://localhost:3200): an e-commerce storefront running an A/B test,
   a multi-armed bandit, a multivariate test, a CUPED checkout test and a gradual-rollout flag.
-- **StreamPulse** (`demo/streampulse`, http://localhost:3300): a simulated mobile app with a device
-  picker, targeting by OS version/region/tier, a kill switch, mutual exclusion and a scripted rollout
-  story in which a crash spike triggers an automatic safety rollback.
+- **StreamPulse** (`demo/streampulse`, http://localhost:3300): a phone drawn in a web page with the
+  React SDK, with a device picker, targeting by OS version/region/tier, a kill switch, mutual
+  exclusion and a scripted rollout story in which a crash spike triggers an automatic safety
+  rollback.
 
 Walkthrough: [demo/DEMO_GUIDE.md](demo/DEMO_GUIDE.md).
 

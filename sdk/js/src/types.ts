@@ -4,9 +4,9 @@ import type { ExperimentationError } from './errors';
  * Operations whose failures are swallowed and reported through `onError`:
  * `'refresh'` (a ruleset fetch), `'flush'` (sending evaluation counts) and `'evaluate'` (an
  * unexpected failure inside local evaluation; the call then goes to the server) occur only with
- * `evaluation: 'local'`.
+ * `evaluation: 'local'`. `'reportError'` is an error report the server did not store.
  */
-export type SwallowedOperation = 'track' | 'trackBatch' | 'refresh' | 'flush' | 'evaluate';
+export type SwallowedOperation = 'track' | 'trackBatch' | 'refresh' | 'flush' | 'evaluate' | 'reportError';
 
 /** Where flags are evaluated: by the server (the default) or in-process from its ruleset. */
 export type EvaluationMode = 'server' | 'local';
@@ -25,9 +25,9 @@ export interface ClientConfig {
   /** Custom `fetch` implementation. Defaults to the global `fetch` (Node >= 18, browsers). */
   fetch?: typeof fetch;
   /**
-   * Called with the error whenever `track` / `trackBatch` swallow a failure, and in local mode
-   * when a ruleset refresh (`'refresh'`), an evaluation-count report (`'flush'`) or a local
-   * evaluation (`'evaluate'`, which then goes to the server) fails.
+   * Called with the error whenever `track` / `trackBatch` / `reportError` swallow a failure, and
+   * in local mode when a ruleset refresh (`'refresh'`), an evaluation-count report (`'flush'`) or
+   * a local evaluation (`'evaluate'`, which then goes to the server) fails.
    * Those operations never reject; this is the only way to observe their failures.
    */
   onError?: (error: ExperimentationError, operation: SwallowedOperation) => void;
@@ -124,6 +124,33 @@ export interface TrackOptions {
 export interface TrackEvent extends TrackOptions {
   userId: string;
   eventName: string;
+}
+
+/**
+ * One error report for `reportError`, sent as `POST /api/v1/tracking/errors`. The server checks
+ * it: a report needs `featureFlagKey` or `experimentKey` (422 otherwise), and a key it does not
+ * know answers 404.
+ */
+export interface ErrorReport {
+  /** Error class, e.g. `'crash'` or `'payment_failed'` (1-100 characters). */
+  errorType: string;
+  /** What happened (not empty). */
+  message: string;
+  /** The flag that was on when it happened (sent as `feature_flag_key`). */
+  featureFlagKey?: string;
+  /** The experiment the user was in (sent as `experiment_key`). */
+  experimentKey?: string;
+  /** The user or device (sent as `user_id`). */
+  userId?: string;
+  /** Sent as `stack_trace`. */
+  stackTrace?: string;
+  /** Extra debugging data (os, app version, ...). */
+  metadata?: Record<string, unknown>;
+  /**
+   * When it happened, sent as ISO-8601. The stored row is timed when the server receives it; this
+   * value is kept in its metadata as `client_timestamp`.
+   */
+  timestamp?: Date | string;
 }
 
 /** Aggregated result of `trackBatch` across all chunks. */

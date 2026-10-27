@@ -174,7 +174,7 @@ else
     warn "SHOPLAB=0 — skipping ShopLab seed."
 fi
 
-# StreamPulse mobile demo (flags, rollout schedule, safety config, MEG, holdout, API key).
+# StreamPulse device-targeting demo (flags, rollout schedule, safety config, MEG, holdout, API key).
 # Set STREAMPULSE=0 to skip everything StreamPulse-related.
 STREAMPULSE="${STREAMPULSE:-1}"
 if [[ "$STREAMPULSE" != "0" ]]; then
@@ -294,7 +294,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 13c. StreamPulse mobile demo (port 3300) + its device simulator
+# 13c. StreamPulse device-targeting demo (port 3300) + its device simulator
 # ---------------------------------------------------------------------------
 STREAMPULSE_STARTED=0
 STREAMPULSE_DIR="$REPO_ROOT/demo/streampulse"

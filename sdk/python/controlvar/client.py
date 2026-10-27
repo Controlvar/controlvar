@@ -9,11 +9,13 @@
   ruleset whenever the answer is provably the server's, and by the server
   otherwise; experiments always stay on the server.
 * Successful assignments/evaluations are cached per user + key for
-  ``cache_ttl_seconds``; failures are never cached.
+  ``cache_ttl_seconds``; failures are never cached. Every successful answer also
+  records its key for the key-less ``track()`` fan-out, for 24 hours
+  (:mod:`controlvar.attribution`); ``clear_cache()`` keeps that record.
 * ``get_assignment``/``get_feature_flag``/``get_all_flags``/``get_assignments``
   raise :class:`~controlvar.ExperimentationError`; the convenience
   wrappers ``get_variant``/``is_feature_enabled`` swallow it and return a
-  default; ``track``/``track_batch`` never raise.
+  default; ``track``/``track_batch``/``report_error`` never raise.
 * Safe to share between threads.
 """
 
@@ -26,6 +28,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Union
 from urllib.parse import quote, urlencode
 
+from .attribution import AttributedKeys
 from .cache import UserKeyCache
 from .evaluator import DEFER
 from .local import (
@@ -146,6 +149,8 @@ class ExperimentationClient:
         self._transport: Transport = transport if transport is not None else UrllibTransport()
         self._assignments: UserKeyCache[Assignment] = UserKeyCache(cache_ttl_seconds)
         self._flags: UserKeyCache[FlagEvaluation] = UserKeyCache(cache_ttl_seconds)
+        # The keys a key-less track() is sent to; outlives the cache entries.
+        self._attributed = AttributedKeys()
         self._sleep = time.sleep
         self._headers: Dict[str, str] = {
             "X-API-Key": api_key,
@@ -235,6 +240,33 @@ class ExperimentationClient:
         except Exception as exc:  # noqa: BLE001 - normalise any transport failure
             raise ExperimentationError(f"{method} {url} failed: {exc}") from exc
 
+    def _exchange(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: Optional[Mapping[str, Any]] = None,
+        query: Optional[Mapping[str, str]] = None,
+    ) -> Response:
+        """Send one API call and return its response, whatever the status.
+
+        Retries exactly once on 429, sleeping for ``Retry-After`` (capped at
+        :data:`MAX_RETRY_AFTER_SECONDS`). Raises :class:`ExperimentationError`
+        for a network failure, and ``TypeError`` for a body JSON cannot encode.
+        """
+        url = self.api_url + path
+        if query:
+            url += "?" + urlencode(query, quote_via=quote)
+        data = None if body is None else json.dumps(body, default=_json_default).encode("utf-8")
+
+        response = self._send(method, url, data)
+        if response.status == 429:
+            wait = _retry_after_seconds(response)
+            logger.debug("429 from %s %s; retrying once after %.1fs", method, path, wait)
+            self._sleep(wait)
+            response = self._send(method, url, data)
+        return response
+
     def _request(
         self,
         method: str,
@@ -249,18 +281,7 @@ class ExperimentationClient:
         :data:`MAX_RETRY_AFTER_SECONDS`). Raises :class:`ExperimentationError`
         for any non-2xx response, network failure or undecodable body.
         """
-        url = self.api_url + path
-        if query:
-            url += "?" + urlencode(query, quote_via=quote)
-        data = None if body is None else json.dumps(body, default=_json_default).encode("utf-8")
-
-        response = self._send(method, url, data)
-        if response.status == 429:
-            wait = _retry_after_seconds(response)
-            logger.debug("429 from %s %s; retrying once after %.1fs", method, path, wait)
-            self._sleep(wait)
-            response = self._send(method, url, data)
-
+        response = self._exchange(method, path, body=body, query=query)
         if response.status < 200 or response.status >= 300:
             raise ExperimentationError(
                 f"{method} {path} failed with HTTP {response.status}",
@@ -300,7 +321,13 @@ class ExperimentationClient:
         body: Dict[str, Any] = {"experiment_key": experiment_key, "user_id": user_id}
         if user_attributes is not None:
             body["context"] = dict(user_attributes)
-        data = self._request("POST", "/api/v1/tracking/assign", body=body)
+        try:
+            data = self._request("POST", "/api/v1/tracking/assign", body=body)
+        except ExperimentationError as exc:
+            # A 404: a key-less track() must no longer reach this experiment.
+            if exc.status == 404:
+                self._attributed.forget_experiment(user_id, experiment_key)
+            raise
 
         if not isinstance(data, dict) or not isinstance(data.get("variant_name"), str):
             raise ExperimentationError(
@@ -322,6 +349,7 @@ class ExperimentationClient:
             reason=data["reason"] if isinstance(data.get("reason"), str) else None,
         )
         self._assignments.set(user_id, experiment_key, assignment)
+        self._attributed.record_experiment(user_id, assignment.experiment_key, assignment.reason)
         return assignment
 
     def get_variant(
@@ -381,6 +409,7 @@ class ExperimentationClient:
                 )
                 # Recorded for the key-less track() fan-out, as a server answer is.
                 self._flags.set(user_id, flag_key, local)
+                self._attributed.record_flag(user_id, flag_key)
                 return local
         cached = self._flags.get(user_id, flag_key)
         if cached is not None:
@@ -410,6 +439,7 @@ class ExperimentationClient:
             source="server" if self._local is not None else None,
         )
         self._flags.set(user_id, flag_key, evaluation)
+        self._attributed.record_flag(user_id, flag_key)
         return evaluation
 
     def is_feature_enabled(
@@ -494,13 +524,19 @@ class ExperimentationClient:
         * With ``experiment_key`` and/or ``feature_flag_key``: one
           ``POST /api/v1/tracking/track``.
         * Without a key: one ``POST /api/v1/tracking/batch`` (chunked at 100)
-          containing one entry per cached assignment (``experiment_key``) plus
-          one per cached evaluated flag (``feature_flag_key``) for this user.
-          If nothing is cached for the user, nothing is sent and ``False`` is
-          returned.
+          containing one entry per experiment (``experiment_key``) plus one per
+          flag (``feature_flag_key``) this client answered for the user in the
+          last 24 hours, cached or not. An experiment whose latest answer said it
+          is a draft, paused, completed or archived gets no entry.
+        * Without a key and with nothing to attribute it to: one
+          ``POST /api/v1/tracking/track`` with no key, which the server stores as
+          history.
 
-        ``event_type`` defaults to ``event_name``. Returns ``True`` only when
-        the server accepted the event(s).
+        ``event_type`` defaults to ``event_name``. Returns ``True`` when the
+        event was sent and the server answered 2xx (every request, when a
+        fan-out takes more than one); ``False`` otherwise. A 2xx batch can still
+        report a failed entry, for example a key the server no longer has; use
+        :meth:`track_batch` to read the per-entry results.
         """
         try:
             base = self._event_body(user_id, event_name, event_value, properties, event_type, timestamp)
@@ -513,18 +549,29 @@ class ExperimentationClient:
                 self._request("POST", "/api/v1/tracking/track", body=body)
                 return True
 
-            events: List[Dict[str, Any]] = [
-                dict(base, experiment_key=assignment.experiment_key)
-                for assignment in self.cached_assignments(user_id)
-            ]
-            events.extend(dict(base, feature_flag_key=flag.key) for flag in self.cached_flags(user_id))
+            experiments, flags = self._attributed.keys(user_id)
+            events: List[Dict[str, Any]] = [dict(base, experiment_key=key) for key in experiments]
+            events.extend(dict(base, feature_flag_key=key) for key in flags)
             if not events:
-                logger.debug("track(%s, %s): nothing cached for user; nothing sent", user_id, event_name)
-                return False
-            return self.track_batch(events).ok
+                # Nothing to attribute it to: sent once with no key, stored as history.
+                self._request("POST", "/api/v1/tracking/track", body=base)
+                return True
+            return self._post_batches(events)
         except Exception as exc:  # noqa: BLE001 - fire-and-forget
             logger.warning("track(%s, %s) failed: %s", user_id, event_name, exc)
             return False
+
+    def _post_batches(self, events: List[Dict[str, Any]]) -> bool:
+        """``POST /api/v1/tracking/batch`` in chunks of 100; ``True`` when every
+        chunk was answered 2xx. A failed chunk is logged and the rest are still sent."""
+        ok = True
+        for start in range(0, len(events), BATCH_LIMIT):
+            try:
+                self._request("POST", "/api/v1/tracking/batch", body={"events": events[start : start + BATCH_LIMIT]})
+            except Exception as exc:  # noqa: BLE001 - never raise
+                logger.warning("track fan-out chunk starting at %d failed: %s", start, exc)
+                ok = False
+        return ok
 
     def track_batch(self, events: Iterable[Mapping[str, Any]]) -> BatchResult:
         """Send raw track bodies via ``POST /api/v1/tracking/batch`` in chunks of 100. Never raises.
@@ -577,10 +624,68 @@ class ExperimentationClient:
             body["timestamp"] = _iso_timestamp(body["timestamp"])
         return body
 
+    # ---------------------------------------------------------- error reports
+
+    def report_error(
+        self,
+        error_type: str,
+        message: str,
+        *,
+        feature_flag_key: Optional[str] = None,
+        experiment_key: Optional[str] = None,
+        user_id: Optional[str] = None,
+        stack_trace: Optional[str] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
+        timestamp: Union[datetime, str, None] = None,
+    ) -> bool:
+        """Report an error that happened while a flag or experiment was active, with one
+        ``POST /api/v1/tracking/errors``. Works in both evaluation modes. Never raises.
+
+        Returns ``True`` exactly when the server answered 201: the report is stored. It
+        counts toward the flag's error rate and automatic rollback only when this client's
+        key is a server-side key (the ``sdk:ruleset`` scope, created by a user who can change
+        flags); the flag's safety check shows the others as ``uncounted_error_count``.
+        Returns ``False``, and logs a warning, on any other answer (401, 404, 422, a 429
+        after its one retry, 5xx) or a network failure. The server checks the report (it
+        needs ``feature_flag_key`` or ``experiment_key``); the SDK does not. ``timestamp``
+        (a ``datetime``, naive meaning UTC, or an ISO-8601 string) is kept with the report
+        as ``client_timestamp``; the stored row is timed when the server receives it.
+        """
+        path = "/api/v1/tracking/errors"
+        try:
+            body: Dict[str, Any] = {"error_type": error_type, "message": message}
+            if feature_flag_key is not None:
+                body["feature_flag_key"] = feature_flag_key
+            if experiment_key is not None:
+                body["experiment_key"] = experiment_key
+            if user_id is not None:
+                body["user_id"] = user_id
+            if stack_trace is not None:
+                body["stack_trace"] = stack_trace
+            if metadata is not None:
+                body["metadata"] = dict(metadata)
+            stamp = _iso_timestamp(timestamp)
+            if stamp is not None:
+                body["timestamp"] = stamp
+            response = self._exchange("POST", path, body=body)
+        except Exception as exc:  # noqa: BLE001 - never raise
+            logger.warning("report_error(%s) failed: %s", error_type, exc)
+            return False
+        if response.status == 201:
+            return True
+        logger.warning(
+            "report_error(%s) was not stored: POST %s answered HTTP %d: %s",
+            error_type,
+            path,
+            response.status,
+            response.text()[:200],
+        )
+        return False
+
     # ------------------------------------------------------------------ cache
 
     def cached_assignments(self, user_id: str) -> List[Assignment]:
-        """Successful, unexpired assignments cached for the user (what ``track`` fans out to)."""
+        """Successful, unexpired assignments cached for the user."""
         return [assignment for _, assignment in self._assignments.entries(user_id)]
 
     def cached_flags(self, user_id: str) -> List[FlagEvaluation]:
@@ -588,6 +693,7 @@ class ExperimentationClient:
         return [evaluation for _, evaluation in self._flags.entries(user_id)]
 
     def clear_cache(self) -> None:
-        """Drop every cached assignment and evaluation."""
+        """Drop every cached assignment and evaluation, so the next calls ask the
+        server again. The keys a key-less ``track()`` is sent to are kept."""
         self._assignments.clear()
         self._flags.clear()
