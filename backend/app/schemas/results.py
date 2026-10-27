@@ -814,8 +814,9 @@ class SampleSizeResult(BaseModel):
     analysed_as: Literal["conversion"] = Field(
         "conversion",
         description=(
-            "The test planned for. Every metric is analysed as a conversion "
-            "today, so this is always 'conversion'."
+            "The test planned for: always 'conversion', whatever the metric's "
+            "type. For a revenue metric, which the results analyse as a mean "
+            "per user, the plan is for the share of users who send its event."
         ),
     )
     alpha: float = Field(
