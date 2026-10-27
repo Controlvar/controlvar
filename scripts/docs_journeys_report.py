@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: 2026 The Controlvar authors
 # SPDX-License-Identifier: Apache-2.0
 """What the docs journeys' runs add up to: one rolling issue per failing guide,
-and the launch walkthroughs a run keeps.
+one rolling alarm when the report cannot decide, and the launch walkthroughs a
+run keeps.
 
-Two commands read with ``gh`` only, and one reads the run directory:
+Three commands read with ``gh`` only, and one reads the run directory:
 
 ``deployed``
     Run by ``docs-journeys.yml`` before the journeys: which commit the
@@ -63,6 +64,20 @@ Only a scheduled run on ``main`` posts. Any other run (a dispatch, a run on
 another branch) decides the same way, as if it were the next scheduled run, and
 prints what it would post: a dry run.
 
+``alarm``
+    Run by ``docs-journeys.yml``'s ``report-alarm`` job after the ``report``
+    job, in every run not cancelled as a whole, with the report job's result
+    and each journeys job's ``verdicts`` output as GitHub gives them. The run
+    is healthy only when they are exactly ``success``, ``true`` and ``true``;
+    any other value, an empty one included, means the report did not decide
+    for every guide (it failed, was cancelled, did not run, or a job wrote no
+    verdicts). It keeps one rolling alarm issue (``ALARM``), labelled like the
+    per-guide issues and found by its exact title and a bot author, never by
+    the label alone: a run that is not healthy opens it, or comments its body
+    on it while it is open; a healthy run closes it, without a comment. It
+    writes its post under ``--out`` as ``report`` does, and only a scheduled
+    run on ``main`` posts it: any other run prints what it would do.
+
 ``recordings``
     Run by ``docs-journeys.yml`` after the journeys, in every run that records
     (a scheduled run, any run on ``main`` or a release tag, and a dispatch with
@@ -82,14 +97,16 @@ Text is rendered only from ``docs-journey-issue.tmpl`` (the issue, and the
 comment when the failing step changes; its body is the guide's
 ``docs-guide-fail.tmpl`` header) and ``docs-guide-pass.tmpl`` or
 ``docs-guide-partial.tmpl`` (the closing comment: the guide's header in the
-run that recovered). Printed text is guide paths, step numbers, run ids,
-artifact names, counts, the reasons ``failure_reason`` names and fixed
-sentences only.
+run that recovered), and ``docs-journeys-alarm-issue.tmpl`` (the alarm, and
+its comments). Printed text is guide paths, step numbers, run ids, artifact
+names, counts, the reasons ``failure_reason`` names, job results from a closed
+set and fixed sentences only.
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import json
 import os
 import re
@@ -141,6 +158,13 @@ FAIL, PASS, PARTIAL = "FAIL", "PASS", "PARTIAL"
 WORDS = (FAIL, PASS, PARTIAL)
 #: The closing comment's template, by the verdict of the run that recovered.
 RECOVERED = {PASS: "docs-guide-pass.tmpl", PARTIAL: "docs-guide-partial.tmpl"}
+#: The alarm: one issue when the report did not decide for every guide.
+ALARM = "docs-journeys-alarm-issue.tmpl"
+#: A healthy run, as the alarm job is given it: the report job's result, then
+#: the journeys job's and the demo job's ``verdicts`` outputs. Nothing else is.
+HEALTHY = ("success", "true", "true")
+#: The results GitHub gives a job in ``needs``; any other value prints as "other".
+RESULTS = ("success", "failure", "cancelled", "skipped")
 #: Each ``gh`` read is tried this many times, the pauses between tries this
 #: long (seconds). On 2026-10-23 one failed download ended the report.
 ATTEMPTS = 3
@@ -620,7 +644,7 @@ class Post(NamedTuple):
     guide: str
     issue: Optional[int]
     title: Optional[str]
-    body: str
+    body: Optional[str]  # None: closed without a comment (the alarm)
 
 
 class Line(NamedTuple):
@@ -713,7 +737,8 @@ def write_posts(items: Sequence[Post | Line], out: Path) -> int:
             (target / "issue").write_text(f"{item.issue}\n", encoding="ascii")
         if item.title is not None:
             (target / "title.txt").write_text(item.title + "\n", encoding="ascii")
-        (target / "body.md").write_text(item.body, encoding="ascii")
+        if item.body is not None:
+            (target / "body.md").write_text(item.body, encoding="ascii")
     return count
 
 
@@ -749,6 +774,127 @@ def report(args: argparse.Namespace, env: Mapping[str, str], gh: Gh = run_gh) ->
     print(f"guides in this run: {len(current)}; open issues: {len(issues)}")
     for item in items:
         print(("would: " if not counted else "") + describe(item))
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# alarm: the report did not decide for every guide
+# ---------------------------------------------------------------------------
+def healthy(report_result: str, journeys_verdicts: str, demo_verdicts: str) -> bool:
+    """True only for exactly ``HEALTHY``: the report job succeeded and both
+    jobs wrote verdicts. Any other value, an empty one included (a misspelt
+    ``needs`` reference gives one), is not healthy."""
+    return (report_result, journeys_verdicts, demo_verdicts) == HEALTHY
+
+
+def alarm_issue(reads: Reads, repo: str, title: str) -> Optional[int]:
+    """The oldest open issue titled exactly *title* that this workflow filed,
+    or None. The per-guide issues carry the same label, so the label alone
+    never finds it."""
+    issues = reads.json(
+        [
+            "issue",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            "open",
+            "--label",
+            LABEL,
+            "--limit",
+            "100",
+            "--json",
+            "number,title,author",
+        ],
+        f"the open {LABEL} issues could not be listed",
+    )
+    numbers = [
+        int(issue["number"])
+        for issue in issues or []
+        if str(issue.get("title") or "") == title and _login(issue) in BOT_LOGINS
+    ]
+    return min(numbers) if numbers else None
+
+
+def utc_date() -> str:
+    return _dt.datetime.now(_dt.timezone.utc).date().isoformat()
+
+
+def alarm_values(env: Mapping[str, str]) -> Dict[str, str]:
+    """The alarm's placeholders, from the run itself; ``qa_render`` checks each."""
+    prefix = qa_render.run_link_prefix(env) or ""
+    return {
+        "date": utc_date(),
+        "sha": env.get("GITHUB_SHA", ""),
+        "run_link": prefix + env.get("GITHUB_RUN_ID", ""),
+    }
+
+
+def decide_alarm(
+    is_healthy: bool, issue: Optional[int], rendered: Optional[qa_render.Rendered]
+) -> Post | Line:
+    """Open the alarm, comment on it, close it, or nothing."""
+    if not is_healthy:
+        if rendered is None:
+            raise qa_render.RenderError("the alarm has no rendered text")
+        if issue is None:
+            return Post("open", "", None, rendered.title, rendered.body)
+        return Post("comment", "", issue, None, rendered.body)
+    if issue is not None:
+        return Post("close", "", issue, None, None)
+    return Line("", "healthy; no alarm issue is open")
+
+
+def describe_alarm(item: Post | Line) -> str:
+    if isinstance(item, Line):
+        return item.text
+    if item.action == "open":
+        return "open the alarm issue"
+    if item.action == "comment":
+        return f"comment on the alarm issue #{item.issue}"
+    return f"close the alarm issue #{item.issue}, without a comment"
+
+
+def _shown(value: str) -> str:
+    """A job result as printed: one of ``RESULTS``, "none" or "other"."""
+    if value in RESULTS:
+        return value
+    return "none" if value == "" else "other"
+
+
+def alarm_command(
+    args: argparse.Namespace, env: Mapping[str, str], gh: Gh = run_gh
+) -> int:
+    repo = env["GITHUB_REPOSITORY"]
+    counted = args.event == "schedule" and args.ref == f"refs/heads/{BRANCH}"
+    out: Path = args.out
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "posts").mkdir(exist_ok=True)
+    is_healthy = healthy(args.report_result, args.journeys_verdicts, args.demo_verdicts)
+    print(
+        f"the report job: {_shown(args.report_result)};"
+        " the journeys job's verdicts:"
+        f" {'written' if args.journeys_verdicts == 'true' else 'not written'};"
+        " the demo job's verdicts:"
+        f" {'written' if args.demo_verdicts == 'true' else 'not written'}"
+    )
+    print(
+        "healthy: the report decided for every guide"
+        if is_healthy
+        else "not healthy: the report did not decide for every guide"
+    )
+    title = qa_render.render_title(ALARM, {})
+    rendered = None if is_healthy else qa_render.render(ALARM, alarm_values(env))
+    issue = alarm_issue(Reads(gh), repo, title)
+    item = decide_alarm(is_healthy, issue, rendered)
+    if counted:
+        print(f"a scheduled run on {BRANCH}: {write_posts([item], out)} post(s)")
+    else:
+        print(
+            f"dry run: a {args.event} run on {args.ref} posts nothing; a scheduled run"
+            f" on {BRANCH} with these results would do this"
+        )
+    print(("would: " if not counted else "") + describe_alarm(item))
     return 0
 
 
@@ -970,6 +1116,13 @@ def main(
     rep.add_argument("--out", required=True, type=Path)
     dep = commands.add_parser("deployed")
     dep.add_argument("--out", required=True, type=Path)
+    ala = commands.add_parser("alarm")
+    ala.add_argument("--report-result", required=True)
+    ala.add_argument("--journeys-verdicts", required=True)
+    ala.add_argument("--demo-verdicts", required=True)
+    ala.add_argument("--event", required=True)
+    ala.add_argument("--ref", required=True)
+    ala.add_argument("--out", required=True, type=Path)
     rec = commands.add_parser("recordings")
     rec.add_argument("--run-dir", required=True, type=Path)
     rec.add_argument("--registry", type=Path, default=RECORDINGS_TOML)
@@ -979,6 +1132,8 @@ def main(
     try:
         if args.command == "deployed":
             return deployed_command(args, env, gh)
+        if args.command == "alarm":
+            return alarm_command(args, env, gh)
         return report(args, env, gh)
     except (
         GhError,
