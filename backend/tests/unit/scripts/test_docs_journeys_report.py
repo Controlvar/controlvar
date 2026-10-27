@@ -31,7 +31,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import pytest
 import yaml
@@ -1119,8 +1119,9 @@ def test_a_night_read_for_one_guide_is_not_read_again_for_another(tmp_path):
 
 
 def test_a_run_that_left_no_verdicts_is_passed_over(tmp_path):
-    """No verdicts artifact listed (the journeys did not start, or it expired):
-    neither a failure nor a pass, as before; the count goes on past it."""
+    """No verdicts artifact listed (the journeys did not start): neither a
+    failure nor a pass, as before; the count goes on past it. An artifact that
+    is listed but expired is test_an_expired_artifact_counts_as_not_run."""
     verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
     gh = FakeGh(
         runs=[night(NIGHT_22), night(NIGHT_21)],
@@ -1328,3 +1329,130 @@ def test_a_partial_night_ends_the_count_of_failed_nights(tmp_path, capsys):
         "README.md: FAIL at step 3; failed 1 scheduled run(s) in a row"
         in capsys.readouterr().out
     )
+
+
+# ---------------------------------------------------------------------------
+# Branches the report claims and nothing else pins
+# ---------------------------------------------------------------------------
+class HtmlGh(FakeGh):
+    """A fake whose *kind* of call exits 0 and prints a page, not JSON."""
+
+    def __init__(self, *args: Any, kind: str, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.kind = kind
+
+    def __call__(self, args: List[str]) -> str:
+        if call_kind(args) == self.kind:
+            self.calls.append(args)
+            return "<html>"
+        return super().__call__(args)
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("kind", ["run list", f"artifacts {NIGHT_22}"])
+def test_a_read_that_exits_0_with_a_page_is_refused_not_read_as_empty(
+    tmp_path, capsys, kind
+):
+    """gh exits 0 and prints HTML (a proxy, a captive portal). Read as null the
+    run list is empty and the history is passed over, in silence."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
+    gh = HtmlGh(
+        runs=[night(NIGHT_22), night(NIGHT_21)],
+        artifacts={
+            NIGHT_22: {"docs-site": verdict("FAIL", 3)},
+            NIGHT_21: {"docs-site": verdict("FAIL", 3)},
+        },
+        kind=kind,
+    )
+    assert report_main(tmp_path, gh) == 1
+    out = capsys.readouterr().out
+    assert "(not JSON; 3 of 3 attempts)" in out
+    assert "::error title=Docs journeys::" in out
+    assert posts(tmp_path) == []
+
+
+class ExpiredGh(FakeGh):
+    """A fake whose artifacts of the runs in ``expired`` are listed as expired."""
+
+    def __init__(self, *args: Any, expired: Iterable[int], **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.expired = set(expired)
+
+    def answer(self, args: List[str]) -> str:
+        found = super().answer(args)
+        if args[0] == "api" and "/artifacts" in args[1]:
+            run_id = int(args[1].split("/runs/")[1].split("/")[0])
+            listing = json.loads(found)
+            for artifact in listing["artifacts"]:
+                artifact["expired"] = run_id in self.expired
+            return json.dumps(listing)
+        return found
+
+
+@pytest.mark.regression
+def test_an_expired_artifact_counts_as_not_run(tmp_path, capsys):
+    """Run 22 failed but its artifact has expired: it is neither a failure nor
+    a pass, so the count goes on to run 21, a PASS, and stops at 1: no issue.
+    Read as a FAIL, run 22 would be the second red night and open one."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
+    gh = ExpiredGh(
+        runs=[night(NIGHT_22), night(NIGHT_21)],
+        artifacts={
+            NIGHT_22: {"docs-site": verdict("FAIL", 3)},
+            NIGHT_21: {"docs-site": verdict("PASS")},
+        },
+        expired=[NIGHT_22],
+    )
+    assert report_main(tmp_path, gh) == 0
+    assert posts(tmp_path) == []
+    assert history_reads(gh) == [
+        f"artifacts {NIGHT_22}",
+        f"artifacts {NIGHT_21}",
+        f"download {NIGHT_21} {JOURNEYS}",
+    ]
+    assert (
+        f"scheduled runs read before it: 2 ({NIGHT_22}, {NIGHT_21}); refused: none\n"
+    ) in capsys.readouterr().out
+
+
+@pytest.mark.regression
+def test_a_journey_in_both_artifacts_of_an_earlier_run_is_refused(tmp_path, capsys):
+    """Run 22 left 'docs-site' in both jobs' artifacts: which one is right is
+    not for the report to guess, and passing the run over restarts the count."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
+    gh = TwoJobGh(
+        runs=[night(NIGHT_22), night(NIGHT_21)],
+        artifacts={
+            NIGHT_22: {"docs-site": verdict("FAIL", 3)},
+            NIGHT_21: {"docs-site": verdict("FAIL", 3)},
+        },
+        demo={NIGHT_22: {"docs-site": verdict("FAIL", 3)}},
+    )
+    assert report_main(tmp_path, gh) == 1
+    out = capsys.readouterr().out
+    assert f"::error title=Docs journeys::run {NIGHT_22}:" in out
+    assert "'docs-site' is in two" in out
+    assert f"refused: {NIGHT_22}\n" in out
+    assert posts(tmp_path) == []
+    assert f"artifacts {NIGHT_21}" not in history_reads(gh)
+
+
+@pytest.mark.regression
+def test_the_run_being_reported_is_not_read_as_its_own_history(tmp_path):
+    """GITHUB_RUN_ID (9) is listed as the newest scheduled run, and by then
+    has verdicts of its own: it is skipped, and the night before decides."""
+    verdicts_file(tmp_path, "now", docs_site=verdict("FAIL"))
+    this_run = {**night(9), "createdAt": "2026-10-23T03:41:00Z"}
+    gh = FakeGh(
+        runs=[this_run, night(NIGHT_22)],
+        artifacts={
+            9: {"docs-site": verdict("FAIL", 3)},
+            NIGHT_22: {"docs-site": verdict("PASS")},
+        },
+    )
+    assert report_main(tmp_path, gh) == 0
+    assert posts(tmp_path) == []
+    assert history_reads(gh) == [
+        f"artifacts {NIGHT_22}",
+        f"download {NIGHT_22} {JOURNEYS}",
+    ]
