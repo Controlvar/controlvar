@@ -531,3 +531,13 @@ by = [
     "test:backend/tests/unit/services/test_experiment_wizard_service.py::TestWizardExperimentCreation::test_payload_without_a_sample_size_step_plans_nothing",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/export/variants, GET /api/v1/export/experiments, GET /api/v1/export/reports/experiments/{experiment_id} | #439 | A metric of type revenue is analysed as its mean value per assigned user, where it was analysed as a conversion: each user's event values are added up, a user with none counts as 0, and the variants are compared with Welch's t-test. For such a metric mean is that value per user (it was the share of users who sent the event), statistical_test_used is welch_t_test, each treatment carries absolute_difference and absolute_difference_ci, and the winner and the recommendation follow the means. conversions is still the number of users who sent the event. Every metric result carries analysis: mean for a revenue metric, proportion for every other type, which is analysed as before. The export's conversion_rate is empty when the primary metric is a revenue metric. The OpenAPI document changes in the new fields and the descriptions. See Data export."
+by = [
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_export_leaves_the_rate_empty_for_a_revenue_primary",
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_only_a_revenue_metric_as_a_mean",
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_a_revenue_primary_names_its_winner_in_the_summary",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]

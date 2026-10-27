@@ -17,6 +17,8 @@ its own output per ``ENGINE_VERSION``.
 ``mean_metric_result`` does the same for a mean metric, from each variant's
 unit count and its sums of ``y - k`` and ``(y - k) ** 2`` centred on the grand
 mean ``k``.  ``test_mean_metric_result.py`` holds it to an exact reference.
+``per_user_mean_metric_result`` gives ``/results`` a revenue metric's mean per
+assigned user from each user's value total, through ``mean_metric_result``.
 """
 
 import logging
@@ -653,6 +655,285 @@ def mean_metric_result(
         "variants": results,
         "has_significant_result": any(v["is_significant"] for v in results),
         "winning_variant_id": winner["variant_id"] if winner else None,
+    }
+
+
+def welch_difference_intervals(
+    variants: Sequence[MeanSums], alpha: float
+) -> Dict[str, Tuple[Optional[float], Optional[Tuple[float, float]]]]:
+    """Each treatment's difference from the control, and its interval.
+
+    ``variants`` are ``(variant, n, sum_d, sum_d2)`` as ``mean_metric_result``
+    takes them, centred on one common ``k`` (it cancels in a difference).  For
+    each treatment, keyed by ``str(variant.id)``: the difference of the means,
+    treatment minus control, and its Welch-Satterthwaite interval at
+    ``1 - alpha``::
+
+        d +/- t(1 - alpha / 2, df) * se,    se ** 2 = v_t / n_t + v_c / n_c,
+        df = se ** 4 / ((v_t / n_t) ** 2 / (n_t - 1) + (v_c / n_c) ** 2 / (n_c - 1))
+
+    where ``v`` is an arm's sample variance (ddof 1).  It is the interval
+    ``scipy.stats.ttest_ind(t, c, equal_var=False).confidence_interval`` gives,
+    and it is not adjusted for multiple comparisons.  ``df`` is computed from
+    each arm's share of ``se ** 2``, so it neither overflows nor divides by 0
+    while ``se`` is above 0.
+
+    The difference and the interval are both None when either arm has fewer
+    than 2 units.  The interval alone is None when neither arm varies: ``se``
+    is 0, and ``df`` would be 0 / 0.
+
+    Raises:
+        SufficientStatsRefused: a count or sum is malformed or not finite, or
+            the sums give a negative variance beyond rounding.
+        ValueError: when no variant is the control.
+    """
+    arms: List[Tuple[Any, Optional[_MeanArm]]] = []
+    for row in variants:
+        try:
+            arms.append((row[0], _mean_arm(*row)))
+        except SufficientStatsNotComputed:
+            arms.append((row[0], None))
+    controls = [arm for variant, arm in arms if variant.is_control]
+    if not controls:
+        raise ValueError("No variant is the control")
+    control = controls[0]
+
+    intervals: Dict[str, Tuple[Optional[float], Optional[Tuple[float, float]]]] = {}
+    for variant, arm in arms:
+        if variant.is_control:
+            continue
+        if arm is None or control is None:
+            intervals[str(variant.id)] = (None, None)
+            continue
+        diff = arm.c - control.c
+        share_t = arm.var / arm.n
+        share_c = control.var / control.n
+        se2 = share_t + share_c
+        if not se2 > 0.0:
+            intervals[str(variant.id)] = (diff, None)
+            continue
+        df = 1.0 / (
+            (share_t / se2) ** 2 / (arm.n - 1) + (share_c / se2) ** 2 / (control.n - 1)
+        )
+        half_width = float(stats.t.ppf(1 - alpha / 2, df)) * math.sqrt(se2)
+        intervals[str(variant.id)] = (diff, (diff - half_width, diff + half_width))
+    return intervals
+
+
+# ---------------------------------------------------------------------------
+# A metric's mean per assigned user (#439)
+# ---------------------------------------------------------------------------
+
+#: The metric types ``/results`` analyses as a mean per assigned user
+#: (``per_user_mean_metric_result``).  Every other type is analysed as a
+#: proportion (``binomial_metric_result``).
+MEAN_METRIC_TYPES = ("revenue",)
+
+#: ``(variant, n, n_converted, totals)``: the users assigned to the variant,
+#: how many of them converted, and the value total of each assigned user who
+#: has one.  Every other assigned user's total is 0.
+PerUserTotals = Tuple[Any, int, int, Sequence[float]]
+
+
+def metric_type_name(metric: Any) -> str:
+    """``metric.metric_type`` as text, whether it is an enum or a string."""
+    metric_type = metric.metric_type
+    return metric_type.value if hasattr(metric_type, "value") else str(metric_type)
+
+
+def _descriptive_mean_entry(
+    variant: Any,
+    n: int,
+    n_converted: int,
+    mean: float,
+    arm: Optional[_MeanArm],
+    alpha: float,
+) -> Dict[str, Any]:
+    """An arm's mean, spread and interval, with no comparison."""
+    std_dev: Optional[float] = None
+    interval = (mean, mean)
+    if arm is not None:
+        std_dev = math.sqrt(arm.var)
+        half_width = float(stats.t.ppf(1 - alpha / 2, arm.n - 1)) * math.sqrt(
+            arm.var / arm.n
+        )
+        interval = (mean - half_width, mean + half_width)
+    return {
+        "variant_id": str(variant.id),
+        "variant_name": variant.name,
+        "is_control": variant.is_control,
+        "sample_size": n,
+        "conversions": n_converted,
+        "mean": mean,
+        "std_dev": std_dev,
+        "confidence_interval": interval,
+        "p_value": None,
+        "adjusted_p_value": None,
+        "is_significant": False,
+        "effect_size": None,
+        "effect_size_label": None,
+        "relative_improvement_pct": None,
+        "power": None,
+        "statistical_test_used": None,
+        "absolute_difference": None,
+        "absolute_difference_ci": None,
+    }
+
+
+def per_user_mean_metric_result(
+    variants: Sequence[PerUserTotals],
+    alpha: float,
+    correction_method: str,
+    *,
+    metric: Any,
+) -> Dict[str, Any]:
+    """One metric's result as its mean per assigned user (a revenue metric).
+
+    Every user assigned to a variant is one unit, and their value is the total
+    of their counted values: 0 for a user with none.  The arms are compared
+    with ``mean_metric_result`` on sums centred on the grand mean ``k``, the
+    total of every value over every assigned user.
+
+    Per variant: ``sample_size`` is ``n`` (at least the number of totals);
+    ``conversions`` is ``n_converted``, the users who converted, as for a
+    proportion metric; ``mean`` is the total of the values over ``n``;
+    ``std_dev`` is over the ``n`` per-user values (ddof 1); and the interval
+    is ``mean +/- t(1 - alpha / 2, n - 1) * std_dev / sqrt(n)``.  Per
+    treatment: Welch's t-test against the control and the rest of
+    ``mean_metric_result``'s comparison, the winner in the metric's direction,
+    ``relative_improvement_pct`` computed on the means (None when the
+    control's mean is 0), and ``absolute_difference`` with its interval from
+    ``welch_difference_intervals``.
+
+    Nothing here raises for well-formed input:
+
+    * an arm with fewer than 2 users has its mean (0.0 with none), no
+      ``std_dev``, the interval ``(mean, mean)`` and no comparison; with a
+      control of fewer than 2 users no treatment is compared;
+    * when neither arm varies (every user's value is 0 before the first
+      purchase) the p-value and the difference's interval are None;
+    * sums ``mean_metric_result`` refuses leave every arm uncompared, and are
+      logged.
+
+    Returns:
+        A dict in the shape of ``schemas.results.MetricResult``, with
+        ``analysis`` ``"mean"``.
+
+    Raises:
+        SufficientStatsRefused: a count is not a non-negative integer, or a
+            total is not finite.
+        ValueError: when no variant is the control.
+    """
+    arms: List[Tuple[Any, int, int, List[float]]] = []
+    for variant, n, n_converted, totals in variants:
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            raise SufficientStatsRefused("n is not a non-negative integer")
+        values = [float(total) for total in totals]
+        if not all(math.isfinite(value) for value in values):
+            raise SufficientStatsRefused("a total is not finite")
+        # A user whose value was read is one of the arm's users, even if the
+        # count was read a moment before they were assigned.
+        arms.append((variant, max(n, len(values)), n_converted, values))
+    if not any(variant.is_control for variant, _, _, _ in arms):
+        raise ValueError("No variant is the control")
+
+    users = sum(n for _, n, _, _ in arms)
+    k = (
+        math.fsum(value for _, _, _, values in arms for value in values) / users
+        if users
+        else 0.0
+    )
+    sums: List[MeanSums] = []
+    means: Dict[str, float] = {}
+    for variant, n, _, values in arms:
+        zeros = n - len(values)
+        mean = math.fsum(values) / n if n else 0.0
+        means[str(variant.id)] = mean
+        sum_d = math.fsum([value - k for value in values] + [-k * zeros])
+        # sum((y - k) ** 2) is the arm's own sum of squares plus
+        # sum_d * sum_d / n.  Adding that term to the own sum of squares, in
+        # the expression _mean_arm subtracts, gives the own sum back exactly
+        # when it is 0: an arm whose users all have the same value (every arm
+        # before its first purchase) has variance 0, not a rounding residue
+        # of its distance from k.
+        own = math.fsum(
+            [(value - mean) ** 2 for value in values] + [mean * mean * zeros]
+        )
+        sums.append((variant, n, sum_d, own + sum_d * sum_d / n if n else 0.0))
+
+    compared = [row for row in sums if row[1] >= 2]
+    result: Optional[Dict[str, Any]] = None
+    intervals: Dict[str, Tuple[Optional[float], Optional[Tuple[float, float]]]] = {}
+    if any(row[0].is_control for row in compared):
+        try:
+            result = mean_metric_result(
+                k, compared, alpha, correction_method, metric=metric
+            )
+            intervals = welch_difference_intervals(compared, alpha)
+        except SufficientStatsRefused as exc:
+            logger.warning(
+                "Metric %s: the per-user sums were refused (%s); no variant is "
+                "compared",
+                getattr(metric, "id", None),
+                exc,
+            )
+            result = None
+    by_id = {v["variant_id"]: v for v in result["variants"]} if result else {}
+
+    control_id = next(
+        str(variant.id) for variant, _, _, _ in arms if variant.is_control
+    )
+    entries: List[Dict[str, Any]] = []
+    for (variant, n, n_converted, _), row in zip(arms, sums):
+        variant_id = str(variant.id)
+        mean = means[variant_id]
+        computed = by_id.get(variant_id)
+        if computed is None:
+            try:
+                arm = _mean_arm(*row) if n >= 2 else None
+            except SufficientStatsRefused:
+                arm = None
+            entries.append(
+                _descriptive_mean_entry(variant, n, n_converted, mean, arm, alpha)
+            )
+            continue
+        entry = dict(computed)
+        entry.pop("note", None)
+        # The mean is the total over n itself, so an arm with no value
+        # reads 0.0 exactly; k + sum_d / n can be a rounding residue away.
+        shift = mean - entry["mean"]
+        low, high = entry["confidence_interval"]
+        entry.update(
+            conversions=n_converted,
+            mean=mean,
+            confidence_interval=(low + shift, high + shift),
+            absolute_difference=None,
+            absolute_difference_ci=None,
+        )
+        if not variant.is_control:
+            difference, interval = intervals.get(variant_id, (None, None))
+            control_mean = means[control_id]
+            entry.update(
+                absolute_difference=difference,
+                absolute_difference_ci=interval,
+                relative_improvement_pct=(
+                    difference / abs(control_mean) * 100
+                    if difference is not None and control_mean != 0
+                    else None
+                ),
+            )
+        entries.append(entry)
+
+    return {
+        "metric_id": str(metric.id),
+        "metric_name": metric.name,
+        "metric_type": metric_type_name(metric),
+        "is_primary": bool(metric.is_primary),
+        "lower_is_better": metric_lower_is_better(metric),
+        "analysis": "mean",
+        "variants": entries,
+        "has_significant_result": any(v["is_significant"] for v in entries),
+        "winning_variant_id": result["winning_variant_id"] if result else None,
     }
 
 

@@ -50,6 +50,17 @@ by = [
 ]
 
 [[unit]]
+text = "When the primary metric is a revenue metric, conversion_rate is empty: /results reports that metric's mean as a value per assigned user, not a rate."
+by = [
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_export_leaves_the_rate_empty_for_a_revenue_primary",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
+]
+
+[[unit]]
+text = "conversions is still the number of users who sent the metric's event, and p_value is the p-value of Welch's t-test that /results reports."
+by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_export_leaves_the_rate_empty_for_a_revenue_primary"]
+
+[[unit]]
 text = "p_value is the unadjusted p-value, while is_significant is decided on the corrected one."
 by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_p_value_is_unadjusted_and_significance_is_decided_on_the_corrected_one"]
 
@@ -305,8 +316,11 @@ text = "conversions | integer | Number of assigned users with at least one conve
 by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
 
 [[unit]]
-text = "conversion_rate | float | Conversion rate [0, 1] (mean in /results)"
-by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
+text = "conversion_rate | float | Conversion rate [0, 1] (mean in /results); empty when the primary metric is a revenue metric"
+by = [
+    "docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_export_leaves_the_rate_empty_for_a_revenue_primary",
+]
 
 [[unit]]
 text = "p_value | float | Unadjusted p-value against control; empty for the control"
