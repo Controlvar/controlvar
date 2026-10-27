@@ -63,6 +63,24 @@ by = [
 ]
 
 [[unit]]
+text = "A bandit that moves traffic toward the better variant of a lower-is-better metric | A bandit (an experiment whose optimization_type is not fixed) moves traffic toward the variant whose users send the primary metric's event most often. It does not read the metric's lower_is_better, so on a metric such as uninstalls or errors it moves traffic toward the worse variant. Use a fixed split for such a metric (#1385)."
+by = ["test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditDoesNotReadTheDirection::test_traffic_moves_to_more_converting_users_on_a_lower_is_better_primary"]
+
+[[unit]]
+text = "An LLM experiment that picks the variant with the lowest value | An LLM experiment's winner is the variant with the highest mean of the metric it is compared on: the business metric when every variant has one, otherwise the judge score. There is no lower-is-better setting for it."
+by = [
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_is_variant_with_higher_business_metric",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_based_on_auto_eval_when_no_business_metric",
+]
+
+[[unit]]
+text = "A warehouse analysis of a metric where lower is better | A warehouse analysis treats every metric as higher is better: a warehouse metric source has no lower-is-better setting, so its results report lower_is_better: false and name a winner only for a significant increase (#1386)."
+by = [
+    "test:modules/backend/tests/unit/test_warehouse_lower_is_better.py::test_a_warehouse_result_names_a_winner_only_for_a_significant_increase",
+    "test:modules/backend/tests/unit/test_warehouse_lower_is_better.py::test_a_warehouse_metric_source_has_no_lower_is_better_setting",
+]
+
+[[unit]]
 text = "Deployments"
 by = ["exempt:label"]
 

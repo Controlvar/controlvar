@@ -34,8 +34,10 @@ from typing import Optional, Union
 import numpy as np
 
 #: Bumped whenever a change alters numbers a client could have persisted
-#: (sampling strategy, estimator, default priors, thresholds).
-ENGINE_VERSION: str = "1.4.0"
+#: (sampling strategy, estimator, default priors, thresholds).  1.5.0: the
+#: winner, the recommendation and the Bayesian decision read the metric's
+#: ``lower_is_better``.
+ENGINE_VERSION: str = "1.5.0"
 
 #: Mask that keeps the derived seed inside the signed 64-bit range.
 _SEED_MASK = (1 << 63) - 1

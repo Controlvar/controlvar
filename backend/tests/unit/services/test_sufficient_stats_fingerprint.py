@@ -67,13 +67,21 @@ SUFFICIENT_STATS_FINGERPRINTS: Dict[str, Dict[str, str]] = {
         "cuped_metric_result": "29e33befe849a6cc36fd462b5d4e1f2a361efcff2f695a38c612653c11363f67",
         "mean_metric_result": "ad119bc6bfff1ec62f70b7499e7c7eb29341f3a12df69587935128964e03125c",
     },
+    # #1377: the winner reads lower_is_better, and the binomial and mean
+    # results carry it (False for these fixtures).  Without that field they
+    # are 1.4.0's (test_lower_is_better_fingerprint.py); CUPED is 1.4.0's.
+    "1.5.0": {
+        "binomial_metric_result": "77ad64a045ff7cac8ca009488eac45d1db6e0216f8bb5f13b86315519187a9c1",
+        "cuped_metric_result": "29e33befe849a6cc36fd462b5d4e1f2a361efcff2f695a38c612653c11363f67",
+        "mean_metric_result": "dbd894429d89e81cb669f5063a4e275452432696c904a180ca3d6e64ae6cbd41",
+    },
 }
 
 #: Engine versions that have shipped in a release.  A function new in this
 #: release is pinned under a later version only, never added to one of these
 #: (a new key under a released version passes every hash, which is how a
 #: changed engine could keep a released version number).
-RELEASED_ENGINE_VERSIONS = ("1.1.0", "1.2.0", "1.3.0")
+RELEASED_ENGINE_VERSIONS = ("1.1.0", "1.2.0", "1.3.0", "1.4.0")
 
 _CONTROL = "ffffffff-0000-4000-8000-000000000002"
 _TREATMENT_1 = "00000000-0000-4000-8000-000000000001"

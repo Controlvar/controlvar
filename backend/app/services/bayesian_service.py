@@ -512,6 +512,7 @@ class BayesianService:
         variant_observations: List[Dict[str, int]],
         n_samples: int = DEFAULT_N_SAMPLES,
         seed: Optional[int] = None,
+        lower_is_better: bool = False,
     ) -> Dict:
         """Run full Bayesian analysis for all variants.
 
@@ -523,6 +524,18 @@ class BayesianService:
                 (see :func:`backend.app.core.stats_engine.derive_seed`);
                 ``None`` derives one from the posteriors
                 (see :func:`resolve_seed`).
+            lower_is_better: the metric's direction.  When true, "best" is the
+                LOWEST rate: the draws are negated after they are made, so the
+                random stream is the one a higher-is-better analysis draws.
+                The probability to be best is then the probability of the
+                lowest rate, and the expected loss is the rate a variant is
+                above the lowest, still a non-negative figure in the metric's
+                units, so ``PROB_BEST_THRESHOLD`` and ``loss_threshold`` keep
+                their meaning.  The ROPE is compared with the best variant's
+                advantage in the good direction (the other variant's rate
+                minus the best one's), not with the raw difference, so an
+                asymmetric ROPE keeps its meaning too.  The posteriors and
+                credible intervals are the rates, unchanged.
 
         Returns:
             Dict with posteriors, PtBBs, losses, decision, and the
@@ -554,6 +567,9 @@ class BayesianService:
 
         # One matrix of draws feeds PtBB, expected loss and the ROPE check.
         samples = _draw_posterior_samples(posteriors, n_samples, seed)
+        if lower_is_better:
+            # Negated after the seeded draw: the same stream, best = lowest.
+            samples = -samples
         ptbb = _ptbb_from_samples(samples)
         losses = _expected_loss_from_samples(samples)
 

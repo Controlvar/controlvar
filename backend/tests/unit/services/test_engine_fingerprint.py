@@ -65,6 +65,10 @@ ENGINE_FINGERPRINTS: Dict[str, str] = {
     # Agresti-Caffo variance of the difference instead of the plug-in one,
     # which moves the ``msprt``, ``cs`` and ``analysis`` outputs below.
     "1.4.0": "003234aa770b7f48e4d42ee0e718895523371c24251dadb6e46dc8355b7e346c",
+    # 1.5.0 is #1377: the winner, the recommendation and the Bayesian
+    # decision read lower_is_better.  This dataset is higher-is-better
+    # throughout, so its output is 1.4.0's.
+    "1.5.0": "003234aa770b7f48e4d42ee0e718895523371c24251dadb6e46dc8355b7e346c",
 }
 
 # Two ids where the control sorts AFTER the treatment, so an engine that
