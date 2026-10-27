@@ -100,7 +100,7 @@ by = [
 ]
 
 [[unit]]
-text = "At start-up it prints what those five devices get right now (flag on/off + reason, variant + assigned/reason)."
+text = "At start-up it prints what the app's five preset devices get right now (flag on/off + reason, variant + assigned/reason)."
 by = ["test:demo/streampulse/simulator/test_traffic.py::test_run_stops_after_max_ticks_and_reports_with_preset_probe"]
 
 [[unit]]

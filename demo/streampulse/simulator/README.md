@@ -46,7 +46,7 @@ Options: `--api-url` (default `http://localhost:8000`), `--api-key` (default: `d
 A session is one of the `--devices` devices that have the app at that moment; after it a device comes back with
 probability 0.25 (`RETURN_RATE`), and otherwise, or after an uninstall, a new install takes its place.
 
-At start-up it prints what those five devices get right now (flag on/off + `reason`, variant + `assigned`/`reason`).
+At start-up it prints what the app's five preset devices get right now (flag on/off + `reason`, variant + `assigned`/`reason`).
 The employee's device gets `player_v2=ON(targeting_rule)`, and `ai_search` is ON only for iOS 17+ / US / premium.
 
 Exit codes: `0` ok · `2` bad or missing API key, or `--incident` without the server key · `3` catalogue not

@@ -133,13 +133,17 @@ PAYMENTS_VISIT_RATE = 0.30
 
 # --- Population -----------------------------------------------------------------------
 # After a session, the chance that a device comes back for another one. The platform
-# counts a device as converted once, while the simulator draws conversions per session:
-# when the same 5000 devices kept coming back, 85% / 91% of them (daily / three_weekly)
-# had opened a push after 4 h of default traffic and 99.7% / 99.9% after 12 h, a relative
-# lift of 6.4% and 0.2% against the spec's 23%. With a device having 1 / (1 - RETURN_RATE)
-# = 1.33 sessions on average, it is 26% / 32% (a 22% lift) after 4 h and 27% / 33% (22%)
-# after 12 h; over 30 seeds the 4-hour lift averaged 22.2% (standard deviation 2.0
-# points). Pinned by test_a_long_run_keeps_the_push_lift_near_the_spec (test_traffic.py).
+# counts a device as converted once, while the simulator draws conversions per session.
+# Measured with test_traffic.py's run_default_traffic (the default traffic against a
+# server that keeps each device's arm and counts it converted once), daily / three_weekly:
+# - before devices left (the same 5000 kept coming back): after 12 h at seed 1, 99.7% /
+#   99.9% of devices had opened a push, a relative lift of 0.25% against the spec's 23%.
+# - with RETURN_RATE: after 12 h at seed 1, 27.0% / 33.0%, a 22.0% lift. Over seeds 1-40
+#   the 12-hour lift averaged 21.05% (SD 1.07 points, lowest 19.1%), none of the 40 more
+#   than 5 points from the spec's. The per-session and uninstall rates with RETURN_RATE
+#   come to 27.2% / 33.0% per device in the long run, a 21.1% lift. After 4 h the mean
+#   was much the same (21.2%), but the SD was 1.84 points and 2 of the 40 seeds fell
+#   outside the 5 points, so test_a_long_run_keeps_the_push_lift_near_the_spec runs 12 h.
 RETURN_RATE = 0.25
 
 # --- Incident model -------------------------------------------------------------------

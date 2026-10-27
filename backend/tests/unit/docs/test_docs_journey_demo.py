@@ -567,6 +567,14 @@ def test_a_key_file_constant_the_reader_cannot_place_is_reported():
 # ---------------------------------------------------------------------------
 #: An API path in setup-local.sh, up to the first character a path cannot hold.
 SCRIPT_API_PATH = re.compile(r"/api/v1/[A-Za-z0-9_.$/{}-]{0,200}")
+#: A shell variable set to a value that holds /api/v1 (``API=http://host:8000/api/v1``):
+#: its uses are read with the value in place. A path split another way, such as
+#: ``$HOST$PREFIX/tracking`` with neither part holding /api/v1, is not seen.
+API_VARIABLE = re.compile(
+    r"^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]{0,63})="
+    r"[\"']?([^\"'\s]{0,200}/api/v1[^\"'\s]{0,200})",
+    re.MULTILINE,
+)
 #: A route the application serves but leaves out of its OpenAPI document: the
 #: API documentation pages and the document itself.
 UNLISTED_ROUTE = re.compile(
@@ -585,11 +593,22 @@ def _is_route(path: str, template: str) -> bool:
     )
 
 
+def _api_variables_in_place(script: str) -> str:
+    """``script`` with each use of a variable that holds /api/v1 replaced by its value."""
+    for name, value in API_VARIABLE.findall(script):
+        script = re.sub(
+            r"\$\{%s\}|\$%s(?![A-Za-z0-9_])" % (name, name),
+            lambda _use, value=value: value,
+            script,
+        )
+    return script
+
+
 def unknown_api_paths(script: str, routes: Set[str]) -> List[str]:
     """``<line>: <path>`` for each /api/v1 path the script names that is no route."""
     return [
         f"{number}: {path}"
-        for number, line in enumerate(script.splitlines(), 1)
+        for number, line in enumerate(_api_variables_in_place(script).splitlines(), 1)
         for path in SCRIPT_API_PATH.findall(line)
         if not any(_is_route(path, route) for route in routes)
     ]
@@ -623,6 +642,17 @@ def test_a_path_that_is_no_route_is_named_with_its_line():
     line = len(planted.splitlines())
     assert unknown_api_paths(planted, _routes()) == [
         f"{line}: /api/v1/tracking/demo-key"
+    ]
+    # The same request with the path built from a variable that holds /api/v1.
+    built = (
+        script + "API_BASE=http://localhost:8000/api/v1\n"
+        'curl -sf -X POST "${API_BASE}/tracking/demo-key"\n'
+        'curl -sf -X POST "$API_BASE/auth/demo-login"\n'
+    )
+    line = len(built.splitlines())
+    assert unknown_api_paths(built, _routes()) == [
+        f"{line - 1}: /api/v1/tracking/demo-key",
+        f"{line}: /api/v1/auth/demo-login",
     ]
     # A route with a parameter matches any value in its place, and only there.
     assert _is_route("/api/v1/api-keys/$KEY_ID", "/api/v1/api-keys/{key_id}")

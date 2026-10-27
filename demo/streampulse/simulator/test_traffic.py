@@ -663,15 +663,12 @@ def test_the_incident_trips_5_percent_beside_as_much_steady_traffic():
     assert len(incident.error_reports) / evaluations > 0.12
 
 
-@pytest.mark.regression
-def test_a_long_run_keeps_the_push_lift_near_the_spec(monkeypatch):
-    """Four hours of the default traffic (3 sessions a second, 5000 devices), offline, on a
-    clock the paced sleeps move. The results count a device as converted once, and the
-    simulator draws conversions per session; when the same 5000 devices kept coming back,
-    85% / 91% of them had opened a push after 4 h, a relative lift of 6.4% against the
-    spec's 23% (0.27 / 0.22 - 1). Devices now leave and new installs take their place, so
-    the lift per device stays within 5 points of the spec's, and each arm's rate within 10
-    points of its per-session rate."""
+LONG_RUN_HOURS = 12
+
+
+def run_default_traffic(hours: int, seed: int, monkeypatch) -> tuple[StickyServer, str]:
+    """traffic.main for ``hours`` of the default traffic (3 sessions a second, 5000 devices)
+    against a StickyServer, offline, on a clock the paced sleeps move (no real time passes)."""
     now = [0.0]
 
     def sleep(seconds):
@@ -681,13 +678,28 @@ def test_a_long_run_keeps_the_push_lift_near_the_spec(monkeypatch):
     server = StickyServer()
     out = io.StringIO()
     rc = traffic.main(
-        ["--api-key", "k", "--duration", str(4 * 3600), "--seed", "1", "--no-probe"],
+        ["--api-key", "k", "--duration", str(hours * 3600), "--seed", str(seed), "--no-probe"],
         client_factory=lambda url, key, **kw: server,
         sleep=sleep,
         out=out,
     )
     assert rc == 0
-    assert f"ticks={4 * 3600 * 3} " in out.getvalue()
+    return server, out.getvalue()
+
+
+@pytest.mark.regression
+def test_a_long_run_keeps_the_push_lift_near_the_spec(monkeypatch):
+    """Twelve hours of the default traffic at seed 1. The results count a device as converted
+    once, and the simulator draws conversions per session, so when the same 5000 devices kept
+    coming back nearly all of them had opened a push and the lift fell far below the spec's
+    23% (0.27 / 0.22 - 1). Devices now leave and new installs take their place, so the lift
+    per device stays within 5 points of the spec's, and no arm's rate is more than 10 points
+    above its per-session rate. The numbers, and why 12 h rather than 4 h, are in the
+    comment on traffic.RETURN_RATE. The seed is fixed, but a change to how the simulator
+    draws its random numbers is a fresh draw: if this turns red after one, try a few seeds
+    before suspecting the population."""
+    server, text = run_default_traffic(LONG_RUN_HOURS, 1, monkeypatch)
+    assert f"ticks={LONG_RUN_HOURS * 3600 * 3} " in text
     rates = {variant: server.rate(variant) for variant in traffic.NOTIFICATION_OPEN_RATE}
     spec = traffic.NOTIFICATION_OPEN_RATE["three_weekly"] / traffic.NOTIFICATION_OPEN_RATE["daily"] - 1
     lift = rates["three_weekly"] / rates["daily"] - 1
