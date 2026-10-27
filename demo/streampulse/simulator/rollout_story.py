@@ -6,6 +6,8 @@ platform dashboard and in the StreamPulse app afterwards.  Without ``--token`` t
 in first with ``POST /api/v1/auth/login`` as ``--email``/``--password``, which default to the
 seeded demo admin (``admin@demo.com`` / ``Demo1234!``), so it works against the local demo
 backend as ``setup-local.sh`` starts it.  ``--token`` uses a bearer token you already have.
+When ``--password`` is not given, the password is read from ``CONTROLVAR_ADMIN_PASSWORD`` if
+that is set, so a command for an install never has to carry it.
 
   1  Internal + 5%      show the flag at 5% with the ``employee equals true`` rule
   2  25%                advance the rollout schedule to stage 2 → flag at 25%
@@ -30,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -38,7 +41,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, TextIO
+from typing import Any, Callable, Mapping, TextIO
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -48,6 +51,9 @@ DEFAULT_API_URL = "http://localhost:8000"
 # The seeded demo admin (backend/scripts/seed_demo_data.py); used to sign in when no --token is given.
 DEFAULT_EMAIL = "admin@demo.com"
 DEFAULT_PASSWORD = "Demo1234!"
+# Read when --password is not given, so a command for an install never carries the password
+# (scripts/seed_demo_catalogue.py reads the same variable). Unset, --password's default applies.
+PASSWORD_ENV = "CONTROLVAR_ADMIN_PASSWORD"
 DEFAULT_DASHBOARD_URL = "http://localhost:3100"
 DEFAULT_APP_URL = "http://localhost:3300"
 TRAFFIC_SCRIPT = Path(__file__).resolve().parent / "traffic.py"
@@ -621,6 +627,14 @@ def shlex_quote(value: str) -> str:
     return value if all(ch.isalnum() or ch in "-_./:=" for ch in value) else json.dumps(value)
 
 
+class _PasswordGiven(argparse.Action):
+    """``--password``: stores the value and notes that it was given, so it wins over PASSWORD_ENV."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, values)
+        namespace.password_given = True
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rollout_story.py",
@@ -629,7 +643,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--token", default=None, help="bearer token for the dashboard API (default: sign in with --email/--password)")
     parser.add_argument("--email", default=DEFAULT_EMAIL, help="user to sign in as when --token is not given")
-    parser.add_argument("--password", default=DEFAULT_PASSWORD, help="password for --email")
+    parser.add_argument(
+        "--password",
+        default=DEFAULT_PASSWORD,
+        action=_PasswordGiven,
+        help=f"password for --email; when it is not given, {PASSWORD_ENV} is read if it is set",
+    )
+    parser.set_defaults(password_given=False)
     parser.add_argument("--api-url", default=DEFAULT_API_URL, help="Controlvar API origin")
     parser.add_argument("--api-key", default=None, help=f"X-API-Key for the incident traffic (default: contents of {DEFAULT_API_KEY_FILE})")
     parser.add_argument("--dashboard-url", default=DEFAULT_DASHBOARD_URL, help="platform dashboard origin (for the 'look at' hints)")
@@ -652,19 +672,27 @@ def main(
     run_traffic: Callable[[list[str]], int] | None = None,
     out: TextIO = sys.stdout,
     login: Callable[[str, str, str], str] = sign_in,
+    environ: Mapping[str, str] | None = None,
 ) -> int:
     args = build_parser().parse_args(argv)
+    environ = os.environ if environ is None else environ
     token = args.token
     if not token:
+        # --password when it is given; else PASSWORD_ENV when it is set; else --password's default.
+        password, from_environment = args.password, False
+        if not args.password_given and environ.get(PASSWORD_ENV):
+            password, from_environment = environ[PASSWORD_ENV], True
         try:
-            token = login(args.api_url, args.email, args.password)
+            token = login(args.api_url, args.email, password)
         except ApiError as err:
             if err.status == 0:
                 print(f"\nerror: cannot reach {args.api_url}: {err.body}. Is the backend running?", file=sys.stderr)
                 return 4
+            read_from = f" The password was read from {PASSWORD_ENV}." if from_environment else ""
             print(
-                f"\nerror: could not sign in to {args.api_url} as {args.email} ({err.status}: {err.body[:200]}). "
-                "Pass --email/--password for an existing user, or --token with a bearer token.",
+                f"\nerror: could not sign in to {args.api_url} as {args.email} ({err.status}: {err.body[:200]}).{read_from} "
+                f"Pass --email for an existing user, with its password in {PASSWORD_ENV} or --password, "
+                "or --token with a bearer token.",
                 file=sys.stderr,
             )
             return 2
