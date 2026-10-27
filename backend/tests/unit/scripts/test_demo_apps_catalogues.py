@@ -285,10 +285,13 @@ def _app_presets() -> list:
     return found
 
 
-def test_the_streampulse_simulator_has_each_app_preset_with_an_id_of_its_own():
-    """PRESET_DEVICES: one device for each of the app's five presets, with the
-    preset's OS, OS version, region, tier, employee flag and model, under an id
-    of its own (``preset-...``)."""
+@pytest.mark.regression
+def test_the_streampulse_simulator_presets_are_the_apps_devices():
+    """PRESET_DEVICES is the app's five presets, device for device: the same id
+    and every attribute, app_version included. Flags and experiments bucket by
+    the id and target the attributes, so the simulator's start-up probe shows
+    what the app's device panel shows. Its presets had ids of their own
+    (``preset-...``) and an iPhone 15 on app 3.2.0, against the app's 3.2.1."""
     spec = importlib.util.spec_from_file_location(
         "_catalogue_streampulse_devices", STREAMPULSE_SIMULATOR / "devices.py"
     )
@@ -300,28 +303,20 @@ def test_the_streampulse_simulator_has_each_app_preset_with_an_id_of_its_own():
         sys.modules.pop(spec.name, None)
     app = _app_presets()
     assert len(app) == 5, app
-
-    def shape(os, os_version, region, tier, employee, model):
-        return (os, os_version, region, tier, employee, model)
-
-    simulator = sorted(
-        shape(d.os, d.os_version, d.region, d.tier, d.employee, d.device_model)
-        for d in devices.PRESET_DEVICES
+    fields = (
+        "device_id",
+        "os",
+        "os_version",
+        "app_version",
+        "region",
+        "tier",
+        "employee",
+        "device_model",
     )
-    assert simulator == sorted(
-        shape(
-            p["os"],
-            p["os_version"],
-            p["region"],
-            p["tier"],
-            p["employee"],
-            p["device_model"],
-        )
-        for p in app
-    )
-    ids = [d.device_id for d in devices.PRESET_DEVICES]
-    assert all(i.startswith("preset-") for i in ids), ids
-    assert not set(ids) & {p["device_id"] for p in app}
+    simulator = [
+        tuple(d.attributes()[name] for name in fields) for d in devices.PRESET_DEVICES
+    ]
+    assert simulator == [tuple(p[name] for name in fields) for p in app]
 
 
 def test_the_simulator_runs_until_stopped_and_takes_the_documented_options(traffic):

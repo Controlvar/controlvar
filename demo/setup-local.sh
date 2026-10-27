@@ -214,40 +214,7 @@ done
 ok "Backend API is healthy."
 
 # ---------------------------------------------------------------------------
-# 12. Create demo API key
-# ---------------------------------------------------------------------------
-log "Creating demo API key..."
-API_KEY_RESPONSE=$(curl -sf -X POST http://localhost:8000/api/v1/tracking/demo-key \
-    -H "Content-Type: application/json" \
-    -d '{"name":"demo-simulator","email":"admin@demo.com","password":"Demo1234!"}' 2>/dev/null || echo "")
-
-# Fallback: use the admin endpoint if demo-key doesn't exist
-if [[ -z "$API_KEY_RESPONSE" ]]; then
-    # Login to get a token
-    LOGIN_RESPONSE=$(curl -sf -X POST http://localhost:8000/api/v1/auth/demo-login \
-        -H "Content-Type: application/json" \
-        -d '{"email":"admin@demo.com","password":"Demo1234!"}' 2>/dev/null || echo "{}")
-
-    TOKEN=$(echo "$LOGIN_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('access_token',''))" 2>/dev/null || echo "")
-
-    if [[ -n "$TOKEN" ]]; then
-        API_KEY_RESPONSE=$(curl -sf -X POST http://localhost:8000/api/v1/api-keys \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $TOKEN" \
-            -d '{"name":"demo-simulator","description":"Live event simulator key","scopes":"read,write"}' 2>/dev/null || echo "")
-        DEMO_API_KEY=$(echo "$API_KEY_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('key',d.get('api_key','demo-fallback-key')))" 2>/dev/null || echo "demo-fallback-key")
-    else
-        DEMO_API_KEY="demo-fallback-key"
-    fi
-else
-    DEMO_API_KEY=$(echo "$API_KEY_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('key',d.get('api_key','demo-fallback-key')))" 2>/dev/null || echo "demo-fallback-key")
-fi
-
-echo "$DEMO_API_KEY" > "$DEMO_DIR/.demo_api_key"
-ok "Demo API key saved to demo/.demo_api_key"
-
-# ---------------------------------------------------------------------------
-# 13. Start frontend
+# 12. Start frontend
 # ---------------------------------------------------------------------------
 log "Installing frontend dependencies..."
 cd "$REPO_ROOT/frontend"
@@ -260,7 +227,7 @@ echo $! > "$REPO_ROOT/demo/.pids/frontend.pid"
 log "Frontend PID: $(cat "$REPO_ROOT/demo/.pids/frontend.pid")"
 
 # ---------------------------------------------------------------------------
-# 13b. ShopLab storefront (port 3200) + its traffic simulator
+# 12b. ShopLab storefront (port 3200) + its traffic simulator
 # ---------------------------------------------------------------------------
 SHOPLAB_STARTED=0
 SHOPLAB_DIR="$REPO_ROOT/demo/shoplab"
@@ -294,7 +261,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 13c. StreamPulse device-targeting demo (port 3300) + its device simulator
+# 12c. StreamPulse device-targeting demo (port 3300) + its device simulator
 # ---------------------------------------------------------------------------
 STREAMPULSE_STARTED=0
 STREAMPULSE_DIR="$REPO_ROOT/demo/streampulse"
@@ -328,21 +295,20 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 14. Start live event simulator
+# 13. Start live event simulator
 # ---------------------------------------------------------------------------
 log "Starting live event simulator..."
 source "$REPO_ROOT/venv/bin/activate"
 cd "$REPO_ROOT"
 nohup python backend/scripts/simulate_live_events.py \
     --api-url http://localhost:8000 \
-    --api-key "$(cat "$DEMO_DIR/.demo_api_key")" \
     --rate 5 \
     > "$DEMO_DIR/.logs/simulator.log" 2>&1 &
 echo $! > "$DEMO_DIR/.pids/simulator.pid"
 ok "Simulator PID: $(cat "$DEMO_DIR/.pids/simulator.pid")"
 
 # ---------------------------------------------------------------------------
-# 15. Success banner
+# 14. Success banner
 # ---------------------------------------------------------------------------
 echo ""
 echo -e "${GREEN}${BOLD}╔════════════════════════════════════════════════╗${NC}"

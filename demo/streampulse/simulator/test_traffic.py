@@ -4,11 +4,10 @@ from __future__ import annotations
 import io
 import json
 import random
-import re
 import sys
 import urllib.error
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -122,11 +121,71 @@ class FailingClient(FakeClient):
         raise traffic.ApiError(self.status, "nope", "http://x/api/v1/feature-flags/evaluate/" + flag_key)
 
 
-def run_ticks(n: int, seed: int = 42, incident: str = "off", devices_n: int = 5000, **client_kw):
+class StickyServer:
+    """The server as far as the push experiment is concerned: each device keeps the arm it was
+    first given, as /tracking/assign does, and the server counts a device as converted once,
+    as the results do. No call is recorded (a long run would hold every one)."""
+
+    def __init__(self) -> None:
+        self.arms: dict[tuple[str, str], dict] = {}
+        self.exposed: dict[str, set[str]] = {v: set() for v in traffic.VARIANTS[traffic.PUSH_KEY]}
+        self.converted: dict[str, set[str]] = {v: set() for v in traffic.VARIANTS[traffic.PUSH_KEY]}
+
+    def evaluate_flag(self, flag_key: str, user_id: str, context: dict) -> dict:
+        return {"key": flag_key, "enabled": flag_key != traffic.PLAYER_FLAG, "reason": "rollout"}
+
+    def assign(self, experiment_key: str, user_id: str, context: dict) -> dict:
+        answer = self.arms.get((experiment_key, user_id))
+        if answer is None:
+            names = list(traffic.VARIANTS[experiment_key])
+            variant = names[devices.stable_bucket(user_id, experiment_key) * len(names) // 100]
+            assigned = devices.stable_bucket(user_id, "holdout") >= 2
+            if not assigned:
+                variant = traffic.CONTROL_VARIANT[experiment_key]
+            answer = {"variant_name": variant, "assigned": assigned, "reason": "assigned" if assigned else "holdout",
+                      "configuration": traffic.VARIANTS[experiment_key][variant]}
+            self.arms[(experiment_key, user_id)] = answer
+        if experiment_key == traffic.PUSH_KEY and answer["assigned"]:
+            self.exposed[answer["variant_name"]].add(user_id)
+        return answer
+
+    def batch(self, events: list[dict]) -> dict:
+        for e in events:
+            if e.get("experiment_key") == traffic.PUSH_KEY and e["event_name"] == traffic.PRIMARY_METRIC[traffic.PUSH_KEY]:
+                self.converted[self.arms[(traffic.PUSH_KEY, e["user_id"])]["variant_name"]].add(e["user_id"])
+        return {"success_count": len(events), "failure_count": 0}
+
+    def rate(self, variant: str) -> float:
+        return len(self.converted[variant]) / len(self.exposed[variant])
+
+
+class ClockedClient(FakeClient):
+    """Notes the wall-clock time each request is sent at, beside what it carried."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.sent: list[tuple[datetime, dict]] = []
+
+    def batch(self, events: list[dict]) -> dict:
+        now = datetime.now(timezone.utc)
+        self.sent.extend((now, e) for e in events)
+        return super().batch(events)
+
+    def report_error(self, report: dict) -> dict:
+        self.sent.append((datetime.now(timezone.utc), report))
+        return super().report_error(report)
+
+    def report_errors(self, reports: list[dict]) -> dict:
+        now = datetime.now(timezone.utc)
+        self.sent.extend((now, r) for r in reports)
+        return super().report_errors(reports)
+
+
+def run_ticks(n: int, seed: int = 42, incident: str = "off", devices_n: int = 5000, client_class=None, **client_kw):
     rng = random.Random(seed)
-    client = FakeClient(seed=seed + 1, **client_kw)
+    client = (client_class or FakeClient)(seed=seed + 1, **client_kw)
     stats = traffic.Stats(incident=incident)
-    population = traffic.Population(devices.generate_devices(devices_n, devices.DEFAULT_SEED))
+    population = traffic.Population(devices_n, devices.DEFAULT_SEED)
     plans = [traffic.run_tick(client, rng, population, stats, incident=incident) for _ in range(n)]
     return client, stats, plans
 
@@ -143,6 +202,9 @@ def test_population_is_deterministic_and_matches_the_spec_mix():
     again = devices.generate_devices(20000, seed=2026)
     assert [d.device_id for d in pop[:50]] == [d.device_id for d in again[:50]]
     assert pop[0] == again[0]
+    # the population is the head of the seed's device stream; new installs are the rest of it
+    stream = devices.device_stream(2026)
+    assert [next(stream) for _ in range(50)] == pop[:50]
     n = len(pop)
     share = lambda pred: sum(1 for d in pop if pred(d)) / n  # noqa: E731
     assert share(lambda d: d.os == "iOS") == pytest.approx(0.55, abs=TOL)
@@ -244,7 +306,7 @@ def test_batch_payloads_use_spec_event_names_and_keys():
     client, _, plans = run_ticks(600, seed=3, devices_n=100000)
     events = all_events(client)
     assert events
-    required = {"event_type", "event_name", "user_id", "metadata", "timestamp"}
+    required = {"event_type", "event_name", "user_id", "metadata"}
     seen: set[str] = set()
     for e in events:
         assert required <= set(e), e
@@ -252,7 +314,6 @@ def test_batch_payloads_use_spec_event_names_and_keys():
         assert e["event_name"] in EVENT_METADATA_KEYS, e["event_name"]
         assert set(e["metadata"]) == EVENT_METADATA_KEYS[e["event_name"]], e
         assert ("experiment_key" in e) ^ ("feature_flag_key" in e), e
-        datetime.fromisoformat(e["timestamp"])
         owner = e.get("experiment_key") or e.get("feature_flag_key")
         if e["event_name"] in EVENT_OWNER:
             assert owner == EVENT_OWNER[e["event_name"]], e
@@ -332,8 +393,8 @@ def test_dry_run_prints_plan_without_network():
     assert events and events[0]["event_name"] == "screen_view"
     out2 = io.StringIO()
     traffic.main(["--dry-run", "--seed", "11"], client_factory=boom, out=out2)
-    strip_ts = lambda s: re.sub(r'"timestamp": "[^"]+"', "", s)  # noqa: E731 — wall-clock timestamps differ
-    assert strip_ts(out2.getvalue()) == strip_ts(text)
+    assert out2.getvalue() == text  # no wall-clock timestamp in it: the same seed prints the same plan
+    assert "timestamp" not in text
 
     # incident dry run shows a crashing Android 12 device and its crash reports
     out3 = io.StringIO()
@@ -381,11 +442,14 @@ def test_run_stops_after_max_ticks_and_reports_with_preset_probe():
     assert "ticks=25" in text
     for key in traffic.EXPERIMENT_KEYS + traffic.FLAG_KEYS:
         assert key in text
-    # the preset probe evaluated the five app presets (internal tester → targeting_rule)
+    # the preset probe evaluated the five app presets (the employee's → targeting_rule), first,
+    # each under the app's own device id and attributes
     assert "Device presets" in text
     assert "employee" in text and "player_v2=ON(targeting_rule)" in text
-    probe_ids = {c[1] for c in made[0].evaluate_calls if c[1].startswith("preset-")}
-    assert probe_ids == {d.device_id for d in devices.PRESET_DEVICES}
+    probe = made[0].evaluate_calls[: len(devices.PRESET_DEVICES) * len(traffic.FLAG_KEYS)]
+    assert [(c[1], c[2]) for c in probe[:: len(traffic.FLAG_KEYS)]] == [
+        (d.device_id, d.attributes()) for d in devices.PRESET_DEVICES
+    ]
 
 
 def test_the_incident_needs_the_server_key(monkeypatch, capsys):
@@ -597,3 +661,101 @@ def test_the_incident_trips_5_percent_beside_as_much_steady_traffic():
         1 for call in incident.evaluate_calls + steady.evaluate_calls if call[0] == traffic.PLAYER_FLAG
     )
     assert len(incident.error_reports) / evaluations > 0.12
+
+
+LONG_RUN_HOURS = 12
+
+
+def run_default_traffic(hours: int, seed: int, monkeypatch) -> tuple[StickyServer, str]:
+    """traffic.main for ``hours`` of the default traffic (3 sessions a second, 5000 devices)
+    against a StickyServer, offline, on a clock the paced sleeps move (no real time passes)."""
+    now = [0.0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    monkeypatch.setattr(traffic.time, "monotonic", lambda: now[0])
+    server = StickyServer()
+    out = io.StringIO()
+    rc = traffic.main(
+        ["--api-key", "k", "--duration", str(hours * 3600), "--seed", str(seed), "--no-probe"],
+        client_factory=lambda url, key, **kw: server,
+        sleep=sleep,
+        out=out,
+    )
+    assert rc == 0
+    return server, out.getvalue()
+
+
+@pytest.mark.regression
+def test_a_long_run_keeps_the_push_lift_near_the_spec(monkeypatch):
+    """Twelve hours of the default traffic at seed 1. The results count a device as converted
+    once, and the simulator draws conversions per session, so when the same 5000 devices kept
+    coming back nearly all of them had opened a push and the lift fell far below the spec's
+    23% (0.27 / 0.22 - 1). Devices now leave and new installs take their place, so the lift
+    per device stays within 5 points of the spec's, and no arm's rate is more than 10 points
+    above its per-session rate. The numbers, and why 12 h rather than 4 h, are in the
+    comment on traffic.RETURN_RATE. The seed is fixed, but a change to how the simulator
+    draws its random numbers is a fresh draw: if this turns red after one, try a few seeds
+    before suspecting the population."""
+    server, text = run_default_traffic(LONG_RUN_HOURS, 1, monkeypatch)
+    assert f"ticks={LONG_RUN_HOURS * 3600 * 3} " in text
+    rates = {variant: server.rate(variant) for variant in traffic.NOTIFICATION_OPEN_RATE}
+    spec = traffic.NOTIFICATION_OPEN_RATE["three_weekly"] / traffic.NOTIFICATION_OPEN_RATE["daily"] - 1
+    lift = rates["three_weekly"] / rates["daily"] - 1
+    assert abs(lift - spec) <= 0.05, f"lift {lift:.3f} against the spec's {spec:.3f}; rates {rates}"
+    for variant, rate in rates.items():
+        assert rate <= traffic.NOTIFICATION_OPEN_RATE[variant] + 0.10, (variant, rate)
+
+
+def test_a_device_comes_back_or_leaves_for_a_new_install_and_the_population_keeps_its_size():
+    """After a session a device comes back with probability RETURN_RATE; otherwise, and
+    always after an uninstall, the next device of the stream takes its place."""
+    assert traffic.RETURN_RATE == 0.25  # the simulator's README states it
+    rng = random.Random(8)
+    client, stats = StickyServer(), traffic.Stats()
+    population = traffic.Population(300, devices.DEFAULT_SEED)
+    stream = devices.device_stream(devices.DEFAULT_SEED)
+    expected_installs = [next(stream) for _ in range(300)]
+    sessions: dict[str, int] = {}
+    left: set[str] = set()
+    installs: list[str] = []
+    for _ in range(6000):
+        before = list(population.devices)
+        plan = traffic.run_tick(client, rng, population, stats)
+        assert plan.user_id not in left, "a device that left came back"
+        sessions[plan.user_id] = sessions.get(plan.user_id, 0) + 1
+        assert plan.first_session == (sessions[plan.user_id] == 1)
+        after = population.devices
+        assert len(after) == 300
+        changed = [i for i in range(300) if after[i] is not before[i]]
+        if plan.outcomes["app_uninstall"]:
+            assert changed, "an uninstalled device stayed"
+        if changed:
+            (slot,) = changed
+            assert before[slot].device_id == plan.user_id
+            left.add(plan.user_id)
+            installs.append(after[slot].device_id)
+            expected_installs.append(next(stream))
+    assert installs == [d.device_id for d in expected_installs[300:]]
+    assert stats.devices == len(sessions)
+    assert len(population.seen) <= 300
+    mean = sum(sessions.values()) / len(sessions)
+    assert mean == pytest.approx(1 / (1 - traffic.RETURN_RATE), abs=0.06)
+
+
+@pytest.mark.regression
+def test_no_event_or_crash_report_is_dated_after_it_is_sent():
+    """The simulator dated each event 1-15 s after the one before, from the moment the session
+    was planned, and sent them all at once, so they arrived dated up to minutes ahead (the
+    server keeps a client timestamp). It now sends none: the server dates each on receipt."""
+    client, _, plans = run_ticks(400, seed=11, incident="android12", player_percentage=25, client_class=ClockedClient)
+    assert any("error_type" in body for _, body in client.sent), "expected crash reports"
+    assert any("event_name" in body for _, body in client.sent), "expected events"
+    ahead = [
+        (sent.isoformat(), body)
+        for sent, body in client.sent
+        if "timestamp" in body and datetime.fromisoformat(body["timestamp"]) > sent
+    ]
+    assert ahead == []
+    assert not [body for _, body in client.sent if "timestamp" in body]

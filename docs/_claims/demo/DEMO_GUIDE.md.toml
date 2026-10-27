@@ -1175,11 +1175,11 @@ text = "Stopping the Demo"
 by = ["exempt:label"]
 
 [[unit]]
-text = "This stops the processes setup-local.sh started, stops the Docker services with docker compose down (or docker-compose down where only that is installed; the database volume is kept), and removes demo/.logs, demo/.pids and the demo API key file."
+text = "This stops the processes setup-local.sh started, stops the Docker services with docker compose down (or docker-compose down where only that is installed; the database volume is kept), and removes demo/.logs and demo/.pids."
 by = [
     "test:backend/tests/unit/infrastructure/test_teardown_local_stops_the_tree.py::test_the_stop_command_stops_the_process_a_tracked_one_started",
     "test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_the_stop_command_brings_compose_down_and_keeps_the_database_volume",
-    "test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_the_stop_command_removes_the_logs_the_pids_and_the_key_file",
+    "test:backend/tests/unit/infrastructure/test_setup_local_runs_the_demo.py::test_the_stop_command_removes_the_logs_and_the_pids",
 ]
 
 [[unit]]

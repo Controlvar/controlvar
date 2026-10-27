@@ -290,8 +290,7 @@ Algorithm MAB** from the Experiments list.
 
 This stops the processes `setup-local.sh` started, stops the Docker services with
 `docker compose down` (or `docker-compose down` where only that is installed; the database
-volume is kept), and removes `demo/.logs`, `demo/.pids`
-and the demo API key file.
+volume is kept), and removes `demo/.logs` and `demo/.pids`.
 
 ---
 
