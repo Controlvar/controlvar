@@ -189,7 +189,7 @@ Then run the same command without `--plan-only`. It prints the plan again and as
   --aws-profile controlvar-install
 ```
 
-The plan looks like this. The values are examples. The lines are those of the install of the run on 2026-10-27, with its account, name and addresses replaced. On a computer that has not run the installer before, the first run also prints that it is installing the pinned CDK and its Python packages:
+The plan looks like this. The values are examples. The lines are those of the install of the run on 2026-10-27, with its account, name, addresses and version replaced. On a computer that has not run the installer before, the first run also prints that it is installing the pinned CDK and its Python packages:
 
 ```text
 Controlvar AWS installer 0.37.0 (beta). What has been tested: https://docs.controlvar.com/self-hosting/aws-install/#what-has-been-tested
@@ -213,7 +213,7 @@ Type the account ID shown above to create these resources:
 
 An account that has no CDK setup stack gets "the CDK's setup stack (uninstall keeps it: other CDK apps may use it)" at the start of the list of what the install creates, in place of the line that says the account already has it.
 
-The installer then prints one line for each of its nine steps, with the time the step took, and a line a minute while AWS creates the stacks, such as `02:41 UTC  6 of 9 done; creating compute`. The step lines of the install of the run on 2026-10-27 looked like this, with the account's name replaced:
+The installer then prints one line for each of its nine steps, with the time the step took, and a line a minute while AWS creates the stacks, such as `02:41 UTC  6 of 9 done; creating compute`. The step lines of the install of the run on 2026-10-27 looked like this, with the account's name and the version replaced:
 
 ```text
 [1/9] Record what is in the account now (read-only) .... done  1 min 31 s
@@ -241,7 +241,7 @@ Uninstall needs this record and this release's files. Keep the folder, and the c
 
 ## After the install
 
-When the install is done, the installer prints the address, the sign-in and the password of the first administrator. The values are examples, and the lines are those of the run on 2026-10-27, except the password line, which the run did not print because it had no terminal:
+When the install is done, the installer prints the address, the sign-in and the password of the first administrator. The values are examples, and the lines are those of the run on 2026-10-27, with the version replaced, except the password line, which the run did not print because it had no terminal:
 
 ```text
 Controlvar 0.37.0 (beta) is installed and answering at:
@@ -354,7 +354,7 @@ Not explained: 1. (Anything here is left alone: someone else may have made it wh
   us-west-2/elasticache-snapshots.txt + automatic.experimentation-redis-staging-redis-001-<yyyy-mm-dd-hh-mm> automated
 ```
 
-As of v0.37.0, the cache takes an automatic backup in a daily window, 02:00 to 03:00 UTC, so the line can appear whenever the cache existed during that window: always for an install kept for a day or more, and for a shorter one only if it spanned the window. AWS removes the backup by itself after the cache is gone; in the one run measured, on 2026-10-27, it was gone about 17 minutes after the cache was deleted.
+As of v0.37.0, the cache takes an automatic backup in a daily window, 02:00 to 03:00 UTC, so the line can appear whenever the cache existed during that window: always for an install kept for a day or more, and for a shorter one only if it overlapped the window. In the one run measured, on 2026-10-27, AWS removed the backup by itself; it was gone about 17 minutes after the cache's stack was deleted.
 
 Do not run `uninstall` again: it refuses, because the install is already removed. To check that the backup has gone, read the account's cache backups; the list has no backup of this cache once AWS has removed it:
 
