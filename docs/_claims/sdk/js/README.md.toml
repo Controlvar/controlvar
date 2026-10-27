@@ -82,6 +82,34 @@ text = "Quick start"
 by = ["exempt:label"]
 
 [[unit]]
+text = "A track without a key goes to every experiment and flag this client answered for the user in the last 24 hours, cached or not, except an experiment that is a draft, paused, completed or archived."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/batch with one entry per assignment plus one per evaluated flag",
+    "test:sdk/js/__tests__/client.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
+    "test:sdk/js/__tests__/client.test.ts::does not send to a key answered more than 24 hours ago: the event goes once with no key",
+    "test:sdk/js/__tests__/client.test.ts::does not send to an experiment whose latest answer has reason %s",
+]
+
+[[unit]]
+text = "With none, it is sent once with no key and stored as history."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::sends the event once to /api/v1/tracking/track with no key when nothing is attributed to the user",
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::TestUntaggedTrack::test_an_event_with_no_key_is_stored_as_history",
+]
+
+[[unit]]
+text = "The keys live in this client's memory (up to 10,000 users), and clearCache() keeps them."
+by = [
+    "test:sdk/js/__tests__/attribution.test.ts::keeps at most MAX_ATTRIBUTED_USERS users: one more drops the least recently answered",
+    "test:sdk/js/__tests__/client.test.ts::still sends to the attributed keys after clearCache, which empties only the cache",
+    "test:sdk/js/__tests__/client.test.ts::another client instance has none of them: its event goes once with no key",
+]
+
+[[unit]]
+text = "In a server, pass experimentKey on conversions."
+by = ["exempt:advice"]
+
+[[unit]]
 text = "API"
 by = ["exempt:label"]
 

@@ -40,8 +40,14 @@ const { enabled, config, reason } = await client.evaluateFlag('new_search', user
 const on = await client.isFeatureEnabled('new_search', user);         // false on failure
 
 await client.track('user-123', 'purchase', { value: 49.99, experimentKey: 'checkout_flow' });
-await client.track('user-123', 'page_view'); // no key → fans out to every cached assignment + flag
+await client.track('user-123', 'page_view'); // no key → every experiment + flag answered for this user
 ```
+
+A `track` without a key goes to every experiment and flag this client answered for the user in the
+last 24 hours, cached or not, except an experiment that is a draft, paused, completed or archived.
+With none, it is sent once with no key and stored as history. The keys live in this client's memory
+(up to 10,000 users), and `clearCache()` keeps them. In a server, pass `experimentKey` on
+conversions.
 
 ## API
 

@@ -93,8 +93,11 @@ text = "Constructor"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Instances are thread-safe and should be shared across your application (one per process is typical): the per-user cache is what makes a key-less track count for every experiment the user is in."
-by = ["test:sdk/python/tests/test_client.py::TestAssignmentsAndCache::test_concurrent_evaluations_are_thread_safe"]
+text = "Instances are thread-safe and should be shared across your application (one per process is typical): the keys a client has answered for a user are what make a key-less track count for every experiment the user is in."
+by = [
+    "test:sdk/python/tests/test_client.py::TestAssignmentsAndCache::test_concurrent_evaluations_are_thread_safe",
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_another_client_instance_has_none_of_them",
+]
 
 [[unit]]
 text = "API reference"
@@ -138,8 +141,12 @@ text = "get_all_flags(user_id, user_attributes=None) | dict[str, bool] (not cach
 by = ["test:sdk/python/tests/test_client.py::TestGetAllFlags::test_not_cached_and_raises_on_error"]
 
 [[unit]]
-text = "track(user_id, event_name, event_value=None, properties=None, experiment_key=None, feature_flag_key=None, event_type=None, timestamp=None) | bool — True when the server accepted it | never raises; False on failure or when nothing was sent"
-by = ["test:sdk/python/tests/test_client.py::TestTrackNeverRaises"]
+text = "track(user_id, event_name, event_value=None, properties=None, experiment_key=None, feature_flag_key=None, event_type=None, timestamp=None) | bool — True when it was sent and the server answered 2xx | never raises; False on failure"
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackNeverRaises",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_a_batch_answered_2xx_returns_true_even_when_an_entry_failed",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_a_fan_out_answered_non_2xx_returns_false",
+]
 
 [[unit]]
 text = "track_batch(events) | BatchResult(success_count, failure_count, errors), .ok | never raises; sends chunks of 100, a failed chunk counts all its events as failures"
@@ -157,8 +164,11 @@ text = "cached_assignments(user_id) / cached_flags(user_id) | cached, unexpired 
 by = ["test:sdk/python/tests/test_client.py::TestAssignmentsAndCache::test_cached_accessors_list_live_entries"]
 
 [[unit]]
-text = "clear_cache() | — | —"
-by = ["test:sdk/python/tests/test_client.py::TestAssignmentsAndCache::test_clear_cache_forces_refetch"]
+text = "clear_cache() | — (keeps the keys a key-less track is sent to) | —"
+by = [
+    "test:sdk/python/tests/test_client.py::TestAssignmentsAndCache::test_clear_cache_forces_refetch",
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_clear_cache_keeps_the_attributed_keys",
+]
 
 [[unit]]
 text = "ready(timeout_seconds=None) | ReadyResult(ok, ruleset_version, error), truthy when ready; ReadyResult(ok=True) at once in server mode | never raises"
@@ -340,16 +350,98 @@ by = [
 ]
 
 [[unit]]
-text = "Without a key → one POST /api/v1/tracking/batch (chunks of 100) containing one entry per experiment the user has been assigned to through this client (experiment_key) plus one per flag evaluated for the user (feature_flag_key), taken from the cache (successful, unexpired only)."
+text = "Without a key → one POST /api/v1/tracking/batch (chunks of 100) containing one entry per experiment (experiment_key) and one per flag (feature_flag_key) this client answered for the user in the last 24 hours, whether or not the answer is still cached."
 by = [
     "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_fans_out_to_cached_assignment_and_flag",
-    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_expired_entries_are_not_fanned_out",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_entries_past_the_cache_ttl_are_still_fanned_out",
     "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_chunks_at_batch_limit",
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_a_purchase_301_seconds_after_the_assignment_reaches_the_experiment",
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_n_experiments_plus_m_flags_each_once_experiments_first",
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_a_key_answered_24_hours_less_1_second_ago_is_kept",
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_a_key_answered_more_than_24_hours_ago_is_dropped_and_the_event_goes_with_no_key",
 ]
 
 [[unit]]
-text = "Nothing cached for the user → nothing is sent and track returns False."
-by = ["test:sdk/python/tests/test_client.py::TestTrackFanOut::test_nothing_cached_sends_nothing"]
+text = "An experiment that is not running (its latest answer has reason \"draft\", \"paused\", \"completed\" or \"archived\") gets no entry."
+by = [
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_an_experiment_whose_latest_answer_has_a_lifecycle_reason_is_skipped",
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_the_latest_answer_decides_paused_stops_and_resumed_restores",
+]
+
+[[unit]]
+text = "An answer with assigned=False for \"holdout\", \"mutual_exclusion\" or \"targeting\" keeps its entry: holdout results count those users' events."
+by = [
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_an_assigned_false_answer_is_kept_past_the_ttl",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestUntagged::test_an_untagged_event_counts_like_a_tagged_one",
+]
+
+[[unit]]
+text = "An experiment whose assignment is later answered 404 loses its entry at once, so key-less events stop reaching it; any other failure (a 5xx, a network error) keeps it."
+by = [
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_an_experiment_whose_assignment_is_later_answered_404_is_dropped",
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_the_key_is_kept_when_the_later_assignment_fails_otherwise",
+    "test:sdk/python/tests/test_attribution.py::test_forget_experiment_drops_that_experiment_only_and_the_user_once_nothing_is_left",
+]
+
+[[unit]]
+text = "With nothing to attribute it to, the event is still sent: one POST /api/v1/tracking/track with no key."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_nothing_attributed_sends_the_event_once_to_track_with_no_key",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_another_users_keys_never_go_out_with_this_users_event",
+]
+
+[[unit]]
+text = "The server stores it as history, which counts in holdout results and as CUPED history, never in an experiment's results."
+by = [
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::TestUntaggedTrack::test_an_event_with_no_key_is_stored_as_history",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestUntagged::test_an_untagged_event_counts_like_a_tagged_one",
+    "test:backend/tests/integration/api/test_cuped_history_sent_by_tracking.py::test_history_is_matched_by_exact_id_and_dated_in_utc",
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::test_an_untagged_event_after_assignment_counts_nowhere",
+]
+
+[[unit]]
+text = "track returns True when the event was sent and the server answered 2xx (every request, when the fan-out takes more than one), and False otherwise."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackWithKey::test_experiment_key_posts_to_track",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_a_fan_out_answered_non_2xx_returns_false",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_a_failed_chunk_does_not_stop_the_next_one",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_an_untagged_send_answered_non_2xx_returns_false",
+    "test:sdk/python/tests/test_client.py::TestTrackNeverRaises::test_http_error",
+]
+
+[[unit]]
+text = "A 2xx batch can still report a failed entry, such as a key the server no longer has; track_batch returns the per-entry results."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_a_batch_answered_2xx_returns_true_even_when_an_entry_failed",
+    "test:sdk/python/tests/test_client.py::TestTrackBatch::test_chunks_aggregates_and_offsets_error_indexes",
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::TestGivenKeysThatAreNotFound::test_batch_reports_the_item",
+]
+
+[[unit]]
+text = "The keys live in this client's memory, for up to 10,000 users (the user answered least recently is dropped first)."
+by = [
+    "test:sdk/python/tests/test_attribution.py::test_one_user_more_than_the_cap_drops_the_least_recently_answered",
+    "test:sdk/python/tests/test_attribution.py::test_a_new_answer_makes_its_user_the_most_recently_answered",
+    "test:sdk/python/tests/test_attribution.py::test_the_bounds_are_10000_users_and_24_hours_and_four_lifecycle_reasons",
+]
+
+[[unit]]
+text = "clear_cache() keeps them, and another process does not have them."
+by = [
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_clear_cache_keeps_the_attributed_keys",
+    "test:sdk/python/tests/test_client.py::TestLateConversions::test_another_client_instance_has_none_of_them",
+]
+
+[[unit]]
+text = "On a server, the process that records a purchase is often not the one that assigned the user, so pass experiment_key on conversions there."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "track_batch sends the events it is given as they are: an entry with no key is stored as history."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackBatch::test_an_entry_with_no_key_is_sent_as_given_never_fanned_out",
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::TestUntaggedBatch::test_untagged_items_are_successes",
+]
 
 [[unit]]
 text = "event_type defaults to event_name; properties is sent as metadata; timestamp may be a datetime (naive values are treated as UTC) or an ISO-8601 string."
