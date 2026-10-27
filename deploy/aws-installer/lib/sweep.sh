@@ -299,13 +299,14 @@ _sweep_in() {
 #
 # What AWS keeps for a time and then removes by itself (the database key pending deletion,
 # the tables' SYSTEM backups, the revisions ECS is deleting and their families, the
-# unconfirmed subscription) is kept by the same exact test whether the after sweep shows it
-# new (+) or gone (-): a second install's before sweep holds the first one's, and AWS may
-# finish removing them before the second uninstall. A service-linked role is kept only when
-# it appears; one that disappears was removed by someone, and the report says so.
+# unconfirmed subscription, the cache's automatic backups) is kept by the same exact test
+# whether the after sweep shows it new (+) or gone (-): a second install's before sweep
+# holds the first one's, and AWS may finish removing them before the second uninstall. A
+# service-linked role is kept only when it appears; one that disappears was removed by
+# someone, and the report says so.
 _sweep_kept() {
     local file="$1" sign="$2" line="$3" account="$4" tab="$_SWEEP_TAB"
-    local id rest entry family revision table
+    local id rest entry family revision table stamp
     case "$file" in
         */kms-aliases.txt)
             case "$line" in
@@ -369,6 +370,18 @@ _sweep_kept() {
             # A family stays listed until its last revision is gone.
             if _sweep_in "$line" ${NAMES_FAMILIES[@]+"${NAMES_FAMILIES[@]}"}; then
                 return 0
+            fi
+            ;;
+        us-west-2/elasticache-snapshots.txt)
+            # The cache's automatic backups: AWS names each after the group's one node and
+            # the minute it was taken, and removes them some minutes after the group is
+            # deleted, so the uninstall's own sweep can still list one. Only that exact name
+            # with the source automated: a backup made by hand (manual) is never kept.
+            stamp=${line#"automatic.${NAMES_REDIS_GROUP}-001-"}
+            if [ "$stamp" != "$line" ]; then
+                case "$stamp" in
+                    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9]"${tab}automated") return 0 ;;
+                esac
             fi
             ;;
         us-west-2/sns-subscriptions.txt)

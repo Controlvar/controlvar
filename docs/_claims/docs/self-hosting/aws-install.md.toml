@@ -916,38 +916,62 @@ text = "Look at it before you delete it."
 by = ["exempt:advice"]
 
 [[unit]]
-text = "If uninstall ends FAILED over a backup"
+text = "The cache's automatic backup"
 by = ["exempt:label"]
 
 [[unit]]
-text = "An uninstall can end FAILED, with exit code 1, after it has removed everything the install made."
+text = "The cache takes an automatic backup in a daily window, 02:00 to 03:00 UTC."
+by = ["mechanism:aws-install-cache-backup"]
+
+[[unit]]
+text = "So an uninstall can find one whenever the cache existed during that window: always for an install kept for a day or more, and for a shorter one only if it overlapped the window."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "AWS deletes the backup by itself after the cache is deleted."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "In the one run measured, on 2026-10-27, it was gone about 17 minutes after the cache's stack was deleted."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "The uninstall counts the cache's own automatic backup with what AWS is still clearing, and ends with exit code 0:"
 by = [
-    "test:backend/tests/installer_sweeps/test_sweep_verdict.py::test_anything_off_the_list_is_not_explained_and_counted",
-    "test:backend/tests/installer_sweeps/test_sweep_verdict.py::test_residue_outranks_incomplete",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_caches_automatic_backup_still_listed_is_a_clean_uninstall",
+    "test:backend/tests/installer_sweeps/test_sweep_verdict.py::test_the_caches_automatic_backup_is_kept_not_unexplained",
+    "test:backend/tests/installer_sweeps/test_sweep_verdict.py::test_the_caches_automatic_backup_is_kept_when_it_goes",
 ]
 
 [[unit]]
-text = "On 2026-10-27 the report had one line under Not explained, the cache's own automatic backup, of this form:"
-by = ["exempt:intent"]
+text = "Only a backup AWS made of this install's cache is counted there."
+by = ["test:backend/tests/installer_sweeps/test_sweep_verdict.py::test_a_backup_that_is_not_the_caches_automatic_one_is_not_explained"]
 
 [[unit]]
-text = "As of v0.37.0, the cache takes an automatic backup in a daily window, 02:00 to 03:00 UTC, so the line can appear whenever the cache existed during that window: always for an install kept for a day or more, and for a shorter one only if it overlapped the window."
-by = ["exempt:intent"]
-
-[[unit]]
-text = "In the one run measured, on 2026-10-27, AWS removed the backup by itself; it was gone about 17 minutes after the cache's stack was deleted."
-by = ["exempt:intent"]
-
-[[unit]]
-text = "Do not run uninstall again: it refuses, because the install is already removed."
-by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_record_already_uninstalled_deletes_nothing"]
+text = "A backup made by hand, or of another cache, is listed under Not explained and left alone."
+by = [
+    "test:backend/tests/installer_sweeps/test_sweep_verdict.py::test_a_backup_that_is_not_the_caches_automatic_one_is_not_explained",
+    "test:backend/tests/installer_sweeps/test_sweep_verdict.py::test_the_caches_automatic_backup_is_kept_when_it_goes",
+]
 
 [[unit]]
 text = "To check that the backup has gone, read the account's cache backups; the list has no backup of this cache once AWS has removed it:"
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "Issue 1380 tracks the report."
+text = "In the run on 2026-10-27, the installer of v0.37.0 did not count the backup: it listed it under Not explained, and the uninstall ended FAILED, with exit code 1, after it had removed everything the install made."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "The report's lines were of this form:"
+by = ["exempt:example"]
+
+[[unit]]
+text = "If an uninstall with the installer of v0.37.0 ended that way, the install is removed: uninstall refuses to run again on a record it has uninstalled, and the check above shows when the backup has gone."
+by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_record_already_uninstalled_deletes_nothing"]
+
+[[unit]]
+text = "Issue 1380 records the change."
 by = ["exempt:navigation"]
 
 [[unit]]
@@ -1044,7 +1068,7 @@ by = [
 ]
 
 [[unit]]
-text = "1 | Failed after something was made. The message lists what exists and what it bills | Run uninstall, then install again. If uninstall fails part-way, its message says to run it again, and it continues. An uninstall that removed everything can also end 1, with a line under Not explained: look at each line, and see If uninstall ends FAILED over a backup"
+text = "1 | Failed after something was made. The message lists what exists and what it bills | Run uninstall, then install again. If uninstall fails part-way, its message says to run it again, and it continues. An uninstall that removed everything can also end 1, with a line under Not explained: look at each line before you delete anything"
 by = [
     "test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules",
     "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_failure_is_named_and_a_run_again_completes",
@@ -1218,7 +1242,7 @@ text = "As of v0.37.0, install took 29 minutes in that run, 23 of them to create
 by = ["exempt:intent"]
 
 [[unit]]
-text = "As of v0.37.0, uninstall took 29 minutes in that run, 26 of them to delete the nine stacks; its comparison of the account with its state before the install found what AWS keeps, and one automatic backup of the cache that AWS removed by itself soon after, so the report ended FAILED (see If uninstall ends FAILED over a backup)."
+text = "As of v0.37.0, uninstall took 29 minutes in that run, 26 of them to delete the nine stacks; its comparison of the account with its state before the install found what AWS keeps, and one automatic backup of the cache that AWS removed by itself soon after, so the report ended FAILED (see The cache's automatic backup)."
 by = ["exempt:intent"]
 
 [[unit]]
@@ -1227,6 +1251,10 @@ by = ["exempt:intent"]
 
 [[unit]]
 text = "As of v0.37.0, the files under deploy/aws-installer/ are the ones that ran."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "The uninstall's count of the cache's automatic backup came after that run: on 2026-10-27 it had run only against the fake AWS CLI, not on AWS."
 by = ["exempt:intent"]
 
 [[unit]]

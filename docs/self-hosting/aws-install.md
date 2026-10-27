@@ -345,24 +345,32 @@ Controlvar is uninstalled from account 123456789012, us-west-2. The record stays
 
 [What `cdk destroy` leaves behind and bills](cdk.md#what-cdk-destroy-leaves-behind-and-bills) says what each of these is. The CDK's setup stack and its bucket stay because other CDK apps in the account may use them. [Removing what is left](cdk.md#removing-what-is-left) says how to remove them when nothing else does. If the report names anything under `Not explained`, the installer has left it alone, because someone else may have made it. Look at it before you delete it.
 
-### If uninstall ends FAILED over a backup
+### The cache's automatic backup
 
-An uninstall can end `FAILED`, with exit code 1, after it has removed everything the install made. On 2026-10-27 the report had one line under `Not explained`, the cache's own automatic backup, of this form:
+The cache takes an automatic backup in a daily window, 02:00 to 03:00 UTC. So an uninstall can find one whenever the cache existed during that window: always for an install kept for a day or more, and for a shorter one only if it overlapped the window. AWS deletes the backup by itself after the cache is deleted. In the one run measured, on 2026-10-27, it was gone about 17 minutes after the cache's stack was deleted.
+
+The uninstall counts the cache's own automatic backup with what AWS is still clearing, and ends with exit code 0:
+
+```text
+  4 task definition(s), 1 cache backup(s) and 12 tag-index entries AWS is still clearing (minutes to hours)
+```
+
+Only a backup AWS made of this install's cache is counted there. A backup made by hand, or of another cache, is listed under `Not explained` and left alone.
+
+To check that the backup has gone, read the account's cache backups; the list has no backup of this cache once AWS has removed it:
+
+```{.bash skip reason="aws: reads the cache backups in your AWS account"}
+aws elasticache describe-snapshots --region us-west-2 --profile controlvar-install
+```
+
+In the run on 2026-10-27, the installer of v0.37.0 did not count the backup: it listed it under `Not explained`, and the uninstall ended `FAILED`, with exit code 1, after it had removed everything the install made. The report's lines were of this form:
 
 ```text
 Not explained: 1. (Anything here is left alone: someone else may have made it while the install ran.)
   us-west-2/elasticache-snapshots.txt + automatic.experimentation-redis-staging-redis-001-<yyyy-mm-dd-hh-mm> automated
 ```
 
-As of v0.37.0, the cache takes an automatic backup in a daily window, 02:00 to 03:00 UTC, so the line can appear whenever the cache existed during that window: always for an install kept for a day or more, and for a shorter one only if it overlapped the window. In the one run measured, on 2026-10-27, AWS removed the backup by itself; it was gone about 17 minutes after the cache's stack was deleted.
-
-Do not run `uninstall` again: it refuses, because the install is already removed. To check that the backup has gone, read the account's cache backups; the list has no backup of this cache once AWS has removed it:
-
-```{.bash skip reason="aws: reads the cache backups in your AWS account"}
-aws elasticache describe-snapshots --region us-west-2 --profile controlvar-install
-```
-
-[Issue 1380](https://github.com/Controlvar/controlvar/issues/1380) tracks the report.
+If an uninstall with the installer of v0.37.0 ended that way, the install is removed: `uninstall` refuses to run again on a record it has uninstalled, and the check above shows when the backup has gone. [Issue 1380](https://github.com/Controlvar/controlvar/issues/1380) records the change.
 
 ### Remove the zone
 
@@ -426,7 +434,7 @@ The installer's exit code tells you whether anything was made:
 | Code | Means | What to do |
 |------|-------|------------|
 | 0 | Done. After `uninstall`, the account holds only what AWS keeps and what the report lists as kept by the installer | Nothing |
-| 1 | Failed after something was made. The message lists what exists and what it bills | Run `uninstall`, then `install` again. If `uninstall` fails part-way, its message says to run it again, and it continues. An `uninstall` that removed everything can also end 1, with a line under `Not explained`: look at each line, and see [If uninstall ends FAILED over a backup](#if-uninstall-ends-failed-over-a-backup) |
+| 1 | Failed after something was made. The message lists what exists and what it bills | Run `uninstall`, then `install` again. If `uninstall` fails part-way, its message says to run it again, and it continues. An `uninstall` that removed everything can also end 1, with a line under `Not explained`: look at each line before you delete anything |
 | 2 | Refused, and nothing was changed. A declined confirmation is 2 as well | Read the message, fix the cause and run the command again. It is safe to repeat |
 | 130 | You pressed Ctrl-C, or the installer was stopped. AWS carries on with the stacks it started | If the message says something was made, run `uninstall`. Otherwise run the command again when you are ready |
 
@@ -460,8 +468,9 @@ The one real run:
 
 - As of v0.37.0, the installer has run end to end once: on 2026-10-27, on an AWS account made for testing, in us-west-2, from a Mac, with release v0.36.4 and the installer from commit `cec53940`.
 - As of v0.37.0, install took 29 minutes in that run, 23 of them to create the nine stacks, and the first administrator signed in with the password in Secrets Manager.
-- As of v0.37.0, uninstall took 29 minutes in that run, 26 of them to delete the nine stacks; its comparison of the account with its state before the install found what AWS keeps, and one automatic backup of the cache that AWS removed by itself soon after, so the report ended `FAILED` (see [If uninstall ends FAILED over a backup](#if-uninstall-ends-failed-over-a-backup)).
+- As of v0.37.0, uninstall took 29 minutes in that run, 26 of them to delete the nine stacks; its comparison of the account with its state before the install found what AWS keeps, and one automatic backup of the cache that AWS removed by itself soon after, so the report ended `FAILED` (see [The cache's automatic backup](#the-caches-automatic-backup)).
 - As of v0.37.0, that run also stopped an install with Ctrl-C while the images were copied, with exit code 130 and a record that `uninstall` could use; `uninstall` removed what the install had made in about 2 minutes, and kept the CDK's setup stack, which the install had made.
 - As of v0.37.0, the files under `deploy/aws-installer/` are the ones that ran.
+- The uninstall's count of the cache's automatic backup came after that run: on 2026-10-27 it had run only against the fake AWS CLI, not on AWS.
 
 As of v0.37.0, the installer has not been run on AWS in another region, with a zone in another account, through an uninstall that stops at the network, through a sign-in that ends in the middle of a run, or on a computer running Linux.

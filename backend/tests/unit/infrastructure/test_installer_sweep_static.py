@@ -340,6 +340,7 @@ NAME_COUNTS = {
     "NAMES_PASSWORD_SECRET": 1,
     "NAMES_PROFILE_LINE": 1,
     "NAMES_PROFILE_VARIABLE": 1,
+    "NAMES_REDIS_GROUP": 1,
     "NAMES_STACKS": 9,
     "NAMES_STACK_PREFIX": 1,
     "NAMES_TABLES": 3,
@@ -382,6 +383,9 @@ def test_the_kept_list_matches_with_the_pinned_patterns_only():
         "*[!0-9]*) ;;",
         "*) return 0 ;;",
         "us-west-2/ecs-td-families-inactive.txt)",
+        "us-west-2/elasticache-snapshots.txt)",
+        # The backup's stamp, yyyy-mm-dd-hh-mm: every character placed, nothing open.
+        '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9]"${tab}automated") return 0 ;;',
         "us-west-2/sns-subscriptions.txt)",
     ], patterns
     assert "[[" not in SWEEP.read_text()  # `[[ x == y* ]]` would be a pattern too
