@@ -43,6 +43,7 @@ from backend.app.services.sufficient_stats_analysis import (
     binomial_metric_result,
     binomial_variant_results,
     effect_size_label,
+    metric_lower_is_better,
 )
 
 logger = logging.getLogger(__name__)
@@ -245,6 +246,13 @@ class AnalysisService:
         variant has reached the primary metric's minimum sample size; before
         that the result is reported but the recommendation stays
         CONTINUE_TESTING (early peeks inflate false positives).
+
+        The primary metric's ``lower_is_better`` decides the direction: the
+        winner is the metric result's ``winning_variant_id`` (already
+        direction-aware), and KEEP_CONTROL means every treatment is
+        significantly worse in that direction.  For a lower-is-better metric
+        the reason gives the improvement as a positive figure and says that
+        lower is better; the higher-is-better sentences are unchanged.
         """
         if not metrics:
             return {
@@ -254,6 +262,7 @@ class AnalysisService:
                 "recommendation_reason": "No metrics are defined for this experiment yet.",
             }
         primary = next((m for m in metrics if m["is_primary"]), metrics[0])
+        lower_is_better = primary.get("lower_is_better", False) is True
         winner_id = primary["winning_variant_id"]
         if winner_id:
             winner = next(
@@ -265,12 +274,25 @@ class AnalysisService:
                 if winner["adjusted_p_value"] is not None
                 else winner["p_value"]
             )
-            reason = (
-                f"{winner['variant_name']} shows "
-                f"{pct:.1f}% improvement on {primary['metric_name']} (p={p:.4f})."
-                if pct is not None and p is not None
-                else f"{winner['variant_name']} is significantly better on {primary['metric_name']}."
-            )
+            if lower_is_better:
+                # The figure is the fall, so it is positive in the good
+                # direction; never "-20.0% improvement".
+                reason = (
+                    f"{winner['variant_name']} shows "
+                    f"{abs(pct):.1f}% improvement on {primary['metric_name']} "
+                    f"(p={p:.4f}): it fell by {abs(pct):.1f}%, and lower is "
+                    "better for this metric."
+                    if pct is not None and p is not None
+                    else f"{winner['variant_name']} is significantly better on "
+                    f"{primary['metric_name']}, where lower is better."
+                )
+            else:
+                reason = (
+                    f"{winner['variant_name']} shows "
+                    f"{pct:.1f}% improvement on {primary['metric_name']} (p={p:.4f})."
+                    if pct is not None and p is not None
+                    else f"{winner['variant_name']} is significantly better on {primary['metric_name']}."
+                )
             if not sample_size_adequate:
                 return {
                     "has_winner": True,
@@ -288,8 +310,11 @@ class AnalysisService:
                 "recommendation_reason": reason,
             }
         treatments = [v for v in primary["variants"] if not v["is_control"]]
+        # "Worse" is the signed change against the metric's direction.
+        worse_sign = 1 if lower_is_better else -1
         if treatments and all(
-            v["is_significant"] and (v["relative_improvement_pct"] or 0) < 0
+            v["is_significant"]
+            and (v["relative_improvement_pct"] or 0) * worse_sign > 0
             for v in treatments
         ):
             return {
@@ -297,7 +322,10 @@ class AnalysisService:
                 "winning_variant_id": None,
                 "recommendation": "KEEP_CONTROL",
                 "recommendation_reason": (
-                    f"Every treatment is significantly worse than control on {primary['metric_name']}."
+                    f"Every treatment is significantly worse than control on "
+                    f"{primary['metric_name']}, where lower is better."
+                    if lower_is_better
+                    else f"Every treatment is significantly worse than control on {primary['metric_name']}."
                 ),
             }
         total = sum(v["sample_size"] for v in primary["variants"])
@@ -392,7 +420,9 @@ class AnalysisService:
             "variant_results": results,
             "total_conversions": sum(conversions.values()),
             "has_significant_results": any(r["is_significant"] for r in results),
-            "best_variant": self._find_best_variant(results),
+            "best_variant": self._find_best_variant(
+                results, lower_is_better=metric_lower_is_better(metric)
+            ),
         }
 
     def calculate_experiment_summary(self, experiment: Experiment) -> Dict[str, Any]:
@@ -599,13 +629,18 @@ class AnalysisService:
         return results
 
     def _find_best_variant(
-        self, variant_results: List[Dict[str, Any]]
+        self,
+        variant_results: List[Dict[str, Any]],
+        lower_is_better: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """
         Find the best performing variant from a list of variant results.
 
         Args:
             variant_results: List of variant result dictionaries
+            lower_is_better: the metric's direction; when true the best is
+                the significant variant with the lowest rate below the
+                control's, otherwise the highest above it.
 
         Returns:
             Dictionary containing best variant info or None if no clear winner
@@ -615,20 +650,26 @@ class AnalysisService:
         if not control:
             return None
 
-        # Find variants with significant improvement over control
+        # Find variants with significant improvement over control, in the
+        # metric's direction
         significant_variants = [
             v
             for v in variant_results
             if not v["is_control"]
             and v["is_significant"]
-            and v["relative_improvement"] > 0
+            and (
+                v["relative_improvement"] < 0
+                if lower_is_better
+                else v["relative_improvement"] > 0
+            )
         ]
 
         if not significant_variants:
             return None
 
-        # Find variant with highest conversion rate
-        best_variant = max(significant_variants, key=lambda v: v["conversion_rate"])
+        # The best rate: the lowest when lower is better, else the highest
+        pick = min if lower_is_better else max
+        best_variant = pick(significant_variants, key=lambda v: v["conversion_rate"])
 
         return {
             "variant_id": best_variant["variant_id"],
@@ -650,14 +691,20 @@ class AnalysisService:
             and getattr(experiment, "bayesian_config", None)
         )
 
+    @staticmethod
+    def _bayesian_primary_metric(experiment: Experiment) -> Optional[Metric]:
+        """The metric the Bayesian analysis reads: the primary, else the first."""
+        definitions = list(getattr(experiment, "metric_definitions", None) or [])
+        return next(
+            (m for m in definitions if m.is_primary),
+            definitions[0] if definitions else None,
+        )
+
     def _bayesian_observations(
         self, experiment: Experiment
     ) -> Dict[str, Dict[str, int]]:
         """Per-variant ``{conversions, total}`` for the primary metric."""
-        primary_metric = next(
-            (m for m in experiment.metric_definitions if m.is_primary),
-            experiment.metric_definitions[0] if experiment.metric_definitions else None,
-        )
+        primary_metric = self._bayesian_primary_metric(experiment)
         metrics_data: Dict[str, Dict[str, int]] = {}
         for variant in experiment.variants:
             vid = str(variant.id)
@@ -757,8 +804,15 @@ class AnalysisService:
         # → byte-identical Monte Carlo draws.
         seed = derive_seed(experiment.id, as_of_bucket(as_of), n_samples)
 
-        # Run full Bayesian analysis
-        analysis = service.analyze(variant_observations, n_samples=n_samples, seed=seed)
+        # Run full Bayesian analysis, in the primary metric's direction
+        analysis = service.analyze(
+            variant_observations,
+            n_samples=n_samples,
+            seed=seed,
+            lower_is_better=metric_lower_is_better(
+                self._bayesian_primary_metric(experiment)
+            ),
+        )
 
         posteriors = analysis["posteriors"]
         credible_intervals = analysis["credible_intervals"]

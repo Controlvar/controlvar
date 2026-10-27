@@ -1439,7 +1439,7 @@
             "type": "array"
           },
           "engine_version": {
-            "default": "1.4.0",
+            "default": "1.5.0",
             "description": "Statistics engine version that computed the current weights",
             "title": "Engine Version",
             "type": "string"
@@ -1825,7 +1825,7 @@
             ]
           },
           "engine_version": {
-            "default": "1.4.0",
+            "default": "1.5.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -3932,7 +3932,7 @@
             "title": "Covariate Lookback Days"
           },
           "engine_version": {
-            "default": "1.4.0",
+            "default": "1.5.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -10069,6 +10069,12 @@
             "title": "Is Primary",
             "type": "boolean"
           },
+          "lower_is_better": {
+            "default": false,
+            "description": "The metric definition's lower_is_better: true when a decrease is the good direction (errors, latency, uninstalls).  winning_variant_id, and for the primary metric the summary's recommendation and the Bayesian decision, follow it.  False when the definition does not set it.",
+            "title": "Lower Is Better",
+            "type": "boolean"
+          },
           "metric_id": {
             "description": "Unique identifier of the metric definition.",
             "format": "uuid",
@@ -10103,7 +10109,7 @@
                 "type": "null"
               }
             ],
-            "description": "ID of the variant with the best significant result, or None if no variant achieved significance.",
+            "description": "ID of the variant with the best significant result in the metric's direction (the lowest when lower_is_better is true, else the highest), or None if no variant is significantly better than the control.",
             "title": "Winning Variant Id"
           }
         },
@@ -16992,7 +16998,7 @@
                 "type": "null"
               }
             ],
-            "description": "Relative change in the metric mean compared with the control, expressed as a percentage: ((variant_mean - control_mean) / control_mean) * 100.  None for the control variant.",
+            "description": "Relative change in the metric mean compared with the control, expressed as a percentage: ((variant_mean - control_mean) / control_mean) * 100.  The sign is the raw change whatever the metric's direction: when the metric's lower_is_better is true, a negative value is the good direction.  None for the control variant.",
             "title": "Relative Improvement Pct"
           },
           "sample_size": {

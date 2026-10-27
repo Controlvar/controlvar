@@ -94,6 +94,17 @@ def adjusted_p_values(
     raise AssertionError(f"unreachable: {method!r}")  # pragma: no cover
 
 
+def metric_lower_is_better(metric: Any) -> bool:
+    """Whether a decrease is the good direction for ``metric``.
+
+    Reads the metric definition's ``lower_is_better``.  Only ``True`` means
+    lower is better: a metric without the attribute, a stored NULL (the
+    column is nullable) and anything else that is not ``True`` read as False,
+    higher is better.
+    """
+    return getattr(metric, "lower_is_better", False) is True
+
+
 def effect_size_label(abs_effect: float) -> str:
     """Map absolute effect size to a human-readable label (EP-016 thresholds)."""
     if abs_effect < 0.2:
@@ -248,7 +259,11 @@ def binomial_metric_result(
         correction_method: ``none``, ``bonferroni`` or ``benjamini_hochberg``,
             applied across the treatments of this metric.
         metric: the metric's identity: ``id``, ``name``, ``metric_type`` and
-            ``is_primary``, which the result carries.
+            ``is_primary``, which the result carries, and optionally
+            ``lower_is_better`` (absent or None reads as False).  When it is
+            true the winner is the significant treatment with the LOWEST
+            rate below the control's; otherwise the highest above it.
+            ``relative_improvement_pct`` stays the signed change either way.
 
     Returns:
         A dict in the shape of ``schemas.results.MetricResult``, exactly what
@@ -334,14 +349,25 @@ def binomial_metric_result(
             )
         results.append(entry)
 
-    winners = [
-        v
-        for v in results
-        if not v["is_control"]
-        and v["is_significant"]
-        and (v["relative_improvement_pct"] or 0) > 0
-    ]
-    winner = max(winners, key=lambda v: v["mean"]) if winners else None
+    lower_is_better = metric_lower_is_better(metric)
+    if lower_is_better:
+        winners = [
+            v
+            for v in results
+            if not v["is_control"]
+            and v["is_significant"]
+            and (v["relative_improvement_pct"] or 0) < 0
+        ]
+        winner = min(winners, key=lambda v: v["mean"]) if winners else None
+    else:
+        winners = [
+            v
+            for v in results
+            if not v["is_control"]
+            and v["is_significant"]
+            and (v["relative_improvement_pct"] or 0) > 0
+        ]
+        winner = max(winners, key=lambda v: v["mean"]) if winners else None
     metric_type = (
         metric.metric_type.value
         if hasattr(metric.metric_type, "value")
@@ -352,6 +378,7 @@ def binomial_metric_result(
         "metric_name": metric.name,
         "metric_type": metric_type,
         "is_primary": bool(metric.is_primary),
+        "lower_is_better": lower_is_better,
         "variants": results,
         "has_significant_result": any(v["is_significant"] for v in results),
         "winning_variant_id": winner["variant_id"] if winner else None,
@@ -509,7 +536,10 @@ def mean_metric_result(
         correction_method: ``none``, ``bonferroni`` or ``benjamini_hochberg``,
             applied across the treatments of this metric.
         metric: the metric's identity: ``id``, ``name``, ``metric_type`` and
-            ``is_primary``, which the result carries.
+            ``is_primary``, which the result carries, and optionally
+            ``lower_is_better`` (absent or None reads as False).  When it is
+            true the winner is the significant treatment with the LOWEST mean
+            below the control's; otherwise the highest above it.
 
     Returns:
         A dict in the shape of ``schemas.results.MetricResult``.  Each variant
@@ -585,14 +615,24 @@ def mean_metric_result(
             )
         results.append(entry)
 
-    # A winner is significant and above the control, compared on the centred
-    # means (a relative improvement is None when the control's mean is 0).
-    winners = [
-        (entry, arm)
-        for entry, arm in zip(results, arms)
-        if not entry["is_control"] and entry["is_significant"] and arm.c > control.c
-    ]
-    winner = max(winners, key=lambda pair: pair[1].c)[0] if winners else None
+    # A winner is significant and on the good side of the control (above it,
+    # or below it when lower is better), compared on the centred means (a
+    # relative improvement is None when the control's mean is 0).
+    lower_is_better = metric_lower_is_better(metric)
+    if lower_is_better:
+        winners = [
+            (entry, arm)
+            for entry, arm in zip(results, arms)
+            if not entry["is_control"] and entry["is_significant"] and arm.c < control.c
+        ]
+        winner = min(winners, key=lambda pair: pair[1].c)[0] if winners else None
+    else:
+        winners = [
+            (entry, arm)
+            for entry, arm in zip(results, arms)
+            if not entry["is_control"] and entry["is_significant"] and arm.c > control.c
+        ]
+        winner = max(winners, key=lambda pair: pair[1].c)[0] if winners else None
     metric_type = (
         metric.metric_type.value
         if hasattr(metric.metric_type, "value")
@@ -603,6 +643,7 @@ def mean_metric_result(
         "metric_name": metric.name,
         "metric_type": metric_type,
         "is_primary": bool(metric.is_primary),
+        "lower_is_better": lower_is_better,
         "variants": results,
         "has_significant_result": any(v["is_significant"] for v in results),
         "winning_variant_id": winner["variant_id"] if winner else None,
