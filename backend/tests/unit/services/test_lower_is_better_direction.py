@@ -219,6 +219,17 @@ MEAN_RISE = (
     2.0,
     [(CONTROL, 500, -100.0, 1000.0), (T1, 500, 150.0, 1100.0), (T2, 500, -40.0, 950.0)],
 )
+#: Both treatments significantly below the control's 2.2: t1 at 1.9, t2 at 1.7.
+#: The lower one is listed second, so neither "the first" nor "the highest"
+#: picks it by accident.
+MEAN_TWO_DROPS = (
+    2.0,
+    [
+        (CONTROL, 500, 100.0, 1000.0),
+        (T1, 500, -50.0, 1000.0),
+        (T2, 500, -150.0, 1100.0),
+    ],
+)
 
 
 def _mean(sums, lower_is_better: Any = True) -> Dict[str, Any]:
@@ -248,6 +259,16 @@ class TestMeanDirection:
         result = _mean(MEAN_RISE)
         assert _variant(result, _T1)["is_significant"] is True
         assert result["winning_variant_id"] is None
+
+    def test_the_lowest_of_several_significantly_lower_means_wins(self):
+        """The mean twin of the proportion case with two significant drops."""
+        result = _mean(MEAN_TWO_DROPS)
+        assert _variant(result, _T1)["is_significant"] is True
+        assert _variant(result, _T2)["is_significant"] is True
+        assert result["winning_variant_id"] == _T2
+        decision = _decide(result)
+        assert decision["recommendation"] == "SHIP_VARIANT"
+        assert decision["winning_variant_id"] == _T2
 
     def test_higher_is_better_is_unchanged(self):
         assert _mean(MEAN_DROP, lower_is_better=False)["winning_variant_id"] is None
@@ -508,6 +529,64 @@ class TestBayesianDirection:
             v.variant_key: v.probability_to_be_best for v in response.variant_results
         }
         assert best["t1"] >= 0.975, best
+
+    def test_the_decision_reads_the_primary_when_a_secondary_comes_first(
+        self, monkeypatch
+    ):
+        """The counts and the direction both come from the primary metric,
+        not from the first one listed.  Here a higher-is-better secondary
+        comes first and does not differ between the arms, so reading it gives
+        no winner in either direction; reading the primary's counts in the
+        higher direction would name the control."""
+        from datetime import datetime, timezone
+        from unittest.mock import MagicMock
+
+        def metric(name, event, is_primary, lower_is_better):
+            return SimpleNamespace(
+                id=f"{event}-0000",
+                name=name,
+                event_name=event,
+                metric_type="conversion",
+                is_primary=is_primary,
+                lower_is_better=lower_is_better,
+            )
+
+        experiment = SimpleNamespace(
+            id="99999999-0000-4000-8000-000000000009",
+            bayesian_config={"alpha": 1.0, "beta": 1.0},
+            variants=[
+                SimpleNamespace(id=_CONTROL, name="control", is_control=True),
+                SimpleNamespace(id=_T1, name="t1", is_control=False),
+            ],
+            metric_definitions=[
+                metric("Purchase", "purchase", False, False),
+                metric("Uninstall", "uninstall", True, True),
+            ],
+        )
+        converted = {
+            ("purchase", _CONTROL): 150,
+            ("purchase", _T1): 150,
+            ("uninstall", _CONTROL): 200,
+            ("uninstall", _T1): 100,
+        }
+        monkeypatch.setattr(
+            analysis_module,
+            "count_converting_users",
+            lambda _db, _experiment_id, variant_id, event: converted[
+                (event, str(variant_id))
+            ],
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.scalar.return_value = 2000
+        response = AnalysisService(db).compute_bayesian_results(
+            experiment, as_of=datetime(2026, 10, 27, tzinfo=timezone.utc)
+        )
+        best = {
+            v.variant_key: v.probability_to_be_best for v in response.variant_results
+        }
+        assert response.decision == BayesianDecision.STOP_WINNER, best
+        assert best["t1"] >= 0.975, best
+        assert experiment.bayesian_decision == BayesianDecision.STOP_WINNER.value
 
     def test_the_random_stream_is_the_higher_is_better_one(self, monkeypatch):
         """Negated after the seeded draw: the same matrix is drawn, and every
