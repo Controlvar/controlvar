@@ -61,9 +61,9 @@ try {
   await client.track(userId, 'purchase', { value: 12.5, experimentKey });
   if (trackErrors.length) fail(`track: ${trackErrors[0]}`);
 
-  // 4. Track without a key: fans out to the cached assignment + evaluated flag.
+  // 4. Track without a key: fans out to the assignment + evaluated flag answered above.
   if (client.getAssignments(userId).length !== 1 || client.getEvaluatedFlags(userId).length !== 1) {
-    fail('cache does not hold one assignment and one flag; fan-out would send nothing');
+    fail('cache does not hold one assignment and one flag');
   }
   await client.track(userId, 'page_view', { properties: { page: '/contract-smoke' } });
   if (trackErrors.length) fail(`fan-out: ${trackErrors[0]}`);

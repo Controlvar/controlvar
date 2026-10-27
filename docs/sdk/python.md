@@ -89,8 +89,8 @@ ExperimentationClient(
 ```
 
 Instances are thread-safe and should be shared across your application (one per process is
-typical): the per-user cache is what makes a key-less `track` count for every experiment the user
-is in.
+typical): the keys a client has answered for a user are what make a key-less `track` count for
+every experiment the user is in.
 
 ---
 
@@ -103,11 +103,12 @@ is in.
 | `get_feature_flag(flag_key, user_id, user_attributes=None)` | `FlagEvaluation(key, enabled, config, reason)` | raises `ExperimentationError` (`status == 404` when the flag key is unknown; a flag that is not ACTIVE returns `enabled=False`, `reason="inactive"`) |
 | `is_feature_enabled(flag_key, user_id, user_attributes=None)` | `bool` | returns `False` |
 | `get_all_flags(user_id, user_attributes=None)` | `dict[str, bool]` (not cached) | raises `ExperimentationError` |
-| `track(user_id, event_name, event_value=None, properties=None, experiment_key=None, feature_flag_key=None, event_type=None, timestamp=None)` | `bool` — `True` when the server accepted it | never raises; `False` on failure or when nothing was sent |
+| `track(user_id, event_name, event_value=None, properties=None, experiment_key=None, feature_flag_key=None, event_type=None, timestamp=None)` | `bool` — `True` when it was sent and the server answered 2xx | never raises; `False` on failure |
 | `track_batch(events)` | `BatchResult(success_count, failure_count, errors)`, `.ok` | never raises; sends chunks of 100, a failed chunk counts all its events as failures |
+| `report_error(error_type, message, *, feature_flag_key=None, experiment_key=None, user_id=None, stack_trace=None, metadata=None, timestamp=None)` | `bool` — `True` when the server stored the report (201); see [Reporting errors](#reporting-errors) | never raises; `False` and a logged warning otherwise |
 | `get_assignments(user_id, active_only=True)` | `list[dict]` — the user's assignments from the server (not cached) | raises `ExperimentationError` |
 | `cached_assignments(user_id)` / `cached_flags(user_id)` | cached, unexpired entries for the user | — |
-| `clear_cache()` | — | — |
+| `clear_cache()` | — (keeps the keys a key-less `track` is sent to) | — |
 | `ready(timeout_seconds=None)` | `ReadyResult(ok, ruleset_version, error)`, truthy when ready; `ReadyResult(ok=True)` at once in server mode | never raises |
 | `status()` | `LocalEvaluationStatus(evaluation, ready, ruleset_version, last_refresh_at, last_error, server_evaluated_flags)` | — |
 | `close()`, `with ExperimentationClient(...) as client:` | local mode: stops the refresh thread and sends the remaining evaluation counts; a no-op in server mode | never raises |
@@ -159,13 +160,48 @@ only, so call `clear_cache()` after changing a user's attributes.
 
 - **With** `experiment_key` and/or `feature_flag_key` → one `POST /api/v1/tracking/track`.
 - **Without** a key → one `POST /api/v1/tracking/batch` (chunks of 100) containing one entry per
-  experiment the user has been assigned to through this client (`experiment_key`) plus one per flag
-  evaluated for the user (`feature_flag_key`), taken from the cache (successful, unexpired only).
-- Nothing cached for the user → nothing is sent and `track` returns `False`.
+  experiment (`experiment_key`) and one per flag (`feature_flag_key`) this client answered for the
+  user in the last 24 hours, whether or not the answer is still cached.
+- An experiment that is not running (its latest answer has `reason` `"draft"`, `"paused"`,
+  `"completed"` or `"archived"`) gets no entry. An answer with `assigned=False` for `"holdout"`,
+  `"mutual_exclusion"` or `"targeting"` keeps its entry: holdout results count those users' events.
+- An experiment whose assignment is later answered 404 loses its entry at once, so key-less events
+  stop reaching it; any other failure (a 5xx, a network error) keeps it.
+- With nothing to attribute it to, the event is still sent: one `POST /api/v1/tracking/track` with
+  no key. The server stores it as history, which counts in holdout results and as CUPED history,
+  never in an experiment's results.
+- `track` returns `True` when the event was sent and the server answered 2xx (every request, when
+  the fan-out takes more than one), and `False` otherwise. A 2xx batch can still report a failed
+  entry, such as a key the server no longer has; `track_batch` returns the per-entry results.
+- The keys live in this client's memory, for up to 10,000 users (the user answered least recently
+  is dropped first). `clear_cache()` keeps them, and another process does not have them. On a
+  server, the process that records a purchase is often not the one that assigned the user, so pass
+  `experiment_key` on conversions there.
+- `track_batch` sends the events it is given as they are: an entry with no key is stored as history.
 
 `event_type` defaults to `event_name`; `properties` is sent as `metadata`; `timestamp` may be a
 `datetime` (naive values are treated as UTC) or an ISO-8601 string. Conversions are matched to
 experiment metrics by **event name**.
+
+### Reporting errors
+
+`report_error(error_type, message, ...)` sends one `POST /api/v1/tracking/errors` for an error
+that happened while a flag or experiment was active, in either evaluation mode; every argument
+after `message` is keyword-only. The server needs `feature_flag_key` or `experiment_key`, and the
+SDK sends the report without checking it.
+
+- `True` means the server stored the report: it answered 201. `False` means it did not: any other
+  answer (401, 404, 422, a 429 after its one retry, 5xx) or a network failure, which is also logged
+  as a warning. `report_error` never raises.
+- A stored report counts toward the flag's error rate and automatic rollback only when it names
+  that flag in `feature_flag_key` (a report with only `experiment_key` is stored, but counts toward
+  no flag's rate) and the client's key is a server-side key: one with the `sdk:ruleset` scope,
+  created by a user who can change feature flags. A report sent with any other key is stored too
+  and still returns `True`; the flag's safety check shows those reports as `uncounted_error_count`.
+  See [Which errors count](../feature-flags/safety.md#which-errors-count).
+- The error rate divides the counted errors by the flag's evaluations in the check's 15-minute
+  window. With no evaluations in the window it reads 0, so an error-rate threshold cannot fire: in
+  local mode the counts reach the server every 60 seconds and on `close()`.
 
 ---
 
@@ -184,6 +220,7 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json` and
 | `get_assignments` | `GET /api/v1/tracking/assignments/{user_id}?active_only=true` | — | list of dicts |
 | local mode: ruleset refresh | `GET /api/v1/sdk/ruleset` (beta) | `If-None-Match: "<version>"` | the ruleset and `ETag`; `304` when unchanged |
 | local mode: evaluation counts | `POST /api/v1/tracking/evaluations` (beta) | `{evaluations: [{flag_key, count, enabled_count, window_start, window_end}]}` | `{accepted, errors}` |
+| `report_error` | `POST /api/v1/tracking/errors` | `{error_type, message, feature_flag_key?, experiment_key?, user_id?, stack_trace?, metadata?, timestamp?}` | 201 and the stored report (only the status is read) |
 
 These SDK paths share a per-IP rate-limit ceiling of `SDK_RATE_LIMIT_PER_MINUTE` requests
 (default 6000) on the backend; the SDK honours `Retry-After` on `429` as described above.

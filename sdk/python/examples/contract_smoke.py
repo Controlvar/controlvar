@@ -21,16 +21,36 @@ import os
 import sys
 import uuid
 from pathlib import Path
+from typing import Any, List, Mapping, Optional, Tuple
+from urllib.parse import urlsplit
 
 # Make ``controlvar`` importable straight from the source tree.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import controlvar.client as client_module  # noqa: E402
 from controlvar import ExperimentationClient, ExperimentationError  # noqa: E402
+from controlvar.transport import Response  # noqa: E402
 
 
 def fail(message: str) -> None:
     print(message, file=sys.stderr)
     sys.exit(1)
+
+
+class Recording:
+    """The SDK's own HTTP layer, keeping each request (method, path, JSON body) and its answer."""
+
+    def __init__(self) -> None:
+        self.inner = client_module.UrllibTransport()
+        self.calls: List[Tuple[str, str, Any, Response]] = []
+
+    def send(
+        self, method: str, url: str, headers: Mapping[str, str], body: Optional[bytes], timeout: float
+    ) -> Response:
+        response = self.inner.send(method, url, headers, body, timeout)
+        sent = None if body is None else json.loads(body.decode("utf-8"))
+        self.calls.append((method.upper(), urlsplit(url).path, sent, response))
+        return response
 
 
 def main() -> None:
@@ -47,7 +67,8 @@ def main() -> None:
     user_id = os.environ.get("CONTRACT_USER_ID") or f"smoke-{uuid.uuid4()}"
     attributes = {"source": "contract_smoke", "sdk": "python"}
 
-    client = ExperimentationClient(api_url, api_key)
+    recording = Recording()
+    client = ExperimentationClient(api_url, api_key, transport=recording)
 
     # 1. Assign twice. The cache is cleared in between so the second call really
     #    goes to the server and proves the assignment is sticky there.
@@ -75,10 +96,22 @@ def main() -> None:
     if not client.track(user_id, "purchase", event_value=12.5, experiment_key=experiment_key):
         fail("track(purchase) with experiment_key was not accepted")
 
-    # 4. Track without a key -> fans out to the cached assignment + flag via /tracking/batch,
-    #    then an explicit 2-event batch.
+    # 4. Track without a key -> exactly one POST /tracking/batch, fanned out to the experiment and
+    #    the flag answered above, every entry stored; then an explicit 2-event batch. track()
+    #    alone would not tell: it is True for an untagged send too, and for a 2xx batch whose
+    #    entries failed.
+    mark = len(recording.calls)
     if not client.track(user_id, "page_view", properties={"page": "/smoke"}):
         fail("track(page_view) without a key was not accepted")
+    sent = recording.calls[mark:]
+    if [(method, path) for method, path, _, _ in sent] != [("POST", "/api/v1/tracking/batch")]:
+        fail(f"track(page_view) without a key sent {[f'{m} {p}' for m, p, _, _ in sent]}, expected one POST /api/v1/tracking/batch")
+    keys = [(e.get("experiment_key"), e.get("feature_flag_key")) for e in sent[0][2]["events"]]
+    if keys != [(experiment_key, None), (None, flag_key)]:
+        fail(f"the fan-out carried {keys}, expected the experiment {experiment_key!r} then the flag {flag_key!r}")
+    answer = sent[0][3].json() if sent[0][3].body else {}
+    if answer.get("failure_count") != 0:
+        fail(f"the fan-out's entries were not all stored: {answer}")
     batch = client.track_batch(
         [
             {"event_name": "page_view", "user_id": user_id, "experiment_key": experiment_key},

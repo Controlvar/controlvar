@@ -64,7 +64,7 @@ describe('useTrackEvent', () => {
     expect(result.current('click', undefined, { experimentKey: 'checkout' })).toBeUndefined();
   });
 
-  it('sends nothing when no key is given and nothing is cached for the user', async () => {
+  it('sends the event once to /api/v1/tracking/track with no key when no key is given and nothing is attributed to the user', async () => {
     const fetchMock = setupFetchMock();
     const { result } = renderHook(() => useTrackEvent(), { wrapper: makeWrapper() });
 
@@ -72,7 +72,14 @@ describe('useTrackEvent', () => {
       result.current('button_clicked');
     });
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://api.example.com/api/v1/tracking/track');
+    const body = JSON.parse(init.body);
+    expect(body.user_id).toBe('user-42');
+    expect(body.event_name).toBe('button_clicked');
+    expect(body).not.toHaveProperty('experiment_key');
+    expect(body).not.toHaveProperty('feature_flag_key');
   });
 
   it('POSTs to /api/v1/tracking/track with the provider user id when an experimentKey is given', async () => {

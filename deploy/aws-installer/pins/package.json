@@ -1,0 +1,10 @@
+{
+  "name": "controlvar-aws-installer-cdk-cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The CDK CLI the AWS installer beta installs into its record, pinned; regenerate the lock with: make installer-pins",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "aws-cdk": "2.1144.0"
+  }
+}
