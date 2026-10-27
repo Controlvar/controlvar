@@ -439,10 +439,15 @@ def _mean_arm(variant: Any, n: Any, sum_d: Any, sum_d2: Any) -> _MeanArm:
             FEWER_THAN_2_UNITS, "Not computed: fewer than 2 units"
         )
     c = sum_d / n
-    var = (sum_d2 - sum_d * sum_d / n) / (n - 1)
-    if not math.isfinite(var) or var < 0:
-        # No sample has these sums; refused rather than clamped to 0.
+    ss = sum_d2 - sum_d * sum_d / n
+    # Rounding can leave a tiny negative where the true value is 0: an arm
+    # whose values are all equal (no buyer at all, say) centred on a k it does
+    # not share.  A negative within 1e-9 of sum_d2 is read as 0.  The bound is
+    # relative only, so it holds at every scale: no sample gives a sum of
+    # squares further below 0 than that, and one is refused.
+    if not math.isfinite(ss) or ss < -1e-9 * abs(sum_d2):
         raise SufficientStatsRefused("the sums give a negative variance")
+    var = max(ss, 0.0) / (n - 1)
     return _MeanArm(variant, n, c, var)
 
 
@@ -547,7 +552,8 @@ def mean_metric_result(
 
     Raises:
         SufficientStatsRefused: a count or sum is malformed or not finite, or
-            the sums give a negative variance.
+            the sums give a negative variance beyond rounding (a rounding
+            residue is read as 0).
         SufficientStatsNotComputed: a variant has fewer than 2 units.
         ValueError: when no variant is the control.
     """
