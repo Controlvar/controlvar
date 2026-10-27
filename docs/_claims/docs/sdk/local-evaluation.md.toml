@@ -559,10 +559,12 @@ by = [
 ]
 
 [[unit]]
-text = "Safety monitoring divides the errors your server reports through POST /api/v1/tracking/errors with a server-side key (the same sdk:ruleset key), and the evaluations that fail on the server, by these counts, so automatic rollback keeps working for flags evaluated locally."
+text = "Safety monitoring divides the errors your server reports with reportError (JavaScript) or report_error (Python), which send POST /api/v1/tracking/errors with the client's key (here the same sdk:ruleset key), and the evaluations that fail on the server, by these counts, so automatic rollback keeps working for flags evaluated locally."
 by = [
     "test:backend/tests/integration/api/test_flag_evaluations_api.py::test_7c_locally_evaluated_flag_is_rolled_back_by_the_safety_monitor",
     "test:backend/tests/integration/api/test_flag_evaluations_api.py::TestRecording::test_the_safety_denominator_counts_the_rows",
+    "test:sdk/js/__tests__/local.test.ts::reportError sends the report with the same key in local mode, before and after close()",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_works_in_local_mode_before_and_after_close_with_the_same_key",
 ]
 
 [[unit]]
@@ -577,6 +579,33 @@ text = "Evaluations sent to the server are not counted twice."
 by = [
     "test:sdk/js/__tests__/local.test.ts::close() sends one entry per flag; deferred evaluations are not counted",
     "test:sdk/python/tests/test_local.py::test_close_sends_one_entry_per_flag_and_deferred_evaluations_are_not_counted",
+]
+
+[[unit]]
+text = "reportError and report_error return true / True when the server stored the report (201), and false / False on any other answer or a network failure; they never throw."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on %s and passes the failure to onError as reportError",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on a network failure and passes it to onError",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_posts_one_report_with_the_server_field_names_and_returns_true_on_201",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_false_without_raising_on",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_false_on_a_network_failure",
+]
+
+[[unit]]
+text = "Stored is not counted: a report counts only when the key has the sdk:ruleset scope and was created by a user who can change feature flags, and the flag's safety check shows the reports it stored but did not count as uncounted_error_count."
+by = [
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_key_without_the_scope_does_not_roll_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_check_endpoint_shows_the_reports_it_does_not_count",
+]
+
+[[unit]]
+text = "With no evaluation counts in the check's 15-minute window (a process that stopped without close() loses up to 60 seconds of them), the error rate reads 0 and an error-rate threshold cannot fire."
+by = [
+    "test:backend/tests/integration/api/test_flag_evaluations_api.py::test_the_check_reports_errors_with_zero_evaluations",
+    "test:sdk/js/__tests__/local.test.ts::counts are sent every 60 seconds, and only when there are some",
+    "test:sdk/python/tests/test_local.py::test_the_thread_flushes_every_sixty_seconds",
 ]
 
 [[unit]]

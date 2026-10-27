@@ -456,7 +456,9 @@ class TestBuildJobSteps:
         assert sorted(core_services) == ["postgres", "redis"], sorted(core_services)
         core_services.pop("redis")
         assert core_services == full["services"], "the Postgres services differ"
-        assert core["timeout-minutes"] == 60
+        # 75, not 60: core-build's passing runs reached 59.6 minutes. A
+        # different number is a decision about the slowest required check.
+        assert core["timeout-minutes"] == 75
         assert core["needs"] == "changes"
 
     def test_the_steps_both_jobs_have_are_the_same_step(self, gate):

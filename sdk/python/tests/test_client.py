@@ -787,6 +787,111 @@ class TestTrackBatch:
         assert transport.last.json()["events"][0]["timestamp"] == "2026-03-01T00:00:00+00:00"
 
 
+# ------------------------------------------------------------------------ report_error
+
+ERRORS_PATH = "/api/v1/tracking/errors"
+STORED = {"id": "err-1", "error_type": "crash", "timestamp": "2026-10-26T10:00:00"}
+
+
+class TestReportError:
+    @pytest.fixture(autouse=True)
+    def no_sleep(self, client):
+        client._sleep = mock.Mock()
+        return client._sleep
+
+    def test_posts_one_report_with_the_server_field_names_and_returns_true_on_201(self, client, transport):
+        transport.route("POST", ERRORS_PATH, status=201, json=STORED)
+        stored = client.report_error(
+            "crash",
+            "TypeError in checkout",
+            feature_flag_key="new-checkout",
+            experiment_key="checkout",
+            user_id="user-1",
+            stack_trace="at pay (checkout.py:12)",
+            metadata={"os": "linux", "release": "3.2.1"},
+            timestamp=datetime(2026, 10, 26, 9, 59, tzinfo=timezone.utc),
+        )
+        assert stored is True
+        assert transport.calls() == [f"POST {ERRORS_PATH}"]
+        assert transport.last.headers["X-API-Key"] == API_KEY
+        assert transport.last.json() == {
+            "error_type": "crash",
+            "message": "TypeError in checkout",
+            "feature_flag_key": "new-checkout",
+            "experiment_key": "checkout",
+            "user_id": "user-1",
+            "stack_trace": "at pay (checkout.py:12)",
+            "metadata": {"os": "linux", "release": "3.2.1"},
+            "timestamp": "2026-10-26T09:59:00+00:00",
+        }
+
+    def test_sends_only_the_fields_given_a_naive_datetime_as_utc_and_a_string_as_it_is(self, client, transport):
+        transport.route("POST", ERRORS_PATH, status=201, json=STORED)
+        client.report_error("crash", "boom", feature_flag_key="f", timestamp=datetime(2026, 1, 2, 3, 4, 5))
+        assert transport.last.json() == {
+            "error_type": "crash",
+            "message": "boom",
+            "feature_flag_key": "f",
+            "timestamp": "2026-01-02T03:04:05+00:00",
+        }
+        client.report_error("crash", "boom", experiment_key="x", timestamp="2026-01-02T03:04:05Z")
+        assert transport.last.json()["timestamp"] == "2026-01-02T03:04:05Z"
+
+    def test_the_target_and_the_rest_are_keyword_only(self, client):
+        with pytest.raises(TypeError):
+            client.report_error("crash", "boom", "a-flag")  # type: ignore[misc]
+
+    def test_does_not_check_the_report_itself_and_a_422_returns_false(self, client, transport, caplog):
+        transport.route("POST", ERRORS_PATH, status=422, json={"detail": "At least one of feature_flag_key or experiment_key is required"})
+        with caplog.at_level("WARNING", logger="controlvar.client"):
+            assert client.report_error("crash", "boom") is False
+        assert transport.last.json() == {"error_type": "crash", "message": "boom"}
+        assert "HTTP 422" in caplog.text
+
+    @pytest.mark.parametrize("status", [401, 404, 422, 500, 503])
+    def test_returns_false_without_raising_on(self, client, transport, status):
+        transport.route("POST", ERRORS_PATH, status=status, json={"detail": "no"})
+        assert client.report_error("crash", "boom", feature_flag_key="f") is False
+
+    def test_returns_false_on_a_2xx_that_is_not_201(self, client, transport):
+        transport.route("POST", ERRORS_PATH, status=200, json=STORED)
+        assert client.report_error("crash", "boom", feature_flag_key="f") is False
+
+    def test_returns_false_on_a_429_that_is_still_a_429_after_its_one_retry(self, client, transport, no_sleep):
+        transport.respond(429, headers={"Retry-After": "1"}).respond(429, headers={"Retry-After": "1"})
+        assert client.report_error("crash", "boom", feature_flag_key="f") is False
+        assert len(transport.requests) == 2
+        no_sleep.assert_called_once_with(1.0)
+
+    def test_returns_true_when_the_retry_after_a_429_is_answered_201(self, client, transport):
+        transport.respond(429, headers={"Retry-After": "1"}).respond(201, json=STORED)
+        assert client.report_error("crash", "boom", feature_flag_key="f") is True
+        assert len(transport.requests) == 2
+
+    @pytest.mark.parametrize("exc", [TransportError("down"), RuntimeError("boom"), TimeoutError("slow")])
+    def test_returns_false_on_a_network_failure(self, client, transport, exc):
+        transport.fail(exc)
+        assert client.report_error("crash", "boom", feature_flag_key="f") is False
+
+    def test_returns_false_when_the_metadata_cannot_be_sent(self, client, transport):
+        assert client.report_error("crash", "boom", feature_flag_key="f", metadata={"obj": object()}) is False
+        assert transport.requests == []
+
+    def test_works_in_local_mode_before_and_after_close_with_the_same_key(self, transport, monkeypatch):
+        # Local mode is server-side code: errors are reported with the same sdk:ruleset key.
+        from controlvar.local import LocalEvaluation
+
+        monkeypatch.setattr(LocalEvaluation, "_start_thread", lambda self: None)
+        local = ExperimentationClient(API_URL, "sk-scoped", transport=transport, evaluation="local")
+        transport.route("POST", ERRORS_PATH, status=201, json=STORED)
+        assert local.report_error("crash", "boom", feature_flag_key="f") is True
+        local.close()
+        assert local.report_error("crash", "boom", feature_flag_key="f") is True
+        sent = [r for r in transport.requests if r.path == ERRORS_PATH]
+        assert len(sent) == 2
+        assert all(r.headers["X-API-Key"] == "sk-scoped" for r in sent)
+
+
 # ------------------------------------------------------------------------------- 429
 
 

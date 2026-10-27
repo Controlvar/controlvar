@@ -16,6 +16,7 @@ import type {
   BatchResponse,
   BatchResult,
   ClientConfig,
+  ErrorReport,
   FlagEvaluateResponse,
   FlagEvaluation,
   SwallowedOperation,
@@ -101,7 +102,7 @@ function isUntagged(bodies: TrackBody[]): boolean {
  *   fan-out, for 24 hours (see `attribution.ts`); `clearCache()` keeps that record.
  * - `getAssignment`, `evaluateFlag`, `getAllFlags` and `fetchAssignments` throw
  *   `ExperimentationError`; `getVariant` / `isFeatureEnabled` return safe
- *   defaults instead; `track` / `trackBatch` never reject.
+ *   defaults instead; `track` / `trackBatch` / `reportError` never reject.
  * - A 429 is retried once after the server's `Retry-After` (capped at `timeoutMs`).
  */
 export class ExperimentationClient {
@@ -426,6 +427,40 @@ export class ExperimentationClient {
       }
     }
     return result;
+  }
+
+  // ─── Error reports ─────────────────────────────────────────────────────────
+
+  /**
+   * Report an error that happened while a flag or experiment was active, with one
+   * `POST /api/v1/tracking/errors`. Works in both evaluation modes.
+   *
+   * Resolves `true` exactly when the server answered 201: the report is stored. It counts toward
+   * the flag's error rate and automatic rollback only when this client's key is a server-side key
+   * (the `sdk:ruleset` scope, created by a user who can change flags); the flag's safety check
+   * shows the others as `uncounted_error_count`. Resolves `false` on any other answer (401, 404,
+   * 422, a 429 after its one retry, 5xx) or a network failure, and passes the failure to
+   * `onError(err, 'reportError')`. Never rejects. The server checks the report; the SDK does not.
+   */
+  async reportError(report: ErrorReport): Promise<boolean> {
+    const path = '/api/v1/tracking/errors';
+    try {
+      const body: Record<string, unknown> = { error_type: report.errorType, message: report.message };
+      if (report.featureFlagKey !== undefined) body.feature_flag_key = report.featureFlagKey;
+      if (report.experimentKey !== undefined) body.experiment_key = report.experimentKey;
+      if (report.userId !== undefined) body.user_id = report.userId;
+      if (report.stackTrace !== undefined) body.stack_trace = report.stackTrace;
+      if (report.metadata !== undefined) body.metadata = report.metadata;
+      if (report.timestamp !== undefined) body.timestamp = toIso(report.timestamp);
+
+      const response = await this.request(path, { method: 'POST', body });
+      if (response.status === 201) return true;
+      this.report(await this.httpError(response, path, 'POST'), 'reportError');
+      return false;
+    } catch (err) {
+      this.report(err, 'reportError');
+      return false;
+    }
   }
 
   // ─── Cache ─────────────────────────────────────────────────────────────────
