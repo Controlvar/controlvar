@@ -148,7 +148,10 @@ TITLE_CARD_MS = 1500
 #: The longest line a walkthrough's caption bar draws.
 CAPTION_CHARS = 180
 #: How long one try of an ``aria_one_of`` template waits before the next is
-#: tried; the rounds of tries end at the step's timeout.
+#: tried. A new round of tries starts while the step's timeout has not passed,
+#: so a screen that matches none fails up to one round after the timeout (a
+#: demo run measured 30244 ms at a 30000 ms timeout), and a screen that settles
+#: in the last round after its own template's turn is not caught.
 ONE_OF_MS = 500
 #: The kinds of step that do nothing on the screen: their caption shows their result.
 OFF_SCREEN = (
@@ -1173,8 +1176,10 @@ class JourneyRunner:
         return f"kept {where} as {keep.secret} ({len(value)} characters)"
 
     def _one_aria(self, page: Page, templates: List[str]) -> Optional[int]:
-        """The number (from 1) of the first template the screen matches, None if
-        none has by the step's timeout: each round tries each one briefly."""
+        """The number (from 1) of the first template the screen matches, or None.
+
+        Each round tries each template for ONE_OF_MS; rounds start until the
+        step's timeout has passed, so None comes up to one round after it."""
         body = page.locator("body")
         deadline = time.monotonic() + self.settings.timeout_ms / 1000
         while True:

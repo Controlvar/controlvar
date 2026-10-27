@@ -141,7 +141,9 @@ def test_the_seed_and_the_storefront_give_three_arms_and_three_labels():
     }
 
 
+@pytest.mark.regression
 def test_the_products_step_pairs_each_arm_with_its_own_label():
+    """#1375: the step expected one arm's label and failed for a visitor in another."""
     step = _products()
     assert set(step["expect"]) == {"aria_one_of"}, step["expect"]
     templates = step["expect"]["aria_one_of"]

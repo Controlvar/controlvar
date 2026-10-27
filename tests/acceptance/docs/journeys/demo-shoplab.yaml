@@ -16,8 +16,9 @@
 # Expectations written on 2026-10-11 from the README, the seed
 # (backend/scripts/seed_shoplab.py) and the storefront's source, before the
 # first run. products-direct (#1172) was added on 2026-10-14: it opens /products
-# as the first page of a load, as an address typed or a reload does, and its
-# expectation is the products step's.
+# as the first page of a load, as an address typed or a reload does, and expects
+# the list's heading and its twelve items. That load closes the panel, so the
+# arm and its sort label are checked by the products step alone (below).
 #
 # The products sort (shoplab_plp_sort) is a bandit, and the tracking API routes
 # a new visitor by the bandit's current weights, so the journey's fresh visitor
