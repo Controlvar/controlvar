@@ -167,9 +167,11 @@ by = [
 ]
 
 [[unit]]
-text = "onError | (error: ExperimentationError, op: 'track' | 'trackBatch' | 'refresh' | 'flush' | 'evaluate') => void | — | Only way to observe swallowed failures; a throwing handler is itself swallowed. 'refresh', 'flush' and 'evaluate' occur only in local mode"
+text = "onError | (error: ExperimentationError, op: 'track' | 'trackBatch' | 'refresh' | 'flush' | 'evaluate' | 'reportError') => void | — | Only way to observe swallowed failures; a throwing handler is itself swallowed. 'refresh', 'flush' and 'evaluate' occur only in local mode"
 by = [
     "test:sdk/js/__tests__/client.test.ts::reports swallowed failures through onError",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on %s and passes the failure to onError as reportError",
+    "test:sdk/js/__tests__/client.test.ts::never rejects, even with a throwing onError handler or no report at all",
     "test:sdk/js/__tests__/client.test.ts::survives a throwing onError handler",
     "test:sdk/js/__tests__/local.test.ts::a failed report goes to onError as flush",
     "test:sdk/js/__tests__/local.test.ts::is reported as evaluate, and the call goes to the server",
@@ -332,6 +334,14 @@ text = "trackBatch | (events: TrackEvent[]) => Promise<BatchResult> | { successC
 by = [
     "test:sdk/js/__tests__/client.test.ts::never rejects: a failed chunk counts its events as failures and reports through onError",
     "test:sdk/js/__tests__/client.test.ts::POSTs keyed events to /api/v1/tracking/batch and aggregates the server counts",
+]
+
+[[unit]]
+text = "reportError | (report: ErrorReport) => Promise<boolean> | true when the server stored the report (201); see Reporting errors | false; never rejects; onError(err, 'reportError')"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on %s and passes the failure to onError as reportError",
+    "test:sdk/js/__tests__/client.test.ts::never rejects, even with a throwing onError handler or no report at all",
 ]
 
 [[unit]]
@@ -537,6 +547,87 @@ text = "Conversions are matched to metrics by event name."
 by = ["test:backend/tests/integration/services/test_conversion_event_matching.py::TestConversionEventFilter::test_matches_both_producer_shapes_and_excludes_exposures"]
 
 [[unit]]
+text = "Reporting errors"
+by = ["exempt:label"]
+
+[[unit]]
+text = "reportError(report) sends one POST /api/v1/tracking/errors for an error that happened while a flag or experiment was active, in either evaluation mode."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/js/__tests__/local.test.ts::reportError sends the report with the same key in local mode, before and after close()",
+]
+
+[[unit]]
+text = "report is an ErrorReport: errorType and message, and optionally featureFlagKey, experimentKey, userId, stackTrace, metadata and timestamp."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/js/__tests__/client.test.ts::sends only the fields given, and a string timestamp as it is",
+]
+
+[[unit]]
+text = "The server needs featureFlagKey or experimentKey, and the SDK sends the report without checking it."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::does not check the report itself: one with no key is sent, and the 422 resolves false",
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportError::test_missing_both_keys_returns_422",
+]
+
+[[unit]]
+text = "true means the server stored the report: it answered 201."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on a 2xx that is not 201: true means stored, and only 201 says so",
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportError::test_writes_row_with_resolved_flag_id",
+]
+
+[[unit]]
+text = "false means it did not: any other answer (401, 404, 422, a 429 after its one retry, 5xx) or a network failure, which is also passed to onError(err, 'reportError')."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::resolves false on %s and passes the failure to onError as reportError",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on a 429 that is still a 429 after its one retry",
+    "test:sdk/js/__tests__/client.test.ts::resolves true when the retry after a 429 is answered 201",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on a network failure and passes it to onError",
+]
+
+[[unit]]
+text = "reportError never rejects."
+by = ["test:sdk/js/__tests__/client.test.ts::never rejects, even with a throwing onError handler or no report at all"]
+
+[[unit]]
+text = "A stored report counts toward the flag's error rate and automatic rollback only when it names that flag in featureFlagKey (a report with only experimentKey is stored, but counts toward no flag's rate) and the client's key is a server-side key: one with the sdk:ruleset scope, created by a user who can change feature flags."
+by = [
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportError::test_experiment_only_report",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_server_side_key_rolls_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_key_without_the_scope_does_not_roll_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count",
+]
+
+[[unit]]
+text = "A report sent with any other key is stored too and still resolves true; the flag's safety check shows those reports as uncounted_error_count."
+by = [
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_check_endpoint_shows_the_reports_it_does_not_count",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_stored_source_follows_the_presented_key",
+]
+
+[[unit]]
+text = "See Which errors count."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The error rate divides the counted errors by the flag's evaluations in the check's 15-minute window."
+by = [
+    "test:backend/tests/integration/api/test_flag_evaluations_api.py::test_the_check_reports_errors_with_zero_evaluations",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetErrorMetrics::test_computes_rate_and_error_type_breakdown",
+]
+
+[[unit]]
+text = "With no evaluations in the window it reads 0, so an error-rate threshold cannot fire: in local mode the counts reach the server every 60 seconds and on close()."
+by = [
+    "test:backend/tests/integration/api/test_flag_evaluations_api.py::test_the_check_reports_errors_with_zero_evaluations",
+    "test:sdk/js/__tests__/local.test.ts::counts are sent every 60 seconds, and only when there are some",
+    "test:sdk/js/__tests__/local.test.ts::close() sends one entry per flag; deferred evaluations are not counted",
+]
+
+[[unit]]
 text = "Caching, dedupe and retries"
 by = ["exempt:label"]
 
@@ -690,6 +781,13 @@ by = [
 ]
 
 [[unit]]
+text = "reportError | POST /api/v1/tracking/errors | {\"error_type\",\"message\",\"feature_flag_key\"?,\"experiment_key\"?,\"user_id\"?,\"stack_trace\"?,\"metadata\"?,\"timestamp\"?} | 201 and the stored report (only the status is read)"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "Errors: 401 bad key; 404 an experiment unknown or not ACTIVE, or an unknown flag key; 422 invalid event; 429 rate limited (Retry-After header, retried once)."
 by = [
     "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 401 for a bad key",
@@ -834,7 +932,7 @@ by = [
 ]
 
 [[unit]]
-text = "That also runs examples/local_eval_smoke.mjs with the seed's sdk:ruleset key (the js (local) row): 40 evaluations answered locally, the counts sent on close(), then two error reports sent with the same key, and the runner checks in the database that no evaluate call was made, that the safety monitor's denominator grew by exactly 40 and that both reports were counted."
+text = "That also runs examples/local_eval_smoke.mjs with the seed's sdk:ruleset key (the js (local) row): 40 evaluations answered locally, the counts sent on close(), then two error reports sent with reportError and the same key, and the runner checks in the database that no evaluate call was made, that the safety monitor's denominator grew by exactly 40 and that both reports were counted."
 by = [
     "test:backend/tests/unit/scripts/test_run_live_contract.py::test_each_sdk_runs_its_own_contract_smoke",
     "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestContractSeed::test_the_seed_writes_a_plain_and_a_scoped_key",
