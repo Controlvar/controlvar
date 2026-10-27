@@ -148,7 +148,13 @@ What an API answers can be kept for later steps and checked against an oracle
   chooses: per variant, how many users are assigned and how many of them send
   the metric's event, through the tracking API with an API key. Its check is
   the action itself: every user assigned the variant the documented hash
-  gives, every event accepted.
+  gives, every event accepted. With ``value: {mode: ramp, base: <number>,
+  step: <number>, modulo: <whole number, at least 1>}`` each converting user's
+  event carries a ``value``, never a random one: the ``i``-th converting user
+  of a variant (``i`` = 0, 1, 2, ..., counted in each variant on its own, in
+  the order the users were chosen) sends ``base + step * (i mod modulo)``.
+  ``{mode: ramp, base: 10, step: 1, modulo: 7}`` sends 10, 11, 12, 13, 14, 15,
+  16, 10, 11, ... (``TrafficValue``). Without ``value``, no event carries one.
 * ``expect.computed`` on an api step: the number at each JSON path equals an
   oracle's within a relative tolerance ``rel`` (``rel: 0``, exactly).
   ``expect.cells`` on a screen step: the cell of a table's column, in the row
@@ -238,6 +244,7 @@ itself: no ``expect``, no screen. The steps after it hold the stack it leaves.
 from __future__ import annotations
 
 import datetime
+import math
 import re
 from typing import Annotated, Any, Dict, List, Literal, Optional, Sequence, Tuple, Union
 
@@ -565,6 +572,40 @@ class Population(_Strict):
         return self
 
 
+class TrafficValue(_Strict):
+    """The ``value`` each converting user's event carries (``traffic.ramp_values``).
+
+    Deterministic, so an oracle recomputes every value from the journey alone.
+    The ``i``-th converting user of a variant (``i`` = 0, 1, 2, ..., counted in
+    each variant on its own, in the order ``traffic.choose`` chose the users)
+    sends::
+
+        base + step * (i mod modulo)
+
+    ``{mode: ramp, base: 10, step: 1, modulo: 7}`` sends 10, 11, 12, 13, 14,
+    15, 16, 10, 11, ...; a variant whose first 9 users convert sends those nine
+    values, 112 in all. ``base`` and ``step`` are numbers (whole or decimal,
+    finite; not true or false, not text); ``modulo`` is a whole number of at
+    least 1; ``ramp`` is the one mode.
+    """
+
+    mode: Literal["ramp"]
+    base: Union[StrictInt, StrictFloat]
+    step: Union[StrictInt, StrictFloat]
+    modulo: StrictInt = Field(ge=1)
+
+    @field_validator("base", "step", mode="before")
+    @classmethod
+    def _a_number(cls, value: Any) -> Any:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
+            raise ValueError(f"must be a number, not {value!r}")
+        return value
+
+
 class Traffic(_Strict):
     """A chosen population sent through the tracking API (``traffic.py``)."""
 
@@ -579,6 +620,8 @@ class Traffic(_Strict):
     #: The user ids are ``<users>-00001``, ``<users>-00002``, ...
     users: StrictStr = Field(pattern=SLUG_PATTERN)
     variants: Dict[OneLine, Population] = Field(min_length=1)
+    #: The value each converting user's event carries; none without it.
+    value: Optional[TrafficValue] = None
 
 
 class Evaluations(_Strict):
