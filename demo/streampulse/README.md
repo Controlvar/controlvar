@@ -30,7 +30,9 @@ the Search tab's would not match from them.
 | Every screen | all of the above | — | **Global holdout** `streampulse-holdout` (2 %): held-out devices see control everywhere with the reason `holdout` |
 
 Every tracked event is sent with an explicit `experimentKey` / `featureFlagKey` (see the table);
-`screen_view {screen}` has no key and is fanned out by the SDK to everything cached for the device.
+`screen_view {screen}` has no key and is fanned out by the SDK to every experiment and flag it
+answered for the device since the page was loaded (up to 24 hours; "Refresh now" clears only the
+cache, so it keeps them).
 
 The right-hand side has two panels:
 

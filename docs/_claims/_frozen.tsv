@@ -1991,3 +1991,4 @@ exempt:baseline	docs/workspaces/overview.md	c245b7b28e9d
 exempt:baseline	docs/workspaces/overview.md	c5fbe66a1f0a
 exempt:baseline	docs/workspaces/overview.md	edbaccdf13b1
 exempt:baseline	docs/workspaces/overview.md	ef126424e390
+untested:T	docs/self-hosting/aws-install.md	93ba51f1f353

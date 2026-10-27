@@ -139,9 +139,14 @@ by = [
 ]
 
 [[unit]]
-text = "Every tracked event is sent with an explicit experimentKey / featureFlagKey (see the table); screen_view {screen} has no key and is fanned out by the SDK to everything cached for the device."
+text = "Every tracked event is sent with an explicit experimentKey / featureFlagKey (see the table); screen_view {screen} has no key and is fanned out by the SDK to every experiment and flag it answered for the device since the page was loaded (up to 24 hours; \"Refresh now\" clears only the cache, so it keeps them)."
 by = [
     "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::POSTs one entry per cached assignment to /api/v1/tracking/batch",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::does not send to a key answered more than 24 hours ago: the event goes once with no key",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::still fans out to the attributed keys after clearCache, which empties only the cache",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::another client instance has none of them: its event goes once with no key",
+    "test:demo/streampulse/src/__tests__/ControlvarPanel.test.tsx::\"Refresh now\" clears the SDK cache and asks the page to re-evaluate; links point at the dashboard",
     "test:demo/streampulse/src/__tests__/screens.test.tsx::flag on: \"AI search ✨\" with explanations; search {query, engine: ai, results} attributed to the flag",
 ]
 

@@ -1017,6 +1017,9 @@ A 422 names positions and fields, never the ids that were sent.
 - **Description**: Record one event. `experiment_key` and `feature_flag_key` are both optional.
   An event with no key is stored as history and counts in no experiment's results; tag outcome
   events. A key that is given but not found answers 404.
+  While the experiment is running (ACTIVE), the event is tagged with the variant the user is
+  assigned to. An event for a draft, paused, completed or archived experiment is stored with the
+  experiment and no variant, so it counts in no variant's results.
   `event_type` is free text (SDKs send the event name); `event_name` defaults to `event_type`. Metrics count
   events by `event_name`: a metric with `event_name: "purchase"` counts every `purchase` event.
 - **Headers**: X-API-Key: {api_key}
@@ -1027,12 +1030,13 @@ A 422 names positions and fields, never the ids that were sent.
 - **Endpoint**: `POST /api/v1/tracking/batch`
 - **Description**: Record up to 100 events (same shape as `/track`) in one request. An entry with no
   key is stored as history, not refused; an entry whose key is not found is reported in `errors`.
+  Each entry is tagged with a variant as `/track` tags it: only while its experiment is running.
 - **Response**: 200 OK `{"success_count": int, "failure_count": int, "errors": [...]|null}`; 422 above 100 events, and none is stored
 
 ### Track Event by Ids
 - **Endpoint**: `POST /api/v1/tracking/events`
 - **Description**: Same as `/track` but keyed by internal ids (`experiment_id`, `variant_id`, `feature_flag_id`);
-  `event_name` is required.
+  `event_name` is required. It stores the `variant_id` it is given, whatever the experiment's status.
 - **Headers**: X-API-Key: {api_key}
 - **Response**: 200 OK (the stored event); 404 an id names no stored row, and nothing is stored: the detail names
   each such field, for example `No experiment has that experiment_id.`; 422 invalid body, or an id that is not a UUID
