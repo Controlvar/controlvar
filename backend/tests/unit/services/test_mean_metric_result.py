@@ -17,9 +17,9 @@ mean (#312).
   the p-value equal scipy's ``t.ppf`` and ``ttest_ind``,
   ``AnalysisService.cohens_d`` and ``NormalIndPower``: the variance is the
   sample variance (ddof 1).
-* **Refusals.**  Sums with a negative variance are refused, not computed.  A
-  rounding residue below 0 (an arm with no buyers, centred on the grand mean)
-  is read as 0, within the tolerance the CUPED sums use.
+* **Refusals.**  Sums with a negative variance are refused, not computed, at
+  any scale.  A rounding residue below 0 (an arm with no buyers, centred on
+  the grand mean) is read as 0 when it is within 1e-9 of ``sum_d2``.
 """
 
 import math
@@ -279,6 +279,34 @@ def test_negative_variance_refused(negative_arm):
         mean_metric_result(
             10.0,
             [(_CONTROL, *control), (_TREATMENT, *treatment)],
+            _ALPHA,
+            "none",
+            metric=_METRIC,
+        )
+    assert refused.value.code == "result_invalid"
+
+
+@pytest.mark.parametrize(
+    "arm",
+    [
+        # Values around 1e-5, with a sum of squares 9% below what the sum
+        # allows.
+        (100, 1e-3, 1e-8 - 9e-10),
+        # The arm above, (100, 50, 24), scaled by 1e-6 and by 1e6.
+        (100, 50e-6, 24e-12),
+        (100, 50e6, 24e12),
+    ],
+    ids=["small-values", "scaled-down", "scaled-up"],
+)
+def test_a_clearly_negative_variance_is_refused_at_any_scale(arm):
+    """The rounding allowance is relative to sum_d2, so sums no sample has are
+    refused whatever the size of the values, small ones included."""
+    n, sum_d, sum_d2 = arm
+    assert sum_d2 - sum_d**2 / n < -0.01 * sum_d2
+    with pytest.raises(SufficientStatsRefused) as refused:
+        mean_metric_result(
+            10.0,
+            [(_CONTROL, 100, 3.0, 250.0), (_TREATMENT, *arm)],
             _ALPHA,
             "none",
             metric=_METRIC,

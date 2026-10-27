@@ -442,9 +442,10 @@ def _mean_arm(variant: Any, n: Any, sum_d: Any, sum_d2: Any) -> _MeanArm:
     ss = sum_d2 - sum_d * sum_d / n
     # Rounding can leave a tiny negative where the true value is 0: an arm
     # whose values are all equal (no buyer at all, say) centred on a k it does
-    # not share.  Within the tolerance `_cuped_arm` uses, that is read as 0.
-    # No sample gives a clearly negative sum of squares, so one is refused.
-    if not math.isfinite(ss) or ss < -1e-9 * max(1.0, abs(sum_d2)):
+    # not share.  A negative within 1e-9 of sum_d2 is read as 0.  The bound is
+    # relative only, so it holds at every scale: no sample gives a sum of
+    # squares further below 0 than that, and one is refused.
+    if not math.isfinite(ss) or ss < -1e-9 * abs(sum_d2):
         raise SufficientStatsRefused("the sums give a negative variance")
     var = max(ss, 0.0) / (n - 1)
     return _MeanArm(variant, n, c, var)
