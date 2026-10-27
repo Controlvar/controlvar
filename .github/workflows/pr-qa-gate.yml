@@ -513,7 +513,7 @@ jobs:
   # The pytest sessions are core-only, and deliberately: `--profile full`
   # leaves the tree exactly as the checkout is, so its unit / integration /
   # smoke / module / Lambda / golden-vector sessions would re-run, in a
-  # 60-minute job, what unit-tests, integration-tests.yml, smoke-tests,
+  # 75-minute job, what unit-tests, integration-tests.yml, smoke-tests,
   # module-tests and sdk-contracts already ran on that same tree in minutes.
   # `--profile core` runs them because there they run against a DIFFERENT
   # tree -- one with modules/ deleted -- which nothing else exercises.
@@ -532,11 +532,18 @@ jobs:
   # the reason and, in core-build only, the tests that pin docs/ content --
   # which is why a docs-only pull request still starts both jobs and their
   # Postgres service.
+  #
+  # Both jobs have 75 minutes. In October 2026 core-build's passing runs took
+  # up to 59.6 minutes and two runs were cancelled at the old 60-minute limit;
+  # the extra 15 are headroom for that tail, not room for more tests.
+  # full-build takes a few minutes and has the same limit only because the
+  # two jobs are kept alike. Running the slowest sessions in parallel shards
+  # (#869) is the fix for the time itself.
   core-build:
     needs: changes
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
     services:
       postgres:
         image: postgres:16
@@ -706,7 +713,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
     services:
       postgres:
         image: postgres:16
