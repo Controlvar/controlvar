@@ -114,6 +114,12 @@ jobs:
           cd backend
           pip install -r requirements.txt
 
+      # The AWS installer beta's tests run the real jq, the one this image ships, and the
+      # installer accepts 1.7 or later (checks.sh). The image's package is 1.7.1 and
+      # reports 1.7; this line is how a later image with another jq shows in the log.
+      - name: The jq these tests run with
+        run: jq --version
+
       - name: Run unit tests
         env:
           APP_ENV: test
@@ -123,7 +129,7 @@ jobs:
           POSTGRES_DB: experimentation
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-        run: python -m pytest backend/tests/unit/ backend/tests/realistic/ -p no:cov -q --tb=short -x --junitxml=unit-junit.xml
+        run: python -m pytest backend/tests/unit/ backend/tests/realistic/ backend/tests/installer_sweeps/ -p no:cov -q --tb=short -x --junitxml=unit-junit.xml
 
       # The workflow tests skip when the file they read is absent, so a
       # renamed workflow used to turn 19 of them into green skips (QA 4d).
@@ -136,10 +142,14 @@ jobs:
       # one of them would read as a pass. So must the docs tests
       # (backend/tests/unit/docs, #1142): the page gate and the information
       # floor are among them, and core-build's docs step checks the same
-      # directory on a docs-only change. On this full checkout nothing under
-      # any of these directories skips. The SMTP certificate tests must also run.
+      # directory on a docs-only change. So must the AWS installer beta's
+      # harness and sweep tests (backend/tests/installer_sweeps): they need
+      # only bash and jq, and they live outside backend/tests/unit so that
+      # core-build, which runs that directory, does not take their minutes.
+      # On this full checkout nothing under any of these directories skips.
+      # The SMTP certificate tests must also run.
       - name: No required test was skipped
-        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic backend/tests/unit/showcase backend/tests/unit/docs backend/tests/unit/services/test_email_notifier_tls
+        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic backend/tests/unit/showcase backend/tests/unit/docs backend/tests/installer_sweeps backend/tests/unit/services/test_email_notifier_tls
 
       # The Lambda functions (event processor, flag evaluation) and their
       # shared package carry tests of their own (240 collected) that ran
@@ -645,6 +655,13 @@ jobs:
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
           gitleaks version
+
+      # The AWS installer beta's clean path runs the real jq in the unit session, the one
+      # this image ships; the installer accepts 1.7 or later (checks.sh). This line is how
+      # a later image with another jq shows in the log.
+      - name: The jq these tests run with
+        if: needs.changes.outputs.docs_only != 'true'
+        run: jq --version
 
       # A second Redis that requires a password, for
       # backend/tests/integration/test_redis_password_auth.py, started the
