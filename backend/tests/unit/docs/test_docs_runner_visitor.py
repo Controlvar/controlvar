@@ -14,6 +14,9 @@ Held here:
   its bucket outside the demo holdout, and its arm in each ShopLab experiment
   the documented assignment hash places users in (the bandit routes by its
   weights instead), pinned as numbers and names;
+* what those arms rest on: the API walks an experiment's variants in the order
+  they were created (``created_at``, stamped per row by Python, then ``id``),
+  and its own assignment, walking the seed's variants in that order, gives them;
 * what the chooser and the seed are made of, read from their sources rather
   than typed here: the holdout's salt and share (the StreamPulse seed), the
   holdout bucket (the API's own function, and the README's ``sp-holdout-15``),
@@ -116,6 +119,56 @@ def test_the_visitors_arm_in_each_hashed_experiment():
         for key in _hashed_experiments()
     }
     assert arms == VISITOR_ARMS
+
+
+def test_the_api_orders_an_experiments_variants_as_they_were_created():
+    """The arms above are the visitor's only while the API walks an experiment's
+    variants in the order the seed creates them (the next test: reversed, each
+    of the three changes).
+
+    The API orders them by ``created_at``, then ``id``, both ascending. The
+    seed adds an experiment's variants in its own order and flushes them
+    together; ``created_at`` is stamped by Python for each row as it is
+    inserted, so it follows that order. A database default such as ``now()``
+    gives every row of one transaction the same time, which would leave the
+    order, and so the visitor's arms, to the variants' random ids.
+    """
+    from sqlalchemy import Column
+    from sqlalchemy import inspect as sa_inspect
+
+    from backend.app.models import register_core_models
+    from backend.app.models.experiment import Experiment, Variant
+
+    register_core_models()
+    variants = Variant.__table__
+    order = sa_inspect(Experiment).relationships["variants"].order_by or ()
+    assert [
+        column.name
+        for column in order
+        if isinstance(column, Column) and column.table is variants
+    ] == ["created_at", "id"], order
+    assert len(order) == 2, order
+
+    created_at = variants.c.created_at
+    assert created_at.server_default is None, created_at.server_default
+    assert created_at.default is not None and created_at.default.is_callable, (
+        created_at.default
+    )
+
+
+def test_the_apis_own_assignment_gives_the_arms_in_creation_order():
+    from backend.app.services.assignment_service import AssignmentService
+
+    api = AssignmentService.__new__(AssignmentService)  # the hash reads no session
+    for key in _hashed_experiments():
+        created = [
+            types.SimpleNamespace(id=name, traffic_allocation=share)
+            for name, share in _allocations(key)
+        ]
+        in_order = types.SimpleNamespace(id=key, key=key, variants=created)
+        reversed_ = types.SimpleNamespace(id=key, key=key, variants=created[::-1])
+        assert api._hash_user_to_variant(VISITOR, in_order) == VISITOR_ARMS[key]
+        assert api._hash_user_to_variant(VISITOR, reversed_) != VISITOR_ARMS[key]
 
 
 def test_the_chooser_finds_a_visitor_in_the_arm_asked_for():

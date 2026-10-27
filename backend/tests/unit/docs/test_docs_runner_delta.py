@@ -251,6 +251,8 @@ def test_a_delta_alone_is_what_an_api_step_expects_of_its_answer(tmp_path):
         pytest.param(7, 7, 0, "", id="the-same"),
         pytest.param(6, 7, -1, "", id="one-fewer"),
         pytest.param(8.0, 7, 1, "", id="a-float-equal"),
+        pytest.param(7.5, 6.5, 1, "", id="a-fraction-moved-exactly"),
+        pytest.param(8.5, 7, 1, "= 8.5; x was 7, so +1 is 8", id="a-fraction-past"),
         pytest.param(7, 7, 1, "= 7; x was 7, so +1 is 8", id="not-counted"),
         pytest.param(9, 7, 1, "= 9; x was 7, so +1 is 8", id="counted-twice"),
         pytest.param(8, 7, 0, "= 8; x was 7, so +0 is 7", id="counted-in-the-other"),
@@ -498,6 +500,13 @@ def test_a_cell_one_more_than_the_saved_count_passes(
             "the Conversions of the row \"one_page\" shows '12'; before-one-page was"
             " 12, so +1 is 13",
             id="not-counted",
+        ),
+        pytest.param(
+            "1,234,567",
+            1234567,
+            "the Conversions of the row \"one_page\" shows '1,234,567';"
+            " before-one-page was 1234567, so +1 is 1234568",
+            id="a-large-count-in-full",
         ),
         pytest.param("—", 12, "no number in '—'", id="no-number"),
         pytest.param(

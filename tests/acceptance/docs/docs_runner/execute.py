@@ -1518,8 +1518,9 @@ class JourneyRunner:
                 if not agrees(text, moved):
                     raise StepFailed(
                         f'the {cell.column} of the row "{cell.row}" shows'
-                        f" {one_line(text, 40)!r}; {delta.since} was {before:g},"
-                        f" so {delta.by:+d} is {moved:g}"
+                        f" {one_line(text, 40)!r}; {delta.since} was"
+                        f" {json.dumps(before)}, so {delta.by:+d} is"
+                        f" {json.dumps(moved)}"
                     )
                 shown_cells.append(
                     f"{cell.column} {one_line(text, 40)}, {delta.by:+d} from"
