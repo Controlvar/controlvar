@@ -824,11 +824,14 @@ async def test_the_check_reports_errors_with_zero_evaluations(
     assert resp.status_code == 201, resp.text
 
     db_session.expire_all()
-    check = await SafetyService(db_session).check_feature_flag_safety(flag.id)
+    service = SafetyService(db_session)
+    check = await service.check_feature_flag_safety(flag.id)
 
     assert check.details["error_count"] == 1
     assert check.details["total_evaluations"] == 0
     assert check.details["timeframe_minutes"] == 15
+    # With nothing to divide by, the rate the rollback compares reads 0.0.
+    assert service.get_error_metrics(db_session, flag.id)["error_rate"] == 0.0
 
 
 def test_counter_rows_are_pruned_after_the_retention(

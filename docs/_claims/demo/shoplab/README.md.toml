@@ -100,8 +100,13 @@ text = "Event vocabulary (all event_type == event_name): page_view {page} · her
 by = ["test:demo/shoplab/simulator/test_traffic.py::test_batch_payloads_have_the_right_keys"]
 
 [[unit]]
-text = "Events without an explicit key are fanned out by the SDK to every experiment the visitor has been assigned to in the session."
-by = ["test:sdk/react/src/__tests__/ExperimentationClient.test.ts::POSTs one entry per cached assignment to /api/v1/tracking/batch"]
+text = "Events without an explicit key are fanned out by the SDK to every experiment the visitor has been assigned to since the page was loaded (up to 24 hours), so an order placed long after the checkout page assigned the visitor still counts."
+by = [
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::POSTs one entry per cached assignment to /api/v1/tracking/batch",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::does not send to a key answered more than 24 hours ago: the event goes once with no key",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::another client instance has none of them: its event goes once with no key",
+]
 
 [[unit]]
 text = "Running it"

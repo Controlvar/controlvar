@@ -75,7 +75,9 @@ await client.close();
 
 `evaluateFlag`, `isFeatureEnabled` and `getAllFlags` keep their signatures. A local answer uses the
 attributes passed to that call, so the "call `clearCache()` after changing attributes" caveat does
-not apply to it; it is still recorded for the key-less `track()` fan-out. `getAllFlags` is answered
+not apply to it; it is still recorded for the key-less `track()` fan-out. That record is kept per
+process, so on a server pass `experimentKey` (`experiment_key` in Python) on conversions: a purchase
+tracked by an order service or another worker reaches no experiment without it. `getAllFlags` is answered
 locally only when every active flag can be answered for those attributes; otherwise the whole call
 goes to the server. The refresh and report timers do not keep a Node process alive.
 
@@ -192,12 +194,20 @@ the 10-minute retry are not.
 
 The server cannot see local evaluations, so the SDK reports how many it made: per flag, every 60
 seconds and on `close()`, to `POST /api/v1/tracking/evaluations`. Safety monitoring divides the
-errors your server reports through `POST /api/v1/tracking/errors` with a server-side key (the same
-`sdk:ruleset` key), and the evaluations that fail on the server, by these counts, so automatic
-rollback keeps working for flags evaluated locally. Reports sent with a key without the scope are
-stored but not counted (see
+errors your server reports with `reportError` (JavaScript) or `report_error` (Python), which send
+`POST /api/v1/tracking/errors` with the client's key (here the same `sdk:ruleset` key), and the
+evaluations that fail on the server, by these counts, so automatic rollback keeps working for flags
+evaluated locally. Reports sent with a key without the scope are stored but not counted (see
 [Which errors count](../feature-flags/safety.md#which-errors-count)). Evaluations sent to the
 server are not counted twice.
+
+`reportError` and `report_error` return `true` / `True` when the server stored the report (201),
+and `false` / `False` on any other answer or a network failure; they never throw. Stored is not
+counted: a report counts only when the key has the `sdk:ruleset` scope and was created by a user
+who can change feature flags, and the flag's safety check shows the reports it stored but did not
+count as `uncounted_error_count`. With no evaluation counts in the check's 15-minute window (a
+process that stopped without `close()` loses up to 60 seconds of them), the error rate reads 0 and
+an error-rate threshold cannot fire.
 
 Two dashboard figures change as local evaluation is adopted, because a count carries no user and
 no rule:

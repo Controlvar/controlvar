@@ -52,8 +52,11 @@ structural expectation (``url``, ``status``, ``visible``, ``text``,
 it, and the step then needs a structural expectation and no ``aria``. A step
 with ``snapshot: false`` keeps no screenshot and no ARIA snapshot, whether it
 passes or fails. ``aria`` is Playwright's ARIA snapshot template: it must parse
-as a YAML list. ``api``, ``ref``, ``crawl`` and ``keep`` steps take no
-snapshot. ``fail`` says what failure looks like; a step without it is refused.
+as a YAML list. ``aria_one_of`` takes its place on a screen that shows one of
+several answers the API may give (the arm a bandit gave a new visitor): two to
+four templates, each pairing what the page shows for one answer, and the
+screen must match one of them. ``api``, ``ref``, ``crawl`` and ``keep`` steps
+take no snapshot. ``fail`` says what failure looks like; a step without it is refused.
 Names, labels, options, ``text``, ``goto``, ``open`` and ``search`` are one
 line each.
 
@@ -388,10 +391,12 @@ GUIDE_PATTERN = r"^[^/\s][^\s]*\.(?:md|tsx)$"
 SCREEN_ACTIONS = ("goto", "open", "click", "fill", "select")
 #: The actions in the browser; each but ``keep`` keeps its screen as a screenshot.
 BROWSER_ACTIONS = (*SCREEN_ACTIONS, "search", "keep")
+#: A screen step's ARIA snapshot: one template, or one of several.
+ARIA_EXPECTS = ("aria", "aria_one_of")
 #: What a step on a screen may expect, and what an ``api`` step may.
-BROWSER_EXPECTS = ("url", "status", "visible", "text", "number", "cells", "aria")
+BROWSER_EXPECTS = ("url", "status", "visible", "text", "number", "cells", *ARIA_EXPECTS)
 #: A screen step's structural expectations: all but the ARIA snapshot.
-STRUCTURAL_EXPECTS = tuple(name for name in BROWSER_EXPECTS if name != "aria")
+STRUCTURAL_EXPECTS = tuple(name for name in BROWSER_EXPECTS if name not in ARIA_EXPECTS)
 #: What an api step may expect of its answer; ``after`` compares times in it.
 API_ANSWER_EXPECTS = ("status", "json", "computed")
 API_EXPECTS = (*API_ANSWER_EXPECTS, "after")
@@ -857,6 +862,10 @@ class Expect(_Strict):
     cells: Optional[List[Cell]] = Field(default=None, min_length=1)
     found: Optional[StrictStr] = Field(default=None, pattern=r"^/\S*$")
     aria: Optional[StrictStr] = Field(default=None, min_length=1)
+    #: Or one of these, each pairing what the screen shows for one answer.
+    aria_one_of: Optional[List[StrictStr]] = Field(
+        default=None, min_length=2, max_length=4
+    )
     #: A ``run`` or ``finish`` step: the status its block must end with.
     exit: Optional[StrictInt] = Field(default=None, ge=0, le=255)
     #: And lines its output must hold, each word for word.
@@ -866,22 +875,25 @@ class Expect(_Strict):
     def _something(self) -> "Expect":
         if not self.given():
             raise ValueError("expect names nothing to check")
+        if self.aria is not None and self.aria_one_of is not None:
+            raise ValueError("give aria or aria_one_of, not both")
         return self
 
-    @field_validator("aria")
+    @field_validator("aria", "aria_one_of")
     @classmethod
-    def _aria_parses(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return value
-        try:
-            nodes = yaml.safe_load(value)
-        except yaml.YAMLError:
-            nodes = None
-        if not isinstance(nodes, list) or not nodes:
-            raise ValueError(
-                "aria must be an ARIA snapshot template: a non-empty YAML list of"
-                ' nodes, such as - heading "Title" [level=1]'
-            )
+    def _aria_parses(cls, value: Any) -> Any:
+        for template in [value] if isinstance(value, str) else value or []:
+            try:
+                nodes = yaml.safe_load(template)
+            except yaml.YAMLError:
+                nodes = None
+            if not isinstance(nodes, list) or not nodes:
+                raise ValueError(
+                    "aria must be an ARIA snapshot template: a non-empty YAML list of"
+                    ' nodes, such as - heading "Title" [level=1]'
+                )
+        if isinstance(value, list) and len(set(value)) < len(value):
+            raise ValueError("aria_one_of gives one template twice")
         return value
 
     def given(self) -> List[str]:

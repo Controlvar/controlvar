@@ -8,6 +8,10 @@ text = "AWS CDK Deployment"
 by = ["exempt:label"]
 
 [[unit]]
+text = "To have a script run this page's steps for you, see Install on AWS with one command (beta)."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "The platform's AWS infrastructure is defined as code using AWS CDK v2, in Python: the app is infrastructure/cdk/app.py, and infrastructure/cdk/cdk.json runs it with python3 app.py."
 by = ["test:infrastructure/tests/test_synth_inputs.py::test_the_cdk_app_is_python_run_by_python3_app_py_on_cdk_v2"]
 
@@ -1382,6 +1386,13 @@ by = ["exempt:instruction"]
 [[unit]]
 text = "If you are not sure that no other CDK app uses the account and region, leave CDKToolkit in place: it costs pennies of storage."
 by = ["exempt:advice"]
+
+[[unit]]
+text = "The AWS installer (beta) never deletes CDKToolkit, whether it made the stack or the account had it before, so this is where to remove it after an uninstall."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_step_5_says_it_keeps_the_cdks_setup_stack",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_cdktoolkit_is_never_touched_while_a_stack_remains",
+]
 
 [[unit]]
 text = "Moving an environment deployed before the rename"

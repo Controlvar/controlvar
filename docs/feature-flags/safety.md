@@ -36,7 +36,9 @@ browser or mobile app, are stored and counted separately in the check
 (`details.uncounted_error_count`), but do not count toward the error rate or a rollback. The same
 goes for an `sdk:ruleset` key whose owner has since lost the role. To have app errors count, send
 them to your server and forward them from there with a server-side key; see
-[Reporting client-side errors](create.md#reporting-client-side-errors).
+[Reporting client-side errors](create.md#reporting-client-side-errors). A server using the
+JavaScript or Python SDK sends one with `reportError` or `report_error`; `true` from either means
+the report was stored, not that it counts.
 
 `GET /api/v1/metrics/summary` counts errors by the same rule: its `error_rate` leaves out the
 reports that do not count, and its `uncounted_error_count` is the number of them in its period.

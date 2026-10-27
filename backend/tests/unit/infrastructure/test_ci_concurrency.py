@@ -24,8 +24,8 @@ merge (#399). Such a workflow has no ``concurrency:`` block at all.
 
 A push to main keeps the group it had before the change: the table below is
 the value each changed workflow evaluated to on main before #75 was fixed. The
-one deliberate exception is chart-kind, whose runs on main are keyed on the
-commit and never cancelled (PR-2').
+deliberate exceptions are chart-kind (PR-2') and demo-apps, a later workflow,
+whose runs on main are keyed on the commit and never cancelled.
 """
 
 from __future__ import annotations
@@ -220,6 +220,9 @@ def test_no_two_workflows_share_a_pull_request_group():
 #: except chart-kind, whose main runs are keyed on the commit and never
 #: cancelled (PR-2', EM C7c): keyed on the ref, each push to main cancelled the
 #: one before it, so a merge that broke the install was never seen on main.
+#: demo-apps came later and is keyed the same way, for the same reason: keyed
+#: on the ref, the run waiting behind one in flight is replaced by the next
+#: push, even with cancel-in-progress false.
 MAIN_GROUPS = {
     ("chart-kind.yml", "push"): (f"chart-kind-push-{MAIN_SHA}", False),
     ("chart-kind.yml", "schedule"): (f"chart-kind-schedule-{MAIN_SHA}", False),
@@ -229,6 +232,11 @@ MAIN_GROUPS = {
     ),
     ("chart.yml", "push"): ("chart-refs/heads/main", True),
     ("compose-production.yml", "push"): ("compose-production-8000", True),
+    ("demo-apps.yml", "push"): (f"demo-apps-push-{MAIN_SHA}", False),
+    ("demo-apps.yml", "workflow_dispatch"): (
+        f"demo-apps-workflow_dispatch-{MAIN_SHA}",
+        False,
+    ),
     ("compose-production.yml", "workflow_dispatch"): (
         "compose-production-8000",
         True,
@@ -281,6 +289,14 @@ def test_a_chart_kind_pull_request_run_is_still_cancelled_by_a_newer_push():
     (only,) = _groups(wg.load(wg.WORKFLOWS / "chart-kind.yml"))
     group, cancel = _group_and_cancel(only[1], _pr_context("pull_request", 7))
     assert (group, cancel) == ("chart-kind-pull_request-7", True)
+
+
+def test_a_demo_apps_pull_request_run_is_still_cancelled_by_a_newer_push():
+    """Keying main on the commit leaves a pull request as it was: one group per
+    number, with cancel-in-progress."""
+    (only,) = _groups(wg.load(wg.WORKFLOWS / "demo-apps.yml"))
+    group, cancel = _group_and_cancel(only[1], _pr_context("pull_request", 7))
+    assert (group, cancel) == ("demo-apps-pull_request-7", True)
 
 
 # ---------------------------------------------------------------------------
