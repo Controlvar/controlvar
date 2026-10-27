@@ -604,8 +604,8 @@ def test_nothing_changes_before_the_confirmation(clean):
 def test_every_aws_child_runs_with_exactly_the_allowed_environment(clean):
     """B2: the parent's keys, profile, endpoint variables, output format, CDK defaults and
     registry login reach no child; each child's environment is the allow-list, its HOME the
-    record's own (W1) and its profile the copy's own name (W2). Every cdk call, and no
-    other child, has the CDK CLI's telemetry off."""
+    record's own and its profile the copy's own name. Every cdk call, and no other child,
+    has the CDK CLI's telemetry off."""
     variable = _profile_variable()
     record = clean.world.record
     seen = 0

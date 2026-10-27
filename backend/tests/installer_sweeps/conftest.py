@@ -9,12 +9,32 @@ those sweeps; a test that changes an account sweeps its own World.
 from __future__ import annotations
 
 import shutil
+import signal
 from pathlib import Path
 
 import pytest
 
 from backend.tests.installer_sweeps.harness import accounts, fake_aws, shapes
 from backend.tests.installer_sweeps.harness.world import World
+
+
+@pytest.fixture(scope="session", autouse=True)
+def interrupts_reach_what_the_tests_start():
+    """Every program a test starts begins with SIGINT at its default, as it does when
+    pytest runs in the foreground.
+
+    A shell starts a background job (``pytest ... &``) with SIGINT ignored, a program
+    inherits an ignored signal, and bash cannot trap a signal that was ignored when it
+    started: every installer a test started would then ignore the Ctrl-C the
+    interrupt tests send it. A handled signal, unlike an ignored one, is back at its
+    default in each program started after it, so Python's own handler (the one it
+    installs when SIGINT is not ignored at its start) is put back for the session."""
+    before = signal.getsignal(signal.SIGINT)
+    if before == signal.SIG_IGN:
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+    yield
+    if before == signal.SIG_IGN:
+        signal.signal(signal.SIGINT, before)
 
 
 @pytest.fixture(scope="session")

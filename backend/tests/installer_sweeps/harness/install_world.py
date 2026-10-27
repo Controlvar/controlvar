@@ -819,7 +819,13 @@ class Batch:
     def run_all(self, root: Path, shapes: Path) -> dict[str, Ran]:
         """Every scenario, or (for a run by hand while working on one) only those whose
         names match a pattern in INSTALL_TEST_ONLY, space-separated; a test whose
-        scenario did not run then fails on its missing name."""
+        scenario did not run then fails on its missing name.
+
+        Each scenario's world is made as the scenario starts, not before the first one
+        runs. A world writes the reader's sign-in as it is made, and the installer
+        refuses that sign-in from about 15 minutes after it was written (lib/env.sh's
+        cv_token_rule): a batch on a busy machine can take longer than that, and its
+        last scenarios would then fail for that alone."""
         import fnmatch
 
         only = os.environ.get("INSTALL_TEST_ONLY", "").split()
@@ -829,17 +835,15 @@ class Batch:
                 for n, s in self.scenarios.items()
                 if any(fnmatch.fnmatch(n, p) for p in only)
             }
-        worlds = {}
-        for name, spec in self.scenarios.items():
-            worlds[name] = InstallWorld(
+
+        def go(name: str) -> Ran:
+            spec = self.scenarios[name]
+            world = InstallWorld(
                 root / name,
                 accounts.install_target(),
                 shapes,
                 stub_sweep=spec["stub_sweep"],
             )
-
-        def go(name: str) -> Ran:
-            spec, world = self.scenarios[name], worlds[name]
             try:
                 if spec["prepare"] is not None:
                     spec["prepare"](world)
