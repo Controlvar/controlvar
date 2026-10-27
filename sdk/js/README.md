@@ -60,13 +60,14 @@ conversions.
 | `getAllFlags(userId, attributes?)` | `Promise<Record<string, boolean>>` (not cached) | rejects |
 | `track(userId, eventName, { value?, properties?, experimentKey?, featureFlagKey?, eventType?, timestamp? })` | `Promise<void>` | never rejects; `onError` |
 | `trackBatch(events)` | `Promise<{ successCount, failureCount, errors }>` (chunked at 100) | never rejects |
+| `reportError({ errorType, message, featureFlagKey?, experimentKey?, userId?, stackTrace?, metadata?, timestamp? })` | `Promise<boolean>`: `true` when the server stored the report (201) | `false`, never rejects; `onError` |
 | `fetchAssignments(userId, { activeOnly? })` | `Promise<AssignmentRecord[]>` from the server | rejects |
 | `getAssignments(userId)`, `getEvaluatedFlags(userId)`, `clearCache()` | in-memory cache access | — |
 | `ready({ timeoutMs? })`, `status()`, `close()` | local mode: readiness, ruleset state, shutdown (sends evaluation counts) | never reject |
 | `consistentHash(userId, flagKey)`, `md5Hex(s)`, `md5Bytes(s)` | compatibility hash utilities (not the flag bucketing function) | — |
 
 Config: `apiUrl`, `apiKey` (required); `timeoutMs` (5000), `cacheTtlMs` (300000),
-`defaultVariant` (`'control'`), `fetch`, `onError(err, 'track' | 'trackBatch' | 'refresh' | 'flush' | 'evaluate')`,
+`defaultVariant` (`'control'`), `fetch`, `onError(err, 'track' | 'trackBatch' | 'refresh' | 'flush' | 'evaluate' | 'reportError')`,
 `evaluation` (`'server'` or `'local'`), `refreshIntervalMs` (30000, minimum 5000), `maxStaleMs`.
 Failures are never cached; concurrent calls for the same user + key share one request; a 429 is
 retried once after `Retry-After`.
@@ -75,6 +76,11 @@ retried once after `Retry-After`.
 (`&context=<url-encoded JSON>`, omitted when empty), so flag targeting rules evaluate against it
 (`country` also matches `user.country`; nested objects flatten to dotted keys such as `app.version`).
 Caches are keyed by user + key only — call `clearCache()` after changing a user's attributes.
+
+`reportError` resolves `true` when the server stored the report. A stored report counts toward the
+flag's error rate and automatic rollback only when the client's key has the `sdk:ruleset` scope and
+was created by a user who can change feature flags; the flag's safety check shows the others as
+`uncounted_error_count`.
 
 ### Enrolment: `assigned` and `reason`
 

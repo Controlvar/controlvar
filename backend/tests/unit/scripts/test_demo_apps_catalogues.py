@@ -3,9 +3,11 @@
 ``demo/shoplab/README.md`` and ``demo/streampulse/README.md`` describe what
 each seed makes, where it writes the app's key, how much history it backfills,
 the rates the ShopLab traffic simulator walks its funnel at, and that neither
-app loads an image, a font or anything from a CDN. Each test holds one of those
-facts against the seed's catalogue, the simulator's constants or the app's
-files, so a change that makes one false fails here.
+app loads an image, a font or anything from a CDN; and no line of the
+repository README or the demos calls a demo a mobile app without saying "web
+SDK". Each test holds one of those facts against the seed's catalogue, the
+simulator's constants or the app's files, so a change that makes one false
+fails here.
 
 The simulator is loaded from its file (it is standard library only); nothing
 reaches a database or the network.
@@ -16,6 +18,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -381,6 +384,56 @@ def test_the_app_loads_no_image_font_audio_or_cdn(app):
         text = path.read_text(encoding="utf-8")
         assert not _LOADS.search(text), path
         assert not _EXTERNAL.search(text), path
+
+
+#: A line that calls a demo a mobile app or a mobile demo ("a simulated mobile
+#: app", "mobile feature-flag demo"), or says "on mobile". StreamPulse is a web
+#: page on the React SDK, and the native SDKs send no attributes on flag
+#: evaluation yet (#438), so such a line also says "web SDK".
+_MOBILE_CLAIM = re.compile(
+    r"\bmobile(?:[ -]\w{1,40}){0,2}[ -](?:apps?|demos?)\b|\bon mobile\b", re.I
+)
+_CLAIM_FILES = {".md", ".ts", ".tsx", ".js", ".json", ".py", ".sh", ".yaml", ".yml"}
+
+
+def _readme_and_demo_files():
+    yield REPO_ROOT / "README.md"
+    for top, dirs, names in os.walk(REPO_ROOT / "demo"):
+        dirs[:] = sorted(d for d in dirs if d not in {"node_modules", ".next"})
+        for name in sorted(names):
+            path = Path(top) / name
+            if path.suffix in _CLAIM_FILES and name != "package-lock.json":
+                yield path
+
+
+@pytest.mark.regression
+def test_no_line_calls_a_demo_a_mobile_app_without_saying_web_sdk():
+    for old in (
+        "a simulated mobile app",
+        "a demo mobile streaming app",
+        "mobile feature-flag demo",
+        "feature flags on mobile",
+    ):
+        assert _MOBILE_CLAIM.search(old), old
+    files = list(_readme_and_demo_files())
+    scanned = {p.relative_to(REPO_ROOT).as_posix() for p in files}
+    assert {
+        "README.md",
+        "demo/DEMO_GUIDE.md",
+        "demo/streampulse/README.md",
+        "demo/streampulse/package.json",
+        "demo/streampulse/src/components/StreamPulseApp.tsx",
+        "demo/streampulse/src/pages/_app.tsx",
+    } <= scanned, "the scan missed a file it must read"
+    found = [
+        f"{path.relative_to(REPO_ROOT).as_posix()}:{number}: {line.strip()}"
+        for path in files
+        for number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        )
+        if _MOBILE_CLAIM.search(line) and "web SDK" not in line
+    ]
+    assert found == []
 
 
 def _package(app: str) -> Dict[str, Any]:

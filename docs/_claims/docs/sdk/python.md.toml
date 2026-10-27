@@ -156,6 +156,14 @@ by = [
 ]
 
 [[unit]]
+text = "report_error(error_type, message, , feature_flag_key=None, experiment_key=None, user_id=None, stack_trace=None, metadata=None, timestamp=None) | bool — True when the server stored the report (201); see Reporting errors | never raises; False and a logged warning otherwise"
+by = [
+    "test:sdk/python/tests/test_client.py::TestReportError::test_posts_one_report_with_the_server_field_names_and_returns_true_on_201",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_false_without_raising_on",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_does_not_check_the_report_itself_and_a_422_returns_false",
+]
+
+[[unit]]
 text = "get_assignments(user_id, active_only=True) | list[dict] — the user's assignments from the server (not cached) | raises ExperimentationError"
 by = ["test:sdk/python/tests/test_client.py::TestAssignmentsAndCache::test_get_assignments_url"]
 
@@ -451,6 +459,85 @@ by = [
 ]
 
 [[unit]]
+text = "Reporting errors"
+by = ["exempt:label"]
+
+[[unit]]
+text = "report_error(error_type, message, ...) sends one POST /api/v1/tracking/errors for an error that happened while a flag or experiment was active, in either evaluation mode; every argument after message is keyword-only."
+by = [
+    "test:sdk/python/tests/test_client.py::TestReportError::test_posts_one_report_with_the_server_field_names_and_returns_true_on_201",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_works_in_local_mode_before_and_after_close_with_the_same_key",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_the_target_and_the_rest_are_keyword_only",
+]
+
+[[unit]]
+text = "The server needs feature_flag_key or experiment_key, and the SDK sends the report without checking it."
+by = [
+    "test:sdk/python/tests/test_client.py::TestReportError::test_does_not_check_the_report_itself_and_a_422_returns_false",
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportError::test_missing_both_keys_returns_422",
+]
+
+[[unit]]
+text = "True means the server stored the report: it answered 201."
+by = [
+    "test:sdk/python/tests/test_client.py::TestReportError::test_posts_one_report_with_the_server_field_names_and_returns_true_on_201",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_false_on_a_2xx_that_is_not_201",
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportError::test_writes_row_with_resolved_flag_id",
+]
+
+[[unit]]
+text = "False means it did not: any other answer (401, 404, 422, a 429 after its one retry, 5xx) or a network failure, which is also logged as a warning."
+by = [
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_false_without_raising_on",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_false_on_a_429_that_is_still_a_429_after_its_one_retry",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_true_when_the_retry_after_a_429_is_answered_201",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_false_on_a_network_failure",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_does_not_check_the_report_itself_and_a_422_returns_false",
+]
+
+[[unit]]
+text = "report_error never raises."
+by = [
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_false_on_a_network_failure",
+    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_false_when_the_metadata_cannot_be_sent",
+]
+
+[[unit]]
+text = "A stored report counts toward the flag's error rate and automatic rollback only when it names that flag in feature_flag_key (a report with only experiment_key is stored, but counts toward no flag's rate) and the client's key is a server-side key: one with the sdk:ruleset scope, created by a user who can change feature flags."
+by = [
+    "test:backend/tests/integration/api/test_client_errors_api.py::TestReportError::test_experiment_only_report",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_server_side_key_rolls_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_key_without_the_scope_does_not_roll_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count",
+]
+
+[[unit]]
+text = "A report sent with any other key is stored too and still returns True; the flag's safety check shows those reports as uncounted_error_count."
+by = [
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_check_endpoint_shows_the_reports_it_does_not_count",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_stored_source_follows_the_presented_key",
+]
+
+[[unit]]
+text = "See Which errors count."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The error rate divides the counted errors by the flag's evaluations in the check's 15-minute window."
+by = [
+    "test:backend/tests/integration/api/test_flag_evaluations_api.py::test_the_check_reports_errors_with_zero_evaluations",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetErrorMetrics::test_computes_rate_and_error_type_breakdown",
+]
+
+[[unit]]
+text = "With no evaluations in the window it reads 0, so an error-rate threshold cannot fire: in local mode the counts reach the server every 60 seconds and on close()."
+by = [
+    "test:backend/tests/integration/api/test_flag_evaluations_api.py::test_the_check_reports_errors_with_zero_evaluations",
+    "test:sdk/python/tests/test_local.py::test_the_thread_flushes_every_sixty_seconds",
+    "test:sdk/python/tests/test_local.py::test_close_sends_one_entry_per_flag_and_deferred_evaluations_are_not_counted",
+]
+
+[[unit]]
 text = "Conversions are matched to experiment metrics by event name."
 by = ["test:backend/tests/integration/services/test_conversion_event_matching.py::TestConversionEventFilter::test_matches_both_producer_shapes_and_excludes_exposures"]
 
@@ -522,6 +609,13 @@ by = [
 text = "local mode: evaluation counts | POST /api/v1/tracking/evaluations (beta) | {evaluations: [{flag_key, count, enabled_count, window_start, window_end}]} | {accepted, errors}"
 by = [
     "test:sdk/python/tests/test_local.py::test_close_sends_one_entry_per_flag_and_deferred_evaluations_are_not_counted",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "report_error | POST /api/v1/tracking/errors | {error_type, message, feature_flag_key?, experiment_key?, user_id?, stack_trace?, metadata?, timestamp?} | 201 and the stored report (only the status is read)"
+by = [
+    "test:sdk/python/tests/test_client.py::TestReportError::test_posts_one_report_with_the_server_field_names_and_returns_true_on_201",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
 

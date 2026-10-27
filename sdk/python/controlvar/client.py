@@ -15,7 +15,7 @@
 * ``get_assignment``/``get_feature_flag``/``get_all_flags``/``get_assignments``
   raise :class:`~controlvar.ExperimentationError`; the convenience
   wrappers ``get_variant``/``is_feature_enabled`` swallow it and return a
-  default; ``track``/``track_batch`` never raise.
+  default; ``track``/``track_batch``/``report_error`` never raise.
 * Safe to share between threads.
 """
 
@@ -240,6 +240,33 @@ class ExperimentationClient:
         except Exception as exc:  # noqa: BLE001 - normalise any transport failure
             raise ExperimentationError(f"{method} {url} failed: {exc}") from exc
 
+    def _exchange(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: Optional[Mapping[str, Any]] = None,
+        query: Optional[Mapping[str, str]] = None,
+    ) -> Response:
+        """Send one API call and return its response, whatever the status.
+
+        Retries exactly once on 429, sleeping for ``Retry-After`` (capped at
+        :data:`MAX_RETRY_AFTER_SECONDS`). Raises :class:`ExperimentationError`
+        for a network failure, and ``TypeError`` for a body JSON cannot encode.
+        """
+        url = self.api_url + path
+        if query:
+            url += "?" + urlencode(query, quote_via=quote)
+        data = None if body is None else json.dumps(body, default=_json_default).encode("utf-8")
+
+        response = self._send(method, url, data)
+        if response.status == 429:
+            wait = _retry_after_seconds(response)
+            logger.debug("429 from %s %s; retrying once after %.1fs", method, path, wait)
+            self._sleep(wait)
+            response = self._send(method, url, data)
+        return response
+
     def _request(
         self,
         method: str,
@@ -254,18 +281,7 @@ class ExperimentationClient:
         :data:`MAX_RETRY_AFTER_SECONDS`). Raises :class:`ExperimentationError`
         for any non-2xx response, network failure or undecodable body.
         """
-        url = self.api_url + path
-        if query:
-            url += "?" + urlencode(query, quote_via=quote)
-        data = None if body is None else json.dumps(body, default=_json_default).encode("utf-8")
-
-        response = self._send(method, url, data)
-        if response.status == 429:
-            wait = _retry_after_seconds(response)
-            logger.debug("429 from %s %s; retrying once after %.1fs", method, path, wait)
-            self._sleep(wait)
-            response = self._send(method, url, data)
-
+        response = self._exchange(method, path, body=body, query=query)
         if response.status < 200 or response.status >= 300:
             raise ExperimentationError(
                 f"{method} {path} failed with HTTP {response.status}",
@@ -607,6 +623,64 @@ class ExperimentationClient:
         if isinstance(body.get("timestamp"), datetime):
             body["timestamp"] = _iso_timestamp(body["timestamp"])
         return body
+
+    # ---------------------------------------------------------- error reports
+
+    def report_error(
+        self,
+        error_type: str,
+        message: str,
+        *,
+        feature_flag_key: Optional[str] = None,
+        experiment_key: Optional[str] = None,
+        user_id: Optional[str] = None,
+        stack_trace: Optional[str] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
+        timestamp: Union[datetime, str, None] = None,
+    ) -> bool:
+        """Report an error that happened while a flag or experiment was active, with one
+        ``POST /api/v1/tracking/errors``. Works in both evaluation modes. Never raises.
+
+        Returns ``True`` exactly when the server answered 201: the report is stored. It
+        counts toward the flag's error rate and automatic rollback only when this client's
+        key is a server-side key (the ``sdk:ruleset`` scope, created by a user who can change
+        flags); the flag's safety check shows the others as ``uncounted_error_count``.
+        Returns ``False``, and logs a warning, on any other answer (401, 404, 422, a 429
+        after its one retry, 5xx) or a network failure. The server checks the report (it
+        needs ``feature_flag_key`` or ``experiment_key``); the SDK does not. ``timestamp``
+        (a ``datetime``, naive meaning UTC, or an ISO-8601 string) is kept with the report
+        as ``client_timestamp``; the stored row is timed when the server receives it.
+        """
+        path = "/api/v1/tracking/errors"
+        try:
+            body: Dict[str, Any] = {"error_type": error_type, "message": message}
+            if feature_flag_key is not None:
+                body["feature_flag_key"] = feature_flag_key
+            if experiment_key is not None:
+                body["experiment_key"] = experiment_key
+            if user_id is not None:
+                body["user_id"] = user_id
+            if stack_trace is not None:
+                body["stack_trace"] = stack_trace
+            if metadata is not None:
+                body["metadata"] = dict(metadata)
+            stamp = _iso_timestamp(timestamp)
+            if stamp is not None:
+                body["timestamp"] = stamp
+            response = self._exchange("POST", path, body=body)
+        except Exception as exc:  # noqa: BLE001 - never raise
+            logger.warning("report_error(%s) failed: %s", error_type, exc)
+            return False
+        if response.status == 201:
+            return True
+        logger.warning(
+            "report_error(%s) was not stored: POST %s answered HTTP %d: %s",
+            error_type,
+            path,
+            response.status,
+            response.text()[:200],
+        )
+        return False
 
     # ------------------------------------------------------------------ cache
 

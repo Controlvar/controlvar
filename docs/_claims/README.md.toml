@@ -144,8 +144,9 @@ by = [
 ]
 
 [[unit]]
-text = "StreamPulse (demo/streampulse, http://localhost:3300): a simulated mobile app with a device picker, targeting by OS version/region/tier, a kill switch, mutual exclusion and a scripted rollout story in which a crash spike triggers an automatic safety rollback."
+text = "StreamPulse (demo/streampulse, http://localhost:3300): a phone drawn in a web page with the React SDK, with a device picker, targeting by OS version/region/tier, a kill switch, mutual exclusion and a scripted rollout story in which a crash spike triggers an automatic safety rollback."
 by = [
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_builds_against_the_react_sdk_source_with_its_own_react",
     "journey:demo-streampulse#app",
     "journey:demo-streampulse#premium-iphone",
     "journey:demo-streampulse#rule-matches-the-premium-iphone",

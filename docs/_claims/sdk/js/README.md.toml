@@ -169,6 +169,14 @@ by = [
 ]
 
 [[unit]]
+text = "reportError({ errorType, message, featureFlagKey?, experimentKey?, userId?, stackTrace?, metadata?, timestamp? }) | Promise<boolean>: true when the server stored the report (201) | false, never rejects; onError"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on %s and passes the failure to onError as reportError",
+    "test:sdk/js/__tests__/client.test.ts::never rejects, even with a throwing onError handler or no report at all",
+]
+
+[[unit]]
 text = "fetchAssignments(userId, { activeOnly? }) | Promise<AssignmentRecord[]> from the server | rejects"
 by = ["test:sdk/js/__tests__/client.test.ts::fetchAssignments GETs /api/v1/tracking/assignments/{user_id}?active_only=true"]
 
@@ -197,7 +205,7 @@ by = [
 ]
 
 [[unit]]
-text = "Config: apiUrl, apiKey (required); timeoutMs (5000), cacheTtlMs (300000), defaultVariant ('control'), fetch, onError(err, 'track' | 'trackBatch' | 'refresh' | 'flush' | 'evaluate'), evaluation ('server' or 'local'), refreshIntervalMs (30000, minimum 5000), maxStaleMs."
+text = "Config: apiUrl, apiKey (required); timeoutMs (5000), cacheTtlMs (300000), defaultVariant ('control'), fetch, onError(err, 'track' | 'trackBatch' | 'refresh' | 'flush' | 'evaluate' | 'reportError'), evaluation ('server' or 'local'), refreshIntervalMs (30000, minimum 5000), maxStaleMs."
 by = [
     "test:sdk/js/__tests__/client.test.ts::requires apiKey",
     "test:sdk/js/__tests__/client.test.ts::requires apiUrl",
@@ -234,6 +242,22 @@ by = [
 [[unit]]
 text = "Caches are keyed by user + key only — call clearCache() after changing a user's attributes."
 by = ["test:sdk/js/__tests__/client.test.ts::is cached by user + flag only: changed attributes hit the cache until clearCache"]
+
+[[unit]]
+text = "reportError resolves true when the server stored the report."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on a 2xx that is not 201: true means stored, and only 201 says so",
+]
+
+[[unit]]
+text = "A stored report counts toward the flag's error rate and automatic rollback only when the client's key has the sdk:ruleset scope and was created by a user who can change feature flags; the flag's safety check shows the others as uncounted_error_count."
+by = [
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_server_side_key_rolls_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_key_without_the_scope_does_not_roll_back",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count",
+    "test:backend/tests/integration/api/test_error_report_source.py::test_the_check_endpoint_shows_the_reports_it_does_not_count",
+]
 
 [[unit]]
 text = "Enrolment: assigned and reason"
