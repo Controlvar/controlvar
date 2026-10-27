@@ -174,7 +174,8 @@ The results engine computes:
 ### Statistical Methods
 
 **Conversion metrics (Fisher's exact test):**
-- Every metric in the results is analysed as a conversion today
+- Every metric in the results but a revenue metric is analysed as a conversion; a revenue metric
+  is its mean per assigned user, compared with Welch's t-test
 - For each treatment against the control: a 2×2 table of users who converted and users who did
   not, from the users assigned to each variant
 - Two-sided Fisher's exact test (`scipy.stats.fisher_exact`); the response's
