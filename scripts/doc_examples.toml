@@ -586,7 +586,7 @@ expects = 6
 path = "docs/self-hosting/aws-install.md"
 environment = "bare"
 exec = 1
-skip = 12
+skip = 13
 expects = 8
 
 # The contributor pages: the Quick Start's stack and a development virtual

@@ -793,7 +793,10 @@ the roles it holds. The stack keeps its bucket when it is deleted. Empty the
 bucket of every object version, delete markers included (the S3 console's Empty
 action does this), then delete the `CDKToolkit` stack, then delete the bucket.
 If you are not sure that no other CDK app uses the account and region, leave
-`CDKToolkit` in place: it costs pennies of storage.
+`CDKToolkit` in place: it costs pennies of storage. The
+[AWS installer (beta)](aws-install.md) never deletes `CDKToolkit`, whether it
+made the stack or the account had it before, so this is where to remove it after
+an uninstall.
 
 ### Moving an environment deployed before the rename
 

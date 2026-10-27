@@ -31,7 +31,7 @@ import re
 import sys
 import tomllib
 from pathlib import Path
-from typing import Any, List
+from typing import Any, Dict, List, Set
 
 import pytest
 import yaml
@@ -52,14 +52,20 @@ HELP = "./deploy/aws-installer/controlvar-aws --help"
 #: What a block that calls the launcher and does not run may give as its reason.
 SKIP_CATEGORIES = ("aws", "destructive")
 
-#: The headings the installer's messages send a reader to, as docs.controlvar.com
-#: serves them: https://docs.controlvar.com/self-hosting/aws-install/#<anchor>.
-ANCHORS = (
-    "if-you-do-not-have-a-zone-yet",
-    "confirm-the-alarm-email",
-    "remove-the-zone",
-    "if-uninstall-stops-at-the-network",
-    "what-has-been-tested",
+#: The installer's own files, which hold every link it prints to this page.
+INSTALLER_DIR = "deploy/aws-installer"
+LAUNCHER_FILE = f"{INSTALLER_DIR}/controlvar-aws"
+SWEEP_SH = f"{INSTALLER_DIR}/lib/sweep.sh"
+UNINSTALL_SH = f"{INSTALLER_DIR}/lib/uninstall.sh"
+NAMES_SH = f"{INSTALLER_DIR}/lib/names.sh"
+REDIS_STACK = "infrastructure/cdk/stacks/elasticache_redis_stack.py"
+
+#: A link the installer prints to this page, as docs.controlvar.com serves it:
+#: https://docs.controlvar.com/self-hosting/aws-install/#<anchor>. The installer
+#: writes it as ${CV_PAGE}#<anchor> (CV_PAGE is the page's address), or through a
+#: local that holds CV_PAGE (lib/steps.sh's ``page``), or in full.
+_ANCHOR_LINK = re.compile(
+    r"(?:\$\{?(?:CV_PAGE|page)\}?|/self-hosting/aws-install/)#([a-z0-9][a-z0-9-]*)"
 )
 
 
@@ -245,13 +251,109 @@ def block_problems(page: str) -> List[str]:
 # ---------------------------------------------------------------------------
 # 3. The anchors the installer's messages link to
 # ---------------------------------------------------------------------------
-def anchor_problems(page: str) -> List[str]:
+def installer_texts() -> Dict[str, str]:
+    """The launcher and its libraries, which hold every link the installer prints."""
+    paths = [LAUNCHER_FILE] + sorted(
+        str(p.relative_to(REPO_ROOT))
+        for p in (REPO_ROOT / INSTALLER_DIR / "lib").glob("*.sh")
+    )
+    return {path: _read(path) for path in paths}
+
+
+def installer_anchors(texts: Dict[str, str]) -> Set[str]:
+    """The anchors of this page that the installer's files link to."""
+    return {m.group(1) for text in texts.values() for m in _ANCHOR_LINK.finditer(text)}
+
+
+def anchor_problems(page: str, texts: Dict[str, str]) -> List[str]:
+    anchors = installer_anchors(texts)
+    if not anchors:
+        return [
+            f"{INSTALLER_DIR}: no file links to an anchor of this page: this check found nothing"
+        ]
     have = {slug(h) for h in headings(page)}
     return [
         f"{PAGE}: no heading makes the anchor #{anchor}, which the installer's messages link to"
-        for anchor in ANCHORS
+        for anchor in sorted(anchors)
         if anchor not in have
     ]
+
+
+# ---------------------------------------------------------------------------
+# 4. The cache's backup, which the page names by file and by group
+# ---------------------------------------------------------------------------
+_BACKUP_LINE = re.compile(
+    r"us-west-2/(?P<file>[a-z0-9-]+)\.txt \+ automatic\.(?P<group>[a-z0-9-]+)-001-"
+    r"<yyyy-mm-dd-hh-mm> automated"
+)
+BACKUP_COMMAND = "aws elasticache describe-snapshots --region us-west-2"
+
+
+def backup_problems(page: str, sweep: str, stack: str, names: str) -> List[str]:
+    """The uninstall report's line for the cache's automatic backup, as the page quotes
+    it, against the files that make it: the sweep that writes the list (its file name),
+    and the Redis stack that names the group and sets the backup window."""
+    found = _BACKUP_LINE.search(page)
+    if found is None:
+        return [
+            f"{PAGE}: no line of the cache's automatic backup, in the report's form"
+        ]
+    problems: List[str] = []
+    file, group = found.group("file"), found.group("group")
+    if (
+        re.search(rf"\b{re.escape(file)} elasticache describe-snapshots\b", sweep)
+        is None
+    ):
+        problems.append(
+            f"{SWEEP_SH}: no read writes {file}.txt from describe-snapshots, which the page names"
+        )
+    stack_names = re.findall(r'"(experimentation-redis-[a-z]+)"', names)
+    if len(stack_names) != 2 or len(set(stack_names)) != 1:
+        problems.append(
+            f"{NAMES_SH}: not exactly the Redis stack's name, once in each list"
+        )
+    elif f"{stack_names[0]}-redis" != group:
+        problems.append(
+            f"{PAGE}: the group {group!r} is not the Redis stack's name {stack_names[0]!r} and -redis"
+        )
+    if 'f"{construct_id}-redis"' not in stack:
+        problems.append(
+            f"{REDIS_STACK}: the group is no longer the stack's id and -redis"
+        )
+    if 'snapshot_window="02:00-03:00"' not in stack:
+        problems.append(f"{REDIS_STACK}: the backup window is no longer 02:00-03:00")
+    if "02:00 to 03:00 UTC" not in page:
+        problems.append(
+            f"{PAGE}: the page no longer names the window, 02:00 to 03:00 UTC"
+        )
+    if BACKUP_COMMAND not in page:
+        problems.append(
+            f"{PAGE}: the check for the backup is no longer {BACKUP_COMMAND!r}"
+        )
+    elif "elasticache describe-snapshots --region" not in sweep:
+        problems.append(
+            f"{SWEEP_SH}: the sweep no longer reads the cache's backups by region"
+        )
+    return problems
+
+
+# ---------------------------------------------------------------------------
+# 5. What the installer keeps, in the words it prints
+# ---------------------------------------------------------------------------
+KEPT_LITERAL = "Kept by the installer: the CDK's setup stack (CDKToolkit), its bucket, repository, parameter and roles, which this install made"
+KEEPS_LITERAL = "Keeps: the zone"
+
+
+def kept_problems(page: str, uninstall: str) -> List[str]:
+    """The page's report and plan screens carry the words uninstall prints for what it
+    keeps: the CDK's setup stack is kept, and listed as kept."""
+    problems: List[str] = []
+    for literal in (KEPT_LITERAL, KEEPS_LITERAL):
+        if literal not in uninstall:
+            problems.append(f"{UNINSTALL_SH}: no longer prints {literal!r}")
+        if literal not in page:
+            problems.append(f"{PAGE}: the screens no longer show {literal!r}")
+    return problems
 
 
 # ---------------------------------------------------------------------------
@@ -268,7 +370,19 @@ def test_only_the_help_block_runs_and_every_block_that_installs_is_a_skip() -> N
 
 
 def test_every_heading_the_installers_messages_link_to_is_on_the_page() -> None:
-    found = anchor_problems(_read(PAGE))
+    found = anchor_problems(_read(PAGE), installer_texts())
+    assert not found, "\n".join(found)
+
+
+def test_the_cache_backup_the_page_names_is_the_one_the_files_make() -> None:
+    found = backup_problems(
+        _read(PAGE), _read(SWEEP_SH), _read(REDIS_STACK), _read(NAMES_SH)
+    )
+    assert not found, "\n".join(found)
+
+
+def test_what_the_installer_keeps_is_said_in_the_words_it_prints() -> None:
+    found = kept_problems(_read(PAGE), _read(UNINSTALL_SH))
     assert not found, "\n".join(found)
 
 
@@ -367,5 +481,98 @@ def test_a_page_with_no_installer_block_does_not_pass_for_having_none() -> None:
 
 def test_a_renamed_heading_names_its_anchor() -> None:
     page = _plant_page("### Remove the zone", "### Remove a zone")
-    found = anchor_problems(page)
+    found = anchor_problems(page, installer_texts())
     assert len(found) == 1 and "#remove-the-zone" in found[0], found
+
+
+def test_the_anchors_are_those_the_installer_prints() -> None:
+    """The set is read from the installer's files, not typed here: it holds each form a
+    link takes there, and every heading the messages send a reader to."""
+    texts = {
+        "a.sh": 'cv_out "${CV_PAGE}#from-the-variable and $CV_PAGE#not-braced"',
+        "b.sh": 'page="$CV_PAGE"; cv_out "  ${page}#from-the-local"',
+        "c.sh": 'say "https://docs.controlvar.com/self-hosting/aws-install/#in-full"',
+        "d.sh": 'say "https://docs.controlvar.com/self-hosting/cdk/#another-page"',
+    }
+    assert installer_anchors(texts) == {
+        "from-the-variable",
+        "not-braced",
+        "from-the-local",
+        "in-full",
+    }
+    real = installer_anchors(installer_texts())
+    assert {
+        "what-has-been-tested",
+        "confirm-the-alarm-email",
+        "remove-the-zone",
+        "if-you-do-not-have-a-zone-yet",
+        "if-uninstall-stops-at-the-network",
+    } <= real, real
+
+
+def test_a_link_to_a_heading_the_page_lacks_is_named() -> None:
+    texts = installer_texts()
+    texts["lib/new.sh"] = 'cv_out "${CV_PAGE}#a-heading-the-page-does-not-have"'
+    found = anchor_problems(_read(PAGE), texts)
+    assert len(found) == 1 and "#a-heading-the-page-does-not-have" in found[0], found
+
+
+def test_an_installer_with_no_links_does_not_pass_for_having_none() -> None:
+    found = anchor_problems(_read(PAGE), {"a.sh": "true  # nothing to see"})
+    assert any("found nothing" in line for line in found), found
+
+
+@pytest.mark.parametrize(
+    ("plant", "says"),
+    [
+        ("file", "elasticache-backups"),
+        ("group", "experimentation-cache-staging-redis"),
+        ("window", "02:00-03:00"),
+        ("command", BACKUP_COMMAND),
+    ],
+)
+def test_a_backup_name_that_drifts_from_the_files_is_named(
+    plant: str, says: str
+) -> None:
+    page, sweep = _read(PAGE), _read(SWEEP_SH)
+    stack, names = _read(REDIS_STACK), _read(NAMES_SH)
+    if plant == "file":
+        page = _plant_page(
+            "us-west-2/elasticache-snapshots.txt", "us-west-2/elasticache-backups.txt"
+        )
+    elif plant == "group":
+        page = _plant_page(
+            "automatic.experimentation-redis-staging-redis-001-",
+            "automatic.experimentation-cache-staging-redis-001-",
+        )
+    elif plant == "window":
+        stack = _plant_text(
+            REDIS_STACK,
+            'snapshot_window="02:00-03:00"',
+            'snapshot_window="04:00-05:00"',
+        )
+    else:
+        page = _plant_page(
+            f"{BACKUP_COMMAND} --profile",
+            "aws elasticache describe-cache-clusters --profile",
+        )
+    found = backup_problems(page, sweep, stack, names)
+    assert found and any(says in line for line in found), (plant, found)
+
+
+def test_a_page_with_no_backup_line_does_not_pass_for_having_none() -> None:
+    found = backup_problems("# Install on AWS with one command (beta)\n", "", "", "")
+    assert any("no line of the cache's automatic backup" in line for line in found), (
+        found
+    )
+
+
+@pytest.mark.parametrize("literal", [KEPT_LITERAL, KEEPS_LITERAL])
+def test_a_kept_line_that_changes_on_either_side_is_named(literal: str) -> None:
+    page, uninstall = _read(PAGE), _read(UNINSTALL_SH)
+    assert kept_problems(page.replace(literal, "Left: x"), uninstall) == [
+        f"{PAGE}: the screens no longer show {literal!r}"
+    ]
+    assert kept_problems(page, uninstall.replace(literal, "Left: x")) == [
+        f"{UNINSTALL_SH}: no longer prints {literal!r}"
+    ]
