@@ -5,7 +5,7 @@
 # The demo-local stack runs the script and the stop command itself
 # (docs_runner/stacks.py): the start must print the "Ready!" box, every address
 # the box lists must answer, and the stop must leave no port answering and
-# demo/.pids, demo/.logs and demo/.demo_api_key gone. It runs on a CI runner
+# demo/.pids and demo/.logs gone. It runs on a CI runner
 # only, in the demo job of docs-journeys.yml.
 #
 # The guide's quoted results are compared with the seed's output and nothing

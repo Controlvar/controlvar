@@ -10,6 +10,7 @@ Per visitor:
   3. Walk the funnel with the true conversion rates from the shared spec (§3), scaled by persona
   4. POST /api/v1/tracking/batch (≤100 events per call) with an explicit experiment_key for
      every assigned experiment (fan-out, like the React SDK) and feature_flag_key for search.
+     No event carries a ``timestamp``, so each is dated by the server when it arrives.
 
 Usage:
   python demo/shoplab/simulator/traffic.py --rate 3 --duration 600
@@ -29,7 +30,6 @@ import urllib.request
 import uuid
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, TextIO
 
@@ -241,11 +241,12 @@ def simulate_visitor(
     attributes: dict[str, Any],
     assignments: dict[str, str],
     flags: dict[str, bool],
-    start_time: datetime | None = None,
 ) -> VisitorPlan:
-    """Pure funnel walk: returns the visitor's events and outcomes. No network."""
+    """Pure funnel walk: returns the visitor's events and outcomes. No network.
+
+    No event carries a ``timestamp``: the server times each on receipt, in the order
+    sent, so no event is ever dated after it arrived."""
     plan = VisitorPlan(user_id, persona, attributes, dict(assignments), dict(flags))
-    clock = start_time or datetime.now(timezone.utc)
 
     def emit(
         name: str,
@@ -254,14 +255,11 @@ def simulate_visitor(
         *,
         flag: str | None = None,
     ) -> None:
-        nonlocal clock
-        clock = clock + timedelta(seconds=rng.uniform(2.0, 20.0))
         base: dict[str, Any] = {
             "event_type": name,
             "event_name": name,
             "user_id": user_id,
             "metadata": metadata or {},
-            "timestamp": clock.isoformat(timespec="seconds"),
         }
         if value is not None:
             base["value"] = round(float(value), 2)

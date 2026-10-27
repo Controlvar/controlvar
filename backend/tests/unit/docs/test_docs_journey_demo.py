@@ -34,6 +34,7 @@ import copy
 import datetime
 import http.server
 import importlib.util
+import json
 import os
 import re
 import shutil
@@ -61,7 +62,6 @@ from docs_runner.stacks import DemoLocal, StackError
 ON_CI = {"GITHUB_ACTIONS": "true", "DOCS_JOURNEY_DEMO_LOCAL": "1"}
 PASSWORD = "Demo1234!"
 KEYS = {
-    "demo/.demo_api_key": "eptk_demo_simulator_key_0123456789",
     "demo/shoplab/.api_key": "eptk_shoplab_storefront_key_0123456789",
     "demo/streampulse/.api_key": "eptk_streampulse_app_key_0123456789",
     "demo/streampulse/.api_key_server": "eptk_streampulse_second_key_0123456789",
@@ -134,7 +134,7 @@ def _checkout(
         "printf 'run\\n' >> runs.log\n"
         "mkdir -p demo/.logs demo/.pids\n"
         f"{keys}"
-        f"printf 'backend started with {KEYS['demo/.demo_api_key']}\\n' > demo/.logs/backend.log\n"
+        f"printf 'backend started with {KEYS['demo/shoplab/.api_key']}\\n' > demo/.logs/backend.log\n"
         "printf 'seeded\\n' > demo/.logs/simulator.log\n"
         "printf '1\\n' > demo/.pids/backend.pid\n"
         + "".join(f"printf 'key {value}\\n'\n" for value in KEYS.values())
@@ -147,7 +147,6 @@ def _checkout(
         "#!/usr/bin/env bash\n"
         'cd "$(dirname "$0")/.."\n'
         "rm -rf demo/.pids demo/.logs\n"
-        "rm -f demo/.demo_api_key\n"
         "printf 'stopped\\n'\n",
     )
     return root
@@ -322,9 +321,7 @@ def test_a_stop_that_leaves_the_logs_fails(tmp_path, served, quiet_ports, monkey
     _executable(root / "demo" / "teardown-local.sh", "#!/usr/bin/env bash\nexit 0\n")
     stack = _stack(root, tmp_path, monkeypatch)
     stack.up("full")
-    with pytest.raises(
-        StackError, match="left: demo/.pids, demo/.logs, demo/.demo_api_key still there"
-    ):
+    with pytest.raises(StackError, match="left: demo/.pids, demo/.logs still there"):
         stack.down()
 
 
@@ -345,7 +342,7 @@ def test_a_stop_that_exits_1_fails(tmp_path, served, quiet_ports, monkeypatch):
         root / "demo" / "teardown-local.sh",
         "#!/usr/bin/env bash\n"
         'cd "$(dirname "$0")/.."\n'
-        "rm -rf demo/.pids demo/.logs demo/.demo_api_key\nexit 1\n",
+        "rm -rf demo/.pids demo/.logs\nexit 1\n",
     )
     stack = _stack(root, tmp_path, monkeypatch)
     stack.up("full")
@@ -373,7 +370,7 @@ def _rendered_box(script: str) -> str:
         "${NC}": "\x1b[0m",
     }
     lines = []
-    start = script.index("# 15. Success banner")
+    start = script.index(". Success banner")
     for line in script[start:].splitlines():
         line = line.strip()
         if "║" not in line or line.count('"') < 2:
@@ -563,6 +560,105 @@ def test_a_key_file_the_script_adds_is_found(tmp_path):
 def test_a_key_file_constant_the_reader_cannot_place_is_reported():
     _, unresolved = seed_key_files('NEW_KEY_FILE = somewhere() / ".key"\n')
     assert unresolved == {"NEW_KEY_FILE"}
+
+
+# ---------------------------------------------------------------------------
+# The start command calls only routes the API serves, and stops on an error
+# ---------------------------------------------------------------------------
+#: An API path in setup-local.sh, up to the first character a path cannot hold.
+SCRIPT_API_PATH = re.compile(r"/api/v1/[A-Za-z0-9_.$/{}-]{0,200}")
+#: A route the application serves but leaves out of its OpenAPI document: the
+#: API documentation pages and the document itself.
+UNLISTED_ROUTE = re.compile(
+    r'@app\.get\(\s*"(/api/v1/[^"]{1,200})"\s*,\s*include_in_schema=False'
+)
+OPENAPI_SNAPSHOT = REPO_ROOT / "docs" / "api" / "openapi-v1.full.json"
+APP_MAIN = REPO_ROOT / "backend" / "app" / "main.py"
+
+
+def _is_route(path: str, template: str) -> bool:
+    """``path`` is ``template``, a ``{parameter}`` matching any one segment."""
+    got, want = path.split("/"), template.split("/")
+    return len(got) == len(want) and all(
+        g == w or (w.startswith("{") and w.endswith("}") and g != "")
+        for g, w in zip(got, want)
+    )
+
+
+def unknown_api_paths(script: str, routes: Set[str]) -> List[str]:
+    """``<line>: <path>`` for each /api/v1 path the script names that is no route."""
+    return [
+        f"{number}: {path}"
+        for number, line in enumerate(script.splitlines(), 1)
+        for path in SCRIPT_API_PATH.findall(line)
+        if not any(_is_route(path, route) for route in routes)
+    ]
+
+
+def _routes() -> Set[str]:
+    documented = set(json.loads(OPENAPI_SNAPSHOT.read_text(encoding="utf-8"))["paths"])
+    unlisted = set(UNLISTED_ROUTE.findall(APP_MAIN.read_text(encoding="utf-8")))
+    # The pages the script's "Ready!" box gives are among them, read from the app.
+    assert {"/api/v1/docs", "/api/v1/redoc"} <= unlisted, unlisted
+    return documented | unlisted
+
+
+@pytest.mark.regression
+def test_the_start_command_calls_only_routes_the_api_serves():
+    """Every /api/v1 path in setup-local.sh is a route of the OpenAPI document, or one
+    the application serves outside it (the documentation pages). The script used to
+    ask /api/v1/tracking/demo-key and /api/v1/auth/demo-login for a key, two routes
+    that never existed, and saved a made-up key as "Demo API key saved"."""
+    script = (REPO_ROOT / stacks.DEMO_SCRIPT).read_text(encoding="utf-8")
+    assert "/api/v1/docs" in SCRIPT_API_PATH.findall(script)
+    assert unknown_api_paths(script, _routes()) == []
+
+
+def test_a_path_that_is_no_route_is_named_with_its_line():
+    """The plant: the old key request back in the script."""
+    script = (REPO_ROOT / stacks.DEMO_SCRIPT).read_text(encoding="utf-8")
+    planted = (
+        script + "curl -sf -X POST http://localhost:8000/api/v1/tracking/demo-key\n"
+    )
+    line = len(planted.splitlines())
+    assert unknown_api_paths(planted, _routes()) == [
+        f"{line}: /api/v1/tracking/demo-key"
+    ]
+    # A route with a parameter matches any value in its place, and only there.
+    assert _is_route("/api/v1/api-keys/$KEY_ID", "/api/v1/api-keys/{key_id}")
+    assert not _is_route("/api/v1/api-keys/a/b", "/api/v1/api-keys/{key_id}")
+
+
+def _curls(script: str) -> List[str]:
+    """Each command of the script that runs curl, its continued lines joined."""
+    joined = re.sub(r"\\\n[ \t]*", " ", script)
+    return [line.strip() for line in joined.split("\n") if re.search(r"\bcurl\s", line)]
+
+
+def _fails_on_an_error(command: str) -> bool:
+    """curl given -f (alone or in a cluster such as -sf) or --fail, and nothing after
+    it that turns a failure into a success."""
+    after = command[command.index("curl") :].split()
+    has_f = any(
+        token == "--fail" or re.fullmatch(r"-[A-Za-z]*f[A-Za-z]*", token)
+        for token in after
+    )
+    return has_f and "|| echo" not in command and "|| true" not in command
+
+
+@pytest.mark.regression
+def test_each_request_the_start_command_makes_stops_it_on_an_error():
+    """A request setup-local.sh makes fails on an error answer (curl -f) and nothing
+    turns that into a success: the key request it used to make printed an empty answer on a failure and went on
+    to print "Demo API key saved" whatever came back."""
+    curls = _curls((REPO_ROOT / stacks.DEMO_SCRIPT).read_text(encoding="utf-8"))
+    assert curls, "the health check is a curl"
+    assert [c for c in curls if not _fails_on_an_error(c)] == []
+    # The plants: the old shapes are refused.
+    assert not _fails_on_an_error(
+        'X=$(curl -sf -X POST http://localhost:8000/api/v1/x 2>/dev/null || echo "")'
+    )
+    assert not _fails_on_an_error("until curl -s http://localhost:8000/health; do")
 
 
 # ---------------------------------------------------------------------------

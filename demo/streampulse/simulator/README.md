@@ -8,7 +8,7 @@ API with a bearer token for the story.
 
 | File | What it is |
 |---|---|
-| `devices.py` | Deterministic population of simulated devices (seeded RNG) following the spec mix: iOS 55% (16.x/17.x/18.x = 20/60/20), Android 45% (12.x/13.x/14.x = 25/35/40), regions US 45 · GB 15 · DE 12 · IN 18 · BR 10, premium 30%, employee 1%, app 3.1.0/3.2.0/3.2.1 = 30/50/20. `Device.attributes()` is the targeting `context` (`os`, `os_version`, `app_version`, `region`, `tier`, `employee`, `device_model`, `device_id`). `PRESET_DEVICES` has a device for each of the app's five presets, with ids of its own (`preset-…`). |
+| `devices.py` | Deterministic population of simulated devices (seeded RNG) following the spec mix: iOS 55% (16.x/17.x/18.x = 20/60/20), Android 45% (12.x/13.x/14.x = 25/35/40), regions US 45 · GB 15 · DE 12 · IN 18 · BR 10, premium 30%, employee 1%, app 3.1.0/3.2.0/3.2.1 = 30/50/20. `Device.attributes()` is the targeting `context` (`os`, `os_version`, `app_version`, `region`, `tier`, `employee`, `device_model`, `device_id`). `PRESET_DEVICES` is the app's five presets, with the same device ids and attributes (`demo/streampulse/src/lib/devices.ts`). |
 | `traffic.py` | Ticks through app sessions: evaluates the 4 flags (`GET /feature-flags/evaluate/{key}?user_id=&context=<url-encoded JSON>`), assigns the 5 experiments (`POST /tracking/assign` with `context`), walks the screens with the spec's true rates and sends the §3 events through `POST /tracking/batch`. `assigned: false` (global holdout, mutual exclusion group, targeting) means no events for that experiment. Prints stats every 10 s. |
 | `rollout_story.py` | The 7-step "Player v2" narrative (see below). |
 | `test_traffic.py`, `test_story.py` | Offline pytest tests (fake clients, no network). |
@@ -42,6 +42,9 @@ Options: `--api-url` (default `http://localhost:8000`), `--api-key` (default: `d
 `--rate` sessions/s, `--duration` seconds (0 = forever), `--seed`, `--devices N` (population size, default 5000),
 `--population-seed` (keep it fixed so device ids are stable), `--incident {off,android12}`, `--max-ticks`,
 `--no-probe`, `--dry-run`.
+
+A session is one of the `--devices` devices that have the app at that moment; after it a device comes back with
+probability 0.25 (`RETURN_RATE`), and otherwise, or after an uninstall, a new install takes its place.
 
 At start-up it prints what those five devices get right now (flag on/off + `reason`, variant + `assigned`/`reason`).
 The employee's device gets `player_v2=ON(targeting_rule)`, and `ai_search` is ON only for iOS 17+ / US / premium.

@@ -31,11 +31,11 @@ text = "File | What it is"
 by = ["exempt:label"]
 
 [[unit]]
-text = "devices.py | Deterministic population of simulated devices (seeded RNG) following the spec mix: iOS 55% (16.x/17.x/18.x = 20/60/20), Android 45% (12.x/13.x/14.x = 25/35/40), regions US 45 · GB 15 · DE 12 · IN 18 · BR 10, premium 30%, employee 1%, app 3.1.0/3.2.0/3.2.1 = 30/50/20. Device.attributes() is the targeting context (os, os_version, app_version, region, tier, employee, device_model, device_id). PRESET_DEVICES has a device for each of the app's five presets, with ids of its own (preset-…)."
+text = "devices.py | Deterministic population of simulated devices (seeded RNG) following the spec mix: iOS 55% (16.x/17.x/18.x = 20/60/20), Android 45% (12.x/13.x/14.x = 25/35/40), regions US 45 · GB 15 · DE 12 · IN 18 · BR 10, premium 30%, employee 1%, app 3.1.0/3.2.0/3.2.1 = 30/50/20. Device.attributes() is the targeting context (os, os_version, app_version, region, tier, employee, device_model, device_id). PRESET_DEVICES is the app's five presets, with the same device ids and attributes (demo/streampulse/src/lib/devices.ts)."
 by = [
     "test:demo/streampulse/simulator/test_traffic.py::test_population_is_deterministic_and_matches_the_spec_mix",
     "test:demo/streampulse/simulator/test_traffic.py::test_evaluate_and_assign_calls_carry_the_device_context",
-    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_streampulse_simulator_has_each_app_preset_with_an_id_of_its_own",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_streampulse_simulator_presets_are_the_apps_devices",
 ]
 
 [[unit]]
@@ -90,6 +90,13 @@ text = "Options: --api-url (default http://localhost:8000), --api-key (default: 
 by = [
     "test:demo/streampulse/simulator/test_traffic.py::test_the_options_and_their_defaults",
     "test:demo/streampulse/simulator/test_traffic.py::test_help_lists_documented_arguments",
+]
+
+[[unit]]
+text = "A session is one of the --devices devices that have the app at that moment; after it a device comes back with probability 0.25 (RETURN_RATE), and otherwise, or after an uninstall, a new install takes its place."
+by = [
+    "test:demo/streampulse/simulator/test_traffic.py::test_a_device_comes_back_or_leaves_for_a_new_install_and_the_population_keeps_its_size",
+    "test:demo/streampulse/simulator/test_traffic.py::test_a_long_run_keeps_the_push_lift_near_the_spec",
 ]
 
 [[unit]]

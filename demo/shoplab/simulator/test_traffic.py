@@ -6,7 +6,7 @@ import json
 import random
 import sys
 import urllib.error
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -159,7 +159,7 @@ def test_assignment_and_flag_calls_carry_context():
 def test_batch_payloads_have_the_right_keys():
     client, _, plans = run_visitors(300, seed=3)
     assert client.batches, "no batches sent"
-    required = {"event_type", "event_name", "user_id", "metadata", "timestamp"}
+    required = {"event_type", "event_name", "user_id", "metadata"}
     metadata_keys = {
         "page_view": {"page"},
         "hero_cta_click": {"variant", "media"},
@@ -181,7 +181,6 @@ def test_batch_payloads_have_the_right_keys():
             assert (e["event_name"] in valued) == ("value" in e), e
             if "value" in e:
                 assert e["value"] > 0
-            datetime.fromisoformat(e["timestamp"])  # parseable
             if "feature_flag_key" in e:
                 assert e["feature_flag_key"] == traffic.NEW_SEARCH_FLAG
                 assert e["event_name"] in ("search", "product_click")
@@ -192,14 +191,20 @@ def test_batch_payloads_have_the_right_keys():
             seen.add(e["event_name"])
     assert seen == set(metadata_keys), f"missing event types: {set(metadata_keys) - seen}"
 
-    # Fan-out: every experiment-attributed event is sent once per assigned experiment.
+    # Fan-out: every experiment-attributed event is sent once per assigned experiment, the
+    # copies one after another.
     for plan in plans:
-        by_name = {}
+        copies = []
         for e in plan.events:
-            if "experiment_key" in e:
-                by_name.setdefault((e["event_name"], e["timestamp"]), set()).add(e["experiment_key"])
-        for keys in by_name.values():
-            assert keys == set(traffic.EXPERIMENT_KEYS)
+            if "experiment_key" not in e:
+                continue
+            body = {k: v for k, v in e.items() if k != "experiment_key"}
+            if not copies or copies[-1][0] != body or e["experiment_key"] in copies[-1][1]:
+                copies.append((body, []))
+            copies[-1][1].append(e["experiment_key"])
+        assert copies
+        for _, keys in copies:
+            assert keys == list(traffic.EXPERIMENT_KEYS)
         # A purchase always follows a begin_checkout, which follows either add_to_cart or a hero click.
         names = [e["event_name"] for e in plan.events]
         if "purchase" in names:
@@ -341,3 +346,35 @@ def test_api_client_request_shape_and_error_mapping(monkeypatch):
 
     with pytest.raises(ValueError):
         client.batch([{}] * 101)
+
+
+class ClockedClient(FakeClient):
+    """Notes the wall-clock time each batch is sent at, beside each event it carried."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.sent: list[tuple[datetime, dict]] = []
+
+    def batch(self, events: list[dict]) -> dict:
+        now = datetime.now(timezone.utc)
+        self.sent.extend((now, e) for e in events)
+        return super().batch(events)
+
+
+@pytest.mark.regression
+def test_no_event_is_dated_after_it_is_sent():
+    """The simulator dated each event 2-20 s after the one before, from the moment the visit
+    was planned, and sent them all at once, so they arrived dated up to minutes ahead (the
+    server keeps a client timestamp). It now sends none: the server dates each on receipt."""
+    rng = random.Random(4)
+    client, stats = ClockedClient(seed=5), traffic.Stats()
+    for _ in range(300):
+        traffic.run_visitor(client, rng, stats)
+    assert any(e["event_name"] == "purchase" for _, e in client.sent), "expected whole funnels"
+    ahead = [
+        (sent.isoformat(), e)
+        for sent, e in client.sent
+        if "timestamp" in e and datetime.fromisoformat(e["timestamp"]) > sent
+    ]
+    assert ahead == []
+    assert not [e for _, e in client.sent if "timestamp" in e]

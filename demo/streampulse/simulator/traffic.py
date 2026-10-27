@@ -11,7 +11,8 @@ Per tick (one app session on one device):
        are sent for that experiment
   3. Walk the screens with the true rates from the spec (§2) and the event names from §3
   4. POST /api/v1/tracking/batch (≤100 events per call) with an explicit experiment_key or
-     feature_flag_key on every event
+     feature_flag_key on every event, and no ``timestamp`` on any event or crash report, so
+     each is dated by the server when it arrives
   5. ``--incident android12``: a broken Player v2 build on Android 12.  40% of Android 12
      devices that have ``streampulse_player_v2`` ON crash when the player opens, and the crash
      is reported with POST /api/v1/tracking/errors (``error_type: crash``).  The reports are
@@ -26,6 +27,10 @@ Per tick (one app session on one device):
      well over 5% of its own and as much steady traffic's evaluations
      (``test_the_incident_trips_5_percent_beside_as_much_steady_traffic``).
 
+The devices come and go (``Population``): ``--devices`` of them have the app at any time,
+each session is one of theirs, and after it a device comes back some day with probability
+``RETURN_RATE`` or leaves (always after an uninstall) and a new install takes its place.
+
 Usage:
   python demo/streampulse/simulator/traffic.py --rate 6 --duration 300
   python demo/streampulse/simulator/traffic.py --incident android12 --rate 6 --duration 90
@@ -37,6 +42,7 @@ Exit codes: 0 ok · 2 bad/missing API key (or ``--incident`` without the server 
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import random
 import sys
@@ -46,7 +52,6 @@ import urllib.parse
 import urllib.request
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator, TextIO
 
@@ -57,7 +62,7 @@ from devices import (  # noqa: E402
     DEFAULT_SEED,
     PRESET_DEVICES,
     Device,
-    generate_devices,
+    device_stream,
     stable_bucket,
 )
 
@@ -125,6 +130,17 @@ PLAYER_VISIT_RATE = 0.75
 SEARCH_VISIT_RATE = 0.35
 PROFILE_VISIT_RATE = 0.50
 PAYMENTS_VISIT_RATE = 0.30
+
+# --- Population -----------------------------------------------------------------------
+# After a session, the chance that a device comes back for another one. The platform
+# counts a device as converted once, while the simulator draws conversions per session:
+# when the same 5000 devices kept coming back, 85% / 91% of them (daily / three_weekly)
+# had opened a push after 4 h of default traffic and 99.7% / 99.9% after 12 h, a relative
+# lift of 6.4% and 0.2% against the spec's 23%. With a device having 1 / (1 - RETURN_RATE)
+# = 1.33 sessions on average, it is 26% / 32% (a 22% lift) after 4 h and 27% / 33% (22%)
+# after 12 h; over 30 seeds the 4-hour lift averaged 22.2% (standard deviation 2.0
+# points). Pinned by test_a_long_run_keeps_the_push_lift_near_the_spec (test_traffic.py).
+RETURN_RATE = 0.25
 
 # --- Incident model -------------------------------------------------------------------
 INCIDENT_AFFECTED_SHARE = 0.40  # of Android 12 devices with player v2 ON
@@ -199,17 +215,13 @@ def simulate_session(
     *,
     incident: str = "off",
     first_session: bool = True,
-    start_time: datetime | None = None,
 ) -> SessionPlan:
-    """Walk one app session: returns the events and crash reports to send. No network."""
-    plan = SessionPlan(device, dict(flags), dict(assignments), first_session=first_session)
-    clock = start_time or datetime.now(timezone.utc)
-    user_id = device.device_id
+    """Walk one app session: returns the events and crash reports to send. No network.
 
-    def stamp() -> str:
-        nonlocal clock
-        clock = clock + timedelta(seconds=rng.uniform(1.0, 15.0))
-        return clock.isoformat(timespec="seconds")
+    Neither carries a ``timestamp``: the server times each on receipt, in the order
+    sent, so no event is ever dated after it arrived."""
+    plan = SessionPlan(device, dict(flags), dict(assignments), first_session=first_session)
+    user_id = device.device_id
 
     def emit(name: str, metadata: dict[str, Any] | None = None, *, experiment: str | None = None,
              flag: str | None = None, value: float | None = None) -> bool:
@@ -221,7 +233,6 @@ def simulate_session(
             "event_name": name,
             "user_id": user_id,
             "metadata": metadata or {},
-            "timestamp": stamp(),
         }
         if value is not None:
             body["value"] = round(float(value), 2)
@@ -280,7 +291,6 @@ def simulate_session(
                             "device_model": device.device_model,
                             "app_version": device.app_version,
                         },
-                        "timestamp": stamp(),
                     }
                 )
         else:
@@ -482,7 +492,9 @@ class Stats:
         self.started = time.monotonic()
         self.incident = incident
         self.ticks = 0
-        self.devices: set[str] = set()
+        # Devices seen: a count of first sessions, not a set of ids, which would grow for as
+        # long as new installs keep arriving (the simulator runs until stopped).
+        self.devices = 0
         self.evaluations = 0
         self.events_sent = 0
         self.rejected = 0  # failure_count reported by /tracking/batch
@@ -500,7 +512,7 @@ class Stats:
 
     def record(self, plan: SessionPlan) -> None:
         self.ticks += 1
-        self.devices.add(plan.user_id)
+        self.devices += plan.first_session
         self.events_sent += len(plan.events)
         self.crash_reports += len(plan.crash_reports)
         if plan.crash_reports:
@@ -545,7 +557,7 @@ class Stats:
         elapsed = max(time.monotonic() - self.started, 1e-9)
         mm, ss = divmod(int(elapsed), 60)
         lines = [
-            f"[{mm:02d}:{ss:02d}] ticks={self.ticks} ({self.ticks / elapsed:.1f}/s) devices={len(self.devices)} "
+            f"[{mm:02d}:{ss:02d}] ticks={self.ticks} ({self.ticks / elapsed:.1f}/s) devices={self.devices} "
             f"evaluations={self.evaluations} events={self.events_sent} rejected={self.rejected} "
             f"api_errors={self.api_errors} crash_reports={self.crash_reports}"
         ]
@@ -583,17 +595,41 @@ class Stats:
 
 
 class Population:
-    """The device population plus the Android 12 subset the incident oversamples."""
+    """The devices that have the app right now, plus the Android 12 subset the incident oversamples.
 
-    def __init__(self, devices: list[Device]):
-        self.devices = list(devices)
+    ``size`` devices, the first of ``device_stream(seed)``, have the app at any time. A
+    session is one of theirs, picked at random. After it the device opens the app again
+    some day with probability ``return_rate``; otherwise, and always after an uninstall,
+    it leaves, and the next device of the stream (a new install) takes its place. So a
+    device has 1 / (1 - return_rate) sessions on average however long the run is, and
+    the platform's per-device conversion rates stay near the spec's per-session rates.
+    The incident's sessions are crash loops of the first ``size`` devices' Android 12
+    ones, which never leave.
+    """
+
+    def __init__(self, size: int = DEFAULT_POPULATION, seed: int = DEFAULT_SEED, *, return_rate: float = RETURN_RATE):
+        self._installs = device_stream(seed)
+        self.devices = list(itertools.islice(self._installs, size))
         self.android12 = [d for d in self.devices if d.is_android_12]
-        self.seen: set[str] = set()
+        self.return_rate = return_rate
+        self.seen: set[str] = set()  # devices that had a session; a leaving device is dropped
+        self._slot: int | None = None  # where the device of the session being walked sits
 
     def pick(self, rng: random.Random, incident: str = "off") -> Device:
         if incident == "android12" and self.android12 and rng.random() < INCIDENT_ANDROID12_SHARE:
+            self._slot = None
             return rng.choice(self.android12)
-        return rng.choice(self.devices)
+        self._slot = rng.randrange(len(self.devices))
+        return self.devices[self._slot]
+
+    def end_session(self, rng: random.Random, plan: SessionPlan) -> None:
+        """The device of the session just walked comes back later, or leaves for a new install."""
+        slot, self._slot = self._slot, None
+        if slot is None:
+            return
+        if plan.outcomes.get("app_uninstall") or rng.random() >= self.return_rate:
+            self.seen.discard(self.devices[slot].device_id)
+            self.devices[slot] = next(self._installs)
 
 
 def evaluate_flags(client: Any, device: Device) -> dict[str, dict[str, Any]]:
@@ -629,6 +665,7 @@ def run_tick(client: Any, rng: random.Random, population: Population, stats: Sta
     stats.evaluations += len(FLAG_KEYS)
     assignments = assign_experiments(client, device)
     plan = simulate_session(rng, device, flags, assignments, incident=incident, first_session=first_session)
+    population.end_session(rng, plan)
 
     for chunk in chunked(plan.events):
         resp = client.batch(chunk)
@@ -678,7 +715,7 @@ def offline_assignments(rng: random.Random, device: Device) -> dict[str, dict[st
 
 
 def dry_run(rng: random.Random, out: TextIO, incident: str = "off", devices: int = DEFAULT_POPULATION, seed: int = DEFAULT_SEED) -> SessionPlan:
-    population = Population(generate_devices(devices, seed))
+    population = Population(devices, seed)
     if incident == "android12":
         # Show what an affected device does: an Android 12 device that has Player v2 ON and crashes.
         candidates = [d for d in population.android12 if is_affected_by_incident(d) and offline_flags(d)[PLAYER_FLAG]["enabled"]]
@@ -816,7 +853,7 @@ def main(
         return 2
 
     client = client_factory(args.api_url, api_key, server_api_key=server_api_key or "")
-    population = Population(generate_devices(args.devices, args.population_seed))
+    population = Population(args.devices, args.population_seed)
     stats = Stats(incident=args.incident)
     interval = 1.0 / args.rate
     print(

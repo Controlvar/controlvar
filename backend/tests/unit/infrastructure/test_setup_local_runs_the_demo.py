@@ -168,11 +168,10 @@ def test_the_stop_command_brings_compose_down_and_keeps_the_database_volume():
         assert not re.search(r"\s(-v|--volumes)\b", command), command
 
 
-def test_the_stop_command_removes_the_logs_the_pids_and_the_key_file():
+def test_the_stop_command_removes_the_logs_and_the_pids():
     commands = _commands(_script(TEARDOWN_LOCAL))
     for removal in (
         'rm -rf "$DEMO_DIR/.pids"',
         'rm -rf "$DEMO_DIR/.logs"',
-        'rm -f  "$DEMO_DIR/.demo_api_key"',
     ):
         assert removal in commands, removal
