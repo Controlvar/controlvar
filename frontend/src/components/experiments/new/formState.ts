@@ -43,6 +43,12 @@ export interface MetricFormData {
   event_name: string;
   metric_type: MetricType;
   is_primary: boolean;
+  /**
+   * A decrease is the good direction (errors, uninstalls): the winner and the
+   * recommendation then read a significant fall as the improvement. Absent
+   * means false, the API's default.
+   */
+  lower_is_better?: boolean;
 }
 
 export interface ExperimentFormState {
@@ -346,6 +352,8 @@ export function buildCreatePayload(state: ExperimentFormState): CreateExperiment
         is_primary: m.is_primary,
       };
       if (m.is_primary && plannedEffect !== undefined) metric.expected_effect = plannedEffect;
+      // Sent only when true; without it the API stores false.
+      if (m.lower_is_better === true) metric.lower_is_better = true;
       return metric;
     }),
     confidence_level: state.confidenceLevel,

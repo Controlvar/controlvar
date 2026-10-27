@@ -84,16 +84,37 @@ export function MetricsEditor({ metrics, dispatch }: MetricsEditorProps) {
                   ))}
                 </select>
               </div>
-              <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
-                <input
-                  type="radio"
-                  name="primary_metric"
-                  checked={metric.is_primary}
-                  onChange={() => dispatch({ type: 'setPrimary', index })}
-                  data-testid={`metric-primary-${index}`}
-                />
-                Primary metric
-              </label>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                  <input
+                    type="radio"
+                    name="primary_metric"
+                    checked={metric.is_primary}
+                    onChange={() => dispatch({ type: 'setPrimary', index })}
+                    data-testid={`metric-primary-${index}`}
+                  />
+                  Primary metric
+                </label>
+                {/* A fall is the improvement for errors or uninstalls: the
+                    winner and the recommendation read it from this. */}
+                <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    name={`metric_lower_is_better_${index}`}
+                    checked={metric.lower_is_better === true}
+                    onChange={(e) =>
+                      dispatch({
+                        type: 'changeMetric',
+                        index,
+                        field: 'lower_is_better',
+                        value: e.target.checked,
+                      })
+                    }
+                    data-testid={`metric-lower-is-better-${index}`}
+                  />
+                  Lower is better (for example errors or uninstalls)
+                </label>
+              </div>
             </div>
             {metrics.length > 1 && (
               <button

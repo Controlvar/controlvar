@@ -373,7 +373,7 @@ steps:
             - region "Metric comparison":
               - table:
                 - rowgroup:
-                  - row "Metric Variant Sample Size Value Improvement p-value Significance"
+                  - row "Metric Variant Sample Size Value Change p-value Significance"
                 - rowgroup:
                   - row /Control\(control\) 400 10\.00%/
                   - row /Treatment 400 16\.00% \+60\.0%/
@@ -545,7 +545,7 @@ steps:
             - region "Metric comparison":
               - table:
                 - rowgroup:
-                  - row "Metric Variant Sample Size Value Improvement p-value Significance"
+                  - row "Metric Variant Sample Size Value Change p-value Significance"
                 - rowgroup:
                   - row /Control\(control\) 300 10\.00%/
                   - row /Treatment 200 20\.00% \+100\.0%/
@@ -667,7 +667,7 @@ steps:
             - region "Metric comparison":
               - table:
                 - rowgroup:
-                  - row "Metric Variant Sample Size Value Improvement p-value Significance"
+                  - row "Metric Variant Sample Size Value Change p-value Significance"
                 - rowgroup:
                   - row /Control\(control\) 60 10\.00%/
                   - row /Treatment 60 40\.00% \+300\.0%/
