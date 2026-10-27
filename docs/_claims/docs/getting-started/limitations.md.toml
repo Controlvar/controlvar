@@ -55,6 +55,14 @@ by = [
 ]
 
 [[unit]]
+text = "One user known by two ids, such as a visitor who signs in | No identify or alias call: a user who signs in under a new id mid-funnel gets a second assignment. Assign with the id you will track purchases with."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_no_call_says_that_two_user_ids_are_one_user",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_assignment_hashes_the_experiment_key_and_the_user",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky",
+]
+
+[[unit]]
 text = "Deployments"
 by = ["exempt:label"]
 
@@ -121,6 +129,17 @@ by = [
 [[unit]]
 text = "SDKs"
 by = ["exempt:label"]
+
+[[unit]]
+text = "Flag targeting from a native mobile SDK | iOS, Android, React Native and Flutter send only the user id on flag evaluation, so rules on attributes do not match (#438). Experiment assignment sends them."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_native_sdks_send_no_context_on_flag_evaluation",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
+    "test:sdk/ios/Tests/ControlvarTests/ExperimentationClientTests.swift::testGetAssignment_postsExperimentKeyUserIdAndContext",
+    "test:sdk/android/sdk/src/test/kotlin/ExperimentationClientTest.kt::getAssignment sends POST tracking assign with experiment_key, user_id and context",
+    "test:sdk/react-native/__tests__/client.test.ts::sends the user attributes as `context`",
+    "test:sdk/flutter/test/client_test.dart::POSTs experiment_key, user_id and context to /api/v1/tracking/assign",
+]
 
 [[unit]]
 text = "Every SDK on a package registry | The JavaScript SDK is on npm and the Python SDK is on PyPI. The Go SDK installs by module path, and every other SDK installs from a clone of this repository."

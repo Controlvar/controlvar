@@ -11,7 +11,7 @@ export default function StreamPulseNextApp({ Component, pageProps }: AppProps) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta
           name="description"
-          content="StreamPulse is a demo mobile streaming app showing feature-flag rollouts, targeting and experiments on Controlvar."
+          content="A phone drawn with the React SDK: pick a device, see which flags and experiments it gets."
         />
       </Head>
       <Component {...pageProps} />
