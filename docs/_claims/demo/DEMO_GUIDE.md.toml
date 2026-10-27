@@ -134,8 +134,10 @@ by = ["exempt:label"]
 count = 7
 
 [[unit]]
-text = "Open http://localhost:3200 — point at the Controlvar panel (bottom-right): the visitor id, the variant this visitor got for each experiment, and the two feature flags."
+text = "Open http://localhost:3200 — point at the Controlvar panel (bottom-right): the visitor id, each experiment's variant once a page has assigned it (here the hero test's; the others fill in as you click through), and the two feature flags."
 by = [
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::a fresh visitor who opens only the home page is assigned to the hero test alone",
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::shows an experiment a page assigns while the panel is open",
     "journey:demo-shoplab#storefront",
     "journey:demo-shoplab#panel",
 ]
@@ -339,7 +341,7 @@ by = [
 ]
 
 [[unit]]
-text = "A few devices show \"in global holdout\" for every experiment."
+text = "A few devices show \"in global holdout\" for every experiment whose screen you open."
 by = [
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
     "journey:demo-streampulse#holdout",

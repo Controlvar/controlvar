@@ -5,6 +5,11 @@
  * hooks instead of the real provider. Tests configure return values with
  * `__setExperiment`, `__setFlag` and `__setUser`, assert on `trackEventMock`, and
  * can observe provider (re)mounts through `providerMounts` / `lastProviderProps`.
+ *
+ * As in the real SDK, `useExperiment` assigns through the client's `assignExperiment`
+ * (recorded in `assignExperimentMock`), and `getAssignments` returns only the experiments
+ * assigned and still cached: `__expireAssignments()` empties it, as the real cache's
+ * 5 s TTL does, without forgetting what was assigned.
  */
 import React, { useEffect } from 'react';
 import type {
@@ -28,12 +33,21 @@ export const DEFAULT_TEST_USER: UserContext = {
 export const providerMounts: Array<{ config: SdkConfig; user: UserContext }> = [];
 /** How many times `clearCache()` was called on the mock client. */
 export const clearCacheMock = jest.fn();
+/** Every `assignExperiment(user, experimentKey)` call: `[userId, experimentKey]`. */
+export const assignExperimentMock = jest.fn<void, [string, string]>();
 
 const state = {
   experiments: new Map<string, Partial<ExperimentAssignment>>(),
   flags: new Map<string, Partial<FeatureFlagEvaluation>>(),
   user: DEFAULT_TEST_USER,
+  /** Keys assigned and still cached, in order: what the real client's cache would hold. */
+  cached: new Set<string>(),
 };
+
+/** The cache entries expire (the real SDK's TTL): `getAssignments` lists none until the next assignment. */
+export function __expireAssignments(): void {
+  state.cached.clear();
+}
 
 export function defaultAssignment(experimentKey: string): ExperimentAssignment {
   return {
@@ -70,8 +84,10 @@ export function __reset(): void {
   state.experiments.clear();
   state.flags.clear();
   state.user = DEFAULT_TEST_USER;
+  state.cached.clear();
   trackEventMock.mockClear();
   clearCacheMock.mockClear();
+  assignExperimentMock.mockClear();
   providerMounts.length = 0;
 }
 
@@ -102,7 +118,9 @@ export class ExperimentationClient {
     return flagFor(flagKey);
   }
 
-  async assignExperiment(_user: UserContext, experimentKey: string): Promise<ExperimentAssignment> {
+  async assignExperiment(user: UserContext, experimentKey: string): Promise<ExperimentAssignment> {
+    assignExperimentMock(user.userId, experimentKey);
+    state.cached.add(experimentKey);
     return assignmentFor(experimentKey);
   }
 
@@ -115,8 +133,9 @@ export class ExperimentationClient {
     trackEventMock(eventName, properties, options);
   }
 
+  /** The experiments assigned and still cached (never an unassigned one), as the real cache. */
   getAssignments(_userId: string): ExperimentAssignment[] {
-    return Array.from(state.experiments.keys()).map(assignmentFor);
+    return Array.from(state.cached).map(assignmentFor);
   }
 
   getEvaluatedFlags(_userId: string): string[] {
@@ -125,6 +144,7 @@ export class ExperimentationClient {
 
   clearCache(): void {
     clearCacheMock();
+    state.cached.clear();
   }
 }
 
@@ -185,7 +205,11 @@ export function useMultipleFlags(flagKeys: string[]): Record<string, FeatureFlag
   return Object.fromEntries(flagKeys.map((k) => [k, flagFor(k)]));
 }
 
+/** Assigns on mount through the client, as the real hook does, and returns the configured answer. */
 export function useExperiment(experimentKey: string): ExperimentAssignment {
+  useEffect(() => {
+    void mockClient.assignExperiment(state.user, experimentKey);
+  }, [experimentKey]);
   return assignmentFor(experimentKey);
 }
 

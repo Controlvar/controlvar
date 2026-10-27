@@ -3,9 +3,11 @@
 # runs on the stack that script starts (demo-local, docs_runner/stacks.py) and
 # walks the storefront, the dashboard it points at, and the kill switch.
 #
-# The storefront's Controlvar panel calls the public API with the
-# storefront's own key (the seed writes it to demo/shoplab/.env.local), so the
-# panel listing a variant for each experiment is the key and the seed working.
+# The storefront calls the public API with its own key (the seed writes it to
+# demo/shoplab/.env.local), so the Controlvar panel showing the hero test's
+# variant, which the home page assigned, is the key and the seed working. The
+# panel assigns nothing itself (2026-10-27): on the home page the other three
+# experiments read "not assigned yet" until the page that uses each opens.
 # What the seed made is read through the API: the four experiments, each the
 # kind the README's table says, and the two flags with the search flag's
 # 10% -> 50% -> 100% schedule. The kill switch is turned off in the dashboard
@@ -62,19 +64,19 @@ steps:
             - listitem:
               - text: Hero banner
               - code: shoplab_hero_banner
-              - text: /^(control|video_hero)$/
+              - text: /^(control|video_hero)$|in the global holdout \(control shown\) ?not enrolled$/
             - listitem:
               - text: Product sort (bandit)
               - code: shoplab_plp_sort
-              - text: /^(relevance|price_low_high|ml_personalized)$/
+              - text: /^assigned when the product list opens ?not assigned yet$/
             - listitem:
               - text: Buy button (MVT)
               - code: shoplab_pdp_buy_button
-              - text: /^(control|green_add|orange_buy_now|green_buy_now)$/
+              - text: /^assigned when a product page opens ?not assigned yet$/
             - listitem:
               - text: Checkout flow
               - code: shoplab_checkout_flow
-              - text: /^(standard|one_page)$/
+              - text: /^assigned when the checkout page opens ?not assigned yet$/
           - heading "Feature flags" [level=2]
           - list:
             - listitem:
@@ -85,7 +87,7 @@ steps:
               - text: Free-shipping banner
               - code: shoplab_free_shipping_banner
               - text: "on"
-    fail: the panel does not show a variant of each of the four experiments and both flags, with a New visitor button
+    fail: the panel does not show the hero test's variant, the other three experiments not assigned yet with the page that assigns each, and both flags, with a New visitor button
   - id: products
     doc: what-each-page-demonstrates
     do:

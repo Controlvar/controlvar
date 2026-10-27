@@ -42,6 +42,8 @@ export function assignmentReasonLabel(
         return `excluded: mutual exclusion group ${PROFILE_MEG_NAME} (control shown)`;
       case 'targeting':
         return 'excluded: targeting rules (control shown)';
+      case 'completed':
+        return 'experiment completed (control shown)';
       default:
         return `not enrolled: ${a.reason ?? 'unknown'} (control shown)`;
     }
@@ -50,9 +52,17 @@ export function assignmentReasonLabel(
 }
 
 /** Short pill text for an experiment row. */
-export function assignmentPill(a: Pick<ExperimentAssignment, 'assigned' | 'loading' | 'error' | 'variantName'>): string {
+export function assignmentPill(a: Pick<ExperimentAssignment, 'assigned' | 'reason' | 'loading' | 'error' | 'variantName'>): string {
   if (a.loading) return 'loading…';
   if (a.error) return 'error';
-  if (a.assigned === false) return 'not enrolled';
+  if (a.assigned === false) return a.reason === 'completed' ? 'completed' : 'not enrolled';
   return a.variantName;
+}
+
+/** Pill for an experiment no screen has assigned the device to yet. */
+export const NOT_ASSIGNED_PILL = 'not assigned yet';
+
+/** The line under such an experiment's key: the screen that assigns it. */
+export function notAssignedLabel(screenName: string): string {
+  return `assigned when the ${screenName} screen opens`;
 }

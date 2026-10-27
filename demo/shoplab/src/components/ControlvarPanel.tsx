@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
-import { useExperiment, useExperimentation, useFeatureFlag } from '@controlvar/react-sdk';
+import { useExperimentation, useFeatureFlag } from '@controlvar/react-sdk';
+import { useAssignedExperiments } from '@/lib/assignments';
 import { DASHBOARD_URL, EXPERIMENT_KEYS, FLAG_KEYS } from '@/lib/env';
 import { useEventLog } from '@/lib/eventLog';
+import { assignmentNote, assignmentPill } from '@/lib/labels';
 import { resetVisitor } from '@/lib/visitor';
 
 export const PANEL_EVENT_LIMIT = 8;
 
-const EXPERIMENT_ROWS: Array<{ key: string; label: string }> = [
-  { key: EXPERIMENT_KEYS.hero, label: 'Hero banner' },
-  { key: EXPERIMENT_KEYS.plpSort, label: 'Product sort (bandit)' },
-  { key: EXPERIMENT_KEYS.pdpBuyButton, label: 'Buy button (MVT)' },
-  { key: EXPERIMENT_KEYS.checkoutFlow, label: 'Checkout flow' },
+/** Each experiment with the page that assigns it (the page's own useExperiment). */
+export const EXPERIMENT_ROWS: Array<{ key: string; label: string; page: string }> = [
+  { key: EXPERIMENT_KEYS.hero, label: 'Hero banner', page: 'the home page' },
+  { key: EXPERIMENT_KEYS.plpSort, label: 'Product sort (bandit)', page: 'the product list' },
+  { key: EXPERIMENT_KEYS.pdpBuyButton, label: 'Buy button (MVT)', page: 'a product page' },
+  { key: EXPERIMENT_KEYS.checkoutFlow, label: 'Checkout flow', page: 'the checkout page' },
 ];
 
 const FLAG_ROWS: Array<{ key: string; label: string }> = [
@@ -34,17 +37,13 @@ export default function ControlvarPanel({ onNewVisitor = defaultNewVisitor, defa
   const { user } = useExperimentation();
   const events = useEventLog();
 
-  // Hooks must be called unconditionally, so the four experiments and two flags are
-  // evaluated up-front. This mirrors the simulator, which assigns every visitor to all
-  // four experiments too.
-  const hero = useExperiment(EXPERIMENT_KEYS.hero);
-  const plp = useExperiment(EXPERIMENT_KEYS.plpSort);
-  const pdp = useExperiment(EXPERIMENT_KEYS.pdpBuyButton);
-  const checkout = useExperiment(EXPERIMENT_KEYS.checkoutFlow);
+  // The panel assigns no experiment: an assignment records that the visitor saw the
+  // experiment, so only the page that uses one assigns it. The panel shows what the
+  // pages have assigned. Flags have no such record and are evaluated here.
+  const assigned = useAssignedExperiments();
   const newSearch = useFeatureFlag(FLAG_KEYS.newSearch);
   const freeShipping = useFeatureFlag(FLAG_KEYS.freeShippingBanner);
 
-  const assignments = [hero, plp, pdp, checkout];
   const flags = [newSearch, freeShipping];
   const recent = events.slice(-PANEL_EVENT_LIMIT).reverse();
 
@@ -84,21 +83,29 @@ export default function ControlvarPanel({ onNewVisitor = defaultNewVisitor, defa
           <section className="mb-4">
             <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Experiments</h2>
             <ul className="divide-y divide-neutral-100">
-              {EXPERIMENT_ROWS.map((row, i) => {
-                const a = assignments[i];
+              {EXPERIMENT_ROWS.map((row) => {
+                const a = assigned[row.key];
+                const note = assignmentNote(a, row.page);
+                const pill = !a
+                  ? 'border border-dashed border-neutral-300 text-neutral-600'
+                  : a.assigned === false
+                    ? 'bg-amber-100 text-amber-900'
+                    : a.isControl
+                      ? 'bg-neutral-100 text-neutral-700'
+                      : 'bg-accent-100 text-accent-700';
                 return (
-                  <li key={row.key} className="flex items-center justify-between py-1.5" data-testid={`panel-exp-${row.key}`}>
-                    <div>
+                  <li key={row.key} className="flex items-center justify-between gap-2 py-1.5" data-testid={`panel-exp-${row.key}`}>
+                    <div className="min-w-0">
                       <div className="font-medium">{row.label}</div>
                       <code className="text-xs text-neutral-500">{row.key}</code>
+                      {note && (
+                        <div className="text-xs text-neutral-600" data-testid={`panel-exp-note-${row.key}`}>
+                          {note}
+                        </div>
+                      )}
                     </div>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        a.error ? 'bg-red-100 text-red-800' : a.isControl ? 'bg-neutral-100 text-neutral-700' : 'bg-accent-100 text-accent-700'
-                      }`}
-                      title={a.error ? a.error.message : a.variantKey}
-                    >
-                      {a.loading ? 'loading…' : a.error ? 'error' : a.variantName}
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${pill}`} title={a?.variantKey}>
+                      {assignmentPill(a)}
                     </span>
                   </li>
                 );
@@ -142,6 +149,7 @@ export default function ControlvarPanel({ onNewVisitor = defaultNewVisitor, defa
                   <li key={e.id} className="truncate" title={JSON.stringify(e.properties ?? {})}>
                     <span className="font-semibold text-neutral-800">{e.name}</span>
                     {e.options?.value !== undefined && <span className="text-emerald-700"> ${e.options.value}</span>}
+                    {e.options?.experimentKey && <span className="text-neutral-500"> exp:{e.options.experimentKey}</span>}
                     {e.options?.featureFlagKey && <span className="text-neutral-500"> flag:{e.options.featureFlagKey}</span>}
                     {e.properties && <span className="text-neutral-500"> {JSON.stringify(e.properties)}</span>}
                   </li>

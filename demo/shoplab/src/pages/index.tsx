@@ -86,7 +86,11 @@ export default function HomePage() {
               key={p.id}
               product={p}
               position={i + 1}
-              onClick={(product, position) => track('product_click', { product_id: product.id, position, sort: 'featured' })}
+              // A click here is not on the sorted list, so it names the hero test rather
+              // than fanning out to the sort bandit, whose reward is product_click.
+              onClick={(product, position) =>
+                track('product_click', { product_id: product.id, position, sort: 'featured' }, { experimentKey: EXPERIMENT_KEYS.hero })
+              }
             />
           ))}
         </ul>

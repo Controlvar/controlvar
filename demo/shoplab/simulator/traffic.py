@@ -5,12 +5,14 @@ Drives synthetic visitors through the ShopLab storefront funnel using only the p
 Controlvar API and the storefront API key — no database access, stdlib only.
 
 Per visitor:
-  1. POST /api/v1/tracking/assign for the four ShopLab experiments (context = persona attributes)
-  2. GET  /api/v1/feature-flags/evaluate/{key}?user_id=… for the two flags
-  3. Walk the funnel with the true conversion rates from the shared spec (§3), scaled by persona
-  4. POST /api/v1/tracking/batch (≤100 events per call) with an explicit experiment_key for
-     every assigned experiment (fan-out, like the React SDK) and feature_flag_key for search.
-     No event carries a ``timestamp``, so each is dated by the server when it arrives.
+  1. GET  /api/v1/feature-flags/evaluate/{key}?user_id=… for the two flags
+  2. Walk the funnel with the true conversion rates from the shared spec (§3), scaled by
+     persona. Each experiment is assigned (POST /api/v1/tracking/assign, context = persona
+     attributes) when the visitor reaches the page that uses it, so the checkout flow only
+     for visitors who begin checkout (simulate_visitor names the one exception)
+  3. POST /api/v1/tracking/batch (≤100 events per call) with an explicit experiment_key for
+     every experiment assigned so far (fan-out, like the React SDK) and feature_flag_key for
+     search. No event carries a ``timestamp``, so each is dated by the server when it arrives.
 
 Usage:
   python demo/shoplab/simulator/traffic.py --rate 3 --duration 600
@@ -222,7 +224,7 @@ class VisitorPlan:
     user_id: str
     persona: Persona
     attributes: dict[str, Any]
-    assignments: dict[str, str]  # experiment key -> variant name
+    assignments: dict[str, str]  # experiment key -> variant name, for each experiment the walk reached
     flags: dict[str, bool]  # flag key -> enabled
     events: list[dict[str, Any]] = field(default_factory=list)  # /tracking/track bodies
     outcomes: dict[str, bool] = field(default_factory=dict)  # named funnel steps hit
@@ -239,14 +241,27 @@ def simulate_visitor(
     user_id: str,
     persona: Persona,
     attributes: dict[str, Any],
-    assignments: dict[str, str],
+    assign: Callable[[str], str],
     flags: dict[str, bool],
 ) -> VisitorPlan:
-    """Pure funnel walk: returns the visitor's events and outcomes. No network.
+    """Funnel walk: returns the visitor's events and outcomes. No network but ``assign``.
+
+    ``assign(key)`` gives the visitor's variant in an experiment, and the walk calls it
+    where the storefront assigns: the hero banner and the product sort as the visit
+    starts (every visitor sees the home page and the product list), and the checkout
+    flow only when the visitor begins checkout, as the checkout page does. So the
+    checkout experiment counts only visitors who reached checkout, as the seeded
+    history does. The buy button is still assigned as the visit starts, although the
+    storefront assigns it on the product page: its add-to-cart draw comes before the
+    walk decides whether the visitor opened one.
 
     No event carries a ``timestamp``: the server times each on receipt, in the order
     sent, so no event is ever dated after it arrived."""
-    plan = VisitorPlan(user_id, persona, attributes, dict(assignments), dict(flags))
+    plan = VisitorPlan(user_id, persona, attributes, {}, dict(flags))
+
+    def take(key: str) -> str:
+        plan.assignments[key] = assign(key)
+        return plan.assignments[key]
 
     def emit(
         name: str,
@@ -271,10 +286,9 @@ def simulate_visitor(
             if key in plan.assignments:
                 plan.events.append({**base, "experiment_key": key})
 
-    hero_variant = assignments[HERO_KEY]
-    plp_variant = assignments[PLP_KEY]
-    pdp_variant = assignments[PDP_KEY]
-    checkout_variant = assignments[CHECKOUT_KEY]
+    hero_variant = take(HERO_KEY)
+    plp_variant = take(PLP_KEY)
+    pdp_variant = take(PDP_KEY)
     new_search_on = bool(flags.get(NEW_SEARCH_FLAG, False))
 
     # --- Home / hero ---------------------------------------------------------------
@@ -322,6 +336,7 @@ def simulate_visitor(
     begin_checkout = add_to_cart or hero_quick
     purchase = False
     if begin_checkout:
+        checkout_variant = take(CHECKOUT_KEY)
         flow = CHECKOUT_FLOW.get(checkout_variant, "standard")
         items = quantity if add_to_cart else 1
         cart_total = product.price * items
@@ -505,16 +520,17 @@ def new_user_id(rng: random.Random) -> str:
 
 
 def run_visitor(client: Any, rng: random.Random, stats: Stats) -> VisitorPlan:
-    """Assign, evaluate flags, walk the funnel and send the events for one visitor."""
+    """Evaluate flags, walk the funnel (assigning each experiment where the storefront
+    does) and send the events for one visitor."""
     persona = pick_persona(rng)
     user_id = new_user_id(rng)
     attributes = make_attributes(rng, persona)
-    assignments: dict[str, str] = {}
-    for key in EXPERIMENT_KEYS:
-        resp = client.assign(key, user_id, attributes)
-        assignments[key] = str(resp["variant_name"])
+
+    def assign(key: str) -> str:
+        return str(client.assign(key, user_id, attributes)["variant_name"])
+
     flags = {key: bool(client.evaluate_flag(key, user_id).get("enabled")) for key in FLAG_KEYS}
-    plan = simulate_visitor(rng, user_id, persona, attributes, assignments, flags)
+    plan = simulate_visitor(rng, user_id, persona, attributes, assign, flags)
     for chunk in chunked(plan.events):
         resp = client.batch(chunk)
         stats.rejected += int(resp.get("failure_count", 0) or 0)
@@ -535,11 +551,11 @@ def dry_run(rng: random.Random, out: TextIO) -> VisitorPlan:
     persona = pick_persona(rng)
     user_id = new_user_id(rng)
     attributes = make_attributes(rng, persona)
-    assignments, flags = offline_assignments(rng)
-    plan = simulate_visitor(rng, user_id, persona, attributes, assignments, flags)
+    variants, flags = offline_assignments(rng)
+    plan = simulate_visitor(rng, user_id, persona, attributes, variants.__getitem__, flags)
     print(f"# dry run — no network. visitor={user_id} persona={persona.name}", file=out)
     print(f"# attributes={json.dumps(attributes)}", file=out)
-    print(f"# assignments={json.dumps(assignments)}", file=out)
+    print(f"# assignments={json.dumps(plan.assignments)}", file=out)
     print(f"# flags={json.dumps(flags)}", file=out)
     print(f"# outcomes={json.dumps(plan.outcomes)}", file=out)
     print(f"# {len(plan.events)} track bodies would be sent in {math.ceil(len(plan.events) / BATCH_LIMIT)} batch call(s):", file=out)

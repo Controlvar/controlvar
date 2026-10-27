@@ -43,10 +43,13 @@ The right-hand side has two panels:
   drops the SDK caches and re-fetches everything. Otherwise the SDK keeps each answer for 5 s
   (`cacheTtlMs: 5000`) and asks again the next time a screen needs it.
 - **Powered by Controlvar** — per flag: on/off + the server `reason` (`targeting_rule`,
-  `rollout`, `inactive`, `error`) spelled out; per experiment: the variant and whether the device
-  was actually enrolled (`assigned: false` → "in global holdout streampulse-holdout", "excluded:
-  mutual exclusion group streampulse-profile", "excluded: targeting rules"); the last 8 events;
-  links to the dashboard; **Refresh now** (clears the SDK cache and re-evaluates).
+  `rollout`, `inactive`, `error`) spelled out; per experiment, once its screen has assigned it:
+  the variant and whether the device was actually enrolled (`assigned: false` → "in global
+  holdout streampulse-holdout", "excluded: mutual exclusion group streampulse-profile",
+  "excluded: targeting rules"); the last 8 events; links to the dashboard; **Refresh now**
+  (clears the SDK cache and re-evaluates). The panel assigns no experiment itself, because an
+  assignment records that the device saw the experiment: until its screen opens, an experiment
+  reads `not assigned yet` and names that screen.
 
 The **Rollout story** button opens a drawer with the 7-step narrative, the command that drives it,
 and a live readout of `streampulse_player_v2` for the current device.
@@ -176,7 +179,7 @@ Keep `traffic.py` running in a terminal throughout so the numbers move.
    *Subscribe*. Dashboard → Admin → Audit log: the seed wrote create, change and start entries
    for this experiment, in the form the platform writes them; every later change is logged too.
 8. **Global holdout**. Type a custom device id such as `sp-holdout-15` (bucket 1 under the demo
-   holdout's salt) and *Apply device*: every experiment reads `in global holdout streampulse-holdout (control
+   holdout's salt) and *Apply device*: every experiment whose screen you open reads `in global holdout streampulse-holdout (control
    shown)` and no exposure is recorded. The preset ids are chosen to be outside the holdout.
    The API records each device first seen while the holdout is active; the seed writes no such
    records, so a comparison of held-out devices with the rest needs real traffic first (the
@@ -189,14 +192,14 @@ per-experiment), so it can differ after `--reset`; the holdout bucket does not.
 
 | Symptom | Cause / fix |
 |---|---|
-| Yellow banner "NEXT_PUBLIC_CONTROLVAR_API_KEY is not set"; panel shows `error: API error: 401` everywhere | The key is missing or wrong. Run `python backend/scripts/seed_streampulse.py` (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` — Next reads env vars at startup. |
+| Yellow banner "NEXT_PUBLIC_CONTROLVAR_API_KEY is not set"; panel shows `error: API error: 401` for every flag, and every experiment stays `not assigned yet` | The key is missing or wrong. Run `python backend/scripts/seed_streampulse.py` (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` — Next reads env vars at startup. |
 | **401** in the network tab although `.env.local` has a key | The key was revoked or belongs to another environment/database. Re-seed. |
 | **404** on `/tracking/assign` or `/feature-flags/evaluate/streampulse_...` | The StreamPulse experiments or flags are not seeded (`--reset` removes both). A paused or completed experiment answers its control variant with `assigned: false`, and a flag that is not ACTIVE answers `enabled: false`: neither is a 404. Run the seed script. |
 | Browser console: **CORS** error from `localhost:3300` | Port 3300 is not in the backend's CORS allow-list. The development defaults (`DEFAULT_CORS_ORIGINS` in `backend/app/core/config.py`) include it; if you set `CORS_ORIGINS` or `BACKEND_CORS_ORIGINS` yourself, add `http://localhost:3300` and restart the API. Against a staging or production API, add it to that API's `CORS_ORIGINS`: those allow no other origin by default. |
-| Every flag `off`, every experiment `error`, nothing loads | Backend not running on `NEXT_PUBLIC_CONTROLVAR_API_URL`. Start it from the repository root: `ENVIRONMENT=development uvicorn backend.app.main:app --reload`. |
+| Every flag `off`, every experiment `not assigned yet`, nothing loads | Backend not running on `NEXT_PUBLIC_CONTROLVAR_API_URL`. Start it from the repository root: `ENVIRONMENT=development uvicorn backend.app.main:app --reload`. |
 | AI search never turns on | The rule needs `os = iOS`, `os_version ≥ 17.0.0`, `region = US`, `tier = premium` and the flag's own rollout is 0 %. Check the custom fields; the panel reason tells you whether a rule matched. |
 | Player v2 does not change after the story rolls back / advances | The app does not poll: it asks for the decisions when you pick a device or press *Refresh now*, so press *Refresh now*. If the schedulers are involved (auto-rollback, time-based stages), they run every `SAFETY_CHECK_INTERVAL_MINUTES` / `ROLLOUT_CHECK_INTERVAL_MINUTES` (default 5 / 15) — set both to `1` in the backend `.env` for the demo (`setup-local.sh` sets both to `1` unless they are already set). |
-| A preset shows "in global holdout streampulse-holdout" for every experiment | That id hashes into the 2 % holdout. The shipped preset ids do not; if you changed one, pick another id (or use it to demonstrate the holdout). |
+| A preset shows "in global holdout streampulse-holdout" for every experiment you open | That id hashes into the 2 % holdout. The shipped preset ids do not; if you changed one, pick another id (or use it to demonstrate the holdout). |
 | "Invalid hook call" in the browser | Two React copies. `next.config.js` aliases `react`/`react-dom` to this app's `node_modules`; run `npm install` inside `demo/streampulse`. |
 | Running with `docker compose --profile demo`: **401** everywhere, and the simulator log says `no /data/demo/streampulse/.api_key` | The streampulse seed did not run. Run `SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait`: it applies the missing seeds to the existing database (no `down -v`). |
 | Simulator exits with code 2 / 3 / 4 | 2 = API key rejected or missing, or `--incident` without the server key in `demo/streampulse/.api_key_server` (run the seed), 3 = catalogue not seeded (404), 4 = backend unreachable. |
