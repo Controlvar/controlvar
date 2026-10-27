@@ -104,6 +104,12 @@ ONE_TREATMENT_PINS: Dict[str, Dict[str, str]] = {
         "three_variants_one_null_p": (
             "3dbc690054ecb0b00c537bf44c67879e95f2457e432db20eb18b596dd79e3641"
         ),
+    },  # 1.5.0 (#1377): each metric result carries lower_is_better (False here).
+    "1.5.0": {
+        "two_variants": "9e41155e9bf3433659bc62c1af0f86371613da5ce204d16108a258f037a71be6",
+        "three_variants_one_null_p": (
+            "0b23f7ba940954b161499973d2c8830487fa8c6fb4e8d0196c68f2d5191fb8b2"
+        ),
     },
 }
 

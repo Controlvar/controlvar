@@ -235,7 +235,10 @@ class VariantResult(BaseModel):
         description=(
             "Relative change in the metric mean compared with the control, "
             "expressed as a percentage: ((variant_mean - control_mean) / "
-            "control_mean) * 100.  None for the control variant."
+            "control_mean) * 100.  The sign is the raw change whatever the "
+            "metric's direction: when the metric's lower_is_better is true, a "
+            "negative value is the good direction.  None for the control "
+            "variant."
         ),
     )
     power: Optional[float] = Field(
@@ -296,6 +299,16 @@ class MetricResult(BaseModel):
             "True when this is the primary (decision) metric for the experiment."
         ),
     )
+    lower_is_better: bool = Field(
+        False,
+        description=(
+            "The metric definition's lower_is_better: true when a decrease is "
+            "the good direction (errors, latency, uninstalls).  "
+            "winning_variant_id, and for the primary metric the summary's "
+            "recommendation and the Bayesian decision, follow it.  False when "
+            "the definition does not set it."
+        ),
+    )
     variants: List[VariantResult] = Field(
         ...,
         description="Per-variant statistical results, one entry per variant.",
@@ -310,8 +323,10 @@ class MetricResult(BaseModel):
     winning_variant_id: Optional[UUID] = Field(
         None,
         description=(
-            "ID of the variant with the best significant result, or None if no "
-            "variant achieved significance."
+            "ID of the variant with the best significant result in the "
+            "metric's direction (the lowest when lower_is_better is true, "
+            "else the highest), or None if no variant is significantly better "
+            "than the control."
         ),
     )
 

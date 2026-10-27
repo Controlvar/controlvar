@@ -126,6 +126,15 @@ CHARACTERISATIONS: Dict[str, Dict[str, str]] = {
         "three_variants-0.9-benjamini_hochberg": "9dc29fe6a32a100937e291cdb811fb7ab614c73cca809f13e89395655361331f",
         "edges-0.95-none": "8a393ac383215c05be91713bf0994289b03126f806ee3ff7b4ba27e4c1496e88",
         "edges-0.95-bonferroni": "d823df91499efad14663e562d09f0ef215926ca87b2746d9148846f1dcb66979",
+    },  # 1.5.0 (#1377): each metric result carries lower_is_better (False
+    # here); without it these are 1.4.0's (test_lower_is_better_fingerprint.py).
+    "1.5.0": {
+        "three_variants-0.95-none": "7a6ca24d92fe5ef7ef9ad1833f24a0b0c8cd7c0db0e6556e54af334ee56b2d83",
+        "three_variants-0.95-bonferroni": "69d361d903b23a6208356313627323fa088b87bf0e18eed42e8893043d94564b",
+        "three_variants-0.95-benjamini_hochberg": "1d8407308e95ab257fc526cde9d041d909590ba3984f1218472cccc9eb54b98e",
+        "three_variants-0.9-benjamini_hochberg": "ebb0ac8fb607cb07f9f815beaad98c1c63f5bf82a5e9ddd6b5568a575a294543",
+        "edges-0.95-none": "fac2456d1239a6cc1e837f0ef1b886fdb6642227aa23458721377f53559c9172",
+        "edges-0.95-bonferroni": "9d1452d5768d8b75a1260c3e9dca19e6926bee4f88f3305edb2a8944b0457cde",
     },
 }
 
