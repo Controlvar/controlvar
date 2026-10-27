@@ -156,6 +156,18 @@ What an API answers can be kept for later steps and checked against an oracle
   it is shown. ``expect.number`` does the same for the one element of a role
   and name, reading its text again until it agrees or stops changing
   (``checks.settle``).
+* ``expect.delta`` on an api step: ``{<dotted path>: {since: <saved name>,
+  by: <whole number>}}``, the number at each JSON path is exactly the number
+  an earlier api step saved under that name plus ``by`` (``by: 0``, the same
+  number). A cell of ``expect.cells`` may give ``delta`` instead of
+  ``oracle``: the cell shows that number. A count read before an action and
+  again after it, one more in the arm the action counts in and none more in
+  the other, is checked this way, whatever the count was before.
+* ``visitor`` (a journey field, demo-local only): ShopLab's visitor id, put
+  into the storefront's localStorage before the journey's first page
+  (``values.storage_state``), so the storefront's visitor is the one the
+  journey chose. It is a UUIDv4 chosen offline with ``values.choose_visitor``
+  and outside the demo's global holdout (the loader refuses one inside it).
 * ``expect.after`` on an api step: ``{<dotted path>: <saved name>}``, the time
   at each JSON path is later than the time an earlier step saved under that
   name (both ISO 8601, read on the stack's own clock; one written without a
@@ -245,6 +257,7 @@ from pydantic import (
 
 from docs_runner.redaction import credential_key, credential_path
 from docs_runner.sdk import required_placeholders
+from docs_runner.values import is_uuid_v4
 
 STACKS = (
     "compose-dev",
@@ -290,6 +303,9 @@ Countable = Literal["events"]
 RELAUNCH_STACKS = ("compose-demo",)
 #: How a ``relaunch`` step starts the stack again: as the recovery note says.
 Relaunch = Literal["recovery"]
+#: The stacks a journey's ``visitor`` is seeded on: the one demo/setup-local.sh
+#: starts, whose ShopLab storefront and demo holdout the visitor is chosen for.
+VISITOR_STACKS = ("demo-local",)
 Profile = Literal["core", "full"]
 
 #: Who an ``api`` step calls as: nobody, or one of the four role accounts the
@@ -398,7 +414,7 @@ BROWSER_EXPECTS = ("url", "status", "visible", "text", "number", "cells", *ARIA_
 #: A screen step's structural expectations: all but the ARIA snapshot.
 STRUCTURAL_EXPECTS = tuple(name for name in BROWSER_EXPECTS if name not in ARIA_EXPECTS)
 #: What an api step may expect of its answer; ``after`` compares times in it.
-API_ANSWER_EXPECTS = ("status", "json", "computed")
+API_ANSWER_EXPECTS = ("status", "json", "computed", "delta")
 API_EXPECTS = (*API_ANSWER_EXPECTS, "after")
 SEARCH_EXPECTS = ("found",)
 #: What a ``run`` or ``finish`` step may expect: how its block ended.
@@ -817,8 +833,17 @@ class Computed(_Strict):
     rel: StrictFloat = Field(ge=0, le=0.01)
 
 
+class Delta(_Strict):
+    """A number exactly ``by`` more than the number an earlier api step saved
+    as ``since`` (``by: 0``: the same number; ``by: -1``: one fewer)."""
+
+    since: Name
+    by: StrictInt
+
+
 class Cell(_Quoted):
-    """A table cell shows an oracle's number, at the precision it shows.
+    """A table cell shows an oracle's number, or a saved number moved by
+    ``delta``, at the precision it shows.
 
     The cell is the one under the column headed ``column``, in the one row
     that has a cell reading exactly ``row`` (a variant's name, say).
@@ -826,7 +851,17 @@ class Cell(_Quoted):
 
     row: OneLine
     column: OneLine
-    oracle: Oracle
+    oracle: Optional[Oracle] = None
+    delta: Optional[Delta] = None
+
+    @model_validator(mode="after")
+    def _oracle_or_delta(self) -> "Cell":
+        if (self.oracle is None) == (self.delta is None):
+            raise ValueError(
+                "a cell shows exactly one of an oracle's number (oracle) or a saved"
+                " number moved by delta"
+            )
+        return self
 
 
 class Poll(_Strict):
@@ -856,6 +891,8 @@ class Expect(_Strict):
     text: Optional[OneLine] = None
     json_: Optional[Dict[str, Any]] = Field(default=None, alias="json", min_length=1)
     computed: Optional[Dict[StrictStr, Computed]] = Field(default=None, min_length=1)
+    #: The number at each JSON path is a saved number moved by an exact amount.
+    delta: Optional[Dict[JsonPath, Delta]] = Field(default=None, min_length=1)
     #: The time at each JSON path is later than the time saved under the name.
     after: Optional[Dict[JsonPath, Name]] = Field(default=None, min_length=1)
     number: Optional[NumberExpect] = None
@@ -983,7 +1020,20 @@ class Journey(_Strict):
     )
     #: The launch walkthroughs this journey records, each a segment of its steps.
     recordings: List[Recording] = Field(default_factory=list)
+    #: demo-local only: ShopLab's visitor, seeded before the first page.
+    visitor: Optional[StrictStr] = None
     steps: List[Step] = Field(min_length=1)
+
+    @field_validator("visitor")
+    @classmethod
+    def _visitor_is_a_uuid_v4(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not is_uuid_v4(value):
+            raise ValueError(
+                "not a UUIDv4 in lower case, as the storefront makes them: it"
+                " drops any other id and makes up its own"
+                " (demo/shoplab/src/lib/visitor.ts)"
+            )
+        return value
 
     @model_validator(mode="after")
     def _unique_step_ids(self) -> "Journey":
