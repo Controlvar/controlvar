@@ -341,14 +341,14 @@ text = "fetchAssignments | GET /api/v1/tracking/assignments/{user_id}?active_onl
 by = ["test:sdk/js/__tests__/client.test.ts::fetchAssignments GETs /api/v1/tracking/assignments/{user_id}?active_only=true"]
 
 [[unit]]
-text = "Errors: 401 bad key, 404 an experiment unknown or not ACTIVE, or an unknown flag key (never cached), 422 invalid event, 429 rate limited."
+text = "Errors: 401 bad key, 404 an unknown experiment or flag key, or a draft experiment with no control variant (never cached), 422 invalid event, 429 rate limited."
 by = [
     "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 401 for a bad key",
     "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when the experiment is not ACTIVE",
     "test:sdk/js/__tests__/client.test.ts::gives up after the single retry and surfaces status 429",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key",
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_unknown_key_returns_404",
-    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_inactive_experiment_returns_404",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_a_draft_with_no_control_variant_returns_404",
     "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
     "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
     "test:backend/tests/integration/api/test_tracking_failure_messages.py::test_an_invalid_event_in_a_batch_names_the_field_only",

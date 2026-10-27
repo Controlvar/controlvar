@@ -98,7 +98,7 @@ every experiment the user is in.
 
 | Method | Returns | Failure behaviour |
 |---|---|---|
-| `get_assignment(experiment_key, user_id, user_attributes=None)` | `Assignment(experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason)` | raises `ExperimentationError` (`status == 404` when the experiment is not ACTIVE or unknown) |
+| `get_assignment(experiment_key, user_id, user_attributes=None)` | `Assignment(experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason)` | raises `ExperimentationError` (`status == 404` when no experiment has the key, or for a draft with no control variant); an experiment that is not ACTIVE returns its control variant with `assigned` False and `reason` its status |
 | `get_variant(experiment_key, user_id, user_attributes=None)` | `str` — the variant name | returns `default_variant` (`"control"`) |
 | `get_feature_flag(flag_key, user_id, user_attributes=None)` | `FlagEvaluation(key, enabled, config, reason)` | raises `ExperimentationError` (`status == 404` when the flag key is unknown; a flag that is not ACTIVE returns `enabled=False`, `reason="inactive"`) |
 | `is_feature_enabled(flag_key, user_id, user_attributes=None)` | `bool` | returns `False` |
@@ -209,7 +209,7 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json` and
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `get_assignment`, `get_variant` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when the experiment is not ACTIVE |
+| `get_assignment`, `get_variant` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `get_feature_flag`, `is_feature_enabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user_attributes` (omitted when empty) | `{key, enabled, config, reason}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `get_all_flags` | `GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON>` | `context` = `user_attributes` (omitted when empty) | `{"<flag_key>": bool, …}` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |

@@ -460,6 +460,20 @@ text = "Existing assignments are preserved."
 by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestMidBatch::test_experiment_paused_part_way_is_409_and_a_resend_completes"]
 
 [[unit]]
+text = "While the experiment is paused, every user gets the control variant (apps see assigned: false and the reason paused); when you start it again, each user who was assigned gets their variant back."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_a_resumed_experiment_answers_enrolled_users_with_their_variant",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
+]
+
+[[unit]]
+text = "An app using an SDK keeps showing the answer it cached during the pause for up to the SDK's cache time, 5 minutes by default."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/python/tests/test_client.py::TestConstruction::test_defaults_and_trailing_slash",
+]
+
+[[unit]]
 text = "Use when you need to investigate anomalies or if there's a critical bug."
 by = ["exempt:baseline"]
 
@@ -522,6 +536,17 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "Existing data is preserved."
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "From then on every user gets the control variant, with the reason completed."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_a_resumed_experiment_answers_enrolled_users_with_their_variant",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
+]
+
+[[unit]]
+text = "So ship the winning experience first: put it in your code, or behind a feature flag at 100%, deploy it, then complete the experiment, and remove the experiment call afterwards."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Events the SDKs send while an experiment is paused, completed or archived (through /tracking/track and /tracking/batch) are stored, but they count in no variant's results."

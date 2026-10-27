@@ -27,7 +27,7 @@ curl -s -H "Authorization: Bearer $METRICS_TOKEN" https://app.example.com/metric
 |--------|------|-------------|
 | `http_requests_total` | Counter | Total HTTP requests by method, endpoint and status code |
 | `http_request_duration_seconds` | Histogram | Request latency (p50, p95, p99 percentiles) |
-| `experiment_assignments_total` | Counter | Variant assignments by experiment and variant |
+| `experiment_assignments_total` | Counter | Variant assignments by experiment and variant; an answer for an experiment that is not ACTIVE is counted under its status (`paused`, …) in place of the variant |
 | `feature_flag_evaluations_total` | Counter | Flag evaluations by flag key and result |
 | `events_tracked_total` | Counter | Tracked events by type |
 | `rate_limit_redis_fallback_active` | Gauge | 1 while this process counts rate limits per process because Redis is unavailable; 0 while it counts them in Redis |

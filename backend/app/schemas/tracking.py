@@ -206,9 +206,10 @@ class VariantAssignmentResponse(BaseModel):
     """Response for POST /tracking/assign: the variant a user was assigned to.
 
     Users that are not eligible (global holdout, mutual exclusion group or
-    targeting rules) still get HTTP 200 with the experiment's control variant
-    so SDKs render the default experience; ``assigned`` is ``False`` and
-    ``reason`` says why.  No assignment or exposure is recorded for them.
+    targeting rules), and every user of an experiment that is not ACTIVE,
+    still get HTTP 200 with the experiment's control variant so SDKs render
+    the default experience; ``assigned`` is ``False`` and ``reason`` says
+    why.  No assignment and no view event is recorded for them.
     """
 
     experiment_key: str
@@ -223,7 +224,11 @@ class VariantAssignmentResponse(BaseModel):
     )
     reason: str = Field(
         "assigned",
-        description="assigned | holdout | mutual_exclusion | targeting",
+        description=(
+            "assigned | holdout | mutual_exclusion | targeting, or the status "
+            "of an experiment that is not ACTIVE: draft | paused | completed "
+            "| archived"
+        ),
     )
 
     model_config = ConfigDict(

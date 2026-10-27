@@ -1386,6 +1386,22 @@ text = "A user who already has an assignment keeps it."
 by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_sticky_assignment_bypasses_all_eligibility_checks"]
 
 [[unit]]
+text = "An experiment that is not ACTIVE: a draft, or a paused, completed or archived experiment, answers every user, enrolled or not, with 200 OK, its control variant, assigned: false and reason set to its status: draft, paused, completed or archived."
+by = ["test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user"]
+
+[[unit]]
+text = "Nothing is recorded."
+by = ["test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_an_answer_for_an_experiment_that_is_not_running_records_nothing"]
+
+[[unit]]
+text = "Users who were assigned keep their assignment, so when a paused experiment is started again each of them gets their variant back."
+by = ["test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_a_resumed_experiment_answers_enrolled_users_with_their_variant"]
+
+[[unit]]
+text = "A draft with no control variant answers 404."
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_a_draft_with_no_control_variant_returns_404"]
+
+[[unit]]
 text = "Body: {\"experiment_key\": string, \"user_id\": string, \"context\": object?}; context at most 8,192 bytes and 10 levels deep (Targeting Context Limits)"
 by = [
     "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_context_over_the_limits_answers_422_and_nothing_is_recorded",
@@ -1393,13 +1409,17 @@ by = [
 ]
 
 [[unit]]
-text = "assigned is false when the user was not enrolled; reason is assigned, holdout, mutual_exclusion or targeting."
-by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_reason_order_is_holdout_then_mutual_exclusion_then_targeting"]
+text = "assigned is false when the user was not enrolled; reason is assigned, holdout, mutual_exclusion or targeting, or the status of an experiment that is not ACTIVE."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_reason_order_is_holdout_then_mutual_exclusion_then_targeting",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
+]
 
 [[unit]]
-text = "Errors: 404 when no ACTIVE experiment has that key; 422 when context is over a limit"
+text = "Errors: 404 when no experiment has that key (No experiment has the key 'checkout'.), or for a draft with no control variant; 422 when context is over a limit"
 by = [
-    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_unknown_key_returns_404",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_a_key_no_experiment_has_is_404_naming_the_key",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_a_draft_with_no_control_variant_returns_404",
     "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_context_over_the_limits_answers_422_and_nothing_is_recorded",
 ]
 

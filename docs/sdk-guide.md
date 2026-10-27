@@ -163,7 +163,7 @@ client = ExperimentationClient(
 
 | Method | Returns | On failure |
 |---|---|---|
-| `get_assignment(experiment_key, user_id, user_attributes=None)` | `Assignment(experiment_key, user_id, variant_id, variant_name, is_control, configuration)` | raises `ExperimentationError(status, body)` (404 when the experiment is not ACTIVE) |
+| `get_assignment(experiment_key, user_id, user_attributes=None)` | `Assignment(experiment_key, user_id, variant_id, variant_name, is_control, configuration)` | raises `ExperimentationError(status, body)` (404 when no experiment has the key, or for a draft with no control variant); an experiment that is not ACTIVE returns its control variant |
 | `get_variant(experiment_key, user_id, user_attributes=None)` | `str` | `default_variant` |
 | `get_feature_flag(flag_key, user_id, user_attributes=None)` | `FlagEvaluation(key, enabled, config, reason)` | raises `ExperimentationError` |
 | `is_feature_enabled(flag_key, user_id, user_attributes=None)` | `bool` | `False` |

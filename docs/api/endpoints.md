@@ -924,6 +924,11 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
   exclusion group and its targeting rules (evaluated against `context`). An ineligible user still gets
   200 OK with the control variant, `assigned: false` and `reason` set to `holdout`, `mutual_exclusion` or
   `targeting`; nothing is recorded for them. A user who already has an assignment keeps it.
+- **An experiment that is not ACTIVE**: a draft, or a paused, completed or archived experiment, answers
+  every user, enrolled or not, with 200 OK, its control variant, `assigned: false` and `reason` set to
+  its status: `draft`, `paused`, `completed` or `archived`. Nothing is recorded. Users who were
+  assigned keep their assignment, so when a paused experiment is started again each of them gets
+  their variant back. A draft with no control variant answers 404.
 - **Headers**: X-API-Key: {api_key}
 - **Body**: `{"experiment_key": string, "user_id": string, "context": object?}`; `context` at most
   8,192 bytes and 10 levels deep ([Targeting Context Limits](#targeting-context-limits))
@@ -941,9 +946,9 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
   }
   ```
   `assigned` is `false` when the user was not enrolled; `reason` is `assigned`, `holdout`,
-  `mutual_exclusion` or `targeting`.
-- **Errors**: 404 when no ACTIVE experiment has that key; 422 when `context` is over a
-  [limit](#targeting-context-limits)
+  `mutual_exclusion` or `targeting`, or the status of an experiment that is not ACTIVE.
+- **Errors**: 404 when no experiment has that key (`No experiment has the key 'checkout'.`), or for a
+  draft with no control variant; 422 when `context` is over a [limit](#targeting-context-limits)
 
 ### Assign a List of Users to an Experiment (beta)
 - **Endpoint**: `POST /api/v1/tracking/assign/batch`

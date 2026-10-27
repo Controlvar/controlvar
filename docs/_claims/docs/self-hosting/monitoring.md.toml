@@ -71,10 +71,11 @@ by = [
 ]
 
 [[unit]]
-text = "experiment_assignments_total | Counter | Variant assignments by experiment and variant"
+text = "experiment_assignments_total | Counter | Variant assignments by experiment and variant; an answer for an experiment that is not ACTIVE is counted under its status (paused, …) in place of the variant"
 by = [
     "test:backend/tests/unit/core/test_metrics.py::test_record_experiment_assignment",
     "test:backend/tests/unit/core/test_metrics_increments.py",
+    "test:backend/tests/unit/core/test_metrics_increments.py::TestTrackingCounters::test_a_not_running_answer_is_counted_under_its_status",
 ]
 
 [[unit]]

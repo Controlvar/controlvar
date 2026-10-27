@@ -69,7 +69,7 @@ default_variant="control", transport=None)`. Instances are thread-safe.
 
 | Method | Returns | Failure behaviour |
 |---|---|---|
-| `get_assignment(experiment_key, user_id, user_attributes=None)` | `Assignment(experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason)` | raises `ExperimentationError` (`status == 404` when the experiment is not ACTIVE) |
+| `get_assignment(experiment_key, user_id, user_attributes=None)` | `Assignment(experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason)` | raises `ExperimentationError` (`status == 404` when no experiment has the key, or for a draft with no control variant); an experiment that is not ACTIVE returns its control variant with `assigned` False and `reason` its status |
 | `get_variant(experiment_key, user_id, user_attributes=None)` | `str` variant name | returns `default_variant` |
 | `get_feature_flag(flag_key, user_id, user_attributes=None)` | `FlagEvaluation(key, enabled, config, reason)` | raises `ExperimentationError` (`status == 404` when the flag key is unknown; a flag that is not ACTIVE returns `enabled=False`, `reason="inactive"`) |
 | `is_feature_enabled(flag_key, user_id, user_attributes=None)` | `bool` | returns `False` |
