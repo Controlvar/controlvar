@@ -4,11 +4,13 @@ import { StatisticalBadge } from '@/components/results/shared/StatisticalBadge';
 import {
   NOT_ENOUGH_DATA,
   analysedAsRate,
+  changeVerdict,
   correctionLabel,
   decisivePValue,
   formatRate,
   formatSignedPct,
   isFiniteNumber,
+  metricLowerIsBetter,
   rateDescription,
 } from '@/components/results/shared/resultFormat';
 import {
@@ -27,14 +29,18 @@ interface MetricComparisonTableProps {
 type SortKey = 'metric' | 'variant' | 'sample_size' | 'mean' | 'improvement' | 'p_value';
 type SortDir = 'asc' | 'desc';
 
-// Colour follows the engine's is_significant — the same decision as the
-// badge and the recommendation. The sign and the badge text carry the
-// meaning; the colour only repeats it.
-function improvementClass(variant: VariantResult): string {
+// Colour follows the verdict in the metric's direction (`changeVerdict`):
+// green for better, red for worse. The words "better" and "worse" are in the
+// cell as well, so the colour only repeats them. A significant change whose
+// direction the response does not give is neutral, never green or red.
+function changeClass(verdict: 'better' | 'worse' | null, variant: VariantResult): string {
   if (variant.is_control) return 'text-slate-600';
-  if (!isFiniteNumber(variant.relative_improvement_pct)) return 'text-slate-500';
-  if (!variant.is_significant) return 'text-slate-500';
-  return variant.relative_improvement_pct >= 0 ? 'text-green-700' : 'text-red-700';
+  if (verdict === 'better') return 'text-green-700';
+  if (verdict === 'worse') return 'text-red-700';
+  if (variant.is_significant && isFiniteNumber(variant.relative_improvement_pct)) {
+    return 'text-slate-700';
+  }
+  return 'text-slate-500';
 }
 
 function formatImprovement(v: number | null | undefined, isControl: boolean): string {
@@ -139,7 +145,9 @@ function columns(adjusted: boolean): [SortKey, string][] {
     ['variant', 'Variant'],
     ['sample_size', 'Sample Size'],
     ['mean', 'Value'],
-    ['improvement', 'Improvement'],
+    // "Change", not "Improvement": a significant rise is worse on a metric
+    // where lower is better. The sort stays on the signed change.
+    ['improvement', 'Change'],
     ['p_value', adjusted ? 'Adjusted p-value' : 'p-value'],
   ];
 }
@@ -260,6 +268,7 @@ export function MetricComparisonTable({
             const decisive = decisivePValue(variant);
             const k = comparisons.get(metric.metric_id) ?? 0;
             const adjustedShown = showsAdjusted(variant, k, correctionMethod);
+            const verdict = changeVerdict(metric, variant);
             return (
               <tr
                 key={`${metric.metric_id}-${variant.variant_id}`}
@@ -271,6 +280,9 @@ export function MetricComparisonTable({
                   {metric.metric_name}
                   {metric.is_primary && (
                     <span className="ml-1.5 text-xs text-blue-700 font-normal">primary</span>
+                  )}
+                  {metricLowerIsBetter(metric) === true && (
+                    <span className="ml-1.5 text-xs text-slate-600 font-normal">lower is better</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-slate-700">
@@ -292,8 +304,9 @@ export function MetricComparisonTable({
                     )}
                   </span>
                 </td>
-                <td className={`px-4 py-3 font-medium ${improvementClass(variant)}`}>
-                  {formatImprovement(variant.relative_improvement_pct, variant.is_control)}
+                <td className={`px-4 py-3 font-medium ${changeClass(verdict, variant)}`}>
+                  <span>{formatImprovement(variant.relative_improvement_pct, variant.is_control)}</span>
+                  {verdict && <span> · {verdict}</span>}
                 </td>
                 <td className="px-4 py-3 text-slate-700">
                   <PValueCell variant={variant} comparisons={k} correctionMethod={correctionMethod} />

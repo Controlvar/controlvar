@@ -78,6 +78,12 @@ export interface MetricResult {
   metric_name: string;
   metric_type: 'conversion' | 'revenue' | 'count' | 'duration' | 'custom';
   is_primary: boolean;
+  /**
+   * True when a decrease is the good direction for this metric. The winner,
+   * the recommendation and the table's better/worse read it. Absent from a
+   * server older than the field.
+   */
+  lower_is_better?: boolean;
   variants: VariantResult[];
 }
 
