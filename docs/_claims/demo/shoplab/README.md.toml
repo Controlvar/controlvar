@@ -327,7 +327,7 @@ by = [
 ]
 
 [[unit]]
-text = "Then go to /products and note \"Sorted by Recommended for you\"."
+text = "Then go to /products and note the sort the page names: it follows the visitor's arm, and \"Recommended for you\" is ml_personalized's, the arm the weights favour."
 by = ["journey:demo-shoplab#products"]
 
 [[unit]]

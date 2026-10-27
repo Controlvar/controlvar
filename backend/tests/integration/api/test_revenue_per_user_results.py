@@ -16,8 +16,8 @@ are known:
 
 Events that must count nowhere are added: a purchase from a user with no
 assignment, one tagged with the control's variant from a user assigned to the
-treatment, one with no variant, another event's value, and an exposure event
-that carries the metric's event name and a value.
+treatment, one with no variant, another event's value, and an event of a type
+in ``EXPOSURE_EVENT_TYPES`` that carries the metric's event name and a value.
 
 A refund, a negative value, is added to its buyer's total: that has its own
 small experiment.
@@ -192,7 +192,7 @@ def experiment(admin_client, db_session, make_experiment):
                 value=1000.0,
                 created_at=at,
             ),
-            # ... and an exposure that carries the metric's name and a value.
+            # ... and an EXPOSURE_EVENT_TYPES event with the metric's name and a value.
             Event(
                 event_type=EventType.EXPOSURE.value,
                 event_name="purchase",

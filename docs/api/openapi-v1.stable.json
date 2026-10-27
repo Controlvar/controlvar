@@ -7861,6 +7861,16 @@
       "MetricResult": {
         "description": "Aggregated results for one metric across all experiment variants.\n\nHolds the per-variant ``VariantResult`` objects together with summary\nflags that indicate whether the experiment produced a statistically\nsignificant winner for this metric.",
         "properties": {
+          "analysis": {
+            "default": "proportion",
+            "description": "How the variants are compared.  'mean' for a revenue metric: the mean value per assigned user, compared with Welch's t-test.  'proportion' for every other metric type: the share of users who converted, compared with Fisher's exact test.",
+            "enum": [
+              "proportion",
+              "mean"
+            ],
+            "title": "Analysis",
+            "type": "string"
+          },
           "has_significant_result": {
             "description": "True when at least one non-control variant has is_significant=True for this metric.",
             "title": "Has Significant Result",
@@ -10232,7 +10242,7 @@
           "analysed_as": {
             "const": "conversion",
             "default": "conversion",
-            "description": "The test planned for. Every metric is analysed as a conversion today, so this is always 'conversion'.",
+            "description": "The test planned for: always 'conversion', whatever the metric's type. For a revenue metric, which the results analyse as a mean per user, the plan is for the share of users who send its event.",
             "title": "Analysed As",
             "type": "string"
           },
@@ -12732,8 +12742,42 @@
         "type": "object"
       },
       "VariantResult": {
-        "description": "Statistical results for a single variant on a single metric.\n\nContains all per-variant statistics produced by the analysis engine,\nincluding sample counts, point estimates, confidence intervals,\nsignificance tests, and effect-size characterisation.\n\nFor the control variant, fields that represent a comparison vs. the\ncontrol (``p_value``, ``adjusted_p_value``, ``relative_improvement_pct``,\n``effect_size``, ``effect_size_label``, ``power``, and\n``statistical_test_used``) are ``None``.\n\nFor conversion metrics ``std_dev`` and ``conversions`` are both set;\n``mean`` holds the observed conversion rate in [0, 1].  For continuous\nmetrics (revenue, duration, custom) ``conversions`` is ``None`` and\n``mean`` holds the raw arithmetic mean.",
+        "description": "Statistical results for a single variant on a single metric.\n\nContains all per-variant statistics produced by the analysis engine,\nincluding sample counts, point estimates, confidence intervals,\nsignificance tests, and effect-size characterisation.\n\nFor the control variant, fields that represent a comparison vs. the\ncontrol (``p_value``, ``adjusted_p_value``, ``relative_improvement_pct``,\n``effect_size``, ``effect_size_label``, ``power``, and\n``statistical_test_used``) are ``None``.\n\nThe metric's ``analysis`` says what ``mean`` is.  For a metric analysed\nas a proportion (every type but revenue) ``mean`` is the share of the\nvariant's users who converted, in [0, 1].  For a revenue metric\n(``analysis`` ``\"mean\"``) it is the mean value per assigned user: each\nuser's values added up, 0 for a user with none.  ``conversions`` is the\nnumber of users who converted either way.",
         "properties": {
+          "absolute_difference": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the metric's analysis is 'mean': this variant's mean minus the control's, per assigned user.  None for the control, for a proportion metric, and when either variant has fewer than 2 users.",
+            "title": "Absolute Difference"
+          },
+          "absolute_difference_ci": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Two-sided Welch-Satterthwaite confidence interval of absolute_difference as (lower, upper), at the response's confidence_level and not adjusted for multiple comparisons.  None when absolute_difference is None, and when neither variant's per-user values vary.",
+            "title": "Absolute Difference Ci"
+          },
           "adjusted_p_value": {
             "anyOf": [
               {
@@ -12747,7 +12791,7 @@
             "title": "Adjusted P Value"
           },
           "confidence_interval": {
-            "description": "Two-sided confidence interval as (lower, upper).  Its level is the response's confidence_level: the one the request sent, otherwise the experiment's stored level.",
+            "description": "Two-sided confidence interval as (lower, upper).  Its level is the response's confidence_level: the one the request sent, otherwise the experiment's stored level.  A variant with too few users for one (none, or fewer than 2 for a mean) has (mean, mean).",
             "maxItems": 2,
             "minItems": 2,
             "prefixItems": [
@@ -12770,7 +12814,7 @@
                 "type": "null"
               }
             ],
-            "description": "Number of assigned users with at least one conversion event; a user who converts several times counts once, so this never exceeds sample_size.  None for non-conversion metric types (revenue, duration, custom).",
+            "description": "Number of assigned users with at least one conversion event; a user who converts several times counts once, so this never exceeds sample_size.  For a revenue metric too: the users who sent the metric's event, whatever its value.",
             "title": "Conversions"
           },
           "effect_size": {
@@ -12807,7 +12851,7 @@
             "type": "boolean"
           },
           "mean": {
-            "description": "For conversion metrics: observed conversion rate in [0, 1].  For continuous metrics: raw arithmetic mean of observed values.",
+            "description": "When the metric's analysis is 'proportion': the share of the variant's users who converted, in [0, 1].  When it is 'mean' (a revenue metric): the mean value per assigned user, each user's values added up and 0 for a user with none.",
             "title": "Mean",
             "type": "number"
           },
@@ -12844,7 +12888,7 @@
                 "type": "null"
               }
             ],
-            "description": "Relative change in the metric mean compared with the control, expressed as a percentage: ((variant_mean - control_mean) / control_mean) * 100.  The sign is the raw change whatever the metric's direction: when the metric's lower_is_better is true, a negative value is the good direction.  None for the control variant.",
+            "description": "Relative change in the metric mean compared with the control, expressed as a percentage: ((variant_mean - control_mean) / control_mean) * 100.  The sign is the raw change whatever the metric's direction: when the metric's lower_is_better is true, a negative value is the good direction.  None for the control variant, and for a mean when the control's mean is 0.",
             "title": "Relative Improvement Pct"
           },
           "sample_size": {
@@ -12873,7 +12917,7 @@
                 "type": "null"
               }
             ],
-            "description": "Sample standard deviation of observed values.  None for conversion metrics (variance is implied by the rate).",
+            "description": "Standard deviation of one user's outcome: sqrt(mean * (1 - mean)) for a proportion, the sample standard deviation of the per-user values for a mean.  None when the variant has no users, or for a mean when it has fewer than 2.",
             "title": "Std Dev"
           },
           "variant_id": {
