@@ -149,6 +149,7 @@ nav:
   - HIPAA Compliance: hipaa/overview.md
 - Self-Hosting:
   - AWS CDK Deployment: self-hosting/cdk.md
+  - AWS installer (beta): self-hosting/aws-install.md
   - Kubernetes (Helm): self-hosting/kubernetes.md
   - Docker Compose (self-hosting stack): https://github.com/Controlvar/controlvar/blob/main/deploy/compose/README.md
   - Environment Variables: getting-started/environment-setup.md
