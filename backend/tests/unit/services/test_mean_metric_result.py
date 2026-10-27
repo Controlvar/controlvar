@@ -17,7 +17,9 @@ mean (#312).
   the p-value equal scipy's ``t.ppf`` and ``ttest_ind``,
   ``AnalysisService.cohens_d`` and ``NormalIndPower``: the variance is the
   sample variance (ddof 1).
-* **Refusals.**  Sums with a negative variance are refused, not computed.
+* **Refusals.**  Sums with a negative variance are refused, not computed.  A
+  rounding residue below 0 (an arm with no buyers, centred on the grand mean)
+  is read as 0, within the tolerance the CUPED sums use.
 """
 
 import math
@@ -282,6 +284,37 @@ def test_negative_variance_refused(negative_arm):
             metric=_METRIC,
         )
     assert refused.value.code == "result_invalid"
+
+
+@pytest.mark.parametrize("no_buyer_arm", ["control", "treatment"])
+def test_a_no_buyer_arm_gives_a_result(no_buyer_arm):
+    """Every value 0 in an arm of 3, centred on k = 0.1 (the other arm has the
+    buyers).  The true variance is 0, but the float64 sums leave
+    ``sum_d2 - sum_d ** 2 / n`` at about -3.5e-18: rounding, read as 0, not a
+    negative variance."""
+    k = 0.1
+    no_buyer = _centred_sums(np.zeros(3), k)
+    buyers = _centred_sums(np.array([0.0, 0.0, 0.6]), k)
+    # The residue is there, or this would not test the tolerance.
+    assert no_buyer[1] - no_buyer[0] ** 2 / 3 < 0
+    control, treatment = (
+        (no_buyer, buyers) if no_buyer_arm == "control" else (buyers, no_buyer)
+    )
+    result = mean_metric_result(
+        k,
+        [(_CONTROL, 3, *control), (_TREATMENT, 3, *treatment)],
+        _ALPHA,
+        "none",
+        metric=_METRIC,
+    )
+    v = _by_name(result)
+    empty = v["control" if no_buyer_arm == "control" else "t1"]
+    assert empty["mean"] == pytest.approx(0.0, abs=1e-15)
+    assert empty["std_dev"] == 0.0
+    # One arm varies, so the treatment is compared.
+    assert v["t1"]["p_value"] is not None
+    assert v["t1"]["note"] is None
+    MetricResult.model_validate(result)
 
 
 @pytest.mark.parametrize(

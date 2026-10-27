@@ -182,7 +182,8 @@ def test_fewer_than_2_units_says_so_not_a_generic_error(monkeypatch):
 
 
 def test_sums_no_sample_can_have_are_result_invalid(monkeypatch):
-    """sum_d2 below sum_d**2 / n is a negative variance: refused, not clamped."""
+    """sum_d2 far below sum_d**2 / n (1 against 50) is a negative variance no
+    rounding explains: refused, not clamped."""
     results = _run(
         monkeypatch,
         [_mean_plan()],
@@ -200,6 +201,32 @@ def test_sums_no_sample_can_have_are_result_invalid(monkeypatch):
     assert metric["message"] == (
         "Not computed: " + MESSAGES[WarehouseErrorCode.RESULT_INVALID]
     )
+
+
+@pytest.mark.regression
+def test_a_no_buyer_arm_is_a_result_not_result_invalid(monkeypatch):
+    """Every value 0 in the control, centred on k = 0.1: its sums leave a
+    rounding residue below 0 (about -3.5e-18), which is read as 0.  Before,
+    the run reported this metric "not computed" as result_invalid."""
+    sum_d, sum_d2 = "-0.30000000000000004", "0.030000000000000006"
+    assert float(sum_d2) - float(sum_d) ** 2 / 3 < 0
+    results = _run(
+        monkeypatch,
+        [_mean_plan()],
+        {
+            "SELECT 'diagnostics'": [_diagnostics(6)],
+            "SELECT 'Revenue'": [
+                _row("control", 3, sum_d, sum_d2, k="0.1"),
+                _row("treatment", 3, "0.3", "0.27", k="0.1"),
+            ],
+        },
+    )
+    (metric,) = results["metrics"]
+    assert metric["computed"] is True, metric
+    control, treatment = metric["result"]["variants"]
+    assert control["mean"] == pytest.approx(0.0, abs=1e-15)
+    assert control["std_dev"] == 0.0
+    assert treatment["statistical_test_used"] == "welch_t_test"
 
 
 def test_no_variation_is_a_note_on_the_variant_not_a_number(monkeypatch):
