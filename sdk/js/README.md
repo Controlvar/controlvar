@@ -120,7 +120,8 @@ Every request carries `X-API-Key`, `Content-Type: application/json`, `Accept: ap
 | `evaluateFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `{key, enabled, config, reason}` |
 | `getAllFlags` | `GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON>` | `{"<flag_key>": bool}` |
 | `track` with a key | `POST /api/v1/tracking/track` | ignored |
-| `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` `{events: [...]}` (≤ 100) | `{success_count, failure_count, errors}` |
+| `track` without keys | `POST /api/v1/tracking/batch` `{events: [...]}` (≤ 100), one entry per experiment and flag it reaches; with none, `POST /api/v1/tracking/track` with no key | ignored |
+| `trackBatch` | `POST /api/v1/tracking/batch` `{events: [...]}` (≤ 100) | `{success_count, failure_count, errors}` |
 | `fetchAssignments` | `GET /api/v1/tracking/assignments/{user_id}?active_only=true` | list of rows |
 
 Errors: 401 bad key, 404 an unknown experiment or flag key, or a draft experiment with no control variant (never cached), 422 invalid event, 429 rate limited.

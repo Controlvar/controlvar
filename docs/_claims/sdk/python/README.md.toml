@@ -420,9 +420,19 @@ by = [
 ]
 
 [[unit]]
-text = "track without keys, track_batch | POST /api/v1/tracking/batch | {events: [<track body>, …]} (≤ 100 per request) | {success_count, failure_count, errors}"
+text = "track without keys | POST /api/v1/tracking/batch, one entry per experiment and flag it reaches; with none, POST /api/v1/tracking/track | {events: [<track body>, …]} (≤ 100 per request); with none, the track body with no key | ignored"
 by = [
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_fans_out_to_cached_assignment_and_flag",
     "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_chunks_at_batch_limit",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_nothing_attributed_sends_the_event_once_to_track_with_no_key",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_a_batch_answered_2xx_returns_true_even_when_an_entry_failed",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "track_batch | POST /api/v1/tracking/batch | {events: [<track body>, …]} (≤ 100 per request) | {success_count, failure_count, errors}"
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackBatch::test_chunks_aggregates_and_offsets_error_indexes",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
 
