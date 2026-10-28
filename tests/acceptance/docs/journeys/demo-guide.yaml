@@ -571,7 +571,9 @@ steps:
         - role: cell
           name: 8.44%
         - role: cell
-          name: +15.0%
+          name: +15.0% · better
+          quote: false
+          reason: the change cell follows the +15.0% lift the guide quotes with its direction word
       cells:
         - row: new_copy
           column: p-value
