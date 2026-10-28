@@ -281,7 +281,7 @@ by = [
 ]
 
 [[unit]]
-text = "4 | Automatic rollbacks ON → polls the flag until the safety monitor sets it to 5%, printing the error rate and each of the monitor's passes; rolls back by hand only after two passes that started after the step began ran without a rollback, or when no pass runs for 6 min. OFF → manual rollback. Either way the rollback pauses the flag's rollout schedule | GET /safety/settings, GET /scheduler/safety/history, POST /safety/feature-flags/{id}/rollback?percentage=5&reason="
+text = "4 | Automatic rollbacks ON → polls the flag until the safety monitor sets it to 5%, printing the error rate and each of the monitor's passes; rolls back by hand only after two passes newer than the newest one recorded when the step began (which can include a pass already running then) ran without a rollback, or when no pass runs for 6 min. OFF → manual rollback. Either way the rollback pauses the flag's rollout schedule | GET /safety/settings, GET /scheduler/safety/history, POST /safety/feature-flags/{id}/rollback?percentage=5&reason="
 by = [
     "test:demo/streampulse/simulator/test_story.py::test_step_4_waits_for_the_safety_scheduler_when_automatic_rollbacks_are_on",
     "test:demo/streampulse/simulator/test_story.py::test_step_4_rolls_back_by_hand_when_automatic_rollbacks_are_off",

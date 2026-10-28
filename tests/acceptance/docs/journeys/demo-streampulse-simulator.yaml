@@ -43,9 +43,10 @@
 # (#1376); most likely the breach fell between two passes of the monitor
 # (inferred: that run kept no record of the passes, which the story now
 # prints). `rolled-back` waits up to 900 s from
-# `critical`: the story's longest path from there (the rest of that round, four
-# more rounds of about 95 s, the pace, and six minutes without a pass) is about
-# 860 s. The
+# `critical`: measured on a clocked fake of the platform, every path on which
+# the monitor acts ends within 299 s of `critical` at its 5-minute default
+# cadence, and a monitor that never acts or dies fails `by-the-monitor` within
+# about 780 s, so the 900 s bound is never what decides. The
 # journey's polls wait for what the story does: each is bounded and every
 # 10 s (a poll every 5 s, the length of uvicorn's default keep-alive, had one
 # request reset in run 38448972328). The monitor may roll the flag back while step 3's

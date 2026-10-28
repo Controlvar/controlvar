@@ -1043,6 +1043,31 @@ def test_step_3_goes_on_until_the_monitor_rolls_back_when_automatic_rollbacks_ar
     assert client.audit == [(MONITOR, 25, 5)] and client.writes() == []
 
 
+def test_step_3_reports_each_monitor_pass_in_exactly_one_round():
+    client = FakeStoryClient()
+    client.flag["rollout_percentage"] = 25
+    runs: list[list[str]] = []
+
+    def run_traffic(args):
+        runs.append(args)
+        client.error_rate = 0.07
+        # rounds 1 and 2 each see one pass that does not act; round 3's rolls the flag back
+        client.monitor_pass(acts=len(runs) == 3)
+        return 0
+
+    s, out = make_story(client, run_traffic=run_traffic)
+    assert s.step_3() is True
+    assert len(runs) == 3
+    text = out.getvalue()
+    starts = [h["started_at"] for h in reversed(client.history)]
+    assert len(starts) == 3
+    lines = [line for line in text.splitlines() if "passes since the last reading" in line]
+    assert len(lines) == 3
+    for started, line in zip(starts, lines):
+        assert started in line
+        assert text.count(started) == 1  # a later round does not report it again
+
+
 def test_step_3_stops_at_the_first_critical_reading_when_automatic_rollbacks_are_off():
     client = FakeStoryClient()
     client.flag["rollout_percentage"] = 25
