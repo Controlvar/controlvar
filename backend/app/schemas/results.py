@@ -144,10 +144,12 @@ class VariantResult(BaseModel):
     ``effect_size``, ``effect_size_label``, ``power``, and
     ``statistical_test_used``) are ``None``.
 
-    For conversion metrics ``std_dev`` and ``conversions`` are both set;
-    ``mean`` holds the observed conversion rate in [0, 1].  For continuous
-    metrics (revenue, duration, custom) ``conversions`` is ``None`` and
-    ``mean`` holds the raw arithmetic mean.
+    The metric's ``analysis`` says what ``mean`` is.  For a metric analysed
+    as a proportion (every type but revenue) ``mean`` is the share of the
+    variant's users who converted, in [0, 1].  For a revenue metric
+    (``analysis`` ``"mean"``) it is the mean value per assigned user: each
+    user's values added up, 0 for a user with none.  ``conversions`` is the
+    number of users who converted either way.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -167,22 +169,26 @@ class VariantResult(BaseModel):
         description=(
             "Number of assigned users with at least one conversion event; a "
             "user who converts several times counts once, so this never "
-            "exceeds sample_size.  None for non-conversion metric types "
-            "(revenue, duration, custom)."
+            "exceeds sample_size.  For a revenue metric too: the users who "
+            "sent the metric's event, whatever its value."
         ),
     )
     mean: float = Field(
         ...,
         description=(
-            "For conversion metrics: observed conversion rate in [0, 1].  "
-            "For continuous metrics: raw arithmetic mean of observed values."
+            "When the metric's analysis is 'proportion': the share of the "
+            "variant's users who converted, in [0, 1].  When it is 'mean' (a "
+            "revenue metric): the mean value per assigned user, each user's "
+            "values added up and 0 for a user with none."
         ),
     )
     std_dev: Optional[float] = Field(
         None,
         description=(
-            "Sample standard deviation of observed values.  "
-            "None for conversion metrics (variance is implied by the rate)."
+            "Standard deviation of one user's outcome: sqrt(mean * (1 - mean)) "
+            "for a proportion, the sample standard deviation of the per-user "
+            "values for a mean.  None when the variant has no users, or for "
+            "a mean when it has fewer than 2."
         ),
     )
     confidence_interval: tuple[float, float] = Field(
@@ -190,7 +196,9 @@ class VariantResult(BaseModel):
         description=(
             "Two-sided confidence interval as (lower, upper).  "
             "Its level is the response's confidence_level: the one the "
-            "request sent, otherwise the experiment's stored level."
+            "request sent, otherwise the experiment's stored level.  A "
+            "variant with too few users for one (none, or fewer than 2 for a "
+            "mean) has (mean, mean)."
         ),
     )
     p_value: Optional[float] = Field(
@@ -238,7 +246,7 @@ class VariantResult(BaseModel):
             "control_mean) * 100.  The sign is the raw change whatever the "
             "metric's direction: when the metric's lower_is_better is true, a "
             "negative value is the good direction.  None for the control "
-            "variant."
+            "variant, and for a mean when the control's mean is 0."
         ),
     )
     power: Optional[float] = Field(
@@ -253,6 +261,24 @@ class VariantResult(BaseModel):
         None,
         description=(
             "The statistical test that produced p_value.  None for the control variant."
+        ),
+    )
+    absolute_difference: Optional[float] = Field(
+        None,
+        description=(
+            "When the metric's analysis is 'mean': this variant's mean minus "
+            "the control's, per assigned user.  None for the control, for a "
+            "proportion metric, and when either variant has fewer than 2 users."
+        ),
+    )
+    absolute_difference_ci: Optional[tuple[float, float]] = Field(
+        None,
+        description=(
+            "Two-sided Welch-Satterthwaite confidence interval of "
+            "absolute_difference as (lower, upper), at the response's "
+            "confidence_level and not adjusted for multiple comparisons.  "
+            "None when absolute_difference is None, and when neither variant's "
+            "per-user values vary."
         ),
     )
 
@@ -307,6 +333,15 @@ class MetricResult(BaseModel):
             "winning_variant_id, and for the primary metric the summary's "
             "recommendation and the Bayesian decision, follow it.  False when "
             "the definition does not set it."
+        ),
+    )
+    analysis: Literal["proportion", "mean"] = Field(
+        "proportion",
+        description=(
+            "How the variants are compared.  'mean' for a revenue metric: the "
+            "mean value per assigned user, compared with Welch's t-test.  "
+            "'proportion' for every other metric type: the share of users who "
+            "converted, compared with Fisher's exact test."
         ),
     )
     variants: List[VariantResult] = Field(
@@ -779,8 +814,9 @@ class SampleSizeResult(BaseModel):
     analysed_as: Literal["conversion"] = Field(
         "conversion",
         description=(
-            "The test planned for. Every metric is analysed as a conversion "
-            "today, so this is always 'conversion'."
+            "The test planned for: always 'conversion', whatever the metric's "
+            "type. For a revenue metric, which the results analyse as a mean "
+            "per user, the plan is for the share of users who send its event."
         ),
     )
     alpha: float = Field(

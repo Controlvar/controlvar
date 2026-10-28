@@ -159,8 +159,11 @@ text = "Mark one metric as the primary metric (the one you decide on); any other
 by = ["journey:experiment-results#type-next"]
 
 [[unit]]
-text = "Every metric is analysed as a conversion today: whatever its type, the results report the share of users who sent the metric's event."
-by = ["test:frontend/src/tests/components/ResultsTruthfulness.test.tsx::labels the row as a share of users, with no \"$\" and no \"per user\""]
+text = "A revenue metric's results report its mean value per assigned user; every other metric reports the share of users who sent the metric's event."
+by = [
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_only_a_revenue_metric_as_a_mean",
+]
 
 [[unit]]
 text = "The metric's event name must match exactly what your engineers track in code (e.g., checkout_complete)."
@@ -904,8 +907,11 @@ text = "no users have been assigned yet, or there is no rate to plan from (no co
 by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
 
 [[unit]]
-text = "the metric is not a conversion: every metric is analysed as a conversion today, so the plan is for a conversion rate."
-by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
+text = "the metric is not a conversion: the plan is for a conversion rate whatever the metric's type, so a revenue metric's plan is for the share of users who buy."
+by = [
+    "test:frontend/src/tests/components/SampleSizeMeter.test.tsx",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_other_analyses_of_a_revenue_metric_stay_on_the_share_of_buyers",
+]
 
 [[unit]]
 text = "The Power Calculator plans conversion rates only too, and the tab says so;"

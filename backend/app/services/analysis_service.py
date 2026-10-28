@@ -29,6 +29,8 @@ from backend.app.services.event_matching import (
     CONVERSION_SQL_PREDICATE,
     CONVERTING_USERS_JOIN,
     CONVERTING_USERS_SQL,
+    _assigned_pairs,
+    conversion_event_filter,
     count_converting_users,
     count_converting_users_any,
     first_conversion_times,
@@ -38,18 +40,25 @@ from backend.app.services.srm_service import (
     sample_ratio_check,
 )
 from backend.app.services.sufficient_stats_analysis import (
+    MEAN_METRIC_TYPES,
     BinomialVariant,
     adjusted_p_values,
     binomial_metric_result,
     binomial_variant_results,
     effect_size_label,
     metric_lower_is_better,
+    metric_type_name,
+    per_user_mean_metric_result,
 )
 
 logger = logging.getLogger(__name__)
 
 #: Monte Carlo samples per variant for the Bayesian block of the results API.
 BAYESIAN_N_SAMPLES: int = DEFAULT_N_SAMPLES
+
+#: An event value counts towards a per-user total when its absolute value is
+#: at most this.  NULL, NaN and the infinities fail the comparison too.
+VALUE_BOUND: float = 1e12
 
 
 class AnalysisService:
@@ -143,22 +152,30 @@ class AnalysisService:
 
         # Return formatted results
         # Schema-shaped results for the analytics API (schemas/results.py).
+        # A revenue metric is its mean per assigned user; every other metric
+        # type is the share of users who converted.
         alpha = 1.0 - confidence_level
         metrics = [
-            binomial_metric_result(
-                [
-                    (
-                        BinomialVariant(
-                            v["variant_id"], v["variant_name"], v["is_control"]
-                        ),
-                        v["sample_size"],
-                        v["conversions"],
-                    )
-                    for v in raw["variant_results"]
-                ],
-                alpha,
-                correction_method,
-                metric=metric,
+            (
+                self._per_user_mean_result(
+                    experiment, metric, raw, alpha, correction_method
+                )
+                if metric_type_name(metric) in MEAN_METRIC_TYPES
+                else binomial_metric_result(
+                    [
+                        (
+                            BinomialVariant(
+                                v["variant_id"], v["variant_name"], v["is_control"]
+                            ),
+                            v["sample_size"],
+                            v["conversions"],
+                        )
+                        for v in raw["variant_results"]
+                    ],
+                    alpha,
+                    correction_method,
+                    metric=metric,
+                )
             )
             for metric, raw in zip(metric_definitions, metrics_results)
         ]
@@ -213,6 +230,72 @@ class AnalysisService:
     # The proportion computation lives in sufficient_stats_analysis (#404);
     # these names stay for the callers and tests that use them.
     _adjusted_p_values = staticmethod(adjusted_p_values)
+
+    def _per_user_mean_result(
+        self,
+        experiment: Experiment,
+        metric: Metric,
+        raw: Dict[str, Any],
+        alpha: float,
+        correction_method: str,
+    ) -> Dict[str, Any]:
+        """A revenue metric's result: its mean value per assigned user.
+
+        ``raw`` is the metric's ``calculate_metric_results`` output, which has
+        each variant's assigned users and converting users; the value totals
+        are read here (``value_totals``).
+        """
+        return per_user_mean_metric_result(
+            [
+                (
+                    BinomialVariant(
+                        v["variant_id"], v["variant_name"], v["is_control"]
+                    ),
+                    v["sample_size"],
+                    v["conversions"],
+                    self.value_totals(
+                        experiment.id, v["variant_id"], metric.event_name
+                    ),
+                )
+                for v in raw["variant_results"]
+            ],
+            alpha,
+            correction_method,
+            metric=metric,
+        )
+
+    def value_totals(
+        self, experiment_id: Any, variant_id: Any, event_name: Optional[str]
+    ) -> List[float]:
+        """The value total of each user of ``variant_id`` who has one.
+
+        The events counted are the ones ``count_converting_users`` counts for
+        the metric: matching ``conversion_event_filter(event_name)``, tagged
+        with ``variant_id``, from a user assigned to that variant
+        (``_assigned_pairs``; no SQL join, as there).  An event's value counts
+        when ``abs(value) <= VALUE_BOUND``: an event with no value, or a value
+        that is not finite or is beyond the bound, adds nothing to its user's
+        total, and the user still counts as a converting user.  A user whose
+        every event is like that has no total here, so their value is 0.
+        """
+        rows = (
+            self.db.query(Event.user_id, func.sum(Event.value))
+            .filter(
+                Event.experiment_id == experiment_id,
+                Event.variant_id == variant_id,
+                conversion_event_filter(event_name),
+                func.abs(Event.value) <= VALUE_BOUND,
+            )
+            .group_by(Event.user_id)
+            .all()
+        )
+        pairs = _assigned_pairs(
+            self.db, experiment_id, (str(user_id) for user_id, _ in rows)
+        )
+        variant = str(variant_id)
+        return [
+            float(total) for user_id, total in rows if (variant, str(user_id)) in pairs
+        ]
 
     @staticmethod
     def _sample_size_adequate(

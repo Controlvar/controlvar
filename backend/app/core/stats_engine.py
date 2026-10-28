@@ -36,7 +36,8 @@ import numpy as np
 #: Bumped whenever a change alters numbers a client could have persisted
 #: (sampling strategy, estimator, default priors, thresholds).  1.5.0: the
 #: winner, the recommendation and the Bayesian decision read the metric's
-#: ``lower_is_better``.
+#: ``lower_is_better``, and ``/results`` analyses a revenue metric as its mean
+#: per assigned user.
 ENGINE_VERSION: str = "1.5.0"
 
 #: Mask that keeps the derived seed inside the signed 64-bit range.

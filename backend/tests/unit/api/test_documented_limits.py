@@ -142,13 +142,6 @@ def test_every_metric_is_planned_as_a_conversion():
     assert field.annotation.__args__ == ("conversion",)
 
 
-def test_the_results_use_one_proportion_test_for_every_metric():
-    source = (APP / "services" / "analysis_service.py").read_text(encoding="utf-8")
-    body = source.split("def get_experiment_results", 1)[1].split("\n    def ", 1)[0]
-    assert "binomial_metric_result(" in body
-    assert "mean_metric_result(" not in body and "metric_type" not in body
-
-
 def test_no_call_says_that_two_user_ids_are_one_user(routes):
     """There is no identify or alias call: an assignment names one user id,
     and no route joins two, so a user who signs in under a new id is a new

@@ -37,12 +37,19 @@ text = "Experiments and results"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A revenue, count or duration metric analysed by its values | Every metric is analysed as a conversion: whether each user sent the metric's event. A metric's type is stored, and its events' values are not analysed."
+text = "A revenue, count or duration metric analysed by its values | A revenue metric is analysed as its mean value per assigned user: each user's event values added up, 0 for a user with none, compared with Welch's t-test. A count, duration or custom metric is analysed as a conversion: whether each user sent the metric's event; its events' values are not analysed."
 by = [
-    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_a_revenue_metric_is_analysed_as_a_conversion",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_results_use_one_proportion_test_for_every_metric",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_every_metric_is_planned_as_a_conversion",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_only_a_revenue_metric_as_a_mean",
 ]
+
+[[unit]]
+text = "Every event value counted in a revenue metric | A value that is not a number, is infinite, or is larger than 10^12 in size, in the unit it was sent in, adds nothing to its user's total; the event still counts its user as a buyer."
+by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test_values_that_are_not_finite_or_too_large_add_nothing"]
+
+[[unit]]
+text = "A revenue metric's sequential analysis, Bayesian analysis, sample-size plan and daily series by its values | Each is of the share of users who sent the metric's event, as for a conversion. CUPED does not analyse a revenue metric."
+by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_other_analyses_of_a_revenue_metric_stay_on_the_share_of_buyers"]
 
 [[unit]]
 text = "A traffic allocation for the experiment as a whole | There is none. Variant weights must add up to exactly 100%, or the request is refused with 422. Users are left out only by targeting rules, a mutual exclusion group or the global holdout."

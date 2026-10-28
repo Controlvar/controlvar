@@ -3,8 +3,6 @@
 * any signed-in user, a VIEWER included, can create an API key for themselves,
   and that key assigns users and tracks their events;
 * an experiment with one variant cannot be started;
-* a revenue metric is analysed as a conversion: the results count the users
-  who sent its event, not the event's value;
 * every flag evaluates with ``"config": null``.
 
 The pages that say so are tied to these tests by their registries under
@@ -155,57 +153,6 @@ def test_an_experiment_with_one_variant_cannot_start(client, db_session):
     )
     assert resp.status_code == 400, resp.text
     assert "at least two variants" in resp.json()["detail"]
-
-
-def test_a_revenue_metric_is_analysed_as_a_conversion(client, db_session):
-    developer = _user(db_session, UserRole.DEVELOPER)
-    experiment = _experiment(client, developer, metric_type="revenue")
-    started = client.post(
-        f"/api/v1/experiments/{experiment['id']}/start", headers=_auth(developer)
-    )
-    assert started.status_code == 200, started.text
-    key = {
-        "X-API-Key": client.post(
-            "/api/v1/api-keys", json={"name": "rev"}, headers=_auth(developer)
-        ).json()["key"]
-    }
-    event = experiment["metrics"][0]["event_name"]
-    users = [f"rev-user-{i}" for i in range(6)]
-    for user_id in users:
-        resp = client.post(
-            "/api/v1/tracking/assign",
-            json={"experiment_key": experiment["key"], "user_id": user_id},
-            headers=key,
-        )
-        assert resp.status_code == 200, resp.text
-    # Two users buy: one for 10, one for 1000, twice.
-    for user_id, value in ((users[0], 10), (users[1], 1000), (users[1], 1000)):
-        resp = client.post(
-            "/api/v1/tracking/track",
-            json={
-                "event_type": "conversion",
-                "event_name": event,
-                "user_id": user_id,
-                "experiment_key": experiment["key"],
-                "value": value,
-            },
-            headers=key,
-        )
-        assert resp.status_code in (200, 201), resp.text
-
-    results = client.get(
-        f"/api/v1/results/{experiment['id']}",
-        params={"use_cache": "false"},
-        headers=_auth(developer),
-    )
-    assert results.status_code == 200, results.text
-    (metric,) = results.json()["metrics"]
-    assert metric["metric_type"] == "revenue"
-    variants = metric["variants"]
-    assert sum(v["sample_size"] for v in variants) == len(users)
-    # Users who sent the event, not the sum or the mean of its values.
-    assert sum(v["conversions"] for v in variants) == 2
-    assert all(0 <= v["mean"] <= 1 for v in variants), variants
 
 
 def test_every_flag_evaluates_with_a_null_config(client, db_session):

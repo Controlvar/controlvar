@@ -20,6 +20,11 @@ parameters. Asked with another `correction_method` or `confidence_level`, `/resu
 report a different `is_significant`, winner and recommendation than the export; the
 counts, rates and unadjusted p-values are the same.
 
+When the primary metric is a revenue metric, `conversion_rate` is empty: `/results`
+reports that metric's `mean` as a value per assigned user, not a rate. `conversions` is
+still the number of users who sent the metric's event, and `p_value` is the p-value of
+Welch's t-test that `/results` reports.
+
 `p_value` is the unadjusted p-value, while `is_significant` is decided on the corrected
 one. With two or more treatments a row can therefore show `p_value` 0.035 and
 `is_significant` false: under Benjamini-Hochberg that treatment's adjusted p-value can be
@@ -156,7 +161,7 @@ Same as `/export/experiments` (`format`, `scope`, `start_date`, `end_date`).
 | `is_control`                | boolean | Whether this is the control variant                 |
 | `assignments`               | integer | Number of users assigned to this variant (`sample_size` in `/results`) |
 | `conversions`               | integer | Number of assigned users with at least one conversion on the primary metric (a repeat purchaser counts once) |
-| `conversion_rate`           | float   | Conversion rate [0, 1] (`mean` in `/results`)       |
+| `conversion_rate`           | float   | Conversion rate [0, 1] (`mean` in `/results`); empty when the primary metric is a revenue metric |
 | `p_value`                   | float   | Unadjusted p-value against control; empty for the control |
 | `is_significant`            | boolean | Whether the result is significant after the experiment's correction, at its confidence level |
 | `relative_improvement_pct`  | float   | Relative improvement over control (%); empty for the control |

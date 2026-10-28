@@ -287,8 +287,15 @@ text = "Progress is the smallest variant's users against the planned number, and
 by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm"]
 
 [[unit]]
-text = "The tab plans a conversion rate (a two-proportion test) whatever the metric's type, because every metric is analysed as a conversion today, and it says so."
+text = "The tab plans a conversion rate (a two-proportion test) whatever the metric's type, and it says so."
 by = ["test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm"]
+
+[[unit]]
+text = "For a revenue metric, which the results analyse as a mean per user, the plan is for the share of users who buy."
+by = [
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_other_analyses_of_a_revenue_metric_stay_on_the_share_of_buyers",
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_only_a_revenue_metric_as_a_mean",
+]
 
 [[unit]]
 text = "Nothing typed on the tab is saved."

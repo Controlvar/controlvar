@@ -298,10 +298,10 @@ text = "To serve one of several experiences, run a multivariate experiment."
 by = ["exempt:advice"]
 
 [[unit]]
-text = "Every metric is analysed as a conversion: whether each user sent the metric's event."
+text = "Only a revenue metric is analysed by its values (its mean per assigned user); a count, duration or custom metric is analysed as a conversion: whether each user sent the metric's event."
 by = [
-    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_a_revenue_metric_is_analysed_as_a_conversion",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_results_use_one_proportion_test_for_every_metric",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_only_a_revenue_metric_as_a_mean",
 ]
 
 [[unit]]
