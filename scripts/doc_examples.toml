@@ -397,7 +397,7 @@ expects = 0
 path = "demo/shoplab/README.md"
 environment = "bare"
 exec = 0
-skip = 6
+skip = 7
 expects = 0
 
 [[document]]

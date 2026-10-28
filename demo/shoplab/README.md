@@ -101,6 +101,17 @@ source venv/bin/activate
 python demo/shoplab/simulator/traffic.py --rate 3 --duration 600
 ```
 
+`demo/setup-local.sh` starts one that runs until stopped and writes its process id to
+`demo/.pids/shoplab-simulator.pid`; from the repository root, this stops it and prints its line
+only once the process has gone, so the numbers hold still while you check an order of your own:
+
+```{.bash skip reason="demo: runs the demo applications (Stream F)"}
+pid="$(cat demo/.pids/shoplab-simulator.pid)"
+kill "$pid"
+while kill -0 "$pid" 2>/dev/null; do sleep 1; done
+printf 'ShopLab simulator stopped\n'
+```
+
 To print one visitor's planned events without touching the network:
 
 ```{.bash skip reason="demo: runs the demo applications (Stream F)"}

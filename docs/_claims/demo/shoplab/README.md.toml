@@ -257,6 +257,10 @@ text = "From the repository root, with the venv active, this sends 3 visitors a 
 by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_runs_until_stopped_and_takes_the_documented_options"]
 
 [[unit]]
+text = "demo/setup-local.sh starts one that runs until stopped and writes its process id to demo/.pids/shoplab-simulator.pid; from the repository root, this stops it and prints its line only once the process has gone, so the numbers hold still while you check an order of your own:"
+by = ["journey:demo-shoplab#stop-simulator"]
+
+[[unit]]
 text = "To print one visitor's planned events without touching the network:"
 by = ["test:demo/shoplab/simulator/test_traffic.py::test_dry_run_prints_plan_without_network"]
 
