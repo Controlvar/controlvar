@@ -204,6 +204,7 @@ def _oracle_args(node: Any) -> List[Dict[str, Any]]:
         ("floor-traffic", ["floor-results-api", "floor-results-page"]),
         ("revenue-traffic", ["revenue-results"]),
         ("doubled-traffic", ["doubled-results"]),
+        ("cuped-traffic", ["cuped-returning-users"]),
     ],
 )
 def test_each_oracle_is_given_the_counts_its_traffic_sends(traffic, readers):
@@ -265,6 +266,8 @@ def test_every_results_read_comes_after_its_experiments_traffic():
         "floor-experiment-id",
         "revenue-experiment-id",
         "doubled-experiment-id",
+        # CUPED's returning users (test_docs_oracles_cuped.py), the sixth.
+        "cuped-experiment-id",
     }
     reads = 0
     for index, step in enumerate(steps):

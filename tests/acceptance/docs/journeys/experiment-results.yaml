@@ -132,6 +132,42 @@
 #   difference double exactly (14.375, 25.625, 11.25), the interval doubles and
 #   Welch's p-value does not move.
 #
+# Then CUPED ("CUPED — Reach Significance Faster", api/cuped.md), which adjusts
+# each conversion rate for whether its users sent the metric's event before
+# they were assigned, read once per experiment from GET /results/{id}/cuped,
+# after its traffic, and held to oracles written from api/cuped.md's formula
+# (oracles.py, cuped_*): theta is the slope of the outcome on that history
+# pooled within the arms (the x coefficient of Y ~ arm + X), each arm's
+# adjusted rate is its rate minus theta times (its share with history minus
+# everyone's), and the effect's variance is each arm's residual variance (the
+# sample variance, n - 1) over its size; the p-value is a two-sided z-test's
+# and the interval goes with it.
+#
+# * New users: CUPED turned on, by PUT as api/cuped.md does, for the A/B
+#   experiment, whose users sent nothing before their assignment. theta,
+#   the coverage and the variance reduction are 0 exactly, and every adjusted
+#   number is the unadjusted one: the effect 0.06, its standard error 0.023715
+#   (p 0.0114, the interval 0.0135 to 0.1065).
+# * Returning users: a sixth 50/50 experiment, created with CUPED and a 7-day
+#   lookback. Its traffic step first sends the event, with no experiment key
+#   and dated 3 days back, for the first 80 Control users and the first 48
+#   Treatment users it chooses, before any of them is assigned (the page's
+#   rule: history counts only if the server has it before the user is
+#   assigned). Then Control's first 40 users convert and Treatment's first 56,
+#   so every converting Control user is a returning one, and every returning
+#   Treatment user converts. The coverage is 25% exactly; theta is 65/94 =
+#   0.69149, where the control alone would give 0.5 and both arms lumped
+#   together 0.6667. The unadjusted effect, 0.0625 (standard error 0.03446,
+#   not significant), becomes 0.14894 (0.02233, p 2.6e-11, the interval 0.1052
+#   to 0.1927): Control had more returning users, who convert more, and that
+#   had hidden Treatment's lift. The variance reduction is 58.0%. Every number
+#   is held to 1e-9 relative (the coverage exactly); the API agreed within one
+#   unit in the last place on a local run. The wrong answers nearest them all
+#   fail: theta 0 (the history dropped, or sent after the assignments), the
+#   adjustment's sign flipped, theta from the control alone or from both arms
+#   lumped together, the variance over n instead of n - 1 (the standard error
+#   0.2% off), and a t-test's p-value.
+#
 # The results are cached for up to five minutes, so each experiment's
 # population is complete before its results are first read, on the page or
 # through the API; nothing reads them earlier, so no cached answer can be
@@ -1278,3 +1314,263 @@ steps:
             args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6, confidence_level: 0.95, bound: upper}
           rel: 1.0e-9
     fail: with every value doubled, the buyers change, the means and the difference are not doubled, or Welch's p-value moves
+  - id: cuped-new-users-on
+    doc: cuped-reach-significance-faster
+    do:
+      api:
+        method: PUT
+        path: /api/v1/experiments/{{experiment-id}}
+        as: admin
+        body:
+          variance_reduction_config:
+            method: cuped
+            covariate_lookback_days: 7
+    expect:
+      status: 200
+      json:
+        variance_reduction_config.method: cuped
+        variance_reduction_config.covariate_lookback_days: 7
+    fail: an administrator cannot turn CUPED on for the running A/B experiment
+  - id: cuped-new-users
+    doc: cuped-reach-significance-faster
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{experiment-id}}/cuped
+        as: admin
+    expect:
+      status: 200
+      json:
+        analysis_status: ga
+        method: cuped
+        confidence_level: 0.95
+        correction_method: benjamini_hochberg
+        covariate_lookback_days: 7
+        metrics.0.metric_name: Checkout completed
+        metrics.0.variant_name: Treatment
+        metrics.0.method: cuped
+        metrics.0.control_sample_size: 400
+        metrics.0.treatment_sample_size: 400
+        metrics.0.covariate_event_name: checkout_completed
+        metrics.0.unavailable_reason: null
+        metrics.0.is_significant: true
+      computed:
+        metrics.0.theta:
+          oracle:
+            name: cuped_theta
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 0
+        metrics.0.covariate_coverage_pct:
+          oracle:
+            name: cuped_coverage_pct
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 0
+        metrics.0.variance_reduction_pct:
+          oracle:
+            name: cuped_variance_reduction_pct
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 0
+        metrics.0.adjusted_effect:
+          oracle:
+            name: cuped_adjusted_effect
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 1.0e-9
+        metrics.0.unadjusted_effect:
+          oracle:
+            name: cuped_unadjusted_effect
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 1.0e-9
+        metrics.0.adjusted_se:
+          oracle:
+            name: cuped_adjusted_se
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 1.0e-9
+        metrics.0.unadjusted_se:
+          oracle:
+            name: cuped_unadjusted_se
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 1.0e-9
+        metrics.0.adjusted_control_mean:
+          oracle:
+            name: cuped_adjusted_mean
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0, variant: control}
+          rel: 1.0e-9
+        metrics.0.adjusted_treatment_mean:
+          oracle:
+            name: cuped_adjusted_mean
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0, variant: treatment}
+          rel: 1.0e-9
+        metrics.0.adjusted_p_value:
+          oracle:
+            name: cuped_adjusted_p
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 1.0e-9
+        metrics.0.corrected_p_value:
+          oracle:
+            name: cuped_adjusted_p
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0}
+          rel: 1.0e-9
+        metrics.0.adjusted_ci_lower:
+          oracle:
+            name: cuped_adjusted_interval
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0, confidence_level: 0.95, bound: lower}
+          rel: 1.0e-9
+        metrics.0.adjusted_ci_upper:
+          oracle:
+            name: cuped_adjusted_interval
+            args: {control_users: 400, control_converted: 40, control_history: 0, treatment_users: 400, treatment_converted: 64, treatment_history: 0, confidence_level: 0.95, bound: upper}
+          rel: 1.0e-9
+    fail: with no user sending anything before assignment, theta is not 0, the coverage or the variance reduction is not 0, or the adjusted numbers are not the unadjusted ones
+  - id: cuped-experiment
+    doc: cuped-reach-significance-faster
+    do:
+      api:
+        method: POST
+        path: /api/v1/experiments/
+        as: admin
+        body:
+          name: Docs journey returning users
+          key: docs_journey_returning_users
+          experiment_type: a_b
+          variants:
+            - name: Control
+              is_control: true
+              traffic_allocation: 50
+            - name: Treatment
+              is_control: false
+              traffic_allocation: 50
+          metrics:
+            - name: Checkout completed
+              event_name: checkout_completed
+              metric_type: conversion
+              is_primary: true
+          variance_reduction_config:
+            method: cuped
+            covariate_lookback_days: 7
+    expect:
+      status: 201
+      json:
+        key: docs_journey_returning_users
+        status: draft
+        variance_reduction_config.method: cuped
+        variance_reduction_config.covariate_lookback_days: 7
+    save:
+      cuped-experiment-id:
+        path: id
+    fail: an experiment that reads seven days of history with CUPED cannot be created as a draft
+  - id: cuped-start
+    doc: cuped-reach-significance-faster
+    do:
+      api:
+        method: POST
+        path: /api/v1/experiments/{{cuped-experiment-id}}/start
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: active
+    fail: the returning-users experiment cannot be started
+  - id: cuped-traffic
+    doc: cuped-reach-significance-faster
+    do:
+      traffic:
+        experiment: cuped-experiment-id
+        key: sdk-key
+        as: admin
+        event: checkout_completed
+        users: cuped-user
+        variants:
+          Control: {assigned: 256, converted: 40}
+          Treatment: {assigned: 256, converted: 56}
+        history: {days_before: 3, converted: {Control: 80, Treatment: 48}}
+    fail: a history event is refused, a user is refused or assigned a variant other than the documented hash gives, or a conversion is refused
+  - id: cuped-returning-users
+    doc: cuped-reach-significance-faster
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{cuped-experiment-id}}/cuped
+        as: admin
+    expect:
+      status: 200
+      json:
+        analysis_status: ga
+        method: cuped
+        confidence_level: 0.95
+        correction_method: benjamini_hochberg
+        covariate_lookback_days: 7
+        metrics.0.metric_name: Checkout completed
+        metrics.0.variant_name: Treatment
+        metrics.0.method: cuped
+        metrics.0.control_sample_size: 256
+        metrics.0.treatment_sample_size: 256
+        metrics.0.covariate_event_name: checkout_completed
+        metrics.0.unavailable_reason: null
+        metrics.0.is_significant: true
+      computed:
+        metrics.0.theta:
+          oracle:
+            name: cuped_theta
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.covariate_coverage_pct:
+          oracle:
+            name: cuped_coverage_pct
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 0
+        metrics.0.variance_reduction_pct:
+          oracle:
+            name: cuped_variance_reduction_pct
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.adjusted_effect:
+          oracle:
+            name: cuped_adjusted_effect
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.unadjusted_effect:
+          oracle:
+            name: cuped_unadjusted_effect
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.adjusted_se:
+          oracle:
+            name: cuped_adjusted_se
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.unadjusted_se:
+          oracle:
+            name: cuped_unadjusted_se
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.adjusted_control_mean:
+          oracle:
+            name: cuped_adjusted_mean
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48, variant: control}
+          rel: 1.0e-9
+        metrics.0.adjusted_treatment_mean:
+          oracle:
+            name: cuped_adjusted_mean
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48, variant: treatment}
+          rel: 1.0e-9
+        metrics.0.adjusted_p_value:
+          oracle:
+            name: cuped_adjusted_p
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.corrected_p_value:
+          oracle:
+            name: cuped_adjusted_p
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48}
+          rel: 1.0e-9
+        metrics.0.adjusted_ci_lower:
+          oracle:
+            name: cuped_adjusted_interval
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48, confidence_level: 0.95, bound: lower}
+          rel: 1.0e-9
+        metrics.0.adjusted_ci_upper:
+          oracle:
+            name: cuped_adjusted_interval
+            args: {control_users: 256, control_converted: 40, control_history: 80, treatment_users: 256, treatment_converted: 56, treatment_history: 48, confidence_level: 0.95, bound: upper}
+          rel: 1.0e-9
+    fail: the returning users' history is not read, theta is not the slope pooled within the arms, or an adjusted number, its standard error, p-value or interval is not the formula's
