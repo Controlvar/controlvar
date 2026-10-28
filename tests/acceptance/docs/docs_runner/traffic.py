@@ -22,13 +22,21 @@ or not assigned, fails the step. So the counts sent are exactly the counts
 chosen, and a disagreement between the API's assignment and the documented hash
 is a failure of its own, not a skewed count.
 
+A step that gives a ``value`` (``model.TrafficValue``) sends one with each
+converting user's event, and none with an assignment. It is never random, so
+an oracle recomputes it from the journey: the ``i``-th converting user of a
+variant (from 0, counted in each variant on its own, in the order ``choose``
+chose them) sends ``base + step * (i mod modulo)`` (``ramp_values``). Without
+a ``value``, no event carries one.
+
 This module computes the hash itself (``hashlib``); it imports nothing from the
 product, so an assignment that drifts from the contract is caught rather than
 copied. Nothing here imports Playwright: the requests go through a ``fetch``
 the runner passes in, and the unit job tests the rest with a fake one.
 
-What a step writes (``NN-<step>.traffic.json``) holds counts and the first few
-problems only; never the API key.
+What a step writes (``NN-<step>.traffic.json``) holds counts, the first few
+problems and, when the step gives a ``value``, the value it gives and every
+value sent, per variant in the order sent; never the API key.
 """
 
 from __future__ import annotations
@@ -36,7 +44,18 @@ from __future__ import annotations
 import hashlib
 import struct
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 #: 2^32, the divisor the SDK contract gives.
 HASH_DIVISOR = 4294967296
@@ -126,6 +145,29 @@ def choose(
     return chosen
 
 
+Number = Union[int, float]
+
+
+class Ramp(Protocol):
+    """A traffic step's ``value`` (``model.TrafficValue``), read by its fields."""
+
+    mode: str
+    base: Number
+    step: Number
+    modulo: int
+
+
+def ramp_values(ramp: Ramp, count: int) -> List[Number]:
+    """The values a variant's first *count* converting users send, in order.
+
+    The ``i``-th (from 0) sends ``base + step * (i mod modulo)``: base 10,
+    step 1, modulo 7 gives 10, 11, 12, 13, 14, 15, 16, 10, 11, ...
+    """
+    if ramp.mode != "ramp":
+        raise TrafficError(f"no value mode {ramp.mode!r}; ramp is the one mode")
+    return [ramp.base + ramp.step * (i % ramp.modulo) for i in range(count)]
+
+
 @dataclass
 class Outcome:
     """What was sent and what came back, in counts, for the step's file."""
@@ -135,15 +177,23 @@ class Outcome:
     variants: Dict[str, Dict[str, int]] = field(default_factory=dict)
     requests: int = 0
     problems: List[str] = field(default_factory=list)
+    #: The step's ``value`` as given, or None (then no event carried one).
+    value: Optional[Dict[str, Any]] = None
+    #: Per variant, every value sent with an event, in the order sent.
+    values_sent: Dict[str, List[Number]] = field(default_factory=dict)
 
     def record(self) -> Dict[str, Any]:
-        return {
+        record: Dict[str, Any] = {
             "experiment_key": self.experiment_key,
             "users": f"{self.prefix}-NNNNN",
             "variants": self.variants,
             "requests": self.requests,
             "problems": self.problems,
         }
+        if self.value is not None:
+            record["value"] = self.value
+            record["values_sent"] = self.values_sent
+        return record
 
 
 def send(
@@ -154,15 +204,24 @@ def send(
     chosen: Mapping[str, Sequence[str]],
     converted: Mapping[str, int],
     prefix: str,
+    value: Optional[Ramp] = None,
 ) -> Outcome:
     """Assign every chosen user, then track *event* for each variant's first converters.
 
     Each assignment must answer 200 with ``assigned: true`` and the variant the
     user was chosen for; each track must answer 200. Sending stops once
     ``PROBLEMS_KEPT`` problems are found, and no event is tracked unless every
-    assignment was as chosen.
+    assignment was as chosen. With a *value*, each event carries the next of
+    its variant's ``ramp_values``, and the outcome lists every value sent.
     """
     outcome = Outcome(experiment_key=experiment_key, prefix=prefix)
+    if value is not None:
+        outcome.value = {
+            "mode": value.mode,
+            "base": value.base,
+            "step": value.step,
+            "modulo": value.modulo,
+        }
 
     def problem(text: str) -> bool:
         outcome.problems.append(text)
@@ -197,19 +256,25 @@ def send(
     if outcome.problems:
         return outcome
     for name, users in chosen.items():
-        for user in users[: converted.get(name, 0)]:
-            status, _ = fetch(
-                "POST",
-                TRACK_PATH,
-                {
-                    "event_type": event,
-                    "user_id": user,
-                    "experiment_key": experiment_key,
-                },
-            )
+        converting = users[: converted.get(name, 0)]
+        values = ramp_values(value, len(converting)) if value is not None else None
+        if values is not None:
+            outcome.values_sent[name] = []
+        for index, user in enumerate(converting):
+            body: Dict[str, Any] = {
+                "event_type": event,
+                "user_id": user,
+                "experiment_key": experiment_key,
+            }
+            carried = ""
+            if values is not None:
+                body["value"] = values[index]
+                outcome.values_sent[name].append(values[index])
+                carried = f" (value {values[index]!r})"
+            status, _ = fetch("POST", TRACK_PATH, body)
             outcome.requests += 1
             if status != 200:
-                if problem(f"tracking {event} for {user} answered {status}"):
+                if problem(f"tracking {event} for {user}{carried} answered {status}"):
                     return outcome
                 continue
             outcome.variants[name]["converted"] += 1

@@ -69,7 +69,8 @@ checkout's sdk/go.
 
 A ``traffic`` step writes ``NN-<step>.expected.json`` (the population chosen,
 written before it is sent) and ``NN-<step>.traffic.json`` (what was sent and
-answered, in counts). A ``services`` step (``services.py``) writes
+answered, in counts, and, when the step gives a value, every value sent). A
+``services`` step (``services.py``) writes
 ``NN-<step>.expected.json`` (the services, the time and the count it holds,
 written before it runs) and ``NN-<step>.services.json`` (each service's state at
 the start and the end, the counts, the problems and, for a service that failed,
@@ -775,6 +776,7 @@ class JourneyRunner:
             chosen=chosen,
             converted={variant: p.converted for variant, p in plan.variants.items()},
             prefix=plan.users,
+            value=plan.value,
         )
         snapshot = self._write(
             name, json.dumps(outcome.record(), indent=2, ensure_ascii=False) + "\n"
