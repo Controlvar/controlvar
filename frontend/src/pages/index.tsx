@@ -141,7 +141,9 @@ export default function HomePage() {
                 },
                 {
                   title: 'Statistics beyond a p-value',
-                  body: 'Frequentist and Bayesian analysis, sequential testing with mSPRT for early stopping, multi-armed bandits, and per-segment breakdowns with a Bonferroni correction across segments.',
+                  // The second sentence quotes the limitations page and the
+                  // user guide; index.test.tsx holds it to their words.
+                  body: 'Frequentist and Bayesian analysis, sequential testing with mSPRT for early stopping, multi-armed bandits, and per-segment breakdowns with a Bonferroni correction across segments. A revenue metric is analysed as its mean value per assigned user, and its results give the difference per user with its confidence interval.',
                 },
                 {
                   title: 'SDKs for the stack you have',
@@ -149,7 +151,23 @@ export default function HomePage() {
                 },
                 {
                   title: 'Deploy it yourself',
-                  body: 'Run the published container images with Docker Compose on one machine, install them on Kubernetes with the Helm chart attached to each release, or use the CDK app to deploy to ECS Fargate, Aurora PostgreSQL and ElastiCache in your own AWS account. There is no hosted tier, so there is nothing to be locked into.',
+                  // The installer sentence says only what its page says (its
+                  // title, its beta wording, what it installs, what has been
+                  // run); index.test.tsx holds it to that page and its link.
+                  body: (
+                    <>
+                      Run the published container images with Docker Compose on one machine,
+                      install them on Kubernetes with the Helm chart attached to each release, or
+                      use the CDK app to deploy to ECS Fargate, Aurora PostgreSQL and ElastiCache
+                      in your own AWS account. Or{' '}
+                      <a href={docsUrl('self-hosting/aws-install')} className="text-blue-700 underline">
+                        install on AWS with one command
+                      </a>
+                      , a beta that installs the core profile in us-west-2; as of v0.37.0 it has
+                      been run end to end once, in a test account, and it is not for production
+                      data. There is no hosted tier, so there is nothing to be locked into.
+                    </>
+                  ),
                 },
                 {
                   title: 'Open, and checkable',

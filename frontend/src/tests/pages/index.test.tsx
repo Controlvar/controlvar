@@ -1,8 +1,11 @@
+import fs from 'fs';
+import path from 'path';
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import HomePage from '@/pages/index';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { TOKEN_STORAGE_KEY, UserMe } from '@/services/api';
+import { docsUrl } from '@/services/docs';
 import { routeKind } from '@/utils/routes';
 import { isMarketingSite } from '@/utils/site-mode';
 
@@ -234,6 +237,120 @@ describe('HomePage (/)', () => {
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/experiments'));
     // The marketing page must not have been painted on the way through.
     expect(screen.queryByTestId('public-home')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Two cards quote a docs page and say nothing it does not: the installer
+ * sentence on "Deploy it yourself" and the revenue sentence on "Statistics
+ * beyond a p-value". Each phrase below must appear in the card AND on the page
+ * it cites, so rewording either one turns this red until the other follows.
+ * Both sides are compared as prose: case folded, markdown code marks dropped,
+ * whitespace collapsed.
+ *
+ * The pages are read from the working tree, as `content/sdks.test.tsx` reads
+ * `sdk/`, so this passes in a copy with no `.git`. A missing page is an error,
+ * never a skip. A pull request that changes only docs/ runs no jest, so a page
+ * reworded on its own turns this red on the next pull request that runs it.
+ */
+describe('claims quoted from the docs', () => {
+  const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+  const INSTALLER_PAGE = 'self-hosting/aws-install';
+
+  const read = (rel: string): string => {
+    const file = path.join(REPO_ROOT, rel);
+    if (!fs.existsSync(file)) {
+      throw new Error(`${file} does not exist; the homepage cites it`);
+    }
+    return fs.readFileSync(file, 'utf8');
+  };
+  const prose = (s: string): string => s.replace(/`/g, '').replace(/\s+/g, ' ').toLowerCase();
+
+  /** The card under `title`, in the platform build (the cards are the same in both). */
+  const card = (title: string): HTMLElement => {
+    render(
+      <AuthProvider>
+        <HomePage />
+      </AuthProvider>,
+    );
+    const heading = screen.getByRole('heading', { level: 2, name: title });
+    return heading.parentElement as HTMLElement;
+  };
+
+  const quoted: Array<[string, string, string[]]> = [
+    [
+      'Deploy it yourself',
+      INSTALLER_PAGE,
+      [
+        'install on AWS with one command',
+        'installs the core profile in us-west-2',
+        'as of v0.37.0 it has been run end to end once, in a test account',
+        'it is not for production data',
+      ],
+    ],
+    [
+      'Statistics beyond a p-value',
+      'getting-started/limitations',
+      ['a revenue metric is analysed as its mean value per assigned user'],
+    ],
+    [
+      'Statistics beyond a p-value',
+      'guides/user-guide',
+      ['the difference per user with its confidence interval'],
+    ],
+  ];
+
+  it.each(quoted)('"%s" says only what docs/%s.md says', (title, page, phrases) => {
+    const said = prose(card(title).textContent ?? '');
+    const source = prose(read(`docs/${page}.md`));
+    for (const phrase of phrases) {
+      expect({ phrase, onTheCard: said.includes(prose(phrase)) }).toEqual({
+        phrase,
+        onTheCard: true,
+      });
+      expect({ phrase, onThePage: source.includes(prose(phrase)) }).toEqual({
+        phrase,
+        onThePage: true,
+      });
+    }
+  });
+
+  it('calls the installer a beta, as its page title does', () => {
+    const title = read(`docs/${INSTALLER_PAGE}.md`).split('\n')[0];
+    const named = /^# (.+) \(beta\)$/.exec(title);
+    expect({ title, beta: named !== null }).toEqual({ title, beta: true });
+
+    const deploy = card('Deploy it yourself');
+    const link = within(deploy).getByRole('link', { name: /with one command/i });
+    expect(prose(link.textContent ?? '')).toBe(prose(named![1]));
+    expect(deploy.textContent).toMatch(/\bbeta\b/i);
+  });
+
+  it('links the installer sentence to the installer page, which the docs nav lists', () => {
+    const link = within(card('Deploy it yourself')).getByRole('link', { name: /with one command/i });
+    expect(link.getAttribute('href')).toBe(docsUrl(INSTALLER_PAGE));
+    expect(read('mkdocs.yml')).toMatch(/^\s+- [^:\n]+: self-hosting\/aws-install\.md\s*$/m);
+  });
+
+  it('is docs.controlvar.com/self-hosting/aws-install/ in the marketing build', () => {
+    const scripts = JSON.parse(read('frontend/package.json')).scripts as Record<string, string>;
+    const site = /NEXT_PUBLIC_DOCS_URL=(\S+)/.exec(scripts['build:marketing'])?.[1];
+    expect(site).toBe('https://docs.controlvar.com/');
+    // DOCS_SITE is read at module load, so the marketing build's value needs
+    // a fresh module registry (as in services/docs.test.ts).
+    const before = process.env.NEXT_PUBLIC_DOCS_URL;
+    let url = '';
+    try {
+      jest.isolateModules(() => {
+        process.env.NEXT_PUBLIC_DOCS_URL = site;
+        const docs: typeof import('@/services/docs') = require('@/services/docs');
+        url = docs.docsUrl(INSTALLER_PAGE);
+      });
+    } finally {
+      if (before === undefined) delete process.env.NEXT_PUBLIC_DOCS_URL;
+      else process.env.NEXT_PUBLIC_DOCS_URL = before;
+    }
+    expect(url).toBe('https://docs.controlvar.com/self-hosting/aws-install/');
   });
 });
 
