@@ -262,8 +262,8 @@ text = "Conversion metrics (Fisher's exact test):"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Every metric in the results is analysed as a conversion today"
-by = ["test:backend/tests/unit/services/test_binomial_effect_size.py::test_every_metric_is_a_fisher_test_on_conversions_with_cohens_h"]
+text = "Every metric in the results but a revenue metric is analysed as a conversion; a revenue metric is its mean per assigned user, compared with Welch's t-test"
+by = ["test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_only_a_revenue_metric_as_a_mean"]
 
 [[unit]]
 text = "For each treatment against the control: a 2×2 table of users who converted and users who did not, from the users assigned to each variant"

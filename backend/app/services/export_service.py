@@ -316,7 +316,9 @@ class ExportService:
         the computation behind ``GET /api/v1/results/{id}`` -- so the export
         and the results API agree. An experiment whose results cannot be
         computed (it has no control variant, for example) keeps its variant
-        rows with the result columns empty.
+        rows with the result columns empty.  ``conversion_rate`` is empty too
+        when the primary metric is analysed as a mean (a revenue metric): its
+        ``mean`` is a value per user, not a rate.
         """
         rows: List[VariantExportRow] = []
         for exp in experiments:
@@ -326,6 +328,7 @@ class ExportService:
                 if primary
                 else {}
             )
+            is_rate = (primary or {}).get("analysis", "proportion") == "proportion"
             for variant in getattr(exp, "variants", []):
                 result = by_variant.get(str(variant.id))
                 rows.append(
@@ -337,7 +340,7 @@ class ExportService:
                         is_control=bool(getattr(variant, "is_control", False)),
                         assignments=result["sample_size"] if result else None,
                         conversions=result["conversions"] if result else None,
-                        conversion_rate=result["mean"] if result else None,
+                        conversion_rate=result["mean"] if result and is_rate else None,
                         p_value=result["p_value"] if result else None,
                         is_significant=result["is_significant"] if result else None,
                         relative_improvement_pct=(

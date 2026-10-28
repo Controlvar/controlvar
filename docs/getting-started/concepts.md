@@ -90,7 +90,7 @@ A metric is the measurable outcome you use to evaluate whether a variant is bett
 |------|-------------|---------|
 | **Conversion** | Binary: did the event happen or not? | Clicked button, completed checkout, signed up |
 
-A metric can also be created with the type `revenue`, `count` or `duration`, but the results analyse every metric as a conversion: whether each user sent the metric's event, not the event's value. See [Limitations](limitations.md).
+A metric can also be created with the type `revenue`, `count` or `duration`. A revenue metric is analysed as its mean value per assigned user: each user's event values added up, 0 for a user with none. A count or duration metric is analysed as a conversion: whether each user sent the metric's event, not the event's value. See [Limitations](limitations.md).
 
 ### Primary vs Secondary Metrics
 

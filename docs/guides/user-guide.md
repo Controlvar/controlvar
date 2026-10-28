@@ -53,8 +53,8 @@ API (`POST /api/v1/experiments/`).
 Then choose what to measure. Mark one metric as the **primary metric** (the one you decide
 on); any others are tracked alongside it.
 
-Every metric is analysed as a conversion today: whatever its type, the results report the
-share of users who sent the metric's event.
+A revenue metric's results report its mean value per assigned user; every other metric reports
+the share of users who sent the metric's event.
 
 The metric's **event name** must match exactly what your engineers track in code (e.g., `checkout_complete`).
 
@@ -332,8 +332,8 @@ The tab also says when:
 
 - **no users have been assigned yet**, or there is no rate to plan from (no control conversions,
   or every control user converted): type the rate you expect;
-- **the metric is not a conversion**: every metric is analysed as a conversion today, so the
-  plan is for a conversion rate. The Power Calculator plans conversion rates only too, and the
+- **the metric is not a conversion**: the plan is for a conversion rate whatever the metric's
+  type, so a revenue metric's plan is for the share of users who buy. The Power Calculator plans conversion rates only too, and the
   tab says so;
 - **a fixed sample size is a guide only**: a bandit, an uneven split, sequential testing or
   Bayesian analysis.

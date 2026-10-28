@@ -13,7 +13,9 @@ the row links it.
 
 | What you might expect | What happens instead |
 |---|---|
-| A revenue, count or duration metric analysed by its values | Every metric is analysed as a conversion: whether each user sent the metric's event. A metric's type is stored, and its events' values are not analysed. |
+| A revenue, count or duration metric analysed by its values | A revenue metric is analysed as its mean value per assigned user: each user's event values added up, 0 for a user with none, compared with Welch's t-test. A count, duration or custom metric is analysed as a conversion: whether each user sent the metric's event; its events' values are not analysed. |
+| Every event value counted in a revenue metric | A value that is not a number, is infinite, or is larger than 10^12 in size, in the unit it was sent in, adds nothing to its user's total; the event still counts its user as a buyer. |
+| A revenue metric's sequential analysis, Bayesian analysis, sample-size plan and daily series by its values | Each is of the share of users who sent the metric's event, as for a conversion. CUPED does not analyse a revenue metric. |
 | A traffic allocation for the experiment as a whole | There is none. Variant weights must add up to exactly 100%, or the request is refused with `422`. Users are left out only by targeting rules, a mutual exclusion group or the global holdout. |
 | One user known by two ids, such as a visitor who signs in | No identify or alias call: a user who signs in under a new id mid-funnel gets a second assignment. Assign with the id you will track purchases with. |
 | A bandit that moves traffic toward the better variant of a lower-is-better metric | A bandit (an experiment whose `optimization_type` is not `fixed`) moves traffic toward the variant whose users send the primary metric's event most often. It does not read the metric's `lower_is_better`, so on a metric such as uninstalls or errors it moves traffic toward the worse variant. Use a fixed split for such a metric ([#1385](https://github.com/Controlvar/controlvar/issues/1385)). |
