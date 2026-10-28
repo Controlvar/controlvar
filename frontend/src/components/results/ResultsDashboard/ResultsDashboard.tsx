@@ -10,7 +10,11 @@ import {
   DimensionalBreakdownResponse,
   MetricResult,
 } from '@/types/results';
-import { analysedAsRate, rateDescription } from '@/components/results/shared/resultFormat';
+import {
+  analysedAsMean,
+  meanDescription,
+  rateDescription,
+} from '@/components/results/shared/resultFormat';
 import { SequentialTestingResponse } from '@/types/sequential';
 import { ExperimentSummary } from './ExperimentSummary';
 import { SrmNotice } from './SrmNotice';
@@ -50,6 +54,23 @@ interface ExperimentReading {
    * compares the share of users who sent the event, not the metric's value).
    */
   lowerIsBetter: boolean | undefined;
+  /**
+   * Each metric's event name by metric id (a result's metric_id is the
+   * metric's id), so a note can name the event. Empty when the experiment
+   * could not be read.
+   */
+  eventNames: Record<string, string>;
+}
+
+/** Each metric's event name by its id; metrics without one are left out. */
+function eventNamesOf(metrics: { id?: string; event_name?: string }[]): Record<string, string> {
+  const names: Record<string, string> = {};
+  for (const m of metrics) {
+    if (typeof m.id === 'string' && typeof m.event_name === 'string' && m.event_name) {
+      names[m.id] = m.event_name;
+    }
+  }
+  return names;
 }
 
 /**
@@ -82,6 +103,7 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
       sequentialMetric && sequentialMetric.metric_type === 'conversion'
         ? (sequentialMetric.lower_is_better ?? false)
         : undefined;
+    const eventNames = eventNamesOf(metrics);
     if (experiment?.correction_method && typeof experiment.confidence_level === 'number') {
       return {
         settings: {
@@ -91,9 +113,10 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
         bayesianEnabled,
         sequentialEnabled,
         lowerIsBetter,
+        eventNames,
       };
     }
-    return { settings: null, bayesianEnabled, sequentialEnabled, lowerIsBetter };
+    return { settings: null, bayesianEnabled, sequentialEnabled, lowerIsBetter, eventNames };
   } catch {
     // Fall through: the results request goes without settings.
   }
@@ -102,6 +125,7 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
     bayesianEnabled: undefined,
     sequentialEnabled: undefined,
     lowerIsBetter: undefined,
+    eventNames: {},
   };
 }
 
@@ -129,14 +153,30 @@ export function resultsErrorMessage(e: unknown): string {
 type Tab = 'overview' | 'trends' | 'sample-size' | 'sequential' | 'breakdowns' | 'live';
 
 /**
- * The chart heading says what the bars are. A revenue, count or duration
- * metric is still analysed as a share of users with an event, so it is not
- * headed as revenue, nor as a "conversion rate" of revenue.
+ * The chart heading says what the bars are. A revenue metric analysed as a
+ * mean is headed "revenue per user"; a count, duration or custom metric is
+ * analysed as a share of users with an event, so it is headed as that, never
+ * as a "conversion rate" of its values.
  */
 function primaryMetricHeading(metric: MetricResult): string {
+  if (analysedAsMean(metric)) return `${metric.metric_name} — ${meanDescription(metric)}`;
   if (metric.metric_type === 'conversion') return `Conversion Rates — ${metric.metric_name}`;
-  if (analysedAsRate(metric)) return `${metric.metric_name} — ${rateDescription(metric)}`;
-  return `${metric.metric_name} — mean`;
+  return `${metric.metric_name} — ${rateDescription(metric)}`;
+}
+
+/**
+ * In the Bayesian panel, under its heading, when the primary metric is
+ * analysed as a mean: the Bayesian analysis stays on the share of users who
+ * sent the metric's event.
+ */
+function bayesianShareNote(metric: MetricResult, eventName?: string): React.ReactNode {
+  return (
+    <>
+      The Bayesian analysis compares the share of users who sent{' '}
+      {eventName ? <code>{eventName}</code> : `${metric.metric_name}'s event`}, not{' '}
+      {meanDescription(metric)}.
+    </>
+  );
 }
 
 function LoadingSkeleton() {
@@ -181,6 +221,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
   // The settings every results request sends (D49), once the experiment is read.
   const [stored, setStored] = useState<StoredAnalysisSettings | null>(null);
   const [bayesianEnabled, setBayesianEnabled] = useState<boolean | undefined>(undefined);
+  const [eventNames, setEventNames] = useState<Record<string, string>>({});
 
   const fetchSampleSize = useCallback(async (overrides: SampleSizeOverrides = {}) => {
     // Only the latest request may write state, so a slow answer for an
@@ -222,9 +263,11 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
       // level. If the experiment cannot be read, the results are still asked
       // for, with no settings, and the server uses the stored ones.
       const experimentRequest = readExperiment(experimentId);
-      const resultsRequest = experimentRequest.then(({ settings, bayesianEnabled: b }) => {
+      const resultsRequest = experimentRequest.then((reading) => {
+        const { settings } = reading;
         setStored(settings);
-        setBayesianEnabled(b);
+        setBayesianEnabled(reading.bayesianEnabled);
+        setEventNames(reading.eventNames);
         return settings
           ? ResultsService.getResults(experimentId, settings)
           : ResultsService.getResults(experimentId);
@@ -314,6 +357,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
   if (!results) return null;
 
   const primaryMetric = results.metrics.find((m) => m.is_primary) ?? results.metrics[0];
+  const primaryAsMean = primaryMetric ? analysedAsMean(primaryMetric) : false;
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
@@ -382,7 +426,11 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
                     >
                       {primaryMetricHeading(primaryMetric)}
                     </h3>
-                    <ConversionChart variants={primaryMetric.variants} />
+                    <ConversionChart
+                      variants={primaryMetric.variants}
+                      analysis={primaryAsMean ? 'mean' : 'proportion'}
+                      metricType={primaryMetric.metric_type}
+                    />
                   </section>
                 )}
                 <section aria-label="Metric comparison">
@@ -393,6 +441,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
                     metrics={results.metrics}
                     confidenceLevel={results.confidence_level}
                     correctionMethod={results.correction_method}
+                    eventNames={eventNames}
                   />
                 </section>
               </>
@@ -401,6 +450,11 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
               bayesian={results.bayesian_results}
               bayesianEnabled={bayesianEnabled}
               srmWarning={results.srm?.warning === true}
+              note={
+                primaryMetric && primaryAsMean
+                  ? bayesianShareNote(primaryMetric, eventNames[primaryMetric.metric_id])
+                  : undefined
+              }
             />
           </div>
         )}
@@ -451,6 +505,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
             ) : (
               <SampleSizeMeter
                 data={sampleSize}
+                eventName={sampleSize.metric_id ? eventNames[sampleSize.metric_id] : undefined}
                 overrides={sampleSizeOverrides}
                 onRecalculate={(o) => void fetchSampleSize(o)}
                 recalculating={sampleSizeLoading}

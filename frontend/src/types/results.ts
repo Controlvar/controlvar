@@ -71,7 +71,27 @@ export interface VariantResult {
   power: number | null;
   /** The test behind p_value; null for the control variant. */
   statistical_test_used?: StatisticalTestUsed | null;
+  /**
+   * For a metric analysed as a mean: this variant's mean minus the control's,
+   * per assigned user. Null for the control, for a proportion metric, and
+   * when either variant has fewer than 2 users. Absent from a server older
+   * than the field.
+   */
+  absolute_difference?: number | null;
+  /**
+   * The interval of `absolute_difference` at the response's
+   * confidence_level, not adjusted for multiple comparisons. Null when
+   * `absolute_difference` is, and when neither variant's per-user values vary.
+   */
+  absolute_difference_ci?: [number, number] | null;
 }
+
+/**
+ * How a metric's variants are compared (backend MetricResult.analysis):
+ * 'mean' is a revenue metric's value per assigned user, by Welch's t-test;
+ * 'proportion' is the share of users who sent the metric's event.
+ */
+export type MetricAnalysis = 'proportion' | 'mean';
 
 export interface MetricResult {
   metric_id: string;
@@ -84,6 +104,12 @@ export interface MetricResult {
    * server older than the field.
    */
   lower_is_better?: boolean;
+  /**
+   * How the variants were compared. Absent from a server older than the
+   * field: read the variants' `statistical_test_used` then
+   * (`analysedAsMean`).
+   */
+  analysis?: MetricAnalysis;
   variants: VariantResult[];
 }
 

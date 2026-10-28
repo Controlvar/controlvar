@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 import sys
+from fractions import Fraction
 from typing import Callable, Dict, Tuple
 
 from scipy import integrate, stats
@@ -420,6 +421,266 @@ def bayes_prob_best(
     return min(1.0, max(0.0, float(probability)))
 
 
+#: The largest value, in size, a revenue metric adds up: a larger one "adds
+#: nothing to its user's total" (``getting-started/limitations.md``). The
+#: revenue oracles refuse a ramp that would send one rather than model that.
+REVENUE_VALUE_LIMIT = 10**12
+
+
+def _whole(name: str, value: object) -> int:
+    """*value* as a whole number; a boolean, a decimal or a text is refused."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name} must be a whole number, not {value!r}")
+    return value
+
+
+def _ramp_sums(converted: int, base: int, step: int, modulo: int) -> Tuple[int, int]:
+    """The total and the total of squares of what a variant's buyers send.
+
+    The traffic step's ``value`` (``docs_runner/model.py``, ``TrafficValue``):
+    the ``i``-th converting user of a variant, ``i`` = 0, 1, 2, ... in each
+    variant on its own, sends one event of ``base + step * (i mod modulo)``.
+    Value ``j`` (``j`` < ``modulo``) is sent by ``converted // modulo`` users,
+    one more when ``j < converted % modulo``. Whole numbers throughout, so
+    both sums are exact integers, never a float sum.
+    """
+    cycles, rest = divmod(converted, modulo)
+    total = 0
+    squares = 0
+    for j in range(min(modulo, converted)):
+        senders = cycles + (1 if j < rest else 0)
+        value = base + step * j
+        total += senders * value
+        squares += senders * value * value
+    return total, squares
+
+
+def _revenue_arms(
+    control_users: int,
+    control_converted: int,
+    treatment_users: int,
+    treatment_converted: int,
+    base: int,
+    step: int,
+    modulo: int,
+) -> Dict[str, Tuple[int, int, int]]:
+    """Per variant, its users and the two sums of its users' values.
+
+    A revenue metric's unit is the ASSIGNED user ("A revenue metric is analysed
+    as its mean value per assigned user: each user's event values added up, 0
+    for a user with none", ``getting-started/limitations.md``): a buyer's value
+    is the one event the traffic step sends for them, every other user's is 0,
+    and 0 adds nothing to either sum. Refused: what ``_users_table`` refuses; a
+    ``base`` or ``step`` that is not a whole number (the journeys send whole
+    numbers, so the arithmetic below is exact); a ``modulo`` under 1; and a
+    ramp that would send a value larger than ``REVENUE_VALUE_LIMIT`` in size.
+    """
+    _users_table(control_users, control_converted, treatment_users, treatment_converted)
+    base = _whole("base", base)
+    step = _whole("step", step)
+    modulo = _whole("modulo", modulo)
+    if modulo < 1:
+        raise ValueError("modulo must be at least 1")
+    sent = min(modulo, max(control_converted, treatment_converted))
+    # The values are base + step * j for j < sent: the extremes are the ends.
+    if sent and max(abs(base), abs(base + step * (sent - 1))) > REVENUE_VALUE_LIMIT:
+        raise ValueError("the ramp sends a value larger than 10^12 in size")
+    return {
+        arm: (users, *_ramp_sums(converted, base, step, modulo))
+        for arm, users, converted in (
+            ("control", control_users, control_converted),
+            ("treatment", treatment_users, treatment_converted),
+        )
+    }
+
+
+def _mean(users: int, total: int) -> Fraction:
+    return Fraction(total, users)
+
+
+def _welch_terms(
+    arms: Dict[str, Tuple[int, int, int]],
+) -> Tuple[Fraction, Fraction, Fraction]:
+    """Welch's difference, its squared standard error and its degrees of freedom.
+
+    Exact rationals from the users and the two sums: each arm's sample variance
+    ``s^2 = (sum y^2 - (sum y)^2 / n) / (n - 1)`` (Bessel's correction), the
+    standard error ``se^2 = s_t^2 / n_t + s_c^2 / n_c`` and the
+    Welch-Satterthwaite degrees of freedom ``se^4 / ((s_t^2 / n_t)^2 / (n_t -
+    1) + (s_c^2 / n_c)^2 / (n_c - 1))``. Refused when an arm has fewer than 2
+    users (no variance) or when neither arm's values vary (``se`` is 0).
+    """
+    shares = {}
+    means = {}
+    for arm, (users, total, squares) in arms.items():
+        if users < 2:
+            raise ValueError(f"the {arm} needs at least 2 users for a variance")
+        variance = (squares - Fraction(total * total, users)) / (users - 1)
+        shares[arm] = (variance / users, users)
+        means[arm] = _mean(users, total)
+    (share_t, n_t), (share_c, n_c) = shares["treatment"], shares["control"]
+    se2 = share_t + share_c
+    if se2 == 0:
+        raise ValueError("neither variant's values vary: there is no test")
+    df = se2 * se2 / (share_t * share_t / (n_t - 1) + share_c * share_c / (n_c - 1))
+    return means["treatment"] - means["control"], se2, df
+
+
+def revenue_mean(
+    control_users: int,
+    control_converted: int,
+    treatment_users: int,
+    treatment_converted: int,
+    base: int,
+    step: int,
+    modulo: int,
+    variant: str = "treatment",
+) -> float:
+    """A revenue metric's ``mean`` for *variant*: its value per assigned user.
+
+    ``getting-started/limitations.md``: "A revenue metric is analysed as its
+    mean value per assigned user: each user's event values added up, 0 for a
+    user with none" (``guides/user-guide.md`` says the same of its results).
+    So the total the variant's buyers send (``_ramp_sums``) over ALL its
+    assigned users, buyers or not. Computed as an exact fraction of two
+    integers and rounded once, so the API's number equals it exactly when its
+    own arithmetic is exact. ``variant`` is ``treatment`` or ``control``; the
+    arguments are the traffic step's counts and its ``value``'s ramp.
+    """
+    arms = _revenue_arms(
+        control_users,
+        control_converted,
+        treatment_users,
+        treatment_converted,
+        base,
+        step,
+        modulo,
+    )
+    if variant not in arms:
+        raise ValueError(f"variant must be 'control' or 'treatment', not {variant!r}")
+    users, total, _ = arms[variant]
+    return float(_mean(users, total))
+
+
+def revenue_difference(
+    control_users: int,
+    control_converted: int,
+    treatment_users: int,
+    treatment_converted: int,
+    base: int,
+    step: int,
+    modulo: int,
+) -> float:
+    """The treatment's ``absolute_difference``: its mean minus the control's.
+
+    ``api/stability.md`` (#439): "each treatment carries
+    ``absolute_difference`` and ``absolute_difference_ci``"; the OpenAPI
+    document defines it as "this variant's mean minus the control's, per
+    assigned user". The two means of ``revenue_mean``, subtracted exactly and
+    rounded once.
+    """
+    arms = _revenue_arms(
+        control_users,
+        control_converted,
+        treatment_users,
+        treatment_converted,
+        base,
+        step,
+        modulo,
+    )
+    return float(_mean(*arms["treatment"][:2]) - _mean(*arms["control"][:2]))
+
+
+def revenue_welch_p(
+    control_users: int,
+    control_converted: int,
+    treatment_users: int,
+    treatment_converted: int,
+    base: int,
+    step: int,
+    modulo: int,
+) -> float:
+    """The two-sided p-value of Welch's t-test on the users' values.
+
+    ``getting-started/limitations.md``: a revenue metric's per-user values are
+    "compared with Welch's t-test". The test is Welch's, B. L. Welch, "The
+    generalization of 'Student's' problem when several different population
+    variances are involved", Biometrika 34 (1947), with the degrees of freedom
+    of F. E. Satterthwaite, "An approximate distribution of estimates of
+    variance components", Biometrics Bulletin 2 (1946); the NIST/SEMATECH
+    e-Handbook of Statistical Methods, 1.3.5.3 "Two-Sample t-Test for Equal
+    Means", gives both::
+
+        t  = (mean_t - mean_c) / se,   se^2 = s_t^2 / n_t + s_c^2 / n_c
+        df = se^4 / ((s_t^2 / n_t)^2 / (n_t - 1) + (s_c^2 / n_c)^2 / (n_c - 1))
+        p  = 2 * P(T_df > |t|)
+
+    ``t``'s parts are exact rationals (``_welch_terms``); scipy's Student t
+    gives the tail. Every assigned user is one value, 0 for a non-buyer. The
+    unit tests check it against ``scipy.stats.ttest_ind(..., equal_var=False)``
+    on the users' values written out one by one.
+    """
+    difference, se2, df = _welch_terms(
+        _revenue_arms(
+            control_users,
+            control_converted,
+            treatment_users,
+            treatment_converted,
+            base,
+            step,
+            modulo,
+        )
+    )
+    t = float(difference) / math.sqrt(float(se2))
+    return float(2 * stats.t.sf(abs(t), float(df)))
+
+
+def revenue_welch_interval(
+    control_users: int,
+    control_converted: int,
+    treatment_users: int,
+    treatment_converted: int,
+    base: int,
+    step: int,
+    modulo: int,
+    confidence_level: float = 0.95,
+    bound: str = "lower",
+) -> float:
+    """One bound of ``absolute_difference_ci``, Welch-Satterthwaite's interval.
+
+    The OpenAPI document: "Two-sided Welch-Satterthwaite confidence interval of
+    absolute_difference as (lower, upper), at the response's confidence_level
+    and not adjusted for multiple comparisons". With ``se`` and ``df`` of
+    ``revenue_welch_p`` (the same sources)::
+
+        (mean_t - mean_c) +/- t(1 - (1 - confidence_level) / 2, df) * se
+
+    ``confidence_level`` is above 0 and below 1 (default 0.95, an
+    experiment's own default); ``bound`` is ``lower`` or ``upper``.
+    """
+    confidence_level = _number("confidence_level", confidence_level)
+    if not 0 < confidence_level < 1:
+        raise ValueError("confidence_level must be above 0 and below 1")
+    if bound not in ("lower", "upper"):
+        raise ValueError(f"bound must be 'lower' or 'upper', not {bound!r}")
+    difference, se2, df = _welch_terms(
+        _revenue_arms(
+            control_users,
+            control_converted,
+            treatment_users,
+            treatment_converted,
+            base,
+            step,
+            modulo,
+        )
+    )
+    quantile = float(stats.t.ppf(1 - (1 - confidence_level) / 2, float(df)))
+    half_width = quantile * math.sqrt(float(se2))
+    if bound == "lower":
+        return float(difference) - half_width
+    return float(difference) + half_width
+
+
 ORACLES: Dict[str, Callable[..., float]] = {
     "fisher_exact_p": fisher_exact_p,
     "sample_ratio_p": sample_ratio_p,
@@ -430,4 +691,8 @@ ORACLES: Dict[str, Callable[..., float]] = {
     "msprt_always_valid_p": msprt_always_valid_p,
     "msprt_confidence_sequence": msprt_confidence_sequence,
     "bayes_prob_best": bayes_prob_best,
+    "revenue_mean": revenue_mean,
+    "revenue_difference": revenue_difference,
+    "revenue_welch_p": revenue_welch_p,
+    "revenue_welch_interval": revenue_welch_interval,
 }

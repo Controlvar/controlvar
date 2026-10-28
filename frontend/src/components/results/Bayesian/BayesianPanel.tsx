@@ -13,6 +13,12 @@ interface BayesianPanelProps {
   bayesianEnabled?: boolean;
   /** The server's sample-ratio warning: the Bayesian numbers share the split. */
   srmWarning?: boolean;
+  /**
+   * What the analysis compares, when that is not the primary metric's own
+   * value: for a revenue primary, the share of users who sent its event.
+   * Shown under the heading.
+   */
+  note?: React.ReactNode;
 }
 
 /** Fixed copy for each decision the API can return; nothing else is shown. */
@@ -69,7 +75,12 @@ function formatInterval(lower: number | undefined, upper: number | undefined): s
  *   line saying it could not be computed.
  * - neither: nothing.
  */
-export function BayesianPanel({ bayesian, bayesianEnabled, srmWarning }: BayesianPanelProps) {
+export function BayesianPanel({
+  bayesian,
+  bayesianEnabled,
+  srmWarning,
+  note,
+}: BayesianPanelProps) {
   if (!bayesian?.is_enabled) {
     if (bayesianEnabled === true) {
       return (
@@ -95,6 +106,11 @@ export function BayesianPanel({ bayesian, bayesianEnabled, srmWarning }: Bayesia
           Decision: {decisionLabel(bayesian.decision)}
         </span>
       </div>
+      {note && (
+        <p className="text-sm text-slate-600" data-testid="bayesian-share-note">
+          {note}
+        </p>
+      )}
       {srmWarning && (
         <p className="text-sm font-medium text-amber-900" data-testid="bayesian-srm-qualifier">
           <span aria-hidden="true">⚠ </span>
