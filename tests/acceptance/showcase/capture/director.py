@@ -419,6 +419,9 @@ class Tally:
     holds_ms: List[int] = field(default_factory=list)
     #: C9: each ``choose`` step, the text its closed select showed and how long.
     choices: List[Dict[str, Any]] = field(default_factory=list)
+    #: Gate 12 (typed as shown): each ``type`` step's field read back after its
+    #: keys, as lengths (``Director.check_typed``).
+    typed: List[Dict[str, Any]] = field(default_factory=list)
     #: G2: one number check a narration sentence, and what each found.
     narration_checks: int = 0
     spoken: List[Dict[str, Any]] = field(default_factory=list)
@@ -1479,12 +1482,16 @@ class Director:
                 raise CaptureFailed(
                     "gate 6", f"{self.where}: a secret typed into a {kind} field"
                 )
+            before = found.input_value()
             self.move_to(box.x + min(40.0, box.w / 2), box.y + box.h / 2)
             self.page.mouse.click(box.x + min(40.0, box.w / 2), box.y + box.h / 2)
             if step.clear:
                 found.fill("")
+            elif step.select:
+                found.select_text()
             found.press_sequentially(step.text, delay=config.TYPE_DELAY_MS)
             self.page.wait_for_timeout(config.FIELD_PAUSE_MS)
+            self.check_typed(step, found, before)
         elif isinstance(step, storyboard.Look):
             _, box = self._visible_box(step.look)
             self.ring(box)
@@ -1500,6 +1507,34 @@ class Director:
             self.slide(found, box, step.value, step.slide.describe())
         self.check_needles()
         self.check_events()
+
+    def check_typed(self, step: storyboard.Type, found: Locator, before: str) -> None:
+        """Gate 12 (typed as shown): the field reads what the step typed, or the
+        take refuses (``judge.typed_as_shown``). The tally keeps the lengths,
+        never the values."""
+        after = found.input_value()
+        kept = set(config.STATIC_NEEDLES) | set(self.redactor.values)
+        ok, numbers, why = judge.typed_as_shown(
+            step.text,
+            before,
+            after,
+            replaced=step.clear or step.select,
+            secret=step.secret,
+            kept=kept,
+        )
+        what = step.type.describe()
+        self.tally.typed.append(
+            {
+                "where": self.where,
+                "field": what,
+                "ok": ok,
+                "replaced": numbers["replaced"],
+                "typed_chars": numbers["typed_chars"],
+                "after_chars": numbers["after_chars"],
+            }
+        )
+        if not ok:
+            raise CaptureFailed("gate 12", f"{self.where}: {what}: {why}")
 
     def choose(self, step: storyboard.Choose) -> None:
         """C9: the cursor presses the select, the option is set without the list

@@ -150,6 +150,21 @@ class Type(_Strict):
     secret: bool = False
     #: Empty the field first (it holds a default the storyboard replaces).
     clear: bool = False
+    #: Select the field's text, then type over it, as a person replaces a value.
+    #: For a number box: emptied first (``clear``), it can draw "034" for 34.
+    select: bool = False
+
+    @model_validator(mode="after")
+    def _one_way_to_replace(self) -> "Type":
+        if self.select and self.clear:
+            raise ValueError(
+                "a type step replaces a value one way: select or clear, not both"
+            )
+        if self.select and self.secret:
+            raise ValueError(
+                "a secret field starts empty: there is nothing to select in it"
+            )
+        return self
 
 
 class Look(_Strict):

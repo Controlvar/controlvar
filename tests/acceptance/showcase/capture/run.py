@@ -810,6 +810,8 @@ def record(
                 director.tally.scenes_run == [s.id for s in board.scenes],
                 ran=director.tally.scenes_run,
                 storyboard=[s.id for s in board.scenes],
+                # Typed as shown: each type step's field, read back (lengths).
+                typed=director.tally.typed,
             )
             # Gate 10: the end state, through the API.
             who = page.evaluate(WHO_JS)

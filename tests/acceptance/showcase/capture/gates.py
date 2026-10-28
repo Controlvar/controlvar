@@ -878,6 +878,58 @@ def select_hold(option: str, shown: str, held: str, held_ms: int) -> Verdict:
     return True, numbers, ""
 
 
+def typed_as_shown(
+    text: str,
+    before: str,
+    after: str,
+    *,
+    replaced: bool,
+    secret: bool,
+    kept: Iterable[str] = (),
+) -> Verdict:
+    """Gate 12 (typed as shown): after a ``type`` step the field reads exactly
+    what the storyboard typed.
+
+    That is *text* when the step replaced the value (``clear`` or ``select``),
+    and otherwise the value *before* the step followed by *text*. A field that
+    reads anything else refuses the take: "034" after 34 was typed into an
+    emptied number box, "5034" when a selection did not take, or text put in
+    the middle of a value. The numbers and the refusal always carry the
+    lengths, and carry the values only when the step is not secret and none of
+    them holds a *kept* value (a needle).
+    """
+    expected = text if replaced else before + text
+    hidden = secret or any(
+        value and (value in text or value in before or value in after) for value in kept
+    )
+    numbers: Dict[str, Any] = {
+        "replaced": replaced,
+        "secret": secret,
+        "typed_chars": len(text),
+        "before_chars": len(before),
+        "after_chars": len(after),
+        "expected_chars": len(expected),
+        "values_shown": not hidden,
+    }
+    if not hidden:
+        numbers.update(typed=text, before=before, after=after)
+    if after == expected:
+        return True, numbers, ""
+    if hidden:
+        return (
+            False,
+            numbers,
+            f"the field reads {len(after)} characters after {len(text)} were typed;"
+            f" it should read {len(expected)} (values not shown)",
+        )
+    return (
+        False,
+        numbers,
+        f"the field reads {after!r} after {text!r} was typed; it should read"
+        f" {expected!r}",
+    )
+
+
 #: How the audit log page names the actions a flag's end state checks
 #: (frontend/src/components/admin/audit/actionLabels.ts; a unit test keeps
 #: them equal).
