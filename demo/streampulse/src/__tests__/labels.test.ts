@@ -1,4 +1,4 @@
-import { assignmentPill, assignmentReasonLabel, flagReasonLabel } from '@/lib/labels';
+import { assignmentPill, assignmentReasonLabel, flagReasonLabel, NOT_ASSIGNED_PILL, notAssignedLabel } from '@/lib/labels';
 
 const base = { loading: false, error: null };
 
@@ -43,5 +43,21 @@ describe('assignmentReasonLabel / assignmentPill', () => {
     expect(assignmentPill({ loading: true, error: null, variantName: 'control' })).toBe('loading…');
     expect(assignmentReasonLabel({ loading: false, error: new Error('API error: 404'), variantName: 'control' })).toBe('error: API error: 404');
     expect(assignmentPill({ loading: false, error: new Error('x'), variantName: 'control' })).toBe('error');
+  });
+
+  it('says a paused experiment is not enrolling and a completed one is over (both show control)', () => {
+    expect(assignmentReasonLabel({ ...base, assigned: false, reason: 'paused', variantName: 'control' })).toBe(
+      'not enrolled: paused (control shown)',
+    );
+    expect(assignmentPill({ ...base, assigned: false, reason: 'paused', variantName: 'control' })).toBe('not enrolled');
+    expect(assignmentReasonLabel({ ...base, assigned: false, reason: 'completed', variantName: 'control' })).toBe(
+      'experiment completed (control shown)',
+    );
+    expect(assignmentPill({ ...base, assigned: false, reason: 'completed', variantName: 'control' })).toBe('completed');
+  });
+
+  it('names the screen that assigns an experiment no screen has assigned yet', () => {
+    expect(NOT_ASSIGNED_PILL).toBe('not assigned yet');
+    expect(notAssignedLabel('Profile')).toBe('assigned when the Profile screen opens');
   });
 });

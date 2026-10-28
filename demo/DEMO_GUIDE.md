@@ -52,8 +52,8 @@ React SDK and the public tracking API — the same path a customer's app would u
 and runs a traffic simulator against it so the dashboards fill up while you talk.
 
 **What to show:**
-- Open http://localhost:3200 — point at the **Controlvar panel** (bottom-right): the visitor id, the variant this visitor
-  got for each experiment, and the two feature flags.
+- Open http://localhost:3200 — point at the **Controlvar panel** (bottom-right): the visitor id, each experiment's variant
+  once a page has assigned it (here the hero test's; the others fill in as you click through), and the two feature flags.
   - "This is a real storefront calling our API with an API key. Every visitor is bucketed server-side, sticky, in one call."
 - Click **Shop the collection** (or **Watch & shop** if you got the video hero) → the panel logs `hero_cta_click`
   - "That click just became a conversion for the hero experiment. Nothing else to wire up."
@@ -91,7 +91,7 @@ of devices through the same API, and a scripted "rollout story" walks the platfo
 - Pick **Internal tester** → the Player tab shows the redesigned player (`streampulse_player_v2: on (targeting_rule)`,
   employee rule) while normal devices are in the 5% canary.
 - Profile tab: `streampulse_wrapped` and `streampulse_profile_badges` are in a **mutual exclusion group** — the panel shows
-  one assigned and the other "excluded: mutual exclusion". A few devices show "in global holdout" for every experiment.
+  one assigned and the other "excluded: mutual exclusion". A few devices show "in global holdout" for every experiment whose screen you open.
 - Kill switch: in the dashboard (http://localhost:3100/feature-flags) disable **streampulse_recs_v2**, then reload StreamPulse
   or press **Refresh now** in its panel: the Home tab falls back to the classic feed.
 - The rollout story (drawer in the app, driven by `python demo/streampulse/simulator/rollout_story.py --auto`):
