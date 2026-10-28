@@ -144,6 +144,29 @@ def test_a_population_worked_by_hand_as_fractions():
     assert found["adjusted_ci_upper"] == pytest.approx(-0.16 + half, rel=1e-12)
 
 
+def test_the_overall_share_with_history_weights_the_arms_by_their_users():
+    """Arms of unequal size, where an unweighted average of the arms' shares
+    gives another answer. Control: 300 users, 30 convert, 10 returning (all 10
+    among the 30); Treatment: 200 users, 40 convert, 150 returning (the 40
+    among the 150).
+
+    S_xy: 10 - 10*30/300 = 9 and 40 - 150*40/200 = 10; S_xx: 10 - 10^2/300 =
+    29/3 and 150 - 150^2/200 = 75/2; theta = 19 / (29/3 + 75/2) = 114/283.
+    Everyone's share with history is (10 + 150) / (300 + 200) = 8/25, not the
+    mean of 1/30 and 3/4. Control's adjusted rate 1/10 - 114/283 (1/30 - 8/25)
+    = 3049/14150; the unweighted mean 47/120 would give 1383/5660.
+    """
+    counts = (300, 30, 10, 200, 40, 150)
+    assert oracles.cuped_theta(*counts) == float(Fraction(114, 283))
+    assert oracles.cuped_coverage_pct(*counts) == 32.0
+    assert oracles.cuped_adjusted_mean(*counts, variant="control") == float(
+        Fraction(3049, 14150)
+    )
+    assert oracles.cuped_adjusted_mean(*counts, variant="control") != float(
+        Fraction(1383, 5660)
+    )
+
+
 def test_balanced_history_leaves_the_effect_and_narrows_its_interval():
     """Control 4 users (2 convert, 2 returning), Treatment 4 (1 converts, 2
     returning): both arms' share with history is everyone's, 1/2, so the
