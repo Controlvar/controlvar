@@ -43,7 +43,7 @@
 #   the three saves an effect, so the line under the cards says the plan is
 #   for the 5% default (#1257).
 #
-# Last, the two further analyses the guide names ("Bayesian Analysis",
+# Then the two further analyses the guide names ("Bayesian Analysis",
 # "Sequential Testing"), turned on through the API on two of the running
 # experiments, as docs/api/sequential-testing.md and docs/api/bayesian.md turn
 # them on (the demo administrator is a superuser, so a running experiment's
@@ -95,6 +95,42 @@
 #   Treatment's expected loss (0.00038) is under the loss_threshold, but its
 #   probability is more than 50 standard deviations under 0.975, so the
 #   journey reads both decisions.
+#
+# Last, a revenue metric, which the results analyse as its mean value per
+# assigned user, each user's values added up and 0 for a user with none,
+# compared with Welch's t-test (getting-started/limitations.md). A fourth
+# 50/50 experiment, created through the API, has the revenue metric "Order
+# value" on the event purchase as its primary, and a second metric on the same
+# event marked lower is better. Its traffic step sends Control 256 users of
+# whom 64 buy and Treatment 256 of whom 112, each purchase with a value from
+# the step's ramp (base -20, step 20, modulo 6: -20, 0, 20, 40, 60, 80, -20,
+# ... in each variant on its own, so a refund, an order of 0 and orders of 20
+# to 80); the oracles add the values up as whole numbers (oracles.py).
+#
+# * The revenue row: the means 1840 / 256 = 7.1875 and 3280 / 256 = 12.8125,
+#   the difference 5.625 and the buyers, 64 and 112, are held exactly
+#   (rel: 0). With 256 users a variant and whole values, each of those numbers
+#   and every sum on the way to it is a binary fraction a double holds
+#   exactly, in whatever order the API adds them up. Welch's p-value
+#   (0.0086024) and the difference's 95% interval (1.4357 to 9.8143) are held
+#   to 1e-9 relative (the API and the oracle use the same scipy; they agreed
+#   within one unit in the last place on a local run). The wrong answers
+#   nearest them: the mean over the buyers only (28.75 for Control), the
+#   refunds dropped (8.046875), and Student's t-test with a pooled variance,
+#   whose p-value (0.0085880) moves 0.17% only through its degrees of freedom,
+#   the users being equal.
+# * The lower-is-better metric is listed with lower_is_better true and the same
+#   users and buyers. That is a listing, not a guardrail check: its rise is
+#   significant (Fisher's p 0.0000112), and the recommendation is still SHIP
+#   VARIANT, from the primary metric alone.
+# * The planned sample ("Sample Size"): the plan is for the share of the
+#   control's users who bought, 64 / 256 = 0.25, whatever the metric's type;
+#   at the 5% default effect, the formula of statistics/power-analysis.md
+#   gives 19,147 per variant (oracles.sample_size_proportions, held exactly).
+# * A fifth experiment is the same in everything but its values, each doubled
+#   (base -40, step 40): the buyers are the same 64 and 112, the means and the
+#   difference double exactly (14.375, 25.625, 11.25), the interval doubles and
+#   Welch's p-value does not move.
 #
 # The results are cached for up to five minutes, so each experiment's
 # population is complete before its results are first read, on the page or
@@ -958,3 +994,287 @@ steps:
             args: {control_users: 400, control_converted: 40, treatment_users: 400, treatment_converted: 64, prior_alpha: 100.0, prior_beta: 900.0, variant: treatment}
           rel: 0.0056
     fail: a posterior is not the experiment's prior updated with the users sent, the treatment's probability to be best is not the two posteriors' (a defect in how the draws are made shows here), or a probability under 0.975 is declared a winner
+  - id: revenue-experiment
+    doc: creating-an-experiment
+    do:
+      api:
+        method: POST
+        path: /api/v1/experiments/
+        as: admin
+        body:
+          name: Docs journey revenue
+          key: docs_journey_revenue
+          experiment_type: a_b
+          variants:
+            - name: Control
+              is_control: true
+              traffic_allocation: 50
+            - name: Treatment
+              is_control: false
+              traffic_allocation: 50
+          metrics:
+            - name: Order value
+              event_name: purchase
+              metric_type: revenue
+              is_primary: true
+            - name: Purchases, lower is better
+              event_name: purchase
+              metric_type: conversion
+              is_primary: false
+              lower_is_better: true
+    expect:
+      status: 201
+      json:
+        key: docs_journey_revenue
+        status: draft
+    save:
+      revenue-experiment-id:
+        path: id
+    fail: an experiment with a revenue metric and a lower-is-better metric cannot be created as a draft
+  - id: revenue-start
+    doc: creating-an-experiment
+    do:
+      api:
+        method: POST
+        path: /api/v1/experiments/{{revenue-experiment-id}}/start
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: active
+    fail: the revenue experiment cannot be started
+  - id: revenue-traffic
+    doc: creating-an-experiment
+    do:
+      traffic:
+        experiment: revenue-experiment-id
+        key: sdk-key
+        as: admin
+        event: purchase
+        users: revenue-user
+        variants:
+          Control: {assigned: 256, converted: 64}
+          Treatment: {assigned: 256, converted: 112}
+        value: {mode: ramp, base: -20, step: 20, modulo: 6}
+    fail: a user is refused, assigned a variant other than the documented hash gives, or a purchase or its value is refused
+  - id: revenue-results
+    doc: creating-an-experiment
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{revenue-experiment-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        experiment_name: Docs journey revenue
+        metrics.0.metric_name: Order value
+        metrics.0.metric_type: revenue
+        metrics.0.analysis: mean
+        metrics.0.is_primary: true
+        metrics.0.variants.0.variant_name: Control
+        metrics.0.variants.0.sample_size: 256
+        metrics.0.variants.0.conversions: 64
+        metrics.0.variants.1.variant_name: Treatment
+        metrics.0.variants.1.sample_size: 256
+        metrics.0.variants.1.conversions: 112
+        metrics.0.variants.1.statistical_test_used: welch_t_test
+        metrics.0.variants.1.is_significant: true
+        summary.total_users: 512
+        srm.warning: false
+        srm.p_value: 1.0
+      computed:
+        metrics.0.variants.0.mean:
+          oracle:
+            name: revenue_mean
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6, variant: control}
+          rel: 0
+        metrics.0.variants.1.mean:
+          oracle:
+            name: revenue_mean
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6, variant: treatment}
+          rel: 0
+        metrics.0.variants.1.absolute_difference:
+          oracle:
+            name: revenue_difference
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6}
+          rel: 0
+        metrics.0.variants.1.p_value:
+          oracle:
+            name: revenue_welch_p
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6}
+          rel: 1.0e-9
+        metrics.0.variants.1.adjusted_p_value:
+          oracle:
+            name: revenue_welch_p
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6}
+          rel: 1.0e-9
+        metrics.0.variants.1.absolute_difference_ci.0:
+          oracle:
+            name: revenue_welch_interval
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6, confidence_level: 0.95, bound: lower}
+          rel: 1.0e-9
+        metrics.0.variants.1.absolute_difference_ci.1:
+          oracle:
+            name: revenue_welch_interval
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -20, step: 20, modulo: 6, confidence_level: 0.95, bound: upper}
+          rel: 1.0e-9
+    fail: a revenue metric's mean is not its value per assigned user (non-buyers counted as 0, a refund subtracted), its buyers are not the users who sent the event, or its p-value or the difference's interval is not Welch's
+  - id: guardrail-listing
+    doc: metric-comparison-table
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{revenue-experiment-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        metrics.0.lower_is_better: false
+        metrics.1.metric_name: Purchases, lower is better
+        metrics.1.is_primary: false
+        metrics.1.lower_is_better: true
+        metrics.1.analysis: proportion
+        metrics.1.variants.0.variant_name: Control
+        metrics.1.variants.0.sample_size: 256
+        metrics.1.variants.0.conversions: 64
+        metrics.1.variants.1.variant_name: Treatment
+        metrics.1.variants.1.sample_size: 256
+        metrics.1.variants.1.conversions: 112
+        summary.recommendation: SHIP_VARIANT
+    fail: the lower-is-better metric is not listed with its direction and the users who sent its event, or its rise changes the recommendation, which follows the primary metric alone
+  - id: revenue-sample-size
+    doc: sample-size
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{revenue-experiment-id}}/sample-size
+        as: admin
+    expect:
+      status: 200
+      json:
+        metric_name: Order value
+        metric_type: revenue
+        analysed_as: conversion
+        baseline_rate: 0.25
+        baseline_source: observed
+        mde: 0.05
+        mde_source: default
+        power_target: 0.8
+        current_sample_size_per_variant: 256
+        is_adequate: false
+      computed:
+        required_sample_size_per_variant:
+          oracle:
+            name: sample_size_proportions
+            args: {baseline_rate: 0.25, minimum_detectable_effect: 0.05, alpha: 0.05, power: 0.8}
+          rel: 0
+    fail: a revenue metric's planned sample is not the two-proportion formula's for the share of the control's users who bought, at the 5% default effect
+  - id: doubled-experiment
+    doc: creating-an-experiment
+    do:
+      api:
+        method: POST
+        path: /api/v1/experiments/
+        as: admin
+        body:
+          name: Docs journey revenue doubled
+          key: docs_journey_revenue_doubled
+          experiment_type: a_b
+          variants:
+            - name: Control
+              is_control: true
+              traffic_allocation: 50
+            - name: Treatment
+              is_control: false
+              traffic_allocation: 50
+          metrics:
+            - name: Order value
+              event_name: purchase
+              metric_type: revenue
+              is_primary: true
+    expect:
+      status: 201
+      json:
+        key: docs_journey_revenue_doubled
+        status: draft
+    save:
+      doubled-experiment-id:
+        path: id
+    fail: a second experiment with a revenue metric cannot be created as a draft
+  - id: doubled-start
+    doc: creating-an-experiment
+    do:
+      api:
+        method: POST
+        path: /api/v1/experiments/{{doubled-experiment-id}}/start
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: active
+    fail: the second revenue experiment cannot be started
+  - id: doubled-traffic
+    doc: creating-an-experiment
+    do:
+      traffic:
+        experiment: doubled-experiment-id
+        key: sdk-key
+        as: admin
+        event: purchase
+        users: doubled-user
+        variants:
+          Control: {assigned: 256, converted: 64}
+          Treatment: {assigned: 256, converted: 112}
+        value: {mode: ramp, base: -40, step: 40, modulo: 6}
+    fail: a user is refused, assigned a variant other than the documented hash gives, or a purchase or its value is refused
+  - id: doubled-results
+    doc: creating-an-experiment
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{doubled-experiment-id}}
+        as: admin
+    expect:
+      status: 200
+      json:
+        experiment_name: Docs journey revenue doubled
+        metrics.0.metric_name: Order value
+        metrics.0.analysis: mean
+        metrics.0.variants.0.sample_size: 256
+        metrics.0.variants.0.conversions: 64
+        metrics.0.variants.1.sample_size: 256
+        metrics.0.variants.1.conversions: 112
+        metrics.0.variants.1.statistical_test_used: welch_t_test
+      computed:
+        metrics.0.variants.0.mean:
+          oracle:
+            name: revenue_mean
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6, variant: control}
+          rel: 0
+        metrics.0.variants.1.mean:
+          oracle:
+            name: revenue_mean
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6, variant: treatment}
+          rel: 0
+        metrics.0.variants.1.absolute_difference:
+          oracle:
+            name: revenue_difference
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6}
+          rel: 0
+        metrics.0.variants.1.p_value:
+          oracle:
+            name: revenue_welch_p
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6}
+          rel: 1.0e-9
+        metrics.0.variants.1.absolute_difference_ci.0:
+          oracle:
+            name: revenue_welch_interval
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6, confidence_level: 0.95, bound: lower}
+          rel: 1.0e-9
+        metrics.0.variants.1.absolute_difference_ci.1:
+          oracle:
+            name: revenue_welch_interval
+            args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6, confidence_level: 0.95, bound: upper}
+          rel: 1.0e-9
+    fail: with every value doubled, the buyers change, the means and the difference are not doubled, or Welch's p-value moves

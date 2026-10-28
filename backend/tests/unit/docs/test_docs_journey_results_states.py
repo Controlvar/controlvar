@@ -16,7 +16,8 @@ can fail is pure, and is tested here, in the unit job:
   of 100 and significant, so a recommendation to ship is withheld for the
   floor alone; the oracles' arguments are the counts the traffic steps send;
 * every results read of an experiment comes after its traffic, so the
-  five-minute results cache cannot hold an answer from before it;
+  five-minute results cache cannot hold an answer from before it (the two
+  revenue experiments at the end are the fourth and fifth with traffic);
 * the key is refused on the management route and the ruleset between a call
   that accepts it and its deletion, and each refusal's body is in the guide.
 
@@ -201,6 +202,8 @@ def _oracle_args(node: Any) -> List[Dict[str, Any]]:
     [
         ("ratio-traffic", ["ratio-results-api", "ratio-results-page"]),
         ("floor-traffic", ["floor-results-api", "floor-results-page"]),
+        ("revenue-traffic", ["revenue-results"]),
+        ("doubled-traffic", ["doubled-results"]),
     ],
 )
 def test_each_oracle_is_given_the_counts_its_traffic_sends(traffic, readers):
@@ -254,10 +257,14 @@ def test_every_results_read_comes_after_its_experiments_traffic():
         for index, step in enumerate(steps)
         if "traffic" in (step.get("do") or {})
     }
+    # The two revenue experiments (test_docs_oracles_revenue.py) are the
+    # fourth and fifth, each with its own traffic step and user prefix.
     assert set(traffic_at) == {
         "experiment-id",
         "ratio-experiment-id",
         "floor-experiment-id",
+        "revenue-experiment-id",
+        "doubled-experiment-id",
     }
     reads = 0
     for index, step in enumerate(steps):
