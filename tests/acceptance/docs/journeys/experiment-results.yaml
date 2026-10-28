@@ -43,6 +43,59 @@
 #   the three saves an effect, so the line under the cards says the plan is
 #   for the 5% default (#1257).
 #
+# Last, the two further analyses the guide names ("Bayesian Analysis",
+# "Sequential Testing"), turned on through the API on two of the running
+# experiments, as docs/api/sequential-testing.md and docs/api/bayesian.md turn
+# them on (the demo administrator is a superuser, so a running experiment's
+# settings may change), and read from their own routes, which are not cached.
+# Each number is held to an oracle written from those pages and textbook
+# formulas, not from the API's code (oracles.py):
+#
+# * Sequential (mSPRT), on the A/B experiment at the documented defaults
+#   (tau_squared 0.001, alpha 0.05): lambda 4.6007 under the boundary of 20, so
+#   it continues. On the minimum-sample experiment with tau_squared 0.01:
+#   lambda 117.30, so it stops for the effect, with the confidence sequence
+#   0.0553 to 0.5447; and the same read with ?alpha=0.001: the boundary 1000,
+#   so it continues, the interval widened to -0.0557 to 0.6557. lambda, the
+#   always-valid p-value and both bounds are held to 1e-9 relative. The API
+#   and the oracle compute the same closed forms in doubles (they agreed to
+#   2e-15 on a local run), and the defects nearest the right answers are
+#   0.4% away or more: the plain variance in place of Agresti-Caffo's, a sign
+#   flip, the default tau_squared in place of the experiment's, the stored
+#   alpha in place of the request's, and the half-width without its
+#   ln((V + tau^2) / V) term.
+# * Bayesian, on the minimum-sample experiment with the prior Beta(20, 180):
+#   the posteriors are exactly the prior plus each variant's converting and
+#   non-converting users, Beta(26, 234) and Beta(44, 216), and Treatment's
+#   probability to be best is 0.990282, from integrating the two posteriors.
+#   The API estimates it from 100,000 seeded Monte Carlo draws, so its answer
+#   has a standard deviation of 0.00031 around that. It is held to 0.2%
+#   relative (0.00198, 6.4 standard deviations: a false failure about once in
+#   six billion nights). None of these wrong answers can pass: the prior
+#   ignored gives 0.999936, the prior's alpha and beta swapped 0.9664, a
+#   posterior beta counting every user 0.9791, and the control's probability
+#   0.0097, each at least 20 of its own standard deviations outside the band.
+#   The band cannot tell a normal approximation of the posteriors (0.990074)
+#   from them, nor a defect in how the draws are made that moves the estimate
+#   by less than the band. The decision is STOP_WINNER: the probability is 49
+#   standard deviations above the page's 0.975, and Treatment's expected loss
+#   (0.0000987) is under a tenth of the loss_threshold (0.001).
+# * Bayesian again, on the A/B experiment with the prior Beta(100, 900), for
+#   the defects in how the draws are made. Near 0.99 a probability barely
+#   moves when the draws are made wrongly: with each variant's draws started
+#   from the same seed, the read above still passes on 999 of 1,000 seeds of
+#   the API's own draws. Near 0.93 the same defect moves it by about 36
+#   standard deviations. Here the posteriors are Beta(140, 1260) and
+#   Beta(164, 1236), and Treatment's probability is 0.927916 (standard
+#   deviation 0.00082), held to 0.56% relative (0.0052, 6.35 standard
+#   deviations); that defect fails on 878 of the same 1,000 seeds, so on about
+#   nine nights in ten. The wrong answers listed above fail here too, each at
+#   least 20 of its own standard deviations outside the band, and a normal
+#   approximation still passes (0.927716). The decision is CONTINUE:
+#   Treatment's expected loss (0.00038) is under the loss_threshold, but its
+#   probability is more than 50 standard deviations under 0.975, so the
+#   journey reads both decisions.
+#
 # The results are cached for up to five minutes, so each experiment's
 # population is complete before its results are first read, on the page or
 # through the API; nothing reads them earlier, so no cached answer can be
@@ -672,3 +725,236 @@ steps:
                   - row /Control\(control\) 60 10\.00%/
                   - row /Treatment 60 40\.00% \+300\.0%/
     fail: the results page reads "Planned sample Reached" before the planned sample is met, or recommends shipping a variant before every variant has 100 users
+  - id: sequential-on
+    doc: sequential-testing-stop-experiments-early
+    do:
+      api:
+        method: PUT
+        path: /api/v1/experiments/{{experiment-id}}
+        as: admin
+        body:
+          sequential_testing_enabled: true
+    expect:
+      status: 200
+      json:
+        sequential_testing_enabled: true
+    fail: an administrator cannot turn sequential testing on for the running experiment
+  - id: sequential-results
+    doc: sequential-testing-stop-experiments-early
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{experiment-id}}/sequential
+        as: admin
+    expect:
+      status: 200
+      json:
+        method: msprt
+        msprt_result.boundary: 20
+        msprt_result.can_stop: false
+        recommended_action: continue
+      computed:
+        msprt_result.lambda_ratio:
+          oracle:
+            name: msprt_lambda_ratio
+            args: {control_users: 400, control_converted: 40, treatment_users: 400, treatment_converted: 64, tau_squared: 0.001}
+          rel: 1.0e-9
+        msprt_result.always_valid_p_value:
+          oracle:
+            name: msprt_always_valid_p
+            args: {control_users: 400, control_converted: 40, treatment_users: 400, treatment_converted: 64, tau_squared: 0.001}
+          rel: 1.0e-9
+        confidence_sequence.lower:
+          oracle:
+            name: msprt_confidence_sequence
+            args: {control_users: 400, control_converted: 40, treatment_users: 400, treatment_converted: 64, tau_squared: 0.001, alpha: 0.05, bound: lower}
+          rel: 1.0e-9
+        confidence_sequence.upper:
+          oracle:
+            name: msprt_confidence_sequence
+            args: {control_users: 400, control_converted: 40, treatment_users: 400, treatment_converted: 64, tau_squared: 0.001, alpha: 0.05, bound: upper}
+          rel: 1.0e-9
+    fail: the mSPRT's lambda, always-valid p-value or confidence sequence is not the formula's for the users sent, at the default tau-squared and alpha, or it stops
+  - id: floor-sequential-on
+    doc: sequential-testing-stop-experiments-early
+    do:
+      api:
+        method: PUT
+        path: /api/v1/experiments/{{floor-experiment-id}}
+        as: admin
+        body:
+          sequential_testing_enabled: true
+          sequential_testing_config:
+            method: msprt
+            alpha: 0.05
+            tau_squared: 0.01
+    expect:
+      status: 200
+      json:
+        sequential_testing_enabled: true
+        sequential_testing_config.alpha: 0.05
+        sequential_testing_config.tau_squared: 0.01
+    fail: an administrator cannot turn sequential testing on with its own tau-squared for the running experiment
+  - id: floor-sequential
+    doc: sequential-testing-stop-experiments-early
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{floor-experiment-id}}/sequential
+        as: admin
+    expect:
+      status: 200
+      json:
+        method: msprt
+        msprt_result.boundary: 20
+        msprt_result.can_stop: true
+        msprt_result.evidence_strength: strong_for_effect
+        recommended_action: stop_for_effect
+      computed:
+        msprt_result.lambda_ratio:
+          oracle:
+            name: msprt_lambda_ratio
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, tau_squared: 0.01}
+          rel: 1.0e-9
+        msprt_result.always_valid_p_value:
+          oracle:
+            name: msprt_always_valid_p
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, tau_squared: 0.01}
+          rel: 1.0e-9
+        confidence_sequence.lower:
+          oracle:
+            name: msprt_confidence_sequence
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, tau_squared: 0.01, alpha: 0.05, bound: lower}
+          rel: 1.0e-9
+        confidence_sequence.upper:
+          oracle:
+            name: msprt_confidence_sequence
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, tau_squared: 0.01, alpha: 0.05, bound: upper}
+          rel: 1.0e-9
+    fail: the mSPRT does not stop for the effect at its boundary of 1/alpha, or its lambda or confidence sequence is not the formula's at the experiment's own tau-squared
+  - id: floor-sequential-alpha
+    doc: sequential-testing-stop-experiments-early
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{floor-experiment-id}}/sequential?alpha=0.001
+        as: admin
+    expect:
+      status: 200
+      json:
+        msprt_result.boundary: 1000
+        msprt_result.can_stop: false
+        recommended_action: continue
+      computed:
+        msprt_result.lambda_ratio:
+          oracle:
+            name: msprt_lambda_ratio
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, tau_squared: 0.01}
+          rel: 1.0e-9
+        confidence_sequence.lower:
+          oracle:
+            name: msprt_confidence_sequence
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, tau_squared: 0.01, alpha: 0.001, bound: lower}
+          rel: 1.0e-9
+        confidence_sequence.upper:
+          oracle:
+            name: msprt_confidence_sequence
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, tau_squared: 0.01, alpha: 0.001, bound: upper}
+          rel: 1.0e-9
+    fail: the request's alpha does not move the boundary to 1/alpha and widen the confidence sequence to the formula's, or the mSPRT still stops
+  - id: floor-bayesian-on
+    doc: bayesian-analysis
+    do:
+      api:
+        method: PUT
+        path: /api/v1/experiments/{{floor-experiment-id}}
+        as: admin
+        body:
+          bayesian_enabled: true
+          bayesian_config:
+            prior_family: beta
+            alpha: 20.0
+            beta: 180.0
+            loss_threshold: 0.001
+            credible_level: 0.95
+    expect:
+      status: 200
+      json:
+        bayesian_enabled: true
+        bayesian_config.alpha: 20.0
+        bayesian_config.beta: 180.0
+    fail: an administrator cannot turn Bayesian analysis on with a prior of its own for the running experiment
+  - id: floor-bayesian
+    doc: bayesian-analysis
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{floor-experiment-id}}/bayesian
+        as: admin
+    expect:
+      status: 200
+      json:
+        is_enabled: true
+        n_samples: 100000
+        decision: STOP_WINNER
+        variant_results.0.variant_key: Control
+        variant_results.0.posterior.alpha: 26.0
+        variant_results.0.posterior.beta: 234.0
+        variant_results.1.variant_key: Treatment
+        variant_results.1.posterior.alpha: 44.0
+        variant_results.1.posterior.beta: 216.0
+      computed:
+        variant_results.1.probability_to_be_best:
+          oracle:
+            name: bayes_prob_best
+            args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, prior_alpha: 20.0, prior_beta: 180.0, variant: treatment}
+          rel: 0.002
+    fail: a posterior is not the experiment's prior updated with the users sent, the treatment's probability to be best is not the two posteriors', or a clear winner is not declared
+  - id: bayesian-on
+    doc: bayesian-analysis
+    do:
+      api:
+        method: PUT
+        path: /api/v1/experiments/{{experiment-id}}
+        as: admin
+        body:
+          bayesian_enabled: true
+          bayesian_config:
+            prior_family: beta
+            alpha: 100.0
+            beta: 900.0
+            loss_threshold: 0.001
+            credible_level: 0.95
+    expect:
+      status: 200
+      json:
+        bayesian_enabled: true
+        bayesian_config.alpha: 100.0
+        bayesian_config.beta: 900.0
+    fail: an administrator cannot turn Bayesian analysis on with a prior of its own for the running A/B experiment
+  - id: bayesian-results
+    doc: bayesian-analysis
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{experiment-id}}/bayesian
+        as: admin
+    expect:
+      status: 200
+      json:
+        is_enabled: true
+        n_samples: 100000
+        decision: CONTINUE
+        variant_results.0.variant_key: Control
+        variant_results.0.posterior.alpha: 140.0
+        variant_results.0.posterior.beta: 1260.0
+        variant_results.1.variant_key: Treatment
+        variant_results.1.posterior.alpha: 164.0
+        variant_results.1.posterior.beta: 1236.0
+      computed:
+        variant_results.1.probability_to_be_best:
+          oracle:
+            name: bayes_prob_best
+            args: {control_users: 400, control_converted: 40, treatment_users: 400, treatment_converted: 64, prior_alpha: 100.0, prior_beta: 900.0, variant: treatment}
+          rel: 0.0056
+    fail: a posterior is not the experiment's prior updated with the users sent, the treatment's probability to be best is not the two posteriors' (a defect in how the draws are made shows here), or a probability under 0.975 is declared a winner
