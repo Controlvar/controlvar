@@ -258,7 +258,7 @@ text = "4. Place an order"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Close the panel if it is open (press Powered by Controlvar), then open Field Watch from the home page, press Add to cart and then Go to checkout, fill in the checkout with any name, address and card digits, pressing Continue between its steps, and press Place order."
+text = "Close the panel if it is open (press Powered by Controlvar), then open Field Watch from the home page, press Add to cart (Buy now, in two of the buy-button test's four arms) and then Go to checkout, fill in the checkout with any name, address and card digits, pressing Continue between its steps, and press Place order."
 by = [
     "journey:guided-examples#panel-closed",
     "journey:guided-examples#paused-product",
@@ -268,6 +268,17 @@ by = [
     "journey:guided-examples#paused-payment",
     "journey:guided-examples#paused-card",
     "journey:guided-examples#paused-order",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_shoplab_seeds_four_experiments_of_the_kinds_its_pages_show",
+    "test:demo/shoplab/src/__tests__/product-detail.test.tsx::styles the buy button from the variant configuration (colour + text)",
+]
+
+[[unit]]
+text = "Go by the storefront's links, without reloading a page or opening one by its address, until the order is placed: the React SDK sends an order only to the tests it has answered since the storefront was last loaded."
+by = [
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::POSTs one entry per cached assignment to /api/v1/tracking/batch",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::another client instance has none of them: its event goes once with no key",
+    "journey:guided-examples#paused-order-reached",
+    "journey:guided-examples#order-counted",
 ]
 
 [[unit]]
@@ -604,10 +615,18 @@ text = "CUPED."
 by = ["exempt:label"]
 
 [[unit]]
-text = "The simulators' visitors are new, so CUPED has no history before their assignment to work with here."
+text = "ShopLab's simulator sends only new visitors, so CUPED has no history before their assignment to work with in these examples."
 by = [
+    "test:demo/shoplab/simulator/test_traffic.py::test_each_experiment_is_assigned_where_the_storefront_assigns_it",
     "test:backend/tests/integration/api/test_cuped_results_api.py::test_n2_n4_zero_coverage_is_theta_zero_and_still_ga",
     "test:backend/tests/integration/api/test_cuped_results_api.py::test_n1_users_with_no_history_stay_in_with_x_zero",
+]
+
+[[unit]]
+text = "The CUPED page uses the demo data's checkout_button_color, which has that history."
+by = [
+    "test:backend/tests/unit/scripts/test_seed_demo_history.py::test_a_history_event_is_untagged_and_stored_a_day_before_assignment",
+    "test:backend/tests/unit/scripts/test_seed_demo_history.py::test_history_is_equally_likely_in_both_arms",
 ]
 
 [[unit]]

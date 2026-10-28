@@ -123,8 +123,11 @@ each arm.
 ### 4. Place an order {#pause-place-an-order}
 
 Close the panel if it is open (press Powered by Controlvar), then open Field Watch from the home
-page, press Add to cart and then Go to checkout, fill in the checkout with any name, address and
-card digits, pressing Continue between its steps, and press Place order.
+page, press Add to cart (Buy now, in two of the buy-button test's four arms) and then Go to
+checkout, fill in the checkout with any name, address and card digits, pressing Continue between
+its steps, and press Place order. Go by the storefront's links, without reloading a page or
+opening one by its address, until the order is placed: the [React SDK](../sdk/react.md) sends
+an order only to the tests it has answered since the storefront was last loaded.
 
 You will see "Thanks for your order!".
 
@@ -251,8 +254,9 @@ and the same nightly CI run walks them.
   [Limitations](../getting-started/limitations.md) says.
 - **How soon an open page sees a flag change.** StreamPulse asks for its flags when you pick a
   device or press Refresh now, and does not poll.
-- **CUPED.** The simulators' visitors are new, so CUPED has no history before their assignment
-  to work with here.
+- **CUPED.** ShopLab's simulator sends only new visitors, so CUPED has no history before their
+  assignment to work with in these examples. The [CUPED page](../api/cuped.md) uses the demo
+  data's `checkout_button_color`, which has that history.
 - **Other SDKs and deployments.** The native mobile SDKs, the server-side SDKs and local
   evaluation, the Go SDK, rotating an API key under a running app, SSO and a cloud deployment
   each have their own guides.
