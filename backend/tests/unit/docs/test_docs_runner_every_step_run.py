@@ -36,7 +36,7 @@ from docs_runner import loader, registry
 JOURNEYS = RUNNER_ROOT / "journeys"
 #: The journeys whose verdict must be PASS or FAIL: the list is held here, so
 #: a change to it is a change to this file too.
-EVERY_STEP_RUN = ("demo-shoplab",)
+EVERY_STEP_RUN = ("demo-shoplab", "guided-examples")
 #: One that is not on the list, for the control: its waiver still loads.
 WAIVABLE = "demo-streampulse"
 

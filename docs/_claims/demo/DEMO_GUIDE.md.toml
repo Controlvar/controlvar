@@ -16,6 +16,13 @@ text = "This guide walks you through a 20-minute live demo of the Controlvar exp
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "To follow the demo apps on your own instead, one step at a time with what you will see at each step, use Guided examples."
+by = [
+    "journey:guided-examples#stop-simulator",
+    "journey:guided-examples#apply-below",
+]
+
+[[unit]]
 text = "The demo environment comes pre-loaded with 100K+ historical events, and a live simulator adds new events in the background while you present."
 by = [
     "test:backend/tests/unit/scripts/test_demo_seed_scenes.py::test_the_seed_writes_more_than_100000_events",

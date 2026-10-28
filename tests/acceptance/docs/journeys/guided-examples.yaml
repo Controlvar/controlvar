@@ -1,0 +1,1051 @@
+# Guided examples (docs/guides/guided-examples.md), as its reader follows it
+# (#1368): every numbered step of the page, in the page's order, on the stack
+# demo/setup-local.sh starts (demo-local). Each step's `doc` is the explicit
+# anchor of one numbered step of the page, and
+# backend/tests/unit/docs/test_docs_journey_guided_examples.py holds the two in
+# step: the page's numbered steps and this file's `doc` values are the same
+# list in the same order, each step's "You will see" is checked here by an
+# ARIA, JSON or output expectation, and the page's last section, "What these
+# examples do not cover", has no steps. registry.EVERY_STEP_RUN names this
+# journey, so no step may be waived or handed to Doc Examples: its verdict is
+# PASS or FAIL, never PARTIAL.
+#
+# It runs last in the demo job (file order: demo-guide, demo-shoplab,
+# demo-streampulse-simulator, demo-streampulse, guided-examples), after
+# demo-shoplab has stopped the ShopLab simulator and completed the checkout
+# flow. So it counts on the hero banner, an experiment no other journey
+# pauses, and it stops the ShopLab simulator again with a block that does
+# nothing when the simulator has already gone (the same command-line check
+# as teardown-local.sh: a pid whose process is not the simulator is left
+# alone), then waits until that pid is no longer the simulator. The ShopLab
+# simulator is the only one that writes to ShopLab's experiments: the
+# StreamPulse simulator sends its own app's five experiments and flags, and
+# simulate_live_events.py the core seed's two, and the StreamPulse steps
+# below count nothing, so those two keep running.
+#
+# The visitor is chosen offline (values.choose_visitor with the name
+# "docs-guided-examples"): a UUIDv4 outside the demo's global holdout, in the
+# hero banner's video_hero arm, the buy button's control (whose words are
+# "Add to cart") and the checkout flow's standard arm (the 3-step form, the
+# form a completed checkout flow shows too). It is not demo-shoplab's
+# visitor, which has already bought in the hero banner.
+#
+# 1. The A/B test: the visitor's press of the hero's button counts once, in
+#    video_hero, read before and after through results with use_cache=false
+#    (the before read is after the home page assigned the visitor), and the
+#    results page shows the API's users per arm.
+# 2. Paused (in the dashboard, before the visit), the storefront shows the
+#    control with the reason `paused`, and an order counts in no arm of the
+#    hero banner. That the order reached the API is read from the buy-button
+#    test, which is running and counts it (+1 in the visitor's arm): the same
+#    request carries both, so a hero read after it is not early. Started
+#    again, a second order counts once, in video_hero (the paused one did not
+#    make the visitor a buyer). Then the free-shipping flag off and on.
+# 3. StreamPulse's AI search rule, by preset and at its OS-version boundary.
+#
+# Expectations written on 2026-10-28 from the page, demo-shoplab.yaml's order
+# steps (the same storefront and form), the seeds and the apps' source,
+# before the first run.
+guide: guides/guided-examples.md
+stack: demo-local
+profile: full
+video: false
+written: 2026-10-28
+visitor: e69da0dd-becb-414a-b258-097b8724ef5e
+steps:
+  # --- Run an A/B test on ShopLab and read the result ----------------------
+  - id: stop-simulator
+    doc: ab-stop-the-simulator
+    do:
+      run:
+        command: |
+          pid="$(cat demo/.pids/shoplab-simulator.pid)"
+          if ps -o args= -p "$pid" | grep -qF demo/shoplab/simulator/traffic.py; then kill "$pid"; fi
+          while ps -o args= -p "$pid" | grep -qF demo/shoplab/simulator/traffic.py; do sleep 1; done
+          printf 'ShopLab simulator stopped\n'
+        up_to_seconds: 60
+    expect:
+      exit: 0
+      output:
+        - ShopLab simulator stopped
+    fail: demo/setup-local.sh left no ShopLab simulator pid file, or the simulator is still running after the page's block, so its visitors would move the counts below
+  - id: storefront
+    doc: ab-open-the-storefront
+    do:
+      open: http://localhost:3200
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - paragraph: Now playing
+          - heading "See it in motion" [level=1]
+          - button "Watch & shop"
+        - complementary "Controlvar panel":
+          - button "Powered by Controlvar"
+    fail: the storefront does not answer at the page's address, or does not show the video hero the documented hash gives the journey's visitor
+  - id: panel
+    doc: ab-open-the-panel
+    do:
+      click:
+        role: button
+        name: Powered by Controlvar
+    expect:
+      aria: |
+        - complementary "Controlvar panel":
+          - button "Powered by Controlvar" [expanded]
+          - heading "Visitor" [level=2]
+          - code: e69da0dd-becb-414a-b258-097b8724ef5e
+          - heading "Experiments" [level=2]
+          - list:
+            - listitem:
+              - text: Hero banner
+              - code: shoplab_hero_banner
+              - text: video_hero
+    fail: the panel does not show the journey's visitor, assigned by the home page to the hero banner's video_hero arm
+  - id: find-hero
+    doc: ab-find-the-test
+    do:
+      api:
+        method: GET
+        path: /api/v1/experiments/?search=Hero%20banner
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: shoplab_hero_banner
+        items.0.status: active
+        items.0.experiment_type: a_b
+    save:
+      hero-id:
+        path: items.0.id
+    fail: the page's search does not find one ACTIVE A/B test, shoplab_hero_banner
+  - id: counts-before
+    doc: ab-read-the-counts
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{hero-id}}?use_cache=false
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: active
+        metrics.0.metric_name: Hero CTA click-through
+        metrics.0.variants.0.variant_name: control
+        metrics.0.variants.1.variant_name: video_hero
+        metrics.1.metric_name: Purchase
+        metrics.1.variants.0.variant_name: control
+        metrics.1.variants.1.variant_name: video_hero
+    save:
+      control-clicks-before:
+        path: metrics.0.variants.0.conversions
+      video-clicks-before:
+        path: metrics.0.variants.1.conversions
+      control-users-before:
+        path: metrics.0.variants.0.sample_size
+      video-users-before:
+        path: metrics.0.variants.1.sample_size
+    fail: the hero banner's results cannot be read freshly while it is active, or do not give its two metrics' control and video_hero arms in that order
+  - id: hero-button
+    doc: ab-press-the-button
+    do:
+      click:
+        role: button
+        name: Watch & shop
+    expect:
+      aria: |
+        - main:
+          - heading "All products" [level=1]
+    fail: the video hero's button does not lead to the product list
+  - id: press-counted
+    doc: ab-read-the-counts-again
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{hero-id}}?use_cache=false
+        as: admin
+    poll:
+      up_to_seconds: 60
+      every_seconds: 5
+    expect:
+      status: 200
+      json:
+        status: active
+        metrics.0.metric_name: Hero CTA click-through
+        metrics.0.variants.0.variant_name: control
+        metrics.0.variants.1.variant_name: video_hero
+      delta:
+        metrics.0.variants.0.conversions:
+          since: control-clicks-before
+          by: 0
+        metrics.0.variants.1.conversions:
+          since: video-clicks-before
+          by: 1
+        metrics.0.variants.0.sample_size:
+          since: control-users-before
+          by: 0
+        metrics.0.variants.1.sample_size:
+          since: video-users-before
+          by: 0
+    save:
+      control-users-after:
+        path: metrics.0.variants.0.sample_size
+      video-users-after:
+        path: metrics.0.variants.1.sample_size
+    fail: the press of the hero's button does not count exactly once, in the visitor's video_hero arm and nowhere else
+  - id: sign-in-page
+    doc: ab-sign-in
+    do:
+      goto: /login
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - heading "Sign in" [level=1]
+    fail: the dashboard's sign-in page does not answer at the page's address
+  - id: email
+    doc: ab-sign-in
+    do:
+      fill:
+        label: Email
+        value: admin@demo.com
+        quote: false
+        reason: the sign-in form's field; the page gives the address to enter
+    expect:
+      aria: |
+        - textbox "Email": admin@demo.com
+    fail: there is no Email field to fill
+  - id: password
+    doc: ab-sign-in
+    do:
+      fill:
+        label: Password
+        value: Demo1234!
+        quote: false
+        reason: the sign-in form's field; the page gives the demo administrator's documented password
+    expect:
+      aria: |
+        - textbox "Password"
+    fail: there is no Password field to fill
+  - id: signed-in
+    doc: ab-sign-in
+    do:
+      click:
+        role: button
+        name: Sign in
+    expect:
+      url: /experiments
+      aria: |
+        - main:
+          - heading "Experiments" [level=1]
+    fail: the demo administrator cannot sign in, or does not land on the experiments list
+  - id: results-page
+    doc: ab-open-the-results
+    do:
+      goto: /results/{{hero-id}}
+    expect:
+      aria: |
+        - main:
+          - 'heading "ShopLab: Hero banner — image vs video" [level=2]'
+          - tabpanel:
+            - region "Metric comparison":
+              - heading "All Metrics" [level=3]
+      cells:
+        - row: control(control)
+          also: Hero CTA click-throughprimary
+          column: Sample Size
+          delta:
+            since: control-users-after
+            by: 0
+          quote: false
+          reason: the results table's row for the control arm of the primary metric, as the page labels them
+        - row: video_hero
+          also: Hero CTA click-throughprimary
+          column: Sample Size
+          delta:
+            since: video-users-after
+            by: 0
+          quote: false
+          reason: the results table's row for the video_hero arm of the primary metric, as the page labels them
+    fail: the hero banner's results page does not show the users of each arm that the API gives
+  # --- Pause the test, and turn a feature off and on with a flag -----------
+  - id: experiment-page
+    doc: pause-the-test
+    do:
+      goto: /experiments/{{hero-id}}
+    expect:
+      aria: |
+        - main:
+          - 'heading "ShopLab: Hero banner — image vs video" [level=1]'
+          - text: Active
+          - button "Pause"
+          - button "Complete"
+          - link "View results"
+    fail: the hero banner's page in the dashboard does not open, active, with a Pause button
+  - id: pause
+    doc: pause-the-test
+    do:
+      click:
+        role: button
+        name: Pause
+    expect:
+      aria: |
+        - main:
+          - 'heading "ShopLab: Hero banner — image vs video" [level=1]'
+          - text: Paused
+          - button "Start"
+          - button "Complete"
+    fail: Pause does not pause the hero banner, or does not offer Start in its place
+  - id: paused-storefront
+    doc: pause-reload-the-storefront
+    do:
+      open: http://localhost:3200
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - paragraph: New season
+          - heading "Gear up for the season" [level=1]
+          - button "Shop the collection"
+    fail: the reloaded storefront does not show the control's hero while the hero banner is paused
+  - id: paused-panel
+    doc: pause-reload-the-storefront
+    do:
+      click:
+        role: button
+        name: Powered by Controlvar
+    expect:
+      aria: |
+        - complementary "Controlvar panel":
+          - list:
+            - listitem:
+              - text: Hero banner
+              - code: shoplab_hero_banner
+              - text: "not enrolled: paused (control shown) not enrolled"
+    fail: the panel does not say the hero banner is paused and the visitor sees its control, or shows an error
+  - id: find-buy-button
+    doc: pause-read-the-counts
+    do:
+      api:
+        method: GET
+        path: /api/v1/experiments/?search=PDP%20buy%20button
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: shoplab_pdp_buy_button
+        items.0.status: active
+    save:
+      buy-button-id:
+        path: items.0.id
+    fail: the page's search does not find one ACTIVE test, shoplab_pdp_buy_button
+  - id: hero-paused-before
+    doc: pause-read-the-counts
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{hero-id}}?use_cache=false
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: paused
+        metrics.1.metric_name: Purchase
+        metrics.1.variants.0.variant_name: control
+        metrics.1.variants.1.variant_name: video_hero
+    save:
+      control-buyers-before:
+        path: metrics.1.variants.0.conversions
+      video-buyers-before:
+        path: metrics.1.variants.1.conversions
+      control-buyer-users-before:
+        path: metrics.1.variants.0.sample_size
+      video-buyer-users-before:
+        path: metrics.1.variants.1.sample_size
+    fail: the paused hero banner's results cannot be read freshly, or do not give its Purchase metric's control and video_hero arms in that order
+  - id: buy-button-before
+    doc: pause-read-the-counts
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{buy-button-id}}?use_cache=false
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: active
+        metrics.1.metric_name: Purchase
+        metrics.1.variants.0.variant_name: control
+    save:
+      buy-button-buyers-before:
+        path: metrics.1.variants.0.conversions
+    fail: the buy-button test's results cannot be read freshly, or do not give its Purchase metric's control arm first
+  - id: paused-product
+    doc: pause-place-an-order
+    do:
+      click:
+        role: link
+        name: Field Watch, $199.00
+        quote: false
+        reason: the home page's link to the product the page names, Field Watch
+    expect:
+      aria: |
+        - main:
+          - heading "Field Watch" [level=1]
+          - button "Add to cart"
+    fail: the home page's product link does not open Field Watch with its Add to cart button
+  - id: paused-add-to-cart
+    doc: pause-place-an-order
+    do:
+      click:
+        role: button
+        name: Add to cart
+    expect:
+      aria: |
+        - main:
+          - status:
+            - text: /Added to your cart \(1 item\)/
+            - link "Go to checkout"
+    fail: Add to cart does not put the product in the cart and offer the checkout
+  - id: paused-checkout
+    doc: pause-place-an-order
+    do:
+      click:
+        role: link
+        name: Go to checkout
+    expect:
+      aria: |
+        - main:
+          - heading "Checkout" [level=1]
+          - 'form "Step 1: Address"'
+    fail: the checkout page does not open on its first step with the product in the cart
+  - id: paused-name
+    doc: pause-place-an-order
+    do:
+      fill:
+        label: Full name
+        value: Docs Journey
+        quote: false
+        reason: the checkout form's first field; the page says any name does
+    expect:
+      aria: |
+        - textbox "Full name": Docs Journey
+    fail: the checkout form has no Full name field to fill
+  - id: paused-email
+    doc: pause-place-an-order
+    do:
+      fill:
+        label: Email
+        value: docs-journey@example.com
+        quote: false
+        reason: the checkout form's email field
+    expect:
+      aria: |
+        - textbox "Email": docs-journey@example.com
+    fail: the checkout form has no Email field to fill
+  - id: paused-address
+    doc: pause-place-an-order
+    do:
+      fill:
+        label: Street address
+        value: 1 Trail Road
+        quote: false
+        reason: the checkout form's street field; the page says any address does
+    expect:
+      aria: |
+        - textbox "Street address": 1 Trail Road
+    fail: the checkout form has no Street address field to fill
+  - id: paused-city
+    doc: pause-place-an-order
+    do:
+      fill:
+        label: City
+        value: Portland
+        quote: false
+        reason: the checkout form's city field
+    expect:
+      aria: |
+        - textbox "City": Portland
+    fail: the checkout form has no City field to fill
+  - id: paused-postal
+    doc: pause-place-an-order
+    do:
+      fill:
+        label: Postal code
+        value: "97201"
+        quote: false
+        reason: the checkout form's postal code field
+    expect:
+      aria: |
+        - textbox "Postal code": "97201"
+    fail: the checkout form has no Postal code field to fill
+  - id: paused-shipping
+    doc: pause-place-an-order
+    do:
+      click:
+        role: button
+        name: Continue
+    expect:
+      aria: |
+        - main:
+          - heading "Checkout" [level=1]
+          - 'form "Step 2: Shipping"'
+    fail: the address step does not lead to the shipping step
+  - id: paused-payment
+    doc: pause-place-an-order
+    do:
+      click:
+        role: button
+        name: Continue
+    expect:
+      aria: |
+        - main:
+          - heading "Checkout" [level=1]
+          - 'form "Step 3: Payment"'
+    fail: the shipping step does not lead to the payment step
+  - id: paused-card
+    doc: pause-place-an-order
+    do:
+      fill:
+        label: Card number (any digits — demo only)
+        value: 4242 4242
+        quote: false
+        reason: the payment step's field; the page says any card digits do
+    expect:
+      aria: |
+        - textbox "Card number (any digits — demo only)": 4242 4242
+    fail: the payment step has no card field to fill
+  - id: paused-order
+    doc: pause-place-an-order
+    do:
+      click:
+        role: button
+        name: Place order · $199.00
+        quote: false
+        reason: the payment step's button, which names the order's total after the words the page gives, Place order
+    expect:
+      aria: |
+        - main:
+          - status:
+            - heading "Thanks for your order!" [level=1]
+    fail: the order cannot be placed while the hero banner is paused
+  - id: paused-order-reached
+    doc: pause-read-the-counts-again
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{buy-button-id}}?use_cache=false
+        as: admin
+    poll:
+      up_to_seconds: 60
+      every_seconds: 5
+    expect:
+      status: 200
+      json:
+        status: active
+        metrics.1.metric_name: Purchase
+        metrics.1.variants.0.variant_name: control
+      delta:
+        metrics.1.variants.0.conversions:
+          since: buy-button-buyers-before
+          by: 1
+    fail: the order placed while the hero banner is paused does not reach the API, where the running buy-button test would count it in the visitor's control arm
+  - id: paused-order-in-no-arm
+    doc: pause-read-the-counts-again
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{hero-id}}?use_cache=false
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: paused
+        metrics.1.metric_name: Purchase
+        metrics.1.variants.0.variant_name: control
+        metrics.1.variants.1.variant_name: video_hero
+      delta:
+        metrics.1.variants.0.conversions:
+          since: control-buyers-before
+          by: 0
+        metrics.1.variants.1.conversions:
+          since: video-buyers-before
+          by: 0
+        metrics.1.variants.0.sample_size:
+          since: control-buyer-users-before
+          by: 0
+        metrics.1.variants.1.sample_size:
+          since: video-buyer-users-before
+          by: 0
+    fail: the order placed while the hero banner is paused counts in one of its arms
+  - id: paused-experiment-page
+    doc: pause-start-again
+    do:
+      goto: /experiments/{{hero-id}}
+    expect:
+      aria: |
+        - main:
+          - 'heading "ShopLab: Hero banner — image vs video" [level=1]'
+          - text: Paused
+          - button "Start"
+    fail: the hero banner's page does not open, paused, with a Start button
+  - id: start
+    doc: pause-start-again
+    do:
+      click:
+        role: button
+        name: Start
+    expect:
+      aria: |
+        - main:
+          - 'heading "ShopLab: Hero banner — image vs video" [level=1]'
+          - text: Active
+          - button "Pause"
+    fail: Start does not make the paused hero banner active again
+  - id: resumed-storefront
+    doc: pause-order-again
+    do:
+      open: http://localhost:3200
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - paragraph: Now playing
+          - heading "See it in motion" [level=1]
+          - button "Watch & shop"
+    fail: the reloaded storefront does not show the visitor's video hero again once the hero banner is started
+  - id: product-again
+    doc: pause-order-again
+    do:
+      click:
+        role: link
+        name: Field Watch, $199.00
+        quote: false
+        reason: the home page's link to the product the page names, Field Watch
+    expect:
+      aria: |
+        - main:
+          - heading "Field Watch" [level=1]
+          - button "Add to cart"
+    fail: the home page's product link does not open Field Watch with its Add to cart button
+  - id: add-to-cart-again
+    doc: pause-order-again
+    do:
+      click:
+        role: button
+        name: Add to cart
+    expect:
+      aria: |
+        - main:
+          - status:
+            - text: /Added to your cart \(1 item\)/
+            - link "Go to checkout"
+    fail: Add to cart does not put the product in the cart again after the first order
+  - id: checkout-again
+    doc: pause-order-again
+    do:
+      click:
+        role: link
+        name: Go to checkout
+    expect:
+      aria: |
+        - main:
+          - heading "Checkout" [level=1]
+          - 'form "Step 1: Address"'
+    fail: the checkout page does not open on its first step for the second order
+  - id: order-name
+    doc: pause-order-again
+    do:
+      fill:
+        label: Full name
+        value: Docs Journey
+        quote: false
+        reason: the checkout form's first field; the page says any name does
+    expect:
+      aria: |
+        - textbox "Full name": Docs Journey
+    fail: the checkout form has no Full name field to fill
+  - id: order-email
+    doc: pause-order-again
+    do:
+      fill:
+        label: Email
+        value: docs-journey@example.com
+        quote: false
+        reason: the checkout form's email field
+    expect:
+      aria: |
+        - textbox "Email": docs-journey@example.com
+    fail: the checkout form has no Email field to fill
+  - id: order-address
+    doc: pause-order-again
+    do:
+      fill:
+        label: Street address
+        value: 1 Trail Road
+        quote: false
+        reason: the checkout form's street field; the page says any address does
+    expect:
+      aria: |
+        - textbox "Street address": 1 Trail Road
+    fail: the checkout form has no Street address field to fill
+  - id: order-city
+    doc: pause-order-again
+    do:
+      fill:
+        label: City
+        value: Portland
+        quote: false
+        reason: the checkout form's city field
+    expect:
+      aria: |
+        - textbox "City": Portland
+    fail: the checkout form has no City field to fill
+  - id: order-postal
+    doc: pause-order-again
+    do:
+      fill:
+        label: Postal code
+        value: "97201"
+        quote: false
+        reason: the checkout form's postal code field
+    expect:
+      aria: |
+        - textbox "Postal code": "97201"
+    fail: the checkout form has no Postal code field to fill
+  - id: order-shipping
+    doc: pause-order-again
+    do:
+      click:
+        role: button
+        name: Continue
+    expect:
+      aria: |
+        - main:
+          - heading "Checkout" [level=1]
+          - 'form "Step 2: Shipping"'
+    fail: the address step does not lead to the shipping step
+  - id: order-payment
+    doc: pause-order-again
+    do:
+      click:
+        role: button
+        name: Continue
+    expect:
+      aria: |
+        - main:
+          - heading "Checkout" [level=1]
+          - 'form "Step 3: Payment"'
+    fail: the shipping step does not lead to the payment step
+  - id: order-card
+    doc: pause-order-again
+    do:
+      fill:
+        label: Card number (any digits — demo only)
+        value: 4242 4242
+        quote: false
+        reason: the payment step's field; the page says any card digits do
+    expect:
+      aria: |
+        - textbox "Card number (any digits — demo only)": 4242 4242
+    fail: the payment step has no card field to fill
+  - id: order-placed
+    doc: pause-order-again
+    do:
+      click:
+        role: button
+        name: Place order · $199.00
+        quote: false
+        reason: the payment step's button, which names the order's total after the words the page gives, Place order
+    expect:
+      aria: |
+        - main:
+          - status:
+            - heading "Thanks for your order!" [level=1]
+    fail: the second order cannot be placed
+  - id: order-counted
+    doc: pause-read-the-result
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{hero-id}}?use_cache=false
+        as: admin
+    poll:
+      up_to_seconds: 60
+      every_seconds: 5
+    expect:
+      status: 200
+      json:
+        status: active
+        metrics.1.metric_name: Purchase
+        metrics.1.variants.0.variant_name: control
+        metrics.1.variants.1.variant_name: video_hero
+      delta:
+        metrics.1.variants.0.conversions:
+          since: control-buyers-before
+          by: 0
+        metrics.1.variants.1.conversions:
+          since: video-buyers-before
+          by: 1
+        metrics.1.variants.0.sample_size:
+          since: control-buyer-users-before
+          by: 0
+        metrics.1.variants.1.sample_size:
+          since: video-buyer-users-before
+          by: 0
+    fail: the order placed once the hero banner is started again does not count exactly once, in the visitor's video_hero arm and nowhere else
+  - id: flags
+    doc: pause-flag-off
+    do:
+      goto: /feature-flags
+    expect:
+      url: /feature-flags
+      aria: |
+        - main:
+          - heading "Feature Flags" [level=1]
+    fail: the dashboard's flags list does not open at the page's address
+  - id: banner-off
+    doc: pause-flag-off
+    do:
+      click:
+        role: switch
+        name: Turn shoplab_free_shipping_banner off
+        quote: false
+        reason: the list's on/off switch for the flag the page names
+    expect:
+      visible:
+        - role: switch
+          name: Turn shoplab_free_shipping_banner on
+          quote: false
+          reason: the same switch, now offering to turn the flag back on
+      aria: |
+        - main:
+          - heading "Feature Flags" [level=1]
+          - table:
+            - rowgroup:
+              - 'row /^shoplab_free_shipping_banner ShopLab: Free shipping banner .* Off /':
+                - cell "Turn shoplab_free_shipping_banner on":
+                  - switch "Turn shoplab_free_shipping_banner on" [disabled=false]
+    fail: the free-shipping banner's flag cannot be turned off from the dashboard
+  - id: banner-off-storefront
+    doc: pause-flag-off-storefront
+    do:
+      open: http://localhost:3200
+    expect:
+      status: 200
+      aria: |
+        - complementary "Controlvar panel":
+          - button "Powered by Controlvar"
+    fail: the storefront does not answer once the free-shipping flag is off
+  - id: banner-off-panel
+    doc: pause-flag-off-storefront
+    do:
+      click:
+        role: button
+        name: Powered by Controlvar
+    expect:
+      aria: |
+        - complementary "Controlvar panel":
+          - heading "Feature flags" [level=2]
+          - list:
+            - listitem:
+              - text: Free-shipping banner
+              - code: shoplab_free_shipping_banner
+              - text: "off"
+    fail: the reloaded storefront's panel does not show the free-shipping flag off
+  - id: flags-again
+    doc: pause-flag-on
+    do:
+      goto: /feature-flags
+    expect:
+      url: /feature-flags
+      aria: |
+        - main:
+          - heading "Feature Flags" [level=1]
+    fail: the dashboard's flags list does not open again
+  - id: banner-on
+    doc: pause-flag-on
+    do:
+      click:
+        role: switch
+        name: Turn shoplab_free_shipping_banner on
+        quote: false
+        reason: the same switch of the flag the page names, now offering to turn it on
+    expect:
+      visible:
+        - role: switch
+          name: Turn shoplab_free_shipping_banner off
+          quote: false
+          reason: the same switch, now offering to turn the flag off again
+      aria: |
+        - main:
+          - heading "Feature Flags" [level=1]
+          - table:
+            - rowgroup:
+              - 'row /^shoplab_free_shipping_banner ShopLab: Free shipping banner .* On /':
+                - cell "Turn shoplab_free_shipping_banner off":
+                  - switch "Turn shoplab_free_shipping_banner off" [checked] [disabled=false]
+    fail: the free-shipping banner's flag cannot be turned back on
+  - id: banner-back
+    doc: pause-flag-on-storefront
+    do:
+      open: http://localhost:3200
+    expect:
+      status: 200
+      text: Free shipping on every order this week — no minimum.
+      aria: |
+        - complementary "Controlvar panel":
+          - button "Powered by Controlvar"
+    fail: the reloaded storefront does not show the free-shipping line again once its flag is back on
+  # --- Target a flag by device (web SDK) -----------------------------------
+  - id: streampulse
+    doc: device-open
+    do:
+      open: http://localhost:3300
+    expect:
+      status: 200
+      aria: |
+        - heading "StreamPulse" [level=1]
+        - main:
+          - region "Device":
+            - heading "Device" [level=2]
+            - group "Presets"
+          - region "Powered by Controlvar":
+            - heading "Powered by Controlvar" [level=2]
+            - region "Feature flags"
+    fail: StreamPulse does not answer at the page's address with its Device and Powered by Controlvar panels
+  - id: premium-iphone
+    doc: device-premium-iphone
+    do:
+      click:
+        role: radio
+        name: iPhone 15 · iOS 17.4 · US · premium
+    expect:
+      aria: |
+        - main:
+          - region "Device":
+            - group "Presets":
+              - radio "iPhone 15 · iOS 17.4 · US · premium" [checked]
+          - region "Powered by Controlvar":
+            - region "Feature flags":
+              - list:
+                - listitem:
+                  - text: AI search · targeting rules
+                  - code: streampulse_ai_search
+                  - text: "on: matched a targeting rule on"
+    fail: the panel does not say a targeting rule turned streampulse_ai_search on for the iPhone 15 · iOS 17.4 · US · premium preset
+  - id: ai-search
+    doc: device-search
+    do:
+      click:
+        role: tab
+        name: Search
+    expect:
+      aria: |
+        - tabpanel "Search":
+          - region "AI search ✨":
+            - heading "AI search ✨" [level=2]
+    fail: the Search tab is not AI search ✨ for the premium iPhone
+  - id: free-iphone
+    doc: device-free-iphone
+    do:
+      click:
+        role: radio
+        name: iPhone 14 · iOS 16.7 · GB · free
+    expect:
+      aria: |
+        - main:
+          - tabpanel "Search":
+            - region "Search":
+              - heading "Search" [level=2]
+              - paragraph: Keyword search
+          - region "Device":
+            - group "Presets":
+              - radio "iPhone 14 · iOS 16.7 · GB · free" [checked]
+          - region "Powered by Controlvar":
+            - region "Feature flags":
+              - list:
+                - listitem:
+                  - text: AI search · targeting rules
+                  - code: streampulse_ai_search
+                  - text: "off: outside the rollout % off"
+    fail: the panel does not say the iPhone 14 · iOS 16.7 · GB · free preset is outside streampulse_ai_search's rollout, or the Search tab is not the keyword search
+  - id: premium-again
+    doc: device-boundary
+    do:
+      click:
+        role: radio
+        name: iPhone 15 · iOS 17.4 · US · premium
+    expect:
+      aria: |
+        - main:
+          - region "Device":
+            - group "Presets":
+              - radio "iPhone 15 · iOS 17.4 · US · premium" [checked]
+            - form "Custom device":
+              - textbox "OS version": 17.4.0
+    fail: picking the premium iPhone again does not fill the custom fields with its OS version
+  - id: os-version-17
+    doc: device-boundary
+    do:
+      fill:
+        label: OS version
+        value: 17.0.0
+    expect:
+      aria: |
+        - main:
+          - region "Device":
+            - form "Custom device":
+              - textbox "OS version": 17.0.0
+              - button "Apply device"
+    fail: there is no OS version field to change
+  - id: apply-17
+    doc: device-boundary
+    do:
+      click:
+        role: button
+        name: Apply device
+    expect:
+      aria: |
+        - main:
+          - region "Powered by Controlvar":
+            - region "Feature flags":
+              - list:
+                - listitem:
+                  - text: AI search · targeting rules
+                  - code: streampulse_ai_search
+                  - text: "on: matched a targeting rule on"
+    fail: OS version 17.0.0 with region US and tier premium, the rule's lowest version, does not match the rule in the app
+  - id: os-version-below
+    doc: device-below
+    do:
+      fill:
+        label: OS version
+        value: 16.9.9
+    expect:
+      aria: |
+        - main:
+          - region "Device":
+            - form "Custom device":
+              - textbox "OS version": 16.9.9
+              - button "Apply device"
+    fail: the OS version field cannot be changed again
+  - id: apply-below
+    doc: device-below
+    do:
+      click:
+        role: button
+        name: Apply device
+    expect:
+      aria: |
+        - main:
+          - region "Powered by Controlvar":
+            - region "Feature flags":
+              - list:
+                - listitem:
+                  - text: AI search · targeting rules
+                  - code: streampulse_ai_search
+                  - text: "off: outside the rollout % off"
+    fail: OS version 16.9.9 matches the rule that needs 17.0.0 or later, in the app
