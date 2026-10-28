@@ -1,6 +1,6 @@
 # Python SDK
 
-`controlvar` (v0.1.1) is a synchronous, dependency-free Python client for the
+`controlvar` (v0.2.0) is a synchronous, dependency-free Python client for the
 Controlvar public API: experiment assignment, feature-flag evaluation and event
 tracking. Requires Python 3.9+; HTTP goes through the standard library (`urllib`).
 
@@ -20,11 +20,11 @@ client (see [openfeature.md](openfeature.md)).
 
 If you installed `experimently`, the name this package had before the project was renamed, uninstall it and install `controlvar`.
 
-The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/). 0.1.1 is a
+The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/). 0.2.0 is a
 beta release.
 
 ```bash
-pip install controlvar==0.1.1
+pip install controlvar==0.2.0
 ```
 
 To work on the SDK itself, install it from the root of a clone of this repository instead:

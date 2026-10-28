@@ -23,7 +23,7 @@ by = [
 ]
 
 [[unit]]
-text = "It is opt-in, and it is available in the JavaScript SDK (@controlvar/js-sdk 0.1.1, evaluation: 'local') and the Python SDK (controlvar 0.1.1, evaluation=\"local\")."
+text = "It is opt-in, and it is available in the JavaScript SDK (@controlvar/js-sdk 0.2.0, evaluation: 'local') and the Python SDK (controlvar 0.2.0, evaluation=\"local\")."
 by = [
     "mechanism:sdk-doc-versions",
     "test:sdk/js/__tests__/local.test.ts::server mode is unchanged: no ruleset request, no source field",

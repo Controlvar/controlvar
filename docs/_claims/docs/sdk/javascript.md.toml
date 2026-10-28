@@ -8,7 +8,7 @@ text = "JavaScript SDK"
 by = ["exempt:label"]
 
 [[unit]]
-text = "@controlvar/js-sdk (v0.1.1) is the JavaScript/TypeScript client for the Controlvar public API: experiment assignment, feature flag evaluation and event tracking for Node >= 18 and browsers."
+text = "@controlvar/js-sdk (v0.2.0) is the JavaScript/TypeScript client for the Controlvar public API: experiment assignment, feature flag evaluation and event tracking for Node >= 18 and browsers."
 by = [
     "mechanism:sdk-doc-versions",
     "test:sdk/js/__tests__/package.test.ts::runs on Node 18 or later and in browsers: no source imports a module",
@@ -67,7 +67,7 @@ by = [
 ]
 
 [[unit]]
-text = "0.1.1 is a beta release."
+text = "0.2.0 is a beta release."
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-javascript#quick-start-user-on",
@@ -78,7 +78,7 @@ text = "To work on the SDK itself, build it from a clone of this repository inst
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "npm pack writes controlvar-js-sdk-0.1.1.tgz:"
+text = "npm pack writes controlvar-js-sdk-0.2.0.tgz:"
 by = ["mechanism:sdk-doc-versions"]
 
 [[unit]]

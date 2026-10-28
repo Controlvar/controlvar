@@ -67,7 +67,7 @@ by = [
 ]
 
 [[unit]]
-text = "0.1.1 is a beta release."
+text = "0.2.0 is a beta release."
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-javascript#quick-start-user-on",
@@ -76,6 +76,47 @@ by = [
 [[unit]]
 text = "To work on the SDK itself, see Development below."
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "Changes in this version"
+by = ["exempt:label"]
+
+[[unit]]
+text = "reportError() is new: it sends one error report to the server and resolves true when the server stored it."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs one report to /api/v1/tracking/errors with the server field names and resolves true on 201",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on a 2xx that is not 201: true means stored, and only 201 says so",
+]
+
+[[unit]]
+text = "SwallowedOperation, the type of onError's second argument, has a new member, 'reportError': a report the server did not store is passed to onError with it."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::resolves false on %s and passes the failure to onError as reportError",
+    "test:sdk/js/__tests__/client.test.ts::resolves false on a network failure and passes it to onError",
+]
+
+[[unit]]
+text = "TypeScript code that checks that type exhaustively, such as a switch whose default assigns the value to never, stops compiling until it handles 'reportError'."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "A track() without a key still reaches the experiments and flags this client answered for the user in the last 24 hours (with the exceptions under Quick start) after their cached answers expire; before this version it reached only the answers still in the cache."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::sends an untagged purchase made 301 s after the assignment to the experiment",
+    "test:sdk/js/__tests__/client.test.ts::still sends to the attributed keys after clearCache, which empties only the cache",
+    "test:sdk/js/__tests__/client.test.ts::does not send to a key answered more than 24 hours ago: the event goes once with no key",
+]
+
+[[unit]]
+text = "Those keys are this client instance's only: an event tracked by another instance, in this process or another, reaches none of them."
+by = ["test:sdk/js/__tests__/client.test.ts::another client instance has none of them: its event goes once with no key"]
+
+[[unit]]
+text = "With nothing to reach, a track() without a key is now sent once with no key and stored as history; before this version it sent nothing."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::sends the event once to /api/v1/tracking/track with no key when nothing is attributed to the user",
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::TestUntaggedTrack::test_an_event_with_no_key_is_stored_as_history",
+]
 
 [[unit]]
 text = "Quick start"

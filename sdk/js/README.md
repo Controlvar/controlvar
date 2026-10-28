@@ -17,14 +17,29 @@ Full documentation: [`docs/sdk/javascript.md`](https://github.com/Controlvar/con
 
 If you installed `@getexperimently/js-sdk`, the name this package had before the project was renamed, uninstall it and install `@controlvar/js-sdk`.
 
-The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk). 0.1.1 is a
+The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk). 0.2.0 is a
 beta release.
 
 ```bash
-npm install @controlvar/js-sdk@0.1.1
+npm install @controlvar/js-sdk@0.2.0
 ```
 
 To work on the SDK itself, see Development below.
+
+## Changes in this version
+
+- `reportError()` is new: it sends one error report to the server and resolves `true` when the
+  server stored it.
+- `SwallowedOperation`, the type of `onError`'s second argument, has a new member,
+  `'reportError'`: a report the server did not store is passed to `onError` with it. TypeScript
+  code that checks that type exhaustively, such as a `switch` whose `default` assigns the value
+  to `never`, stops compiling until it handles `'reportError'`.
+- A `track()` without a key still reaches the experiments and flags this client answered for the
+  user in the last 24 hours (with the exceptions under Quick start) after their cached answers
+  expire; before this version it reached only the answers still in the cache. Those keys are this client instance's only: an event
+  tracked by another instance, in this process or another, reaches none of them.
+- With nothing to reach, a `track()` without a key is now sent once with no key and stored as
+  history; before this version it sent nothing.
 
 ## Quick start
 

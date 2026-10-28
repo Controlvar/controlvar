@@ -16,11 +16,11 @@ else to install.
 
 If you installed `experimently`, the name this package had before the project was renamed, uninstall it and install `controlvar`.
 
-The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/). 0.1.1 is a
+The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/). 0.2.0 is a
 beta release. It installs and imports as `controlvar`.
 
 ```bash
-pip install controlvar==0.1.1
+pip install controlvar==0.2.0
 ```
 
 To work on the SDK itself, install it from the root of a clone of this repository instead:
@@ -28,6 +28,22 @@ To work on the SDK itself, install it from the root of a clone of this repositor
 ```bash
 pip install -e sdk/python
 ```
+
+## Changes in this version
+
+- `report_error()` is new: it sends one error report to the server and returns `True` when the
+  server stored it.
+- `track()` returns `True` when the event was sent and the server answered 2xx, and `False`
+  otherwise. Before this version, a `track()` without a key returned `True` only when the server
+  accepted every entry it was fanned out to. Now a batch answered 2xx returns `True` even when the
+  server refused one of its entries; `track_batch()` returns the per-entry results.
+- A `track()` without a key still reaches the experiments and flags this client answered for the
+  user in the last 24 hours (with the exceptions under Tracking fan-out rule) after their cached
+  answers expire; before this version it reached only the answers still in the cache. Those keys
+  are this client instance's only: an event tracked by another instance, in this process or
+  another, reaches none of them.
+- With nothing to reach, a `track()` without a key is now sent once with no key and stored as
+  history, and returns `True` on a 2xx; before this version it sent nothing and returned `False`.
 
 ## Quick start
 

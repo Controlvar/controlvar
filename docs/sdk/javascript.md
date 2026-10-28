@@ -1,6 +1,6 @@
 # JavaScript SDK
 
-`@controlvar/js-sdk` (v0.1.1) is the JavaScript/TypeScript client for the
+`@controlvar/js-sdk` (v0.2.0) is the JavaScript/TypeScript client for the
 Controlvar public API: experiment assignment, feature flag evaluation and event
 tracking for Node >= 18 and browsers. Zero runtime dependencies — it uses the global `fetch`.
 
@@ -25,14 +25,14 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlv
 If you installed `@getexperimently/js-sdk`, the name this package had before the project was renamed, uninstall it and install `@controlvar/js-sdk`.
 
 The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk).
-0.1.1 is a beta release.
+0.2.0 is a beta release.
 
 ```bash
-npm install @controlvar/js-sdk@0.1.1
+npm install @controlvar/js-sdk@0.2.0
 ```
 
 To work on the SDK itself, build it from a clone of this repository instead. `npm pack` writes
-`controlvar-js-sdk-0.1.1.tgz`:
+`controlvar-js-sdk-0.2.0.tgz`:
 
 ```bash
 git clone https://github.com/Controlvar/controlvar.git
@@ -43,7 +43,7 @@ npm ci && npm run build && npm pack
 Then, in your app, install the packed tarball:
 
 ```bash
-npm install /path/to/controlvar/sdk/js/controlvar-js-sdk-0.1.1.tgz
+npm install /path/to/controlvar/sdk/js/controlvar-js-sdk-0.2.0.tgz
 ```
 
 CommonJS build (`dist/index.js`) with type declarations; `import`/`require` both work.
