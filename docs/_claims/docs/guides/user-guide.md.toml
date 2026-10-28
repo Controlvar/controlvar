@@ -789,12 +789,21 @@ by = [
 ]
 
 [[unit]]
-text = "Value | Conversion rate for this variant: the share of its users who sent the metric's event"
-by = ["test:frontend/src/tests/components/ResultsTruthfulness.test.tsx::labels the row as a share of users, with no \"$\" and no \"per user\""]
+text = "Value | Conversion rate for this variant: the share of its users who sent the metric's event. For a revenue metric, revenue per user: each user's event values added up, averaged over every user assigned to the variant (0 for a user with none), as a plain number with no currency"
+by = [
+    "test:frontend/src/tests/components/ResultsTruthfulness.test.tsx::labels the row as a share of users, with no \"$\" and no \"per user\"",
+    "test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::shows each variant as a plain amount labelled \"revenue per user\", with no \"%\" or \"$\"",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
+]
 
 [[unit]]
-text = "Improvement | How much better/worse vs. control (e.g., +12.3%)"
-by = ["journey:experiment-results#results-page"]
+text = "Change | Relative change vs. control (e.g., +12.3%). A significant change also says better or worse in the metric's direction, so a fall is better when lower is better. For a revenue metric a second line gives the difference per user with its confidence interval, e.g. +1.19 per user (95% CI −0.47 to +2.84), marked unadjusted when the p-value beside it is adjusted"
+by = [
+    "journey:experiment-results#results-page",
+    "test:frontend/src/tests/components/MetricComparisonTable.lowerIsBetter.test.tsx::lower is better: a significant fall is green \"better\", a significant rise red \"worse\"",
+    "test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::gives the difference per user and its interval in the change cell",
+    "test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::says \"unadjusted\" when the row shows an adjusted p-value (a correction with two treatments)",
+]
 
 [[unit]]
 text = "p-value | Probability the difference is due to chance (lower = more confident). Headed Adjusted p-value when a correction applies and a metric has two or more treatments with a p-value: the p-value after the experiment's correction, with the unadjusted value beneath it. A footnote under the table names the correction."
@@ -812,8 +821,26 @@ by = [
 ]
 
 [[unit]]
-text = "Green = statistically significant improvement Red = statistically significant degradation Gray = not statistically significant"
-by = ["test:frontend/src/tests/pages/results-reading.test.tsx::is green for a significant improvement, red for a significant degradation, gray otherwise"]
+text = "Green = significantly better in the metric's direction Red = significantly worse in the metric's direction Gray = not statistically significant"
+by = [
+    "test:frontend/src/tests/pages/results-reading.test.tsx::is green for a significant improvement, red for a significant degradation, gray otherwise",
+    "test:frontend/src/tests/components/MetricComparisonTable.lowerIsBetter.test.tsx::lower is better: a significant fall is green \"better\", a significant rise red \"worse\"",
+]
+
+[[unit]]
+text = "The words better and worse in the cell say the same as the colour, so colour is never the only signal."
+by = [
+    "test:frontend/src/tests/components/MetricComparisonTable.lowerIsBetter.test.tsx::lower is better: a significant fall is green \"better\", a significant rise red \"worse\"",
+    "test:frontend/src/tests/components/MetricComparisonTable.lowerIsBetter.test.tsx::higher is better: a significant rise is green \"better\", a significant fall red \"worse\"",
+]
+
+[[unit]]
+text = "Under the table, a revenue metric has a footnote saying what revenue per user is."
+by = ["test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::says what revenue per user is, under a table with a revenue row"]
+
+[[unit]]
+text = "If users sent a revenue metric's event but every user's total value is 0, a note says so: send the amount in the event's value field, not in its properties."
+by = ["test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::says so, naming the event, and where the amount belongs"]
 
 [[unit]]
 text = "Trend Chart"
