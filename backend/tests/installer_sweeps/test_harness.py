@@ -1,16 +1,25 @@
 """The harness's own behaviour, where a run of the installer tests depends on it rather
 than on the installer: when a batch makes each scenario's world (and so the reader's
-sign-in), and the SIGINT every program a test starts begins with."""
+sign-in), the SIGINT every program a test starts begins with, and what is left running
+once the computer "stops dead"."""
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
 
-from backend.tests.installer_sweeps.harness.install_world import Batch
+from backend.tests.installer_sweeps.harness import accounts
+from backend.tests.installer_sweeps.harness.install_world import (
+    Batch,
+    alive,
+    session_pids,
+)
 from backend.tests.installer_sweeps.harness.world import REPO_ROOT, SAFETY_NET_SECONDS
 
 pytestmark = pytest.mark.unit
@@ -94,3 +103,58 @@ def test_the_interrupt_tests_hold_when_pytest_is_a_background_job(tmp_path):
     )
     assert done.returncode == 0, done.stdout[-4000:] + done.stderr[-4000:]
     assert "1 passed" in done.stdout, done.stdout[-4000:]
+
+
+#: A stand-in for the installer, named as the kill_session effect requires its session's
+#: leader to be: it starts a long child in a process group of its own, as lib/record.sh's
+#: cv_bg starts the migration task's script, then makes the call the computer stops at.
+STAND_IN = (
+    "set -m\n"
+    "{ sleep 120 < /dev/null > /dev/null 2>&1 & } 2> /dev/null\n"
+    'printf "%s\\n" "$!" > child.pid\n'
+    "set +m\n"
+    "aws sts get-caller-identity > /dev/null 2>&1\n"
+    "sleep 120\n"
+)
+
+
+@pytest.mark.regression
+def test_a_stop_dead_leaves_no_child_of_the_installer_running(make_world):
+    """The computer stopping dead (the kill_session effect) stops every process of the
+    installer's session, not its leader alone. A child the installer started in a process
+    group of its own outlived a SIGKILL to the leader: the migration task's script, stopped
+    at its run-task, went on calling the fakes beside the uninstall that came next, and
+    each call made the record's home/ again while the uninstall was making it."""
+    world = make_world(accounts.new_account())
+    world.edit(
+        lambda s: s.setdefault("effects", []).append(
+            {"service": "sts", "op": "get-caller-identity", "kill_session": True}
+        )
+    )
+    launcher = world.root / "controlvar-aws"
+    launcher.write_text(STAND_IN)
+    process = subprocess.Popen(
+        ["bash", str(launcher)],
+        cwd=world.root,
+        env=world.env(),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    try:
+        assert process.wait(timeout=60) == -signal.SIGKILL
+        child = int((world.root / "child.pid").read_text())
+        deadline = time.time() + 10
+        while alive(child) and time.time() < deadline:
+            time.sleep(0.05)
+        assert not alive(child), "a child of the installer outlived the stop"
+    finally:
+        for pid in session_pids(process.pid):
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=60)

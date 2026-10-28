@@ -11,10 +11,11 @@ each change j in turn, two installs in fake accounts of their own:
   CDK's setup stack, if the failed install made it, kept and used), and the account is a
   clean install's but for what the uninstall said AWS keeps (E1's convergence half).
 * **The computer stops dead** just after j's call has done its work and before the
-  installer reads its answer (a SIGKILL to the installer, harness effect kill_session):
-  nothing it would have recorded after the call exists, its lock and tmp/ are left as they
-  were. Then uninstall: exit 0, "Not explained: none", the account the account before the
-  install plus exactly the kept list (E3's SIGKILL half, with E2).
+  installer reads its answer (a SIGKILL to every process of the installer's session but
+  that call, harness effect kill_session): nothing it or a child of its would have
+  recorded after the call exists, its lock and tmp/ are left as they were. Then
+  uninstall: exit 0, "Not explained: none", the account the account before the install
+  plus exactly the kept list (E3's SIGKILL half, with E2).
 
 The record of the account is taken from the fake's state in one process (stub_sweep
 "state"), the same files the sweep library writes (test_state_sweep.py), and compared by
