@@ -32,9 +32,20 @@
 #   100% with still one rollback: only the server key's reports counted.
 #
 # The waits: the story itself paces its steps (20 s), runs the incident in
-# 90-second rounds until the check is critical (its step 3, at most 5 rounds),
-# and waits for the monitor (its step 4, up to 6 min) and for the error rate
-# to fall back (its step 6, up to 16 min); its bound here is 40 min. The
+# 90-second rounds until the check is critical and then on until the flag is
+# rolled back (its step 3, at most 5 rounds in all), waits for the monitor
+# (its step 4: two of the monitor's passes, or 6 min without one) and for the
+# error rate to fall back (its step 6, up to 16 min); its bound here is 40 min.
+# The incident goes on because a rate just over 5% falls back under it once
+# the incident stops, diluted by the steady traffic. On 2026-10-20 the story
+# read 5.8% at the end of its first round and 5.3% twenty seconds later, the
+# monitor did not roll back, and the story rolled back by hand after its wait
+# (#1376); most likely the breach fell between two passes of the monitor
+# (inferred: that run kept no record of the passes, which the story now
+# prints). `rolled-back` waits up to 900 s from
+# `critical`: the story's longest path from there (the rest of that round, four
+# more rounds of about 95 s, the pace, and six minutes without a pass) is about
+# 860 s. The
 # journey's polls wait for what the story does: each is bounded and every
 # 10 s (a poll every 5 s, the length of uvicorn's default keep-alive, had one
 # request reset in run 38448972328). The monitor may roll the flag back while step 3's
@@ -323,7 +334,7 @@ steps:
         path: /api/v1/feature-flags/{{flag-id}}
         as: admin
     poll:
-      up_to_seconds: 600
+      up_to_seconds: 900
       every_seconds: 10
     expect:
       status: 200
