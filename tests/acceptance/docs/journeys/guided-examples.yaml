@@ -385,17 +385,14 @@ steps:
   - id: paused-product
     doc: pause-place-an-order
     do:
-      click:
-        role: link
-        name: Field Watch, $199.00
-        quote: false
-        reason: the home page's link to the product the page names, Field Watch
+      open: http://localhost:3200/products/p011
     expect:
+      status: 200
       aria: |
         - main:
           - heading "Field Watch" [level=1]
           - button "Add to cart"
-    fail: the home page's product link does not open Field Watch with its Add to cart button
+    fail: Field Watch's page does not open at its address with its Add to cart button
   - id: paused-add-to-cart
     doc: pause-place-an-order
     do:
@@ -619,17 +616,14 @@ steps:
   - id: product-again
     doc: pause-order-again
     do:
-      click:
-        role: link
-        name: Field Watch, $199.00
-        quote: false
-        reason: the home page's link to the product the page names, Field Watch
+      open: http://localhost:3200/products/p011
     expect:
+      status: 200
       aria: |
         - main:
           - heading "Field Watch" [level=1]
           - button "Add to cart"
-    fail: the home page's product link does not open Field Watch with its Add to cart button
+    fail: Field Watch's page does not open at its address with its Add to cart button again
   - id: add-to-cart-again
     doc: pause-order-again
     do:

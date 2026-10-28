@@ -122,9 +122,9 @@ each arm.
 
 ### 4. Place an order {#pause-place-an-order}
 
-Open Field Watch from the home page, press Add to cart and then Go to checkout, fill in the
-checkout with any name, address and card digits, pressing Continue between its steps, and press
-Place order.
+Open Field Watch at http://localhost:3200/products/p011, press Add to cart and then Go to
+checkout, fill in the checkout with any name, address and card digits, pressing Continue between
+its steps, and press Place order.
 
 You will see "Thanks for your order!".
 
