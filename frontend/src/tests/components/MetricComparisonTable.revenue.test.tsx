@@ -8,6 +8,9 @@
  *  - a treatment's change cell adds the difference per user and its interval,
  *    at the response's confidence level, marked "unadjusted" when the row's
  *    p-value is the adjusted one;
+ *  - a difference of 0 with no interval (every user's total is the same)
+ *    adds no per-user line: the cell reads "Not enough data to estimate"
+ *    alone;
  *  - before the first purchase (`analysis` "mean", no test on any treatment)
  *    the row is still revenue per user, never "0.00%";
  *  - a footnote says what revenue per user is, only when such a row exists;
@@ -249,6 +252,9 @@ describe('before the first purchase', () => {
     expect(screen.getByTestId('metric-comparison-table').textContent).not.toMatch(
       /0\.00%|share of users/,
     );
+    // The API's difference is 0 with no interval: the cell says there is not
+    // enough data, without a 0.00 amount that would read as a measurement.
+    expect(cells(row(/one_page/))[4]).toBe('Not enough data to estimate');
     // No one sent the event, so there is nothing to say about values.
     expect(screen.queryByTestId('revenue-no-value-note')).not.toBeInTheDocument();
   });
@@ -303,6 +309,11 @@ describe('users sent the event with no value', () => {
         "Send the amount in the event's value field, not in its properties.",
     );
     expect(within(note).getByText('purchase').tagName).toBe('CODE');
+  });
+
+  it('reads "Not enough data to estimate" in the change cell, with no 0.00 amount', () => {
+    render(<MetricComparisonTable metrics={[noValues()]} confidenceLevel={0.95} />);
+    expect(cells(row(/one_page/))[4]).toBe('Not enough data to estimate');
   });
 
   it('says "its event" when the event name is not known', () => {

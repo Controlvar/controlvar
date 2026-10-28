@@ -7,18 +7,44 @@
  *
  * What is pinned:
  *  - the chart is headed "<metric> — revenue per user";
+ *  - the dashboard hands the chart the metric's analysis: its axis and its
+ *    tooltip read the amount per user ("5.66", "Revenue per user"), never a
+ *    percentage ("566.0%", "Rate");
  *  - the Bayesian panel says it compares the share of users who sent the
  *    metric's event (named from the experiment), not revenue per user;
  *  - the Sample Size tab says its plan is for that share, naming the event;
  *  - the table gives the difference per user and the revenue footnote;
- *  - a result cached before `analysis` existed is read from its test;
- *  - a conversion primary keeps its heading and gets none of these notes.
+ *  - a result from a server older than `analysis` is read from its test;
+ *  - a conversion primary keeps its heading, its chart in percentages, and
+ *    gets none of these notes.
  */
 import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import ResultDetailPage from '@/pages/results/[id]';
 import { ApiError, apiFetch } from '@/services/api';
 import { makeRouter, routedApi } from './helpers/apiMock';
+
+// The shared recharts mock draws no axis or tooltip, so this file's mock
+// renders what the chart's formatters make of one value: the control's 5.66
+// for a revenue primary.
+jest.mock('recharts', () => {
+  const shared = jest.requireActual('recharts');
+  return {
+    ...shared,
+    YAxis: ({ tickFormatter }: { tickFormatter?: (v: number) => string }) => (
+      <div data-testid="y-axis">{tickFormatter ? tickFormatter(5.66) : ''}</div>
+    ),
+    Tooltip: ({ formatter }: { formatter?: (v: unknown) => [string, string] }) => {
+      const [value, label] = formatter ? formatter(5.66) : ['', ''];
+      return (
+        <div data-testid="tooltip">
+          <span data-testid="tooltip-value">{value}</span>
+          <span data-testid="tooltip-label">{label}</span>
+        </div>
+      );
+    },
+  };
+});
 
 jest.mock('@/services/api', () => ({
   ...jest.requireActual('@/services/api'),
@@ -252,6 +278,16 @@ async function renderLoaded() {
   return view;
 }
 
+/** The primary metric's chart: what its axis and its tooltip read. */
+function chartReadings() {
+  const chart = within(screen.getByTestId('conversion-chart'));
+  return {
+    axis: chart.getByTestId('y-axis').textContent,
+    value: chart.getByTestId('tooltip-value').textContent,
+    label: chart.getByTestId('tooltip-label').textContent,
+  };
+}
+
 beforeEach(() => {
   mockedApiFetch.mockReset();
 });
@@ -264,6 +300,13 @@ describe('a revenue primary on the results page', () => {
       screen.getByRole('heading', { name: 'Order value — revenue per user' }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Conversion Rates/)).not.toBeInTheDocument();
+  });
+
+  it('plots revenue per user: the axis reads 5.66 and the tooltip "Revenue per user"', async () => {
+    install(REVENUE);
+    await renderLoaded();
+    expect(chartReadings()).toEqual({ axis: '5.66', value: '5.66', label: 'Revenue per user' });
+    expect(screen.getByTestId('conversion-chart').textContent).not.toMatch(/%|\$|Rate/);
   });
 
   it('says the Bayesian analysis compares the share of users who sent purchase', async () => {
@@ -304,14 +347,15 @@ describe('a revenue primary on the results page', () => {
     expect(screen.getByTestId('results-dashboard').textContent).not.toContain('$');
   });
 
-  it('reads a result cached before `analysis` from its test (welch_t_test is a mean)', async () => {
-    const cached: Record<string, unknown> = { ...REVENUE };
-    delete cached.analysis;
-    install(cached);
+  it('reads a result from a server older than `analysis` from its test (welch_t_test is a mean)', async () => {
+    const older: Record<string, unknown> = { ...REVENUE };
+    delete older.analysis;
+    install(older);
     await renderLoaded();
     expect(
       screen.getByRole('heading', { name: 'Order value — revenue per user' }),
     ).toBeInTheDocument();
+    expect(chartReadings()).toEqual({ axis: '5.66', value: '5.66', label: 'Revenue per user' });
     expect(screen.getByTestId('bayesian-share-note')).toBeInTheDocument();
   });
 });
@@ -321,6 +365,8 @@ describe('a conversion primary', () => {
     install(CONVERSION);
     await renderLoaded();
     expect(screen.getByRole('heading', { name: 'Conversion Rates — Checkout' })).toBeInTheDocument();
+    // The mock hands the formatters 5.66 whatever the data: a rate reads as a percentage.
+    expect(chartReadings()).toEqual({ axis: '566.0%', value: '566.00%', label: 'Rate' });
     expect(screen.queryByTestId('bayesian-share-note')).not.toBeInTheDocument();
     expect(screen.queryByTestId('revenue-per-user-footnote')).not.toBeInTheDocument();
     expect(screen.getByTestId('results-dashboard').textContent).not.toMatch(/per user/);

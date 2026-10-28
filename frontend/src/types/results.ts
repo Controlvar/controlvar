@@ -106,8 +106,8 @@ export interface MetricResult {
   lower_is_better?: boolean;
   /**
    * How the variants were compared. Absent from a server older than the
-   * field, and from a result cached before it: read the variants'
-   * `statistical_test_used` then (`analysedAsMean`).
+   * field: read the variants' `statistical_test_used` then
+   * (`analysedAsMean`).
    */
   analysis?: MetricAnalysis;
   variants: VariantResult[];

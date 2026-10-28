@@ -2,10 +2,9 @@
  * How the dashboard decides whether a metric's numbers are a share of users
  * or a mean, and how it writes an amount per user.
  *
- * The response's `analysis` decides. A result without it (a server older than
- * the field, or a result cached before it) is read from the test it ran:
- * `welch_t_test` is a mean. The field names are the API's, read from the
- * stable OpenAPI snapshot.
+ * The response's `analysis` decides. A result without it, from a server older
+ * than the field, is read from the test it ran: `welch_t_test` is a mean. The
+ * field names are the API's, read from the stable OpenAPI snapshot.
  */
 import fs from 'fs';
 import path from 'path';
@@ -71,7 +70,7 @@ describe('analysedAsMean / analysedAsRate', () => {
     ['revenue', 'proportion', 'welch_t_test', false],
     ['count', 'proportion', 'fisher_exact', false],
     ['conversion', 'proportion', 'fisher_exact', false],
-    // No `analysis` (an older or cached result): read the test.
+    // No `analysis` (a server older than the field): read the test.
     ['revenue', undefined, 'welch_t_test', true],
     ['revenue', undefined, 'fisher_exact', false],
     ['revenue', undefined, null, false],
@@ -137,6 +136,26 @@ describe('amounts per user', () => {
         false,
       ),
     ).toBe('−1.50 per user');
+  });
+
+  it("gives nothing for a 0.00 difference with no interval (every user's total is the same)", () => {
+    for (const diff of [0, 0.004, -0.004]) {
+      expect(
+        formatDifferencePerUser(
+          variant({ absolute_difference: diff, absolute_difference_ci: null }),
+          0.95,
+          false,
+        ),
+      ).toBeNull();
+    }
+    // With an interval, a difference of 0.00 is an estimate and is shown.
+    expect(
+      formatDifferencePerUser(
+        variant({ absolute_difference: 0, absolute_difference_ci: [-0.5, 0.5] }),
+        0.95,
+        false,
+      ),
+    ).toBe('0.00 per user (95% CI −0.50 to +0.50)');
   });
 });
 

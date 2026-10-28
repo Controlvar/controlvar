@@ -34,10 +34,10 @@ export function correctionLabel(method: CorrectionMethod | undefined): string | 
 /**
  * True when the engine analysed this metric as a mean: a revenue metric's
  * value per assigned user, compared with Welch's t-test. The response's
- * `analysis` says so. A result without it (from a server older than the
- * field, or cached before it) is read from the test it ran: `welch_t_test`
- * is a mean, anything else a share. `analysis` comes first because before
- * the first purchase no treatment has a test to read.
+ * `analysis` says so. A result without it, from a server older than the
+ * field, is read from the test it ran: `welch_t_test` is a mean, anything
+ * else a share. `analysis` comes first because before the first purchase no
+ * treatment has a test to read.
  */
 export function analysedAsMean(metric: MetricResult): boolean {
   if (metric.analysis === 'mean') return true;
@@ -92,7 +92,11 @@ export function formatSignedAmount(v: number): string {
  * `unadjusted` says the interval is not adjusted for multiple comparisons,
  * shown when the row's p-value is: the badge then reads the adjusted p, and
  * an interval that excludes 0 can sit on a row that is not significant.
- * Null when there is no difference to show.
+ * Null when there is no difference to show: for the control, without a
+ * finite difference, and for a difference of 0.00 with no interval. The API
+ * gives that when every user's total is the same, as before the first
+ * purchase or when every total is 0; beside "Not enough data to estimate" it
+ * would read as a measured 0.00.
  */
 export function formatDifferencePerUser(
   variant: VariantResult,
@@ -101,11 +105,13 @@ export function formatDifferencePerUser(
 ): string | null {
   const diff = variant.absolute_difference;
   if (variant.is_control || !isFiniteNumber(diff)) return null;
-  const text = `${formatSignedAmount(diff)} per user`;
+  const amount = formatSignedAmount(diff);
+  const text = `${amount} per user`;
   const ci = variant.absolute_difference_ci;
-  if (!ci || !isFiniteNumber(ci[0]) || !isFiniteNumber(ci[1]) || !isFiniteNumber(confidenceLevel)) {
-    return text;
+  if (!ci || !isFiniteNumber(ci[0]) || !isFiniteNumber(ci[1])) {
+    return amount === '0.00' ? null : text;
   }
+  if (!isFiniteNumber(confidenceLevel)) return text;
   const level = `${formatConfidence(confidenceLevel)} CI`;
   const label = unadjusted ? `${level}, unadjusted,` : level;
   return `${text} (${label} ${formatSignedAmount(ci[0])} to ${formatSignedAmount(ci[1])})`;
