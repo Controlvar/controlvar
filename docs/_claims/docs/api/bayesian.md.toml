@@ -287,8 +287,8 @@ by = [
 ]
 
 [[unit]]
-text = "The example response above answers CONTINUE: the treatment's expected loss, 0.0002, is below the default loss_threshold, but its probability to be best, 0.9731, is under 0.975."
-by = ["test:backend/tests/unit/services/test_bayesian_service.py::test_stop_winner_needs_probability_and_loss"]
+text = "The example response above answers CONTINUE: the treatment's expected loss, 0.00007, is below the default loss_threshold, but its probability to be best, 0.9723, is under 0.975."
+by = ["mechanism:bayesian-example"]
 
 [[unit]]
 text = "Reading the decision"
