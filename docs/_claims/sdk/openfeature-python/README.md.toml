@@ -170,10 +170,24 @@ by = [
 ]
 
 [[unit]]
-text = "provider.track / provider.client.track | POST /api/v1/tracking/track (with a key) or POST /api/v1/tracking/batch (fan-out) | ignored / {success_count, failure_count, errors}"
+text = "provider.client.track with a key | POST /api/v1/tracking/track | ignored"
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackWithKey::test_experiment_key_posts_to_track",
+]
+
+[[unit]]
+text = "provider.track, and provider.client.track without a key | POST /api/v1/tracking/batch, one entry per experiment and flag it reaches; with none, POST /api/v1/tracking/track with no key | ignored"
 by = [
     "test:sdk/openfeature-python/tests/test_provider.py::TestTracking::test_track_fans_out_to_cached_flags",
-    "test:sdk/python/tests/test_client.py::TestTrackWithKey::test_experiment_key_posts_to_track",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_fans_out_to_cached_assignment_and_flag",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_nothing_attributed_sends_the_event_once_to_track_with_no_key",
+    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_a_batch_answered_2xx_returns_true_even_when_an_entry_failed",
+]
+
+[[unit]]
+text = "provider.client.track_batch | POST /api/v1/tracking/batch | {success_count, failure_count, errors}"
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackBatch::test_chunks_aggregates_and_offsets_error_indexes",
 ]
 
 [[unit]]

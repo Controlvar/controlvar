@@ -210,7 +210,8 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | `getAllFlags`, Vercel middleware without `flagKeys` | `GET /api/v1/feature-flags/user/{user_id}` | — | `{"<flag_key>": bool, ...}` |
 | `getAssignment`, `getVariant` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
-| `track` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [ ...track bodies ]}` (max 100 per request) | `{success_count, failure_count, errors}` |
+| `track` without keys | `POST /api/v1/tracking/batch`, one entry per cached assignment and evaluated flag; with nothing cached, nothing is sent | `{events: [ ...track bodies ]}` (max 100 per request) | ignored |
+| `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [ ...track bodies ]}` (max 100 per request) | `{success_count, failure_count, errors}` |
 
 ---
 
