@@ -22,6 +22,39 @@ interface SampleSizeMeterProps {
   /** Asks for a new plan with these overrides. Without it the inputs are read-only. */
   onRecalculate?: (overrides: SampleSizeOverrides) => void;
   recalculating?: boolean;
+  /** The planned metric's event name, when the experiment could be read. */
+  eventName?: string;
+}
+
+/**
+ * What a plan for a metric that is not a conversion is for. A revenue
+ * metric's results are revenue per user, but its plan, like every plan, is
+ * for the share of users who send its event. A count, duration or custom
+ * metric is analysed as that share in the results too.
+ */
+function metricTypeNote(
+  metricName: string | null,
+  metricType: string,
+  eventName: string | undefined,
+): React.ReactNode {
+  const name = metricName ?? 'This metric';
+  if (metricType === 'revenue') {
+    return (
+      <>
+        {name} is analysed as revenue per user, but this plan is for the share of users who send{' '}
+        {eventName ? <code>{eventName}</code> : 'its event'} (a two-proportion test). A sample-size
+        plan for revenue per user is not available, and the Power Calculator plans conversion rates
+        only.
+      </>
+    );
+  }
+  return (
+    <>
+      {name} is a {metricType} metric, analysed as a conversion: the share of users who sent its
+      event, so this plan is for a conversion rate. The Power Calculator plans conversion rates only,
+      so it cannot plan a {metricType} metric either.
+    </>
+  );
 }
 
 const POWER_OPTIONS = [0.8, 0.9, 0.95];
@@ -81,6 +114,7 @@ export function SampleSizeMeter({
   overrides = {},
   onRecalculate,
   recalculating = false,
+  eventName,
 }: SampleSizeMeterProps) {
   const {
     current_sample_size_per_variant: current,
@@ -391,9 +425,7 @@ export function SampleSizeMeter({
         </p>
         {metric_type && metric_type !== 'conversion' && (
           <p className="text-xs text-amber-800" data-testid="sample-size-metric-type-note">
-            {metric_name} is a {metric_type} metric. Every metric is analysed as a conversion today, so this
-            plan is for a conversion rate. The Power Calculator plans conversion rates only, so it cannot
-            plan a {metric_type} metric either.
+            {metricTypeNote(metric_name, metric_type, eventName)}
           </p>
         )}
 

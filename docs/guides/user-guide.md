@@ -282,17 +282,24 @@ For each metric and variant pair:
 | Column | Meaning |
 |--------|---------|
 | **Sample Size** | Users assigned to this variant |
-| **Value** | Conversion rate for this variant: the share of its users who sent the metric's event |
-| **Improvement** | How much better/worse vs. control (e.g., +12.3%) |
+| **Value** | Conversion rate for this variant: the share of its users who sent the metric's event. For a revenue metric, revenue per user: each user's event values added up, averaged over every user assigned to the variant (0 for a user with none), as a plain number with no currency |
+| **Change** | Relative change vs. control (e.g., +12.3%). A significant change also says *better* or *worse* in the metric's direction, so a fall is better when lower is better. For a revenue metric a second line gives the difference per user with its confidence interval, e.g. +1.19 per user (95% CI −0.47 to +2.84), marked *unadjusted* when the p-value beside it is adjusted |
 | **p-value** | Probability the difference is due to chance (lower = more confident). Headed **Adjusted p-value** when a correction applies and a metric has two or more treatments with a p-value: the p-value after the experiment's correction, with the unadjusted value beneath it. A footnote under the table names the correction. |
 | **Significance** | (adjusted) p-value < (1 - confidence level), e.g., < 0.05 for 95% confidence |
 
 For each variant, `GET /api/v1/results/{experiment_id}` also returns `effect_size`,
 `effect_size_label` (negligible / small / medium / large) and `confidence_interval`.
 
-**Green** = statistically significant improvement
-**Red** = statistically significant degradation
+**Green** = significantly better in the metric's direction
+**Red** = significantly worse in the metric's direction
 **Gray** = not statistically significant
+
+The words *better* and *worse* in the cell say the same as the colour, so colour is never the
+only signal.
+
+Under the table, a revenue metric has a footnote saying what revenue per user is. If users sent
+a revenue metric's event but every user's total value is 0, a note says so: send the amount in
+the event's `value` field, not in its properties.
 
 #### Trend Chart
 

@@ -4,12 +4,17 @@ import { StatisticalBadge } from '@/components/results/shared/StatisticalBadge';
 import {
   NOT_ENOUGH_DATA,
   analysedAsRate,
+  buyersWithNoValue,
   changeVerdict,
   correctionLabel,
   decisivePValue,
+  formatAmount,
+  formatDifferencePerUser,
   formatRate,
   formatSignedPct,
   isFiniteNumber,
+  isRevenuePerUser,
+  meanDescription,
   metricLowerIsBetter,
   rateDescription,
 } from '@/components/results/shared/resultFormat';
@@ -24,6 +29,12 @@ interface MetricComparisonTableProps {
   confidenceLevel: number;
   /** The response's correction_method: the correction the p-values were adjusted with. */
   correctionMethod?: CorrectionMethod;
+  /**
+   * Each metric's event name by metric id, from the experiment, for the note
+   * on a revenue metric whose events carried no value. Without it the note
+   * says "its event".
+   */
+  eventNames?: Record<string, string>;
 }
 
 type SortKey = 'metric' | 'variant' | 'sample_size' | 'mean' | 'improvement' | 'p_value';
@@ -51,10 +62,44 @@ function formatImprovement(v: number | null | undefined, isControl: boolean): st
 
 function formatValue(metric: MetricResult, variant: VariantResult): string {
   if (analysedAsRate(metric)) return formatRate(variant.mean, variant.sample_size);
-  // A mean (welch_t_test). Units arrive with the mean analysis; until then a
-  // plain number, never a currency or "per user".
+  // A mean: a plain amount per user, never a currency (none is read).
   if (!isFiniteNumber(variant.mean) || variant.sample_size <= 0) return NOT_ENOUGH_DATA;
-  return variant.mean.toFixed(2);
+  return formatAmount(variant.mean);
+}
+
+/** The words under a revenue metric's rows, so "per user" is never a guess. */
+function RevenueFootnote() {
+  return (
+    <p className="mt-3 text-xs text-slate-600" data-testid="revenue-per-user-footnote">
+      Revenue per user: each user&apos;s total <code>value</code> on the metric&apos;s event,
+      averaged over every user assigned to the variant; a user with no such event counts as 0.
+      Values are added as sent: no currency is read or converted, and no order is capped.
+    </p>
+  );
+}
+
+/**
+ * Users sent a revenue metric's event, yet every user's total is 0: the
+ * amounts did not arrive in the event's `value`. Says so, rather than
+ * leaving a row of zeros to be read as "no revenue".
+ */
+function NoValueNote({
+  metric,
+  buyers,
+  eventName,
+}: {
+  metric: MetricResult;
+  buyers: number;
+  eventName?: string;
+}) {
+  const who = buyers === 1 ? '1 user' : `${buyers.toLocaleString()} users`;
+  return (
+    <p className="mt-2 text-xs text-amber-800" data-testid="revenue-no-value-note">
+      {metric.metric_name}: {who} sent {eventName ? <code>{eventName}</code> : 'its event'}, and
+      every user&apos;s total <code>value</code> is 0. Send the amount in the event&apos;s{' '}
+      <code>value</code> field, not in its properties.
+    </p>
+  );
 }
 
 /** Sort key for a possibly non-finite number: unknowns sort first ascending. */
@@ -161,6 +206,7 @@ export function MetricComparisonTable({
   metrics,
   confidenceLevel,
   correctionMethod,
+  eventNames,
 }: MetricComparisonTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>('metric');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -269,6 +315,9 @@ export function MetricComparisonTable({
             const k = comparisons.get(metric.metric_id) ?? 0;
             const adjustedShown = showsAdjusted(variant, k, correctionMethod);
             const verdict = changeVerdict(metric, variant);
+            const difference = analysedAsRate(metric)
+              ? null
+              : formatDifferencePerUser(variant, confidenceLevel, adjustedShown);
             return (
               <tr
                 key={`${metric.metric_id}-${variant.variant_id}`}
@@ -299,7 +348,7 @@ export function MetricComparisonTable({
                     <span>{formatValue(metric, variant)}</span>
                     {metric.metric_type !== 'conversion' && (
                       <span className="text-xs text-slate-600">
-                        {analysedAsRate(metric) ? rateDescription(metric) : 'mean'}
+                        {analysedAsRate(metric) ? rateDescription(metric) : meanDescription(metric)}
                       </span>
                     )}
                   </span>
@@ -307,6 +356,9 @@ export function MetricComparisonTable({
                 <td className={`px-4 py-3 font-medium ${changeClass(verdict, variant)}`}>
                   <span>{formatImprovement(variant.relative_improvement_pct, variant.is_control)}</span>
                   {verdict && <span> · {verdict}</span>}
+                  {difference && (
+                    <span className="block text-xs font-normal text-slate-600"> {difference}</span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-slate-700">
                   <PValueCell variant={variant} comparisons={k} correctionMethod={correctionMethod} />
@@ -329,6 +381,18 @@ export function MetricComparisonTable({
           {adjustedFootnote(correctedKs, correctionMethod, confidenceLevel)}
         </p>
       )}
+      {metrics.some(isRevenuePerUser) && <RevenueFootnote />}
+      {metrics.map((m) => {
+        const buyers = buyersWithNoValue(m);
+        return buyers === null ? null : (
+          <NoValueNote
+            key={m.metric_id}
+            metric={m}
+            buyers={buyers}
+            eventName={eventNames?.[m.metric_id]}
+          />
+        );
+      })}
     </div>
   );
 }

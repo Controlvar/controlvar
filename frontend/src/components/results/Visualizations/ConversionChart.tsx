@@ -9,17 +9,32 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { VariantResult } from '@/types/results';
-import { isFiniteNumber } from '@/components/results/shared/resultFormat';
+import { MetricAnalysis, MetricResult, VariantResult } from '@/types/results';
+import { formatAmount, isFiniteNumber } from '@/components/results/shared/resultFormat';
 
 interface ConversionChartProps {
   variants: VariantResult[];
+  /**
+   * How the metric was analysed (`analysedAsMean` on the metric): 'mean'
+   * plots each variant's value per user as a plain amount, 'proportion' (the
+   * default) its rate as a percentage.
+   */
+  analysis?: MetricAnalysis;
+  /** The metric's type: a revenue mean is labelled "Revenue per user". */
+  metricType?: MetricResult['metric_type'];
 }
 
 const CONTROL_COLOR = '#3b82f6'; // blue-500
 const VARIANT_COLORS = ['#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
-export function ConversionChart({ variants }: ConversionChartProps) {
+export function ConversionChart({
+  variants,
+  analysis = 'proportion',
+  metricType,
+}: ConversionChartProps) {
+  const mean = analysis === 'mean';
+  const revenue = mean && metricType === 'revenue';
+
   if (!variants.length) {
     return (
       <div className="flex items-center justify-center h-48 text-slate-500">
@@ -36,7 +51,7 @@ export function ConversionChart({ variants }: ConversionChartProps) {
         className="flex items-center justify-center h-48 text-slate-500"
         data-testid="conversion-chart-empty"
       >
-        No conversions yet
+        {revenue ? 'No revenue yet' : mean ? 'No values yet' : 'No conversions yet'}
       </div>
     );
   }
@@ -62,9 +77,18 @@ export function ConversionChart({ variants }: ConversionChartProps) {
         >
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" />
-          <YAxis tickFormatter={(v: number) => `${(v * 100).toFixed(1)}%`} />
+          {mean ? (
+            // A mean is an amount per user: plain numbers, no "%" and no currency.
+            <YAxis tickFormatter={(v: number) => formatAmount(v)} />
+          ) : (
+            <YAxis tickFormatter={(v: number) => `${(v * 100).toFixed(1)}%`} />
+          )}
           <Tooltip
-            formatter={(v) => [`${((v as number) * 100).toFixed(2)}%`, 'Rate']}
+            formatter={(v) =>
+              mean
+                ? [formatAmount(v as number), revenue ? 'Revenue per user' : 'Mean']
+                : [`${((v as number) * 100).toFixed(2)}%`, 'Rate']
+            }
           />
           <Legend />
           {chartData.map((entry) => (

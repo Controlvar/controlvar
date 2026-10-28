@@ -276,6 +276,13 @@ text = "Conversion | Binary: did the event happen or not? | Clicked button, comp
 by = ["test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py::test_binomial_metric_result_characterisation"]
 
 [[unit]]
+text = "Revenue | The amount on each user's events, as revenue per user | Order total sent as the value of purchase"
+by = [
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
+    "test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::shows each variant as a plain amount labelled \"revenue per user\", with no \"%\" or \"$\"",
+]
+
+[[unit]]
 text = "A metric can also be created with the type revenue, count or duration."
 by = [
     "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
@@ -307,7 +314,7 @@ text = "All other metrics are secondary and used to check for unexpected side ef
 by = ["exempt:advice"]
 
 [[unit]]
-text = "Example: primary = checkout completion rate; secondary = cart abandonment rate, average order value, customer support contacts."
+text = "Example: primary = checkout completion rate; secondary = cart abandonment rate, revenue per user, customer support contacts."
 by = ["exempt:example"]
 
 [[unit]]

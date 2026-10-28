@@ -1,4 +1,5 @@
 import { CorrectionMethod, MetricResult, VariantResult } from '@/types/results';
+import { formatConfidence } from '@/components/results/shared/analysisSettings';
 
 /** Shown wherever a number is missing, NaN or infinite. Never "NaN", "∞" or "0.00%". */
 export const NOT_ENOUGH_DATA = 'Not enough data to estimate';
@@ -31,20 +32,108 @@ export function correctionLabel(method: CorrectionMethod | undefined): string | 
 }
 
 /**
+ * True when the engine analysed this metric as a mean: a revenue metric's
+ * value per assigned user, compared with Welch's t-test. The response's
+ * `analysis` says so. A result without it, from a server older than the
+ * field, is read from the test it ran: `welch_t_test` is a mean, anything
+ * else a share. `analysis` comes first because before the first purchase no
+ * treatment has a test to read.
+ */
+export function analysedAsMean(metric: MetricResult): boolean {
+  if (metric.analysis === 'mean') return true;
+  if (metric.analysis === 'proportion') return false;
+  if (metric.metric_type === 'conversion') return false;
+  return metric.variants.some((v) => v.statistical_test_used === 'welch_t_test');
+}
+
+/**
  * True when the engine analysed this metric as a share of users with an event
- * (a conversion test), whatever its declared type. Today every metric is
- * analysed that way (the per-variant test is fisher_exact); a revenue, count
- * or duration metric is only a mean once its test is welch_t_test.
+ * (a conversion test), whatever its declared type: every metric but a revenue
+ * metric analysed as a mean (`analysedAsMean`).
  */
 export function analysedAsRate(metric: MetricResult): boolean {
-  if (metric.metric_type === 'conversion') return true;
-  return !metric.variants.some((v) => v.statistical_test_used === 'welch_t_test');
+  return !analysedAsMean(metric);
 }
 
 /** What the value in a metric's rate column is. */
 export function rateDescription(metric: MetricResult): string {
   if (metric.metric_type === 'conversion') return 'conversion rate';
   return 'share of users with at least one event';
+}
+
+/** What the value of a metric analysed as a mean is. */
+export function meanDescription(metric: MetricResult): string {
+  return metric.metric_type === 'revenue' ? 'revenue per user' : 'mean';
+}
+
+/** True for a revenue metric whose value is revenue per user. */
+export function isRevenuePerUser(metric: MetricResult): boolean {
+  return metric.metric_type === 'revenue' && analysedAsMean(metric);
+}
+
+/**
+ * An amount per user, to 2 places, with a real minus sign and no currency:
+ * Controlvar reads no currency, so none is shown.
+ */
+export function formatAmount(v: number): string {
+  const fixed = Math.abs(v).toFixed(2);
+  return v < 0 && Number(fixed) !== 0 ? `−${fixed}` : fixed;
+}
+
+/** A signed amount: "+1.18", "−0.47", and "0.00" for anything that rounds to 0. */
+export function formatSignedAmount(v: number): string {
+  const amount = formatAmount(v);
+  return v > 0 && amount !== '0.00' ? `+${amount}` : amount;
+}
+
+/**
+ * A treatment's difference from the control per user, with its interval:
+ * "+1.18 per user (95% CI −0.47 to +2.84)". The level is the response's.
+ * `unadjusted` says the interval is not adjusted for multiple comparisons,
+ * shown when the row's p-value is: the badge then reads the adjusted p, and
+ * an interval that excludes 0 can sit on a row that is not significant.
+ * Null when there is no difference to show: for the control, without a
+ * finite difference, and for a difference of 0.00 with no interval. The API
+ * gives that when every user's total is the same, as before the first
+ * purchase or when every total is 0; beside "Not enough data to estimate" it
+ * would read as a measured 0.00.
+ */
+export function formatDifferencePerUser(
+  variant: VariantResult,
+  confidenceLevel: number,
+  unadjusted: boolean,
+): string | null {
+  const diff = variant.absolute_difference;
+  if (variant.is_control || !isFiniteNumber(diff)) return null;
+  const amount = formatSignedAmount(diff);
+  const text = `${amount} per user`;
+  const ci = variant.absolute_difference_ci;
+  if (!ci || !isFiniteNumber(ci[0]) || !isFiniteNumber(ci[1])) {
+    return amount === '0.00' ? null : text;
+  }
+  if (!isFiniteNumber(confidenceLevel)) return text;
+  const level = `${formatConfidence(confidenceLevel)} CI`;
+  const label = unadjusted ? `${level}, unadjusted,` : level;
+  return `${text} (${label} ${formatSignedAmount(ci[0])} to ${formatSignedAmount(ci[1])})`;
+}
+
+/**
+ * The users who sent a revenue metric's event when every user's total value
+ * is 0 in every variant: the amounts were not sent in the event's `value`
+ * (most often they went into its properties). Null otherwise, and for a
+ * metric that is not revenue per user.
+ */
+export function buyersWithNoValue(metric: MetricResult): number | null {
+  if (!isRevenuePerUser(metric) || metric.variants.length === 0) return null;
+  const allZero = metric.variants.every(
+    (v) => v.mean === 0 && (v.std_dev === null || v.std_dev === undefined || v.std_dev === 0),
+  );
+  if (!allZero) return null;
+  const buyers = metric.variants.reduce(
+    (sum, v) => sum + (isFiniteNumber(v.conversions) ? v.conversions : 0),
+    0,
+  );
+  return buyers > 0 ? buyers : null;
 }
 
 /** A rate in [0, 1] as a percentage; NOT_ENOUGH_DATA when it cannot be estimated. */

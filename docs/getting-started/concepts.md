@@ -89,6 +89,7 @@ A metric is the measurable outcome you use to evaluate whether a variant is bett
 | Type | Description | Example |
 |------|-------------|---------|
 | **Conversion** | Binary: did the event happen or not? | Clicked button, completed checkout, signed up |
+| **Revenue** | The amount on each user's events, as revenue per user | Order total sent as the `value` of `purchase` |
 
 A metric can also be created with the type `revenue`, `count` or `duration`. A revenue metric is analysed as its mean value per assigned user: each user's event values added up, 0 for a user with none. A count or duration metric is analysed as a conversion: whether each user sent the metric's event, not the event's value. See [Limitations](limitations.md).
 
@@ -96,7 +97,7 @@ A metric can also be created with the type `revenue`, `count` or `duration`. A r
 
 Each experiment should have exactly one **primary metric** — the north star for your ship/no-ship decision. All other metrics are **secondary** and used to check for unexpected side effects.
 
-Example: primary = checkout completion rate; secondary = cart abandonment rate, average order value, customer support contacts.
+Example: primary = checkout completion rate; secondary = cart abandonment rate, revenue per user, customer support contacts.
 
 ### Guardrail Metrics
 
