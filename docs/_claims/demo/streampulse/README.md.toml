@@ -66,6 +66,13 @@ by = [
 ]
 
 [[unit]]
+text = "Guided examples walks the Search tab's rule one step at a time, with what you will see at each step."
+by = [
+    "journey:guided-examples#premium-iphone",
+    "journey:guided-examples#apply-below",
+]
+
+[[unit]]
 text = "Screens ↔ platform features"
 by = ["exempt:label"]
 

@@ -23,6 +23,14 @@ by = [
 ]
 
 [[unit]]
+text = "Guided examples walks the hero banner test, a pause and the free-shipping flag one step at a time, with what you will see at each step."
+by = [
+    "journey:guided-examples#press-counted",
+    "journey:guided-examples#order-counted",
+    "journey:guided-examples#banner-back",
+]
+
+[[unit]]
 text = "Nothing is for sale."
 by = ["exempt:example"]
 

@@ -75,7 +75,8 @@ Every request carries `X-API-Key`, `Content-Type: application/json`, `Accept: ap
 | every `resolve*Evaluation` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | `{key, enabled, config}` |
 | `provider.client.getAssignment` / `getVariant` | `POST /api/v1/tracking/assign` `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}` |
 | `provider.client.track` with a key | `POST /api/v1/tracking/track` | ignored |
-| `provider.client.track` without a key, `trackBatch` | `POST /api/v1/tracking/batch` `{events: [...]}` (≤ 100) | `{success_count, failure_count, errors}` |
+| `provider.client.track` without a key | `POST /api/v1/tracking/batch` `{events: [...]}` (≤ 100), one entry per experiment and flag it reaches; with none, `POST /api/v1/tracking/track` with no key | ignored |
+| `provider.client.trackBatch` | `POST /api/v1/tracking/batch` `{events: [...]}` (≤ 100) | `{success_count, failure_count, errors}` |
 
 Errors: 401 bad key, 404 an unknown experiment or flag key, or a draft experiment with no control variant (never cached), 422 invalid event, 429 rate limited.
 An experiment that is not ACTIVE is not an error: `getAssignment` resolves to its control variant with `assigned: false`.

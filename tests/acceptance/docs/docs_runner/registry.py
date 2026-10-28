@@ -48,7 +48,7 @@ DECLARED: Tuple[str, ...] = (NEEDS_AWS, NEEDS_FOUNDER_ACCOUNT)
 #: Reasons only the runner sets.
 RUNTIME: Tuple[str, ...] = (EARLIER_STEP_FAILED, DOC_EXAMPLES)
 #: Journeys every step of which this runner runs: no ``not_run``, no ``ref:``.
-EVERY_STEP_RUN: Tuple[str, ...] = ("demo-shoplab",)
+EVERY_STEP_RUN: Tuple[str, ...] = ("demo-shoplab", "guided-examples")
 
 WAIVED = re.compile(r"waived #[1-9][0-9]*")
 
