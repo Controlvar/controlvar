@@ -843,6 +843,14 @@ text = "If users sent a revenue metric's event but every user's total value is 0
 by = ["test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::says so, naming the event, and where the amount belongs"]
 
 [[unit]]
+text = "A metric marked lower is better (lower_is_better), such as a guardrail, is listed like any other metric, with its users and conversions."
+by = ["journey:experiment-results#guardrail-listing"]
+
+[[unit]]
+text = "No guardrail verdict is produced: the recommendation follows the primary metric alone, so a significant rise in a lower-is-better secondary metric does not change it."
+by = ["journey:experiment-results#guardrail-listing"]
+
+[[unit]]
 text = "Trend Chart"
 by = ["exempt:baseline"]
 
