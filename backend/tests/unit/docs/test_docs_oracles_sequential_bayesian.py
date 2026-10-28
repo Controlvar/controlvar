@@ -16,6 +16,8 @@ whether those checks can fail is pure, and is tested here, in the unit job:
   the settings its PUT stores (or the page's defaults), the literals beside it
   follow from the oracles, and its tolerance holds the right answer while
   refusing the answer each defect would give;
+* the second Bayesian read, near a probability of 0.93, fails a defect in how
+  the draws are made (modelled with numpy) that the first, near 0.99, cannot see;
 * the runner fails each step on an answer such a defect would give.
 
 No network, no browser, no product code.
@@ -33,6 +35,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Tuple
 
+import numpy as np
 import pytest
 import yaml
 from scipy import integrate, stats
@@ -60,9 +63,16 @@ DEFAULT_PRIOR = (1.0, 1.0)
 #: comment says "at least 20").
 SIGMAS = 6.0
 DEFECT_SIGMAS = 20.0
+#: The API's Monte Carlo draws per arm (the journey's ``n_samples``), and how
+#: many seeds the draw-level model below is run at.
+BAYES_DRAWS = 100_000
+BAYES_SEEDS = 20
 
 SEQUENTIAL_READS = ("sequential-results", "floor-sequential", "floor-sequential-alpha")
-BAYESIAN_READS = ("floor-bayesian",)
+#: The second Bayesian read sits near a probability of 0.93, where a defect in
+#: how the draws are made moves the estimate far more than its Monte Carlo
+#: spread; near 0.99 (the first) it barely moves it.
+BAYESIAN_READS = ("floor-bayesian", "bayesian-results")
 COUNT_ARGS = (
     "control_users",
     "control_converted",
@@ -360,6 +370,7 @@ BAYES_CASES = [
     (60, 6, 60, 24, 1, 1),
     (400, 40, 400, 64, 1, 1),
     (400, 40, 400, 64, 10, 90),
+    (400, 40, 400, 64, 100, 900),
     (300, 30, 200, 40, 2, 3),
     (100, 30, 100, 20, 1, 1),
     (5_000, 600, 5_000, 640, 1, 1),
@@ -739,9 +750,9 @@ def test_the_sequential_tolerance_refuses_every_defects_answer():
     assert min(caught.values()) > 0.004, caught
 
 
-def _bayes_check() -> Tuple[Dict[str, Any], Dict[str, Any], float]:
+def _bayes_check(read_id: str) -> Tuple[Dict[str, Any], Dict[str, Any], float]:
     steps = _steps()
-    setup = _read_setup(steps, "floor-bayesian")
+    setup = _read_setup(steps, read_id)
     expected = setup["read"]["expect"]
     ((path, check),) = expected["computed"].items()
     assert path == "variant_results.1.probability_to_be_best"
@@ -775,8 +786,22 @@ def _expected_loss(alpha_c, beta_c, alpha_t, beta_t) -> float:
     return value
 
 
-def test_the_bayesian_literals_are_the_prior_plus_the_users_sent():
-    setup, check, _ = _bayes_check()
+def _posteriors(setup: Dict[str, Any]) -> Tuple[float, float, float, float]:
+    """(alpha_c, beta_c, alpha_t, beta_t): the PUT's prior plus the users sent."""
+    config = _turned_on(setup, "bayesian_enabled")["bayesian_config"]
+    a, b = config["alpha"], config["beta"]
+    sent = _sent(setup)
+    return (
+        a + sent["control_converted"],
+        b + sent["control_users"] - sent["control_converted"],
+        a + sent["treatment_converted"],
+        b + sent["treatment_users"] - sent["treatment_converted"],
+    )
+
+
+@pytest.mark.parametrize("read_id", BAYESIAN_READS)
+def test_the_bayesian_literals_are_the_prior_plus_the_users_sent(read_id):
+    setup, check, _ = _bayes_check(read_id)
     sent = _sent(setup)
     config = _turned_on(setup, "bayesian_enabled")["bayesian_config"]
     expected = setup["read"]["expect"]["json"]
@@ -793,11 +818,12 @@ def test_the_bayesian_literals_are_the_prior_plus_the_users_sent():
     assert expected["is_enabled"] is True
 
 
-def test_the_bayesian_tolerance_holds_the_draws_and_refuses_each_defect():
+@pytest.mark.parametrize("read_id", BAYESIAN_READS)
+def test_the_bayesian_tolerance_holds_the_draws_and_refuses_each_defect(read_id):
     """The API's probability is the share of ``n_samples`` draws, so its standard
     deviation is sqrt(p (1 - p) / n_samples). ``rel`` holds 6 of them; each
     defect's answer lies at least 20 of its own outside the band."""
-    setup, check, right = _bayes_check()
+    setup, check, right = _bayes_check(read_id)
     n_samples = setup["read"]["expect"]["json"]["n_samples"]
     assert n_samples == 100_000
     band = check["rel"] * right
@@ -844,25 +870,79 @@ def test_the_bayesian_tolerance_holds_the_draws_and_refuses_each_defect():
     assert abs(normal - right) < band
 
 
-def test_the_decision_is_stop_winner_with_room_on_both_rules():
+@pytest.mark.parametrize("read_id", BAYESIAN_READS)
+def test_the_decision_follows_from_the_posteriors_with_room_on_its_rule(read_id):
     """STOP_WINNER needs a probability to be best of at least 0.975 and an
-    expected loss below loss_threshold; both hold with a wide margin."""
-    setup, check, right = _bayes_check()
+    expected loss below loss_threshold; with no ``rope`` anything else is
+    CONTINUE. A STOP_WINNER read clears both rules with a wide margin; a
+    CONTINUE read's probability is far under 0.975 even at the top of its band."""
+    setup, check, right = _bayes_check(read_id)
     expected = setup["read"]["expect"]["json"]
-    assert expected["decision"] == "STOP_WINNER"
     n_samples = expected["n_samples"]
     spread = math.sqrt(right * (1 - right) / n_samples)
-    assert right - check["rel"] * right - STOP_WINNER_PROBABILITY > 20 * spread
+    band = check["rel"] * right
     config = _turned_on(setup, "bayesian_enabled")["bayesian_config"]
-    a, b = config["alpha"], config["beta"]
-    sent = _sent(setup)
-    loss = _expected_loss(
-        a + sent["control_converted"],
-        b + sent["control_users"] - sent["control_converted"],
-        a + sent["treatment_converted"],
-        b + sent["treatment_users"] - sent["treatment_converted"],
+    assert config.get("rope") is None
+    loss = _expected_loss(*_posteriors(setup))
+    if expected["decision"] == "STOP_WINNER":
+        assert right - band - STOP_WINNER_PROBABILITY > 20 * spread
+        assert loss < config["loss_threshold"] / 10, loss
+    else:
+        assert expected["decision"] == "CONTINUE"
+        assert STOP_WINNER_PROBABILITY - (right + band) > 20 * spread
+
+
+def test_the_journey_reads_both_bayesian_decisions():
+    decisions = {
+        _read_setup(_steps(), r)["read"]["expect"]["json"]["decision"]
+        for r in BAYESIAN_READS
+    }
+    assert decisions == {"STOP_WINNER", "CONTINUE"}
+
+
+def _one_stream(posteriors, seed: int) -> float:
+    """Treatment's share of draws above Control's, both arms from ONE generator."""
+    rng = np.random.default_rng(seed)
+    control = rng.beta(posteriors[0], posteriors[1], BAYES_DRAWS)
+    treatment = rng.beta(posteriors[2], posteriors[3], BAYES_DRAWS)
+    return float(np.mean(treatment > control))
+
+
+def _same_seed(posteriors, seed: int) -> float:
+    """The defect: each arm's draws from a generator started at the same seed."""
+    control = np.random.default_rng(seed).beta(
+        posteriors[0], posteriors[1], BAYES_DRAWS
     )
-    assert loss < config["loss_threshold"] / 10, loss
+    treatment = np.random.default_rng(seed).beta(
+        posteriors[2], posteriors[3], BAYES_DRAWS
+    )
+    return float(np.mean(treatment > control))
+
+
+def test_only_the_second_read_sees_draws_started_from_one_seed():
+    """A defect in how the draws are made, modelled with numpy alone: each
+    arm's draws from a generator started at the same seed. Near 0.99 (the
+    first read) it moves the probability by less than the band on almost
+    every seed; near 0.93 (the second) by tens of standard deviations, so the
+    second read fails it on most seeds, while draws from one generator stay
+    inside its band on every seed. (On the API's own draws, over 1,000 seeds:
+    the first read caught it on 1, the second on 878.)"""
+    first_setup, first_check, first_right = _bayes_check("floor-bayesian")
+    second_setup, second_check, second_right = _bayes_check("bayesian-results")
+    first, second = _posteriors(first_setup), _posteriors(second_setup)
+    first_band = first_check["rel"] * first_right
+    second_band = second_check["rel"] * second_right
+    seeds = range(1, BAYES_SEEDS + 1)
+    assert all(abs(_one_stream(second, s) - second_right) < second_band for s in seeds)
+    caught_second = sum(
+        abs(_same_seed(second, s) - second_right) > second_band for s in seeds
+    )
+    caught_first = sum(
+        abs(_same_seed(first, s) - first_right) > first_band for s in seeds
+    )
+    assert caught_second >= 0.6 * BAYES_SEEDS, caught_second
+    # The limit the second read exists for: the first read cannot see it.
+    assert caught_first <= 0.1 * BAYES_SEEDS, caught_first
 
 
 # ---------------------------------------------------------------------------
@@ -1000,19 +1080,21 @@ def test_each_sequential_step_passes_the_formulas_answer_and_fails_a_defects(
     )
 
 
-def _bayesian_body(probability: float) -> Dict[str, Any]:
+def _bayesian_body(read_id: str, probability: float) -> Dict[str, Any]:
+    setup = _read_setup(_steps(), read_id)
+    alpha_c, beta_c, alpha_t, beta_t = _posteriors(setup)
     return {
         "is_enabled": True,
-        "decision": "STOP_WINNER",
+        "decision": setup["read"]["expect"]["json"]["decision"],
         "variant_results": [
             {
                 "variant_key": "Control",
-                "posterior": {"alpha": 26.0, "beta": 234.0},
+                "posterior": {"alpha": alpha_c, "beta": beta_c},
                 "probability_to_be_best": 1 - probability,
             },
             {
                 "variant_key": "Treatment",
-                "posterior": {"alpha": 44.0, "beta": 216.0},
+                "posterior": {"alpha": alpha_t, "beta": beta_t},
                 "probability_to_be_best": probability,
             },
         ],
@@ -1020,18 +1102,28 @@ def _bayesian_body(probability: float) -> Dict[str, Any]:
     }
 
 
+@pytest.mark.parametrize(
+    "read_id, experiment",
+    [("floor-bayesian", "e3"), ("bayesian-results", "e1")],
+)
 def test_the_bayesian_step_holds_the_draws_and_fails_a_wrong_prior(
-    execute_module, tmp_path
+    execute_module, tmp_path, read_id, experiment
 ):
-    _, check, right = _bayes_check()
+    setup, check, right = _bayes_check(read_id)
     band = check["rel"] * right
     for inside in (right, right - 0.9 * band, right + 0.9 * band):
         observed, paths = _run(
-            execute_module, tmp_path, "floor-bayesian", _bayesian_body(inside)
+            execute_module, tmp_path, read_id, _bayesian_body(read_id, inside)
         )
         assert observed == "status 200"
-        assert paths == ["/api/v1/results/e3/bayesian"]
-    wrong_prior = _probability(7, 55, 25, 37)
-    for outside in (wrong_prior, right - 1.1 * band, 1 - right):
+        assert paths == [f"/api/v1/results/{experiment}/bayesian"]
+    sent = _sent(setup)
+    wrong_prior = _probability(
+        1 + sent["control_converted"],
+        1 + sent["control_users"] - sent["control_converted"],
+        1 + sent["treatment_converted"],
+        1 + sent["treatment_users"] - sent["treatment_converted"],
+    )
+    for outside in (wrong_prior, right - 1.1 * band, right + 1.1 * band, 1 - right):
         with pytest.raises(execute_module._Failed, match="bayes_prob_best gives"):
-            _run(execute_module, tmp_path, "floor-bayesian", _bayesian_body(outside))
+            _run(execute_module, tmp_path, read_id, _bayesian_body(read_id, outside))
