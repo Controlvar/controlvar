@@ -301,6 +301,11 @@ Under the table, a revenue metric has a footnote saying what revenue per user is
 a revenue metric's event but every user's total value is 0, a note says so: send the amount in
 the event's `value` field, not in its properties.
 
+A metric marked lower is better (`lower_is_better`), such as a guardrail, is listed like any other
+metric, with its users and conversions. No guardrail verdict is produced: the recommendation follows
+the primary metric alone, so a significant rise in a lower-is-better secondary metric does not
+change it.
+
 #### Trend Chart
 
 Shows conversion rate over time for each variant. Two modes:

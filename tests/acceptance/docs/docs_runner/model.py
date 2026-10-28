@@ -158,8 +158,8 @@ What an API answers can be kept for later steps and checked against an oracle
 * ``expect.computed`` on an api step: the number at each JSON path equals an
   oracle's within a relative tolerance ``rel`` (``rel: 0``, exactly).
   ``expect.cells`` on a screen step: the cell of a table's column, in the row
-  that has a cell reading ``row``, shows an oracle's number at the precision
-  it is shown. ``expect.number`` does the same for the one element of a role
+  that has a cell reading ``row`` (and, with ``also``, a cell reading
+  ``also``), shows an oracle's number at the precision it is shown. ``expect.number`` does the same for the one element of a role
   and name, reading its text again until it agrees or stops changing
   (``checks.settle``).
 * ``expect.delta`` on an api step: ``{<dotted path>: {since: <saved name>,
@@ -889,11 +889,15 @@ class Cell(_Quoted):
     ``delta``, at the precision it shows.
 
     The cell is the one under the column headed ``column``, in the one row
-    that has a cell reading exactly ``row`` (a variant's name, say).
+    that has a cell reading exactly ``row`` (a variant's name, say) and, with
+    ``also``, a cell reading exactly ``also`` too: the one row of a table that
+    lists each variant once per metric is the variant's row of one metric.
     """
 
     row: OneLine
     column: OneLine
+    #: A second cell of the same row, read exactly as ``row`` is.
+    also: Optional[OneLine] = None
     oracle: Optional[Oracle] = None
     delta: Optional[Delta] = None
 
@@ -904,6 +908,12 @@ class Cell(_Quoted):
                 "a cell shows exactly one of an oracle's number (oracle) or a saved"
                 " number moved by delta"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _also_another_cell(self) -> "Cell":
+        if self.also is not None and self.also == self.row:
+            raise ValueError("also names the row's cell again; give another cell")
         return self
 
 
