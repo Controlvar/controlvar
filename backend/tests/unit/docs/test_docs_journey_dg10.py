@@ -559,6 +559,33 @@ def test_the_panel_rows_are_the_panels_words_for_each_status():
     assert _panel_row("completed") == "experiment completed (control shown) completed"
 
 
+def _split_nodes(node, found: List[str]) -> List[str]:
+    """Each name or text of a parsed ARIA template with an unbalanced quote."""
+    if isinstance(node, list):
+        for item in node:
+            _split_nodes(item, found)
+    elif isinstance(node, dict):
+        for key, value in node.items():
+            if isinstance(key, str) and key.count('"') % 2:
+                found.append(key)
+            _split_nodes(value, found)
+    elif isinstance(node, str) and node.count('"') % 2:
+        found.append(node)
+    return found
+
+
+def test_no_aria_node_is_split_at_a_colon_in_its_name():
+    """A name holding ": " (``form "Step 1: Address"``) read as YAML is a mapping,
+    ``form "Step 1`` to ``Address"``, which matches no screen: the first run of
+    the checkout step failed that way at once. Such a node is quoted whole."""
+    for step in _steps():
+        expected = step.get("expect") or {}
+        templates = [expected["aria"]] if expected.get("aria") else []
+        templates += expected.get("aria_one_of") or []
+        for template in templates:
+            assert _split_nodes(yaml.safe_load(template), []) == [], step["id"]
+
+
 def test_the_visitor_is_the_one_the_panel_steps_expect():
     for step_id in ("panel", "checkout-arm"):
         assert f"- code: {_visitor()}" in _step(step_id)["expect"]["aria"]

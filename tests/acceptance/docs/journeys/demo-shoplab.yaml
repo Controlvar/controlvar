@@ -529,7 +529,7 @@ steps:
       aria: |
         - main:
           - heading "Checkout" [level=1]
-          - form "Step 1: Address"
+          - 'form "Step 1: Address"'
     fail: the checkout page does not open on its first step with the product in the cart
   - id: checkout-arm
     doc: what-each-page-demonstrates
@@ -681,7 +681,7 @@ steps:
       aria: |
         - main:
           - heading "Checkout" [level=1]
-          - form "Step 2: Shipping"
+          - 'form "Step 2: Shipping"'
     fail: the address step does not lead to the shipping step
   - id: paused-payment
     doc: what-each-page-demonstrates
@@ -695,7 +695,7 @@ steps:
       aria: |
         - main:
           - heading "Checkout" [level=1]
-          - form "Step 3: Payment"
+          - 'form "Step 3: Payment"'
     fail: the shipping step does not lead to the payment step
   - id: paused-card
     doc: what-each-page-demonstrates
@@ -856,7 +856,7 @@ steps:
       aria: |
         - main:
           - heading "Checkout" [level=1]
-          - form "Step 1: Address"
+          - 'form "Step 1: Address"'
     fail: the checkout page does not open on its first step for the second order
   - id: order-name
     doc: what-each-page-demonstrates
@@ -930,7 +930,7 @@ steps:
       aria: |
         - main:
           - heading "Checkout" [level=1]
-          - form "Step 2: Shipping"
+          - 'form "Step 2: Shipping"'
     fail: the address step does not lead to the shipping step
   - id: order-payment
     doc: what-each-page-demonstrates
@@ -944,7 +944,7 @@ steps:
       aria: |
         - main:
           - heading "Checkout" [level=1]
-          - form "Step 3: Payment"
+          - 'form "Step 3: Payment"'
     fail: the shipping step does not lead to the payment step
   - id: order-card
     doc: what-each-page-demonstrates
@@ -1019,7 +1019,7 @@ steps:
     expect:
       aria: |
         - main:
-          - heading "ShopLab: Checkout flow — 3 steps vs one page" [level=2]
+          - 'heading "ShopLab: Checkout flow — 3 steps vs one page" [level=2]'
       cells:
         - row: standard(control)
           also: Purchaseprimary
