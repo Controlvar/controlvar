@@ -69,7 +69,8 @@ checkout's sdk/go.
 
 A ``traffic`` step writes ``NN-<step>.expected.json`` (the population chosen,
 written before it is sent) and ``NN-<step>.traffic.json`` (what was sent and
-answered, in counts, and, when the step gives a value, every value sent). A
+answered, in counts, and, when the step gives a value, every value sent; when
+it gives a history, the history, its date and the events accepted). A
 ``services`` step (``services.py``) writes
 ``NN-<step>.expected.json`` (the services, the time and the count it holds,
 written before it runs) and ``NN-<step>.services.json`` (each service's state at
@@ -124,6 +125,7 @@ from docs_runner.checks import (
     StepFailed,
     agrees,
     agrees_or_not,
+    cell_row,
     delta_problem,
     describe_action,
     describe_expect,
@@ -777,6 +779,7 @@ class JourneyRunner:
             converted={variant: p.converted for variant, p in plan.variants.items()},
             prefix=plan.users,
             value=plan.value,
+            history=plan.history,
         )
         snapshot = self._write(
             name, json.dumps(outcome.record(), indent=2, ensure_ascii=False) + "\n"
@@ -1519,7 +1522,7 @@ class JourneyRunner:
                 moved = moved_to(before, delta.since, delta.by)
                 if not agrees(text, moved):
                     raise StepFailed(
-                        f'the {cell.column} of the row "{cell.row}" shows'
+                        f"the {cell.column} of the row {cell_row(cell)} shows"
                         f" {one_line(text, 40)!r}; {delta.since} was"
                         f" {json.dumps(before)}, so {delta.by:+d} is"
                         f" {json.dumps(moved)}"
@@ -1532,7 +1535,7 @@ class JourneyRunner:
             oracle = self._oracle(cell.oracle)
             if not agrees(text, oracle):
                 raise StepFailed(
-                    f'the {cell.column} of the row "{cell.row}" shows'
+                    f"the {cell.column} of the row {cell_row(cell)} shows"
                     f" {one_line(text, 40)!r}; {cell.oracle.name} gives {oracle:.6g}"
                 )
             shown_cells.append(f"{cell.column} {one_line(text, 40)}")
@@ -1574,9 +1577,13 @@ class JourneyRunner:
             .get_by_role("row")
             .filter(has=page.get_by_role("cell", name=cell.row, exact=True))
         )
+        cells = f'a cell "{cell.row}"'
+        if cell.also is not None:
+            row = row.filter(has=page.get_by_role("cell", name=cell.also, exact=True))
+            cells += f' and a cell "{cell.also}"'
         self._holds(
             lambda: expect(row).to_have_count(1),
-            f'not one row with a cell "{cell.row}" under "{cell.column}" at {here}',
+            f'not one row with {cells} under "{cell.column}" at {here}',
         )
         index = header.evaluate("th => th.cellIndex")
         text = row.evaluate(

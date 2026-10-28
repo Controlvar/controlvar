@@ -155,11 +155,19 @@ What an API answers can be kept for later steps and checked against an oracle
   the order the users were chosen) sends ``base + step * (i mod modulo)``.
   ``{mode: ramp, base: 10, step: 1, modulo: 7}`` sends 10, 11, 12, 13, 14, 15,
   16, 10, 11, ... (``TrafficValue``). Without ``value``, no event carries one.
+  With ``history: {days_before: <1 to 30>, converted: {<variant>: <count>}}``
+  some users are returning users: before any user is assigned, the first
+  ``count`` users chosen for each variant named send the step's event once,
+  with no experiment key and dated ``days_before`` days before it is sent,
+  which is how ``api/cuped.md`` says to send pre-experiment history. The first
+  users chosen are also the first to convert, so with 80 returning users and
+  40 converting ones, the 40 are among the 80 (``TrafficHistory``). Without
+  ``history``, no user sends anything before it is assigned.
 * ``expect.computed`` on an api step: the number at each JSON path equals an
   oracle's within a relative tolerance ``rel`` (``rel: 0``, exactly).
   ``expect.cells`` on a screen step: the cell of a table's column, in the row
-  that has a cell reading ``row``, shows an oracle's number at the precision
-  it is shown. ``expect.number`` does the same for the one element of a role
+  that has a cell reading ``row`` (and, with ``also``, a cell reading
+  ``also``), shows an oracle's number at the precision it is shown. ``expect.number`` does the same for the one element of a role
   and name, reading its text again until it agrees or stops changing
   (``checks.settle``).
 * ``expect.delta`` on an api step: ``{<dotted path>: {since: <saved name>,
@@ -597,13 +605,48 @@ class TrafficValue(_Strict):
     @field_validator("base", "step", mode="before")
     @classmethod
     def _a_number(cls, value: Any) -> Any:
-        if (
-            isinstance(value, bool)
-            or not isinstance(value, (int, float))
-            or not math.isfinite(value)
-        ):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"must be a number, not {value!r}")
+        try:
+            finite = math.isfinite(value)
+        except OverflowError:
+            # A whole number too large for a double: isfinite cannot convert it.
+            raise ValueError(
+                "must be a number a double can hold, not a whole number of"
+                f" {len(str(abs(value)))} digits"
+            ) from None
+        if not finite:
             raise ValueError(f"must be a number, not {value!r}")
         return value
+
+
+#: How many users of a variant a history names: none or more.
+HistoryCount = Annotated[StrictInt, Field(ge=0)]
+
+
+class TrafficHistory(_Strict):
+    """Events from before the experiment, for its returning users (``traffic.send``).
+
+    Before any user of the step is assigned, the first ``count`` users chosen
+    for each variant named in ``converted`` send the step's event once, with
+    no experiment key and no flag key, dated ``days_before`` days before the
+    moment the step sends it. That is how ``api/cuped.md`` ("Sending
+    pre-experiment history") says to send history: such an event counts in no
+    experiment's results, only as CUPED history, and only if the server
+    received it before the user was assigned. ``{days_before: 3, converted:
+    {Control: 80, Treatment: 48}}`` makes the first 80 Control users and the
+    first 48 Treatment users returning users; a variant not named has none.
+    The first users chosen are also the first to convert, so with 80
+    returning users and 40 converting ones in a variant, every converting user
+    is a returning one, and with 48 returning and 56 converting, every
+    returning user converts. ``days_before`` is a whole number from 1 to 30
+    (the experiment's ``covariate_lookback_days`` must be more than it for
+    the history to count); a count is a whole number of at least 0 and at
+    most the variant's ``assigned``.
+    """
+
+    days_before: StrictInt = Field(ge=1, le=30)
+    converted: Dict[OneLine, HistoryCount] = Field(min_length=1)
 
 
 class Traffic(_Strict):
@@ -622,6 +665,26 @@ class Traffic(_Strict):
     variants: Dict[OneLine, Population] = Field(min_length=1)
     #: The value each converting user's event carries; none without it.
     value: Optional[TrafficValue] = None
+    #: The returning users' events from before the experiment; none without it.
+    history: Optional[TrafficHistory] = None
+
+    @model_validator(mode="after")
+    def _history_of_the_steps_own_users(self) -> "Traffic":
+        if self.history is None:
+            return self
+        for variant, count in self.history.converted.items():
+            if variant not in self.variants:
+                raise ValueError(
+                    f"history names {variant!r}, which is not one of the step's"
+                    f" variants ({', '.join(self.variants)})"
+                )
+            assigned = self.variants[variant].assigned
+            if count > assigned:
+                raise ValueError(
+                    f"history gives {variant} {count} returning users, more than"
+                    f" the {assigned} it assigns"
+                )
+        return self
 
 
 class Evaluations(_Strict):
@@ -889,11 +952,15 @@ class Cell(_Quoted):
     ``delta``, at the precision it shows.
 
     The cell is the one under the column headed ``column``, in the one row
-    that has a cell reading exactly ``row`` (a variant's name, say).
+    that has a cell reading exactly ``row`` (a variant's name, say) and, with
+    ``also``, a cell reading exactly ``also`` too: the one row of a table that
+    lists each variant once per metric is the variant's row of one metric.
     """
 
     row: OneLine
     column: OneLine
+    #: A second cell of the same row, read exactly as ``row`` is.
+    also: Optional[OneLine] = None
     oracle: Optional[Oracle] = None
     delta: Optional[Delta] = None
 
@@ -904,6 +971,12 @@ class Cell(_Quoted):
                 "a cell shows exactly one of an oracle's number (oracle) or a saved"
                 " number moved by delta"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _also_another_cell(self) -> "Cell":
+        if self.also is not None and self.also == self.row:
+            raise ValueError("also names the row's cell again; give another cell")
         return self
 
 

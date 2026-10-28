@@ -349,6 +349,13 @@ text = "The demo guide walks through what to look at, and how to run the apps ou
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "Guided examples takes you through the apps one step at a time, with what you will see at each step, on the stack ./demo/setup-local.sh starts."
+by = [
+    "journey:guided-examples#stop-simulator",
+    "journey:guided-examples#apply-below",
+]
+
+[[unit]]
 text = "Troubleshooting"
 by = ["exempt:label"]
 

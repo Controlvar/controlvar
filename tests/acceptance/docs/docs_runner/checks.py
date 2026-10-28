@@ -161,6 +161,14 @@ def _moved(delta) -> str:
     return f"the number saved as {delta.since} {delta.by:+d}"
 
 
+def cell_row(cell) -> str:
+    """The row a cell is read in, for the log: ``"one_page"``, or with
+    ``also`` ``"one_page" / "Purchaseprimary"`` (one row per metric)."""
+    if cell.also is None:
+        return f'"{cell.row}"'
+    return f'"{cell.row}" / "{cell.also}"'
+
+
 def describe_expect(step: Step) -> str:
     if step.do.crawl is not None:
         return CRAWL_EXPECTS[step.do.crawl]
@@ -244,7 +252,7 @@ def describe_expect(step: Step) -> str:
         )
     for cell in expect_.cells or []:
         shown = _oracle_call(cell.oracle) if cell.oracle else _moved(cell.delta)
-        parts.append(f'the {cell.column} of the row "{cell.row}" shows {shown}')
+        parts.append(f"the {cell.column} of the row {cell_row(cell)} shows {shown}")
     if expect_.found is not None:
         parts.append(f"{expect_.found} among the first {SEARCH_TOP} results")
     if expect_.aria is not None:

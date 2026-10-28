@@ -52,6 +52,10 @@ text = "A revenue metric's sequential analysis, Bayesian analysis, sample-size p
 by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_other_analyses_of_a_revenue_metric_stay_on_the_share_of_buyers"]
 
 [[unit]]
+text = "A revenue metric's breakdown by segment as revenue per user | The Breakdowns view of a revenue metric shows, in its column headed Mean, the share of users who sent the metric's event in each segment, not revenue per user. The metric's headline row is revenue per user."
+by = ["test:backend/tests/integration/api/test_revenue_breakdown_share_of_buyers.py::test_a_revenue_metric_breakdown_is_the_share_of_buyers"]
+
+[[unit]]
 text = "A traffic allocation for the experiment as a whole | There is none. Variant weights must add up to exactly 100%, or the request is refused with 422. Users are left out only by targeting rules, a mutual exclusion group or the global holdout."
 by = [
     "test:backend/tests/unit/api/test_documented_limits.py::test_the_experiment_has_no_traffic_allocation_of_its_own",

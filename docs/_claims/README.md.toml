@@ -163,6 +163,13 @@ text = "Walkthrough: demo/DEMO_GUIDE.md."
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "Step by step, with what you will see at each step: Guided examples."
+by = [
+    "journey:guided-examples#stop-simulator",
+    "journey:guided-examples#apply-below",
+]
+
+[[unit]]
 text = "What it does"
 by = ["exempt:label"]
 

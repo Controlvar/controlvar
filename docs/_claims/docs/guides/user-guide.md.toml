@@ -580,6 +580,13 @@ by = [
 ]
 
 [[unit]]
+text = "To follow one result from a visitor's click to this page on the demo stack, see Guided examples."
+by = [
+    "journey:guided-examples#press-counted",
+    "journey:guided-examples#results-page",
+]
+
+[[unit]]
 text = "Experiment Summary Card"
 by = ["exempt:baseline"]
 
@@ -841,6 +848,14 @@ by = ["test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx
 [[unit]]
 text = "If users sent a revenue metric's event but every user's total value is 0, a note says so: send the amount in the event's value field, not in its properties."
 by = ["test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::says so, naming the event, and where the amount belongs"]
+
+[[unit]]
+text = "A metric marked lower is better (lower_is_better), such as a guardrail, is listed like any other metric, with its users and conversions."
+by = ["journey:experiment-results#guardrail-listing"]
+
+[[unit]]
+text = "No guardrail verdict is produced: the recommendation follows the primary metric alone, so a significant rise in a lower-is-better secondary metric does not change it."
+by = ["journey:experiment-results#guardrail-listing"]
 
 [[unit]]
 text = "Trend Chart"
@@ -1128,6 +1143,13 @@ by = ["test:backend/tests/unit/core/test_rollout_scheduler.py"]
 [[unit]]
 text = "A manual stage waits until you advance it with POST /api/v1/rollout-schedules/stages/{stage_id}/advance."
 by = ["test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutStages::test_advance_manual_stage_on_active_schedule"]
+
+[[unit]]
+text = "Guided examples points to a staged rollout with an automatic rollback that runs on the demo stack."
+by = [
+    "journey:demo-streampulse-simulator#rolled-back",
+    "journey:demo-streampulse-simulator#full-rollout",
+]
 
 [[unit]]
 text = "Disabling / Rolling Back"

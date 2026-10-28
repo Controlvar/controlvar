@@ -68,7 +68,8 @@ a customer app would. `./demo/setup-local.sh` starts everything.
   exclusion and a scripted rollout story in which a crash spike triggers an automatic safety
   rollback.
 
-Walkthrough: [demo/DEMO_GUIDE.md](demo/DEMO_GUIDE.md).
+Walkthrough: [demo/DEMO_GUIDE.md](demo/DEMO_GUIDE.md). Step by step, with what you will see at each
+step: [Guided examples](docs/guides/guided-examples.md).
 
 ---
 

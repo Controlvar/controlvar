@@ -34,11 +34,46 @@
 # the holdout (demo/shoplab/src/lib/labels.ts). That is the step's fourth
 # snapshot. The panel step's hero row already allows for that visitor; its
 # other three rows read "not assigned yet" whoever the visitor is.
+#
+# The visitor is chosen (2026-10-28), not random: `visitor` is
+# values.choose_visitor()'s answer, a UUIDv4 outside the demo's global holdout,
+# put in the storefront's localStorage before the first page, and the panel
+# step expects the panel to show it. By the documented assignment hash it is
+# in shoplab_checkout_flow's `standard` arm (and green_add of the buy button,
+# whose words stay "Add to cart"). The bandit still routes it by its weights,
+# so the products step keeps a template per arm; its held-out template is
+# never used by this visitor and is kept for a run without one.
+#
+# The last steps check that an order placed in the storefront lands in the
+# visitor's arm and nowhere else, exactly, as the README's event vocabulary
+# says: a purchase with no key goes to every experiment the page assigned.
+# 1. The simulator demo/setup-local.sh started is stopped as the README says,
+#    and gone, so nothing else moves the counts; it is not restarted, and
+#    every step after it belongs to this check.
+# 2. The visitor opens a product, adds it to the cart and opens checkout,
+#    which assigns the checkout flow. The panel shows the arm, and the arm
+#    the API holds for the visitor is asked again (/tracking/assign answers an
+#    assigned visitor with their stored arm): `standard`. Every count below
+#    is read for that arm and the other, by name, so an arm in another order
+#    fails rather than passing for the wrong one.
+# 3. The experiment is paused, then the counts are read (results with
+#    use_cache=false: the cache keeps results for up to five minutes), after
+#    the visitor's assignment, so the assignment is in the "before" numbers.
+# 4. The visitor, still on the checkout page that was assigned while the
+#    experiment ran, places an order. It reaches the API tagged with the
+#    experiment, which stores it in no arm while paused: one more event for
+#    the experiment, and +0 users and +0 conversions in each arm. The panel
+#    then says the experiment is paused, not an error.
+# 5. Resumed, the panel shows the visitor's arm again, and a second order
+#    counts once, in that arm: +1 conversion there, +0 in the other, +0 users
+#    in each. The results page shows the API's numbers for both arms.
+# 6. Completing the experiment comes last; the panel then says so.
 guide: demo/shoplab/README.md
 stack: demo-local
 profile: full
 video: false
 written: 2026-10-11
+visitor: d2e601e3-374a-4e49-89ab-e1e613123a87
 steps:
   - id: storefront
     doc: running-it
@@ -65,6 +100,7 @@ steps:
         - complementary "Controlvar panel":
           - button "Powered by Controlvar" [expanded]
           - heading "Visitor" [level=2]
+          - code: d2e601e3-374a-4e49-89ab-e1e613123a87
           - heading "Experiments" [level=2]
           - list:
             - listitem:
@@ -93,7 +129,7 @@ steps:
               - text: Free-shipping banner
               - code: shoplab_free_shipping_banner
               - text: "on"
-    fail: the panel does not show the hero test's variant, the other three experiments not assigned yet with the page that assigns each, and both flags, with a New visitor button
+    fail: the panel does not show the journey's visitor, the hero test's variant, the other three experiments not assigned yet with the page that assigns each, and both flags, with a New visitor button
   - id: products
     doc: what-each-page-demonstrates
     do:
@@ -234,6 +270,9 @@ steps:
         items.0.key: shoplab_checkout_flow
         items.0.status: active
         items.0.experiment_type: a_b
+    save:
+      checkout-id:
+        path: items.0.id
     fail: shoplab_checkout_flow is not an ACTIVE A/B test
   - id: new-search
     doc: what-each-page-demonstrates
@@ -434,3 +473,615 @@ steps:
         - complementary "Controlvar panel":
           - button "Powered by Controlvar"
     fail: the reloaded storefront does not show the banner again once its flag is back on
+  - id: stop-simulator
+    doc: traffic-simulator
+    do:
+      run:
+        command: |
+          pid="$(cat demo/.pids/shoplab-simulator.pid)" &&
+            ps -o args= -p "$pid" | grep -qF demo/shoplab/simulator/traffic.py &&
+            kill "$pid" &&
+            while kill -0 "$pid" 2>/dev/null; do sleep 1; done &&
+            printf 'ShopLab simulator stopped\n'
+        up_to_seconds: 60
+    expect:
+      exit: 0
+      output:
+        - ShopLab simulator stopped
+    fail: the simulator demo/setup-local.sh started is not running (or its pid file names another process), or is still running after the README's block stops it, so its visitors would move the counts below
+  - id: product
+    doc: what-each-page-demonstrates
+    do:
+      click:
+        role: link
+        name: Field Watch, $199.00
+        quote: false
+        reason: the home page's link to one product page, the page the README's table names for the buy button
+    expect:
+      aria: |
+        - main:
+          - heading "Field Watch" [level=1]
+          - button "Add to cart"
+    fail: the home page's product link does not open the product page with its buy button
+  - id: add-to-cart
+    doc: what-each-page-demonstrates
+    do:
+      click:
+        role: button
+        name: Add to cart
+        quote: false
+        reason: the product page's buy button; the visitor's buy-button arm (green_add) keeps these words
+    expect:
+      aria: |
+        - main:
+          - status:
+            - text: /Added to your cart \(1 item\)/
+            - link "Go to checkout"
+    fail: the buy button does not put the product in the cart and offer the checkout
+  - id: checkout
+    doc: what-each-page-demonstrates
+    do:
+      click:
+        role: link
+        name: Go to checkout
+        quote: false
+        reason: the product page's link to /checkout once the cart holds the product
+    expect:
+      aria: |
+        - main:
+          - heading "Checkout" [level=1]
+          - 'form "Step 1: Address"'
+    fail: the checkout page does not open on its first step with the product in the cart
+  - id: checkout-arm
+    doc: what-each-page-demonstrates
+    do:
+      click:
+        role: button
+        name: Powered by Controlvar
+    expect:
+      aria: |
+        - complementary "Controlvar panel":
+          - button "Powered by Controlvar" [expanded]
+          - heading "Visitor" [level=2]
+          - code: d2e601e3-374a-4e49-89ab-e1e613123a87
+          - heading "Experiments" [level=2]
+          - list:
+            - listitem:
+              - text: Checkout flow
+              - code: shoplab_checkout_flow
+              - text: standard
+    fail: the panel does not show that the checkout page assigned the journey's visitor to the checkout flow's standard arm
+  - id: checkout-arm-api
+    doc: what-each-page-demonstrates
+    do:
+      api:
+        method: POST
+        path: /api/v1/tracking/assign
+        as: anonymous
+        key: sdk-key
+        body:
+          experiment_key: shoplab_checkout_flow
+          user_id: d2e601e3-374a-4e49-89ab-e1e613123a87
+    expect:
+      status: 200
+      json:
+        experiment_key: shoplab_checkout_flow
+        user_id: d2e601e3-374a-4e49-89ab-e1e613123a87
+        variant_name: standard
+        is_control: true
+        assigned: true
+    fail: the API does not hold the journey's visitor in the checkout flow's standard arm, the arm every count below is read for
+  - id: pause-checkout
+    doc: troubleshooting
+    do:
+      api:
+        method: POST
+        path: /api/v1/experiments/{{checkout-id}}/pause
+        as: admin
+    expect:
+      status: 200
+      json:
+        key: shoplab_checkout_flow
+        status: paused
+    fail: the checkout flow cannot be paused
+  - id: before-order
+    doc: what-each-page-demonstrates
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{checkout-id}}?use_cache=false
+        as: admin
+    expect:
+      status: 200
+      json:
+        status: paused
+        metrics.0.metric_name: Purchase
+        metrics.0.variants.0.variant_name: standard
+        metrics.0.variants.1.variant_name: one_page
+    save:
+      events-before:
+        path: summary.total_events
+      standard-before:
+        path: metrics.0.variants.0.conversions
+      one-page-before:
+        path: metrics.0.variants.1.conversions
+      standard-users-before:
+        path: metrics.0.variants.0.sample_size
+      one-page-users-before:
+        path: metrics.0.variants.1.sample_size
+    fail: the paused checkout flow's results cannot be read freshly, or do not give its Purchase metric's standard and one_page arms in that order
+  - id: paused-name
+    doc: what-each-page-demonstrates
+    do:
+      fill:
+        label: Full name
+        value: Docs Journey
+        quote: false
+        reason: the checkout form's first field
+    expect:
+      aria: |
+        - textbox "Full name": Docs Journey
+    fail: the checkout form has no Full name field to fill
+  - id: paused-email
+    doc: what-each-page-demonstrates
+    do:
+      fill:
+        label: Email
+        value: docs-journey@example.com
+        quote: false
+        reason: the checkout form's email field
+    expect:
+      aria: |
+        - textbox "Email": docs-journey@example.com
+    fail: the checkout form has no Email field to fill
+  - id: paused-address
+    doc: what-each-page-demonstrates
+    do:
+      fill:
+        label: Street address
+        value: 1 Trail Road
+        quote: false
+        reason: the checkout form's street field
+    expect:
+      aria: |
+        - textbox "Street address": 1 Trail Road
+    fail: the checkout form has no Street address field to fill
+  - id: paused-city
+    doc: what-each-page-demonstrates
+    do:
+      fill:
+        label: City
+        value: Portland
+        quote: false
+        reason: the checkout form's city field
+    expect:
+      aria: |
+        - textbox "City": Portland
+    fail: the checkout form has no City field to fill
+  - id: paused-postal
+    doc: what-each-page-demonstrates
+    do:
+      fill:
+        label: Postal code
+        value: "97201"
+        quote: false
+        reason: the checkout form's postal code field
+    expect:
+      aria: |
+        - textbox "Postal code": "97201"
+    fail: the checkout form has no Postal code field to fill
+  - id: paused-shipping
+    doc: what-each-page-demonstrates
+    do:
+      click:
+        role: button
+        name: Continue
+        quote: false
+        reason: the 3-step checkout's button to its next step
+    expect:
+      aria: |
+        - main:
+          - heading "Checkout" [level=1]
+          - 'form "Step 2: Shipping"'
+    fail: the address step does not lead to the shipping step
+  - id: paused-payment
+    doc: what-each-page-demonstrates
+    do:
+      click:
+        role: button
+        name: Continue
+        quote: false
+        reason: the 3-step checkout's button to its next step
+    expect:
+      aria: |
+        - main:
+          - heading "Checkout" [level=1]
+          - 'form "Step 3: Payment"'
+    fail: the shipping step does not lead to the payment step
+  - id: paused-card
+    doc: what-each-page-demonstrates
+    do:
+      fill:
+        label: Card number (any digits — demo only)
+        value: 4242 4242
+        quote: false
+        reason: the payment step's field; the page says any digits do
+    expect:
+      aria: |
+        - textbox "Card number (any digits — demo only)": 4242 4242
+    fail: the payment step has no card field to fill
+  - id: paused-order
+    doc: what-each-page-demonstrates
+    do:
+      click:
+        role: button
+        name: Place order · $199.00
+        quote: false
+        reason: the payment step's button, which names the order's total (the product, free shipping)
+    expect:
+      aria: |
+        - main:
+          - status:
+            - heading "Thanks for your order!" [level=1]
+    fail: the order cannot be placed from the checkout page the visitor opened before the pause
+  - id: paused-order-in-no-arm
+    doc: troubleshooting
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{checkout-id}}?use_cache=false
+        as: admin
+    poll:
+      up_to_seconds: 60
+      every_seconds: 5
+    expect:
+      status: 200
+      json:
+        metrics.0.variants.0.variant_name: standard
+        metrics.0.variants.1.variant_name: one_page
+      delta:
+        summary.total_events:
+          since: events-before
+          by: 1
+        metrics.0.variants.0.conversions:
+          since: standard-before
+          by: 0
+        metrics.0.variants.1.conversions:
+          since: one-page-before
+          by: 0
+        metrics.0.variants.0.sample_size:
+          since: standard-users-before
+          by: 0
+        metrics.0.variants.1.sample_size:
+          since: one-page-users-before
+          by: 0
+    fail: the order placed while the checkout flow was paused is not stored, or counts in an arm
+  - id: paused-checkout-page
+    doc: troubleshooting
+    do:
+      open: http://localhost:3200/checkout
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - heading "Your cart is empty" [level=1]
+    fail: the checkout page does not open again, empty, after the order
+  - id: paused-panel
+    doc: troubleshooting
+    do:
+      click:
+        role: button
+        name: Powered by Controlvar
+    expect:
+      aria: |
+        - complementary "Controlvar panel":
+          - list:
+            - listitem:
+              - text: Checkout flow
+              - code: shoplab_checkout_flow
+              - text: "not enrolled: paused (control shown) not enrolled"
+    fail: the panel does not say the checkout flow is paused and the visitor sees its control, or shows an error
+  - id: resume-checkout
+    doc: troubleshooting
+    do:
+      api:
+        method: POST
+        path: /api/v1/experiments/{{checkout-id}}/start
+        as: admin
+    expect:
+      status: 200
+      json:
+        key: shoplab_checkout_flow
+        status: active
+    fail: the paused checkout flow cannot be resumed
+  - id: resumed-checkout-page
+    doc: troubleshooting
+    do:
+      open: http://localhost:3200/checkout
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - heading "Your cart is empty" [level=1]
+    fail: the checkout page does not open again after the resume
+  - id: resumed-panel
+    doc: troubleshooting
+    do:
+      click:
+        role: button
+        name: Powered by Controlvar
+    expect:
+      aria: |
+        - complementary "Controlvar panel":
+          - list:
+            - listitem:
+              - text: Checkout flow
+              - code: shoplab_checkout_flow
+              - text: standard
+    fail: the resumed checkout flow does not give the visitor their arm again
+  - id: product-again
+    doc: what-each-page-demonstrates
+    do:
+      open: http://localhost:3200/products/p011
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - heading "Field Watch" [level=1]
+          - button "Add to cart"
+    fail: the product page does not open at its address
+  - id: add-to-cart-again
+    doc: what-each-page-demonstrates
+    do:
+      click:
+        role: button
+        name: Add to cart
+        quote: false
+        reason: the product page's buy button; the visitor's buy-button arm (green_add) keeps these words
+    expect:
+      aria: |
+        - main:
+          - status:
+            - text: /Added to your cart \(1 item\)/
+            - link "Go to checkout"
+    fail: the buy button does not put the product in the cart again after the first order
+  - id: checkout-again
+    doc: what-each-page-demonstrates
+    do:
+      click:
+        role: link
+        name: Go to checkout
+        quote: false
+        reason: the product page's link to /checkout once the cart holds the product
+    expect:
+      aria: |
+        - main:
+          - heading "Checkout" [level=1]
+          - 'form "Step 1: Address"'
+    fail: the checkout page does not open on its first step for the second order
+  - id: order-name
+    doc: what-each-page-demonstrates
+    do:
+      fill:
+        label: Full name
+        value: Docs Journey
+        quote: false
+        reason: the checkout form's first field
+    expect:
+      aria: |
+        - textbox "Full name": Docs Journey
+    fail: the checkout form has no Full name field to fill
+  - id: order-email
+    doc: what-each-page-demonstrates
+    do:
+      fill:
+        label: Email
+        value: docs-journey@example.com
+        quote: false
+        reason: the checkout form's email field
+    expect:
+      aria: |
+        - textbox "Email": docs-journey@example.com
+    fail: the checkout form has no Email field to fill
+  - id: order-address
+    doc: what-each-page-demonstrates
+    do:
+      fill:
+        label: Street address
+        value: 1 Trail Road
+        quote: false
+        reason: the checkout form's street field
+    expect:
+      aria: |
+        - textbox "Street address": 1 Trail Road
+    fail: the checkout form has no Street address field to fill
+  - id: order-city
+    doc: what-each-page-demonstrates
+    do:
+      fill:
+        label: City
+        value: Portland
+        quote: false
+        reason: the checkout form's city field
+    expect:
+      aria: |
+        - textbox "City": Portland
+    fail: the checkout form has no City field to fill
+  - id: order-postal
+    doc: what-each-page-demonstrates
+    do:
+      fill:
+        label: Postal code
+        value: "97201"
+        quote: false
+        reason: the checkout form's postal code field
+    expect:
+      aria: |
+        - textbox "Postal code": "97201"
+    fail: the checkout form has no Postal code field to fill
+  - id: order-shipping
+    doc: what-each-page-demonstrates
+    do:
+      click:
+        role: button
+        name: Continue
+        quote: false
+        reason: the 3-step checkout's button to its next step
+    expect:
+      aria: |
+        - main:
+          - heading "Checkout" [level=1]
+          - 'form "Step 2: Shipping"'
+    fail: the address step does not lead to the shipping step
+  - id: order-payment
+    doc: what-each-page-demonstrates
+    do:
+      click:
+        role: button
+        name: Continue
+        quote: false
+        reason: the 3-step checkout's button to its next step
+    expect:
+      aria: |
+        - main:
+          - heading "Checkout" [level=1]
+          - 'form "Step 3: Payment"'
+    fail: the shipping step does not lead to the payment step
+  - id: order-card
+    doc: what-each-page-demonstrates
+    do:
+      fill:
+        label: Card number (any digits — demo only)
+        value: 4242 4242
+        quote: false
+        reason: the payment step's field; the page says any digits do
+    expect:
+      aria: |
+        - textbox "Card number (any digits — demo only)": 4242 4242
+    fail: the payment step has no card field to fill
+  - id: order-placed
+    doc: what-each-page-demonstrates
+    do:
+      click:
+        role: button
+        name: Place order · $199.00
+        quote: false
+        reason: the payment step's button, which names the order's total (the product, free shipping)
+    expect:
+      aria: |
+        - main:
+          - status:
+            - heading "Thanks for your order!" [level=1]
+    fail: the second order cannot be placed
+  - id: order-in-its-arm
+    doc: what-each-page-demonstrates
+    do:
+      api:
+        method: GET
+        path: /api/v1/results/{{checkout-id}}?use_cache=false
+        as: admin
+    poll:
+      up_to_seconds: 60
+      every_seconds: 5
+    expect:
+      status: 200
+      json:
+        status: active
+        metrics.0.metric_name: Purchase
+        metrics.0.variants.0.variant_name: standard
+        metrics.0.variants.1.variant_name: one_page
+        metrics.1.metric_name: Order value
+        metrics.1.variants.0.variant_name: standard
+      delta:
+        metrics.0.variants.0.conversions:
+          since: standard-before
+          by: 1
+        metrics.0.variants.1.conversions:
+          since: one-page-before
+          by: 0
+        metrics.0.variants.0.sample_size:
+          since: standard-users-before
+          by: 0
+        metrics.0.variants.1.sample_size:
+          since: one-page-users-before
+          by: 0
+    save:
+      standard-users-after:
+        path: metrics.0.variants.0.sample_size
+      one-page-users-after:
+        path: metrics.0.variants.1.sample_size
+      standard-revenue-after:
+        path: metrics.1.variants.0.mean
+    fail: the order placed while the checkout flow runs does not count exactly once, in the visitor's standard arm, and nowhere else
+  - id: results-page
+    doc: demo-script-what-to-show-in-the-dashboard
+    do:
+      goto: /results/{{checkout-id}}
+    expect:
+      aria: |
+        - main:
+          - 'heading "ShopLab: Checkout flow — 3 steps vs one page" [level=2]'
+      cells:
+        - row: standard(control)
+          also: Purchaseprimary
+          column: Sample Size
+          delta:
+            since: standard-users-after
+            by: 0
+          quote: false
+          reason: the results table's row for the standard arm (the control) of the Purchase metric, as the page labels them
+        - row: one_page
+          also: Purchaseprimary
+          column: Sample Size
+          delta:
+            since: one-page-users-after
+            by: 0
+          quote: false
+          reason: the results table's row for the one_page arm of the Purchase metric, as the page labels them
+        - row: standard(control)
+          also: Order value
+          column: Value
+          delta:
+            since: standard-revenue-after
+            by: 0
+          quote: false
+          reason: the results table's row for the standard arm of the Order value metric, whose value per user holds the order
+    fail: the checkout flow's results page does not show the users of each arm and the standard arm's order value per user that the API gives
+  - id: complete-checkout
+    doc: troubleshooting
+    do:
+      api:
+        method: POST
+        path: /api/v1/experiments/{{checkout-id}}/complete
+        as: admin
+    expect:
+      status: 200
+      json:
+        key: shoplab_checkout_flow
+        status: completed
+    fail: the checkout flow cannot be completed
+  - id: completed-checkout-page
+    doc: troubleshooting
+    do:
+      open: http://localhost:3200/checkout
+    expect:
+      status: 200
+      aria: |
+        - main:
+          - heading "Your cart is empty" [level=1]
+    fail: the checkout page does not open after the checkout flow is completed
+  - id: completed-panel
+    doc: troubleshooting
+    do:
+      click:
+        role: button
+        name: Powered by Controlvar
+    expect:
+      aria: |
+        - complementary "Controlvar panel":
+          - list:
+            - listitem:
+              - text: Checkout flow
+              - code: shoplab_checkout_flow
+              - text: experiment completed (control shown) completed
+    fail: the panel does not say the checkout flow is completed and the visitor sees its control, or shows an error
