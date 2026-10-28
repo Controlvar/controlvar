@@ -185,13 +185,21 @@ by = [
 ]
 
 [[unit]]
-text = "Powered by Controlvar — per flag: on/off + the server reason (targeting_rule, rollout, inactive, error) spelled out; per experiment: the variant and whether the device was actually enrolled (assigned: false → \"in global holdout streampulse-holdout\", \"excluded: mutual exclusion group streampulse-profile\", \"excluded: targeting rules\"); the last 8 events; links to the dashboard; Refresh now (clears the SDK cache and re-evaluates)."
+text = "Powered by Controlvar — per flag: on/off + the server reason (targeting_rule, rollout, inactive, error) spelled out; per experiment, once its screen has assigned it: the variant and whether the device was actually enrolled (assigned: false → \"in global holdout streampulse-holdout\", \"excluded: mutual exclusion group streampulse-profile\", \"excluded: targeting rules\"); the last 8 events; links to the dashboard; Refresh now (clears the SDK cache and re-evaluates)."
 by = [
+    "test:demo/streampulse/src/__tests__/ControlvarPanel.test.tsx::shows the variant for assigned experiments and a human label for every assigned:false reason",
     "journey:demo-streampulse#premium-iphone",
     "journey:demo-streampulse#gb-iphone",
     "journey:demo-streampulse#profile",
     "journey:demo-streampulse#holdout",
     "journey:demo-streampulse#refresh-now",
+]
+
+[[unit]]
+text = "The panel assigns no experiment itself, because an assignment records that the device saw the experiment: until its screen opens, an experiment reads not assigned yet and names that screen."
+by = [
+    "test:demo/streampulse/src/__tests__/ControlvarPanel.test.tsx::assigns no experiment itself: a flag can still be loading, an experiment no screen opened is not assigned yet",
+    "test:demo/streampulse/src/__tests__/ControlvarPanel.test.tsx::a device that opens only the Notifications screen is assigned to the push test alone",
 ]
 
 [[unit]]
@@ -566,7 +574,7 @@ text = "Global holdout."
 by = ["journey:demo-streampulse#holdout"]
 
 [[unit]]
-text = "Type a custom device id such as sp-holdout-15 (bucket 1 under the demo holdout's salt) and Apply device: every experiment reads in global holdout streampulse-holdout (control shown) and no exposure is recorded."
+text = "Type a custom device id such as sp-holdout-15 (bucket 1 under the demo holdout's salt) and Apply device: every experiment whose screen you open reads in global holdout streampulse-holdout (control shown) and no exposure is recorded."
 by = [
     "test:backend/tests/integration/services/test_seed_streampulse_holdout.py::test_the_demo_salt_keeps_the_documented_ids_where_the_demo_says",
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
@@ -606,9 +614,11 @@ text = "Symptom | Cause / fix"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Yellow banner \"NEXT_PUBLIC_CONTROLVAR_API_KEY is not set\"; panel shows error: API error: 401 everywhere | The key is missing or wrong. Run python backend/scripts/seed_streampulse.py (it rewrites .env.local and .api_key), then restart npm run dev — Next reads env vars at startup."
+text = "Yellow banner \"NEXT_PUBLIC_CONTROLVAR_API_KEY is not set\"; panel shows error: API error: 401 for every flag, and every experiment stays not assigned yet | The key is missing or wrong. Run python backend/scripts/seed_streampulse.py (it rewrites .env.local and .api_key), then restart npm run dev — Next reads env vars at startup."
 by = [
     "test:demo/streampulse/src/__tests__/StreamPulseApp.test.tsx::warns when the API key is missing but still renders the app",
+    "test:demo/streampulse/src/__tests__/ControlvarPanel.test.tsx::assigns no experiment itself: a flag can still be loading, an experiment no screen opened is not assigned yet",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::does not include failed assignments",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key",
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
 ]
@@ -633,10 +643,12 @@ by = [
 ]
 
 [[unit]]
-text = "Every flag off, every experiment error, nothing loads | Backend not running on NEXT_PUBLIC_CONTROLVAR_API_URL. Start it from the repository root: ENVIRONMENT=development uvicorn backend.app.main:app --reload."
+text = "Every flag off, every experiment not assigned yet, nothing loads | Backend not running on NEXT_PUBLIC_CONTROLVAR_API_URL. Start it from the repository root: ENVIRONMENT=development uvicorn backend.app.main:app --reload."
 by = [
     "test:sdk/react/src/__tests__/useFeatureFlag.test.tsx::sets error on network failure",
     "test:sdk/react/src/__tests__/useExperiment.test.tsx::sets error and keeps the control defaults on network failure",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::does not include failed assignments",
+    "test:demo/streampulse/src/__tests__/ControlvarPanel.test.tsx::assigns no experiment itself: a flag can still be loading, an experiment no screen opened is not assigned yet",
 ]
 
 [[unit]]
@@ -656,7 +668,7 @@ by = [
 ]
 
 [[unit]]
-text = "A preset shows \"in global holdout streampulse-holdout\" for every experiment | That id hashes into the 2 % holdout. The shipped preset ids do not; if you changed one, pick another id (or use it to demonstrate the holdout)."
+text = "A preset shows \"in global holdout streampulse-holdout\" for every experiment you open | That id hashes into the 2 % holdout. The shipped preset ids do not; if you changed one, pick another id (or use it to demonstrate the holdout)."
 by = [
     "journey:demo-streampulse#holdout",
     "test:backend/tests/integration/services/test_seed_streampulse_holdout.py::test_the_demo_salt_keeps_the_documented_ids_where_the_demo_says",

@@ -1,8 +1,9 @@
 import React from 'react';
-import { useExperiment, useExperimentation, useFeatureFlag } from '@controlvar/react-sdk';
+import { useExperimentation, useFeatureFlag } from '@controlvar/react-sdk';
+import { useAssignedExperiments } from '@/lib/assignments';
 import { DASHBOARD_URL, EXPERIMENT_KEYS, FLAG_KEYS } from '@/lib/env';
 import { useEventLog } from '@/lib/eventLog';
-import { assignmentPill, assignmentReasonLabel, flagReasonLabel } from '@/lib/labels';
+import { assignmentPill, assignmentReasonLabel, flagReasonLabel, NOT_ASSIGNED_PILL, notAssignedLabel } from '@/lib/labels';
 
 export const PANEL_EVENT_LIMIT = 8;
 
@@ -13,12 +14,13 @@ export const FLAG_ROWS: Array<{ key: string; label: string; feature: string }> =
   { key: FLAG_KEYS.offlineMode, label: 'Offline mode', feature: 'SDK cache' },
 ];
 
-export const EXPERIMENT_ROWS: Array<{ key: string; label: string; feature: string }> = [
-  { key: EXPERIMENT_KEYS.pushFrequency, label: 'Push frequency', feature: 'sequential + guardrail' },
-  { key: EXPERIMENT_KEYS.wrapped, label: '2026 Wrapped', feature: 'mutual exclusion' },
-  { key: EXPERIMENT_KEYS.profileBadges, label: 'Profile badges', feature: 'mutual exclusion' },
-  { key: EXPERIMENT_KEYS.onboardingSteps, label: 'Onboarding steps', feature: 'Bayesian' },
-  { key: EXPERIMENT_KEYS.upsellModal, label: 'Upsell modal', feature: 'audit trail' },
+/** Each experiment with the screen that assigns it (the screen's own useExperiment). */
+export const EXPERIMENT_ROWS: Array<{ key: string; label: string; feature: string; screen: string }> = [
+  { key: EXPERIMENT_KEYS.pushFrequency, label: 'Push frequency', feature: 'sequential + guardrail', screen: 'Notifications' },
+  { key: EXPERIMENT_KEYS.wrapped, label: '2026 Wrapped', feature: 'mutual exclusion', screen: 'Profile' },
+  { key: EXPERIMENT_KEYS.profileBadges, label: 'Profile badges', feature: 'mutual exclusion', screen: 'Profile' },
+  { key: EXPERIMENT_KEYS.onboardingSteps, label: 'Onboarding steps', feature: 'Bayesian', screen: 'Onboarding' },
+  { key: EXPERIMENT_KEYS.upsellModal, label: 'Upsell modal', feature: 'audit trail', screen: 'Payments' },
 ];
 
 interface Props {
@@ -28,28 +30,25 @@ interface Props {
 
 /**
  * "Powered by Controlvar" panel: what the platform decided for the current
- * device (every flag with its `reason`, every experiment with its variant and
- * enrolment status), the last 8 events, dashboard links and "Refresh now".
- * Must be rendered inside the SDK provider.
+ * device (every flag with its `reason`, and each experiment a screen has
+ * assigned, with its variant and enrolment status), the last 8 events,
+ * dashboard links and "Refresh now". Must be rendered inside the SDK provider.
  */
 export default function ControlvarPanel({ onRefresh }: Props) {
   const { client, user } = useExperimentation();
   const events = useEventLog();
 
-  // Hooks are called unconditionally, so every flag and experiment is evaluated
-  // up front — the same set the device simulator evaluates for each device.
+  // Every flag is evaluated here, the same set the device simulator evaluates.
+  // No experiment is: an assignment records that the device saw the experiment,
+  // so only the screen that uses one assigns it, and the panel shows what the
+  // screens have assigned.
   const recs = useFeatureFlag(FLAG_KEYS.recsV2);
   const player = useFeatureFlag(FLAG_KEYS.playerV2);
   const aiSearch = useFeatureFlag(FLAG_KEYS.aiSearch);
   const offline = useFeatureFlag(FLAG_KEYS.offlineMode);
-  const push = useExperiment(EXPERIMENT_KEYS.pushFrequency);
-  const wrapped = useExperiment(EXPERIMENT_KEYS.wrapped);
-  const badges = useExperiment(EXPERIMENT_KEYS.profileBadges);
-  const onboarding = useExperiment(EXPERIMENT_KEYS.onboardingSteps);
-  const upsell = useExperiment(EXPERIMENT_KEYS.upsellModal);
+  const assigned = useAssignedExperiments();
 
   const flags = [recs, player, aiSearch, offline];
-  const assignments = [push, wrapped, badges, onboarding, upsell];
   const recent = events.slice(-PANEL_EVENT_LIMIT).reverse();
 
   const refresh = () => {
@@ -70,7 +69,8 @@ export default function ControlvarPanel({ onRefresh }: Props) {
       </div>
 
       <p className="mb-3 text-xs text-neutral-500">
-        Decisions for <code className="rounded bg-neutral-100 px-1 font-mono" data-testid="panel-user-id">{user.userId}</code>, fetched when you pick a device or press Refresh now.
+        Decisions for <code className="rounded bg-neutral-100 px-1 font-mono" data-testid="panel-user-id">{user.userId}</code>: flags are
+        fetched when you pick a device or press Refresh now, and each experiment when its screen opens.
       </p>
 
       <section className="mb-4" aria-labelledby="panel-flags-title">
@@ -104,9 +104,9 @@ export default function ControlvarPanel({ onRefresh }: Props) {
           Experiments
         </h3>
         <ul className="divide-y divide-neutral-100">
-          {EXPERIMENT_ROWS.map((row, i) => {
-            const a = assignments[i];
-            const pill = a.loading ? 'pill-control' : a.error ? 'pill-error' : a.assigned === false ? 'pill-warn' : a.isControl ? 'pill-control' : 'pill-variant';
+          {EXPERIMENT_ROWS.map((row) => {
+            const a = assigned[row.key];
+            const pill = !a ? 'pill-off' : a.assigned === false ? 'pill-warn' : a.isControl ? 'pill-control' : 'pill-variant';
             return (
               <li key={row.key} className="flex items-center justify-between gap-2 py-1.5" data-testid={`panel-exp-${row.key}`}>
                 <div className="min-w-0">
@@ -115,11 +115,11 @@ export default function ControlvarPanel({ onRefresh }: Props) {
                   </div>
                   <code className="block truncate text-xs text-neutral-500">{row.key}</code>
                   <div className="text-xs text-neutral-600" data-testid={`panel-exp-reason-${row.key}`}>
-                    {assignmentReasonLabel(a)}
+                    {a ? assignmentReasonLabel(a) : notAssignedLabel(row.screen)}
                   </div>
                 </div>
-                <span className={pill} title={a.error ? a.error.message : a.variantKey}>
-                  {assignmentPill(a)}
+                <span className={pill} title={a?.variantKey}>
+                  {a ? assignmentPill(a) : NOT_ASSIGNED_PILL}
                 </span>
               </li>
             );
