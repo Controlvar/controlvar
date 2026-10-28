@@ -210,6 +210,8 @@ the planned sample size.
 Open the experiment from **Experiments** and choose **View results** (it cannot be chosen
 while the experiment is a draft), or go to http://localhost:3000/results/EXPERIMENT_ID.
 
+To follow one result from a visitor's click to this page on the demo stack, see [Guided examples](guided-examples.md#ab-test).
+
 #### Experiment Summary Card
 
 Shows at a glance:
@@ -421,6 +423,8 @@ shows the schedule, its status and its stages, read-only. A schedule like this o
 
 The platform automatically advances time-based stages. A manual stage waits until you
 advance it with `POST /api/v1/rollout-schedules/stages/{stage_id}/advance`.
+
+[Guided examples](guided-examples.md#rollout) points to a staged rollout with an automatic rollback that runs on the demo stack.
 
 ### Disabling / Rolling Back
 

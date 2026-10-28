@@ -6,6 +6,8 @@ SDK. It exists to *show* the platform: open the storefront, click around, watch 
 "Powered by Controlvar" panel, then open the dashboard and see the same visitor, the
 same variants and the same events turn into statistics.
 
+[Guided examples](https://docs.controlvar.com/guides/guided-examples/) walks the hero banner test, a pause and the free-shipping flag one step at a time, with what you will see at each step.
+
 Nothing is for sale. There are no images, no external fonts and no CDNs — just twelve
 made-up products with gradient artwork.
 
