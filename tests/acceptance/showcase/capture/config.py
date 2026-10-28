@@ -242,6 +242,7 @@ VIDEOS: Dict[str, str] = {
     "03-flag-rollout": "storyboards/03-flag-rollout.yaml",
     "05-plan-and-team": "storyboards/05-plan-and-team.yaml",
     "06-shoplab-ab-test": "storyboards/06-shoplab-ab-test.yaml",
+    "09-design-in-depth": "storyboards/09-design-in-depth.yaml",
 }
 #: Storyboards that prove the tool and are never a video: capture only, never
 #: rendered, and not part of ``all``.

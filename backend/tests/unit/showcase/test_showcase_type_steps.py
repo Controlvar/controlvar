@@ -45,11 +45,23 @@ def type_steps(board):
                     yield step
 
 
+#: The one board that selects a value to type over it: video 9's three share
+#: boxes (a number box emptied first can draw "034" for 34).
+SELECTS = {
+    "09-design-in-depth": [
+        "variant-allocation-0",
+        "variant-allocation-1",
+        "variant-allocation-2",
+    ]
+}
+
+
 @pytest.mark.parametrize("slug, path", list(boards()), ids=[s for s, _ in boards()])
-def test_every_board_still_loads_and_none_selects(slug, path):
+def test_every_board_still_loads_and_only_video_9_selects(slug, path):
     board = storyboard.load(path)
     steps = list(type_steps(board))
-    assert all(step.select is False for step in steps), slug
+    selected = [step.type.testid for step in steps if step.select]
+    assert selected == SELECTS.get(slug, []), slug
 
 
 def board_with(slug, change):
