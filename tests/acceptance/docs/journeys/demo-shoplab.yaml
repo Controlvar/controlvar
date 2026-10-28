@@ -478,16 +478,17 @@ steps:
     do:
       run:
         command: |
-          pid="$(cat demo/.pids/shoplab-simulator.pid)"
-          kill "$pid"
-          while kill -0 "$pid" 2>/dev/null; do sleep 1; done
-          printf 'ShopLab simulator stopped\n'
+          pid="$(cat demo/.pids/shoplab-simulator.pid)" &&
+            ps -o args= -p "$pid" | grep -qF demo/shoplab/simulator/traffic.py &&
+            kill "$pid" &&
+            while kill -0 "$pid" 2>/dev/null; do sleep 1; done &&
+            printf 'ShopLab simulator stopped\n'
         up_to_seconds: 60
     expect:
       exit: 0
       output:
         - ShopLab simulator stopped
-    fail: the simulator demo/setup-local.sh started is not running, or is still running after the README's block stops it, so its visitors would move the counts below
+    fail: the simulator demo/setup-local.sh started is not running (or its pid file names another process), or is still running after the README's block stops it, so its visitors would move the counts below
   - id: product
     doc: what-each-page-demonstrates
     do:

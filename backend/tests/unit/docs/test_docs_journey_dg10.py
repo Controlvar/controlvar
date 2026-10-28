@@ -14,7 +14,10 @@ and in the sources it reads, and is held here:
   change fails rather than passing for the other arm);
 * the simulator ``demo/setup-local.sh`` started is stopped by the README's own
   block, first, is not restarted, and the block prints only once the process
-  has gone (run here for real against a stand-in process);
+  has gone; it signals only a process whose command line is the simulator's
+  (``demo/teardown-local.sh``'s check), and prints nothing when there is none,
+  in the journey's ``bash -e`` and in a reader's shell alike (run here for real
+  against stand-in processes);
 * the "before" counts are read after the visitor's assignment, with
   ``use_cache=false`` on every results read;
 * the exact amounts: the order placed while paused is one more event for the
@@ -24,7 +27,8 @@ and in the sources it reads, and is held here:
   experiment ran (no reload between), so it reaches the API tagged with the
   experiment and only the API's status check keeps it out of the arm; and it
   comes before any counted order, since a user is counted once;
-* the results page is read for the numbers the API answered last;
+* the results page is read for the numbers the API answered last, by the
+  results table's own labels (read from its source, so a relabel fails here);
 * every new step runs: none declares ``not_run``;
 * the words the steps expect are the storefront's and the seed's own.
 """
@@ -58,6 +62,16 @@ from backend.scripts import seed_shoplab
 JOURNEY = RUNNER_ROOT / "journeys" / "demo-shoplab.yaml"
 README = REPO_ROOT / "demo" / "shoplab" / "README.md"
 SETUP = REPO_ROOT / "demo" / "setup-local.sh"
+TEARDOWN = REPO_ROOT / "demo" / "teardown-local.sh"
+RESULTS_TABLE = (
+    REPO_ROOT
+    / "frontend"
+    / "src"
+    / "components"
+    / "results"
+    / "MetricComparison"
+    / "MetricComparisonTable.tsx"
+)
 SHOPLAB = REPO_ROOT / "demo" / "shoplab" / "src"
 CHECKOUT_PAGE = SHOPLAB / "pages" / "checkout.tsx"
 PRODUCT_PAGE = SHOPLAB / "pages" / "products" / "[id].tsx"
@@ -318,6 +332,11 @@ def test_the_simulator_is_stopped_by_the_readmes_block_and_stays_stopped():
     assert later == []
 
 
+#: What the stop block looks for in the process's command line before it
+#: signals it: the simulator's script, as setup-local.sh starts it.
+SIMULATOR = "demo/shoplab/simulator/traffic.py"
+
+
 def test_the_stop_block_names_the_pid_file_setup_local_writes():
     setup = SETUP.read_text(encoding="utf-8")
     assert '> "$DEMO_DIR/.pids/shoplab-simulator.pid"' in setup
@@ -325,18 +344,35 @@ def test_the_stop_block_names_the_pid_file_setup_local_writes():
         r"nohup (python demo/shoplab/simulator/traffic\.py[^\n>]*)", setup, SETUP
     )
     assert "--duration" not in started, "it runs until stopped"
+    assert started.split()[1] == SIMULATOR
     command = _step("stop-simulator")["do"]["run"]["command"]
     assert 'pid="$(cat demo/.pids/shoplab-simulator.pid)"' in command
 
 
-def test_the_stop_block_prints_last_after_waiting_for_the_process():
-    """The order the test below cannot see: it checks the process has gone
-    when the block ends, and this that nothing is printed before the wait."""
-    lines = _step("stop-simulator")["do"]["run"]["command"].strip("\n").splitlines()
-    assert lines[0] == 'pid="$(cat demo/.pids/shoplab-simulator.pid)"'
-    assert lines[1] == 'kill "$pid"'
-    assert lines[2].startswith('while kill -0 "$pid"'), lines
-    assert lines[3:] == ["printf 'ShopLab simulator stopped\\n'"], lines
+def test_the_stop_block_checks_the_process_as_teardown_does():
+    """The block's check is teardown-local.sh's for the same pid file: the
+    process's ``ps -o args=`` holds the script setup-local.sh started."""
+    teardown = TEARDOWN.read_text(encoding="utf-8")
+    expected = _found(
+        r"shoplab-simulator\) printf '%s' '([^']+)' ;;", teardown, TEARDOWN
+    )
+    assert expected == SIMULATOR
+    assert 'COMMAND=$(ps -o args= -p "$PID"' in teardown
+    assert f'ps -o args= -p "$pid" | grep -qF {SIMULATOR} &&' in _stop_block()
+
+
+def test_the_stop_block_is_one_chain_that_checks_signals_waits_then_prints():
+    """The order the tests below cannot see: each step runs only if the one
+    before it succeeded, so a reader's shell (no ``-e``) never reaches the line
+    after a failure, and nothing is printed before the wait."""
+    lines = [line.strip() for line in _stop_block().strip("\n").splitlines()]
+    assert lines == [
+        'pid="$(cat demo/.pids/shoplab-simulator.pid)" &&',
+        f'ps -o args= -p "$pid" | grep -qF {SIMULATOR} &&',
+        'kill "$pid" &&',
+        'while kill -0 "$pid" 2>/dev/null; do sleep 1; done &&',
+        "printf 'ShopLab simulator stopped\\n'",
+    ]
 
 
 def test_every_results_read_skips_the_cache():
@@ -470,6 +506,62 @@ def test_the_results_page_is_read_for_the_numbers_the_api_answered_last():
     assert f'heading "{name}" [level=2]' in _step("results-page")["expect"]["aria"]
 
 
+def _table_labels() -> Dict[str, str]:
+    """The results table's column labels by the result field each column shows
+    (``columns()`` in MetricComparisonTable.tsx: ``['sample_size', 'Sample Size']``)."""
+    source = RESULTS_TABLE.read_text(encoding="utf-8")
+    body = _found(
+        r"(?s)function columns\([^)]*\)[^{]*\{(.*?)\n\}\n", source, RESULTS_TABLE
+    )
+    return dict(re.findall(r"\['(\w+)', '([^']+)'\]", body))
+
+
+def _drawn_after(name: str, flag: str) -> str:
+    """The words the results table draws right after ``{name}`` when ``flag``
+    holds. Only a line break may come between the two (JSX drops it), so the
+    cell's text is the name and the words with no space: ``standard(control)``."""
+    source = RESULTS_TABLE.read_text(encoding="utf-8")
+    pattern = (
+        r"\{"
+        + re.escape(name)
+        + r"\}\n[ ]*\{"
+        + re.escape(flag)
+        + r" && \(\s*<span[^>]*>([^<{]+)</span>"
+    )
+    return _found(pattern, source, RESULTS_TABLE)
+
+
+def test_the_results_cells_are_found_by_the_tables_own_words():
+    """The cells are found by words the results table draws: each column's
+    label for the field the cell is compared with, and the variant and metric
+    cells' text with their "(control)" and "primary" marks. A relabel in the
+    dashboard fails here, not in the nightly."""
+    labels = _table_labels()
+    saved = _saved("order-in-its-arm")
+    cells = _step("results-page")["expect"]["cells"]
+    for cell in cells:
+        field = saved[cell["delta"]["since"]].rsplit(".", 1)[1]
+        assert labels.get(field) == cell["column"], (field, labels)
+    control = _drawn_after("variant.variant_name", "variant.is_control")
+    primary = _drawn_after("metric.metric_name", "metric.is_primary")
+    assert (control, primary) == ("(control)", "primary")
+    (control_arm,) = [
+        v["name"] for v in _experiment(CHECKOUT)["variants"] if v["is_control"]
+    ]
+    (primary_metric,) = [
+        m["name"] for m in _experiment(CHECKOUT)["metrics"] if m["is_primary"]
+    ]
+    rows = [cell["row"] for cell in cells]
+    assert rows.count(f"{control_arm}{control}") == 2
+    assert rows.count(_other_arm()) == 1
+    alsos = [cell["also"] for cell in cells]
+    assert alsos.count(f"{primary_metric}{primary}") == 2
+    (other_metric,) = [
+        m["name"] for m in _experiment(CHECKOUT)["metrics"] if not m["is_primary"]
+    ]
+    assert alsos.count(other_metric) == 1
+
+
 def test_the_metric_names_are_the_seeds():
     metrics = _experiment(CHECKOUT)["metrics"]
     primary = [m["name"] for m in metrics if m["is_primary"]]
@@ -594,20 +686,30 @@ def test_the_visitor_is_the_one_the_panel_steps_expect():
 # ---------------------------------------------------------------------------
 # The README's stop block, run for real against a stand-in simulator
 # ---------------------------------------------------------------------------
-def _stand_in(tmp_path: Path, delay: float = 0.5):
+STOPPED = "ShopLab simulator stopped"
+
+
+def _stand_in(tmp_path: Path, delay: float = 0.5, simulator: bool = True):
     """A process that takes *delay* seconds to exit after SIGTERM, its pid in
     the file setup-local.sh writes, reaped as soon as it exits (so a check that
-    it has gone does not wait on a zombie)."""
+    it has gone does not wait on a zombie).
+
+    With *simulator*, its command line is the simulator's script, run from the
+    checkout's root (``/bin/sh demo/shoplab/simulator/traffic.py``, short enough
+    that no ``ps`` width cuts it); without, it is another program the pid has
+    come to name (a pid file outlives its process)."""
     (tmp_path / "venv" / "bin").mkdir(parents=True)
     pids = tmp_path / "demo" / ".pids"
     pids.mkdir(parents=True)
-    child = subprocess.Popen(
-        [
-            "/bin/sh",
-            "-c",
-            f"trap 'sleep {delay}; exit 0' TERM; while :; do sleep 0.1; done",
-        ]
-    )
+    loop = f"trap 'sleep {delay}; exit 0' TERM; while :; do sleep 0.1; done\n"
+    if simulator:
+        script = tmp_path / SIMULATOR
+        script.parent.mkdir(parents=True)
+        script.write_text(loop, encoding="utf-8")
+        argv = ["/bin/sh", SIMULATOR]
+    else:
+        argv = ["/bin/sh", "-c", loop]
+    child = subprocess.Popen(argv, cwd=tmp_path)
     threading.Thread(target=child.wait, daemon=True).start()
     (pids / "shoplab-simulator.pid").write_text(f"{child.pid}\n", encoding="utf-8")
     return child
@@ -622,41 +724,115 @@ def _finish(child) -> None:
         child.kill()
 
 
-def test_the_stop_block_prints_its_line_only_once_the_process_has_gone(tmp_path):
+def _gone(child, seconds: float = 5) -> None:
+    """Wait for *child* (killed) to be reaped, so its pid names no process."""
+    deadline = time.monotonic() + seconds
+    while child.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert child.poll() is not None
+
+
+def _run(shell: str, block: str, checkout: Path):
+    """The block as the journey runs it (``bash -e``, ``commands.run``) or as a
+    reader pastes it into a shell with no ``-e``: (exit status, output)."""
+    if shell == "journey":
+        finished = commands.run(block, checkout, 20, os.environ)
+        return finished.status, finished.output
+    done = subprocess.run(
+        ["bash", "-c", block],
+        cwd=checkout,
+        env=commands.environment(checkout, os.environ),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=20,
+        check=False,
+    )
+    return done.returncode, done.stdout.decode("utf-8", "replace")
+
+
+SHELLS = pytest.mark.parametrize("shell", ["journey", "reader"])
+
+
+@SHELLS
+def test_the_stop_block_prints_its_line_only_once_the_process_has_gone(tmp_path, shell):
     child = _stand_in(tmp_path)
     try:
-        finished = commands.run(_stop_block(), tmp_path, 20, os.environ)
+        status, output = _run(shell, _stop_block(), tmp_path)
         gone = child.poll() is not None
     finally:
         _finish(child)
-    assert finished.status == 0, finished.output
-    assert "ShopLab simulator stopped" in finished.output
+    assert status == 0, output
+    assert STOPPED in output
     assert gone, "the line was printed while the simulator still ran"
 
 
-def test_the_stop_block_fails_when_the_simulator_is_not_running(tmp_path):
+@SHELLS
+def test_the_stop_block_fails_when_the_simulator_is_not_running(tmp_path, shell):
+    """A pid file left behind by a simulator that has gone."""
     child = _stand_in(tmp_path)
     child.kill()
-    deadline = time.monotonic() + 5
-    while child.poll() is None and time.monotonic() < deadline:
-        time.sleep(0.05)
-    finished = commands.run(_stop_block(), tmp_path, 20, os.environ)
-    assert finished.status != 0
-    assert "ShopLab simulator stopped" not in finished.output
+    _gone(child)
+    status, output = _run(shell, _stop_block(), tmp_path)
+    assert status != 0
+    assert STOPPED not in output
+
+
+@SHELLS
+def test_the_stop_block_leaves_another_process_alone(tmp_path, shell):
+    """A stale pid that now names another program: not signalled, no line,
+    and a non-zero exit."""
+    child = _stand_in(tmp_path, delay=0, simulator=False)
+    try:
+        status, output = _run(shell, _stop_block(), tmp_path)
+        time.sleep(0.5)  # a TERM it had been sent would have ended it by now
+        running = child.poll() is None
+    finally:
+        _finish(child)
+    assert running, "the block signalled a process that is not the simulator"
+    assert status != 0
+    assert STOPPED not in output
+
+
+@SHELLS
+def test_the_stop_block_with_no_pid_file_prints_nothing(tmp_path, shell):
+    (tmp_path / "venv" / "bin").mkdir(parents=True)
+    status, output = _run(shell, _stop_block(), tmp_path)
+    assert status != 0
+    assert STOPPED not in output
 
 
 def test_a_block_that_does_not_wait_is_caught(tmp_path):
-    """Positive control for the test above: the same block without its wait
-    prints while the stand-in still runs, and the check says so."""
+    """Positive control for the first test above: the same block without its
+    wait prints while the stand-in still runs, and the check says so."""
     planted = "\n".join(
-        line for line in _stop_block().splitlines() if not line.startswith("while ")
+        line
+        for line in _stop_block().splitlines()
+        if not line.lstrip().startswith("while ")
     )
     assert planted != _stop_block()
     child = _stand_in(tmp_path, delay=1.0)
     try:
-        finished = commands.run(planted, tmp_path, 20, os.environ)
+        status, _ = _run("journey", planted, tmp_path)
         gone: Optional[bool] = child.poll() is not None
     finally:
         _finish(child)
-    assert finished.status == 0
+    assert status == 0
     assert gone is False
+
+
+def test_a_block_that_does_not_check_the_process_is_caught(tmp_path):
+    """Positive control for the stale-pid test: the same block without its
+    check signals the other program."""
+    planted = "\n".join(
+        line for line in _stop_block().splitlines() if "ps -o args=" not in line
+    )
+    assert planted != _stop_block()
+    child = _stand_in(tmp_path, delay=0, simulator=False)
+    try:
+        status, output = _run("reader", planted, tmp_path)
+        _gone(child)
+    finally:
+        _finish(child)
+    assert status == 0, output
+    assert STOPPED in output
