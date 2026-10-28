@@ -854,11 +854,14 @@ def test_the_demo_job_runs_demo_local_alone(runner_conftest):
             path, ("demo-local",), {"DOCS_JOURNEY_STACKS": "demo-local"}
         )
     ]
+    # guided-examples runs last: after demo-shoplab has stopped the ShopLab
+    # simulator and completed the checkout flow, on the counts it leaves.
     assert selected == [
         "demo-guide",
         "demo-shoplab",
         "demo-streampulse-simulator",
         "demo-streampulse",
+        "guided-examples",
     ]
     default = [
         path.stem
@@ -866,6 +869,7 @@ def test_the_demo_job_runs_demo_local_alone(runner_conftest):
         if runner_conftest.selected(path, runner_conftest.selected_stacks({}), {})
     ]
     assert not [stem for stem in default if stem.startswith("demo-")]
+    assert not set(default) & set(selected)
 
 
 def test_an_unknown_stack_stops_the_session(runner_conftest):

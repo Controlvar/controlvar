@@ -580,6 +580,13 @@ by = [
 ]
 
 [[unit]]
+text = "To follow one result from a visitor's click to this page on the demo stack, see Guided examples."
+by = [
+    "journey:guided-examples#press-counted",
+    "journey:guided-examples#results-page",
+]
+
+[[unit]]
 text = "Experiment Summary Card"
 by = ["exempt:baseline"]
 
@@ -1136,6 +1143,13 @@ by = ["test:backend/tests/unit/core/test_rollout_scheduler.py"]
 [[unit]]
 text = "A manual stage waits until you advance it with POST /api/v1/rollout-schedules/stages/{stage_id}/advance."
 by = ["test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutStages::test_advance_manual_stage_on_active_schedule"]
+
+[[unit]]
+text = "Guided examples points to a staged rollout with an automatic rollback that runs on the demo stack."
+by = [
+    "journey:demo-streampulse-simulator#rolled-back",
+    "journey:demo-streampulse-simulator#full-rollout",
+]
 
 [[unit]]
 text = "Disabling / Rolling Back"

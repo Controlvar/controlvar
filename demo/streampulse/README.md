@@ -16,6 +16,9 @@ every flag evaluation. The native iOS, Android, React Native and Flutter SDKs do
 on flag evaluation yet ([#438](https://github.com/Controlvar/controlvar/issues/438)), so a rule like
 the Search tab's would not match from them.
 
+[Guided examples](https://docs.controlvar.com/guides/guided-examples/#device) walks the Search
+tab's rule one step at a time, with what you will see at each step.
+
 ## Screens ↔ platform features
 
 | Screen | Flag / experiment | What the phone shows | Platform feature showcased |

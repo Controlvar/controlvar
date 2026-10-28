@@ -12,7 +12,7 @@
 # scripts/doc_examples.py), and each page's residual counts can only fall.
 
 [meta]
-documents = 54
+documents = 55
 exec = 305
 universe = [
     ".github/pull_request_template.md",
@@ -99,6 +99,7 @@ universe = [
     "docs/guides/assign-customer-list.md",
     "docs/guides/dashboard-and-api.md",
     "docs/guides/experiment-wizard.md",
+    "docs/guides/guided-examples.md",
     "docs/guides/segments.md",
     "docs/guides/user-guide.md",
     "docs/hipaa/overview.md",
@@ -416,6 +417,13 @@ expects = 0
 
 [[document]]
 path = "docs/guides/user-guide.md"
+environment = "bare"
+exec = 0
+skip = 1
+expects = 0
+
+[[document]]
+path = "docs/guides/guided-examples.md"
 environment = "bare"
 exec = 0
 skip = 1
