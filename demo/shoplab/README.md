@@ -20,9 +20,11 @@ made-up products with gradient artwork.
 | **Search** `/search` | `shoplab_new_search` flag — exact name match vs. fuzzy engine with highlights | **Feature-flag gradual rollout** (10% → 50% → 100%), safety config, flag-attributed events |
 | Header (every page) | `shoplab_free_shipping_banner` flag | **Kill switch**: turn the banner off in the dashboard, reload the storefront |
 
-The bottom-right **Powered by Controlvar** panel shows the visitor id, the variant for each
-of the four experiments, both flags, the last 8 tracked events, a "New visitor" button
-(new id + reload → fresh assignments) and a link to the dashboard.
+The bottom-right **Powered by Controlvar** panel shows the visitor id, each experiment's variant
+once a page has assigned it, both flags, the last 8 tracked events, a "New visitor" button
+(new id + reload → fresh assignments) and a link to the dashboard. The panel assigns no
+experiment itself, because an assignment records that the visitor saw the experiment: until the
+page that uses it opens, an experiment reads `not assigned yet` and names that page.
 
 Event vocabulary (all `event_type == event_name`):
 `page_view {page}` · `hero_cta_click` · `product_click {product_id, position, sort}` ·
@@ -108,10 +110,11 @@ python demo/shoplab/simulator/traffic.py --dry-run --seed 1
 Its other options are `--api-url`, `--api-key` (default: the contents of
 `demo/shoplab/.api_key`) and `--max-visitors`; `--help` describes them all.
 
-Each visitor is assigned to the four experiments (`POST /tracking/assign`, context = persona
-attributes), has both flags evaluated, then walks the funnel with the spec's true conversion
-rates (hero CTA 12% vs 15%; sort click 22/19/28%; add-to-cart 8.0/8.5/10.5/9.5%; purchase after
-checkout 62% vs 68%, lognormal order value with median $85; search click 35% with the new engine
+Each visitor has both flags evaluated, then is assigned to the hero banner, product sort and buy
+button experiments as its visit starts, and to the checkout flow only if it begins checkout
+(`POST /tracking/assign`, context = persona attributes). It walks the funnel with the spec's
+true conversion rates (hero CTA 12% vs 15%; sort click 22/19/28%; add-to-cart 8.0/8.5/10.5/9.5%;
+purchase after checkout 62% vs 68%, lognormal order value with median $85; search click 35% with the new engine
 vs 25% without). Three personas scale intent — casual 60%, shopper 30%, power 10% — calibrated so
 the population rates equal the spec. Events go out via `POST /tracking/batch` (≤100 per call) with
 an explicit `experiment_key` for every assigned experiment and `feature_flag_key` for search.
@@ -156,7 +159,7 @@ source venv/bin/activate && python -m pytest demo/shoplab/simulator/test_traffic
 
 | Symptom | Cause / fix |
 |---|---|
-| Panel shows `error` for every experiment; network tab shows **401** | Wrong or missing `NEXT_PUBLIC_CONTROLVAR_API_KEY`. Re-run the seed script (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` (env vars are read at startup). |
+| Every experiment in the panel stays `not assigned yet` and both flags read `off`; network tab shows **401** | Wrong or missing `NEXT_PUBLIC_CONTROLVAR_API_KEY`. Re-run the seed script (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` (env vars are read at startup). |
 | **404** on `/tracking/assign` or `/feature-flags/evaluate/...` | The ShopLab experiments or flags are not seeded. A paused or completed experiment answers its control variant with `assigned: false`, and a flag that is not ACTIVE answers `enabled: false`: neither is a 404. Run the seed script. |
 | Browser console: **CORS** error from `localhost:3200` | Port 3200 is not in the backend's CORS allow-list. The development defaults (`DEFAULT_CORS_ORIGINS` in `backend/app/core/config.py`) include it; if you set `CORS_ORIGINS` or `BACKEND_CORS_ORIGINS` yourself, add `http://localhost:3200` and restart the API. Against a staging or production API, add it to that API's `CORS_ORIGINS`: those allow no other origin by default. |
 | Every visitor is `control` and nothing loads | Backend not running on `NEXT_PUBLIC_CONTROLVAR_API_URL`. Start it from the repository root: `ENVIRONMENT=development uvicorn backend.app.main:app --reload`. |

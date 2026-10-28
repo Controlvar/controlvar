@@ -67,7 +67,9 @@ monitoring computes `error_rate = crash reports ÷ flag evaluations` over the la
 evaluation of the flag counts, the steady traffic's too. With the flag at 25%, the incident's reports come to
 well over 5% (the critical threshold) of its own and an equally busy steady traffic's evaluations, so the rate
 climbs past 5% while the incident runs; step 3 of the story runs it until the check is critical, at most
-5 rounds of 90 seconds.
+5 rounds of 90 seconds. With automatic rollbacks on, it goes on until the safety monitor has rolled the flag
+back, within the same 5 rounds: once the incident stops, the steady traffic dilutes the rate, which can fall
+back under 5% before the monitor's next pass has seen it.
 
 ## Rollout story
 
@@ -99,8 +101,8 @@ Other options: `--api-url`, `--api-key` (for the step-3 traffic), `--dashboard-u
 |---|---|---|
 | 1 | Prints the flag (5%, `employee equals true` → 100%), the 4-stage schedule, safety config and check | `GET /feature-flags/`, `/rollout-schedules/?feature_flag_id=`, `/safety/...` |
 | 2 | Completes stage 1 → stage 2 in progress → flag 25% | `PUT /rollout-schedules/stages/{id}` (trigger → manual), `POST .../stages/{id}/advance` |
-| 3 | Runs `traffic.py --incident android12 --rate 6 --duration 90` as a subprocess, then the safety check; while the check is still healthy, runs it again, at most 5 rounds in all | `GET /safety/feature-flags/{id}/check` |
-| 4 | Automatic rollbacks ON → polls the flag (up to 6 min) until the safety scheduler sets it to 5%; OFF (or timeout) → manual rollback. Either way the rollback pauses the flag's rollout schedule | `GET /safety/settings`, `POST /safety/feature-flags/{id}/rollback?percentage=5&reason=` |
+| 3 | Runs `traffic.py --incident android12 --rate 6 --duration 90` as a subprocess, then the safety check; while the check is still healthy, and with automatic rollbacks ON until the flag is rolled back, runs it again, at most 5 rounds in all | `GET /safety/feature-flags/{id}/check`, `GET /scheduler/safety/history` |
+| 4 | Automatic rollbacks ON → polls the flag until the safety monitor sets it to 5%, printing the error rate and each of the monitor's passes; rolls back by hand only after two passes newer than the newest one recorded when the step began (which can include a pass already running then) ran without a rollback, or when no pass runs for 6 min. OFF → manual rollback. Either way the rollback pauses the flag's rollout schedule | `GET /safety/settings`, `GET /scheduler/safety/history`, `POST /safety/feature-flags/{id}/rollback?percentage=5&reason=` |
 | 5 | Adds `app_version semver_gte 3.2.1` (→ 100%) next to the employee group, dashboard shape, OR | `PUT /feature-flags/{id}` `{targeting_rules}` |
 | 6 | Waits until the check is healthy again (the 15-minute error window), resumes the schedule the rollback paused, then stage 3 → 50% | `POST /rollout-schedules/{id}/activate`, then as step 2 |
 | 7 | Stage 4 → 100%, completes the schedule, removes the rules | as step 2 + `PUT /feature-flags/{id}` |
@@ -116,6 +118,8 @@ Re-running step 3 runs the incident again. Notes:
   matched by the `employee equals true` rule keep Player v2 through it, and it pauses the rollout schedule,
   which step 6 resumes (a rollback to 0% would turn the flag off for everyone; see
   [What a rollback changes](../../../docs/feature-flags/safety.md#what-a-rollback-changes)).
+- When step 4 rolls back by hand it says so, as the user the story signed in as: the audit log names that
+  user, not `system:safety-monitor`.
 - After the incident the flag stays critical until its error rate over the last 15 minutes is back at 5% or
   below; step 6 waits for that (pass `--no-wait` to skip, at the cost of the scheduler rolling the flag back again).
 - Reset the whole story with `python backend/scripts/seed_streampulse.py --reset` followed by a reseed.

@@ -15,9 +15,10 @@ computes with), and imports nothing from the product.
 from __future__ import annotations
 
 import math
-from typing import Callable, Dict
+import sys
+from typing import Callable, Dict, Tuple
 
-from scipy import stats
+from scipy import integrate, stats
 from statsmodels.stats.power import NormalIndPower
 from statsmodels.stats.proportion import samplesize_proportions_2indep_onetail
 
@@ -164,10 +165,269 @@ def absolute_effect(
     return effect * 100 if points else effect
 
 
+def _number(name: str, value: object) -> float:
+    """*value* as a finite float; a boolean or a text is refused, not coerced."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a number, not {value!r}")
+    if not math.isfinite(value):
+        raise ValueError(f"{name} must be finite, not {value!r}")
+    return float(value)
+
+
+def _users_table(
+    control_users: int,
+    control_converted: int,
+    treatment_users: int,
+    treatment_converted: int,
+) -> None:
+    """Refuse what two variants' users cannot be.
+
+    Each count is a whole number of users, none negative; a variant has at
+    least one user (with none, the pages say nothing bounds the effect, and
+    these formulas do not apply); and no more of a variant's users convert
+    than were assigned to it.
+    """
+    for arm, users, converted in (
+        ("control", control_users, control_converted),
+        ("treatment", treatment_users, treatment_converted),
+    ):
+        for name, count in ((f"{arm}_users", users), (f"{arm}_converted", converted)):
+            if isinstance(count, bool) or not isinstance(count, int):
+                raise ValueError(f"{name} must be a whole number of users")
+            if count < 0:
+                raise ValueError(f"{name} cannot be negative")
+        if users == 0:
+            raise ValueError(f"the {arm} has no users")
+        if converted > users:
+            raise ValueError(f"more {arm} users converted than were assigned")
+
+
+#: The largest finite double, where the sequential page caps ``lambda_ratio``.
+LARGEST_DOUBLE = sys.float_info.max
+
+
+def _msprt_terms(
+    control_users: int,
+    control_converted: int,
+    treatment_users: int,
+    treatment_converted: int,
+    tau_squared: float,
+) -> Tuple[float, float, float]:
+    """The estimate, ``V`` and ``tau_squared`` the sequential page defines.
+
+    ``api/sequential-testing.md`` ("Always-Valid Confidence Intervals
+    (Confidence Sequences)"): the estimate is the observed difference in rates,
+    treatment minus control; ``V`` is the Agresti-Caffo variance of that
+    difference, one conversion and one non-conversion added to each arm,
+    ``p~ = (conversions + 1) / (users + 2)`` and ``V = p~_c (1 - p~_c) / (n_c +
+    2) + p~_t (1 - p~_t) / (n_t + 2)``; "the mSPRT uses the same V". ``V`` is
+    never 0: ``p~`` lies strictly between 0 and 1. ``tau_squared`` is above 0
+    and at most 1 ("Turning it on").
+    """
+    _users_table(control_users, control_converted, treatment_users, treatment_converted)
+    tau_squared = _number("tau_squared", tau_squared)
+    if not 0 < tau_squared <= 1:
+        raise ValueError("tau_squared must be above 0 and at most 1")
+    p_c = (control_converted + 1) / (control_users + 2)
+    p_t = (treatment_converted + 1) / (treatment_users + 2)
+    variance = p_c * (1 - p_c) / (control_users + 2) + p_t * (1 - p_t) / (
+        treatment_users + 2
+    )
+    estimate = treatment_converted / treatment_users - control_converted / control_users
+    return estimate, variance, tau_squared
+
+
+def _sequential_alpha(alpha: float) -> float:
+    """The sequential page's alpha: above 0 and at most 0.2 ("Turning it on")."""
+    alpha = _number("alpha", alpha)
+    if not 0 < alpha <= 0.2:
+        raise ValueError("alpha must be above 0 and at most 0.2")
+    return alpha
+
+
+def _half_width(variance: float, tau_squared: float, alpha: float) -> float:
+    """The page's half-width, before the interval is clipped to ``[-1, 1]``."""
+    return math.sqrt(
+        variance
+        * (variance + tau_squared)
+        / tau_squared
+        * (2 * math.log(1 / alpha) + math.log((variance + tau_squared) / variance))
+    )
+
+
+def msprt_lambda_ratio(
+    control_users: int,
+    control_converted: int,
+    treatment_users: int,
+    treatment_converted: int,
+    tau_squared: float = 0.001,
+) -> float:
+    """The mSPRT's ``lambda_ratio`` for two variants' users, at one look.
+
+    The sequential page ("mSPRT") calls it the likelihood ratio that
+    accumulates evidence for an effect, gives ``V`` and the mixing parameter
+    ``tau_squared`` (default 0.001) but not its formula. The formula is the
+    mixture SPRT of Johari, Koomen, Pekelis and Walsh, "Peeking at A/B Tests:
+    Why it matters, and what to do about it" (KDD 2017), with a normal mixing
+    distribution, which the page names as its source: the
+    likelihood ratio of the estimate ``d ~ N(theta, V)`` against ``theta = 0``,
+    averaged over ``theta ~ N(0, tau_squared)``, which is
+
+        lambda = sqrt(V / (V + tau_squared))
+                 * exp(tau_squared * d^2 / (2 V (V + tau_squared)))
+
+    (their ``2 sigma^2 / n`` is the page's ``V``). It is computed in log space
+    and capped at the largest finite double, as the page says the analysis
+    does ("about 1.8 x 10^308"). The unit tests integrate the mixture itself
+    and find this number, and check that ``lambda >= 1/alpha`` exactly when 0
+    is outside ``msprt_confidence_sequence``, as the page promises.
+    """
+    estimate, variance, tau_squared = _msprt_terms(
+        control_users,
+        control_converted,
+        treatment_users,
+        treatment_converted,
+        tau_squared,
+    )
+    log_ratio = 0.5 * math.log(variance / (variance + tau_squared)) + (
+        tau_squared * estimate**2 / (2 * variance * (variance + tau_squared))
+    )
+    if log_ratio >= math.log(LARGEST_DOUBLE):
+        return LARGEST_DOUBLE
+    return math.exp(log_ratio)
+
+
+def msprt_always_valid_p(
+    control_users: int,
+    control_converted: int,
+    treatment_users: int,
+    treatment_converted: int,
+    tau_squared: float = 0.001,
+) -> float:
+    """The mSPRT's ``always_valid_p_value`` at one look: ``min(1, 1/lambda)``.
+
+    Johari et al. (2017): the always-valid p-value is the running minimum of
+    ``1/lambda`` over the looks, and never more than 1. With one
+    look, which is what the journey takes (every user is sent before the
+    one read), that is ``min(1, 1 / msprt_lambda_ratio(...))``. The sequential
+    page's example agrees: ``lambda_ratio`` 5.73 with ``always_valid_p_value``
+    0.174.
+    """
+    ratio = msprt_lambda_ratio(
+        control_users,
+        control_converted,
+        treatment_users,
+        treatment_converted,
+        tau_squared,
+    )
+    return min(1.0, 1.0 / ratio)
+
+
+def msprt_confidence_sequence(
+    control_users: int,
+    control_converted: int,
+    treatment_users: int,
+    treatment_converted: int,
+    tau_squared: float = 0.001,
+    alpha: float = 0.05,
+    bound: str = "lower",
+) -> float:
+    """One bound of the mSPRT's ``confidence_sequence``, by the page's formula.
+
+    ``api/sequential-testing.md`` ("Always-Valid Confidence Intervals
+    (Confidence Sequences)"), on the difference in conversion rates, treatment
+    minus control::
+
+        estimate +/- sqrt( V (V + tau^2) / tau^2
+                           * (2 ln(1/alpha) + ln((V + tau^2) / V)) )
+
+    with the estimate and ``V`` of ``_msprt_terms``, clipped to ``[-1, 1]``
+    ("A difference in rates cannot leave [-1, 1], so the interval is clipped to
+    that range"). ``bound`` is ``lower`` or ``upper``. ``alpha`` is above 0 and
+    at most 0.2 (default 0.05); the stopping boundary is ``1/alpha``.
+    """
+    estimate, variance, tau_squared = _msprt_terms(
+        control_users,
+        control_converted,
+        treatment_users,
+        treatment_converted,
+        tau_squared,
+    )
+    half_width = _half_width(variance, tau_squared, _sequential_alpha(alpha))
+    if bound == "lower":
+        return max(-1.0, estimate - half_width)
+    if bound == "upper":
+        return min(1.0, estimate + half_width)
+    raise ValueError(f"bound must be 'lower' or 'upper', not {bound!r}")
+
+
+def bayes_prob_best(
+    control_users: int,
+    control_converted: int,
+    treatment_users: int,
+    treatment_converted: int,
+    prior_alpha: float = 1.0,
+    prior_beta: float = 1.0,
+    variant: str = "treatment",
+) -> float:
+    """The probability that *variant*'s conversion rate is the higher of two.
+
+    ``api/bayesian.md`` ("Overview"): a Beta-Binomial model of each variant's
+    converting users; the posterior is the prior (``bayesian_config``'s
+    ``alpha`` and ``beta``, both above 0, default 1.0) updated with the
+    conversions and the non-conversions, ``Beta(alpha + converted, beta +
+    users - converted)``; "Probability to be best" is the share of Monte Carlo
+    draws in which the variant has the highest rate. With two variants that
+    share estimates ``P(rate_t > rate_c)`` (a tie has probability 0), which is
+    computed here exactly rather than by drawing:
+
+        P(rate_t > rate_c) = integral over x of f_t(x) F_c(x)
+                           = integral over u in (0, 1) of F_c(F_t^-1(u))
+
+    (the second form substitutes ``u = F_t(x)``: a bounded, smooth integrand
+    however narrow the posteriors), by ``scipy.integrate.quad``. The unit tests
+    check it against Evan Miller's closed form for whole-number parameters
+    ("Formulas for Bayesian A/B Testing"). ``variant`` is ``treatment``
+    or ``control``.
+    """
+    _users_table(control_users, control_converted, treatment_users, treatment_converted)
+    prior_alpha = _number("prior_alpha", prior_alpha)
+    prior_beta = _number("prior_beta", prior_beta)
+    if prior_alpha <= 0 or prior_beta <= 0:
+        raise ValueError("the prior's alpha and beta must be above 0")
+    posteriors = {
+        "control": stats.beta(
+            prior_alpha + control_converted,
+            prior_beta + control_users - control_converted,
+        ),
+        "treatment": stats.beta(
+            prior_alpha + treatment_converted,
+            prior_beta + treatment_users - treatment_converted,
+        ),
+    }
+    if variant not in posteriors:
+        raise ValueError(f"variant must be 'control' or 'treatment', not {variant!r}")
+    best = posteriors[variant]
+    other = posteriors["control" if variant == "treatment" else "treatment"]
+    probability, _ = integrate.quad(
+        lambda u: float(other.cdf(best.ppf(u))),
+        0.0,
+        1.0,
+        epsabs=1e-12,
+        epsrel=1e-12,
+        limit=200,
+    )
+    return min(1.0, max(0.0, float(probability)))
+
+
 ORACLES: Dict[str, Callable[..., float]] = {
     "fisher_exact_p": fisher_exact_p,
     "sample_ratio_p": sample_ratio_p,
     "sample_size_proportions": sample_size_proportions,
     "sample_size_means": sample_size_means,
     "absolute_effect": absolute_effect,
+    "msprt_lambda_ratio": msprt_lambda_ratio,
+    "msprt_always_valid_p": msprt_always_valid_p,
+    "msprt_confidence_sequence": msprt_confidence_sequence,
+    "bayes_prob_best": bayes_prob_best,
 }

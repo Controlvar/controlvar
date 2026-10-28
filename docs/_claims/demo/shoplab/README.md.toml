@@ -92,8 +92,20 @@ by = [
 ]
 
 [[unit]]
-text = "The bottom-right Powered by Controlvar panel shows the visitor id, the variant for each of the four experiments, both flags, the last 8 tracked events, a \"New visitor\" button (new id + reload → fresh assignments) and a link to the dashboard."
-by = ["journey:demo-shoplab#panel"]
+text = "The bottom-right Powered by Controlvar panel shows the visitor id, each experiment's variant once a page has assigned it, both flags, the last 8 tracked events, a \"New visitor\" button (new id + reload → fresh assignments) and a link to the dashboard."
+by = [
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::shows the visitor id and the variant of each experiment a page has assigned",
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::shows an experiment a page assigns while the panel is open",
+    "journey:demo-shoplab#panel",
+]
+
+[[unit]]
+text = "The panel assigns no experiment itself, because an assignment records that the visitor saw the experiment: until the page that uses it opens, an experiment reads not assigned yet and names that page."
+by = [
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::assigns no experiment itself, and names the page that assigns each one",
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::a fresh visitor who opens only the home page is assigned to the hero test alone",
+    "journey:demo-shoplab#panel",
+]
 
 [[unit]]
 text = "Event vocabulary (all event_type == event_name): page_view {page} · hero_cta_click · product_click {product_id, position, sort} · add_to_cart value = unit price {product_id, quantity, button} · begin_checkout value = cart total {items, flow} · purchase value = order total {items, flow, order_id} · search {query, results, engine} (attached to the shoplab_new_search flag)."
@@ -256,11 +268,15 @@ by = [
 ]
 
 [[unit]]
-text = "Each visitor is assigned to the four experiments (POST /tracking/assign, context = persona attributes), has both flags evaluated, then walks the funnel with the spec's true conversion rates (hero CTA 12% vs 15%; sort click 22/19/28%; add-to-cart 8.0/8.5/10.5/9.5%; purchase after checkout 62% vs 68%, lognormal order value with median $85; search click 35% with the new engine vs 25% without)."
+text = "Each visitor has both flags evaluated, then is assigned to the hero banner, product sort and buy button experiments as its visit starts, and to the checkout flow only if it begins checkout (POST /tracking/assign, context = persona attributes)."
 by = [
-    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_walks_the_funnel_at_the_spec_rates",
+    "test:demo/shoplab/simulator/test_traffic.py::test_each_experiment_is_assigned_where_the_storefront_assigns_it",
     "test:demo/shoplab/simulator/test_traffic.py::test_assignment_and_flag_calls_carry_context",
 ]
+
+[[unit]]
+text = "It walks the funnel with the spec's true conversion rates (hero CTA 12% vs 15%; sort click 22/19/28%; add-to-cart 8.0/8.5/10.5/9.5%; purchase after checkout 62% vs 68%, lognormal order value with median $85; search click 35% with the new engine vs 25% without)."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_walks_the_funnel_at_the_spec_rates"]
 
 [[unit]]
 text = "Three personas scale intent — casual 60%, shopper 30%, power 10% — calibrated so the population rates equal the spec."
@@ -414,8 +430,10 @@ text = "Symptom | Cause / fix"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Panel shows error for every experiment; network tab shows 401 | Wrong or missing NEXT_PUBLIC_CONTROLVAR_API_KEY. Re-run the seed script (it rewrites .env.local and .api_key), then restart npm run dev (env vars are read at startup)."
+text = "Every experiment in the panel stays not assigned yet and both flags read off; network tab shows 401 | Wrong or missing NEXT_PUBLIC_CONTROLVAR_API_KEY. Re-run the seed script (it rewrites .env.local and .api_key), then restart npm run dev (env vars are read at startup)."
 by = [
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::does not include failed assignments",
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::assigns no experiment itself, and names the page that assigns each one",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key",
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
 ]

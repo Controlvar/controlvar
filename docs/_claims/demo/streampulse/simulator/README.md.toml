@@ -179,6 +179,18 @@ by = [
 ]
 
 [[unit]]
+text = "With automatic rollbacks on, it goes on until the safety monitor has rolled the flag back, within the same 5 rounds: once the incident stops, the steady traffic dilutes the rate, which can fall back under 5% before the monitor's next pass has seen it."
+by = [
+    "test:demo/streampulse/simulator/test_story.py::test_step_3_goes_on_until_the_monitor_rolls_back_when_automatic_rollbacks_are_on",
+    "test:demo/streampulse/simulator/test_story.py::test_step_4_the_monitor_rolls_back_a_marginal_incident_before_the_fallback",
+    "test:demo/streampulse/simulator/test_story.py::test_the_monitor_rolls_back_whatever_the_phase_of_its_passes",
+    "test:demo/streampulse/simulator/test_story.py::test_a_slow_monitor_still_rolls_back_the_incident_whatever_its_phase",
+    "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetErrorMetrics::test_computes_rate_and_error_type_breakdown",
+    "journey:demo-streampulse-simulator#rolled-back",
+    "journey:demo-streampulse-simulator#by-the-monitor",
+]
+
+[[unit]]
 text = "Rollout story"
 by = ["exempt:label"]
 
@@ -257,19 +269,27 @@ by = [
 ]
 
 [[unit]]
-text = "3 | Runs traffic.py --incident android12 --rate 6 --duration 90 as a subprocess, then the safety check; while the check is still healthy, runs it again, at most 5 rounds in all | GET /safety/feature-flags/{id}/check"
+text = "3 | Runs traffic.py --incident android12 --rate 6 --duration 90 as a subprocess, then the safety check; while the check is still healthy, and with automatic rollbacks ON until the flag is rolled back, runs it again, at most 5 rounds in all | GET /safety/feature-flags/{id}/check, GET /scheduler/safety/history"
 by = [
     "test:demo/streampulse/simulator/test_story.py::test_step_3_runs_the_incident_traffic_subprocess_and_checks_safety",
     "test:demo/streampulse/simulator/test_story.py::test_step_3_runs_the_incident_again_while_the_check_is_still_healthy",
+    "test:demo/streampulse/simulator/test_story.py::test_step_3_goes_on_until_the_monitor_rolls_back_when_automatic_rollbacks_are_on",
+    "test:demo/streampulse/simulator/test_story.py::test_step_3_stops_at_the_first_critical_reading_when_automatic_rollbacks_are_off",
+    "test:demo/streampulse/simulator/test_story.py::test_step_3_runs_at_most_five_rounds_when_the_flag_is_never_rolled_back",
+    "test:demo/streampulse/simulator/test_story.py::test_story_client_uses_bearer_auth_and_the_documented_endpoints",
     "journey:demo-streampulse-simulator#critical",
 ]
 
 [[unit]]
-text = "4 | Automatic rollbacks ON → polls the flag (up to 6 min) until the safety scheduler sets it to 5%; OFF (or timeout) → manual rollback. Either way the rollback pauses the flag's rollout schedule | GET /safety/settings, POST /safety/feature-flags/{id}/rollback?percentage=5&reason="
+text = "4 | Automatic rollbacks ON → polls the flag until the safety monitor sets it to 5%, printing the error rate and each of the monitor's passes; rolls back by hand only after two passes newer than the newest one recorded when the step began (which can include a pass already running then) ran without a rollback, or when no pass runs for 6 min. OFF → manual rollback. Either way the rollback pauses the flag's rollout schedule | GET /safety/settings, GET /scheduler/safety/history, POST /safety/feature-flags/{id}/rollback?percentage=5&reason="
 by = [
     "test:demo/streampulse/simulator/test_story.py::test_step_4_waits_for_the_safety_scheduler_when_automatic_rollbacks_are_on",
     "test:demo/streampulse/simulator/test_story.py::test_step_4_rolls_back_by_hand_when_automatic_rollbacks_are_off",
     "test:demo/streampulse/simulator/test_story.py::test_step_4_falls_back_to_a_manual_rollback_when_the_scheduler_never_acts",
+    "test:demo/streampulse/simulator/test_story.py::test_the_fallback_waits_for_two_passes_however_slow_the_monitor",
+    "test:demo/streampulse/simulator/test_story.py::test_step_4_counts_the_monitors_passes_on_the_servers_clock",
+    "test:demo/streampulse/simulator/test_story.py::test_step_4_prints_the_error_rate_at_each_poll_and_the_passes_it_counted",
+    "test:demo/streampulse/simulator/test_story.py::test_story_client_uses_bearer_auth_and_the_documented_endpoints",
     "journey:demo-streampulse-simulator#rolled-back",
     "journey:demo-streampulse-simulator#schedule-paused",
     "journey:demo-streampulse-simulator#by-the-monitor",
@@ -342,6 +362,15 @@ by = [
     "journey:demo-streampulse-simulator#employee-keeps-it",
     "journey:demo-streampulse-simulator#schedule-paused",
     "journey:demo-streampulse-simulator#story-ended",
+]
+
+[[unit]]
+text = "When step 4 rolls back by hand it says so, as the user the story signed in as: the audit log names that user, not system:safety-monitor."
+by = [
+    "test:demo/streampulse/simulator/test_story.py::test_a_rollback_by_hand_names_the_user_the_story_signed_in_as",
+    "test:demo/streampulse/simulator/test_story.py::test_no_monitor_at_all_is_told_apart_from_a_monitor_that_did_not_act",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_manual_rollback_is_recorded_by_the_calling_user",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_monitor_rollback_is_recorded_by_the_safety_monitor",
 ]
 
 [[unit]]

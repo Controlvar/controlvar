@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import io
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -19,10 +20,16 @@ EMPLOYEE_GROUP = {
     "logical_operator": "AND",
     "conditions": [{"id": "cond-employee", "attribute": "employee", "operator": "equals", "value": True}],
 }
+# Who a rollback's audit entry names: the safety monitor, or the demo admin the story signs in as.
+MONITOR = "system:safety-monitor"
+ADMIN = "admin@demo.com"
+# The stack's clock when step 3 begins (the 2026-10-20 run's night).
+SERVER_CLOCK = datetime(2026, 10, 20, 8, 40, tzinfo=timezone.utc)
 
 
 class FakeStoryClient:
-    """In-memory platform: flag, 4-stage schedule (rollout-service semantics), safety config/settings."""
+    """In-memory platform: flag, 4-stage schedule (rollout-service semantics), safety config/settings,
+    and the safety monitor's run history."""
 
     def __init__(self, api_url: str = "", token: str = "dev", timeout: float = 15.0):
         self.api_url = api_url
@@ -58,6 +65,10 @@ class FakeStoryClient:
         self.scheduler_after_polls: int | None = None  # the "safety scheduler" rolls back after N get_flag calls
         self.calls: list[tuple[str, ...]] = []
         self.rollbacks: list[tuple[int, str]] = []
+        # (who, from %, to %) for each rollback, as the audit log's safety_rollback entries name it
+        self.audit: list[tuple[str, int, int]] = []
+        # the safety monitor's recorded passes, newest first (GET /scheduler/safety/history)
+        self.history: list[dict] = []
         self.flag_updates: list[dict] = []
         self.stage_updates: list[tuple[str, dict]] = []
         self.checks = 0
@@ -173,8 +184,33 @@ class FakeStoryClient:
         self.calls.append(("rollback", flag_id, str(percentage)))
         self.rollbacks.append((percentage, reason))
         previous = self.flag["rollout_percentage"]
+        self.audit.append((ADMIN, previous, percentage))
         self._roll_back(percentage)
         return {"success": True, "feature_flag_id": flag_id, "message": f"rolled back from {previous}% to {percentage}%"}
+
+    # --- the safety monitor ---
+    def safety_passes(self, limit=20):
+        self.calls.append(("safety_passes",))
+        return copy.deepcopy(self.history[:limit])
+
+    def monitor_pass(self, started=None, acts=True):
+        """One pass of the safety monitor: with automatic rollbacks on it rolls a critical flag
+        back to its target (what the scheduler's check_feature_flags_safety does), then the pass
+        is recorded, newest first, as the scheduler records a finished tick."""
+        if started is None:
+            started = SERVER_CLOCK + timedelta(seconds=60 * len(self.history))
+        target = self.config["rollback_percentage"]
+        if acts and self.settings["enable_automatic_rollbacks"] and self.error_rate > 0.05 and self.flag["rollout_percentage"] > target:
+            self.audit.append((MONITOR, self.flag["rollout_percentage"], target))
+            self._roll_back(target)
+        self.history.insert(0, {
+            "id": f"run-{len(self.history) + 1}",
+            "scheduler_name": "safety",
+            "started_at": started.isoformat(),
+            "completed_at": (started + timedelta(seconds=0.4)).isoformat(),
+            "status": "success",
+            "items_processed": 1,
+        })
 
     # --- helpers for assertions ---
     def stage_status(self, order):
@@ -198,6 +234,91 @@ def make_story(client: FakeStoryClient, **kw) -> tuple[story.Story, io.StringIO]
     s = story.Story(client=client, out=out, **kw)
     s.sleeps = sleeps  # type: ignore[attr-defined]
     return s, out
+
+
+# The journey runs the story with --auto --pace 20: twenty seconds between its steps.
+PACE = 20
+
+
+class ClockedPlatform(FakeStoryClient):
+    """The fake platform on a clock, with a safety monitor that runs a pass every ``period``
+    seconds from ``phase`` (seconds after step 3 begins; three passes are recorded before).
+
+    The error rate is crash reports over flag evaluations, as the safety check computes it:
+    the steady traffic evaluates the flag all the time, the incident adds crash reports (each
+    with its evaluation) while it runs, and once it stops the steady evaluations dilute the
+    rate. The 15-minute window does not empty within these tests. The numbers are fitted to
+    the 2026-10-20 run: 5.8% when the first round ended and 5.3% twenty seconds later, when
+    step 4 began. The rate is then above 5% from 68.8 s into the first round until 33.9 s
+    after it, 55 s in all, so a pass every 60 s or more can miss it. This encodes the decay
+    inferred from that run's output; it is not a measurement of the backend.
+    """
+
+    BEFORE = 803.0  # flag evaluations already in the window when step 3 begins
+    STEADY = 7.32  # steady flag evaluations a second
+    CRASHES = 1.0  # crash reports a second while the incident runs
+
+    def __init__(self, phase: float, period: float, server_clock: datetime = SERVER_CLOCK, acts: bool = True):
+        super().__init__()
+        self.flag["rollout_percentage"] = 25
+        self.now = 0.0
+        self.period = period
+        self.next_pass = phase - 3 * period
+        self.server_clock = server_clock
+        self.acts = acts
+        self.incidents: list[tuple[float, float]] = []
+        self.fixed_rate: float | None = None
+        self.rolled_back_at: float | None = None
+        self.advance(0)
+
+    def rate(self, t: float) -> float:
+        if self.fixed_rate is not None:
+            return self.fixed_rate
+        crashes = self.CRASHES * sum(max(0.0, min(end, t) - start) for start, end in self.incidents)
+        if crashes == 0:
+            return 0.0
+        return crashes / (self.BEFORE + self.STEADY * t + crashes)
+
+    def advance(self, seconds: float) -> None:
+        """The story's sleep: time passes, and the monitor runs each pass that falls in it."""
+        end = self.now + seconds
+        while self.next_pass <= end:
+            self.error_rate = self.rate(self.next_pass)
+            self.monitor_pass(self.server_clock + timedelta(seconds=self.next_pass), acts=self.acts)
+            self.next_pass += self.period
+        self.now = end
+
+    def incident(self, args: list[str]) -> int:
+        """The story's incident subprocess: crash traffic for its --duration."""
+        duration = float(args[args.index("--duration") + 1])
+        self.incidents.append((self.now, self.now + duration))
+        self.advance(duration)
+        return 0
+
+    def safety_check(self, flag_id):
+        self.error_rate = self.rate(self.now)
+        return super().safety_check(flag_id)
+
+    def rollback(self, flag_id, percentage, reason):
+        self.rolled_back_at = self.now
+        return super().rollback(flag_id, percentage, reason)
+
+
+def clocked_story(client: ClockedPlatform, **kw) -> tuple[story.Story, io.StringIO]:
+    """The story on the platform's clock, with its own defaults for every wait."""
+    out = io.StringIO()
+    s = story.Story(
+        client=client, out=out, sleep=client.advance, clock=lambda: client.now, run_traffic=client.incident,
+        api_key="eptk_test", **kw,
+    )
+    return s, out
+
+
+def steps_3_and_4(s: story.Story) -> None:
+    """Steps 3 and 4 as --auto --pace 20 runs them."""
+    assert s.step_3() is True
+    s.sleep(PACE)
+    assert s.step_4() is True
 
 
 # --------------------------------------------------------------------------------------
@@ -245,6 +366,7 @@ def test_step_3_runs_the_incident_traffic_subprocess_and_checks_safety():
     def run_traffic(args):
         runs.append(args)
         client.error_rate = 0.12  # the incident traffic pushed the error rate past 5%
+        client.monitor_pass()  # and the safety monitor rolled the flag back while it ran
         return 0
 
     s, out = make_story(client, run_traffic=run_traffic, api_key="eptk_secret", api_url="http://api:8000")
@@ -259,6 +381,7 @@ def test_step_3_runs_the_incident_traffic_subprocess_and_checks_safety():
     assert ("safety_check", FLAG_ID) in client.calls
     text = out.getvalue()
     assert "CRITICAL" in text and "12.0%" in text and "/admin/safety" in text
+    assert "rolled back to 5%, so the incident stops" in text
     assert client.writes() == []
 
 
@@ -320,11 +443,12 @@ def test_step_4_falls_back_to_a_manual_rollback_when_the_scheduler_never_acts():
     client = FakeStoryClient()
     client.flag["rollout_percentage"] = 25
     client.error_rate = 0.12
-    s, out = make_story(client)  # scheduler_after_polls stays None: the flag never moves on its own
+    s, out = make_story(client)  # no pass is ever recorded: the flag never moves on its own
     assert s.step_4() is True
     assert client.rollbacks == [(5, client.rollbacks[0][1])]
     assert client.flag["rollout_percentage"] == 5
-    assert "did not act in time" in out.getvalue()
+    assert "No pass of the safety monitor completed for 5s" in out.getvalue()
+    assert sum(s.sleeps) == 5
 
 
 def test_step_4_is_idempotent_and_refuses_when_there_is_nothing_to_roll_back():
@@ -500,6 +624,8 @@ def test_story_client_uses_bearer_auth_and_the_documented_endpoints(monkeypatch)
     assert captured[-1]["url"] == "http://localhost:8000/api/v1/rollout-schedules/s-1/activate" and captured[-1]["method"] == "POST"
     client.safety_check("f-1")
     assert captured[-1]["url"].endswith("/safety/feature-flags/f-1/check")
+    client.safety_passes()
+    assert captured[-1]["url"] == "http://localhost:8000/api/v1/scheduler/safety/history?limit=20" and captured[-1]["method"] == "GET"
     client.update_flag("f-1", {"targeting_rules": {}})
     assert captured[-1]["method"] == "PUT" and captured[-1]["body"] == b'{"targeting_rules": {}}'
     client.schedule_for_flag("f-1")
@@ -615,16 +741,11 @@ def test_every_step_but_the_incident_writes_nothing_when_run_again():
     def run_traffic(args):
         runs.append(args)
         client.error_rate = 0.12
+        client.monitor_pass()  # the monitor rolls the flag back during the incident, once
         return 0
 
     s, out = make_story(client, run_traffic=run_traffic, healthy_wait=120)
     for step in range(1, 8):
-        if step == 4:
-            client.scheduler_after_polls = (
-                client.polls
-            )  # the monitor acts at the next poll
-        if step == 5:
-            client.scheduler_after_polls = None  # and once only
         if step == 6:
             client.healthy_after_checks = client.checks + 1
         assert s.run_step(step) is True
@@ -641,6 +762,7 @@ def test_every_step_but_the_incident_writes_nothing_when_run_again():
         and client.schedule["status"] == "completed"
     )
     assert len(runs) == 2
+    assert client.audit == [(MONITOR, 25, 5)], "one rollback, the monitor's"
 
 
 def test_the_story_takes_the_documented_options_with_their_defaults():
@@ -711,6 +833,7 @@ def test_step_3_runs_the_incident_again_while_the_check_is_still_healthy():
         runs.append(args)
         if len(runs) == 3:
             client.error_rate = 0.07
+            client.monitor_pass()
         return 0
 
     s, out = make_story(client, run_traffic=run_traffic)
@@ -726,3 +849,254 @@ def test_step_3_runs_the_incident_again_while_the_check_is_still_healthy():
     assert s.step_3() is True
     assert len(runs) == story.INCIDENT_ROUNDS == 5
     assert "still healthy after 5 rounds" in out.getvalue()
+
+
+# --------------------------------------------------------------------------------------
+# The automatic rollback whatever the timing of the monitor's passes (#1376). On 2026-10-20
+# the incident's first round ended at 5.8% and step 3 stopped it; 20 s later step 4 read 5.3%,
+# the monitor did not roll back, the story rolled back by hand after its 6-minute wait, and
+# the journey's audit step found the demo admin's entry instead of the monitor's. Most likely
+# the steady traffic diluted the rate back under 5% between two passes of the monitor, so no
+# pass saw a breach (inferred from those readings; the run kept no record of the passes).
+# --------------------------------------------------------------------------------------
+
+
+def test_the_clocked_platform_reproduces_the_2026_10_20_timing():
+    """What the tests below stand on: one 90-second round, then the decay, read at that
+    night's moments, and a monitor every 60 s from 6 s that misses the breach."""
+    client = ClockedPlatform(phase=6, period=60)
+    client.incidents = [(0.0, 90.0)]
+    assert round(client.rate(90), 3) == 0.058  # the story's reading when the round ended
+    assert round(client.rate(110), 3) == 0.053  # its reading when step 4 began, 20 s later
+    assert client.rate(68) < 0.05 < client.rate(69) and client.rate(123) > 0.05 > client.rate(125)
+    assert [p for p in (6, 66, 126, 186, 246) if client.rate(p) > 0.05] == []
+
+
+@pytest.mark.regression
+def test_step_4_the_monitor_rolls_back_a_marginal_incident_before_the_fallback():
+    """The 2026-10-20 timing: the monitor's passes fall just before and just after the
+    breach. The incident goes on until the monitor has rolled the flag back, so the one
+    rollback is the monitor's, and the story never rolls back by hand."""
+    client = ClockedPlatform(phase=6, period=60)
+    s, out = clocked_story(client)
+    steps_3_and_4(s)
+    assert client.audit == [(MONITOR, 25, 5)], out.getvalue()
+    assert client.rollbacks == []
+    assert client.flag["rollout_percentage"] == 5 and client.schedule["status"] == "paused"
+    text = out.getvalue()
+    assert "now CRITICAL" in text and "The incident continues until the safety monitor rolls Player v2 back" in text
+    assert "already rolled back" in text
+
+
+@pytest.mark.regression
+def test_the_monitor_rolls_back_whatever_the_phase_of_its_passes():
+    """Every phase of a pass every 61 s (the one-minute interval plus the tick: the scheduler
+    sleeps after each pass): the monitor's rollback, never the story's."""
+    missed = []
+    for phase in range(61):
+        client = ClockedPlatform(phase=phase, period=61)
+        s, _ = clocked_story(client)
+        steps_3_and_4(s)
+        if client.audit != [(MONITOR, 25, 5)]:
+            missed.append((phase, client.audit))
+    assert missed == []
+
+
+def test_a_slow_monitor_still_rolls_back_the_incident_whatever_its_phase():
+    """SAFETY_CHECK_INTERVAL_MINUTES=3, a pass every 182 s: the incident goes on (at most 5
+    rounds, 450 s) until a pass sees the breach."""
+    missed = []
+    for phase in range(182):
+        client = ClockedPlatform(phase=phase, period=182)
+        s, _ = clocked_story(client)
+        steps_3_and_4(s)
+        if client.audit != [(MONITOR, 25, 5)]:
+            missed.append((phase, client.audit))
+    assert missed == []
+
+
+def test_the_fallback_waits_for_two_passes_however_slow_the_monitor():
+    """Step 4's bound is counted in the monitor's passes, not in seconds: with a pass every
+    182 s, the second pass after step 4 began comes 363 s in, past ROLLBACK_WAIT_S (360 s),
+    and the story waits for it before it rolls back by hand."""
+    client = ClockedPlatform(phase=-1, period=182, acts=False)  # passes at -1 (recorded), 181, 363
+    client.fixed_rate = 0.07
+    s, out = clocked_story(client)
+    assert s.step_4() is True
+    assert client.audit == [(ADMIN, 25, 5)]
+    assert client.rolled_back_at is not None and client.rolled_back_at >= 363, client.rolled_back_at
+    assert "did not roll back: 2 of its passes ran since step 4 began" in out.getvalue()
+
+
+@pytest.mark.parametrize("skew_hours", [1, -1])
+def test_step_4_counts_the_monitors_passes_on_the_servers_clock(skew_hours):
+    """The passes that count are those newer than the newest pass the server had recorded
+    when step 4 began, both read from the server: the story's own clock is not the server's."""
+    server = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(hours=skew_hours)
+    client = ClockedPlatform(phase=-50, period=61, server_clock=server, acts=False)  # recorded: ..., -50; then 11, 72
+    client.fixed_rate = 0.07
+    s, out = clocked_story(client)
+    assert s.step_4() is True
+    assert client.rolled_back_at is not None and client.rolled_back_at >= 72, client.rolled_back_at
+    text = out.getvalue()
+    assert "did not roll back: 2 of its passes ran since step 4 began" in text
+    assert f"the newest before this step started at {(server - timedelta(seconds=50)).isoformat()}" in text
+
+
+def test_step_4_reads_the_monitors_history_before_the_flag():
+    """A pass is recorded only once it has finished, after the rollback it made. Read after
+    the flag, the history can hold a pass whose rollback that flag reading missed; counted, it
+    would send the story to roll back by hand a flag the monitor has just rolled back."""
+
+    class PassAsTheHistoryIsRead(FakeStoryClient):
+        def safety_passes(self, limit=20):
+            reads = sum(1 for call in self.calls if call == ("safety_passes",))
+            if reads == 1:
+                self.monitor_pass(acts=False)  # a pass that saw the flag below 5%
+            elif reads == 2:
+                self.monitor_pass()  # the pass that rolls it back, finished just before this read
+            return super().safety_passes(limit)
+
+    client = PassAsTheHistoryIsRead()
+    client.flag["rollout_percentage"] = 25
+    client.error_rate = 0.12
+    client.monitor_pass(acts=False)  # the newest pass recorded before step 4
+    s, out = make_story(client)
+    assert s.step_4() is True
+    assert client.audit == [(MONITOR, 25, 5)], out.getvalue()
+    assert client.rollbacks == []
+    assert "The safety monitor rolled the flag back to 5%." in out.getvalue()
+
+
+def test_step_4_prints_the_error_rate_at_each_poll_and_the_passes_it_counted():
+    client = ClockedPlatform(phase=-1, period=61, acts=False)  # recorded: ..., -1; then 60, 121
+    client.fixed_rate = 0.062
+    s, out = clocked_story(client, actor=ADMIN)
+    assert s.step_4() is True
+    text = out.getvalue()
+    polls = [line for line in text.splitlines() if line.startswith("    … rollout still 25%")]
+    assert len(polls) >= 12 and all("error rate 6.2% (critical 5%)" in line for line in polls), polls
+    assert "the newest before this step started at 2026-10-20T08:39:59+00:00 (server clock)" in text
+    assert "    monitor pass 1: started 2026-10-20T08:41:00+00:00, success" in text
+    assert "    monitor pass 2: started 2026-10-20T08:42:01+00:00, success" in text
+
+
+def test_no_monitor_at_all_is_told_apart_from_a_monitor_that_did_not_act():
+    """Both roll back by hand and name who did; the audit entry will not be the monitor's."""
+    passes = ClockedPlatform(phase=-1, period=61, acts=False)
+    passes.fixed_rate = 0.07
+    s, ran = clocked_story(passes, actor=ADMIN)
+    assert s.step_4() is True
+    none = ClockedPlatform(phase=-1, period=10**6, acts=False)  # one pass recorded long before, none after
+    none.fixed_rate = 0.07
+    s, idle = clocked_story(none, actor=ADMIN)
+    assert s.step_4() is True
+    assert none.rolled_back_at == story.ROLLBACK_WAIT_S
+    named = "Rolling back by hand as admin@demo.com; the audit log will name admin@demo.com, not system:safety-monitor."
+    assert "The safety monitor did not roll back: 2 of its passes ran since step 4 began" in ran.getvalue()
+    assert "No pass of the safety monitor" not in ran.getvalue() and named in ran.getvalue()
+    assert "No pass of the safety monitor completed for 360s" in idle.getvalue()
+    assert "did not roll back" not in idle.getvalue() and named in idle.getvalue()
+    assert passes.audit == none.audit == [(ADMIN, 25, 5)]
+
+
+def test_a_rollback_by_hand_names_the_user_the_story_signed_in_as():
+    client = FakeStoryClient()
+    client.flag["rollout_percentage"] = 25
+    client.error_rate = 0.12
+    out = io.StringIO()
+    rc = story.main(
+        ["--step", "4", "--rollback-wait", "0"], client_factory=lambda u, t: client, login=lambda *a: "jwt", out=out, sleep=lambda s: None
+    )
+    assert rc == 0
+    assert "Rolling back by hand as admin@demo.com; the audit log will name admin@demo.com" in out.getvalue()
+    out = io.StringIO()
+    client = FakeStoryClient()
+    client.flag["rollout_percentage"] = 25
+    client.error_rate = 0.12
+    rc = story.main(["--step", "4", "--rollback-wait", "0", "--token", "t0k"], client_factory=lambda u, t: client, out=out)
+    assert rc == 0
+    assert "Rolling back by hand as the user of --token" in out.getvalue()
+
+
+def test_step_3_goes_on_until_the_monitor_rolls_back_when_automatic_rollbacks_are_on():
+    client = FakeStoryClient()
+    client.flag["rollout_percentage"] = 25
+    runs: list[list[str]] = []
+
+    def run_traffic(args):
+        runs.append(args)
+        client.error_rate = 0.07
+        if len(runs) == 3:
+            client.monitor_pass()  # the first pass that sees the breach comes in round 3
+        return 0
+
+    s, out = make_story(client, run_traffic=run_traffic)
+    assert s.step_3() is True
+    assert len(runs) == 3
+    text = out.getvalue()
+    assert text.count("now CRITICAL") == 1
+    assert text.count("The incident continues until the safety monitor rolls Player v2 back") == 2
+    assert text.count("The safety monitor recorded no pass since the last reading.") == 2
+    assert "The safety monitor's passes since the last reading (started, server clock): 2026-10-20T08:40:00+00:00 success" in text
+    assert "Player v2 is rolled back to 5%, so the incident stops (step 4 shows the rollback)." in text
+    assert client.audit == [(MONITOR, 25, 5)] and client.writes() == []
+
+
+def test_step_3_reports_each_monitor_pass_in_exactly_one_round():
+    client = FakeStoryClient()
+    client.flag["rollout_percentage"] = 25
+    runs: list[list[str]] = []
+
+    def run_traffic(args):
+        runs.append(args)
+        client.error_rate = 0.07
+        # rounds 1 and 2 each see one pass that does not act; round 3's rolls the flag back
+        client.monitor_pass(acts=len(runs) == 3)
+        return 0
+
+    s, out = make_story(client, run_traffic=run_traffic)
+    assert s.step_3() is True
+    assert len(runs) == 3
+    text = out.getvalue()
+    starts = [h["started_at"] for h in reversed(client.history)]
+    assert len(starts) == 3
+    lines = [line for line in text.splitlines() if "passes since the last reading" in line]
+    assert len(lines) == 3
+    for started, line in zip(starts, lines):
+        assert started in line
+        assert text.count(started) == 1  # a later round does not report it again
+
+
+def test_step_3_stops_at_the_first_critical_reading_when_automatic_rollbacks_are_off():
+    client = FakeStoryClient()
+    client.flag["rollout_percentage"] = 25
+    client.settings["enable_automatic_rollbacks"] = False
+    runs: list[list[str]] = []
+
+    def run_traffic(args):
+        runs.append(args)
+        client.error_rate = 0.07
+        return 0
+
+    s, out = make_story(client, run_traffic=run_traffic)
+    assert s.step_3() is True
+    assert len(runs) == 1
+    assert "now CRITICAL" in out.getvalue() and "continues" not in out.getvalue()
+    assert ("safety_passes",) not in client.calls
+
+
+def test_step_3_runs_at_most_five_rounds_when_the_flag_is_never_rolled_back():
+    client = FakeStoryClient()
+    client.flag["rollout_percentage"] = 25
+    runs: list[list[str]] = []
+
+    def run_traffic(args):
+        runs.append(args)
+        client.error_rate = 0.07
+        return 0
+
+    s, out = make_story(client, run_traffic=run_traffic)
+    assert s.step_3() is True
+    assert len(runs) == story.INCIDENT_ROUNDS == 5
+    assert "After 5 rounds Player v2 is still at 25%: step 4 waits for the safety monitor." in out.getvalue()

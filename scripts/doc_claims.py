@@ -1848,6 +1848,21 @@ MECHANISMS: Dict[str, Mechanism] = {
             "The cache takes an automatic backup in a daily window, 02:00 to 03:00 UTC.",
         ),
     ),
+    # The Bayesian page's example response: the sentence under the decision
+    # table against the posteriors the example prints and the product at the
+    # example's seed.
+    "bayesian-example": Mechanism(
+        "backend/tests/unit/docs/test_docs_bayesian_example.py"
+        "::test_the_sentence_under_the_table_explains_the_example",
+        holds=(
+            (
+                "docs/api/bayesian.md",
+                r"^The example response above answers [A-Z_]{1,20}: the treatment's"
+                r" expected loss, [0-9.]{1,12}, is below the default loss_threshold,"
+                r" but its probability to be best, [0-9.]{1,12}, is under 0\.975\.$",
+            ),
+        ),
+    ),
 }
 
 #: The mobile and not-yet-published SDK pages (#1107): their registries wait
