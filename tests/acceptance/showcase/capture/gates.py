@@ -6,6 +6,7 @@ They are unit tested on planted inputs (``backend/tests/unit/showcase``).
 
 from __future__ import annotations
 
+import json
 import math
 from statistics import NormalDist
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
@@ -1074,4 +1075,460 @@ def flag_end(
             numbers,
             f"the audit log's top rows showed {drawn}; the API says {wanted}",
         )
+    return True, numbers, ""
+
+
+# ---------------------------------------------------------------------------
+# Gate 10 "design": an experiment the video designed and left a draft
+# ---------------------------------------------------------------------------
+
+#: How the Review step names a metric's type (frontend/src/types/experiments.ts
+#: ``METRIC_TYPE_LABELS``; a unit test keeps them equal).
+METRIC_TYPE_LABELS: Dict[str, str] = {
+    "conversion": "Conversion",
+    "revenue": "Revenue",
+    "count": "Count",
+    "duration": "Duration",
+    "custom": "Custom",
+}
+#: ``correctionName`` (frontend/src/components/results/shared/analysisSettings.ts):
+#: any other method is named "None".
+CORRECTION_NAMES: Dict[str, str] = {
+    "benjamini_hochberg": "Benjamini-Hochberg",
+    "bonferroni": "Bonferroni",
+}
+#: The Review row's addition when Bayesian analysis is on (Wizard.tsx).
+BAYESIAN_ON = " · Bayesian analysis on"
+#: The tolerance a saved effect is compared within.
+EFFECT_TOLERANCE = 1e-12
+
+#: The fields guided setup never sets, with the value an experiment it made
+#: holds: anything else was set some other way.
+UNTOUCHED: Tuple[Tuple[str, Any], ...] = (
+    ("sequential_testing_enabled", False),
+    ("variance_reduction_config", None),
+    ("mutual_exclusion_group_id", None),
+    ("optimization_type", "fixed"),
+    ("split_url_config", None),
+    ("start_date", None),
+    ("end_date", None),
+    ("resume_at", None),
+)
+_EXPERIMENT_KEYS = (
+    "id",
+    "name",
+    "key",
+    "status",
+    "owner_id",
+    "experiment_type",
+    "variants",
+    "metrics",
+    "targeting_rules",
+    "confidence_level",
+    "correction_method",
+    "bayesian_enabled",
+)
+_VARIANT_KEYS = ("name", "traffic_allocation", "is_control", "configuration")
+_METRIC_KEYS = (
+    "name",
+    "event_name",
+    "metric_type",
+    "is_primary",
+    "expected_effect",
+    "lower_is_better",
+)
+
+
+def correction_name(method: str) -> str:
+    """``correctionName``: the correction's full name, "None" for none."""
+    return CORRECTION_NAMES.get(method, "None")
+
+
+def format_confidence(level: float) -> str:
+    """``formatConfidence``: 0.95 -> "95%", 0.925 -> "92.5%" (one decimal at
+    most, a trailing zero dropped, as ``Number(x.toFixed(1))`` prints it)."""
+    text = f"{level * 100:.1f}"
+    if text.endswith(".0"):
+        text = text[:-2]
+    return f"{text}%"
+
+
+def describe_settings(level: float, method: str) -> str:
+    """``describeSettings``: the Review row's wording of the analysis settings."""
+    correction = (
+        "no correction" if method == "none" else f"{correction_name(method)} correction"
+    )
+    return f"{format_confidence(level)} confidence · {correction}"
+
+
+def _one_line(text: Optional[str]) -> str:
+    return " ".join((text or "").split())
+
+
+def _lines(text: Optional[str]) -> List[str]:
+    return [
+        " ".join(line.split()) for line in (text or "").splitlines() if line.strip()
+    ]
+
+
+#: The Review's variant line puts the configuration after this, as JSON.
+CONFIGURATION_SEPARATOR = ", configuration "
+
+
+def _variant_line(line: str) -> Tuple[str, Any]:
+    """A Review variant line as (its words, its configuration parsed or None).
+
+    The configuration is compared parsed: the API may return its keys in
+    another order than the wizard sent them."""
+    head, separator, tail = line.partition(CONFIGURATION_SEPARATOR)
+    if not separator:
+        return line, None
+    try:
+        return head, json.loads(tail)
+    except ValueError:
+        return line, None
+
+
+def _stored_rules_empty(rules: Any) -> bool:
+    return (
+        rules is None
+        or rules == {}
+        or (
+            isinstance(rules, dict)
+            and set(rules) <= {"groups", "logical_operator"}
+            and rules.get("groups") == []
+        )
+    )
+
+
+def _without_builder_ids(rules: Any) -> Any:
+    """The stored rules less the ``id`` the builder gives each group and each
+    condition: at those two levels only, so an id anywhere else stays a
+    difference."""
+    if not isinstance(rules, dict):
+        return rules
+    out = dict(rules)
+    groups = out.get("groups")
+    if isinstance(groups, list):
+        cleaned = []
+        for group in groups:
+            if isinstance(group, dict):
+                group = {k: v for k, v in group.items() if k != "id"}
+                conditions = group.get("conditions")
+                if isinstance(conditions, list):
+                    group["conditions"] = [
+                        {k: v for k, v in c.items() if k != "id"}
+                        if isinstance(c, dict)
+                        else c
+                        for c in conditions
+                    ]
+            cleaned.append(group)
+        out["groups"] = cleaned
+    return out
+
+
+def design_mirrors(end: Any, saved: Mapping[str, Any]) -> Dict[str, Any]:
+    """Each reading a design end state may compare, as the product draws the
+    saved experiment *saved*: list readings as lines in the storyboard's
+    declared order (the order the wizard holds them), from the API's values
+    keyed by name, never in the API's own order."""
+    variants = {v["name"]: v for v in saved["variants"]}
+    metrics = {m["name"]: m for m in saved["metrics"]}
+    variant_lines = []
+    for declared in end.variants:
+        api = variants[declared.name]
+        line = f"{api['name']}: {api['traffic_allocation']}%"
+        if api["is_control"]:
+            line += " (control)"
+        if api["configuration"] is not None:
+            line += CONFIGURATION_SEPARATOR + json.dumps(
+                api["configuration"], separators=(",", ":"), ensure_ascii=False
+            )
+        variant_lines.append(line)
+    metric_lines = []
+    for declared in end.metrics:
+        api = metrics[declared.name]
+        label = METRIC_TYPE_LABELS.get(str(api["metric_type"]), str(api["metric_type"]))
+        line = f"{api['name']} ({api['event_name']}, {label})"
+        if api["is_primary"]:
+            line += " — primary metric"
+        metric_lines.append(line)
+    rules = saved["targeting_rules"]
+    if _stored_rules_empty(rules):
+        targeting = "Targeting: everyone"
+    else:
+        groups = rules.get("groups") if isinstance(rules, dict) else None
+        count = len(groups) if isinstance(groups, list) else 0
+        targeting = f"Targeting: {count} rule {'group' if count == 1 else 'groups'}"
+    level = float(saved["confidence_level"])
+    method = str(saved["correction_method"])
+    detail = "no correction" if method == "none" else correction_name(method)
+    return {
+        "review_variants": variant_lines,
+        "review_metrics": metric_lines,
+        "review_targeting": targeting,
+        "review_analysis": describe_settings(level, method)
+        + (BAYESIAN_ON if saved["bayesian_enabled"] else ""),
+        "detail_analysis": f"{format_confidence(level)} confidence · {detail}",
+        "detail_bayesian": "On" if saved["bayesian_enabled"] else "Off",
+    }
+
+
+def _missing(item: Mapping[str, Any], keys: Sequence[str]) -> Optional[str]:
+    for key in keys:
+        if key not in item:
+            return key
+    return None
+
+
+def design_end(
+    end: Any,
+    *,
+    named: Sequence[Mapping[str, Any]],
+    total: int,
+    seed_experiments: int,
+    owner_id: Any,
+    readings: Mapping[str, str],
+) -> Verdict:
+    """Gate 10 "design" (``storyboard.DesignEnd``): the video made exactly the
+    experiment it declares, and left it a draft. In order, the first failure
+    refusing:
+
+    1. exactly one experiment has the name, with the key, a draft, owned by the
+       signed-in user (*owner_id*);
+    2. the API holds the seed's experiments and this one (a double-clicked
+       Create refuses);
+    3. its type;
+    4. its variants, keyed by name: allocation, control, configuration;
+    5. its metrics, keyed by name: event, type, primary, the saved effect (the
+       primary's mde, null on the others) and lower_is_better;
+    6. its targeting rule, as declared, less the builder's ids;
+    7. its confidence level, correction and Bayesian setting;
+    8. nothing guided setup cannot set (``UNTOUCHED``);
+    9. each reading named in ``shown`` said what was saved, in the product's
+       words (``design_mirrors``).
+
+    A key absent from the API's answer refuses: no check passes on a default.
+    """
+    numbers: Dict[str, Any] = {"experiments_named": len(named)}
+    if len(named) != 1:
+        return False, numbers, f"{len(named)} experiments are named {end.name!r}"
+    saved = named[0]
+    absent = _missing(saved, _EXPERIMENT_KEYS + tuple(k for k, _ in UNTOUCHED))
+    if absent:
+        return False, numbers, f"the API's answer for {end.name!r} has no {absent!r}"
+    numbers.update(
+        key=saved["key"],
+        status=saved["status"],
+        experiment_type=saved["experiment_type"],
+        owner_matches=str(saved["owner_id"]) == str(owner_id),
+    )
+    if saved["key"] != end.key:
+        return False, numbers, f"{end.name!r} has key {saved['key']!r}, not {end.key!r}"
+    if str(saved["status"]).lower() != end.status:
+        return (
+            False,
+            numbers,
+            f"{end.name!r} is {saved['status']!r}, not {end.status!r}",
+        )
+    if owner_id is None or str(saved["owner_id"]) != str(owner_id):
+        return (
+            False,
+            numbers,
+            f"{end.name!r} is owned by {saved['owner_id']!r}, not the signed-in user",
+        )
+    numbers.update(experiments_in_api=total, seed_experiments=seed_experiments)
+    if total != seed_experiments + 1:
+        return (
+            False,
+            numbers,
+            f"the API holds {total} experiments; the seed made {seed_experiments}"
+            " and the video 1",
+        )
+    if str(saved["experiment_type"]) != end.type:
+        return (
+            False,
+            numbers,
+            f"{end.name!r} is type {saved['experiment_type']!r}; the storyboard made"
+            f" {end.type!r}",
+        )
+    variants = list(saved["variants"])
+    for variant in variants:
+        absent = _missing(variant, _VARIANT_KEYS)
+        if absent:
+            return False, numbers, f"a variant in the API's answer has no {absent!r}"
+    names = [str(v["name"]) for v in variants]
+    numbers["variants"] = sorted(names)
+    declared = [v.name for v in end.variants]
+    if len(set(names)) != len(names) or sorted(names) != sorted(declared):
+        return (
+            False,
+            numbers,
+            f"the variants are {sorted(names)}; the storyboard made {sorted(declared)}",
+        )
+    by_name = {str(v["name"]): v for v in variants}
+    for want in end.variants:
+        got = by_name[want.name]
+        if got["traffic_allocation"] != want.allocation:
+            return (
+                False,
+                numbers,
+                f"variant {want.name!r} is {got['traffic_allocation']}%; the"
+                f" storyboard sets {want.allocation}%",
+            )
+        if bool(got["is_control"]) != want.control or not isinstance(
+            got["is_control"], bool
+        ):
+            return (
+                False,
+                numbers,
+                f"variant {want.name!r} has is_control {got['is_control']!r}; the"
+                f" storyboard says {want.control}",
+            )
+        if got["configuration"] != want.configuration:
+            return (
+                False,
+                numbers,
+                f"variant {want.name!r}'s configuration is {got['configuration']!r};"
+                f" the storyboard sets {want.configuration!r}",
+            )
+    metrics = list(saved["metrics"])
+    for metric in metrics:
+        absent = _missing(metric, _METRIC_KEYS)
+        if absent:
+            return False, numbers, f"a metric in the API's answer has no {absent!r}"
+    names = [str(m["name"]) for m in metrics]
+    numbers["metrics"] = sorted(names)
+    declared = [m.name for m in end.metrics]
+    if len(set(names)) != len(names) or sorted(names) != sorted(declared):
+        return (
+            False,
+            numbers,
+            f"the metrics are {sorted(names)}; the storyboard made {sorted(declared)}",
+        )
+    by_name = {str(m["name"]): m for m in metrics}
+    for want in end.metrics:
+        got = by_name[want.name]
+        said = (got["event_name"], str(got["metric_type"]), got["is_primary"])
+        if said != (want.event, want.type, want.primary):
+            return (
+                False,
+                numbers,
+                f"metric {want.name!r} is {said}; the storyboard made"
+                f" {(want.event, want.type, want.primary)}",
+            )
+        effect = got["expected_effect"]
+        if want.mde is None:
+            if effect is not None:
+                return (
+                    False,
+                    numbers,
+                    f"metric {want.name!r} has the planned effect {effect!r}; the"
+                    " storyboard typed none for it",
+                )
+        elif (
+            not isinstance(effect, (int, float))
+            or abs(float(effect) - want.mde) > EFFECT_TOLERANCE
+        ):
+            return (
+                False,
+                numbers,
+                f"metric {want.name!r} has the planned effect {effect!r}; the"
+                f" storyboard typed {want.mde}",
+            )
+        if got["lower_is_better"] is not want.lower_is_better:
+            return (
+                False,
+                numbers,
+                f"metric {want.name!r} has lower_is_better {got['lower_is_better']!r};"
+                f" the storyboard says {want.lower_is_better}",
+            )
+    stored = saved["targeting_rules"]
+    numbers["targeting_rules"] = stored
+    if end.targeting is None:
+        if not _stored_rules_empty(stored):
+            return (
+                False,
+                numbers,
+                f"{end.name!r} has targeting rules {stored!r}; the storyboard lets"
+                " everyone join",
+            )
+    else:
+        wanted = end.targeting.model_dump()
+        if _without_builder_ids(stored) != wanted:
+            return (
+                False,
+                numbers,
+                f"the stored targeting differs: {_without_builder_ids(stored)!r}, not"
+                f" {wanted!r} (the builder's ids aside)",
+            )
+    analysis = (
+        saved["confidence_level"],
+        saved["correction_method"],
+        saved["bayesian_enabled"],
+    )
+    numbers["analysis"] = list(analysis)
+    if (
+        not isinstance(analysis[0], (int, float))
+        or abs(float(analysis[0]) - end.analysis.confidence) > 1e-9
+    ):
+        return (
+            False,
+            numbers,
+            f"confidence_level is {analysis[0]!r}; the storyboard chose"
+            f" {end.analysis.confidence}",
+        )
+    if str(analysis[1]) != end.analysis.correction:
+        return (
+            False,
+            numbers,
+            f"correction_method is {analysis[1]!r}; the storyboard chose"
+            f" {end.analysis.correction!r}",
+        )
+    if analysis[2] is not end.analysis.bayesian:
+        return (
+            False,
+            numbers,
+            f"bayesian_enabled is {analysis[2]!r}; the storyboard turns it"
+            f" {'on' if end.analysis.bayesian else 'off'}",
+        )
+    for key, value in UNTOUCHED:
+        if saved[key] != value:
+            return (
+                False,
+                numbers,
+                f"{end.name!r} has {key} {saved[key]!r}: guided setup never sets"
+                f" it, so the video did not",
+            )
+    mirrors = design_mirrors(end, saved)
+    shown: Dict[str, Any] = {}
+    for kind, record in end.shown.items():
+        text = readings.get(record)
+        if text is None:
+            return (
+                False,
+                numbers,
+                f"no reading {record!r} was recorded for {kind}",
+            )
+        wanted = mirrors[kind]
+        if isinstance(wanted, list):
+            drawn: Any = _lines(text)
+            if kind == "review_variants":
+                same = [_variant_line(x) for x in drawn] == [
+                    _variant_line(x) for x in wanted
+                ]
+            else:
+                same = drawn == wanted
+        else:
+            drawn = _one_line(text)
+            same = drawn == wanted
+        shown[kind] = drawn
+        numbers["shown"] = shown
+        if not same:
+            return (
+                False,
+                numbers,
+                f"{kind} showed {drawn!r}; the API saved {wanted!r}",
+            )
+    numbers["shown"] = shown
     return True, numbers, ""
