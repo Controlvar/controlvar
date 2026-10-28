@@ -431,44 +431,80 @@ def test_no_aria_node_is_split_at_a_colon_in_its_name():
     assert split == []
 
 
-PRODUCT_PAGE = "http://localhost:3200/products/"
+HOME = "http://localhost:3200"
+PANEL = "Powered by Controlvar"
+PANEL_CLOSED = f'button "{PANEL}" [expanded=false]'
 
 
-def _presses_add_to_cart(step: Dict[str, Any]) -> bool:
+def _clicked(step: Dict[str, Any]) -> str:
     click = (step.get("do") or {}).get("click")
-    return isinstance(click, dict) and click.get("name") == "Add to cart"
+    return click.get("name", "") if isinstance(click, dict) else ""
 
 
 def add_to_cart_problems(steps: List[Dict[str, Any]]) -> List[str]:
-    """Each step pressing Add to cart whose step before is not an open of a
-    product page's address."""
+    """Each Add to cart pressed while the panel may be open, or after a page
+    load other than the home page's.
+
+    A press of the panel's button counts as closing it only when its snapshot
+    says ``[expanded=false]``; any other press is taken to open it. A page
+    load (``open`` or ``goto``) closes it.
+    """
     found = []
-    for before, step in zip([{}] + steps, steps):
-        if _presses_add_to_cart(step):
-            opened = (before.get("do") or {}).get("open")
-            if not (isinstance(opened, str) and opened.startswith(PRODUCT_PAGE)):
-                found.append(step["id"])
+    panel_open = False
+    last_load = None
+    for step in steps:
+        do = step.get("do") or {}
+        if "open" in do or "goto" in do:
+            panel_open = False
+            last_load = do.get("open") or do.get("goto")
+        elif _clicked(step) == PANEL:
+            aria = (step.get("expect") or {}).get("aria") or ""
+            panel_open = PANEL_CLOSED not in aria
+        elif _clicked(step) == "Add to cart":
+            if panel_open:
+                found.append(f"{step['id']}: the panel is open")
+            if last_load != HOME:
+                found.append(f"{step['id']}: the last page loaded is {last_load}")
     return found
 
 
-def test_add_to_cart_is_pressed_on_a_freshly_opened_product_page():
-    """The storefront's Controlvar panel, once opened, stays open across the
-    storefront's own links, and at the runner's 1280x720 window it covers the
-    product page's Add to cart: the journey's first browser run timed out
-    pressing it after following the home page's link. Opening the page's
-    address loads it afresh with the panel closed, so each Add to cart follows
-    that open."""
+def test_add_to_cart_is_pressed_with_the_panel_closed_after_the_home_page():
+    """Two things the browser runs of this journey showed.
+
+    The storefront's Controlvar panel stays open across the storefront's own
+    links, and at the runner's 1280x720 window it covers the product page's
+    Add to cart: the first run timed out pressing it. So the panel is closed
+    first, and the step says so in its snapshot.
+
+    The React SDK sends a purchase to the experiments it has answered for the
+    visitor in the page's lifetime (sdk/react/src/client/attribution.ts keeps
+    them in memory), so an order reaches the hero banner only if the home
+    page, where the banner is answered, is the last page loaded. Opening the
+    product page by its address instead lets the paused order's +0 hold
+    without testing the pause, and in the second run the resumed order's +1
+    had not come after 20 s. So the product page is reached by its link.
+    """
     steps = _journey()["steps"]
-    presses = [s["id"] for s in steps if _presses_add_to_cart(s)]
+    presses = [s["id"] for s in steps if _clicked(s) == "Add to cart"]
     assert presses == ["paused-add-to-cart", "add-to-cart-again"]
     assert add_to_cart_problems(steps) == []
 
 
-def test_add_to_cart_after_following_a_link_is_red():
+def test_add_to_cart_with_the_panel_left_open_is_red():
+    steps = [s for s in _journey()["steps"] if s["id"] != "panel-closed"]
+    assert add_to_cart_problems(steps) == ["paused-add-to-cart: the panel is open"]
+
+
+def test_add_to_cart_after_opening_the_product_page_by_its_address_is_red():
     steps = _journey()["steps"]
-    product = next(s for s in steps if s["id"] == "paused-product")
-    product["do"] = {"click": {"role": "link", "name": "Field Watch, $199.00"}}
-    assert add_to_cart_problems(steps) == ["paused-add-to-cart"]
+    address = f"{HOME}/products/p011"
+    for step in steps:
+        if step["id"] in ("paused-product", "product-again"):
+            step["do"] = {"open": address}
+    assert add_to_cart_problems(steps) == [
+        f"paused-add-to-cart: the last page loaded is {address}",
+        f"add-to-cart-again: the last page loaded is {address}",
+    ]
 
 
 # ---------------------------------------------------------------------------

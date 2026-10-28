@@ -382,17 +382,31 @@ steps:
       buy-button-buyers-before:
         path: metrics.1.variants.0.conversions
     fail: the buy-button test's results cannot be read freshly, or do not give its Purchase metric's control arm first
+  - id: panel-closed
+    doc: pause-place-an-order
+    do:
+      click:
+        role: button
+        name: Powered by Controlvar
+    expect:
+      aria: |
+        - complementary "Controlvar panel":
+          - button "Powered by Controlvar" [expanded=false]
+    fail: the panel does not close when Powered by Controlvar is pressed again, so it stays over the product page's Add to cart
   - id: paused-product
     doc: pause-place-an-order
     do:
-      open: http://localhost:3200/products/p011
+      click:
+        role: link
+        name: Field Watch, $199.00
+        quote: false
+        reason: the home page's link to the product the page names, Field Watch
     expect:
-      status: 200
       aria: |
         - main:
           - heading "Field Watch" [level=1]
           - button "Add to cart"
-    fail: Field Watch's page does not open at its address with its Add to cart button
+    fail: the home page's product link does not open Field Watch with its Add to cart button
   - id: paused-add-to-cart
     doc: pause-place-an-order
     do:
@@ -616,14 +630,17 @@ steps:
   - id: product-again
     doc: pause-order-again
     do:
-      open: http://localhost:3200/products/p011
+      click:
+        role: link
+        name: Field Watch, $199.00
+        quote: false
+        reason: the home page's link to the product the page names, Field Watch
     expect:
-      status: 200
       aria: |
         - main:
           - heading "Field Watch" [level=1]
           - button "Add to cart"
-    fail: Field Watch's page does not open at its address with its Add to cart button again
+    fail: the home page's product link does not open Field Watch with its Add to cart button
   - id: add-to-cart-again
     doc: pause-order-again
     do:
