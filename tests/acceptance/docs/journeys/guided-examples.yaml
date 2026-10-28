@@ -918,7 +918,8 @@ steps:
     expect:
       status: 200
       aria: |
-        - heading "StreamPulse" [level=1]
+        - banner:
+          - heading "StreamPulse" [level=1]
         - main:
           - region "Device":
             - heading "Device" [level=2]
