@@ -294,7 +294,10 @@ describe('claims quoted from the docs', () => {
     [
       'Statistics beyond a p-value',
       'getting-started/limitations',
-      ['a revenue metric is analysed as its mean value per assigned user'],
+      [
+        'a revenue metric is analysed as its mean value per assigned user',
+        "compared with Welch's t-test",
+      ],
     ],
     [
       'Statistics beyond a p-value',
@@ -303,7 +306,7 @@ describe('claims quoted from the docs', () => {
     ],
   ];
 
-  it.each(quoted)('"%s" says only what docs/%s.md says', (title, page, phrases) => {
+  it.each(quoted)('every phrase quoted by "%s" is on docs/%s.md', (title, page, phrases) => {
     const said = prose(card(title).textContent ?? '');
     const source = prose(read(`docs/${page}.md`));
     for (const phrase of phrases) {

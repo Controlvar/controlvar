@@ -72,7 +72,10 @@ QUOTED: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
     (
         "Statistics beyond a p-value",
         "getting-started/limitations",
-        ("a revenue metric is analysed as its mean value per assigned user",),
+        (
+            "a revenue metric is analysed as its mean value per assigned user",
+            "compared with Welch's t-test",
+        ),
     ),
     (
         "Statistics beyond a p-value",
@@ -344,7 +347,7 @@ def test_the_reader_finds_both_cards_and_the_one_link():
 @pytest.mark.parametrize(
     "title, page, phrases", QUOTED, ids=[f"{t} <- docs/{p}.md" for t, p, _ in QUOTED]
 )
-def test_says_only_what_the_cited_page_says(title, page, phrases):
+def test_every_quoted_phrase_is_on_the_cited_page(title, page, phrases):
     said = _prose(_card(title).text)
     source = _prose(_read(f"docs/{page}.md"))
     missing = [
@@ -399,10 +402,15 @@ def _jest_table(text: str) -> List[str]:
     assert end != -1, f"{JEST_TWIN}: the `quoted` table does not close as expected"
     block = text[start:end].split("= [", 1)[1]
     tokens: List[str] = []
-    for m in re.finditer(r"'((?:[^'\\\n]|\\.)*)'|\b(INSTALLER_PAGE)\b|(\w+)", block):
-        if m.group(3) is not None:
-            raise AssertionError(f"{JEST_TWIN}: the table names {m.group(3)!r}")
-        tokens.append(INSTALLER_PAGE if m.group(2) else m.group(1))
+    # A literal is single-quoted, or double-quoted when it holds an apostrophe.
+    literal = r"'((?:[^'\\\n]|\\.)*)'|\"((?:[^\"\\\n]|\\.)*)\""
+    for m in re.finditer(literal + r"|\b(INSTALLER_PAGE)\b|(\w+)", block):
+        if m.group(4) is not None:
+            raise AssertionError(f"{JEST_TWIN}: the table names {m.group(4)!r}")
+        if m.group(3):
+            tokens.append(INSTALLER_PAGE)
+        else:
+            tokens.append(m.group(1) if m.group(1) is not None else m.group(2))
     return tokens
 
 

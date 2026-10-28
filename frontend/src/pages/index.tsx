@@ -143,7 +143,7 @@ export default function HomePage() {
                   title: 'Statistics beyond a p-value',
                   // The second sentence quotes the limitations page and the
                   // user guide; index.test.tsx holds it to their words.
-                  body: 'Frequentist and Bayesian analysis, sequential testing with mSPRT for early stopping, multi-armed bandits, and per-segment breakdowns with a Bonferroni correction across segments. A revenue metric is analysed as its mean value per assigned user, and its results give the difference per user with its confidence interval.',
+                  body: "Frequentist and Bayesian analysis, sequential testing with mSPRT for early stopping, multi-armed bandits, and per-segment breakdowns with a Bonferroni correction across segments. A revenue metric is analysed as its mean value per assigned user, compared with Welch's t-test, and its results give the difference per user with its confidence interval.",
                 },
                 {
                   title: 'SDKs for the stack you have',
@@ -151,7 +151,7 @@ export default function HomePage() {
                 },
                 {
                   title: 'Deploy it yourself',
-                  // The installer sentence says only what its page says (its
+                  // The installer sentence quotes its page (its
                   // title, its beta wording, what it installs, what has been
                   // run); index.test.tsx holds it to that page and its link.
                   body: (
