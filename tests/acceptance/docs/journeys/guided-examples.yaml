@@ -37,10 +37,14 @@
 # 2. Paused (in the dashboard, before the visit), the storefront shows the
 #    control with the reason `paused`, and an order counts in no arm of the
 #    hero banner. That the order reached the API is read from the buy-button
-#    test, which is running and counts it (+1 in the visitor's arm): the same
-#    request carries both, so a hero read after it is not early. Started
-#    again, a second order counts once, in video_hero (the paused one did not
-#    make the visitor a buyer). Then the free-shipping flag off and on.
+#    test, which is running and counts it (+1 in the visitor's arm). The
+#    order's request carries no hero-banner entry: the React SDK sends none to
+#    an experiment whose latest answer is `paused`, so the hero's +0 is held
+#    by the SDK first and by the server's status check second. A hero entry
+#    sent despite the pause would come in that same request, so a hero read
+#    after the buy-button +1 is not early. Started again, a second order
+#    counts once, in video_hero (the paused one did not make the visitor a
+#    buyer). Then the free-shipping flag off and on.
 # 3. StreamPulse's AI search rule, by preset and at its OS-version boundary.
 #
 # Expectations written on 2026-10-28 from the page, demo-shoplab.yaml's order
