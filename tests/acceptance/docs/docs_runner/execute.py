@@ -124,6 +124,7 @@ from docs_runner.checks import (
     StepFailed,
     agrees,
     agrees_or_not,
+    cell_row,
     delta_problem,
     describe_action,
     describe_expect,
@@ -1519,7 +1520,7 @@ class JourneyRunner:
                 moved = moved_to(before, delta.since, delta.by)
                 if not agrees(text, moved):
                     raise StepFailed(
-                        f'the {cell.column} of the row "{cell.row}" shows'
+                        f"the {cell.column} of the row {cell_row(cell)} shows"
                         f" {one_line(text, 40)!r}; {delta.since} was"
                         f" {json.dumps(before)}, so {delta.by:+d} is"
                         f" {json.dumps(moved)}"
@@ -1532,7 +1533,7 @@ class JourneyRunner:
             oracle = self._oracle(cell.oracle)
             if not agrees(text, oracle):
                 raise StepFailed(
-                    f'the {cell.column} of the row "{cell.row}" shows'
+                    f"the {cell.column} of the row {cell_row(cell)} shows"
                     f" {one_line(text, 40)!r}; {cell.oracle.name} gives {oracle:.6g}"
                 )
             shown_cells.append(f"{cell.column} {one_line(text, 40)}")
@@ -1574,9 +1575,13 @@ class JourneyRunner:
             .get_by_role("row")
             .filter(has=page.get_by_role("cell", name=cell.row, exact=True))
         )
+        cells = f'a cell "{cell.row}"'
+        if cell.also is not None:
+            row = row.filter(has=page.get_by_role("cell", name=cell.also, exact=True))
+            cells += f' and a cell "{cell.also}"'
         self._holds(
             lambda: expect(row).to_have_count(1),
-            f'not one row with a cell "{cell.row}" under "{cell.column}" at {here}',
+            f'not one row with {cells} under "{cell.column}" at {here}',
         )
         index = header.evaluate("th => th.cellIndex")
         text = row.evaluate(
