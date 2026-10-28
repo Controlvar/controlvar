@@ -16,8 +16,9 @@
 # traffic simulators keep running, unrestarted, for 60 s (one whose seed has
 # not run exits at start, printing that "the shoplab seed has not run", and is
 # restarted), and the events table grows while they run. Then the two apps at
-# the addresses the page gives: ShopLab's panel shows a variant for each
-# experiment and the free-shipping flag on, which needs the app's built-in
+# the addresses the page gives: ShopLab's panel shows the hero test's variant
+# (the home page assigns it; the panel assigns nothing, so the other three
+# read "not assigned yet") and the free-shipping flag on, which needs the app's built-in
 # key, the shoplab seed that creates it and the API's CORS origins together;
 # StreamPulse's panel gives each of its four flags a reason that is not an
 # error. ShopLab's panel shows a flag's on or off but not its reason, and
@@ -85,19 +86,19 @@ steps:
             - listitem:
               - text: Hero banner
               - code: shoplab_hero_banner
-              - text: /^(control|video_hero)$/
+              - text: /^(control|video_hero)$|in the global holdout \(control shown\) ?not enrolled$/
             - listitem:
               - text: Product sort (bandit)
               - code: shoplab_plp_sort
-              - text: /^(relevance|price_low_high|ml_personalized)$/
+              - text: /^assigned when the product list opens ?not assigned yet$/
             - listitem:
               - text: Buy button (MVT)
               - code: shoplab_pdp_buy_button
-              - text: /^(control|green_add|orange_buy_now|green_buy_now)$/
+              - text: /^assigned when a product page opens ?not assigned yet$/
             - listitem:
               - text: Checkout flow
               - code: shoplab_checkout_flow
-              - text: /^(standard|one_page)$/
+              - text: /^assigned when the checkout page opens ?not assigned yet$/
           - heading "Feature flags" [level=2]
           - list:
             - listitem:
@@ -108,7 +109,7 @@ steps:
               - text: Free-shipping banner
               - code: shoplab_free_shipping_banner
               - text: "on"
-    fail: ShopLab's panel shows an error, or no variant, for one of its four experiments, or the free-shipping flag off
+    fail: ShopLab's panel does not show the hero test's variant and the other three experiments not assigned yet, or shows the free-shipping flag off
   - id: new-search
     doc: services
     do:
@@ -209,19 +210,19 @@ steps:
             - listitem:
               - text: Hero banner
               - code: shoplab_hero_banner
-              - text: /^(control|video_hero)$/
+              - text: /^(control|video_hero)$|in the global holdout \(control shown\) ?not enrolled$/
             - listitem:
               - text: Product sort (bandit)
               - code: shoplab_plp_sort
-              - text: /^(relevance|price_low_high|ml_personalized)$/
+              - text: /^assigned when the product list opens ?not assigned yet$/
             - listitem:
               - text: Buy button (MVT)
               - code: shoplab_pdp_buy_button
-              - text: /^(control|green_add|orange_buy_now|green_buy_now)$/
+              - text: /^assigned when a product page opens ?not assigned yet$/
             - listitem:
               - text: Checkout flow
               - code: shoplab_checkout_flow
-              - text: /^(standard|one_page)$/
+              - text: /^assigned when the checkout page opens ?not assigned yet$/
           - heading "Feature flags" [level=2]
           - list:
             - listitem:
@@ -232,7 +233,7 @@ steps:
               - text: Free-shipping banner
               - code: shoplab_free_shipping_banner
               - text: "on"
-    fail: after the recovery ShopLab's panel shows an error, or no variant, for one of its four experiments, or the free-shipping flag off
+    fail: after the recovery ShopLab's panel does not show the hero test's variant and the other three experiments not assigned yet, or shows the free-shipping flag off
   - id: recovered-new-search
     doc: services
     do:
