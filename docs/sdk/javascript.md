@@ -281,7 +281,8 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | `evaluateFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<id>&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{"key","enabled","config","reason"}` |
 | `getAllFlags` | `GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON>` | `context` = `attributes` (omitted when empty) | `{"<flag_key>": bool, ...}` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{"event_type","event_name","user_id","experiment_key"?,"feature_flag_key"?,"value"?,"metadata"?,"timestamp"?}` | stored event (ignored) |
-| `track` without a key, `trackBatch` | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` (max 100) | `{"success_count","failure_count","errors"}` |
+| `track` without a key | `POST /api/v1/tracking/batch`, one entry per experiment and flag it reaches; with none, `POST /api/v1/tracking/track` | `{"events":[<track body>...]}` (max 100); with none, the track body with no key | ignored |
+| `trackBatch` | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` (max 100) | `{"success_count","failure_count","errors"}` |
 | `fetchAssignments` | `GET /api/v1/tracking/assignments/{user_id}?active_only=true` | — | list of assignment rows |
 | local mode: ruleset refresh | `GET /api/v1/sdk/ruleset` (beta) | `If-None-Match: "<version>"` | the ruleset, `ETag`; `304` when unchanged |
 | local mode: evaluation counts | `POST /api/v1/tracking/evaluations` (beta) | `{"evaluations":[{"flag_key","count","enabled_count","window_start","window_end"}]}` | `{"accepted","errors"}` |

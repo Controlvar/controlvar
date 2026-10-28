@@ -762,7 +762,16 @@ by = [
 ]
 
 [[unit]]
-text = "track without a key, trackBatch | POST /api/v1/tracking/batch | {\"events\":[<track body>...]} (max 100) | {\"success_count\",\"failure_count\",\"errors\"}"
+text = "track without a key | POST /api/v1/tracking/batch, one entry per experiment and flag it reaches; with none, POST /api/v1/tracking/track | {\"events\":[<track body>...]} (max 100); with none, the track body with no key | ignored"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::POSTs /api/v1/tracking/batch with one entry per assignment plus one per evaluated flag",
+    "test:sdk/js/__tests__/client.test.ts::splits more than 100 entries into multiple batch requests",
+    "test:sdk/js/__tests__/client.test.ts::sends the event once to /api/v1/tracking/track with no key when nothing is attributed to the user",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "trackBatch | POST /api/v1/tracking/batch | {\"events\":[<track body>...]} (max 100) | {\"success_count\",\"failure_count\",\"errors\"}"
 by = [
     "test:sdk/js/__tests__/client.test.ts::chunks at 100 events per request",
     "test:sdk/js/__tests__/client.test.ts::POSTs keyed events to /api/v1/tracking/batch and aggregates the server counts",
