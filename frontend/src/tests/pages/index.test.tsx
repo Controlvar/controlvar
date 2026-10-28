@@ -250,8 +250,11 @@ describe('HomePage (/)', () => {
  *
  * The pages are read from the working tree, as `content/sdks.test.tsx` reads
  * `sdk/`, so this passes in a copy with no `.git`. A missing page is an error,
- * never a skip. A pull request that changes only docs/ runs no jest, so a page
- * reworded on its own turns this red on the next pull request that runs it.
+ * never a skip. A pull request that changes only docs/ (or mkdocs.yml) runs no
+ * jest; there its Python twin, backend/tests/unit/docs/test_homepage_quotes_docs.py,
+ * holds every rule below but the marketing build's URL, so a page reworded on its
+ * own turns that pull request itself red. The twin also fails when this table or
+ * one of these rules changes without it: change the two together.
  */
 describe('claims quoted from the docs', () => {
   const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
