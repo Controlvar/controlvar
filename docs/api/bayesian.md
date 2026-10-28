@@ -165,24 +165,24 @@ prior. With traffic, the full response looks like this; the numbers are illustra
         "alpha": 598.0,
         "beta": 4224.0,
         "mean": 0.1240,
-        "credible_interval_lower": 0.1148,
-        "credible_interval_upper": 0.1334
+        "credible_interval_lower": 0.1149,
+        "credible_interval_upper": 0.1335
       },
-      "probability_to_be_best": 0.0269,
-      "expected_loss": 0.0148,
+      "probability_to_be_best": 0.0277,
+      "expected_loss": 0.0132,
       "bayes_factor": null
     },
     {
       "variant_key": "treatment",
       "posterior": {
-        "alpha": 666.0,
-        "beta": 4131.0,
-        "mean": 0.1388,
-        "credible_interval_lower": 0.1291,
-        "credible_interval_upper": 0.1488
+        "alpha": 658.0,
+        "beta": 4139.0,
+        "mean": 0.1372,
+        "credible_interval_lower": 0.1276,
+        "credible_interval_upper": 0.1470
       },
-      "probability_to_be_best": 0.9731,
-      "expected_loss": 0.0002,
+      "probability_to_be_best": 0.9723,
+      "expected_loss": 0.00007,
       "bayes_factor": null
     }
   ],
@@ -207,8 +207,8 @@ The rules are checked in this order:
 The decision is a recommendation: nothing stops the experiment or changes its status.
 `STOP_FUTILE` is defined but no rule returns it.
 
-The example response above answers `CONTINUE`: the treatment's expected loss, 0.0002, is
-below the default `loss_threshold`, but its probability to be best, 0.9731, is under 0.975.
+The example response above answers `CONTINUE`: the treatment's expected loss, 0.00007, is
+below the default `loss_threshold`, but its probability to be best, 0.9723, is under 0.975.
 
 ### Reading the decision
 
