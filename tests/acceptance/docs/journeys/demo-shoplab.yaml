@@ -27,7 +27,13 @@
 # lands in any arm (#1375). The products step therefore checks the pair: the
 # arm the panel shows the API gave this visitor, and the sort label for that
 # arm (demo/shoplab/src/lib/sorting.ts). The panel is still open there, because
-# the header's link does not reload the page.
+# the header's link does not reload the page. The stack also has a 2% global
+# holdout (the StreamPulse seed makes it, and it covers every experiment), and
+# a visitor in it is enrolled in no arm: the API answers the control, so the
+# list is sorted by the control's label and the panel says the visitor is in
+# the holdout (demo/shoplab/src/lib/labels.ts). That is the step's fourth
+# snapshot. The panel step's hero row already allows for that visitor; its
+# other three rows read "not assigned yet" whoever the visitor is.
 guide: demo/shoplab/README.md
 stack: demo-local
 profile: full
@@ -131,7 +137,18 @@ steps:
                 - text: Product sort (bandit)
                 - code: shoplab_plp_sort
                 - text: ml_personalized
-    fail: the product list does not open from the header, or is not sorted by the arm of the products-sort bandit that the panel shows the API gave this visitor
+        - |
+          - main:
+            - heading "All products" [level=1]
+            - paragraph: 12 items
+            - paragraph: Sorted by Relevance
+          - complementary "Controlvar panel":
+            - list:
+              - listitem:
+                - text: Product sort (bandit)
+                - code: shoplab_plp_sort
+                - text: in the global holdout (control shown) not enrolled
+    fail: the product list does not open from the header, or is not sorted by the arm of the products-sort bandit that the panel shows the API gave this visitor (the control's sort for a visitor in the global holdout)
   - id: products-direct
     doc: what-each-page-demonstrates
     do:

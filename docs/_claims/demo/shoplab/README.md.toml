@@ -268,11 +268,15 @@ by = [
 ]
 
 [[unit]]
-text = "Each visitor is assigned to the four experiments (POST /tracking/assign, context = persona attributes), has both flags evaluated, then walks the funnel with the spec's true conversion rates (hero CTA 12% vs 15%; sort click 22/19/28%; add-to-cart 8.0/8.5/10.5/9.5%; purchase after checkout 62% vs 68%, lognormal order value with median $85; search click 35% with the new engine vs 25% without)."
+text = "Each visitor has both flags evaluated, then is assigned to the hero banner, product sort and buy button experiments as its visit starts, and to the checkout flow only if it begins checkout (POST /tracking/assign, context = persona attributes)."
 by = [
-    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_walks_the_funnel_at_the_spec_rates",
+    "test:demo/shoplab/simulator/test_traffic.py::test_each_experiment_is_assigned_where_the_storefront_assigns_it",
     "test:demo/shoplab/simulator/test_traffic.py::test_assignment_and_flag_calls_carry_context",
 ]
+
+[[unit]]
+text = "It walks the funnel with the spec's true conversion rates (hero CTA 12% vs 15%; sort click 22/19/28%; add-to-cart 8.0/8.5/10.5/9.5%; purchase after checkout 62% vs 68%, lognormal order value with median $85; search click 35% with the new engine vs 25% without)."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_walks_the_funnel_at_the_spec_rates"]
 
 [[unit]]
 text = "Three personas scale intent — casual 60%, shopper 30%, power 10% — calibrated so the population rates equal the spec."

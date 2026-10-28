@@ -110,10 +110,11 @@ python demo/shoplab/simulator/traffic.py --dry-run --seed 1
 Its other options are `--api-url`, `--api-key` (default: the contents of
 `demo/shoplab/.api_key`) and `--max-visitors`; `--help` describes them all.
 
-Each visitor is assigned to the four experiments (`POST /tracking/assign`, context = persona
-attributes), has both flags evaluated, then walks the funnel with the spec's true conversion
-rates (hero CTA 12% vs 15%; sort click 22/19/28%; add-to-cart 8.0/8.5/10.5/9.5%; purchase after
-checkout 62% vs 68%, lognormal order value with median $85; search click 35% with the new engine
+Each visitor has both flags evaluated, then is assigned to the hero banner, product sort and buy
+button experiments as its visit starts, and to the checkout flow only if it begins checkout
+(`POST /tracking/assign`, context = persona attributes). It walks the funnel with the spec's
+true conversion rates (hero CTA 12% vs 15%; sort click 22/19/28%; add-to-cart 8.0/8.5/10.5/9.5%;
+purchase after checkout 62% vs 68%, lognormal order value with median $85; search click 35% with the new engine
 vs 25% without). Three personas scale intent — casual 60%, shopper 30%, power 10% — calibrated so
 the population rates equal the spec. Events go out via `POST /tracking/batch` (≤100 per call) with
 an explicit `experiment_key` for every assigned experiment and `feature_flag_key` for search.
