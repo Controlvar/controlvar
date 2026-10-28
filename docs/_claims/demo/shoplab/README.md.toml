@@ -92,8 +92,20 @@ by = [
 ]
 
 [[unit]]
-text = "The bottom-right Powered by Controlvar panel shows the visitor id, the variant for each of the four experiments, both flags, the last 8 tracked events, a \"New visitor\" button (new id + reload → fresh assignments) and a link to the dashboard."
-by = ["journey:demo-shoplab#panel"]
+text = "The bottom-right Powered by Controlvar panel shows the visitor id, each experiment's variant once a page has assigned it, both flags, the last 8 tracked events, a \"New visitor\" button (new id + reload → fresh assignments) and a link to the dashboard."
+by = [
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::shows the visitor id and the variant of each experiment a page has assigned",
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::shows an experiment a page assigns while the panel is open",
+    "journey:demo-shoplab#panel",
+]
+
+[[unit]]
+text = "The panel assigns no experiment itself, because an assignment records that the visitor saw the experiment: until the page that uses it opens, an experiment reads not assigned yet and names that page."
+by = [
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::assigns no experiment itself, and names the page that assigns each one",
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::a fresh visitor who opens only the home page is assigned to the hero test alone",
+    "journey:demo-shoplab#panel",
+]
 
 [[unit]]
 text = "Event vocabulary (all event_type == event_name): page_view {page} · hero_cta_click · product_click {product_id, position, sort} · add_to_cart value = unit price {product_id, quantity, button} · begin_checkout value = cart total {items, flow} · purchase value = order total {items, flow, order_id} · search {query, results, engine} (attached to the shoplab_new_search flag)."
@@ -414,8 +426,10 @@ text = "Symptom | Cause / fix"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Panel shows error for every experiment; network tab shows 401 | Wrong or missing NEXT_PUBLIC_CONTROLVAR_API_KEY. Re-run the seed script (it rewrites .env.local and .api_key), then restart npm run dev (env vars are read at startup)."
+text = "Every experiment in the panel stays not assigned yet and both flags read off; network tab shows 401 | Wrong or missing NEXT_PUBLIC_CONTROLVAR_API_KEY. Re-run the seed script (it rewrites .env.local and .api_key), then restart npm run dev (env vars are read at startup)."
 by = [
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::does not include failed assignments",
+    "test:demo/shoplab/src/__tests__/ControlvarPanel.test.tsx::assigns no experiment itself, and names the page that assigns each one",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_rejects_unknown_key",
     "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_seed_writes_its_key_files_and_backfills_its_history",
 ]

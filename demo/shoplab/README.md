@@ -20,9 +20,11 @@ made-up products with gradient artwork.
 | **Search** `/search` | `shoplab_new_search` flag — exact name match vs. fuzzy engine with highlights | **Feature-flag gradual rollout** (10% → 50% → 100%), safety config, flag-attributed events |
 | Header (every page) | `shoplab_free_shipping_banner` flag | **Kill switch**: turn the banner off in the dashboard, reload the storefront |
 
-The bottom-right **Powered by Controlvar** panel shows the visitor id, the variant for each
-of the four experiments, both flags, the last 8 tracked events, a "New visitor" button
-(new id + reload → fresh assignments) and a link to the dashboard.
+The bottom-right **Powered by Controlvar** panel shows the visitor id, each experiment's variant
+once a page has assigned it, both flags, the last 8 tracked events, a "New visitor" button
+(new id + reload → fresh assignments) and a link to the dashboard. The panel assigns no
+experiment itself, because an assignment records that the visitor saw the experiment: until the
+page that uses it opens, an experiment reads `not assigned yet` and names that page.
 
 Event vocabulary (all `event_type == event_name`):
 `page_view {page}` · `hero_cta_click` · `product_click {product_id, position, sort}` ·
@@ -156,7 +158,7 @@ source venv/bin/activate && python -m pytest demo/shoplab/simulator/test_traffic
 
 | Symptom | Cause / fix |
 |---|---|
-| Panel shows `error` for every experiment; network tab shows **401** | Wrong or missing `NEXT_PUBLIC_CONTROLVAR_API_KEY`. Re-run the seed script (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` (env vars are read at startup). |
+| Every experiment in the panel stays `not assigned yet` and both flags read `off`; network tab shows **401** | Wrong or missing `NEXT_PUBLIC_CONTROLVAR_API_KEY`. Re-run the seed script (it rewrites `.env.local` and `.api_key`), then restart `npm run dev` (env vars are read at startup). |
 | **404** on `/tracking/assign` or `/feature-flags/evaluate/...` | The ShopLab experiments or flags are not seeded. A paused or completed experiment answers its control variant with `assigned: false`, and a flag that is not ACTIVE answers `enabled: false`: neither is a 404. Run the seed script. |
 | Browser console: **CORS** error from `localhost:3200` | Port 3200 is not in the backend's CORS allow-list. The development defaults (`DEFAULT_CORS_ORIGINS` in `backend/app/core/config.py`) include it; if you set `CORS_ORIGINS` or `BACKEND_CORS_ORIGINS` yourself, add `http://localhost:3200` and restart the API. Against a staging or production API, add it to that API's `CORS_ORIGINS`: those allow no other origin by default. |
 | Every visitor is `control` and nothing loads | Backend not running on `NEXT_PUBLIC_CONTROLVAR_API_URL`. Start it from the repository root: `ENVIRONMENT=development uvicorn backend.app.main:app --reload`. |
