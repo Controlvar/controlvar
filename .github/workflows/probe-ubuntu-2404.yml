@@ -1,0 +1,17 @@
+# PROBE for #1439 (never merged): does the `ubuntu-24.04` label still get a
+# 24.04 runner with Docker's overlay2 store in this repository?
+name: Probe ubuntu-24.04 label
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/probe-ubuntu-2404.yml
+
+permissions: {}
+
+jobs:
+  docker-info:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: docker info
