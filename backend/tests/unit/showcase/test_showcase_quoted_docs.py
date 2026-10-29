@@ -91,7 +91,7 @@ DESIGN_SLUG = "09-design-in-depth"
 API_ONLY_SCENE = "api-only"
 #: The card's subjects: these words may appear only in its scene (its cue, its
 #: sentence and the card), so no other beat names what the dashboard lacks.
-API_ONLY_WORDS = ("holdout", "exclusion", "sequential", "schedule")
+API_ONLY_WORDS = ("holdout", "exclusion", "sequential", "schedule", "cuped")
 #: The guide's rows the card paraphrases, by the start of their first cell.
 API_ONLY_ROWS = (
     "Schedule an experiment's start and end dates",
@@ -172,9 +172,16 @@ def test_video_9s_card_paraphrases_the_pages_it_names():
     )
 
 
-def test_a_card_word_in_another_beat_is_refused():
+@pytest.mark.parametrize(
+    ("line", "word"),
+    [
+        ("Choose New Experiment, or a holdout.", "holdout"),
+        ("Choose New Experiment, then CUPED.", "cuped"),
+    ],
+)
+def test_a_card_word_in_another_beat_is_refused(line, word):
     raw = design_raw()
-    raw["scenes"][0]["beats"][0]["say"] = ["Choose New Experiment, or a holdout."]
+    raw["scenes"][0]["beats"][0]["say"] = [line]
     changed = storyboard.parse(raw)
     problems = api_only_card_problems(
         changed,
@@ -182,7 +189,7 @@ def test_a_card_word_in_another_beat_is_refused():
         SEQUENTIAL_TESTING.read_text(encoding="utf-8"),
     )
     assert problems == [
-        "scene design beat 1 says 'holdout', which only the card's scene may"
+        f"scene design beat 1 says {word!r}, which only the card's scene may"
     ]
 
 
