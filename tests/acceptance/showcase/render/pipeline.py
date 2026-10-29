@@ -334,7 +334,7 @@ def render(
             raise Refused("stack", stack_problems)
         sheet = capture.sheet
         spoken = capture.narration
-        # T216: the one reading of this video's gain; everything below that
+        # The one reading of this video's gain; everything below that
         # applies, measures with or reports the gain is given this value.
         gain_db = contract.voice_gain_db(sheet.slug)
         log.passed(

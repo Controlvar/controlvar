@@ -649,7 +649,7 @@ STRETCH_LONG_MS = 5
 #: is ``voice_gain_db(slug)``: G10, the mux, G13's onsets, the G17 record and
 #: the review page all read it there, and no other module reads these two.
 DEFAULT_VOICE_GAIN_DB = 4.5
-#: The videos that take another gain (T216). Video 9's 14 clips measured a mean
+#: The videos that take another gain. Video 9's 14 clips measured a mean
 #: of -22.5 LUFS in the voice step (2026-10-29), against -23.7 to -23.9 for
 #: videos 1-4 and 6, so 4.5 dB puts them at -18.0 and G10 refuses; 3.5 dB puts
 #: them at -19.0. Why its new clips are louder is not known: a change in

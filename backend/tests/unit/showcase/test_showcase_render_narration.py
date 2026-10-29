@@ -603,9 +603,9 @@ def test_two_sound_streams_fail_g16():
     ]
 
 
-#: Each registered video's gain (T216) as the mux's filter, the review page's
-#: words and G17's record write it: the 4.5 dB every video had before T216,
-#: except video 9's 3.5 dB.
+#: Each registered video's gain as the mux's filter, the review page's words
+#: and G17's record write it: the default 4.5 dB, which every video had before
+#: video 9 took its own, except video 9's 3.5 dB.
 BEFORE_T216 = ("volume=4.5dB:precision=float", "4.5 dB gain", 4.5)
 VIDEO_9 = ("volume=3.5dB:precision=float", "3.5 dB gain", 3.5)
 GAINS = [
@@ -828,7 +828,7 @@ def test_sound_outside_every_clip_fails_g15(voiced: Path, tmp_path: Path):
     ]
 
 
-# --- T216: each video's gain, read once ---------------------------------------
+# --- Each video's own gain, read once -----------------------------------------
 
 
 @pytest.mark.parametrize("slug, _volume, words, recorded", GAINS, ids=GAIN_IDS)
@@ -869,7 +869,7 @@ def gain_given(call: ast.Call) -> str:
 
 
 def test_the_render_reads_the_videos_gain_once_and_every_consumer_gets_that_value():
-    """The partial wiring the PE named (T216): G10 at 3.5 dB and a mux at 4.5 dB
+    """The partial wiring this guards against: G10 at 3.5 dB and a mux at 4.5 dB
     would land video 9 about 1 dB hot. The render has no test that runs ffmpeg
     here, so its wiring is read from its source."""
     tree = ast.parse((SHOWCASE / "render" / "pipeline.py").read_text(encoding="utf-8"))

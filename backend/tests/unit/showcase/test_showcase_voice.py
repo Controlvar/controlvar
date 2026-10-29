@@ -984,7 +984,7 @@ def test_the_parser_refuses_a_missing_summary_or_label(text, reason):
 
 def test_the_gain_and_the_precheck_are_the_plans():
     assert contract.DEFAULT_VOICE_GAIN_DB == 4.5
-    # T216: video 9 alone takes another gain.
+    # Video 9 alone takes another gain: its new clips measure louder.
     assert contract.VOICE_GAIN_DB_BY_VIDEO == {"09-design-in-depth": 3.5}
     assert contract.PRECHECK_PEAK_DBTP == -1.3
     assert (contract.LOUDNESS_TARGET_LUFS, contract.PRECHECK_LOUDNESS_LU) == (
@@ -993,10 +993,10 @@ def test_the_gain_and_the_precheck_are_the_plans():
     )
 
 
-# --- T216: a video's own gain ------------------------------------------------------------------
+# --- A video's own gain ------------------------------------------------------------------------
 
 V9 = "09-design-in-depth"
-#: Video 9's 14 clips as the founder's voice step measured them (2026-10-29):
+#: Video 9's 14 clips as the voice step measured them (2026-10-29):
 #: (where, integrated LUFS, true peak dBTP). Beat 2's was cached; the rest new.
 V9_CLIPS = [
     ("api-only beat 1 line 1", -22.4, -6.7),
@@ -1028,7 +1028,7 @@ def test_every_video_given_its_own_gain_is_a_registered_video():
 
 @pytest.mark.regression
 def test_video_9s_measured_clips_pass_g10_at_its_gain_and_not_at_the_default():
-    """The founder's voice step refused video 9 at 4.5 dB (T216); at its own
+    """The voice step refused video 9's measured clips at 4.5 dB; at its own
     gain the same 14 readings pass."""
     assert contract.loudness_problems(V9_CLIPS, contract.voice_gain_db(V9)) == []
     refused = contract.loudness_problems(V9_CLIPS, contract.DEFAULT_VOICE_GAIN_DB)
@@ -1054,9 +1054,9 @@ def test_the_step_gives_the_summary_and_g10_the_videos_own_gain(
 
 
 def test_the_gain_is_not_in_the_clip_key_so_video_9s_cached_clip_keeps_its_key():
-    """Beat 2's sentence was cached before T216 (videos 2, 3 and 6 say it too).
-    A changed recipe or key field gives every clip of every video a new key, and
-    the voice step would ask Polly for all of them again."""
+    """Beat 2's sentence was cached before video 9 took its own gain (videos 2,
+    3 and 6 say it too). A changed recipe or key field gives every clip of every
+    video a new key, and the voice step would ask Polly for all of them again."""
     board = storyboard.load(SHOWCASE / config.VIDEOS[V9])
     design = next(scene for scene in board.scenes if scene.id == "design")
     sentence = "Name it, and the key your code uses fills itself in."
