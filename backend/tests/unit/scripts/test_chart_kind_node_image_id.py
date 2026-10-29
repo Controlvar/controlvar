@@ -80,7 +80,7 @@ def sandbox(tmp_path: pathlib.Path) -> tuple[pathlib.Path, dict[str, str]]:
     (tmp_path / "work").mkdir()
     (tmp_path / "chart").mkdir()
     (tmp_path / "chart" / "Chart.yaml").write_text(
-        'name: experimently\nappVersion: "0.37.0"\n', encoding="utf-8"
+        'name: chart\nappVersion: "0.37.0"\n', encoding="utf-8"
     )
     # docker: `image inspect` answers the host's ID for the ref; `exec` is the
     # node's crictl, answering $NODE_JSON_<api|web> (empty: no such image).
