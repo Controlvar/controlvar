@@ -172,6 +172,12 @@ do_load() {
     printf 'api=%s\nweb=%s\napi_repo=%s\nweb_repo=%s\napi_node=%s\nweb_node=%s\n' \
         "$api" "$web" "$API_REPO" "$WEB_REPO" "$api_node" "$web_node" >"$WORK/images.txt"
     cat "$WORK/images.txt"
+    # TAMPER (#1435, never merged): the registry's images under the tags just
+    # loaded, so the pods run GHCR's build, not this job's. assert_images must fail.
+    docker pull "$API_REPO:$tag"
+    docker pull "$WEB_REPO:$tag"
+    kind load docker-image --name "$CLUSTER" "$API_REPO:$tag" "$WEB_REPO:$tag"
+    say "TAMPER: node now has api $(node_image_id "$API_REPO:$tag"), web $(node_image_id "$WEB_REPO:$tag")"
 }
 
 # ---------------------------------------------------------------------------
