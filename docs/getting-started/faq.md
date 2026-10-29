@@ -75,8 +75,8 @@ dashboard shows.
 
 ### What SDKs are available?
 
-The JavaScript SDK is on npm (`npm install @controlvar/js-sdk`, 0.1.1, beta) and the
-Python SDK is on PyPI (`pip install controlvar`, 0.1.1, beta). The Go SDK installs by module
+The JavaScript SDK is on npm (`npm install @controlvar/js-sdk`, 0.2.0, beta) and the
+Python SDK is on PyPI (`pip install controlvar`, 0.2.0, beta). The Go SDK installs by module
 path, and the other SDKs from a clone of this repository: each SDK's page
 ([Go](../sdk/go.md), [Java](../sdk/java.md), [React](../sdk/react.md)) says how.
 

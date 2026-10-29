@@ -1,6 +1,6 @@
 # JavaScript SDK
 
-`@controlvar/js-sdk` (v0.1.1) is the JavaScript/TypeScript client for the
+`@controlvar/js-sdk` (v0.2.0) is the JavaScript/TypeScript client for the
 Controlvar public API: experiment assignment, feature flag evaluation and event
 tracking for Node >= 18 and browsers. Zero runtime dependencies — it uses the global `fetch`.
 
@@ -25,14 +25,14 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlv
 If you installed `@getexperimently/js-sdk`, the name this package had before the project was renamed, uninstall it and install `@controlvar/js-sdk`.
 
 The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk).
-0.1.1 is a beta release.
+0.2.0 is a beta release.
 
 ```bash
-npm install @controlvar/js-sdk@0.1.1
+npm install @controlvar/js-sdk@0.2.0
 ```
 
 To work on the SDK itself, build it from a clone of this repository instead. `npm pack` writes
-`controlvar-js-sdk-0.1.1.tgz`:
+`controlvar-js-sdk-0.2.0.tgz`:
 
 ```bash
 git clone https://github.com/Controlvar/controlvar.git
@@ -43,7 +43,7 @@ npm ci && npm run build && npm pack
 Then, in your app, install the packed tarball:
 
 ```bash
-npm install /path/to/controlvar/sdk/js/controlvar-js-sdk-0.1.1.tgz
+npm install /path/to/controlvar/sdk/js/controlvar-js-sdk-0.2.0.tgz
 ```
 
 CommonJS build (`dist/index.js`) with type declarations; `import`/`require` both work.
@@ -281,7 +281,8 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | `evaluateFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<id>&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{"key","enabled","config","reason"}` |
 | `getAllFlags` | `GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON>` | `context` = `attributes` (omitted when empty) | `{"<flag_key>": bool, ...}` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{"event_type","event_name","user_id","experiment_key"?,"feature_flag_key"?,"value"?,"metadata"?,"timestamp"?}` | stored event (ignored) |
-| `track` without a key, `trackBatch` | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` (max 100) | `{"success_count","failure_count","errors"}` |
+| `track` without a key | `POST /api/v1/tracking/batch`, one entry per experiment and flag it reaches; with none, `POST /api/v1/tracking/track` | `{"events":[<track body>...]}` (max 100); with none, the track body with no key | ignored |
+| `trackBatch` | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` (max 100) | `{"success_count","failure_count","errors"}` |
 | `fetchAssignments` | `GET /api/v1/tracking/assignments/{user_id}?active_only=true` | — | list of assignment rows |
 | local mode: ruleset refresh | `GET /api/v1/sdk/ruleset` (beta) | `If-None-Match: "<version>"` | the ruleset, `ETag`; `304` when unchanged |
 | local mode: evaluation counts | `POST /api/v1/tracking/evaluations` (beta) | `{"evaluations":[{"flag_key","count","enabled_count","window_start","window_end"}]}` | `{"accepted","errors"}` |

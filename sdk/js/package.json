@@ -1,6 +1,6 @@
 {
   "name": "@controlvar/js-sdk",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "JavaScript/TypeScript SDK for the Controlvar public API (Node >= 18 and browsers, zero runtime dependencies)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

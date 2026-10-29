@@ -309,7 +309,7 @@ text = "What SDKs are available?"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The JavaScript SDK is on npm (npm install @controlvar/js-sdk, 0.1.1, beta) and the Python SDK is on PyPI (pip install controlvar, 0.1.1, beta)."
+text = "The JavaScript SDK is on npm (npm install @controlvar/js-sdk, 0.2.0, beta) and the Python SDK is on PyPI (pip install controlvar, 0.2.0, beta)."
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-javascript#quick-start-user-on",
