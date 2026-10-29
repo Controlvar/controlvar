@@ -546,7 +546,7 @@ def narration_clips(
         raise voiced.VoiceRefused(f"{board.slug}: no voice cache was given")
     clips = voiced.find_clips(board, voice, options.voice_cache)
     projected = voiced.projected_ms(board, clips)
-    limit = contract.MAX_VIDEO_MS * contract.PROJECTION_SHARE
+    limit = contract.max_video_ms(board.slug) * contract.PROJECTION_SHARE
     if projected > limit:
         raise voiced.VoiceRefused(
             f"{board.slug}: its clips project {projected / 1000:.1f} s, above"

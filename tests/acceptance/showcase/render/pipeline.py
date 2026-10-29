@@ -452,9 +452,7 @@ def render(
             info = probe.ffprobe(partial_mp4)
         except (RuntimeError, ValueError) as exc:
             raise Refused("2", f"ffprobe could not read the encode ({exc})") from exc
-        problems, numbers = probe.length_problems(
-            info, f"{sheet.slug}.mp4", total_frames
-        )
+        problems, numbers = probe.length_problems(info, sheet.slug, total_frames)
         log.require("1", problems, numbers)
         problems, numbers = probe.format_problems(info, total_frames)
         boxes = probe.top_level_boxes(partial_mp4)
