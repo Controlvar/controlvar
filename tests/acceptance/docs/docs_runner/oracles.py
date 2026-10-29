@@ -17,7 +17,7 @@ from __future__ import annotations
 import math
 import sys
 from fractions import Fraction
-from typing import Callable, Dict, Tuple
+from typing import Any, Callable, Dict, Tuple
 
 from scipy import integrate, stats
 from statsmodels.stats.power import NormalIndPower
@@ -681,6 +681,385 @@ def revenue_welch_interval(
     return float(difference) + half_width
 
 
+# ---------------------------------------------------------------------------
+# CUPED (``GET /api/v1/results/{experiment_id}/cuped``)
+# ---------------------------------------------------------------------------
+def _cuped_counts(
+    control_users: int,
+    control_converted: int,
+    control_history: int,
+    treatment_users: int,
+    treatment_converted: int,
+    treatment_history: int,
+) -> Dict[str, Tuple[int, int, int, int]]:
+    """Per variant: its users, converting users, returning users, and both.
+
+    The traffic step chooses the users and decides who does what
+    (``docs_runner/model.py``, ``TrafficHistory``): of a variant's ``users``,
+    the first ``converted`` chosen convert after assignment (the outcome ``Y``
+    is 1) and the first ``history`` chosen sent the metric's event before it
+    (the covariate ``X`` is 1), so ``min(history, converted)`` users have both.
+    Refused: what ``_users_table`` refuses; a ``history`` that is not a whole
+    number from 0 to the variant's users; and a variant with fewer than 2 users
+    (``api/cuped.md``: ``fewer_than_2_units``, a comparison with no numbers).
+    """
+    _users_table(control_users, control_converted, treatment_users, treatment_converted)
+    counts = {}
+    for arm, users, converted, history in (
+        ("control", control_users, control_converted, control_history),
+        ("treatment", treatment_users, treatment_converted, treatment_history),
+    ):
+        history = _whole(f"{arm}_history", history)
+        if not 0 <= history <= users:
+            raise ValueError(f"{arm}_history must be from 0 to the {arm}'s users")
+        if users < 2:
+            raise ValueError(f"the {arm} needs at least 2 users for a comparison")
+        counts[arm] = (users, converted, history, min(history, converted))
+    return counts
+
+
+def _cuped_terms(*counts: int) -> Dict[str, Fraction]:
+    """Every number of a CUPED comparison, as an exact fraction where it is one.
+
+    ``api/cuped.md`` ("How It Works"), for a conversion metric, with ``Y`` and
+    ``X`` of ``_cuped_counts``:
+
+    * each arm's adjusted rate is ``mean(Y) - theta * (mean(X) - overall
+      mean(X))``, where ``overall mean(X)`` is "the share of all assigned users
+      with history" (with two variants, both arms' users);
+    * ``theta`` is "the slope of Y on X, pooled within arms over every arm of
+      the experiment: the x coefficient of the regression Y ~ arm + X". By the
+      Frisch-Waugh-Lovell theorem that coefficient is the slope of Y on X
+      after each is centred on its own arm's mean:
+      ``sum over arms of S_xy / sum over arms of S_xx``, with ``S_xy =
+      sum (X - mean X)(Y - mean Y)`` and ``S_xx = sum (X - mean X)^2`` within
+      the arm; and ``theta`` is 0 "when no user (or every user) has history"
+      (both ``S_xx`` are 0). This is the regression form of Deng, Xu, Kohavi
+      and Walker, "Improving the sensitivity of online controlled experiments
+      by utilizing pre-experiment data" (WSDM 2013), whose ``Y_cv = mean(Y) -
+      theta (mean(X) - E[X])`` with ``theta = cov(Y, X) / var(X)`` the page
+      cites; pooled within arms, it is the same ``theta`` for every arm;
+    * the adjusted effect is the treatment's adjusted rate minus the control's,
+      and "its variance is each arm's residual variance over its size": the
+      residuals are ``Y - mean(Y) - theta (X - mean(X))`` within the arm, and
+      their variance ``(S_yy - 2 theta S_xy + theta^2 S_xx) / (n - 1)``. The
+      page does not name the divisor of a variance; this is the sample
+      variance (Bessel's ``n - 1``), and the unadjusted effect's variance takes
+      the same one (``S_yy / (n - 1)`` over the arm's size), so with ``theta``
+      0 the adjusted numbers are the unadjusted ones, as the page says they
+      are. The unit tests pin that the divisor ``n`` gives other numbers.
+
+    Refused: a comparison the page lists with ``unavailable_reason`` and no
+    numbers: ``no_variation`` (neither arm's ``Y`` varies) and
+    ``no_residual_variation`` (history predicts every outcome, so the
+    adjusted variance is 0).
+    """
+    arms = _cuped_counts(*counts)
+    sums = {}
+    for arm, (users, converted, history, both) in arms.items():
+        sums[arm] = {
+            "n": users,
+            "y": Fraction(converted, users),
+            "x": Fraction(history, users),
+            "sxy": both - Fraction(history * converted, users),
+            "sxx": history - Fraction(history * history, users),
+            "syy": converted - Fraction(converted * converted, users),
+        }
+    sxx = sum(s["sxx"] for s in sums.values())
+    theta = sum(s["sxy"] for s in sums.values()) / sxx if sxx else Fraction(0)
+    returning = sum(history for _, _, history, _ in arms.values())
+    everyone = sum(users for users, _, _, _ in arms.values())
+    overall_x = Fraction(returning, everyone)
+
+    def residual(s: Dict[str, Any]) -> Fraction:
+        return s["syy"] - 2 * theta * s["sxy"] + theta * theta * s["sxx"]
+
+    unadjusted_variance = sum(s["syy"] / ((s["n"] - 1) * s["n"]) for s in sums.values())
+    if unadjusted_variance == 0:
+        raise ValueError("neither variant's outcome varies: there is no comparison")
+    adjusted_variance = sum(
+        residual(s) / ((s["n"] - 1) * s["n"]) for s in sums.values()
+    )
+    if adjusted_variance == 0:
+        raise ValueError("history predicts every outcome: there is no p-value")
+    adjusted = {arm: s["y"] - theta * (s["x"] - overall_x) for arm, s in sums.items()}
+    return {
+        "theta": theta,
+        "adjusted_control_mean": adjusted["control"],
+        "adjusted_treatment_mean": adjusted["treatment"],
+        "adjusted_effect": adjusted["treatment"] - adjusted["control"],
+        "unadjusted_effect": sums["treatment"]["y"] - sums["control"]["y"],
+        "adjusted_variance": adjusted_variance,
+        "unadjusted_variance": unadjusted_variance,
+        "coverage": Fraction(100 * returning, everyone),
+    }
+
+
+def cuped_theta(
+    control_users: int,
+    control_converted: int,
+    control_history: int,
+    treatment_users: int,
+    treatment_converted: int,
+    treatment_history: int,
+) -> float:
+    """``theta``: the slope of the outcome on history, pooled within arms.
+
+    ``api/cuped.md`` ("How It Works"; see ``_cuped_terms``). The arguments are
+    the traffic step's counts: each variant's users, converting users and
+    returning users (its ``history``). 0 when no user, or every user, has
+    history.
+    """
+    return float(
+        _cuped_terms(
+            control_users,
+            control_converted,
+            control_history,
+            treatment_users,
+            treatment_converted,
+            treatment_history,
+        )["theta"]
+    )
+
+
+def cuped_adjusted_mean(
+    control_users: int,
+    control_converted: int,
+    control_history: int,
+    treatment_users: int,
+    treatment_converted: int,
+    treatment_history: int,
+    variant: str = "treatment",
+) -> float:
+    """``adjusted_control_mean`` or ``adjusted_treatment_mean``.
+
+    ``api/cuped.md``: ``mean(Y) - theta * (mean(X) - overall mean(X))`` for
+    *variant* (``control`` or ``treatment``), on the conversion-rate scale.
+    """
+    terms = _cuped_terms(
+        control_users,
+        control_converted,
+        control_history,
+        treatment_users,
+        treatment_converted,
+        treatment_history,
+    )
+    if variant not in ("control", "treatment"):
+        raise ValueError(f"variant must be 'control' or 'treatment', not {variant!r}")
+    return float(terms[f"adjusted_{variant}_mean"])
+
+
+def cuped_adjusted_effect(
+    control_users: int,
+    control_converted: int,
+    control_history: int,
+    treatment_users: int,
+    treatment_converted: int,
+    treatment_history: int,
+) -> float:
+    """``adjusted_effect``: the treatment's adjusted rate minus the control's.
+
+    That is ``(mean Y_t - mean Y_c) - theta (mean X_t - mean X_c)``
+    (``api/cuped.md``; ``_cuped_terms``).
+    """
+    return float(
+        _cuped_terms(
+            control_users,
+            control_converted,
+            control_history,
+            treatment_users,
+            treatment_converted,
+            treatment_history,
+        )["adjusted_effect"]
+    )
+
+
+def cuped_unadjusted_effect(
+    control_users: int,
+    control_converted: int,
+    control_history: int,
+    treatment_users: int,
+    treatment_converted: int,
+    treatment_history: int,
+) -> float:
+    """``unadjusted_effect``: the treatment's conversion rate minus the control's."""
+    return float(
+        _cuped_terms(
+            control_users,
+            control_converted,
+            control_history,
+            treatment_users,
+            treatment_converted,
+            treatment_history,
+        )["unadjusted_effect"]
+    )
+
+
+def cuped_adjusted_se(
+    control_users: int,
+    control_converted: int,
+    control_history: int,
+    treatment_users: int,
+    treatment_converted: int,
+    treatment_history: int,
+) -> float:
+    """``adjusted_se``: the square root of the adjusted effect's variance.
+
+    Each arm's residual variance over its size, added up (``_cuped_terms``).
+    """
+    return math.sqrt(
+        _cuped_terms(
+            control_users,
+            control_converted,
+            control_history,
+            treatment_users,
+            treatment_converted,
+            treatment_history,
+        )["adjusted_variance"]
+    )
+
+
+def cuped_unadjusted_se(
+    control_users: int,
+    control_converted: int,
+    control_history: int,
+    treatment_users: int,
+    treatment_converted: int,
+    treatment_history: int,
+) -> float:
+    """``unadjusted_se``: the same comparison's standard error without CUPED.
+
+    Each arm's sample variance of ``Y`` over its size, added up: the residual
+    variance of ``_cuped_terms`` at ``theta`` 0.
+    """
+    return math.sqrt(
+        _cuped_terms(
+            control_users,
+            control_converted,
+            control_history,
+            treatment_users,
+            treatment_converted,
+            treatment_history,
+        )["unadjusted_variance"]
+    )
+
+
+def cuped_adjusted_p(
+    control_users: int,
+    control_converted: int,
+    control_history: int,
+    treatment_users: int,
+    treatment_converted: int,
+    treatment_history: int,
+) -> float:
+    """``adjusted_p_value``: two-sided, of a z-test on the adjusted effect.
+
+    The OpenAPI document: "Two-sided p-value of a z-test on the adjusted
+    effect, before any multiple-comparison correction". ``z = adjusted_effect
+    / adjusted_se`` and ``p = 2 P(Z > |z|)`` for a standard normal ``Z``.
+    """
+    terms = _cuped_terms(
+        control_users,
+        control_converted,
+        control_history,
+        treatment_users,
+        treatment_converted,
+        treatment_history,
+    )
+    z = float(terms["adjusted_effect"]) / math.sqrt(terms["adjusted_variance"])
+    return float(2 * stats.norm.sf(abs(z)))
+
+
+def cuped_adjusted_interval(
+    control_users: int,
+    control_converted: int,
+    control_history: int,
+    treatment_users: int,
+    treatment_converted: int,
+    treatment_history: int,
+    confidence_level: float = 0.95,
+    bound: str = "lower",
+) -> float:
+    """``adjusted_ci_lower`` or ``adjusted_ci_upper``: the z-test's interval.
+
+    ``api/cuped.md``: "The adjusted effect's interval at confidence_level"
+    (the experiment's stored level). The interval that goes with the z-test
+    of ``cuped_adjusted_p``: ``adjusted_effect +/- z(1 - (1 -
+    confidence_level) / 2) * adjusted_se``, so 0 is outside it exactly when
+    that p-value is under ``1 - confidence_level``. ``confidence_level`` is
+    above 0 and below 1 (default 0.95); ``bound`` is ``lower`` or ``upper``.
+    """
+    confidence_level = _number("confidence_level", confidence_level)
+    if not 0 < confidence_level < 1:
+        raise ValueError("confidence_level must be above 0 and below 1")
+    if bound not in ("lower", "upper"):
+        raise ValueError(f"bound must be 'lower' or 'upper', not {bound!r}")
+    terms = _cuped_terms(
+        control_users,
+        control_converted,
+        control_history,
+        treatment_users,
+        treatment_converted,
+        treatment_history,
+    )
+    quantile = float(stats.norm.ppf(1 - (1 - confidence_level) / 2))
+    half_width = quantile * math.sqrt(terms["adjusted_variance"])
+    effect = float(terms["adjusted_effect"])
+    return effect - half_width if bound == "lower" else effect + half_width
+
+
+def cuped_variance_reduction_pct(
+    control_users: int,
+    control_converted: int,
+    control_history: int,
+    treatment_users: int,
+    treatment_converted: int,
+    treatment_history: int,
+) -> float:
+    """``variance_reduction_pct``: ``100 * (1 - adjusted / unadjusted variance)``.
+
+    ``api/cuped.md``'s Response Fields, of the effect's two variances
+    (``_cuped_terms``). 0 with ``theta`` 0; below 0 when the slope pooled
+    over the arms leaves this comparison noisier than no adjustment would
+    (the page: it "can be negative").
+    """
+    terms = _cuped_terms(
+        control_users,
+        control_converted,
+        control_history,
+        treatment_users,
+        treatment_converted,
+        treatment_history,
+    )
+    return float(100 * (1 - terms["adjusted_variance"] / terms["unadjusted_variance"]))
+
+
+def cuped_coverage_pct(
+    control_users: int,
+    control_converted: int,
+    control_history: int,
+    treatment_users: int,
+    treatment_converted: int,
+    treatment_history: int,
+) -> float:
+    """``covariate_coverage_pct``: the share of the comparison's users with history.
+
+    ``api/cuped.md``'s Response Fields: the share of this comparison's users
+    (control and treatment), from 0 to 100, with history; the returning users
+    of both variants over all their users, times 100.
+    """
+    return float(
+        _cuped_terms(
+            control_users,
+            control_converted,
+            control_history,
+            treatment_users,
+            treatment_converted,
+            treatment_history,
+        )["coverage"]
+    )
+
+
 ORACLES: Dict[str, Callable[..., float]] = {
     "fisher_exact_p": fisher_exact_p,
     "sample_ratio_p": sample_ratio_p,
@@ -695,4 +1074,14 @@ ORACLES: Dict[str, Callable[..., float]] = {
     "revenue_difference": revenue_difference,
     "revenue_welch_p": revenue_welch_p,
     "revenue_welch_interval": revenue_welch_interval,
+    "cuped_theta": cuped_theta,
+    "cuped_adjusted_mean": cuped_adjusted_mean,
+    "cuped_adjusted_effect": cuped_adjusted_effect,
+    "cuped_unadjusted_effect": cuped_unadjusted_effect,
+    "cuped_adjusted_se": cuped_adjusted_se,
+    "cuped_unadjusted_se": cuped_unadjusted_se,
+    "cuped_adjusted_p": cuped_adjusted_p,
+    "cuped_adjusted_interval": cuped_adjusted_interval,
+    "cuped_variance_reduction_pct": cuped_variance_reduction_pct,
+    "cuped_coverage_pct": cuped_coverage_pct,
 }

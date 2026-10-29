@@ -51,6 +51,17 @@ In a storyboard whose end state counts an experiment's users, every app with
 a visitor key (``config.APP_VISITOR_KEY``) declares its visitors, from its
 first scene: no page of it loads under an id the storyboard does not name.
 
+Video 4's incident adds three steps to that closed list (S4 of plan v2.2),
+each once and in this order after the StreamPulse seed: ``story: 2``, the
+demo's own rollout script, its step 2 only; ``crashes``, the tool's fixed
+crash sender, started right after a safety run completes; and, on the card
+after B9 (a dashboard scene filmed before the monitor's next run),
+``wait_for_rollback``, which waits for the safety monitor to roll the flag
+back by itself. That card says the gap the cut hides, measured
+(``{rollback_minutes}``, nowhere else), and the end state's ``rollback`` names
+what gate 10/4 holds the platform and the page to. A dashboard scene may open
+a flag's page by the flag's name (``flag_of``), its id looked up off camera.
+
 Two steps work a form control the way a person would be seen to: ``choose``
 changes a native <select> to one of its options without opening it (a
 screencast never draws a native list, so an open one would film a select
@@ -72,8 +83,10 @@ credential into a step not marked secret, an on-camera step that opens the API
 keys page, a locator naming nothing, a scene with no beats, a code line that
 names a host and port, traffic finished before it starts, a ``choose`` or
 ``slide`` in ``before`` (cut, so never seen), a flag's end state naming a
-segment the setup does not make or a reading no beat records, and a narration
-``narration.board_problems`` refuses (every problem at once). Caption text
+segment the setup does not make or a reading no beat records, an incident step
+other than ``story: 2`` or out of order, or ``{rollback_minutes}`` anywhere but
+the card after the wait, and a narration ``narration.board_problems`` refuses
+(every problem at once). Caption text
 never comes from the page or the run: ``compile_cues`` is a pure function of
 the file, so the cue list is the same on every run (gate 13a).
 """
@@ -311,6 +324,11 @@ class Card(_Strict):
         return [self.label, *body, self.note]
 
 
+def card_texts(card: Optional[Card]) -> List[str]:
+    """Everything a card draws (``Card.drawn_text``), or nothing for no card."""
+    return [] if card is None else [text for text in card.drawn_text() if text]
+
+
 App = Literal["dashboard", "shoplab", "streampulse"]
 
 
@@ -359,8 +377,88 @@ class Visitor(_Strict):
         return self
 
 
+class Story(_Strict):
+    """Off camera: the StreamPulse demo's own rollout script, its step 2 only
+    (``rollout_story.py --step 2``: the Player v2 schedule's stage 2, 25%),
+    run from the recorded tree against the tool's stack (S4 of plan v2.2).
+    Any other step is refused at load: step 3 sends incident traffic of its
+    own, and step 4 rolls the flag back by hand when the monitor is late. The
+    video's incident is the tool's own fixed sender (``Crashes``)."""
+
+    story: Literal[2]
+
+
+class CrashPlan(_Strict):
+    """How many times Android 12 devices ask for the flag, and how many crashes
+    they report. Each crashing device runs one loop (``config.CRASH_LOOP``: it
+    asks for the flag and crashes, again and again) as one of
+    ``config.CRASH_DEVICES``; every other ask is a device that does not crash."""
+
+    evaluations: int = Field(ge=1, le=1000)
+    reports: int = Field(ge=1, le=200)
+
+    @model_validator(mode="after")
+    def _loops(self) -> "CrashPlan":
+        if self.reports % config.CRASH_LOOP:
+            raise ValueError(
+                f"crash reports come {config.CRASH_LOOP} a crashing device;"
+                f" {self.reports} is not a whole number of devices"
+            )
+        if self.reports // config.CRASH_LOOP > len(config.CRASH_DEVICES):
+            raise ValueError(
+                f"{self.reports} crash reports need more than the"
+                f" {len(config.CRASH_DEVICES)} crashing devices the tool has"
+            )
+        if self.evaluations < self.reports:
+            raise ValueError(
+                f"each crash follows an ask for the flag: {self.evaluations} asks"
+                f" cannot carry {self.reports} crashes"
+            )
+        return self
+
+
+class Crashes(_Strict):
+    """Off camera: the tool's fixed crash sender (S4, T156 C15). Simulated
+    Android 12 devices ask for ``config.CRASH_FLAG`` through the API with the
+    app's key, and report their crashes with the StreamPulse server key, held
+    in this process only. It starts right after a safety run completes (B9's
+    anchor), and every answer must be 2xx."""
+
+    crashes: CrashPlan
+
+
+class RollbackWait(_Strict):
+    """What ``wait_for_rollback`` waits for: the safety monitor's own rollback
+    of *flag* to *percentage*, within *within_s* seconds."""
+
+    flag: str = Field(pattern=r"^[a-z0-9][a-z0-9_]{0,63}$")
+    percentage: int = Field(ge=0, le=100)
+    within_s: int = Field(ge=30, le=600)
+
+
+class WaitForRollback(_Strict):
+    """Off camera: wait for the safety monitor to roll the flag back by itself.
+    The tool reads the flag and its audit log; nothing ever asks for a
+    rollback (``POST .../rollback``)."""
+
+    wait_for_rollback: RollbackWait
+
+
 #: What may run off camera before a scene: a closed list.
-OffCamera = Union[SeedApp, Visitor]
+OffCamera = Union[SeedApp, Visitor, Story, Crashes, WaitForRollback]
+#: Video 4's incident, off camera, by each step's name in the storyboard.
+INCIDENT_KINDS: Dict[type, str] = {
+    Story: "story",
+    Crashes: "crashes",
+    WaitForRollback: "wait_for_rollback",
+}
+#: In the card right after ``wait_for_rollback``, and nowhere else: the gap the
+#: cut hides, measured on the wall clock from B9's last frame (S5 of plan v2.2).
+ROLLBACK_MINUTES = "{rollback_minutes}"
+#: In a card that finishes the traffic: how long it took, measured (run.py).
+TRAFFIC_MINUTES = "{traffic_minutes}"
+#: The measured values a card may name, each filled in by the run.
+MEASURED = (TRAFFIC_MINUTES, ROLLBACK_MINUTES)
 
 #: A departure from a new user's path (D84), each stated on screen where it
 #: happens: users the tool simulates, a scheduler interval shortened, a time
@@ -407,6 +505,9 @@ class Scene(_Strict):
     open: Optional[str] = Field(default=None, pattern=r"^/[A-Za-z0-9/_?=&.-]*$")
     #: Open this experiment's results page; the id is looked up off camera.
     results_of: Optional[str] = None
+    #: Open this feature flag's page, by the flag's name; the id is looked up
+    #: off camera, as ``results_of`` does.
+    flag_of: Optional[str] = Field(default=None, min_length=1, max_length=128)
     card: Optional[Card] = None
     #: Sign in as the demo admin off camera before the scene.
     signed_in: bool = False
@@ -419,10 +520,11 @@ class Scene(_Strict):
 
     @model_validator(mode="after")
     def _page_or_card(self) -> "Scene":
-        if sum(x is not None for x in (self.open, self.results_of, self.card)) != 1:
+        openers = (self.open, self.results_of, self.flag_of, self.card)
+        if sum(x is not None for x in openers) != 1:
             raise ValueError(
-                "a scene opens a page, opens an experiment's results or draws a card:"
-                " exactly one, not both"
+                "a scene opens a page, opens an experiment's results or a flag's"
+                " page, or draws a card: exactly one, not both"
             )
         if self.app != "dashboard" and (
             self.open is None or self.signed_in or self.warm_results
@@ -531,6 +633,80 @@ class FlagEnd(_Strict):
     audit: List[FlagAction] = Field(min_length=1)
     #: The ``record`` name of the audit log's rows as the page showed them.
     shown: str
+
+
+#: The audit action types a rolled-back flag's end state may name.
+RollbackAction = Literal[
+    "feature_flag_update", "toggle_enable", "toggle_disable", "safety_rollback"
+]
+
+
+class Agreement(_Strict):
+    """Gate 10/4 at one beat's start, after the rollback (plan v2 C1): the app's
+    panel row for the flag, its phone and the API's answer for the device, read
+    off camera with the app's key and the context the app sends, all say the
+    same: on or off (``enabled``)."""
+
+    scene: str
+    beat: int = Field(ge=1)
+    #: The StreamPulse device the app is filmed as (``config.STREAMPULSE_DEVICES``).
+    device: str
+    #: The ``record`` names of the panel's reason for the flag, and of the phone's screen.
+    panel: str
+    phone: str
+    enabled: bool
+
+
+class KillSwitch(_Strict):
+    """A flag the video switches off on camera: its exact audit entries."""
+
+    name: str
+    key: str
+    audit: List[FlagAction] = Field(min_length=1)
+
+
+class RollbackEnd(_Strict):
+    """Gate 10/4 (S8a of plan v2.2): the safety monitor rolled the flag back by
+    itself, and every reading of it agrees.
+
+    * the flag is at ``percentage``, still active, and its schedule is paused;
+    * its audit entries, oldest first, are exactly ``audit``, every one by the
+      signed-in user but the last, one ``safety_rollback`` by the safety
+      monitor (``system:safety-monitor``), an automatic one;
+    * the API's log holds that one rollback, automatic, and no POST asked for
+      a rollback, from the page or from the tool;
+    * the page drew it: the safety badge at B9, the schedule's badge and the
+      rollout after the rollback, the audit log's top row and the rollback's
+      reason, and the agreement at ``agree``;
+    * the kill switch the video turned off is off, with its exact entries.
+    """
+
+    name: str
+    key: str
+    percentage: int = Field(ge=0, le=100)
+    status: Literal["active"]
+    schedule: Literal["paused"]
+    audit: List[RollbackAction] = Field(min_length=1)
+    #: The ``record`` names of what the page drew: the audit log's rows and the
+    #: rollback's details, the safety badge at B9, and the schedule's badge and
+    #: the rollout percentage after the rollback.
+    shown: str
+    reason: str
+    unhealthy: str
+    paused: str
+    rolled_back: str
+    agree: Agreement
+    kill_switch: KillSwitch
+
+    @model_validator(mode="after")
+    def _one_rollback_last(self) -> "RollbackEnd":
+        if self.audit.count("safety_rollback") != 1 or self.audit[-1] != (
+            "safety_rollback"
+        ):
+            raise ValueError(
+                "a rolled-back flag's audit ends in one safety_rollback, and holds no other"
+            )
+        return self
 
 
 class Calculation(_Strict):
@@ -797,6 +973,8 @@ class EndState(_Strict):
     team: Optional[Team] = None
     #: An experiment the video designed and left a draft.
     design: Optional[DesignEnd] = None
+    #: A flag the safety monitor rolled back by itself (video 4).
+    rollback: Optional[RollbackEnd] = None
 
     @model_validator(mode="after")
     def _something(self) -> "EndState":
@@ -807,10 +985,11 @@ class EndState(_Strict):
             and not self.calculations
             and self.team is None
             and self.design is None
+            and self.rollback is None
         ):
             raise ValueError(
                 "an end state names experiments_listed, an experiment, a flag,"
-                " calculations or a team, or a design"
+                " calculations or a team, or a design, or a rollback"
             )
         if self.design is not None and (
             self.experiment is not None or self.flag is not None
@@ -958,6 +1137,135 @@ class Storyboard(_Strict):
                 f"the video invites {len(emails)} teammates, and no scene masks"
                 f" {config.INVITE_PASSWORD_TESTID}: each one-time password would be"
                 " filmed (masks)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _incident_in_order(self) -> "Storyboard":
+        """Video 4's incident (S4, S5, S8a of plan v2.2), refused at load unless
+        it is whole and in order: the StreamPulse seed, then ``story: 2``, then
+        ``crashes``, then at least one scene (the last of them B9: a dashboard
+        page, filmed before the monitor's next run), then ``wait_for_rollback``
+        on a card that says the gap it hides (``{rollback_minutes}``), each
+        once, with the rollback's end state for that flag and percentage, and
+        every reading that end state names recorded where it is true."""
+        found: Dict[str, int] = {}
+        #: Each step's place, scene and then its place in the scene's list.
+        placed: Dict[str, Tuple[int, int]] = {}
+        seeded: Optional[Tuple[int, int]] = None
+        for index, scene in enumerate(self.scenes):
+            for position, item in enumerate(scene.off_camera):
+                if isinstance(item, SeedApp) and item.seed == "streampulse":
+                    seeded = (index, position)
+                kind = INCIDENT_KINDS.get(type(item))
+                if kind is None:
+                    continue
+                if kind in found:
+                    raise ValueError(f"{kind} runs twice")
+                found[kind] = index
+                placed[kind] = (index, position)
+        wait_at = found.get("wait_for_rollback")
+        for index, scene in enumerate(self.scenes):
+            if index != wait_at and ROLLBACK_MINUTES in " ".join(
+                card_texts(scene.card)
+            ):
+                raise ValueError(
+                    f"scene {scene.id} names {ROLLBACK_MINUTES}: only the card"
+                    " right after wait_for_rollback says the gap the cut hides"
+                )
+        end = self.end_state.rollback
+        if not found and end is None:
+            return self
+        if sorted(found) != sorted(INCIDENT_KINDS.values()) or end is None:
+            raise ValueError(
+                "the incident is story, crashes, wait_for_rollback and the"
+                f" rollback's end state, each once; this storyboard has"
+                f" {sorted(found) or 'none of them'}"
+                f"{'' if end is not None else ' and no rollback end state'}"
+            )
+        if (
+            seeded is None
+            or not seeded < placed["story"]
+            or not found["story"] < found["crashes"] < wait_at - 1
+        ):
+            raise ValueError(
+                "off camera, the StreamPulse seed runs first, then story: 2, then"
+                " crashes, then at least one scene before wait_for_rollback"
+                " (B9, filmed before the monitor acts)"
+            )
+        b9 = self.scenes[wait_at - 1]
+        if b9.app != "dashboard" or b9.card is not None:
+            raise ValueError(
+                f"scene {b9.id} is B9, the scene before wait_for_rollback: it is"
+                " a dashboard page that shows the flag's safety check"
+            )
+        wait = next(
+            item.wait_for_rollback
+            for item in self.scenes[wait_at].off_camera
+            if isinstance(item, WaitForRollback)
+        )
+        if wait.flag != config.CRASH_FLAG or end.key != config.CRASH_FLAG:
+            raise ValueError(
+                f"the crashes are sent against {config.CRASH_FLAG}: the wait and the"
+                f" end state name it, not {wait.flag} and {end.key}"
+            )
+        if wait.percentage != end.percentage:
+            raise ValueError(
+                f"the wait is for {wait.percentage}%; the end state says"
+                f" {end.percentage}%"
+            )
+        card = self.scenes[wait_at].card
+        if card is None or ROLLBACK_MINUTES not in " ".join(card_texts(card)):
+            raise ValueError(
+                f"scene {self.scenes[wait_at].id} follows wait_for_rollback: it is"
+                f" a card that says the measured gap the cut hides ({ROLLBACK_MINUTES})"
+            )
+        where: Dict[str, int] = {}
+        for index, scene in enumerate(self.scenes):
+            for beat in scene.beats:
+                for name in beat.record:
+                    where.setdefault(name, index)
+        for name, after in (
+            (end.unhealthy, None),
+            (end.paused, wait_at),
+            (end.rolled_back, wait_at),
+            (end.shown, wait_at),
+            (end.reason, wait_at),
+        ):
+            if name not in where:
+                raise ValueError(
+                    f"the rollback's end state compares {name!r}, which no beat records"
+                )
+            if after is None and where[name] != wait_at - 1:
+                raise ValueError(
+                    f"{name!r} is read in B9 ({b9.id}), before the monitor acts"
+                )
+            if after is not None and where[name] <= after:
+                raise ValueError(
+                    f"{name!r} is read after the rollback, not before"
+                    f" {self.scenes[after].id}"
+                )
+        agree = end.agree
+        scene = next((s for s in self.scenes if s.id == agree.scene), None)
+        if scene is None or not 1 <= agree.beat <= len(scene.beats):
+            raise ValueError(
+                f"the agreement is read at scene {agree.scene} beat {agree.beat},"
+                " which the storyboard does not have"
+            )
+        if self.scenes.index(scene) <= wait_at or scene.app != "streampulse":
+            raise ValueError(
+                f"the agreement is read in StreamPulse after the rollback, not in"
+                f" {scene.id}"
+            )
+        recorded = scene.beats[agree.beat - 1].record
+        if agree.panel not in recorded or agree.phone not in recorded:
+            raise ValueError(
+                f"scene {scene.id} beat {agree.beat} records the panel's"
+                f" {agree.panel!r} and the phone's {agree.phone!r} at its start"
+            )
+        if agree.device not in config.STREAMPULSE_DEVICES:
+            raise ValueError(
+                f"{agree.device} is not a StreamPulse device the tool knows"
             )
         return self
 
@@ -1216,6 +1524,13 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
       off camera (its card says how many, measured: ``{traffic_minutes}``);
     * ``masked value``: a scene that masks a credential the product draws
       (``masks``; S7 of plan v2.2): the tool replaces what the page draws.
+
+    Off camera (``off_camera``, S7 of plan v2.2), each step by what it is: an
+    app's seed, a visitor and ``story`` (the demo's rollout script, run by the
+    tool) are off-camera setup; ``crashes`` is simulated traffic, the devices'
+    crashes the tool sends; ``wait_for_rollback`` is a time skip, on the card it
+    runs before, which says how long the cut hides. A shortened scheduler
+    interval is stated as its override's statement (``overrides``).
     """
     needed: List[Tuple[str, str]] = []
     running = False
@@ -1228,8 +1543,9 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
             for beat in scene.beats
             for step in beat.before
         )
+        steps = [OFF_CAMERA_KINDS[type(item)] for item in scene.off_camera]
         if (
-            scene.off_camera
+            "off-camera setup" in steps
             or (index == 0 and board.setup is not None)
             or signs_in
             or scene.warm_results
@@ -1238,14 +1554,43 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
             needed.append((scene.id, "off-camera setup"))
         if scene.traffic in ("start", "run"):
             running = True
-        if running:
+        if running or "simulated traffic" in steps:
             needed.append((scene.id, "simulated traffic"))
-        if scene.traffic in ("finish", "run"):
+        if scene.traffic in ("finish", "run") or "time skip" in steps:
             needed.append((scene.id, "time skip"))
+        if scene.traffic in ("finish", "run"):
             running = False
         if scene.masks:
             needed.append((scene.id, "masked value"))
     return needed
+
+
+#: What each off-camera step is, as a departure from a new user's path (D84;
+#: S7 of plan v2.2). A closed table: a step with no row here cannot load.
+OFF_CAMERA_KINDS: Dict[type, str] = {
+    SeedApp: "off-camera setup",
+    Visitor: "off-camera setup",
+    Story: "off-camera setup",
+    Crashes: "simulated traffic",
+    WaitForRollback: "time skip",
+}
+
+
+def incident_at(board: Storyboard) -> Dict[str, int]:
+    """Where video 4's incident steps run: each one's scene index, by name."""
+    found: Dict[str, int] = {}
+    for index, scene in enumerate(board.scenes):
+        for item in scene.off_camera:
+            kind = INCIDENT_KINDS.get(type(item))
+            if kind is not None:
+                found[kind] = index
+    return found
+
+
+def b9_scene(board: Storyboard) -> Optional[Scene]:
+    """B9: the scene right before ``wait_for_rollback``'s, or None."""
+    wait_at = incident_at(board).get("wait_for_rollback")
+    return None if wait_at is None else board.scenes[wait_at - 1]
 
 
 #: EM condition 6 of T166 (S2 of plan v2.2): a storyboard that records a demo

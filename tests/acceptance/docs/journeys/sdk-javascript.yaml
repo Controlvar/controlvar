@@ -3,7 +3,7 @@
 # follows them, against the compose stack.
 #
 # Each sdk step makes a fresh project, runs the page's install command exactly
-# as it is written (`npm install @controlvar/js-sdk@0.1.1`, read from the
+# as it is written (`npm install @controlvar/js-sdk@0.2.0`, read from the
 # page) against the public registry, checks the version it installed, and runs
 # the page's Quick start block, also read from the page, with only its
 # placeholders replaced: the API's address, the experiment's key, the flag's key

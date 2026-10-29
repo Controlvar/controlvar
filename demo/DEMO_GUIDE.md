@@ -4,6 +4,9 @@
 
 This guide walks you through a 20-minute live demo of the Controlvar experimentation platform. The demo environment comes pre-loaded with 100K+ historical events, and a live simulator adds new events in the background while you present.
 
+To follow the demo apps on your own instead, one step at a time with what you will see at each
+step, use [Guided examples](https://docs.controlvar.com/guides/guided-examples/).
+
 ---
 
 ## Setup

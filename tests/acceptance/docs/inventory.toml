@@ -172,6 +172,11 @@ class = "journey"
 journey = "experiment-results"
 reason = "running an experiment and reading its results page after seeded traffic: counts, p-value and the sample-ratio check; then a 300/200 split that fails the check, and a significant result under the minimum sample"
 
+[pages."guides/guided-examples.md"]
+class = "journey"
+journey = "guided-examples"
+reason = "every numbered step, in order, on the stack demo/setup-local.sh starts: a ShopLab A/B test counted in the visitor's arm, the test paused and started again, a flag off and on, and StreamPulse's device rule"
+
 [pages."guides/dashboard-and-api.md"]
 class = "reference"
 reason = "a table of where each capability lives, with no steps; its rows are held to the dashboard's source by test_dashboard_and_api.py"
@@ -685,7 +690,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 150
+walked = 151
 
 # The front door, and the policy beside it.
 

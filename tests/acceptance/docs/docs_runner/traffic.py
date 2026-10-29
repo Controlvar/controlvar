@@ -29,6 +29,16 @@ variant (from 0, counted in each variant on its own, in the order ``choose``
 chose them) sends ``base + step * (i mod modulo)`` (``ramp_values``). Without
 a ``value``, no event carries one.
 
+A step that gives a ``history`` (``model.TrafficHistory``) has returning
+users: before any user is assigned, the first ``count`` users chosen for each
+variant it names send the step's event once, with no experiment key and dated
+``days_before`` days before it is sent (``history_events``). That is
+pre-experiment history as ``docs/api/cuped.md`` ("Sending pre-experiment
+history") describes it: it counts in no experiment's results, and as CUPED
+history only because the server receives it before the user is assigned. If
+the API refuses any of it, no user is assigned. Without a ``history``, nothing
+is sent before the assignments.
+
 This module computes the hash itself (``hashlib``); it imports nothing from the
 product, so an assignment that drifts from the contract is caught rather than
 copied. Nothing here imports Playwright: the requests go through a ``fetch``
@@ -36,11 +46,14 @@ the runner passes in, and the unit job tests the rest with a fake one.
 
 What a step writes (``NN-<step>.traffic.json``) holds counts, the first few
 problems and, when the step gives a ``value``, the value it gives and every
-value sent, per variant in the order sent; never the API key.
+value sent, per variant in the order sent; when it gives a ``history``, the
+history it gives, the time its events were dated, and how many of them each
+variant's users sent; never the API key.
 """
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import struct
 from dataclasses import dataclass, field
@@ -168,6 +181,48 @@ def ramp_values(ramp: Ramp, count: int) -> List[Number]:
     return [ramp.base + ramp.step * (i % ramp.modulo) for i in range(count)]
 
 
+class History(Protocol):
+    """A traffic step's ``history`` (``model.TrafficHistory``), read by its fields."""
+
+    days_before: int
+    converted: Mapping[str, int]
+
+
+def history_time(history: History, now: datetime.datetime) -> str:
+    """When the history's events are dated: ``days_before`` days before *now*.
+
+    In UTC, ISO 8601 with a ``Z`` and whole seconds (``2026-10-25T04:52:15Z``),
+    a form ``docs/api/cuped.md`` gives for ``timestamp``.
+    """
+    if now.tzinfo is None:
+        raise TrafficError("the time history is dated from must carry its zone")
+    dated = now.astimezone(datetime.timezone.utc) - datetime.timedelta(
+        days=history.days_before
+    )
+    return dated.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def history_events(
+    history: History,
+    chosen: Mapping[str, Sequence[str]],
+    event: str,
+    timestamp: str,
+) -> List[Tuple[str, Dict[str, Any]]]:
+    """``(variant, body)`` of each history event, in the order they are sent.
+
+    Per variant in the order chosen, its first ``converted[variant]`` users
+    each send *event* once with *timestamp* and no experiment key: the body is
+    ``{"event_type", "user_id", "timestamp"}`` and nothing else.
+    """
+    events = []
+    for name, users in chosen.items():
+        for user in users[: history.converted.get(name, 0)]:
+            events.append(
+                (name, {"event_type": event, "user_id": user, "timestamp": timestamp})
+            )
+    return events
+
+
 @dataclass
 class Outcome:
     """What was sent and what came back, in counts, for the step's file."""
@@ -181,6 +236,11 @@ class Outcome:
     value: Optional[Dict[str, Any]] = None
     #: Per variant, every value sent with an event, in the order sent.
     values_sent: Dict[str, List[Number]] = field(default_factory=dict)
+    #: The step's ``history`` as given and the time its events were dated, or
+    #: None (then nothing was sent before the assignments).
+    history: Optional[Dict[str, Any]] = None
+    #: Per variant, how many of its users' history events the API accepted.
+    history_sent: Dict[str, int] = field(default_factory=dict)
 
     def record(self) -> Dict[str, Any]:
         record: Dict[str, Any] = {
@@ -193,6 +253,9 @@ class Outcome:
         if self.value is not None:
             record["value"] = self.value
             record["values_sent"] = self.values_sent
+        if self.history is not None:
+            record["history"] = self.history
+            record["history_sent"] = self.history_sent
         return record
 
 
@@ -205,6 +268,8 @@ def send(
     converted: Mapping[str, int],
     prefix: str,
     value: Optional[Ramp] = None,
+    history: Optional[History] = None,
+    now: Optional[datetime.datetime] = None,
 ) -> Outcome:
     """Assign every chosen user, then track *event* for each variant's first converters.
 
@@ -213,6 +278,9 @@ def send(
     ``PROBLEMS_KEPT`` problems are found, and no event is tracked unless every
     assignment was as chosen. With a *value*, each event carries the next of
     its variant's ``ramp_values``, and the outcome lists every value sent.
+    With a *history*, its events (``history_events``, dated ``history_time``
+    from *now*, the current time when not given) are sent first, before any
+    assignment, and each must answer 200; if one does not, nobody is assigned.
     """
     outcome = Outcome(experiment_key=experiment_key, prefix=prefix)
     if value is not None:
@@ -226,6 +294,30 @@ def send(
     def problem(text: str) -> bool:
         outcome.problems.append(text)
         return len(outcome.problems) >= PROBLEMS_KEPT
+
+    if history is not None:
+        timestamp = history_time(
+            history, now or datetime.datetime.now(datetime.timezone.utc)
+        )
+        outcome.history = {
+            "days_before": history.days_before,
+            "converted": dict(history.converted),
+            "timestamp": timestamp,
+        }
+        outcome.history_sent = dict.fromkeys(chosen, 0)
+        for name, body in history_events(history, chosen, event, timestamp):
+            status, _ = fetch("POST", TRACK_PATH, body)
+            outcome.requests += 1
+            if status != 200:
+                if problem(
+                    f"tracking {event} as history for {body['user_id']} answered"
+                    f" {status}"
+                ):
+                    break
+                continue
+            outcome.history_sent[name] += 1
+        if outcome.problems:
+            return outcome
 
     stop = False
     for name, users in chosen.items():

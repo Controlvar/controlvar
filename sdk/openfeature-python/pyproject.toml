@@ -20,7 +20,7 @@ dependencies = [
     # API, so admit the current minor only; widen this when that SDK moves.
     # backend/tests/smoke/test_sdk_sibling_ranges.py fails if it stops
     # admitting sdk/python's manifest version (#668).
-    "controlvar>=0.1.0,<0.2",
+    "controlvar>=0.2.0,<0.3",
 ]
 
 [project.optional-dependencies]

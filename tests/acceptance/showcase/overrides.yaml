@@ -15,6 +15,23 @@
 01-getting-started: {}
 02-first-experiment: {}
 03-flag-rollout: {}
+
+04-streampulse-rollout:
+  CORS_ORIGINS:
+    value: "{dashboard},{streampulse}"
+    why: >-
+      The Quick Start's default allows the dashboard at localhost:3000 and
+      localhost:3100, and StreamPulse at localhost:3300. The tool serves the
+      dashboard and StreamPulse on its own ports instead, so their origins are
+      named here, and only theirs (the video records no other app);
+      StreamPulse's calls to the API then succeed as they do on the default
+      port. Nothing on screen changes.
+  # D84(c): the safety monitor's one-minute check, stated on screen with its
+  # default; the capture reads the API's own start-up line back (C6).
+  SAFETY_CHECK_INTERVAL_MINUTES:
+    value: "1"
+    statement: "The safety monitor checks every minute in this demo (default: every 5 minutes)."
+
 05-plan-and-team: {}
 
 06-shoplab-ab-test:

@@ -1,6 +1,6 @@
 # Python SDK
 
-`controlvar` (v0.1.1) is a synchronous, dependency-free Python client for the
+`controlvar` (v0.2.0) is a synchronous, dependency-free Python client for the
 Controlvar public API: experiment assignment, feature-flag evaluation and event
 tracking. Requires Python 3.9+; HTTP goes through the standard library (`urllib`).
 
@@ -20,11 +20,11 @@ client (see [openfeature.md](openfeature.md)).
 
 If you installed `experimently`, the name this package had before the project was renamed, uninstall it and install `controlvar`.
 
-The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/). 0.1.1 is a
+The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/). 0.2.0 is a
 beta release.
 
 ```bash
-pip install controlvar==0.1.1
+pip install controlvar==0.2.0
 ```
 
 To work on the SDK itself, install it from the root of a clone of this repository instead:
@@ -216,7 +216,8 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json` and
 | `get_feature_flag`, `is_feature_enabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user_attributes` (omitted when empty) | `{key, enabled, config, reason}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `get_all_flags` | `GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON>` | `context` = `user_attributes` (omitted when empty) | `{"<flag_key>": bool, …}` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
-| `track` without keys, `track_batch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | `{success_count, failure_count, errors}` |
+| `track` without keys | `POST /api/v1/tracking/batch`, one entry per experiment and flag it reaches; with none, `POST /api/v1/tracking/track` | `{events: [<track body>, …]}` (max 100 per request); with none, the track body with no key | ignored |
+| `track_batch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | `{success_count, failure_count, errors}` |
 | `get_assignments` | `GET /api/v1/tracking/assignments/{user_id}?active_only=true` | — | list of dicts |
 | local mode: ruleset refresh | `GET /api/v1/sdk/ruleset` (beta) | `If-None-Match: "<version>"` | the ruleset and `ETag`; `304` when unchanged |
 | local mode: evaluation counts | `POST /api/v1/tracking/evaluations` (beta) | `{evaluations: [{flag_key, count, enabled_count, window_start, window_end}]}` | `{accepted, errors}` |

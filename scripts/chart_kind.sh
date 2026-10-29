@@ -134,6 +134,20 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# node_image_id REF: the ID kind's node gives REF, which is what a pod running
+# it reports as its imageID (containerd's CRI: the first repo digest if the
+# image has one, else the image ID). Read from the node, not the host: with
+# Docker's containerd image store (Docker 29.4.2 on the ubuntu-26.04 runner),
+# `docker image inspect .Id` is a different digest from the one the node
+# reports, so every pod read as "not the image this job built" (#1434).
+# Prints nothing when the node has no such image, and returns 0 so that the
+# caller's own check names the image rather than set -e stopping it silently.
+node_image_id() {
+    docker exec "$CLUSTER-control-plane" crictl inspecti -o json "$1" |
+        python3 -c 'import json, sys; s = json.load(sys.stdin)["status"]; print((s.get("repoDigests") or [s["id"]])[0])' ||
+        true
+}
+
 do_load() {
     : "${API_IMAGE:?}" "${WEB_IMAGE:?}"
     local tag
@@ -145,11 +159,18 @@ do_load() {
     docker tag "$WEB_IMAGE" "$WEB_REPO:$tag"
     kind load docker-image --name "$CLUSTER" "$API_REPO:$tag" "$WEB_REPO:$tag"
     # Assigned first: `echo "x=$(cmd)"` succeeds when cmd fails.
-    local api web
+    # api/web: the host's IDs, which `docker` accepts (upgrade-previous reads
+    # this PR's revisions through api=); api_node/web_node: the node's, which
+    # assert_images compares the pods with.
+    local api web api_node web_node
     api=$(docker image inspect --format '{{.Id}}' "$API_REPO:$tag")
     web=$(docker image inspect --format '{{.Id}}' "$WEB_REPO:$tag")
+    api_node=$(node_image_id "$API_REPO:$tag")
+    web_node=$(node_image_id "$WEB_REPO:$tag")
     : "${api:?no image id for $API_REPO:$tag}" "${web:?no image id for $WEB_REPO:$tag}"
-    printf 'api=%s\nweb=%s\napi_repo=%s\nweb_repo=%s\n' "$api" "$web" "$API_REPO" "$WEB_REPO" >"$WORK/images.txt"
+    : "${api_node:?no image id on the kind node for $API_REPO:$tag}" "${web_node:?no image id on the kind node for $WEB_REPO:$tag}"
+    printf 'api=%s\nweb=%s\napi_repo=%s\nweb_repo=%s\napi_node=%s\nweb_node=%s\n' \
+        "$api" "$web" "$API_REPO" "$WEB_REPO" "$api_node" "$web_node" >"$WORK/images.txt"
     cat "$WORK/images.txt"
 }
 
@@ -222,16 +243,18 @@ run_block() {
 }
 
 # assert_images NS [IMAGES]: the pods running our images run exactly the
-# images this job loaded (IMAGES, default $WORK/images.txt: api=ID, web=ID,
-# and the repositories they were loaded under, api_repo= and web_repo=; N-1's
-# are the ones its own chart names, which need not be this checkout's).
+# images this job loaded (IMAGES, default $WORK/images.txt: api_node=ID and
+# web_node=ID, the IDs kind's node gave them when they were loaded (see
+# node_image_id), and the repositories they were loaded under, api_repo= and
+# web_repo=; N-1's are the ones its own chart names, which need not be this
+# checkout's).
 assert_images() {
     local ns=$1 images=${2:-$WORK/images.txt} api web api_repo web_repo ids
-    api=$(sed -n 's/^api=//p' "$images")
-    web=$(sed -n 's/^web=//p' "$images")
+    api=$(sed -n 's/^api_node=//p' "$images")
+    web=$(sed -n 's/^web_node=//p' "$images")
     api_repo=$(sed -n 's/^api_repo=//p' "$images")
     web_repo=$(sed -n 's/^web_repo=//p' "$images")
-    : "${api:?no api image id in $images}" "${web:?no web image id in $images}"
+    : "${api:?no api_node image id in $images}" "${web:?no web_node image id in $images}"
     : "${api_repo:?no api repository in $images}" "${web_repo:?no web repository in $images}"
     ids=$(kubectl get pods -n "$ns" -l "app.kubernetes.io/component in (api,web)" \
         -o jsonpath='{range .items[*]}{range .status.initContainerStatuses[*]}{.image}{" "}{.imageID}{"\n"}{end}{range .status.containerStatuses[*]}{.image}{" "}{.imageID}{"\n"}{end}{end}')
@@ -628,10 +651,14 @@ EOF
     docker rm "$cid" >/dev/null
     docker tag "$WEB_REPO:$tag" "$WEB_REPO:$next"
     kind load docker-image --name "$CLUSTER" "$API_REPO:$next" "$WEB_REPO:$next"
-    local api web
+    local api web api_node web_node
     api=$(docker image inspect --format '{{.Id}}' "$API_REPO:$next")
     web=$(docker image inspect --format '{{.Id}}' "$WEB_REPO:$next")
-    printf 'api=%s\nweb=%s\napi_repo=%s\nweb_repo=%s\n' "$api" "$web" "$API_REPO" "$WEB_REPO" >"$WORK/images-next.txt"
+    api_node=$(node_image_id "$API_REPO:$next")
+    web_node=$(node_image_id "$WEB_REPO:$next")
+    : "${api_node:?no image id on the kind node for $API_REPO:$next}" "${web_node:?no image id on the kind node for $WEB_REPO:$next}"
+    printf 'api=%s\nweb=%s\napi_repo=%s\nweb_repo=%s\napi_node=%s\nweb_node=%s\n' \
+        "$api" "$web" "$API_REPO" "$WEB_REPO" "$api_node" "$web_node" >"$WORK/images-next.txt"
     [ "$(revisions "$API_REPO:$next" | grep -cx "$NEXT_REVISION")" = 1 ] ||
         fail "$API_REPO:$next does not carry $NEXT_REVISION"
 
@@ -817,10 +844,14 @@ do_upgrade_previous() {
         docker tag "$ref:$ptag" "$ref:$ltag"
     done
     kind load docker-image --name "$CLUSTER" "$papi:$ltag" "$pweb:$ltag"
-    local api web
+    local api web api_node web_node
     api=$(docker image inspect --format '{{.Id}}' "$papi:$ltag")
     web=$(docker image inspect --format '{{.Id}}' "$pweb:$ltag")
-    printf 'api=%s\nweb=%s\napi_repo=%s\nweb_repo=%s\n' "$api" "$web" "$papi" "$pweb" >"$WORK/images-previous.txt"
+    api_node=$(node_image_id "$papi:$ltag")
+    web_node=$(node_image_id "$pweb:$ltag")
+    : "${api_node:?no image id on the kind node for $papi:$ltag}" "${web_node:?no image id on the kind node for $pweb:$ltag}"
+    printf 'api=%s\nweb=%s\napi_repo=%s\nweb_repo=%s\napi_node=%s\nweb_node=%s\n' \
+        "$api" "$web" "$papi" "$pweb" "$api_node" "$web_node" >"$WORK/images-previous.txt"
 
     # What N adds: revisions in this PR's image (read above) and not in N-1's.
     revisions "$papi:$ltag" >"$WORK/revisions-previous"

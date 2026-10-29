@@ -6,6 +6,8 @@ SDK. It exists to *show* the platform: open the storefront, click around, watch 
 "Powered by Controlvar" panel, then open the dashboard and see the same visitor, the
 same variants and the same events turn into statistics.
 
+[Guided examples](https://docs.controlvar.com/guides/guided-examples/) walks the hero banner test, a pause and the free-shipping flag one step at a time, with what you will see at each step.
+
 Nothing is for sale. There are no images, no external fonts and no CDNs — just twelve
 made-up products with gradient artwork.
 
@@ -99,6 +101,19 @@ minutes (`--duration 0`, the default, runs until you stop it):
 ```{.bash skip reason="demo: runs the demo applications (Stream F)"}
 source venv/bin/activate
 python demo/shoplab/simulator/traffic.py --rate 3 --duration 600
+```
+
+`demo/setup-local.sh` starts one that runs until stopped and writes its process id to
+`demo/.pids/shoplab-simulator.pid`; from the repository root, this stops it, but only if the
+process with that id is still the simulator, and prints its line only once the process has gone,
+so the numbers hold still while you check an order of your own:
+
+```{.bash skip reason="demo: runs the demo applications (Stream F)"}
+pid="$(cat demo/.pids/shoplab-simulator.pid)" &&
+  ps -o args= -p "$pid" | grep -qF demo/shoplab/simulator/traffic.py &&
+  kill "$pid" &&
+  while kill -0 "$pid" 2>/dev/null; do sleep 1; done &&
+  printf 'ShopLab simulator stopped\n'
 ```
 
 To print one visitor's planned events without touching the network:

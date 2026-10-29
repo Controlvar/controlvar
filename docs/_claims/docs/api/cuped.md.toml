@@ -73,6 +73,13 @@ text = "Its variance is each arm's residual variance over its size, so the more 
 by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_s3_effect_equals_ols_and_se_matches_hc2"]
 
 [[unit]]
+text = "Each residual variance is a sample variance, divided by the arm's users minus 1."
+by = [
+    "journey:experiment-results#cuped-returning-users",
+    "journey:experiment-results#cuped-new-users",
+]
+
+[[unit]]
 text = "What counts as history, per user:"
 by = ["exempt:baseline"]
 
@@ -104,8 +111,8 @@ text = "Send history before you start the experiment."
 by = ["test:backend/tests/integration/services/test_cuped_covariate_window.py::test_receive_guard_stored_after_assignment_is_not_history"]
 
 [[unit]]
-text = "History backfilled after the start is ignored."
-by = ["exempt:baseline"]
+text = "History the server receives after a user was assigned is ignored for that user."
+by = ["test:backend/tests/integration/services/test_cuped_covariate_window.py::test_receive_guard_stored_after_assignment_is_not_history"]
 
 [[unit]]
 text = "Sending pre-experiment history"

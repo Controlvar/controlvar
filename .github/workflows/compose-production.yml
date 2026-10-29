@@ -188,9 +188,13 @@ jobs:
           curl -sf -H "Host: $host" "$base/api/v1/modules" -o modules.json
           jq -e --arg v "$(cat VERSION)" '.profile == "core" and .version == $v' modules.json
           echo "ok  /api/v1/modules: core $(cat VERSION)"
-          # Postgres and Redis publish nothing on the host.
+          # Postgres and Redis publish nothing on the host. `docker compose port`
+          # prints an unpublished port as ":0" (as this check was first written)
+          # or "invalid IP:0" (the ubuntu-26.04 runner, Docker 29.4.2: run
+          # 40787685453); a real binding is never port 0. So a port is
+          # published when any line of the answer does not end in ":0".
           for svc in postgres:5432 redis:6379 api:8000; do
-            if docker compose -f "$PROD_COMPOSE" port "${svc%%:*}" "${svc##*:}" >port.out 2>&1 && [ -s port.out ] && ! grep -q '^:0$' port.out; then
+            if docker compose -f "$PROD_COMPOSE" port "${svc%%:*}" "${svc##*:}" >port.out 2>&1 && grep -q -v ':0$' port.out; then
               echo "::error::${svc%%:*} publishes $(cat port.out)"
               exit 1
             fi

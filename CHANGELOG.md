@@ -10,6 +10,49 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.38.0](https://github.com/Controlvar/controlvar/compare/v0.37.0...v0.38.0) (2026-10-29)
+
+
+### Features
+
+* **dashboard:** a revenue metric reads as revenue per user, with its difference and interval ([#1406](https://github.com/Controlvar/controlvar/issues/1406)) ([4421a06](https://github.com/Controlvar/controlvar/commit/4421a0627a988a40fbbc46dff25891e02ee116ea))
+* **results:** a revenue metric is analysed as its mean per assigned user ([#1400](https://github.com/Controlvar/controlvar/issues/1400)) ([7024eeb](https://github.com/Controlvar/controlvar/commit/7024eeb8a7ef969516b6e42c195e7c2564956066))
+* **sdk:** the JavaScript and Python SDKs report errors to safety monitoring ([#1364](https://github.com/Controlvar/controlvar/issues/1364)) ([6f827f9](https://github.com/Controlvar/controlvar/commit/6f827f98582779fb902320062901be5b948e8b83))
+* **sdk:** version 0.2.0 of the JavaScript and Python SDKs ([#1421](https://github.com/Controlvar/controlvar/issues/1421)) ([fc5c6b2](https://github.com/Controlvar/controlvar/commit/fc5c6b2c3b07c454cf0983a3391e83619aa5e733))
+
+
+### Bug Fixes
+
+* **ci:** the docs journeys raise one alarm issue when the report cannot decide ([#1395](https://github.com/Controlvar/controlvar/issues/1395)) ([fd78a90](https://github.com/Controlvar/controlvar/commit/fd78a90d531d5d399b79610f49acbde6678d6a25))
+* **ci:** the docs-journeys report retries every read and names what fails ([#1382](https://github.com/Controlvar/controlvar/issues/1382)) ([5b42f12](https://github.com/Controlvar/controlvar/commit/5b42f128a2afd835f7fecf357c7cabf6ded6487f))
+* **dashboard:** better and worse follow lower_is_better; the form sets it ([#1393](https://github.com/Controlvar/controlvar/issues/1393)) ([d535bef](https://github.com/Controlvar/controlvar/commit/d535bef008b72d2b6e13676519538f6dc09385c4))
+* **demo:** assign each experiment where it is used; keep off-list clicks off the sort bandit ([#1403](https://github.com/Controlvar/controlvar/issues/1403)) ([dd15c90](https://github.com/Controlvar/controlvar/commit/dd15c9021303915676bc66a987e1a824ac9b7fa1))
+* **demo:** simulators keep the StreamPulse lift, date nothing ahead, and match the app ([#1398](https://github.com/Controlvar/controlvar/issues/1398)) ([a23b0fc](https://github.com/Controlvar/controlvar/commit/a23b0fcc29372bfe19a5f23950e703d702d4c215))
+* **demo:** the rollout story waits for the safety monitor's rollback ([#1404](https://github.com/Controlvar/controlvar/issues/1404)) ([cd9eddf](https://github.com/Controlvar/controlvar/commit/cd9eddf31a1ee9c5e002877a3427d083060174d0))
+* **installer:** uninstall counts the cache's automatic backup with what AWS is still clearing ([#1399](https://github.com/Controlvar/controlvar/issues/1399)) ([83c2095](https://github.com/Controlvar/controlvar/commit/83c2095a03f24cd918060f419298bfb731af4f4e))
+* **sdk:** an event tracked without a key is still sent after the SDK's cache expires ([#1358](https://github.com/Controlvar/controlvar/issues/1358)) ([940fdf1](https://github.com/Controlvar/controlvar/commit/940fdf1bacc80df9022cb4c1aa7716a4557f5ac0))
+* **stats:** a mean arm whose values are all equal gets a result, not result_invalid ([#1387](https://github.com/Controlvar/controlvar/issues/1387)) ([00c498a](https://github.com/Controlvar/controlvar/commit/00c498a29331ef27d618b3f18076b7cf3af646c5))
+* **stats:** the winner and recommendation follow a metric's lower_is_better ([#1383](https://github.com/Controlvar/controlvar/issues/1383)) ([a6cced6](https://github.com/Controlvar/controlvar/commit/a6cced6d4be24f2d51bd47f3e579b78b73dbbd9b))
+* **tracking:** a paused or completed experiment answers control with a reason, not 404 ([#1362](https://github.com/Controlvar/controlvar/issues/1362)) ([0caf581](https://github.com/Controlvar/controlvar/commit/0caf5810805027386345af8ed639a70e329a0dd3))
+* **tracking:** events for a paused or completed experiment count in no arm ([#1359](https://github.com/Controlvar/controlvar/issues/1359)) ([a50c469](https://github.com/Controlvar/controlvar/commit/a50c4693af11cdf3ebd2e7bacb2b610b9c65aa95))
+
+
+### Dependencies
+
+* authlib 1.9.1 for CVE-2026-96760, dnspython 2.9.0 for CVE-2026-114605, sqlglot 30.23.0 ([#1325](https://github.com/Controlvar/controlvar/issues/1325)) ([e775ead](https://github.com/Controlvar/controlvar/commit/e775eade0583112e324d98455f7dd6ea09eb0816))
+
+
+### Documentation
+
+* **api:** name CUPED's variance divisor and state the history rule exactly ([#1420](https://github.com/Controlvar/controlvar/issues/1420)) ([9bfcc47](https://github.com/Controlvar/controlvar/commit/9bfcc477886459161231b8d2f993c808a2090db2))
+* **api:** the Bayesian example's numbers follow its posteriors ([#1409](https://github.com/Controlvar/controlvar/issues/1409)) ([341e7cf](https://github.com/Controlvar/controlvar/commit/341e7cf71072cd84cbcb77fcb8c148e976536faa))
+* **demo:** StreamPulse targets devices through the web SDK; native SDKs send no attributes yet ([#1371](https://github.com/Controlvar/controlvar/issues/1371)) ([daa687e](https://github.com/Controlvar/controlvar/commit/daa687e3b58eddd3b648c4e77a048eb55171acc8))
+* **guide:** say no guardrail verdict is produced; Breakdowns of a revenue metric ([#1414](https://github.com/Controlvar/controlvar/issues/1414)) ([4596352](https://github.com/Controlvar/controlvar/commit/459635228bb6c89feca06ff3b6bbf65ea5225fec))
+* **guides:** guided examples, every step walked nightly by a journey ([#1417](https://github.com/Controlvar/controlvar/issues/1417)) ([05f5794](https://github.com/Controlvar/controlvar/commit/05f5794713e45cb864d1752eb8fd9d4afc30e41b))
+* **guides:** guided examples: Buy now arms, the reload rule, CUPED ([#1430](https://github.com/Controlvar/controlvar/issues/1430)) ([56a3f5d](https://github.com/Controlvar/controlvar/commit/56a3f5d7ab6aeef7a8737b21577deddf4bcf9c28))
+* **sdk:** no SDK page says a paused or completed experiment answers 404 ([#1370](https://github.com/Controlvar/controlvar/issues/1370)) ([34ae5d1](https://github.com/Controlvar/controlvar/commit/34ae5d1a42eba5b9f00a4f6a544b272d5b5c7f8d))
+* **sdk:** the provider and edge pages say where a track without a key goes ([#1431](https://github.com/Controlvar/controlvar/issues/1431)) ([1f8b41c](https://github.com/Controlvar/controlvar/commit/1f8b41c4cccb1a9032c30c4729a7db746927d6c3))
+
 ## [0.37.0](https://github.com/Controlvar/controlvar/compare/v0.36.4...v0.37.0) (2026-10-27)
 
 

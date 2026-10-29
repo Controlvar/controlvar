@@ -389,6 +389,8 @@ def _quoted_names(step: Step) -> List[tuple]:
             names.append(("expect.number.locator.name", locator.name, locator.quote))
         for index, cell in enumerate(expect.cells or []):
             names.append((f"expect.cells[{index}].row", cell.row, cell.quote))
+            if cell.also is not None:
+                names.append((f"expect.cells[{index}].also", cell.also, cell.quote))
             names.append((f"expect.cells[{index}].column", cell.column, cell.quote))
     return names
 

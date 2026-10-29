@@ -239,6 +239,9 @@ missing seeds to the existing database, with no `down -v`. The
 [demo guide](https://github.com/Controlvar/controlvar/blob/main/demo/DEMO_GUIDE.md)
 walks through what to look at, and how to run the apps outside Docker.
 
+[Guided examples](../guides/guided-examples.md) takes you through the apps one step at a
+time, with what you will see at each step, on the stack `./demo/setup-local.sh` starts.
+
 ---
 
 ## Troubleshooting

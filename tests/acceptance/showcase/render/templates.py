@@ -138,13 +138,18 @@ def card_texts(title: str, version: str) -> Sequence[str]:
     )
 
 
-def canary_html(needle: str, key_like: str, faint: str) -> str:
+def canary_html(needle: str, key_like: str, faint: str, hex_value: str) -> str:
     """A page that draws an OCR canary in the sizes a dashboard uses.
 
     The canary values are made up for each run. The self-test passes only if
-    every OCR engine reads the dark value and key back through the same
-    encode the video gets, and at least one reads the faint value
-    (``FAINT_CANARY_PX`` px ``FAINT_CANARY_COLOUR``).
+    every OCR engine reads the dark value, the key and the hex value back
+    through the same encode the video gets, and at least one reads the faint
+    value (``FAINT_CANARY_PX`` px ``FAINT_CANARY_COLOUR``). The hex value is
+    drawn like the key, 14 px in ``MONO_STACK``, and below everything else, so
+    the other values sit where they always have. Measured on the render Mac:
+    drawn between the key and the one-time password, it made Vision read the
+    dark or the faint value under the threshold in 5 of 325 self-tests; drawn
+    last, in 1 of 300; before it was added, in 0 of 150.
     """
     css = (
         ".wrap{padding:96px 120px;color:#0F172A}"
@@ -162,6 +167,7 @@ def canary_html(needle: str, key_like: str, faint: str) -> str:
         "<table><tr><td>Homepage hero copy test</td><td>Active</td><td>2 variants</td></tr>"
         "<tr><td>Checkout button colour</td><td>Draft</td><td>3 variants</td></tr></table>"
         f'<div class="faint">Last edited by {html.escape(faint)}</div>'
+        f'<div class="mono">Signing secret: {html.escape(hex_value)}</div>'
         "</div>"
     )
     return _page(contract.OUT_W, contract.OUT_H, "#FFFFFF", body, css)

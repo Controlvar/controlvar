@@ -27,6 +27,15 @@ Order, and what must be true before each step:
    camera between them), gate 10 (the end state), and the capture directory
    (``write_capture``). The stack comes down in a ``finally``, and nothing
    labelled may be left.
+5. Video 4: a setting the video states on screen (overrides.yaml
+   ``statement``, Quick Start stack only) is read back from the API's own log
+   after the stack is up (C6, ``interval_read_back``); B9's fit is refused in
+   the preflight when it cannot leave ``config.B9_SPARE_S`` of the interval
+   (``refuse_b9_fit``); between scenes the incident runs off camera
+   (``incident.Incident``: the rollout script, the crashes after a fresh
+   safety run, the wait for the monitor's rollback and the B9 gate); the card
+   after the wait says the measured gap (S5, U3); gate 10/4 is the rollback's
+   end state; and the manifest records S4, B9, U3, C6 and A6.
 
 The capture directory is ``<work root>/<slug>/capture/`` (contract.py):
 ``frames/`` and ``frames.jsonl``, ``cues.json``, ``needles.txt`` (mode 0600,
@@ -54,6 +63,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from showcase import contract
 from showcase.capture import build, compose, config, guard, storyboard, traffic, voiced
+from showcase.capture import incident as incidents
 from showcase.capture import overrides as override_lists
 from showcase.capture.procs import Children
 from showcase.capture.stack import (
@@ -148,6 +158,54 @@ def experiment_id(api_url: str, token: str, name: str) -> str:
     if len(match) != 1:
         raise StackError(f"{len(match)} experiments named {name!r}")
     return str(match[0]["id"])
+
+
+def flag_id(api_url: str, token: str, name: str) -> str:
+    """The one feature flag named *name*, for a ``flag_of`` scene (off camera)."""
+    from urllib.parse import quote
+
+    listed = _api(
+        f"{api_url}/api/v1/feature-flags/?search={quote(name)}&limit=100", token
+    )["items"]
+    match = [item for item in listed if item.get("name") == name]
+    if len(match) != 1:
+        raise StackError(f"{len(match)} flags named {name!r}")
+    return str(match[0]["id"])
+
+
+def required_texts(
+    board: storyboard.Storyboard, app_trees: Mapping[str, Path]
+) -> Dict[str, str]:
+    """A5: by app, the text each of its scenes shows at its first cue
+    (``config.APP_REQUIRED_TEXT``), read from the app's built tree, which is
+    the recorded ref's (``build.build_app``). Refused before any scene when
+    the recorded source does not say it."""
+    found: Dict[str, str] = {}
+    for app in board.apps:
+        if app not in config.APP_REQUIRED_TEXT:
+            continue
+        text, relative = config.APP_REQUIRED_TEXT[app]
+        path = Path(app_trees[app]) / relative
+        source = path.read_text(encoding="utf-8") if path.is_file() else ""
+        if text not in source:
+            raise StackError(
+                f"A5: {relative} in the recorded tree does not say {text!r}"
+            )
+        found[app] = text
+    return found
+
+
+def write_redacted(path: Path, text: str, redactor: Any) -> None:
+    """*text* into *path*, every value the run keeps taken out first: the static
+    needles and whatever the run registered (the StreamPulse server key among
+    them from when it was read: PE 7 of T178 14)."""
+    from docs_runner import redaction
+
+    every = redaction.Redactor()
+    for value in (*config.STATIC_NEEDLES, *redactor.values):
+        every.add(value)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(every.redact(text), encoding="utf-8")
 
 
 def seed_counts(api_url: str, token: str) -> Dict[str, int]:
@@ -372,12 +430,27 @@ def preflight(options: Options, environ: Mapping[str, str]) -> None:
             " --capture-only to capture from it"
         )
     guard.refuse_ports(options.ports.as_dict(), in_use=lambda _port: False)
+    listed = override_lists.load()
     if options.stack == "quickstart":
-        listed = override_lists.load()
         for slug in options.videos:
             override_lists.override_list(
                 storyboard.load(board_path(slug)), options.ports, listed
             )
+    else:
+        for slug in options.videos:
+            if override_lists.statements(slug, listed):
+                raise guard.Refused(
+                    f"{slug} states a setting on screen (overrides.yaml), which"
+                    " reaches the API on the quickstart stack only: on the"
+                    f" {options.stack} stack the statement would be false"
+                )
+            # On every stack: a scene that says the tool shortened an interval
+            # names one of its video's statements (S7), or the claim is false.
+            problems = override_lists.stated_problems(
+                storyboard.load(board_path(slug)), listed
+            )
+            if problems:
+                raise guard.Refused("overrides.yaml: " + "; ".join(problems))
     for board in options.videos:
         problems = storyboard.departure_problems(storyboard.load(board_path(board)))
         if problems:
@@ -409,7 +482,39 @@ def preflight(options: Options, environ: Mapping[str, str]) -> None:
     refuse_missing_ffmpeg()
     for slug in options.videos:
         board = storyboard.load(board_path(slug))
-        narration_clips(board, options)
+        _voice, clips = narration_clips(board, options)
+        refuse_b9_fit(board, clips)
+
+
+#: The API's own safety interval when no setting shortens it
+#: (``SAFETY_CHECK_INTERVAL_MINUTES``, backend/app/core/config.py).
+SAFETY_DEFAULT_MINUTES = 5
+
+
+def incident_interval_s(board: storyboard.Storyboard) -> float:
+    """How often the safety monitor runs in this video, in seconds: its stated
+    ``SAFETY_CHECK_INTERVAL_MINUTES`` (overrides.yaml), or the API's default."""
+    for key, value, _statement in override_lists.statements(
+        board.slug, override_lists.load()
+    ):
+        if key == "SAFETY_CHECK_INTERVAL_MINUTES":
+            return 60.0 * int(value)
+    return 60.0 * SAFETY_DEFAULT_MINUTES
+
+
+def refuse_b9_fit(
+    board: storyboard.Storyboard, clips: List[voiced.Clip]
+) -> Optional[int]:
+    """B9's fit (T165 C5), before anything starts: from the first crash to
+    B9's last frame, held as the capture will hold it (the clips' slots when
+    narrated), leaves at least ``config.B9_SPARE_S`` of the interval.
+    Refused otherwise; the estimate, or None without the incident."""
+    samples = {(c.scene, c.beat, c.line): c.samples for c in clips} if clips else None
+    fit = incidents.b9_fit_ms(board, samples)
+    problem = incidents.b9_fit_problem(fit, incident_interval_s(board))
+    if problem:
+        raise guard.Refused(f"{board.slug}: B9 does not fit: {problem}")
+    return fit
 
 
 def refuse_voice_cache_inside(options: Options) -> None:
@@ -496,6 +601,7 @@ def capture_video(
     board = storyboard.load(board_path(slug))
     # Again, as the preflight did: the cache is read as the video starts.
     voice, clips = narration_clips(board, options)
+    b9_fit = refuse_b9_fit(board, clips)
     built = dict(app_trees or {})
     missing = [app for app in board.apps if app not in built]
     if missing:
@@ -580,6 +686,14 @@ def capture_video(
                     "gate 14",
                     f"the stack holds {counts}, the seed makes {wanted}: not a fresh stack",
                 )
+            # C6: each setting the video states on screen is what the API runs
+            # with, read back from its own log (only the lines matched are kept).
+            read_back = interval_read_back(stack, board, override_lists.load())
+            if read_back:
+                gates["C6"] = gate(True, **read_back)
+            if b9_fit is not None:
+                # B9's fit as the preflight estimated it; record() adds the rest.
+                gates["B9"] = gate(True, fit_ms=b9_fit)
             setup = make_setup(board, stack.api_url, token)
             if setup:
                 gates["14"]["numbers"]["setup"] = setup
@@ -653,6 +767,38 @@ def capture_video(
         work=work,
     )
     return capture
+
+
+def interval_read_back(
+    stack: Any, board: storyboard.Storyboard, data: Mapping[str, object]
+) -> Dict[str, Any]:
+    """C6 (S4 of plan v2.2, T178 9(e)): each setting the video states on screen
+    (overrides.yaml ``statement``) reached the API: the line the API writes
+    when it starts with that value is in its log, once. Only the lines matched
+    are kept; the log is read into this process and never written as it is
+    (PE 7 of T178 14). Nothing for a video that states none; refused otherwise."""
+    from showcase.capture.director import CaptureFailed
+
+    stated = override_lists.statements(board.slug, data)
+    if not stated:
+        return {}
+    text = stack.api_log()
+    kept: Dict[str, str] = {}
+    for key, value, _statement in stated:
+        wanted = override_lists.log_line(key, value)
+        lines = incidents.log_lines(text, wanted)
+        if len(lines) != 1:
+            # What the API said instead: the same line with its own value.
+            said = incidents.log_lines(
+                text, override_lists.STATED[key][1].split("{value}")[0]
+            )
+            raise CaptureFailed(
+                "C6",
+                f"the API's log holds {len(lines)} line(s) {wanted!r}, and says"
+                f" {said[:2]}: the screen's statement would not be true",
+            )
+        kept[key] = lines[0]
+    return {"lines": kept}
 
 
 def make_stack(
@@ -740,6 +886,19 @@ def record(
             )
             page = context.new_page()
             counted = board.end_state.experiment
+            # Video 4's incident (S4, S5, B9, gate 10/4), or None.
+            incident = (
+                incidents.Incident(
+                    board,
+                    api=incidents.Api(stack.api_url, token),
+                    stack=stack,
+                    keys=read_keys,
+                    interval_s=incident_interval_s(board),
+                    log=log,
+                )
+                if board.end_state.rollback is not None
+                else None
+            )
             director = directing.Director(
                 context=context,
                 page=page,
@@ -767,6 +926,9 @@ def record(
                 if board.end_state.team
                 else 0,
                 masks=masked(board),
+                resolve_flag=lambda name: flag_id(stack.api_url, token, name),
+                at_cue=incident.at_cue if incident is not None else None,
+                required=required_texts(board, stack.apps),
             )
             director.install()
             # Gate 3: the page is the frame's size at scale 1, before anything is recorded.
@@ -824,9 +986,16 @@ def record(
                         redactor=redactor,
                         read_keys=read_keys,
                         log=log,
+                        incident=incident,
                     )
                     log(f"scene {scene.id}")
-                    director.scene(with_traffic_minutes(scene, users.report))
+                    shown = with_traffic_minutes(scene, users.report)
+                    if incident is not None:
+                        # S5: the card after the wait says the gap it hides.
+                        shown = incident.with_minutes(shown, director)
+                    director.scene(shown)
+                    if incident is not None:
+                        incident.after_scene(scene, director)
             finally:
                 users.stop()
                 TEARDOWN.remove(users.stop)
@@ -896,6 +1065,19 @@ def record(
                     shown=director.readings.get(end.team.shown),
                 )
                 numbers["team"] = made
+                if not ok:
+                    why.append(reason)
+            if end.rollback is not None and incident is not None:
+                # Gate 10/4 (S8a): the API's log, read into this process; its
+                # rollback lines counted, and the rest written only redacted.
+                text = stack.api_log()
+                write_redacted(stack.logs / "api.log", text, redactor)
+                ok, made, reason = incident.end_state(
+                    director.readings,
+                    director.tally.rollback_posts,
+                    incidents.rollback_log_counts(text, end.rollback.key),
+                )
+                numbers["rollback"] = made
                 if not ok:
                     why.append(reason)
             gates["10"] = gate(not why, **numbers)
@@ -1006,6 +1188,38 @@ def record(
         ),
         "U5": judge.payoff_still(entries, tally.payoffs),
     }
+    if director.required:
+        # A5: refused at the first cue that lacked the text; this is the count.
+        scenes = [s.id for s in board.scenes if s.app in director.required]
+        checks["A5"] = (
+            len(tally.required_checks) == len(scenes),
+            {"checks": len(tally.required_checks), "texts": dict(director.required)},
+            f"{len(tally.required_checks)} required-text checks for {len(scenes)} scenes",
+        )
+    if any(app in config.APP_FIT for app in board.apps):
+        # A6: refused at the step that cut the phone off; this is the count.
+        checks["A6"] = (
+            tally.fit_checks > 0,
+            {"checks": tally.fit_checks, "least_room_px": tally.fit_least_px},
+            "the app's frame was never checked for its fit",
+        )
+    if incident is not None:
+        # S4, B9 and S5 (U3) each refused where it failed; these record what
+        # each found. The story, the crash's counts and b; the anchor, the
+        # fit and the rollback's time against B9's last frame; the card.
+        found = incident.numbers
+        checks["S4"] = (
+            True,
+            {k: found.get(k) for k in ("interval_s", "story", "crashes", "rollback")},
+            "",
+        )
+        fit = (gates.get("B9") or {}).get("numbers", {}).get("fit_ms")
+        checks["B9"] = (
+            True,
+            {"anchor": found.get("anchor"), "fit_ms": fit, **(found.get("b9") or {})},
+            "",
+        )
+        checks["U3"] = (True, dict(found.get("card") or {}), "")
     if director.pacing.narrated:
         checks.update(voiced_checks(director, board))
     failed = []
@@ -1038,12 +1252,14 @@ def before_scene(
     redactor: Any,
     read_keys: List[str],
     log: Callable[[str], None],
+    incident: Any = None,
 ) -> None:
     """Everything that runs off camera before *scene*, in this order: the
     storyboard's traffic (started, finished, or run: both), its results asked
-    for, then its ``off_camera`` list: an app's seed, or the visitor the scene
+    for, then its ``off_camera`` list: an app's seed, the visitor the scene
     is filmed as (``Director.set_visitor``: the app's init script the first
-    time, the declared switch after)."""
+    time, the declared switch after), or a step of video 4's incident
+    (``incident.Incident.step``: the rollout script, the crashes, the wait)."""
     if scene.traffic in ("start", "run"):
         users.start()
     if scene.traffic in ("finish", "run"):
@@ -1058,10 +1274,19 @@ def before_scene(
                 f"{scene.app} visitor {set_as['visitor']}, off camera ({set_as['how']})"
             )
             continue
-        log(f"seed {item.seed}, off camera")
-        server = stack.seed_app(item.seed, history=item.history)
-        if server is not None:
-            keep_private(server, redactor, stack.children, read_keys)
+        if isinstance(item, storyboard.SeedApp):
+            log(f"seed {item.seed}, off camera")
+            server = stack.seed_app(item.seed, history=item.history)
+            if server is not None:
+                keep_private(server, redactor, stack.children, read_keys)
+            continue
+        if incident is None:
+            raise StackError(
+                f"scene {scene.id}: {type(item).__name__} runs only in a video"
+                " whose end state is a rollback"
+            )
+        director.where = f"scene {scene.id}, off camera"
+        incident.step(item, director)
 
 
 def voiced_checks(director: Any, board: storyboard.Storyboard) -> Dict[str, Any]:
@@ -1231,13 +1456,10 @@ def refuse_unquoted_code(board: storyboard.Storyboard, tree: Path) -> None:
 #: the Quick Start's default SDK limit).
 TRAFFIC_MAX_S = 1200.0
 #: In a card's headline or note: the measured time the traffic took (EM C8).
-TRAFFIC_MINUTES = "{traffic_minutes}"
-
-
-def minutes_text(seconds: float) -> str:
-    """``12 minutes``: the measured time, to the nearest minute (at least 1)."""
-    minutes = max(1, int(round(seconds / 60)))
-    return f"{minutes} minute{'' if minutes == 1 else 's'}"
+TRAFFIC_MINUTES = storyboard.TRAFFIC_MINUTES
+#: ``12 minutes``: a measured time, to the nearest minute (at least 1); the
+#: card after video 4's wait says its gap the same way (S5).
+minutes_text = incidents.minutes_text
 
 
 def with_traffic_minutes(

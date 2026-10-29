@@ -32,7 +32,8 @@ Where:
 
 The adjusted effect is the treatment's adjusted rate minus the control's. Its variance is
 each arm's residual variance over its size, so the more of the outcome the history
-explains, the narrower the interval.
+explains, the narrower the interval. Each residual variance is a sample variance, divided
+by the arm's users minus 1.
 
 What counts as history, per user:
 
@@ -43,7 +44,8 @@ What counts as history, per user:
 - it can carry any experiment key, any flag key, or none. One event is enough; a user with
   three copies of the same purchase still has `X = 1`;
 - **History counts only if the server received it before the user was assigned. Send
-  history before you start the experiment. History backfilled after the start is ignored.**
+  history before you start the experiment. History the server receives after a user was
+  assigned is ignored for that user.**
 
 ---
 

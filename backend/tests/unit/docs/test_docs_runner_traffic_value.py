@@ -363,6 +363,17 @@ REFUSED = [
     pytest.param(
         {"base": float("inf")}, "base: must be a number, not inf", id="base-inf"
     ),
+    # A whole number too large for a double is a refusal line, not a traceback.
+    pytest.param(
+        {"base": 10**400},
+        "base: must be a number a double can hold, not a whole number of 401 digits",
+        id="base-too-large-for-a-double",
+    ),
+    pytest.param(
+        {"step": -(10**309)},
+        "step: must be a number a double can hold, not a whole number of 310 digits",
+        id="step-too-large-for-a-double",
+    ),
     pytest.param({"step": "1"}, "step: must be a number, not '1'", id="step-text"),
     pytest.param({"step": False}, "step: must be a number, not False", id="step-bool"),
     pytest.param(
@@ -519,6 +530,18 @@ def test_the_step_sends_its_values_and_writes_them(execute_module, tmp_path):
         "Control": [10, 11, 12, 13],
         "Treatment": [10, 11, 12, 13, 14, 15, 16, 10, 11],
     }
+
+
+def test_a_whole_value_reaches_the_request_body_as_a_whole_number(
+    execute_module, tmp_path
+):
+    """The body says ``10``, not ``10.0``: the number the journey wrote."""
+    api = _Api()
+    _run_step(execute_module, tmp_path, _traffic_step(DOCUMENTED), api)
+    bodies = list(api.tracking.tracks)
+    assert [type(body["value"]) for body in bodies] == [int] * 13
+    assert '"value": 10}' in json.dumps(bodies[0])
+    assert all(".0" not in json.dumps(body["value"]) for body in bodies)
 
 
 def test_a_step_whose_event_is_refused_shows_the_values(execute_module, tmp_path):

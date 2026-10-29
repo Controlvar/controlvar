@@ -16,6 +16,17 @@ Each option plants one defect instead:
 ``--black N``          make frame N an all-black page (gate 11)
 ``--frame-size WxH``   draw every frame at another size (gate 3)
 
+Two options make the directory more like a real capture instead, so that gate 7
+can be shown passing the demo apps' own words (and, with a plant, still
+refusing the plant):
+
+``--public-needles``   put the four values every stack carries
+                       (``capture.config.STATIC_NEEDLES``) in needles.txt too,
+                       after the two made-up needles
+``--product-words``    draw on every page the words of the three public values'
+                       readable parts (``contract.PUBLIC_VALUES``, without the
+                       ``eptk`` key prefix): the demo apps' names and words
+
 ``--voice-cache DIR`` makes a narrated capture directory instead: a storyboard's
 headlines on the band (``--story``, default video 1), its ``say:`` sentences
 with their real clips copied from a voice cache (read only: give it a copy),
@@ -34,10 +45,11 @@ import argparse
 import html
 import json
 import os
+import re
 import secrets
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from showcase import contract
 from showcase.render import templates
@@ -78,8 +90,46 @@ def _cues() -> List[Dict[str, object]]:
     ]
 
 
+def product_words() -> List[str]:
+    """Each public value's readable part as words, one line each (``--product-words``).
+
+    Taken from ``contract.PUBLIC_VALUES`` when called, split at its separators,
+    without the ``eptk`` key prefix (that is the key shape gate 7 refuses on
+    its own), each word capitalised as a page would show it.
+    """
+    return [
+        " ".join(
+            word.capitalize()
+            for word in re.split(r"[_-]", readable)
+            if word and word != "eptk"
+        )
+        for readable, _random_part in contract.PUBLIC_VALUES
+    ]
+
+
+def capture_needles(public_needles: bool = False) -> List[str]:
+    """The lines of needles.txt: two made-up values, then any static ones asked for.
+
+    With ``--public-needles`` the four values every stack carries follow, as a
+    real capture registers them (``capture.config.STATIC_NEEDLES``).
+    """
+    needles = [
+        "VALUE-" + secrets.token_hex(8).upper(),
+        "VALUE-" + secrets.token_hex(8).upper(),
+    ]
+    if public_needles:
+        from showcase.capture import config
+
+        needles += list(config.STATIC_NEEDLES)
+    return needles
+
+
 def page_html(
-    step: int, extra: Optional[str] = None, black: bool = False, faint: bool = False
+    step: int,
+    extra: Optional[str] = None,
+    black: bool = False,
+    faint: bool = False,
+    words: Sequence[str] = (),
 ) -> str:
     if black:
         return (
@@ -98,6 +148,7 @@ def page_html(
         else ""
     )
     planted = f"<div class='planted'{style}>{html.escape(extra)}</div>" if extra else ""
+    shown = "".join(f"<div class='words'>{html.escape(line)}</div>" for line in words)
     return (
         "<!doctype html><html><head><meta charset='utf-8'><style>"
         "body{margin:0;font-family:-apple-system,system-ui,sans-serif;color:#0F172A;background:#F8FAFC}"
@@ -109,10 +160,11 @@ def page_html(
         "td{padding:16px 20px;border-bottom:1px solid #E2E8F0}tr.on td{background:#EFF6FF}"
         ".key{margin-top:28px;font-size:18px;color:#334155}"
         ".planted{margin-top:24px;font-family:ui-monospace,Menlo,monospace;font-size:18px}"
+        ".words{margin-top:20px;font-size:20px;color:#0F172A}"
         "</style></head><body>"
         "<header><b>Controlvar</b><span>Experiments</span><span>Feature Flags</span><span>Admin</span></header>"
         f"<main><h1>Experiments</h1><div class='sub'>Step {step + 1}: four experiments in the demo data</div>"
-        f"<table>{rows}</table><div class='key'>API key eptk_ab12… created today</div>{planted}</main>"
+        f"<table>{rows}</table><div class='key'>API key eptk_ab12… created today</div>{shown}{planted}</main>"
         "</body></html>"
     )
 
@@ -167,14 +219,14 @@ def write(
     plant_text: Optional[Dict[int, str]] = None,
     black: Optional[int] = None,
     frame_size: tuple = (contract.PAGE_W, contract.PAGE_H),
+    public_needles: bool = False,
+    words: bool = False,
 ) -> Path:
     root.mkdir(parents=True, exist_ok=False)
     frames_dir = root / "frames"
     frames_dir.mkdir()
-    needles = [
-        "VALUE-" + secrets.token_hex(8).upper(),
-        "VALUE-" + secrets.token_hex(8).upper(),
-    ]
+    needles = capture_needles(public_needles)
+    shown = product_words() if words else []
     key_like = "eptk_" + secrets.token_hex(12)
     lines = []
     with Chromium() as browser:
@@ -193,7 +245,11 @@ def write(
             name = f"{index + 1:06d}.jpg"
             browser.page_jpeg(
                 page_html(
-                    index, extra, black=index == black, faint=index == plant_faint
+                    index,
+                    extra,
+                    black=index == black,
+                    faint=index == plant_faint,
+                    words=shown,
                 ),
                 frames_dir / name,
                 width=frame_size[0],
@@ -384,6 +440,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--plant-text", action="append", default=[], metavar="N:TEXT")
     parser.add_argument("--black", type=int)
     parser.add_argument("--frame-size", default=f"{contract.PAGE_W}x{contract.PAGE_H}")
+    parser.add_argument("--public-needles", action="store_true")
+    parser.add_argument("--product-words", action="store_true")
     parser.add_argument("--voice-cache", type=Path)
     parser.add_argument("--story", default="01-getting-started")
     parser.add_argument("--plant-say", type=int)
@@ -411,6 +469,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         plant_text=texts,
         black=args.black,
         frame_size=(width, height),
+        public_needles=args.public_needles,
+        words=args.product_words,
     )
     sys.stdout.write(f"{root}\n")
     return 0
