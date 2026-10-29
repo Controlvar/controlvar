@@ -76,6 +76,100 @@ APP_SELF_TEST: Dict[str, Dict[str, object]] = {
         "exact": True,
     },
 }
+#: The element an app's frame must hold whole, by ``data-testid`` (A6 of the UX
+#: draft): StreamPulse's phone (demo/streampulse/src/components/PhoneFrame.tsx),
+#: status bar to tab bar. Checked at every cue's start and end and after every
+#: step of the app's scenes, and once when the app is armed.
+APP_FIT: Dict[str, str] = {"streampulse": "phone"}
+#: Text an app's frame must show at each of its scenes' first cue, and the
+#: file of the app it comes from (A5, plan v2 C1: two-sided, the false "every
+#: 5 s" on ``never_show``): StreamPulse's panel says when it fetches. The run
+#: reads the sentence from that file in the built tree, the recorded ref's,
+#: and refuses before any scene if it is not there.
+APP_REQUIRED_TEXT: Dict[str, Tuple[str, str]] = {
+    "streampulse": (
+        "fetched when you pick a device or press Refresh now",
+        "demo/streampulse/src/components/ControlvarPanel.tsx",
+    ),
+}
+
+# ---------------------------------------------------------------------------
+# Video 4's incident, off camera (S4 of plan v2.2)
+# ---------------------------------------------------------------------------
+
+#: The StreamPulse demo's own rollout script in the recorded tree; the tool
+#: runs its step 2 only (``off_camera: story: 2``), against the tool's stack.
+ROLLOUT_STORY: Tuple[str, ...] = (
+    "demo",
+    "streampulse",
+    "simulator",
+    "rollout_story.py",
+)
+#: The flag the crash sender evaluates and reports crashes against.
+CRASH_FLAG = "streampulse_player_v2"
+#: A crashing device asks for the flag and crashes this many times: its first
+#: launch and four relaunches, the StreamPulse simulator's crash loop
+#: (demo/streampulse/simulator/traffic.py, ``INCIDENT_RELAUNCHES`` + 1).
+CRASH_LOOP = 5
+#: The Android 12 devices that crash, one loop each: every one is inside Player
+#: v2's rollout at 25% and outside it at 5% (its bucket is 5 to 24 by the
+#: server's own hash; a unit test pins each). The run refuses if the server
+#: answers one of them off: a device that never got Player v2 cannot crash in it.
+CRASH_DEVICES: Tuple[str, ...] = (
+    "sp-a12-crash-02",
+    "sp-a12-crash-14",
+    "sp-a12-crash-16",
+    "sp-a12-crash-20",
+    "sp-a12-crash-21",
+    "sp-a12-crash-26",
+    "sp-a12-crash-27",
+    "sp-a12-crash-36",
+)
+#: The crash a report names: the StreamPulse simulator's own
+#: (demo/streampulse/simulator/traffic.py, ``CRASH_MESSAGE``).
+CRASH_MESSAGE = "NullPointerException in PlayerV2Fragment"
+#: The crash sender's pace, every request together: under the API's default
+#: SDK limit of 100 a second, with the browser idle while it sends.
+CRASH_REQUESTS_PER_SECOND = 40.0
+#: Evaluations of the flag by the browser in the monitor's window, at most
+#: (plan v2 C13): with 200 sent and 40 crashes, its error rate stays between
+#: 40/300 and 40/200, well above the 5% the seed sets.
+BROWSER_EVALUATIONS_MAX = 100
+#: StreamPulse's device presets the video films, as devices.ts defines them and
+#: the app sends them (``toUserContext``: the attributes, the id included); a
+#: unit test keeps them equal. Gate 10/4 asks the API about the Galaxy S10 with
+#: the same context the app sends.
+STREAMPULSE_DEVICES: Dict[str, Dict[str, object]] = {
+    "sp-galaxy-s10-us-premium": {
+        "os": "Android",
+        "os_version": "12.0.0",
+        "app_version": "3.1.0",
+        "region": "US",
+        "tier": "premium",
+        "employee": False,
+        "device_model": "Galaxy S10",
+        "device_id": "sp-galaxy-s10-us-premium",
+    },
+}
+#: The safety scheduler's run history: the one completion that anchors B9 is a
+#: run that first appears after the tool starts waiting (T165 C5).
+SAFETY_SCHEDULER = "safety"
+#: How often the tool looks for that run (each look is one request), and for the
+#: rollback; both well under the API's 300 a minute for a path.
+ANCHOR_POLL_S = 0.5
+ROLLBACK_POLL_S = 1.0
+#: The crash sends begin at most this long after that run completed (T165 C5).
+SEND_AFTER_TICK_MAX_S = 5.0
+#: The host's clock and the API's may disagree by at most this much: the B9
+#: gate compares the host's frame times with the API's rollback time.
+CLOCK_SKEW_MAX_S = 1.0
+#: B9's fit (T165 C5): from the first crash sent to B9's last frame, at most
+#: the safety interval less this much.
+B9_SPARE_S = 15
+#: For the fit, what the capture spends off camera that the estimate does not
+#: count: a card drawn, a dashboard page loaded and settled, a scene's drain.
+CARD_OVERHEAD_MS = 600
+PAGE_OVERHEAD_MS = 5_000
 
 # ---------------------------------------------------------------------------
 # One run per machine
@@ -191,12 +285,12 @@ FORBIDDEN_TEXT: Tuple[str, ...] = (
 # ---------------------------------------------------------------------------
 
 #: The values every stack carries and no frame may show: the demo accounts'
-#: password, docker-compose.yml's two demo API keys and its SECRET_KEY default.
+#: password, then docker-compose.yml's two demo API keys and its SECRET_KEY
+#: default, which ``contract.PUBLIC_VALUES`` holds in two parts (the render's
+#: OCR scan looks for those three only through their random part).
 STATIC_NEEDLES: Tuple[str, ...] = (
     "Demo1234!",
-    "eptk_demo_shoplab_0123456789abcdef0123456789abcdef",
-    "eptk_demo_streampulse_0123456789abcdef0123456789ab",
-    "dev-only-change-me-9f1c7b2e4a6d8e0f1a2b3c4d5e6f7a8b",
+    *(readable + random_part for readable, random_part in contract.PUBLIC_VALUES),
 )
 #: The compose demo key each app's bundle is built with, and its seed registers.
 APP_STATIC_KEY: Dict[str, str] = {
@@ -235,13 +329,15 @@ DEFAULT_SDK_RATE_LIMIT_PER_MINUTE = 6_000
 #: together, under the default limit's 100 a second.
 TRAFFIC_REQUESTS_PER_SECOND = 90.0
 
-#: The videos, by slug, in the order ``all`` records them.
+#: The videos, by slug, in the order ``all`` records them: video 4 last, the
+#: longest take (its incident waits for the safety monitor).
 VIDEOS: Dict[str, str] = {
     "01-getting-started": "storyboards/01-getting-started.yaml",
     "02-first-experiment": "storyboards/02-first-experiment.yaml",
     "03-flag-rollout": "storyboards/03-flag-rollout.yaml",
     "05-plan-and-team": "storyboards/05-plan-and-team.yaml",
     "06-shoplab-ab-test": "storyboards/06-shoplab-ab-test.yaml",
+    "04-streampulse-rollout": "storyboards/04-streampulse-rollout.yaml",
 }
 #: Storyboards that prove the tool and are never a video: capture only, never
 #: rendered, and not part of ``all``.

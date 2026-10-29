@@ -17,6 +17,9 @@ step before it sends anything (``showcase.voice``), with the same function:
   "real time", "instantly", "immediately" or "as it happens", nor the words the
   UX rules never say.
 * G3: every number in the beat's headline (``cue``) is also spoken.
+* A9: a card that shows a measured value (``{traffic_minutes}``,
+  ``{rollback_minutes}``) has narration that says no number its fixed text
+  does not draw: the voice is made before the value is measured.
 * G2's comparison (``number_key``): numbers as written, except that a fraction
   of zeros is ignored (``15%`` is ``15.0%``) and commas count only as digit
   grouping (``31,234`` is ``31234``). The page half runs at capture.
@@ -34,9 +37,11 @@ from showcase import contract
 from showcase.capture import config, guard
 from showcase.capture.storyboard import (
     HOST_PORT,
+    MEASURED,
     Click,
     Storyboard,
     caption_problem,
+    card_texts,
     numbers_in,
 )
 
@@ -251,6 +256,34 @@ def headline_problems(cue: str, say: Iterable[str]) -> List[str]:
     return []
 
 
+def measured_problems(board: Storyboard) -> List[str]:
+    """A card that shows a measured value (``storyboard.MEASURED``: how long the
+    traffic took, or the gap a cut hides) has narration that says only numbers
+    its fixed text draws (UX check A9). The voice is made before the capture,
+    so a measured value can never be said; G2 would otherwise pass a sentence
+    that happened to match the measurement on one run and not the next."""
+    problems: List[str] = []
+    for scene in board.scenes:
+        texts = card_texts(scene.card)
+        named = [value for value in MEASURED if any(value in t for t in texts)]
+        if not named:
+            continue
+        fixed = " ".join(texts)
+        for value in MEASURED:
+            fixed = fixed.replace(value, " ")
+        shown = {number_key(n) for n in numbers_in(fixed)}
+        for number, beat in enumerate(scene.beats, start=1):
+            for line, sentence in enumerate(beat.say, start=1):
+                for said in numbers_in(sentence):
+                    if number_key(said) not in shown:
+                        problems.append(
+                            f"scene {scene.id} beat {number} say {line}: says {said},"
+                            f" which only the measured {named[0]} could show; a"
+                            " measured value is never said"
+                        )
+    return problems
+
+
 def _clicks_refresh(beat: Any) -> bool:
     for step in [*beat.before, *beat.steps, *beat.exit]:
         if isinstance(step, Click):
@@ -308,4 +341,6 @@ def board_problems(board: Storyboard) -> List[str]:
                     f"{where}: the claim {claim.says!r} holds no number word"
                 )
         problems.extend(f"{where}: {p}" for p in headline_problems(beat.cue, beat.say))
+    if voiced:
+        problems.extend(measured_problems(board))
     return problems

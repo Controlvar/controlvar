@@ -103,6 +103,22 @@ NEEDLES_MODE = 0o600
 #: ordinary page text by OCR (and ``--------`` normalises to nothing at all).
 MIN_NEEDLE_CHARS = 8
 
+#: The three values every Quick Start stack carries in public, exactly as
+#: docker-compose.yml gives them: its two demo app keys (ShopLab's, then
+#: StreamPulse's) and its SECRET_KEY default. Each is (readable part, random
+#: part): the readable part is the product's own words and ends in ``_`` or
+#: ``-``; the random part is 24 or more lowercase hex characters, none of which
+#: ``normalise`` drops. The capture registers each value whole, as a needle
+#: (``capture.config.STATIC_NEEDLES``: the demo password, then these in this
+#: order). The render's OCR scan treats a needle as one of these only when it
+#: is exactly readable + random, and then looks for it only through its random
+#: part (``render.ocr.needle_pieces``).
+PUBLIC_VALUES: Tuple[Tuple[str, str], ...] = (
+    ("eptk_demo_shoplab_", "0123456789abcdef0123456789abcdef"),
+    ("eptk_demo_streampulse_", "0123456789abcdef0123456789ab"),
+    ("dev-only-change-me-", "9f1c7b2e4a6d8e0f1a2b3c4d5e6f7a8b"),
+)
+
 #: What OCR confuses, folded together: 0/O/@, 1/l/I/|, f/t, 2/Z, 5/S, 8/B.
 _CONFUSABLE = str.maketrans(
     {

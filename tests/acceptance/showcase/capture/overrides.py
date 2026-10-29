@@ -16,13 +16,20 @@ profile, any ``COMPOSE_*``); the SDK rate limit (EM C8: the default stays);
 video needs and does not declare (``needed``: the demo apps' origins in
 ``CORS_ORIGINS``); a statement no scene makes; and a ``CORS_ORIGINS`` that is
 not exactly the dashboard and the video's apps.
+
+A ``statement`` is allowed only for a setting in ``STATED`` (a closed table):
+each names the kind of departure its statement is (D84, S7 of plan v2.2) and
+the line the API writes when it starts with that value, which the capture
+reads back from the API container (C6). The scene that states it declares
+that kind, and a scene may declare a shortened interval only in the words of
+one of its video's statements (``stated_problems``).
 """
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Dict, List, Mapping
+from typing import Dict, List, Mapping, Tuple
 
 import yaml
 
@@ -39,6 +46,71 @@ FORBIDDEN = frozenset(
     | {"SDK_RATE_LIMIT_PER_MINUTE", "WAREHOUSE_CREDENTIALS_KEYS"}
 )
 WHY_MIN = 40
+#: The settings a video may state on screen, each with the departure its
+#: statement is and the line the API logs when it runs with the value
+#: (``backend/app/core/safety_scheduler.py``, ``SafetyScheduler.start``). A
+#: statement for any other setting is refused: nothing would show it reached
+#: the API.
+STATED: Dict[str, Tuple[str, str]] = {
+    "SAFETY_CHECK_INTERVAL_MINUTES": (
+        "shortened interval",
+        "Safety scheduler started with {value} minute interval",
+    ),
+}
+#: The departure kinds a statement override stands behind.
+STATED_KINDS = frozenset(kind for kind, _line in STATED.values())
+
+
+def statements(slug: str, data: Mapping[str, object]) -> List[Tuple[str, str, str]]:
+    """``(key, value, statement)`` for each of the video's stated settings."""
+    entries = data.get(slug) or {}
+    if not isinstance(entries, dict):
+        return []
+    found = []
+    for key, entry in entries.items():
+        if isinstance(entry, dict) and "statement" in entry:
+            found.append((str(key), str(entry.get("value")), str(entry["statement"])))
+    return found
+
+
+def log_line(key: str, value: str) -> str:
+    """The line the API writes when it starts with *key* set to *value* (C6)."""
+    return STATED[key][1].format(value=value)
+
+
+def stated_problems(
+    board: storyboard.Storyboard, data: Mapping[str, object]
+) -> List[str]:
+    """Each statement override is stated by a scene as its kind of departure,
+    and each departure of a stated kind is one of the video's statements, word
+    for word: a shortened interval the tool did not set is never claimed."""
+    problems: List[str] = []
+    said = statements(board.slug, data)
+    for key, _value, statement in said:
+        if key not in STATED:
+            problems.append(
+                f"{board.slug} {key} is stated on screen, and the tool cannot read"
+                " back whether it reached the API; give it a why, or leave it out"
+            )
+            continue
+        kind = STATED[key][0]
+        if not any(
+            d.says == statement and d.kind == kind
+            for s in board.scenes
+            for d in s.departures
+        ):
+            problems.append(
+                f"{board.slug} {key}: no scene states {statement!r} as a {kind}"
+            )
+    words = {statement for _key, _value, statement in said}
+    for scene in board.scenes:
+        for d in scene.departures:
+            if d.kind in STATED_KINDS and d.says not in words:
+                problems.append(
+                    f"scene {scene.id} states a {d.kind} ({d.says!r}) that no"
+                    f" setting in overrides.yaml makes"
+                )
+    return problems
 
 
 def load(path: Path = PATH) -> Dict[str, Dict[str, Dict[str, str]]]:
@@ -114,4 +186,7 @@ def override_list(
                     f"overrides.yaml: {board.slug} CORS_ORIGINS is {item.value!r},"
                     f" not the dashboard and the video's apps ({','.join(want)})"
                 )
+    problems = stated_problems(board, data)
+    if problems:
+        raise guard.Refused("overrides.yaml: " + "; ".join(problems))
     return made

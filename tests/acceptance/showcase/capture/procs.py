@@ -163,10 +163,16 @@ class Children:
         kind: str,
         timeout: float = 300,
         private: bool = False,
+        merged: bool = False,
     ) -> Tuple[int, str]:
         """Run to completion; ``(exit status, standard output)``, the output
         held in this process. The log gets the command and its standard error,
-        and, unless *private* (a key file read, PE C7 of T166), its output."""
+        and, unless *private* (a key file read, PE C7 of T166), its output.
+
+        *merged*: the standard error is returned after the output, and neither
+        is logged (``docker compose logs``, which may write a container's
+        standard error to its own: the API's log is held in this process only,
+        PE 7 of T178 14)."""
         self._record(name, argv, env, kind)
         log.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -185,10 +191,15 @@ class Children:
             status, stdout, stderr = done.returncode, done.stdout, done.stderr
         with log.open("a", encoding="utf-8") as handle:
             handle.write(f"$ {' '.join(str(a) for a in argv)}\n")
-            handle.write("(output held in memory, not logged)\n" if private else stdout)
-            handle.write(stderr)
+            if merged:
+                handle.write("(output and standard error held in memory, not logged)\n")
+            else:
+                handle.write(
+                    "(output held in memory, not logged)\n" if private else stdout
+                )
+                handle.write(stderr)
             handle.write(f"(exit {status})\n")
-        return status, stdout
+        return status, (stdout + stderr) if merged else stdout
 
     def python(
         self, name: str, module: str, args: Sequence[str], *, cwd: Path, **kw
