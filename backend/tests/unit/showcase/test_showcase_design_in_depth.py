@@ -12,6 +12,11 @@ claims it makes that no frame can prove.
   ``config.STATIC_NEEDLES`` read at run time; a finding names a value by its
   index only).
 * A correct API answer passes gate 10's ``design`` end state for this board.
+* Its API part: each sentence's clip key (the 13 the design part has always
+  had, and the 13 new ones), no sentence saying a date, a clock time or what
+  the holdout is not, every number said drawn in its beat, the calls in an
+  order the API's cache shows truly, and every exchange fitting the console
+  in the answers' own field order (the API's response models).
 
 If a product change makes one of these fail, re-verify what the video says
 before changing the test: the narration makes the claim.
@@ -19,16 +24,29 @@ before changing the test: the narration makes the claim.
 
 from __future__ import annotations
 
+import ast
 import copy
+import inspect
+import json
+import re
+import textwrap
+import typing
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytest
+import yaml
+from showcase import contract
 from showcase.capture import config, gates, narration, storyboard
 from showcase.render import ocr
 
+from backend.app.api.v1.endpoints import (
+    experiments,
+    global_holdout,
+    mutual_exclusion_groups,
+)
 from backend.app.services.assignment_service import AssignmentService
 from backend.app.services.rules_evaluation_service import RulesEvaluationService
 from backend.tests.unit.showcase.test_showcase_design_end import DRAWN, OWNER, saved
@@ -58,10 +76,13 @@ def test_video_9_registers_just_before_video_4_on_the_demo_seed_with_no_app_or_o
     made = board()
     assert made.seed == "demo"
     assert made.apps == []
-    assert made.traffic is None and made.setup is None
+    assert made.traffic is None
+    # Its one setup: the exclusion group the API scene adds the draft to.
+    assert made.setup.segments == []
+    assert [g.name for g in made.setup.exclusion_groups] == ["Checkout tests"]
 
 
-def test_video_9_narrates_by_the_rules_and_states_its_one_departure():
+def test_video_9_narrates_by_the_rules_and_states_its_departures():
     made = board()
     assert narration.board_problems(made) == []
     assert storyboard.departure_problems(made) == []
@@ -69,6 +90,16 @@ def test_video_9_narrates_by_the_rules_and_states_its_one_departure():
     assert first.signed_in
     assert [d.says for d in first.departures] == ["Signed in off camera"]
     assert first.beats[0].cue.startswith("Signed in off camera.")
+    assert [s.id for s in made.scenes] == ["design", "api-intro", "api"]
+    api = made.scenes[2]
+    assert [d.says for d in api.departures] == [
+        "Signed in to the API off camera",
+        "made off camera",
+    ]
+    assert api.console.label == "Signed in to the API off camera"
+    # The group made off camera, said where it is used: its caption and note.
+    assert "made off camera" in api.beats[0].cue
+    assert "were made off camera" in api.beats[0].note
 
 
 def test_video_9_never_shows_a_guardrail_or_the_sdk_hint():
@@ -273,11 +304,14 @@ def test_a_rule_that_admits_others_than_the_narration_says_is_caught(rule):
 
 
 def drawn_and_said(made: storyboard.Storyboard) -> List[str]:
-    """Every caption, sentence, typed string and card line of *made*."""
+    """Every caption, sentence, typed string, card line, console label, note
+    and string written into a call of *made*."""
     lines: List[str] = []
     for scene in made.scenes:
         if scene.card is not None:
             lines.extend(scene.card.drawn_text())
+        if scene.console is not None:
+            lines.append(scene.console.label)
         for beat in scene.beats:
             lines.append(beat.cue)
             lines.extend(beat.say)
@@ -286,6 +320,10 @@ def drawn_and_said(made: storyboard.Storyboard) -> List[str]:
                 for step in every_step(beat)
                 if isinstance(step, storyboard.Type)
             )
+            if beat.note is not None:
+                lines.append(beat.note)
+            if beat.call is not None:
+                lines.extend(beat.call.written())
     return lines
 
 
@@ -301,6 +339,9 @@ def screened(lines: List[str]) -> List[Tuple[int, str]]:
 def test_no_line_of_video_9_reads_like_a_kept_value():
     lines = drawn_and_said(board())
     assert len(lines) > 30
+    # The API part is read too: its label, its notes and its calls.
+    assert "Signed in to the API off camera" in lines
+    assert "/api/v1/holdout" in lines and "Q4 holdout" in lines
     assert screened(lines) == []
 
 
@@ -321,3 +362,441 @@ def test_the_screen_fires_on_a_line_made_from_a_kept_value(index):
     wanted = f"needle {index + 1} of {len(config.STATIC_NEEDLES)}"
     assert [number for number, _ in found] != []
     assert any(what.startswith(wanted) for _, what in found)
+
+
+# ---------------------------------------------------------------------------
+# The API part: the clips it needs
+# ---------------------------------------------------------------------------
+
+#: The design part's sentences and their clip keys, cached before the API
+#: part was written: byte for byte the same, so no new clip is made for them.
+KEPT_KEYS: Dict[str, str] = {
+    "Choose New Experiment.": (
+        "3eaa033a60ed7bb342de251eabae586c6d99581b47cc80922cb401d4c327dea2"
+    ),
+    "Name it, and the key your code uses fills itself in.": (
+        "aa651bdcd6d99962fbfe4756d0ba76ebc24c1b90504bb798894e61ce3404ebab"
+    ),
+    "Make purchases the primary metric: the one you decide on.": (
+        "96cb7be81cfa004bf6367cb7e5f3128aa94a42145b1e103404d5e44a858d8dc9"
+    ),
+    "Add a second metric to track alongside it: add to cart.": (
+        "aec81f87ad4ca81c855b161e9b867f9c529710cec7654ca1121fc0b65a172c9d"
+    ),
+    "Add a third version, and split the traffic so it reaches 100%.": (
+        "3395e59ccb57bf528c86b90d6c7732eb1ecacaaaaa4904289b20c4ced35fdd4e"
+    ),
+    "Choose who can join from what your app sends: US or Canada.": (
+        "7c9860831ecef5205b6c54b584e8b07aab59578193876d4fda89539cb639f56f"
+    ),
+    "Everyone else gets the control, and isn't enrolled.": (
+        "f499597c0ed4b625b6b80261bf3ed68037d2d3971d75ef27c41b34b1e877085f"
+    ),
+    "Next, a confidence level and a correction, which lock once it starts.": (
+        "7f03d856d3b3a84cb2400780fdb1b615070bef2b19d4188e04124fa377c72614"
+    ),
+    "With several versions, one can look like a winner by luck.": (
+        "ab6648c5b3139ee254782812524e6c56544bc07d40b60d61e8092f31d8aefb3e"
+    ),
+    "Benjamini-Hochberg, the default, keeps false winners to about 5% of all"
+    " winners.": "773dc09955c377718fbadd1728f0da1759d5343b9dea3d3d9905c17838f24cf5",
+    "Turn on Bayesian to also see each version's chance of being best.": (
+        "2cd57f5f2d42ca5f33f0838ee6fab1b026b51bd2e6fdc23888c05ff0e4a200d7"
+    ),
+    "Review your choices, then create it.": (
+        "4661fb415fc437a327f1304e6256d5108eebeb55571135e84af73384b1b48fb6"
+    ),
+    "It's saved as a draft, with its versions, metrics and analysis.": (
+        "75bf554a773f9a3fe7d49671ff7d66e487afa21e74c9da6f0cda58394f009f62"
+    ),
+}
+#: The API part's sentences, each a new clip, in the order they are said.
+NEW_KEYS: Dict[str, str] = {
+    "Guided setup ends here: you do the rest through the API.": (
+        "db63efad2f71467b734765d55c747ce0e3e70be297cf5937eb88d70154d0f57b"
+    ),
+    "Experiments in the same exclusion group never share a user.": (
+        "4ce7f7653f2738a92213f2a1d5b84176631d59837565f0a9634031dd73028898"
+    ),
+    "Add this draft to the group with Checkout Button Color.": (
+        "3e15d81bb92ef3fdc1d8da90b362629fa49eb9a55126818cfe8b1c0dddb7f1b3"
+    ),
+    "A global holdout keeps 5% of new users out of every experiment.": (
+        "7e3bcb9d20bf752e7b36375445564f1a24a5713672b4943977189ecfeae51be7"
+    ),
+    "That includes this one.": (
+        "ccfac8f7a6db8706d17cba0f96816cde433bc53c5602a9264854b4a8510863d6"
+    ),
+    "Give it a start date, and it starts on its own.": (
+        "2904aaaad2279f32415070e917ad61452bf4b1b6374307b29ed81c57b31acbc6"
+    ),
+    "Until then, it stays a draft.": (
+        "04ebdbfce7946bc64c376035e18356d92326e7d297b5972c336c85e8f9c6b981"
+    ),
+    "Turn on sequential testing, in beta.": (
+        "3afe3df24150d13ca09dbe841139df1345414f6d12a9f3e7712082b67a424633"
+    ),
+    "Check results whenever you like, and stop once the evidence is strong.": (
+        "db3290140562d00a66fd16f1b9b865e481194c77b566a5d450cba377eb4eb531"
+    ),
+    "The answer also carries the group's id and the start date.": (
+        "767ddb735235b1ffec429b0419b4bf946395b8d0e1a6d5aeef0288f2b92b8a94"
+    ),
+    "Read it back: it's still a draft, in its group.": (
+        "0869e3343b5d8e67ebf1c6136ce56f85cf8f7808e418b66332a3a15a8adccca6"
+    ),
+    "It has its start date, and sequential testing is on.": (
+        "4900ee378ba1f0648c60dce4e3a834636f6688c2d1e4136c4ea1d14ff612281a"
+    ),
+    "And the holdout is active.": (
+        "1bdf8720af6d78bd305e29e9c8b1292cc663d9e73756d850b03c997badafd6aa"
+    ),
+}
+#: The sentence the API part replaced, and its key: never said again.
+API_ONLY_LINE = (
+    "Set holdouts, exclusion groups, schedules and sequential testing through the API."
+)
+API_ONLY_KEY = "c9ce71ce9b54fbb2415a8eac9202141892a075a4df94c9f53ea2f4a509d07a9e"
+
+
+def raw_board() -> Dict[str, Any]:
+    """Video 9's storyboard as written, to change one thing and parse again."""
+    return yaml.safe_load((SHOWCASE / config.VIDEOS[SLUG]).read_text(encoding="utf-8"))
+
+
+def api_beats(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return next(s for s in data["scenes"] if s["id"] == "api")["beats"]
+
+
+def clip_keys(made: storyboard.Storyboard) -> Dict[str, str]:
+    """Each sentence of *made* and its clip's key, as the voice step makes it."""
+    return {
+        text: contract.clip_key("Ruth", contract.polly_text(text))
+        for _scene, _beat, _line, text in storyboard.narration_lines(made)
+    }
+
+
+def test_video_9s_clips_are_the_13_kept_and_the_13_new():
+    keys = clip_keys(board())
+    assert keys == {**KEPT_KEYS, **NEW_KEYS}
+    assert list(keys)[len(KEPT_KEYS) :] == list(NEW_KEYS)
+    assert API_ONLY_LINE not in keys and API_ONLY_KEY not in keys.values()
+    # The voice step's own count: 13 new clips, 621 billable characters.
+    assert sum(len(contract.polly_text(text)) for text in NEW_KEYS) == 621
+
+
+def test_one_character_changed_in_a_kept_sentence_moves_its_key():
+    """The pin above fires: a kept sentence edited by one character is a new
+    clip, and the clip it had is no longer used."""
+    data = raw_board()
+    data["scenes"][0]["beats"][0]["say"] = ["Choose New experiment."]
+    keys = clip_keys(storyboard.parse(data))
+    assert keys != {**KEPT_KEYS, **NEW_KEYS}
+    assert sorted(set(KEPT_KEYS.values()) - set(keys.values())) == [
+        KEPT_KEYS["Choose New Experiment."]
+    ]
+
+
+# ---------------------------------------------------------------------------
+# The API part: what it says, and never says
+# ---------------------------------------------------------------------------
+
+API_SCENES = ("api-intro", "api")
+#: What the holdout is not: it keeps new users out of every experiment, so it
+#: is never one experiment's, nor something an experiment sits behind.
+NEVER_SAID = (API_ONLY_LINE, "behind a holdout", "this experiment's holdout")
+#: A date or a time of day, said: the start date is drawn and never said, so
+#: the narration stays true on every day the video is shown. The narration's
+#: own rules (G1) do not refuse one.
+DATE_OR_TIME = re.compile(
+    r"\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?"
+    r"|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
+    r"|monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekend"
+    r"|today|tonight|tomorrow|yesterday|midnight|noon|morning|evening"
+    r"|o'clock|utc|gmt)\b"
+    r"|\b[0-9]{1,2}:[0-9]{2}\b|\b[0-9]{1,2} ?(?:am|pm)\b"
+    r"|\b[0-9]{4}-[0-9]{2}-[0-9]{2}\b|\b[0-9]{1,2}/[0-9]{1,2}\b",
+    re.IGNORECASE,
+)
+
+
+def board_texts(made: storyboard.Storyboard) -> List[Tuple[str, str]]:
+    """``(where, text)`` for every caption, sentence, card line, label and note."""
+    found = []
+    for scene in made.scenes:
+        for text in storyboard.scene_screen_text(scene):
+            found.append((f"scene {scene.id}", text))
+        for number, beat in enumerate(scene.beats, start=1):
+            for text in beat.say:
+                found.append((f"scene {scene.id} beat {number}", text))
+    return found
+
+
+def unsaid_problems(made: storyboard.Storyboard) -> List[str]:
+    return [
+        f"{where} says {phrase!r}"
+        for where, text in board_texts(made)
+        for phrase in NEVER_SAID
+        if phrase.lower() in text.lower()
+    ]
+
+
+def dated(made: storyboard.Storyboard) -> List[str]:
+    """Every caption, sentence, card line, label or note holding a date or a
+    time of day."""
+    return [text for _where, text in board_texts(made) if DATE_OR_TIME.search(text)]
+
+
+def test_video_9_never_says_what_the_holdout_is_not_nor_the_old_card():
+    assert unsaid_problems(board()) == []
+
+
+def test_saying_this_experiments_holdout_is_refused():
+    data = raw_board()
+    api_beats(data)[1]["say"][1] = "That includes this experiment's holdout."
+    assert unsaid_problems(storyboard.parse(data)) == [
+        'scene api beat 2 says "this experiment\'s holdout"'
+    ]
+
+
+def test_no_line_of_video_9_says_a_date_or_a_time():
+    assert dated(board()) == []
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "It starts on October 30 at 9:00, on its own.",
+        "Give it a start at 9:00, and it starts on its own.",
+        "It starts tomorrow, on its own.",
+    ],
+)
+def test_a_dated_sentence_passes_the_narrations_rules_and_is_refused_here(sentence):
+    assert narration.sentence_problems(sentence) == []
+    data = raw_board()
+    api_beats(data)[2]["say"][0] = sentence
+    assert dated(storyboard.parse(data)) == [sentence]
+
+
+def api_part(made: storyboard.Storyboard) -> List[Tuple[str, int, Any]]:
+    return [
+        (scene.id, number, beat)
+        for scene in made.scenes
+        if scene.id in API_SCENES
+        for number, beat in enumerate(scene.beats, start=1)
+    ]
+
+
+def drawn_on_the_page(made: storyboard.Storyboard, scene_id: str, beat: Any) -> str:
+    """What the storyboard itself puts on the page with *beat*: its card, or
+    its console note (the request and the answer are the run's)."""
+    scene = next(s for s in made.scenes if s.id == scene_id)
+    return " ".join(storyboard.card_texts(scene.card)) or (beat.note or "")
+
+
+def test_every_number_the_api_part_says_or_captions_its_own_page_draws():
+    """U2 and G2 read the page, not the caption band: a number said or
+    captioned in the API part is in its note or its card. Today one: 5%."""
+    made = board()
+    numbered = []
+    for scene_id, number, beat in api_part(made):
+        page = drawn_on_the_page(made, scene_id, beat)
+        ok, _numbers, why = gates.caption_numbers(beat.cue, page)
+        assert ok, f"{scene_id} beat {number}: {why}"
+        for sentence in beat.say:
+            ok, numbers, why = gates.spoken_numbers(sentence, page, page)
+            assert ok, f"{scene_id} beat {number}: {why}"
+            numbered += numbers["said"]
+    assert numbered == ["5%"]
+
+
+def holdout_beat() -> Any:
+    return next(beat for _s, _n, beat in api_part(board()) if "5%" in beat.cue)
+
+
+def test_the_holdout_beats_note_without_its_percent_sign_is_refused_by_u2():
+    beat = holdout_beat()
+    assert beat.note.startswith("5% of new users")
+    ok, _numbers, why = gates.caption_numbers(beat.cue, beat.note.replace("%", ""))
+    assert not ok
+    assert why == "the caption says 5%; the page shows 5"
+
+
+def test_saying_10_percent_with_5_percent_drawn_is_refused_by_g2():
+    beat = holdout_beat()
+    said = beat.say[0].replace("5%", "10%")
+    ok, _numbers, why = gates.spoken_numbers(said, beat.note, beat.note)
+    assert not ok and "10%" in why
+
+
+# ---------------------------------------------------------------------------
+# The API part: the calls, in an order the API's cache shows truly
+# ---------------------------------------------------------------------------
+
+
+def call_order_problems(made: storyboard.Storyboard) -> List[str]:
+    """The group add before the two experiment PUTs, and the reads last.
+
+    ``GET /api/v1/experiments/{id}`` answers from a cached copy of the
+    experiment. Adding it to a group does not refresh that copy; the schedule
+    and the experiment PUT do. So the group add goes before both, and the
+    read-back shows the group: after them, the read would show the copy from
+    before the group (and gate 10 refuse it)."""
+    order = []
+    for _s, _n, beat in api_part(made):
+        if beat.call is not None:
+            kind = storyboard.API_CALLS[(beat.call.method, beat.call.path)]
+            order.append(kind.sets or f"read {beat.call.path}")
+    problems = []
+    group = order.index("exclusion_group")
+    for later in ("scheduled_start", "sequential"):
+        if order.index(later) < group:
+            problems.append(
+                f"the group add is call {group + 1}, after {later} (call"
+                f" {order.index(later) + 1}): the read-back would show the cached"
+                " experiment without its group"
+            )
+    reads = [i for i, what in enumerate(order) if what.startswith("read ")]
+    sets = [i for i, what in enumerate(order) if not what.startswith("read ")]
+    if reads and sets and min(reads) < max(sets):
+        problems.append("a read comes before a call that changes what it reads")
+    return problems
+
+
+def test_the_group_add_comes_before_the_experiment_puts_and_the_reads_last():
+    assert call_order_problems(board()) == []
+
+
+def test_the_group_add_moved_after_the_schedule_is_refused():
+    data = raw_board()
+    beats = api_beats(data)
+    beats.insert(2, beats.pop(0))
+    made = storyboard.parse(data)
+    assert call_order_problems(made) == [
+        "the group add is call 3, after scheduled_start (call 2): the read-back"
+        " would show the cached experiment without its group"
+    ]
+
+
+# ---------------------------------------------------------------------------
+# The API part: every exchange fits the console, in the answers' own order
+# ---------------------------------------------------------------------------
+
+#: The routers the calls reach, by the prefix the API mounts each under.
+ROUTERS = {
+    "/api/v1/experiments": experiments.router,
+    "/api/v1/holdout": global_holdout.router,
+    "/api/v1/mutual-exclusion-groups": mutual_exclusion_groups.router,
+}
+#: What the console draws for an id (its first 8 hex characters) and for the
+#: start date sent, to measure a request's lines.
+CUT_ID = "0b6b4f1e…"
+SENT_START = "2026-10-30T09:00:00Z"
+
+
+def answer_order(method: str, path: str) -> List[str]:
+    """The top-level fields of the API's answer to *method* *path*, in the
+    order it sends them: its response model's, or, for a route that returns a
+    dict it writes out, that dict's keys."""
+    prefix = next(p for p in ROUTERS if path == p or path.startswith(p + "/"))
+    shape = re.sub(r"\{[^}]*\}", "{}", path[len(prefix) :])
+    routes = [
+        route
+        for route in ROUTERS[prefix].routes
+        if method in route.methods and re.sub(r"\{[^}]*\}", "{}", route.path) == shape
+    ]
+    assert len(routes) == 1, (method, path, routes)
+    model = routes[0].response_model
+    inner = [a for a in typing.get_args(model) if a is not type(None)]
+    model = inner[0] if inner else model
+    if model is not None:
+        return list(model.model_fields)
+    source = textwrap.dedent(inspect.getsource(routes[0].endpoint))
+    returned = [
+        node.value
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Return) and isinstance(node.value, ast.Dict)
+    ]
+    assert len(returned) == 1, (method, path)
+    return [key.value for key in returned[0].keys]
+
+
+def exchange_lines(call: storyboard.Call) -> int:
+    """The console's lines for *call*: its request line and its body (one
+    line), the status line, each shown field, and one muted line for each run
+    of fields left out, in the answer's own order."""
+    fields = answer_order(call.method, call.path)
+    shown = sorted(fields.index(name) for name in call.show)
+    runs, previous = 0, -1
+    for position in [*shown, len(fields)]:
+        if position > previous + 1:
+            runs += 1
+        previous = position
+    request = 1 if call.body is None else 2
+    return request + 1 + len(call.show) + runs
+
+
+def request_lines(call: storyboard.Call) -> List[str]:
+    """The request as the console draws it, ids cut, the start as sent."""
+
+    def resolved(text: str) -> str:
+        return re.sub(
+            r"\{([^}]*)\}",
+            lambda m: SENT_START if m.group(1) == "start" else CUT_ID,
+            text,
+        )
+
+    lines = [f"{call.method} {resolved(call.path)}"]
+    if call.body is not None:
+        lines.append(resolved(json.dumps(call.body, ensure_ascii=False)))
+    return lines
+
+
+def exchanges(made: storyboard.Storyboard) -> List[Tuple[str, storyboard.Call]]:
+    """Each console beat's exchange: its own call, or the one it keeps up."""
+    shown: List[Tuple[str, storyboard.Call]] = []
+    current: Optional[storyboard.Call] = None
+    for scene_id, number, beat in api_part(made):
+        if scene_id != "api":
+            continue
+        current = beat.call or current
+        shown.append((beat.cue, current))
+    return shown
+
+
+def test_every_exchange_fits_the_console_in_the_answers_own_order():
+    made = board()
+    counts = [exchange_lines(call) for _cue, call in exchanges(made)]
+    # B C D E1 E2 R1 R2: E2 keeps E1's exchange up; E1 is exactly at the cap.
+    assert counts == [6, 9, 8, 12, 12, 11, 8]
+    assert max(counts) <= config.CONSOLE_MAX_LINES
+    for _cue, call in exchanges(made):
+        fields = answer_order(call.method, call.path)
+        assert [f for f in fields if f in call.show] == list(call.show)
+        for line in request_lines(call):
+            assert len(line) <= config.CONSOLE_LINE_CHARS, line
+
+
+def test_a_fifth_field_on_the_sequential_answer_is_13_lines_and_refused():
+    made = board()
+    call = next(c for cue, c in exchanges(made) if cue.startswith("Sequential"))
+    wider = call.model_copy(update={"show": [*call.show, "end_date"]})
+    assert exchange_lines(wider) == 13 > config.CONSOLE_MAX_LINES
+
+
+def test_the_answers_order_is_read_from_the_api():
+    assert answer_order(
+        "POST", "/api/v1/mutual-exclusion-groups/{group}/experiments"
+    ) == ["status", "experiment_id", "group_id"]
+    order = answer_order("PUT", "/api/v1/experiments/{experiment}")
+    assert len(order) == 30
+    assert [order.index(f) for f in ("status", "start_date")] == [6, 10]
+    assert order.index("sequential_testing_enabled") == 17
+    assert order.index("mutual_exclusion_group_id") == 20
+    assert answer_order("GET", "/api/v1/holdout")[:5] == [
+        "id",
+        "name",
+        "description",
+        "holdout_percentage",
+        "is_active",
+    ]

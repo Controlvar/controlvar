@@ -2,12 +2,28 @@
 # 2) into the options the dashboard offers when an experiment is designed: a
 # second metric, a third version and its traffic split, who can join (a
 # targeting rule), the confidence level and the multiple-comparison correction,
-# the Bayesian view, the Review step and the saved draft. On the `demo` seed;
-# the experiment is created and left a draft, so no traffic is sent.
+# the Bayesian view, the Review step and the saved draft. Then what guided
+# setup does not offer, set on that draft through the API on camera (an
+# exclusion group, a global holdout, a start date and sequential testing),
+# each request and the API's own answer drawn by the tool, and two reads of
+# what was saved. On the `demo` seed; the experiment is created and left a
+# draft, so no traffic is sent.
 #
-# * D84: the only departure from a new user's path is the sign-in, done off
-#   camera and stated in the first caption. Nothing is set up, simulated,
-#   skipped or masked.
+# * The departures from a new user's path, each stated on screen where it
+#   happens: the sign-in, done off camera (the first caption); the API calls,
+#   made as the admin signed in off camera (the console's label, and the API
+#   card's note); and the exclusion group "Checkout tests", made off camera
+#   before the first scene with the seeded Checkout Button Color in it
+#   (`setup`), so that adding this draft to it shows a group of two (beat B's
+#   caption and note). Nothing else is set up, simulated, skipped or masked.
+# * The API scene (`console`) shows six calls, in this order: the group add,
+#   the holdout, the schedule, sequential testing, then the experiment and the
+#   holdout read back. The group add comes before the two experiment PUTs: it
+#   does not refresh the API's cached copy of the experiment, and they do, so
+#   the read-back shows the group. Each id is made by the run and named
+#   here only by a placeholder. The holdout is global: it keeps new users out
+#   of every experiment, this one included, and is never said to belong to
+#   this experiment.
 # * The share boxes are changed by selecting the number and typing over it
 #   (`select: true`), the way a person commonly replaces a value. Emptying a
 #   share box and then typing draws a leading zero ("034") while 34 is saved;
@@ -33,18 +49,21 @@
 #     help text, drawn while it is said ("about 5% (at 95% confidence)").
 #   - "each version's chance of being best": the Bayesian panel's "Chance to be
 #     best" for every variant.
-#   - The closing card paraphrases docs/guides/dashboard-and-api.md (the
-#     schedule, global holdout and mutual exclusion rows, each "API only") and
-#     docs/api/sequential-testing.md ("Turning it on"); its pin is in
-#     test_showcase_quoted_docs.py. It is the first cut if it alone holds up a
-#     review.
-# * Length cuts, in order, if the voiced length runs over: (1) merge the
-#   confidence beat into the correction beat, caption "A correction for lucky
-#   winners, locked once it starts." (no new clip); (2) the card's sentence
-#   becomes "Holdouts, exclusion groups and schedules use the API.".
+#   - Each sentence of the API card and the API scene: its row of CLAIMS in
+#     test_showcase_quoted_docs.py, with what is drawn while it is said and
+#     the pages of the docs that state it. The API words (holdout, exclusion,
+#     sequential, schedule, CUPED) are said only in those two scenes.
+# * Length cuts, in order, if the voiced length runs over 143 s. Each drops or
+#   moves whole sentences, so none needs a new clip: (1) drop "That includes
+#   this one."; (2) drop "Check results whenever you like, and stop once the
+#   evidence is strong."; (3) drop "Until then, it stays a draft."; (4) drop
+#   the beat "Also in this answer" and its sentence; (5) drop the API card and
+#   say its sentence second at the saved draft's beat, its note then drawn by
+#   the console's label.
 # * `say` is the narration, in the other videos' voice; every number it says
 #   is drawn while it is said (G2): "100%" in "Currently 100%", "5%" in the
-#   correction's help text.
+#   correction's help text, and "5%" in the holdout beat's note. No sentence
+#   says a date or a clock time: the start date is drawn, never said.
 slug: 09-design-in-depth
 title: "Design an experiment in depth"
 seed: demo
@@ -80,6 +99,12 @@ end_state:
       review_analysis: review-analysis
       detail_analysis: analysis
       detail_bayesian: bayesian
+    api: [exclusion_group, holdout, scheduled_start, sequential]
+setup:
+  exclusion_groups:
+    - name: Checkout tests
+      traffic_allocation: 1.0
+      experiments: [Checkout Button Color]
 scenes:
   - id: design
     open: /experiments
@@ -243,15 +268,140 @@ scenes:
           - look: {testid: metrics-list}
             ms: 1000
 
-  - id: api-only
+  - id: api-intro
     card:
-      label: Not in guided setup
+      label: The rest of the setup
       headline: Through the API
       note: >-
-        Mutual exclusion groups, a global holdout (beta), start and end dates, and
-        sequential testing (beta) are set through the API; the docs show each request.
+        Requests to this same stack, as the admin signed in off camera; the token
+        is not shown. Each response is the API's own, cut to the lines that matter.
     beats:
-      - cue: Holdouts, exclusion groups, schedules and more use the API.
+      - cue: "Past guided setup: the rest goes through the API."
         focus: {css: "#headline"}
         say:
-          - Set holdouts, exclusion groups, schedules and sequential testing through the API.
+          - "Guided setup ends here: you do the rest through the API."
+
+  - id: api
+    console:
+      label: Signed in to the API off camera
+    departures:
+      - kind: off-camera setup
+        says: Signed in to the API off camera
+      - kind: off-camera setup
+        says: made off camera
+    beats:
+      - cue: Join a group made off camera, with Checkout Button Color.
+        focus: {css: "#console"}
+        note: >-
+          Checkout tests and its member Checkout Button Color were made off camera.
+          Experiments in the same group never share a user.
+        say:
+          - Experiments in the same exclusion group never share a user.
+          - Add this draft to the group with Checkout Button Color.
+        call:
+          method: POST
+          path: /api/v1/mutual-exclusion-groups/{group}/experiments
+          body: {experiment_id: "{experiment}"}
+          show: [status, experiment_id, group_id]
+          answer:
+            status: 200
+            fields: {status: ok, experiment_id: "{experiment}", group_id: "{group}"}
+        steps:
+          - send: true
+
+      - cue: "Global holdout: 5% of new users kept out of every experiment."
+        focus: {css: "#console"}
+        note: >-
+          5% of new users are kept out of every experiment, this one included. One
+          holdout is active at a time.
+        say:
+          - A global holdout keeps 5% of new users out of every experiment.
+          - That includes this one.
+        call:
+          method: POST
+          path: /api/v1/holdout
+          body: {name: Q4 holdout, holdout_percentage: 5, is_active: true}
+          show: [name, holdout_percentage, is_active]
+          answer:
+            status: 201
+            fields: {name: Q4 holdout, holdout_percentage: 5, is_active: true}
+          keep: {holdout: id}
+        steps:
+          - send: true
+
+      - cue: Schedule its start; it starts on its own.
+        focus: {css: "#console"}
+        say:
+          - Give it a start date, and it starts on its own.
+          - Until then, it stays a draft.
+        call:
+          method: PUT
+          path: /api/v1/experiments/{experiment}/schedule
+          body: {start_date: "{start}"}
+          show: [status, start_date]
+          answer:
+            status: 200
+            fields: {status: draft, start_date: "{start}"}
+        steps:
+          - send: true
+
+      - cue: "Sequential testing (beta): check often, stop early."
+        focus: {css: "#console"}
+        note: >-
+          Beta. Check whenever you like; it compares the control with the first
+          treatment, on the primary metric.
+        say:
+          - Turn on sequential testing, in beta.
+          - Check results whenever you like, and stop once the evidence is strong.
+        call:
+          method: PUT
+          path: /api/v1/experiments/{experiment}
+          body: {sequential_testing_enabled: true}
+          show: [status, start_date, sequential_testing_enabled, mutual_exclusion_group_id]
+          answer:
+            status: 200
+            fields:
+              status: draft
+              start_date: "{start}"
+              sequential_testing_enabled: true
+              mutual_exclusion_group_id: "{group}"
+        steps:
+          - send: true
+
+      - cue: "Also in this answer: the group and the start date."
+        focus: {css: "#console"}
+        say:
+          - The answer also carries the group's id and the start date.
+
+      - cue: "Read back: a draft, in its group, scheduled, sequential on."
+        focus: {css: "#console"}
+        say:
+          - "Read it back: it's still a draft, in its group."
+          - It has its start date, and sequential testing is on.
+        call:
+          method: GET
+          path: /api/v1/experiments/{experiment}
+          show: [status, start_date, sequential_testing_enabled, mutual_exclusion_group_id]
+          answer:
+            status: 200
+            fields:
+              status: draft
+              start_date: "{start}"
+              sequential_testing_enabled: true
+              mutual_exclusion_group_id: "{group}"
+        steps:
+          - send: true
+
+      - cue: "The global holdout: active."
+        focus: {css: "#console"}
+        say:
+          - And the holdout is active.
+        call:
+          method: GET
+          path: /api/v1/holdout
+          show: [id, name, holdout_percentage, is_active]
+          answer:
+            status: 200
+            fields: {id: "{holdout}", name: Q4 holdout, holdout_percentage: 5, is_active: true}
+        steps:
+          - send: true
