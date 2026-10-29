@@ -311,14 +311,14 @@ def _run_locked(
         limit = contract.MAX_VIDEO_MS * contract.PROJECTION_SHARE
         mean = sum(c[1] for c in clips) / len(clips)
         loudest = max(c[2] for c in clips)
-        gain = contract.VOICE_GAIN_DB
+        gain = contract.voice_gain_db(slug)
         say(
             f"{slug}: {len(clips)} lines; projected {projected / 1000:.1f} s of"
             f" {contract.MAX_VIDEO_MS / 1000:.0f} s (refused above {limit / 1000:.1f} s);"
             f" mean loudness {mean:.1f} LUFS ({mean + gain:.1f} with the {gain:g} dB"
             f" gain); loudest true peak {loudest:.1f} dBTP ({loudest + gain:.1f} with it)"
         )
-        problems = contract.loudness_problems(clips)
+        problems = contract.loudness_problems(clips, gain)
         if projected > limit:
             problems.append(
                 f"projected {projected / 1000:.1f} s, above {limit / 1000:.1f} s: cut"

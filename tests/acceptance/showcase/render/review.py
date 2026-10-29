@@ -218,15 +218,15 @@ def review_html(
     vtt_sha256: str,
     contact: List[ContactFrame],
     render_gates: Mapping[str, Mapping[str, Any]],
+    gain_db: float,
     narration: Optional[List[ScriptRow]] = None,
     srt_sha256: Optional[str] = None,
     transcript_sha256: Optional[str] = None,
 ) -> str:
+    """The review page; *gain_db* is the gain the render gave the mux."""
     title = f"{sheet.title} ({sheet.slug}) review"
     voice_line = (
-        VOICE_LINE.format(
-            voice=manifest.voice, tempo=contract.TEMPO, gain=contract.VOICE_GAIN_DB
-        )
+        VOICE_LINE.format(voice=manifest.voice, tempo=contract.TEMPO, gain=gain_db)
         if narration
         else "none (silent)"
     )

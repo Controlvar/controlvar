@@ -136,6 +136,7 @@ def page(tmp_path):
         vtt_sha256="d" * 64,
         contact=contact,
         render_gates={"1": {"ok": True, "numbers": {"duration_s": 57.0}}},
+        gain_db=contract.voice_gain_db(capture.sheet.slug),
     )
 
 

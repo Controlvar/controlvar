@@ -163,6 +163,21 @@ class Type(_Strict):
     secret: bool = False
     #: Empty the field first (it holds a default the storyboard replaces).
     clear: bool = False
+    #: Select the field's text, then type over it, as a person replaces a value.
+    #: For a number box: emptied first (``clear``), it can draw "034" for 34.
+    select: bool = False
+
+    @model_validator(mode="after")
+    def _one_way_to_replace(self) -> "Type":
+        if self.select and self.clear:
+            raise ValueError(
+                "a type step replaces a value one way: select or clear, not both"
+            )
+        if self.select and self.secret:
+            raise ValueError(
+                "a secret field starts empty: there is nothing to select in it"
+            )
+        return self
 
 
 class Look(_Strict):
@@ -731,6 +746,219 @@ class Team(_Strict):
     shown: str
 
 
+#: The most a variant's configuration may be in the guided setup, in UTF-8
+#: bytes (frontend/src/components/experiments/new/formState.ts
+#: ``CONFIGURATION_MAX_BYTES``; a unit test keeps them equal). It is the
+#: dashboard's own limit: the API accepts larger ones.
+CONFIGURATION_MAX_BYTES = 16_384
+
+#: The confidence levels and corrections the guided setup offers
+#: (frontend/src/components/results/shared/analysisSettings.ts
+#: ``CONFIDENCE_OPTIONS`` and ``CORRECTION_OPTIONS``; a unit test keeps them
+#: equal): a storyboard cannot claim a setting the dashboard cannot make.
+CONFIDENCE_OPTIONS: Tuple[float, ...] = (0.9, 0.95, 0.99)
+CORRECTION_OPTIONS: Tuple[str, ...] = ("benjamini_hochberg", "bonferroni", "none")
+
+#: The operators the targeting builder offers (frontend/src/types/targeting.ts
+#: ``OperatorType``; a unit test keeps them equal), less the two segment
+#: operators: a segment condition's value is an id made at run time, which a
+#: design end state cannot declare.
+BUILDER_OPERATORS: Tuple[str, ...] = (
+    "equals",
+    "not_equals",
+    "contains",
+    "not_contains",
+    "starts_with",
+    "ends_with",
+    "greater_than",
+    "less_than",
+    "greater_than_or_equal",
+    "less_than_or_equal",
+    "in",
+    "not_in",
+    "regex",
+    "is_null",
+    "is_not_null",
+    "semver_eq",
+    "semver_gt",
+    "semver_lt",
+    "semver_gte",
+    "semver_lte",
+    "geo_within_radius",
+    "time_window",
+    "array_contains",
+    "array_intersects",
+)
+SEGMENT_OPERATORS: Tuple[str, ...] = ("in_segment", "not_in_segment")
+#: The operators whose row has no value box: the builder sends ``null``.
+NO_VALUE_OPERATORS: Tuple[str, ...] = ("is_null", "is_not_null")
+
+#: What a design end state may compare with a recorded reading: the Review
+#: step's rows, and the experiment page's analysis and Bayesian rows.
+DesignReading = Literal[
+    "review_variants",
+    "review_metrics",
+    "review_targeting",
+    "review_analysis",
+    "detail_analysis",
+    "detail_bayesian",
+]
+
+
+class DesignVariant(_Strict):
+    """A variant of the experiment the video designs, as the wizard saves it."""
+
+    name: str = Field(min_length=1, max_length=100)
+    allocation: int = Field(ge=0, le=100)
+    control: bool = False
+    #: Its JSON configuration; absent means none was typed.
+    configuration: Optional[Dict[str, Any]] = None
+
+    @model_validator(mode="after")
+    def _configuration_fits(self) -> "DesignVariant":
+        if self.configuration is not None:
+            # The compact form is the least a person could type: over the
+            # limit in it, the wizard refuses it in every form.
+            text = json.dumps(self.configuration, separators=(",", ":"))
+            size = len(text.encode("utf-8"))
+            if size > CONFIGURATION_MAX_BYTES:
+                raise ValueError(
+                    f"variant {self.name!r}'s configuration is {size} bytes; the"
+                    f" guided setup takes at most {CONFIGURATION_MAX_BYTES}"
+                )
+        return self
+
+
+class DesignMetric(_Strict):
+    """A metric of the experiment the video designs, as the wizard saves it."""
+
+    name: str = Field(min_length=1, max_length=100)
+    event: str = Field(min_length=1)
+    type: Literal["conversion", "revenue", "count", "duration", "custom"]
+    primary: bool = False
+    #: The minimum detectable effect typed on the Estimate step: the wizard
+    #: saves it on the primary metric only. Absent when none was typed.
+    mde: Optional[float] = Field(default=None, gt=0, lt=1)
+    lower_is_better: bool = False
+
+    @model_validator(mode="after")
+    def _effect_on_primary(self) -> "DesignMetric":
+        if self.mde is not None and not self.primary:
+            raise ValueError(
+                f"metric {self.name!r} has an mde, and is not the primary metric:"
+                " the wizard saves the typed effect on the primary only"
+            )
+        return self
+
+
+class DesignCondition(_Strict):
+    """One condition of a targeting rule, as the builder sends it (less its id)."""
+
+    attribute: str = Field(min_length=1)
+    operator: str
+    value: Any = None
+
+    @model_validator(mode="after")
+    def _offered(self) -> "DesignCondition":
+        if self.operator in SEGMENT_OPERATORS:
+            raise ValueError(
+                f"operator {self.operator!r}: a segment's id is made at run time,"
+                " so a design end state does not declare one"
+            )
+        if self.operator not in BUILDER_OPERATORS:
+            raise ValueError(
+                f"operator {self.operator!r} is not one the targeting builder offers"
+            )
+        if self.operator in NO_VALUE_OPERATORS:
+            if self.value is not None:
+                raise ValueError(
+                    f"operator {self.operator!r} has no value box: the builder"
+                    f" sends null, not {self.value!r}"
+                )
+        elif not isinstance(self.value, str):
+            raise ValueError(
+                f"the builder sends the value box's text, a string, not {self.value!r}"
+            )
+        return self
+
+
+class DesignGroup(_Strict):
+    logical_operator: Literal["AND", "OR"]
+    conditions: List[DesignCondition] = Field(min_length=1)
+
+
+class DesignTargeting(_Strict):
+    """Who can join, as the builder sends it, without the ids it adds to each
+    group and condition (they are made in the browser)."""
+
+    logical_operator: Literal["AND", "OR"]
+    groups: List[DesignGroup] = Field(min_length=1)
+
+
+class DesignAnalysis(_Strict):
+    confidence: float
+    correction: str
+    bayesian: bool
+
+    @model_validator(mode="after")
+    def _offered(self) -> "DesignAnalysis":
+        if self.confidence not in CONFIDENCE_OPTIONS:
+            raise ValueError(
+                f"confidence {self.confidence} is not one the guided setup offers"
+                f" {list(CONFIDENCE_OPTIONS)}"
+            )
+        if self.correction not in CORRECTION_OPTIONS:
+            raise ValueError(
+                f"correction {self.correction!r} is not one the guided setup"
+                f" offers {list(CORRECTION_OPTIONS)}"
+            )
+        return self
+
+
+class DesignEnd(_Strict):
+    """Gate 10 for an experiment the video designs and leaves a draft
+    (``gates.design_end``): it exists once, exactly as declared, with nothing
+    guided setup cannot set, and the readings named in ``shown`` said what was
+    saved, in the product's words."""
+
+    name: str = Field(min_length=1, max_length=100)
+    key: str = Field(min_length=1)
+    status: Literal["draft"]
+    type: Literal["a_b", "mv"]
+    #: Every variant, in the order the wizard holds them.
+    variants: List[DesignVariant] = Field(min_length=2)
+    #: Every metric, in the order the wizard holds them.
+    metrics: List[DesignMetric] = Field(min_length=1)
+    #: Absent: everyone can join.
+    targeting: Optional[DesignTargeting] = None
+    analysis: DesignAnalysis
+    #: Each reading compared, by the ``record`` name of the beat that read it.
+    shown: Dict[DesignReading, str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _as_the_wizard_saves(self) -> "DesignEnd":
+        names = [variant.name for variant in self.variants]
+        if len(set(names)) != len(names):
+            raise ValueError(f"a variant name repeats: {names}")
+        total = sum(variant.allocation for variant in self.variants)
+        if total != 100:
+            raise ValueError(f"the variants' allocations add up to {total}, not 100")
+        controls = [variant.name for variant in self.variants if variant.control]
+        if len(controls) != 1:
+            raise ValueError(f"exactly one variant is the control, not {controls}")
+        names = [metric.name for metric in self.metrics]
+        if len(set(names)) != len(names):
+            raise ValueError(f"a metric name repeats: {names}")
+        primary = [metric.name for metric in self.metrics if metric.primary]
+        if len(primary) != 1:
+            raise ValueError(f"exactly one metric is primary, not {primary}")
+        if not any(kind.startswith("review_") for kind in self.shown):
+            raise ValueError(
+                "a design end state compares at least one Review row (review_*)"
+            )
+        return self
+
+
 class EndState(_Strict):
     """Gate 10: what is true after the last scene, checked through the API."""
 
@@ -743,6 +971,8 @@ class EndState(_Strict):
     calculations: List[Calculation] = Field(default_factory=list)
     #: The teammates the video invited (their one-time passwords masked).
     team: Optional[Team] = None
+    #: An experiment the video designed and left a draft.
+    design: Optional[DesignEnd] = None
     #: A flag the safety monitor rolled back by itself (video 4).
     rollback: Optional[RollbackEnd] = None
 
@@ -754,11 +984,18 @@ class EndState(_Strict):
             and self.flag is None
             and not self.calculations
             and self.team is None
+            and self.design is None
             and self.rollback is None
         ):
             raise ValueError(
                 "an end state names experiments_listed, an experiment, a flag,"
-                " calculations or a team, or a rollback"
+                " calculations or a team, or a design, or a rollback"
+            )
+        if self.design is not None and (
+            self.experiment is not None or self.flag is not None
+        ):
+            raise ValueError(
+                "a design end state stands alone: not with an experiment or a flag"
             )
         return self
 
@@ -858,6 +1095,19 @@ class Storyboard(_Strict):
                 raise ValueError(
                     f"the flag's end state compares {flag.shown!r}, which no beat records"
                 )
+        design = self.end_state.design
+        if design is not None:
+            if self.traffic is not None:
+                raise ValueError(
+                    "a designed experiment is left a draft: its storyboard sends no"
+                    " traffic"
+                )
+            for kind, name in design.shown.items():
+                if name not in recorded:
+                    raise ValueError(
+                        f"the design's end state compares {kind} with {name!r},"
+                        " which no beat records"
+                    )
         return self
 
     @model_validator(mode="after")

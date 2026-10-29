@@ -234,17 +234,22 @@ def _narrate(
     total_frames: int,
     work: WorkDir,
     log: GateLog,
+    gain_db: float,
 ) -> Path:
     """The narration track onto the gated silent encode, and the sound's gates.
 
-    Returns the narrated file, which is the one published and named.
+    *gain_db* is the video's gain: the mux applies it, G13 finds each clip's
+    speech with it, and G17 records it. Returns the narrated file, which is the
+    one published and named.
     """
     track = work.path / "narration.wav"
     narration.build_wav(spoken, total_frames, track)
     problems, numbers = narration.placement_problems(track, spoken, total_frames)
     log.require("G15", problems, numbers)
     try:
-        encode.encode(sound.mux_argv(silent, track, voiced), work.path / "mux.log")
+        encode.encode(
+            sound.mux_argv(silent, track, voiced, gain_db), work.path / "mux.log"
+        )
     except RuntimeError as exc:
         raise Refused("G16", str(exc)) from exc
     work.remove(track)
@@ -271,7 +276,7 @@ def _narrate(
         windows = narration.windows_from(parsed)
         expected = []
         for sentence, (start, _end) in zip(spoken.sentences, windows):
-            first, last = narration.clip_speech(spoken.clip(sentence))
+            first, last = narration.clip_speech(spoken.clip(sentence), gain_db)
             expected.append((start + first, start + last))
     except (RuntimeError, ValueError) as exc:
         raise Refused("G13", str(exc)) from exc
@@ -284,7 +289,7 @@ def _narrate(
         levels = [sound.loudness(voiced, window)[0] for window in windows]
     except (RuntimeError, ValueError) as exc:
         raise Refused("G17", str(exc)) from exc
-    log.require("G17", *narration.loudness_problems(integrated, peak, levels))
+    log.require("G17", *narration.loudness_problems(integrated, peak, levels, gain_db))
     return voiced
 
 
@@ -329,6 +334,9 @@ def render(
             raise Refused("stack", stack_problems)
         sheet = capture.sheet
         spoken = capture.narration
+        # The one reading of this video's gain; everything below that
+        # applies, measures with or reports the gain is given this value.
+        gain_db = contract.voice_gain_db(sheet.slug)
         log.passed(
             "3",
             {
@@ -541,6 +549,7 @@ def render(
                 total_frames,
                 work,
                 log,
+                gain_db,
             )
         else:
             # G16, silent: the data says no narration, so no sound at all.
@@ -596,6 +605,7 @@ def render(
             vtt_sha256=vtt_sha,
             contact=contact,
             render_gates=log.gates,
+            gain_db=gain_db,
             narration=review.narration_rows(spoken, out_cues) if spoken else None,
             srt_sha256=srt_sha,
             transcript_sha256=txt_sha,

@@ -983,12 +983,86 @@ def test_the_parser_refuses_a_missing_summary_or_label(text, reason):
 
 
 def test_the_gain_and_the_precheck_are_the_plans():
-    assert contract.VOICE_GAIN_DB == 4.5
+    assert contract.DEFAULT_VOICE_GAIN_DB == 4.5
+    # Video 9 alone takes another gain: its new clips measure louder.
+    assert contract.VOICE_GAIN_DB_BY_VIDEO == {"09-design-in-depth": 3.5}
     assert contract.PRECHECK_PEAK_DBTP == -1.3
     assert (contract.LOUDNESS_TARGET_LUFS, contract.PRECHECK_LOUDNESS_LU) == (
         -19.0,
         0.7,
     )
+
+
+# --- A video's own gain ------------------------------------------------------------------------
+
+V9 = "09-design-in-depth"
+#: Video 9's 14 clips as the voice step measured them (2026-10-29):
+#: (where, integrated LUFS, true peak dBTP). Beat 2's was cached; the rest new.
+V9_CLIPS = [
+    ("api-only beat 1 line 1", -22.4, -6.7),
+    ("design beat 1 line 1", -20.9, -6.7),
+    ("design beat 10 line 1", -21.9, -6.5),
+    ("design beat 11 line 1", -22.5, -6.9),
+    ("design beat 2 line 1", -23.9, -8.5),
+    ("design beat 3 line 1", -22.2, -6.5),
+    ("design beat 4 line 1", -22.9, -6.9),
+    ("design beat 5 line 1", -23.3, -7.8),
+    ("design beat 6 line 1", -22.1, -8.2),
+    ("design beat 6 line 2", -22.6, -7.0),
+    ("design beat 7 line 1", -23.2, -7.0),
+    ("design beat 8 line 1", -22.3, -6.8),
+    ("design beat 8 line 2", -22.6, -6.8),
+    ("design beat 9 line 1", -21.9, -7.3),
+]
+#: That run's refusal, word for word.
+V9_REFUSED_AT_4_5 = (
+    "[voice] REFUSED 09-design-in-depth: the clips' mean loudness -22.5 LUFS is"
+    " -18.0 LUFS with the 4.5 dB gain; the target is -19 +-0.7"
+)
+
+
+def test_every_video_given_its_own_gain_is_a_registered_video():
+    """A misspelt slug would leave its video on the default gain without a word."""
+    assert set(contract.VOICE_GAIN_DB_BY_VIDEO) <= set(config.VIDEOS)
+
+
+@pytest.mark.regression
+def test_video_9s_measured_clips_pass_g10_at_its_gain_and_not_at_the_default():
+    """The voice step refused video 9's measured clips at 4.5 dB; at its own
+    gain the same 14 readings pass."""
+    assert contract.loudness_problems(V9_CLIPS, contract.voice_gain_db(V9)) == []
+    refused = contract.loudness_problems(V9_CLIPS, contract.DEFAULT_VOICE_GAIN_DB)
+    assert [f"[voice] REFUSED {V9}: {problem}" for problem in refused] == [
+        V9_REFUSED_AT_4_5
+    ]
+
+
+def test_the_step_gives_the_summary_and_g10_the_videos_own_gain(
+    voice, capsys, monkeypatch
+):
+    monkeypatch.setitem(contract.VOICE_GAIN_DB_BY_VIDEO, SLUG, 3.5)
+    voice.fakes.set("ffmpeg", {"ebur128": "quiet"})
+    status, out = voice.run(capsys)
+    assert status == step.REFUSED
+    summary = [line for line in out.splitlines() if " 6 lines; projected " in line]
+    assert len(summary) == 1, out
+    assert " mean loudness -33.0 LUFS (-29.5 with the 3.5 dB gain);" in summary[0]
+    assert out.splitlines()[-2] == (
+        f"[voice] REFUSED {SLUG}: the clips' mean loudness -33.0 LUFS is -29.5 LUFS with"
+        " the 3.5 dB gain; the target is -19 +-0.7"
+    )
+
+
+def test_the_gain_is_not_in_the_clip_key_so_video_9s_cached_clip_keeps_its_key():
+    """Beat 2's sentence was cached before video 9 took its own gain (videos 2,
+    3 and 6 say it too). A changed recipe or key field gives every clip of every
+    video a new key, and the voice step would ask Polly for all of them again."""
+    board = storyboard.load(SHOWCASE / config.VIDEOS[V9])
+    design = next(scene for scene in board.scenes if scene.id == "design")
+    sentence = "Name it, and the key your code uses fills itself in."
+    assert list(design.beats[1].say) == [sentence]
+    request = contract.polly_text(sentence)
+    assert contract.clip_key("Ruth", request).startswith("aa651bdcd6d9")
 
 
 # --- The projection ---------------------------------------------------------------------------

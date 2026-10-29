@@ -45,6 +45,8 @@
       the API then succeed as they do on the default port. Nothing on screen
       changes.
 
+09-design-in-depth: {}
+
 90-app-probe:
   CORS_ORIGINS:
     value: "{dashboard},{shoplab},{streampulse}"

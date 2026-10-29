@@ -290,6 +290,33 @@ def flag_state(
     )
 
 
+def design_state(
+    end: storyboard.DesignEnd,
+    api_url: str,
+    token: str,
+    readings: Mapping[str, str],
+    seed_experiments: int,
+) -> Tuple[bool, Dict[str, Any], str]:
+    """Gate 10's half for an experiment the video designed: the API's answers
+    (the experiments list with its total, the one named experiment read in
+    full, and the signed-in user), judged by ``gates.design_end``."""
+    from showcase.capture import gates as judge
+
+    listed = _api(f"{api_url}/api/v1/experiments/?limit=100", token)
+    named = [item for item in listed["items"] if item.get("name") == end.name]
+    if len(named) == 1:
+        named = [_api(f"{api_url}/api/v1/experiments/{named[0]['id']}", token)]
+    me = _api(f"{api_url}/api/v1/auth/me", token)
+    return judge.design_end(
+        end,
+        named=named,
+        total=int(listed["total"]),
+        seed_experiments=seed_experiments,
+        owner_id=me.get("id"),
+        readings=readings,
+    )
+
+
 def write_private(path: Path, text: str) -> None:
     """Create *path* with mode 0600 (never readable by anyone else), or fail."""
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, contract.NEEDLES_MODE)
@@ -979,6 +1006,8 @@ def record(
                 director.tally.scenes_run == [s.id for s in board.scenes],
                 ran=director.tally.scenes_run,
                 storyboard=[s.id for s in board.scenes],
+                # Typed as shown: each type step's field, read back (lengths).
+                typed=director.tally.typed,
             )
             # Gate 10: the end state, through the API.
             who = page.evaluate(WHO_JS)
@@ -1008,6 +1037,17 @@ def record(
                     end.flag, stack.api_url, token, director.readings
                 )
                 numbers["flag"] = made
+                if not ok:
+                    why.append(reason)
+            if end.design is not None:
+                ok, made, reason = design_state(
+                    end.design,
+                    stack.api_url,
+                    token,
+                    director.readings,
+                    board.seed_counts.experiments,
+                )
+                numbers["design"] = made
                 if not ok:
                     why.append(reason)
             for made_end in end.calculations:

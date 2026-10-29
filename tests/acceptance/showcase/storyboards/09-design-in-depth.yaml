@@ -1,0 +1,257 @@
+# Video 9, Design an experiment in depth: past the basics of guided setup (video
+# 2) into the options the dashboard offers when an experiment is designed: a
+# second metric, a third version and its traffic split, who can join (a
+# targeting rule), the confidence level and the multiple-comparison correction,
+# the Bayesian view, the Review step and the saved draft. On the `demo` seed;
+# the experiment is created and left a draft, so no traffic is sent.
+#
+# * D84: the only departure from a new user's path is the sign-in, done off
+#   camera and stated in the first caption. Nothing is set up, simulated,
+#   skipped or masked.
+# * The share boxes are changed by selecting the number and typing over it
+#   (`select: true`), the way a person commonly replaces a value. Emptying a
+#   share box and then typing draws a leading zero ("034") while 34 is saved;
+#   that behaviour is reported as a product issue and is not filmed here. The
+#   typed-as-shown check (gate 12) refuses any `type` step whose field does not
+#   read exactly what was typed, so a "034" can never be filmed unseen.
+# * Gate 10 ("design") reads the experiment back through the API: one draft
+#   with this name and key, the variants and metrics keyed by name, the
+#   targeting rule as the builder sent it (its ids aside), the analysis
+#   settings, and nothing guided setup cannot set. The Review rows and the
+#   page's analysis rows recorded below must say, in the product's own words,
+#   what was saved.
+# * What each narrated claim rests on:
+#   - "Everyone else gets the control, and isn't enrolled": an ineligible user
+#     gets the control with `assigned: false` and no assignment
+#     (test_tracking_api.py::test_dashboard_shaped_targeting_rules_gate_new_users);
+#     the rule admits exactly US and CA visitors
+#     (test_showcase_design_in_depth.py, with the server's own eligibility check).
+#   - "which lock once it starts": the confidence level and the correction are
+#     refused after draft (the experiments API's update path). The Bayesian
+#     view is not claimed to lock.
+#   - "keeps false winners to about 5% of all winners": the correction's own
+#     help text, drawn while it is said ("about 5% (at 95% confidence)").
+#   - "each version's chance of being best": the Bayesian panel's "Chance to be
+#     best" for every variant.
+#   - The closing card paraphrases docs/guides/dashboard-and-api.md (the
+#     schedule, global holdout and mutual exclusion rows, each "API only") and
+#     docs/api/sequential-testing.md ("Turning it on"); its pin is in
+#     test_showcase_quoted_docs.py. It is the first cut if it alone holds up a
+#     review.
+# * Length cuts, in order, if the voiced length runs over: (1) merge the
+#   confidence beat into the correction beat, caption "A correction for lucky
+#   winners, locked once it starts." (no new clip); (2) the card's sentence
+#   becomes "Holdouts, exclusion groups and schedules use the API.".
+# * `say` is the narration, in the other videos' voice; every number it says
+#   is drawn while it is said (G2): "100%" in "Currently 100%", "5%" in the
+#   correction's help text.
+slug: 09-design-in-depth
+title: "Design an experiment in depth"
+seed: demo
+seed_counts: {experiments: 3, feature_flags: 2, users: 4}
+never_show:
+  - Assign a user from your app
+  - guardrail
+end_state:
+  signed_in_as: admin@demo.com
+  design:
+    name: Delivery promise
+    key: delivery_promise
+    status: draft
+    type: a_b
+    variants:
+      - {name: Control, allocation: 34, control: true}
+      - {name: Treatment, allocation: 33}
+      - {name: Variant 2, allocation: 33}
+    metrics:
+      - {name: Purchase, event: purchase, type: conversion, primary: true}
+      - {name: Add to cart, event: add_to_cart, type: conversion}
+    targeting:
+      logical_operator: AND
+      groups:
+        - logical_operator: AND
+          conditions:
+            - {attribute: user.country, operator: in, value: "US, CA"}
+    analysis: {confidence: 0.95, correction: benjamini_hochberg, bayesian: true}
+    shown:
+      review_variants: review-variants
+      review_metrics: review-metrics
+      review_targeting: review-targeting
+      review_analysis: review-analysis
+      detail_analysis: analysis
+      detail_bayesian: bayesian
+scenes:
+  - id: design
+    open: /experiments
+    signed_in: true
+    departures:
+      - kind: off-camera setup
+        says: Signed in off camera
+    beats:
+      - cue: Signed in off camera. Past the basics of guided setup.
+        focus: {testid: new-experiment-btn}
+        say:
+          - Choose New Experiment.
+        steps:
+          - move: {testid: new-experiment-btn}
+        exit:
+          - click: {testid: new-experiment-btn}
+          - wait_for: {testid: wizard-step-heading}
+          - click: {testid: wizard-next}
+
+      - before:
+          - wait_for: {role: heading, name: Name it and choose what to measure}
+        cue: Name it, and the key fills itself in.
+        focus: {testid: experiment-name}
+        say:
+          - Name it, and the key your code uses fills itself in.
+        steps:
+          - type: {testid: experiment-name}
+            text: Delivery promise
+          - look: {testid: experiment-key}
+            ms: 1000
+
+      - before:
+          - scroll_to: {testid: metric-row-0}
+        cue: "The primary metric: the one you decide on."
+        focus: {testid: metric-row-0}
+        say:
+          - "Make purchases the primary metric: the one you decide on."
+        steps:
+          - type: {testid: metric-name-0}
+            text: Purchase
+            clear: true
+          - type: {testid: metric-event-0}
+            text: purchase
+            clear: true
+
+      - cue: Add a metric to track alongside it.
+        focus: {testid: metrics-section}
+        say:
+          - "Add a second metric to track alongside it: add to cart."
+        steps:
+          - click: {testid: add-metric}
+          - type: {testid: metric-name-1}
+            text: Add to cart
+          - type: {testid: metric-event-1}
+            text: add_to_cart
+        exit:
+          - click: {testid: wizard-next}
+
+      - before:
+          - wait_for: {role: heading, name: Set up the versions users will see}
+        cue: Add a third version, and split the traffic.
+        focus: {css: "div.space-y-3:has([data-testid=variant-row-0])"}
+        say:
+          - Add a third version, and split the traffic so it reaches 100%.
+        steps:
+          - click: {testid: add-variant}
+          - type: {testid: variant-allocation-0}
+            text: "34"
+            select: true
+          - type: {testid: variant-allocation-1}
+            text: "33"
+            select: true
+          - type: {testid: variant-allocation-2}
+            text: "33"
+            select: true
+
+      - before:
+          - scroll_to: {testid: add-group}
+        cue: Choose who can join, from what your app sends.
+        focus: {css: "div.space-y-4:has(> div > h3)"}
+        say:
+          - "Choose who can join from what your app sends: US or Canada."
+          - Everyone else gets the control, and isn't enrolled.
+        steps:
+          - click: {testid: add-group}
+          - type: {testid: condition-attribute}
+            text: user.country
+          - choose: {testid: condition-operator}
+            option: is one of
+          - type: {testid: condition-value}
+            text: US, CA
+        exit:
+          - click: {testid: wizard-next}
+
+      - before:
+          - wait_for: {testid: analysis-settings}
+        cue: Confidence and correction lock once it starts.
+        focus: {css: "fieldset[data-testid=analysis-settings] > div.grid"}
+        say:
+          - Next, a confidence level and a correction, which lock once it starts.
+        steps:
+          - look: {css: "div:has(> #analysis-confidence)"}
+            ms: 1500
+
+      - cue: Several versions? Correct for lucky winners.
+        focus: {css: "div:has(> #analysis-correction)"}
+        say:
+          - With several versions, one can look like a winner by luck.
+          - Benjamini-Hochberg, the default, keeps false winners to about 5% of all winners.
+        steps:
+          - look: {css: "div:has(> #analysis-correction)"}
+            ms: 2000
+
+      - cue: "Optional: a Bayesian view of the primary metric."
+        focus: {css: "div:has(> #analysis-bayesian)"}
+        say:
+          - Turn on Bayesian to also see each version's chance of being best.
+        steps:
+          - click: {testid: analysis-bayesian}
+          - look: {css: "div:has(> #analysis-bayesian)"}
+            ms: 1000
+        exit:
+          - click: {testid: wizard-next}
+
+      - before:
+          - wait_for: {testid: wizard-review}
+        cue: Review your choices, then create it.
+        focus: {css: "div.py-3:has([data-testid=review-variants])"}
+        say:
+          - Review your choices, then create it.
+        record:
+          review-variants: {testid: review-variants}
+          review-metrics: {testid: review-metrics}
+          review-targeting: {testid: review-targeting}
+          review-analysis: {testid: review-analysis}
+        steps:
+          - look: {testid: review-variants}
+            ms: 1000
+          - look: {testid: review-analysis}
+            ms: 1000
+        exit:
+          - click: {testid: wizard-create}
+
+      - before:
+          - wait_for: {testid: experiment-analysis}
+        cue: Saved as a draft, with its versions, metrics and analysis.
+        focus: {css: "div.bg-white:has([data-testid=experiment-analysis])"}
+        say:
+          - It's saved as a draft, with its versions, metrics and analysis.
+        record:
+          analysis: {testid: experiment-analysis}
+          bayesian: {testid: experiment-bayesian}
+        payoff: true
+        steps:
+          - look: {testid: experiment-analysis}
+            ms: 1000
+          - look: {testid: experiment-bayesian}
+            ms: 800
+          - look: {testid: variants-table}
+            ms: 1200
+          - look: {testid: metrics-list}
+            ms: 1000
+
+  - id: api-only
+    card:
+      label: Not in guided setup
+      headline: Through the API
+      note: >-
+        Mutual exclusion groups, a global holdout (beta), start and end dates, and
+        sequential testing (beta) are set through the API; the docs show each request.
+    beats:
+      - cue: Holdouts, exclusion groups, schedules and more use the API.
+        focus: {css: "#headline"}
+        say:
+          - Set holdouts, exclusion groups, schedules and sequential testing through the API.

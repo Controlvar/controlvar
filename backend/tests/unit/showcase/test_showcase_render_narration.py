@@ -10,7 +10,9 @@ tamper-tested on a developer's machine (``showcase.render.synthetic
 
 from __future__ import annotations
 
+import ast
 import copy
+import inspect
 import json
 import shutil
 import wave
@@ -19,6 +21,7 @@ from pathlib import Path
 
 import pytest
 from showcase import contract
+from showcase.capture import config
 from showcase.render import narration, pipeline, probe, review, sound, timeline, vtt
 
 from backend.tests.unit.showcase.capture_dirs import (
@@ -36,6 +39,7 @@ from backend.tests.unit.showcase.capture_dirs import (
 pytestmark = [pytest.mark.unit]
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
+SHOWCASE = Path(__file__).resolve().parents[4] / "tests" / "acceptance" / "showcase"
 
 
 def refused(root: Path) -> str:
@@ -522,7 +526,7 @@ def test_a_sentence_with_no_speech_fails_g13():
 def test_a_clips_own_speech_is_measured_with_the_gain(tmp_path: Path):
     path = tmp_path / "clip.wav"
     write_clip(path, clip_bytes(1))
-    first, last = narration.clip_speech(path)
+    first, last = narration.clip_speech(path, contract.DEFAULT_VOICE_GAIN_DB)
     assert CLIP_LEAD <= first < CLIP_LEAD + 20
     assert CLIP_LEAD + CLIP_TONE - 20 < last < CLIP_LEAD + CLIP_TONE
 
@@ -599,8 +603,25 @@ def test_two_sound_streams_fail_g16():
     ]
 
 
-def test_the_mux_copies_the_video_and_applies_the_gain_in_floating_point():
-    argv = sound.mux_argv(Path("s.mp4"), Path("n.wav"), Path("o.mp4"))
+#: Each registered video's gain as the mux's filter, the review page's words
+#: and G17's record write it: the default 4.5 dB, which every video had before
+#: video 9 took its own, except video 9's 3.5 dB.
+BEFORE_T216 = ("volume=4.5dB:precision=float", "4.5 dB gain", 4.5)
+VIDEO_9 = ("volume=3.5dB:precision=float", "3.5 dB gain", 3.5)
+GAINS = [
+    (slug, *(VIDEO_9 if slug == "09-design-in-depth" else BEFORE_T216))
+    for slug in config.VIDEOS
+]
+GAIN_IDS = list(config.VIDEOS)
+
+
+@pytest.mark.parametrize("slug, volume, _words, _recorded", GAINS, ids=GAIN_IDS)
+def test_the_mux_copies_the_video_and_applies_the_videos_gain_in_floating_point(
+    slug, volume, _words, _recorded
+):
+    argv = sound.mux_argv(
+        Path("s.mp4"), Path("n.wav"), Path("o.mp4"), contract.voice_gain_db(slug)
+    )
     assert argv == [
         "ffmpeg",
         "-hide_banner",
@@ -619,7 +640,7 @@ def test_the_mux_copies_the_video_and_applies_the_gain_in_floating_point():
         "-c:v",
         "copy",
         "-af",
-        "volume=4.5dB:precision=float",
+        volume,
         "-c:a",
         "aac",
         "-b:a",
@@ -681,7 +702,9 @@ def test_a_sentences_loudness_is_read_on_the_files_own_timeline():
 
 
 def test_loudness_on_target_passes_g17():
-    problems, numbers = narration.loudness_problems(-19.3, -2.1, [-19.0, -19.6, -18.4])
+    problems, numbers = narration.loudness_problems(
+        -19.3, -2.1, [-19.0, -19.6, -18.4], contract.DEFAULT_VOICE_GAIN_DB
+    )
     assert problems == []
     assert numbers["sentence_median_lufs"] == -19.0
 
@@ -701,7 +724,9 @@ def test_loudness_on_target_passes_g17():
     ],
 )
 def test_g17_refuses_loudness_off_target(integrated, peak, levels, message):
-    assert narration.loudness_problems(integrated, peak, levels)[0] == [message]
+    assert narration.loudness_problems(
+        integrated, peak, levels, contract.DEFAULT_VOICE_GAIN_DB
+    )[0] == [message]
 
 
 # --- G19: the published file names itself ----------------------------------------
@@ -748,6 +773,7 @@ def page(root: Path, narrated: bool) -> str:
         vtt_sha256="cd" * 32,
         contact=[],
         render_gates={},
+        gain_db=contract.voice_gain_db(capture.sheet.slug),
         narration=rows,
         srt_sha256="ef" * 32 if narrated else None,
         transcript_sha256="12" * 32 if narrated else None,
@@ -800,3 +826,97 @@ def test_sound_outside_every_clip_fails_g15(voiced: Path, tmp_path: Path):
     assert problems == [
         "the narration track has sound at sample 10, outside every clip's place"
     ]
+
+
+# --- Each video's own gain, read once -----------------------------------------
+
+
+@pytest.mark.parametrize("slug, _volume, words, recorded", GAINS, ids=GAIN_IDS)
+def test_the_review_page_and_g17_state_the_videos_gain(
+    tmp_path: Path, slug, _volume, words, recorded
+):
+    root = make_voiced_capture(tmp_path / "c")
+    edit_json(root / "cues.json", lambda sheet: sheet.update(slug=slug))
+    assert f"after synthesis; {words}; AAC, 48 kHz, mono" in page(root, True)
+    _problems, numbers = narration.loudness_problems(
+        -19.0, -3.0, [-19.0, -19.2], contract.voice_gain_db(slug)
+    )
+    assert numbers["gain_db"] == recorded
+
+
+@pytest.mark.parametrize(
+    "consumer",
+    [
+        contract.loudness_problems,
+        sound.gain_filter,
+        sound.mux_argv,
+        narration.clip_speech,
+        narration.loudness_problems,
+        review.review_html,
+        pipeline._narrate,
+    ],
+    ids=lambda function: f"{function.__module__}.{function.__name__}",
+)
+def test_no_gain_consumer_falls_back_to_a_gain_of_its_own(consumer):
+    """A call that leaves the gain out fails, rather than taking 4.5 dB."""
+    gain = inspect.signature(consumer).parameters["gain_db"]
+    assert gain.default is inspect.Parameter.empty
+
+
+def gain_given(call: ast.Call) -> str:
+    keyword = [k.value for k in call.keywords if k.arg == "gain_db"]
+    return ast.unparse(keyword[0] if keyword else call.args[-1])
+
+
+def test_the_render_reads_the_videos_gain_once_and_every_consumer_gets_that_value():
+    """The partial wiring this guards against: G10 at 3.5 dB and a mux at 4.5 dB
+    would land video 9 about 1 dB hot. The render has no test that runs ffmpeg
+    here, so its wiring is read from its source."""
+    tree = ast.parse((SHOWCASE / "render" / "pipeline.py").read_text(encoding="utf-8"))
+    stores = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name)
+        and node.id == "gain_db"
+        and isinstance(node.ctx, ast.Store)
+    ]
+    assigned = [
+        ast.unparse(node)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign) and any(t in stores for t in node.targets)
+    ]
+    assert len(stores) == 1
+    assert assigned == ["gain_db = contract.voice_gain_db(sheet.slug)"]
+    consumers = {
+        "_narrate",
+        "narration.clip_speech",
+        "narration.loudness_problems",
+        "review.review_html",
+        "sound.mux_argv",
+    }
+    given = sorted(
+        (ast.unparse(node.func), gain_given(node))
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and ast.unparse(node.func) in consumers
+    )
+    assert given == [(name, "gain_db") for name in sorted(consumers)]
+
+    lookups, reads = [], []
+    for path in sorted(SHOWCASE.rglob("*.py")):
+        where = path.relative_to(SHOWCASE).as_posix()
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call) and ast.unparse(node.func).endswith(
+                "voice_gain_db"
+            ):
+                lookups.append((where, ast.unparse(node)))
+            name = getattr(node, "attr", None) or getattr(node, "id", None)
+            if where != "contract.py" and name in (
+                "DEFAULT_VOICE_GAIN_DB",
+                "VOICE_GAIN_DB_BY_VIDEO",
+            ):
+                reads.append((where, node.lineno))
+    assert lookups == [
+        ("render/pipeline.py", "contract.voice_gain_db(sheet.slug)"),
+        ("voice/step.py", "contract.voice_gain_db(slug)"),
+    ]
+    assert reads == []
