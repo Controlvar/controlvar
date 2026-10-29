@@ -308,6 +308,8 @@ scenes:
             fields: {status: ok, experiment_id: "{experiment}", group_id: "{group}"}
         steps:
           - send: true
+          - look: {css: '#response > div[data-key="group_id"]'}
+            ms: 2000
 
       - cue: "Global holdout: 5% of new users kept out of every experiment."
         focus: {css: "#console"}
@@ -328,6 +330,8 @@ scenes:
           keep: {holdout: id}
         steps:
           - send: true
+          - look: {css: '#response > div[data-key="holdout_percentage"]'}
+            ms: 2000
 
       - cue: Schedule its start; it starts on its own.
         focus: {css: "#console"}
@@ -344,6 +348,8 @@ scenes:
             fields: {status: draft, start_date: "{start}"}
         steps:
           - send: true
+          - look: {css: '#response > div[data-key="start_date"]'}
+            ms: 2000
 
       - cue: "Sequential testing (beta): check often, stop early."
         focus: {css: "#console"}
@@ -367,11 +373,18 @@ scenes:
               mutual_exclusion_group_id: "{group}"
         steps:
           - send: true
+          - look: {css: '#response > div[data-key="sequential_testing_enabled"]'}
+            ms: 2000
 
       - cue: "Also in this answer: the group and the start date."
         focus: {css: "#console"}
         say:
           - The answer also carries the group's id and the start date.
+        steps:
+          - look: {css: '#response > div[data-key="mutual_exclusion_group_id"]'}
+            ms: 1500
+          - look: {css: '#response > div[data-key="start_date"]'}
+            ms: 1500
 
       - cue: "Read back: a draft, in its group, scheduled, sequential on."
         focus: {css: "#console"}
@@ -391,6 +404,14 @@ scenes:
               mutual_exclusion_group_id: "{group}"
         steps:
           - send: true
+          - look: {css: '#response > div[data-key="status"]'}
+            ms: 1200
+          - look: {css: '#response > div[data-key="mutual_exclusion_group_id"]'}
+            ms: 1200
+          - look: {css: '#response > div[data-key="start_date"]'}
+            ms: 1200
+          - look: {css: '#response > div[data-key="sequential_testing_enabled"]'}
+            ms: 1200
 
       - cue: "The global holdout: active."
         focus: {css: "#console"}
@@ -405,3 +426,5 @@ scenes:
             fields: {id: "{holdout}", name: Q4 holdout, holdout_percentage: 5, is_active: true}
         steps:
           - send: true
+          - look: {css: '#response > div[data-key="is_active"]'}
+            ms: 2000

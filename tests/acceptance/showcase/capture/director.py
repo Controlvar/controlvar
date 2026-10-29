@@ -102,6 +102,16 @@ stand-in pages where Playwright is not installed. What it does, in order:
   B9's gate and S5's card read it); and ``at_cue`` is called at every cue's
   start, after its readings, where the run reads the API off camera.
 
+* A console scene (video 9's API part, ``showcase.capture.console``) is a
+  page the tool draws, like a card, with no cursor and not a still span. At
+  each beat's cue start its call's request is drawn (or the call before it
+  kept up), the ``send`` step makes the call and draws the API's answer, and
+  after the send and at the cue's end the panel is read back: its text must
+  be the exchange's, each shown field's own value from the raw answer on
+  its own line, and the render's own matcher must find no kept value or
+  token in the page's text. A request from the console page fails the
+  video. The calls' answers are registered as the page's are.
+
 A failure raises ``CaptureFailed`` naming the scene, the beat and the gate.
 """
 
@@ -119,7 +129,7 @@ from urllib.parse import parse_qs, urlparse
 
 import numpy as np
 
-from showcase.capture import config, guard, storyboard
+from showcase.capture import config, console, guard, storyboard
 from showcase.capture import gates as judge
 from showcase.capture.voiced import Pacing, exit_floor_ms
 
@@ -462,6 +472,9 @@ class Tally:
     fit_least_px: Optional[float] = None
     #: A5: each app scene's first cue, and whether it showed the app's text.
     required_checks: List[str] = field(default_factory=list)
+    #: A console scene's secret checks (``console.secret_findings`` on the
+    #: drawn text: after each draw, at each cue's start and end).
+    console_secret_checks: int = 0
 
 
 def decode_rgb(jpeg: bytes, width: int, height: int) -> np.ndarray:
@@ -670,6 +683,14 @@ class Director:
         self.pacing = pacing or Pacing()
         #: U4's reading of the viewport's text at the last cue start (G2).
         self.start_text = ""
+        #: A console scene's calls (``console.Calls``), set by the run off
+        #: camera before the scene; the exchange on screen and its call; and the
+        #: requests seen while a console page is filmed (none may be).
+        self.calls: Optional[console.Calls] = None
+        self.console_exchange: Optional[console.Exchange] = None
+        self.console_call: Optional[storyboard.Call] = None
+        self.console_note: Optional[str] = None
+        self.console_requests: Optional[List[str]] = None
 
     # -- the guard and the listeners ------------------------------------------
 
@@ -814,6 +835,9 @@ class Director:
             )
 
     def _on_request(self, request: Any) -> None:
+        if self.console_requests is not None:
+            # A console page is the tool's own and fetches nothing.
+            self.console_requests.append(f"{urlparse(request.url).path} ({self.where})")
         app = self._counted(request.url)
         # Every request is tagged with the scene it starts in (or none).
         self.charged[id(request)] = (app, self.where, _now_ms())
@@ -1616,9 +1640,17 @@ class Director:
             _, box = self._visible_box(step.look)
             if self.recorder.recording:
                 self.check_fit(self.filming, "a ring", box)
+            # On a console, a shown field is barred as well as rung.
+            barred = console.FIELD_SELECTOR.match(step.look.css or "")
+            if barred and self.console_exchange is not None:
+                self.page.evaluate(console.MARK_JS, [barred.group(1), True])
             self.ring(box)
             self.page.wait_for_timeout(step.ms)
             self.ring(None)
+            if barred and self.console_exchange is not None:
+                self.page.evaluate(console.MARK_JS, [barred.group(1), False])
+        elif isinstance(step, storyboard.Send):
+            self.console_send()
         elif isinstance(step, storyboard.ScrollTo):
             found = self.locate(step.scroll_to)
             self.scroll_into_view(found)
@@ -1778,6 +1810,8 @@ class Director:
             finally:
                 self.recorder.start()
             self.draw_cursor()
+        if scene.console is not None:
+            self.console_cue_start(scene, index, beat)
         found, focus = self._visible_box(beat.focus)
         self.check_needles()
         self.check_page(focus, found, beat.cue)
@@ -1817,6 +1851,8 @@ class Director:
             )
         self.check_needles()
         end_box = self.check_focus(focus, found, "end")
+        if scene.console is not None:
+            self.console_cue_end(scene, index, beat)
         self.check_fit(scene.app, "cue end")
         self.check_events()
         if voice is not None:
@@ -1859,6 +1895,156 @@ class Director:
     def card(self, card: storyboard.Card) -> None:
         self.page.set_content(card_html(card))
         self.page.wait_for_timeout(300)
+
+    # -- a console scene ----------------------------------------------------------
+
+    def console_page(self, scene: Scene) -> None:
+        """Off camera: the console's empty page, and its calls ready."""
+        if self.calls is None:
+            raise CaptureFailed(
+                "api", f"{self.where}: no calls were set up for the console"
+            )
+        assert scene.console is not None
+        self.console_exchange = None
+        self.console_call = None
+        self.page.set_content(console.console_html(scene.console.label))
+        self.page.wait_for_timeout(300)
+
+    def console_draw(self, exchange: console.Exchange, note: Optional[str]) -> None:
+        """Draw *exchange* as it stands, and *note*, then read the panel back:
+        its text must be the exchange's, every line within the console's size."""
+        request, response = console.exchange_lines(exchange)
+        lines = [text for text, _k, _f in [*request, *response]]
+        too_big = console.fit_problems(lines)
+        if too_big:
+            raise CaptureFailed("api", f"{self.where}: {'; '.join(too_big)}")
+        self.page.evaluate(
+            console.DRAW_JS,
+            {
+                "request": [list(line) for line in request],
+                "response": [list(line) for line in response],
+                "note": note or "",
+            },
+        )
+
+    def console_read(self) -> Dict[str, Any]:
+        return self.page.evaluate(console.READ_JS)
+
+    def console_secrets(self) -> None:
+        """The render's own matcher on the console's drawn text: a kept value
+        whole, cut short or split, or a token's shape, refuses the take."""
+        from docs_runner.execute import DRAWN_JS
+
+        self.tally.console_secret_checks += 1
+        text, _fields = self.page.evaluate(DRAWN_JS)
+        values = [*config.STATIC_NEEDLES, *sorted(self.redactor.values)]
+        found = console.secret_findings(text, values)
+        if found:
+            raise CaptureFailed(
+                "gate 6",
+                f"{self.where}: the console's text gives away {found[0]}; recording"
+                " dropped",
+            )
+
+    def console_cue_start(self, scene: Scene, index: int, beat: Beat) -> None:
+        """At the cue's start: a call's request drawn (its answer not yet), or
+        the exchange before kept up; the beat's note; the panel read back."""
+        calls = self.calls
+        if calls is None:
+            raise CaptureFailed("api", f"{self.where}: no calls were set up")
+        now = self.recorder.now()
+        if beat.call is not None:
+            try:
+                exchange = calls.begin(scene.id, index, beat.call)
+            except console.CallRefused as error:
+                raise CaptureFailed("api", f"{self.where}: {error}") from None
+            exchange.times["cue_start"] = now
+            self.console_exchange = exchange
+            self.console_call = beat.call
+            self.console_note = beat.note
+            self.console_draw(exchange, beat.note)
+            exchange.times["request_drawn"] = self.recorder.now()
+            drawn = console.drawn_lines(self.console_read())
+            exchange.checks["request_as_drawn"] = drawn
+            if drawn != console.exchange_text(exchange):
+                raise CaptureFailed(
+                    "api", f"{self.where}: the request drawn is not the one to be sent"
+                )
+        else:
+            exchange = self.console_exchange
+            if exchange is None or not exchange.answered:
+                raise CaptureFailed(
+                    "api", f"{self.where}: no answered exchange to keep on screen"
+                )
+            self.console_note = beat.note
+            self.console_draw(exchange, beat.note)
+            problems = self.console_mismatch(exchange)
+            calls.kept_up.append(
+                {
+                    "scene": scene.id,
+                    "beat": index,
+                    "keeps": [exchange.scene, exchange.beat],
+                    "at_cue_start": problems,
+                }
+            )
+            if problems:
+                raise CaptureFailed("api", f"{self.where}: {'; '.join(problems)}")
+        self.console_secrets()
+
+    def console_mismatch(self, exchange: console.Exchange) -> List[str]:
+        """What the panel shows that is not *exchange*: its text against the
+        record's, and each shown field against the raw answer's own value."""
+        read = self.console_read()
+        problems = []
+        if console.drawn_lines(read) != console.exchange_text(exchange):
+            problems.append("the drawn answer is not the API's")
+        assert self.calls is not None
+        answer = self.calls.answers.get(id(exchange))
+        if not isinstance(answer, dict):
+            problems.append("no answer to compare the panel with")
+        else:
+            problems += console.raw_answer_problems(exchange.show, answer, read)
+        return problems
+
+    def console_send(self) -> None:
+        """The ``send`` step: the call made, its answer drawn and read back."""
+        exchange, call, calls = self.console_exchange, self.console_call, self.calls
+        if exchange is None or call is None or calls is None or exchange.answered:
+            raise CaptureFailed("api", f"{self.where}: a send with no request drawn")
+        exchange.times["sent"] = self.recorder.now()
+        try:
+            answer = calls.make(exchange, call)
+        except console.CallRefused as error:
+            raise CaptureFailed("api", f"{self.where}: {error}") from None
+        exchange.times["answered"] = self.recorder.now()
+        # The tool's own call is not a page's: its answer is registered here.
+        redaction.register_credentials(answer, self.redactor)
+        self.console_draw(exchange, self.console_note)
+        exchange.times["response_drawn"] = self.recorder.now()
+        problems = self.console_mismatch(exchange)
+        sent = console.exchange_lines(exchange)[0]
+        if [text for text, _k, _f in sent] != exchange.checks.get("request_as_drawn"):
+            problems.append("the request sent is not the one drawn at the cue's start")
+        exchange.checks["after_send"] = problems
+        if problems:
+            raise CaptureFailed("api", f"{self.where}: {'; '.join(problems)}")
+        self.console_secrets()
+
+    def console_cue_end(self, scene: Scene, index: int, beat: Beat) -> None:
+        """At the cue's end: the exchange still on screen, as made."""
+        exchange = self.console_exchange
+        if exchange is None or not exchange.answered:
+            raise CaptureFailed("api", f"{self.where}: the call was never sent")
+        problems = self.console_mismatch(exchange)
+        if beat.call is not None:
+            exchange.times["cue_end"] = self.recorder.now()
+            exchange.checks["at_cue_end"] = problems
+        else:
+            assert self.calls is not None
+            self.calls.kept_up[-1]["at_cue_end"] = problems
+        if problems:
+            raise CaptureFailed("api", f"{self.where}: {'; '.join(problems)}")
+        self.console_secrets()
 
     def sign_in(self) -> None:
         """Off camera: the demo admin signs in through the login page."""
@@ -1908,6 +2094,8 @@ class Director:
         self.counting = scene.app
         if scene.card is not None:
             self.card(scene.card)
+        elif scene.console is not None:
+            self.console_page(scene)
         elif scene.results_of is not None:
             if self.resolve is None:
                 raise CaptureFailed("gate 12", f"{self.where}: no experiment lookup")
@@ -1931,9 +2119,12 @@ class Director:
         self.filming = scene.app
         walls = self.scene_walls.setdefault(scene.id, {})
         walls["start"] = _now_ms()
+        # A console page fetches nothing while it is filmed; any request refuses.
+        self.console_requests = [] if scene.console is not None else None
         self.recorder.start()
         try:
-            if scene.card is None:
+            # No cursor on a card or a console: nothing on them is pointed at.
+            if scene.card is None and scene.console is None:
                 self.draw_cursor()
             for index, beat in enumerate(scene.beats, start=1):
                 self.beat(scene, index, beat)
@@ -1944,6 +2135,13 @@ class Director:
             self.recorder.stop()
             walls["end"] = _now_ms()
             self.filming = None
+            requested, self.console_requests = self.console_requests, None
+        if requested:
+            raise CaptureFailed(
+                "P2",
+                f"scene {scene.id}: the console page made {len(requested)} request(s),"
+                f" first {requested[0]}",
+            )
         if scene.card is not None:
             self.still_spans.append((began, self.recorder.now()))
         self.tally.scenes_run.append(scene.id)

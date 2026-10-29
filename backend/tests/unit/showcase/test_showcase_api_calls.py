@@ -17,7 +17,7 @@ from typing import Any, Callable, Dict, List
 
 import pytest
 import yaml
-from showcase.capture import config, storyboard, voiced
+from showcase.capture import config, console, storyboard, voiced
 
 pytestmark = [pytest.mark.unit]
 
@@ -98,8 +98,26 @@ def test_the_real_boards_calls_are_six_of_the_closed_list_in_order():
         "scheduled_start",
         "sequential",
     ]
-    sends = [[type(step).__name__ for step in beat.steps] for beat in scene.beats]
+    sends = [
+        [
+            type(step).__name__
+            for step in beat.steps
+            if not isinstance(step, storyboard.Look)
+        ]
+        for beat in scene.beats
+    ]
     assert sends == [["Send"]] * 4 + [[]] + [["Send"]] * 2
+    # Each look rings a field its beat's exchange shows, after the send.
+    for number, beat in enumerate(scene.beats):
+        exchange = beat.call or scene.beats[number - 1].call
+        for step in beat.steps:
+            if isinstance(step, storyboard.Look):
+                field = console.FIELD_SELECTOR.match(step.look.css or "")
+                assert field and field.group(1) in exchange.show, step.look.css
+        assert all(
+            not isinstance(step, storyboard.Look)
+            for step in beat.steps[: 1 if beat.call else 0]
+        )
 
 
 def test_the_closed_list_is_exactly_the_plans():
