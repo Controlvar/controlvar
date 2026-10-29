@@ -193,6 +193,10 @@ jobs:
           # or "invalid IP:0" (the ubuntu-26.04 runner, Docker 29.4.2: run
           # 40787685453); a real binding is never port 0. So a port is
           # published when any line of the answer does not end in ":0".
+          # TAMPER (#1437, never merged): postgres re-created publishing a host
+          # port; the loop below must fail on it.
+          printf 'services:\n  postgres:\n    ports: ["127.0.0.1:15432:5432"]\n' >tamper-ports.yml
+          docker compose -f "$PROD_COMPOSE" -f tamper-ports.yml up -d --no-build --pull never --no-deps postgres
           for svc in postgres:5432 redis:6379 api:8000; do
             if docker compose -f "$PROD_COMPOSE" port "${svc%%:*}" "${svc##*:}" >port.out 2>&1 && grep -q -v ':0$' port.out; then
               echo "::error::${svc%%:*} publishes $(cat port.out)"
