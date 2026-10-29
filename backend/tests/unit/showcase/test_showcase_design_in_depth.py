@@ -52,9 +52,9 @@ def every_step(beat: Any) -> List[Any]:
 # ---------------------------------------------------------------------------
 
 
-def test_video_9_registers_last_on_the_demo_seed_with_no_app_or_override():
+def test_video_9_registers_just_before_video_4_on_the_demo_seed_with_no_app_or_override():
     assert config.VIDEOS[SLUG] == "storyboards/09-design-in-depth.yaml"
-    assert list(config.VIDEOS)[-1] == SLUG
+    assert list(config.VIDEOS)[-2:] == [SLUG, "04-streampulse-rollout"]
     made = board()
     assert made.seed == "demo"
     assert made.apps == []
