@@ -2,8 +2,9 @@
 
 * ``mux_argv``: the silent encode's video stream copied as it is (``-c:v
   copy``), the narration track encoded as AAC LC, 48 kHz, mono, with the
-  fixed gain ``contract.VOICE_GAIN_DB`` applied by ffmpeg's ``volume`` filter
-  in floating point. No ``-shortest``, no ``atrim``, no limiter, no loudnorm:
+  video's gain (``contract.voice_gain_db``, which the render reads once and
+  passes in) applied by ffmpeg's ``volume`` filter in floating point. No
+  ``-shortest``, no ``atrim``, no limiter, no loudnorm:
   the track is exactly as long as the video, built so (``narration.build_wav``).
 * ``video_md5``: the video stream's packets, hashed (G16: the mux left the
   gated silent encode's video untouched).
@@ -30,11 +31,11 @@ FFMPEG = "ffmpeg"
 AAC_BITRATE = "128k"
 
 
-def gain_filter() -> str:
-    return f"volume={contract.VOICE_GAIN_DB:g}dB:precision=float"
+def gain_filter(gain_db: float) -> str:
+    return f"volume={gain_db:g}dB:precision=float"
 
 
-def mux_argv(silent: Path, track: Path, output: Path) -> List[str]:
+def mux_argv(silent: Path, track: Path, output: Path, gain_db: float) -> List[str]:
     return [
         FFMPEG,
         "-hide_banner",
@@ -53,7 +54,7 @@ def mux_argv(silent: Path, track: Path, output: Path) -> List[str]:
         "-c:v",
         "copy",
         "-af",
-        gain_filter(),
+        gain_filter(gain_db),
         "-c:a",
         "aac",
         "-b:a",

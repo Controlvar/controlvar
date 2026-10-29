@@ -366,8 +366,8 @@ def _last_loud(
     return None
 
 
-def clip_speech(path: Path, gain_db: float = contract.VOICE_GAIN_DB) -> Tuple[int, int]:
-    """Where a clip's own speech starts and ends, in samples, with the render's gain."""
+def clip_speech(path: Path, gain_db: float) -> Tuple[int, int]:
+    """Where a clip's own speech starts and ends, in samples, with the video's gain."""
     values = samples_from_s16le(_clip_bytes(path))
     level = SPEECH_LEVEL / 10 ** (gain_db / 20)
     first = _first_loud(values, 0, len(values), level)
@@ -446,9 +446,12 @@ def windows_from(parsed: Sequence[VttCue]) -> List[Tuple[int, int]]:
 
 
 def loudness_problems(
-    integrated: float, peak: float, sentences: Sequence[float]
+    integrated: float, peak: float, sentences: Sequence[float], gain_db: float
 ) -> Tuple[List[str], Dict[str, Any]]:
-    """G17: integrated loudness, true peak, and each sentence against the median."""
+    """G17: integrated loudness, true peak, and each sentence against the median.
+
+    *gain_db* is the gain the mux applied, recorded with the numbers.
+    """
     problems: List[str] = []
     target, tolerance = contract.LOUDNESS_TARGET_LUFS, contract.FINAL_LOUDNESS_LU
     if abs(round(integrated - target, 3)) > tolerance:
@@ -471,6 +474,6 @@ def loudness_problems(
         "true_peak_dbtp": peak,
         "sentence_median_lufs": round(median, 2),
         "sentence_range_lufs": [min(sentences), max(sentences)] if sentences else [],
-        "gain_db": contract.VOICE_GAIN_DB,
+        "gain_db": gain_db,
     }
     return problems, numbers

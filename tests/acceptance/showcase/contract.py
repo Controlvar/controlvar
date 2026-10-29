@@ -642,11 +642,26 @@ VOICE_GUARD_MS = 50
 STRETCH_SHORT_MS = 45
 STRETCH_LONG_MS = 5
 
-#: G10: the fixed gain the render applies (in ffmpeg, in floating point, never to
-#: the samples here), and what the voice step requires of the clips with it
-#: applied, before any capture: no clip's true peak above -1.3 dBTP, and the
-#: clips' mean loudness within -19 +-0.7 LUFS.
-VOICE_GAIN_DB = 4.5
+#: G10: the gain the render applies to a video's narration (in ffmpeg, in
+#: floating point, never to the samples here), and what the voice step requires
+#: of the clips with it applied, before any capture: no clip's true peak above
+#: -1.3 dBTP, and the clips' mean loudness within -19 +-0.7 LUFS. A video's gain
+#: is ``voice_gain_db(slug)``: G10, the mux, G13's onsets, the G17 record and
+#: the review page all read it there, and no other module reads these two.
+DEFAULT_VOICE_GAIN_DB = 4.5
+#: The videos that take another gain (T216). Video 9's 14 clips measured a mean
+#: of -22.5 LUFS in the voice step (2026-10-29), against -23.7 to -23.9 for
+#: videos 1-4 and 6, so 4.5 dB puts them at -18.0 and G10 refuses; 3.5 dB puts
+#: them at -19.0. Why its new clips are louder is not known: a change in
+#: Polly's output level is suspected, and no Polly call has checked it.
+VOICE_GAIN_DB_BY_VIDEO: Dict[str, float] = {"09-design-in-depth": 3.5}
+
+
+def voice_gain_db(slug: str) -> float:
+    """The gain, in dB, the render applies to video *slug*'s narration."""
+    return VOICE_GAIN_DB_BY_VIDEO.get(slug, DEFAULT_VOICE_GAIN_DB)
+
+
 PRECHECK_PEAK_DBTP = -1.3
 LOUDNESS_TARGET_LUFS = -19.0
 PRECHECK_LOUDNESS_LU = 0.7
@@ -858,11 +873,12 @@ def stretch_problem(raw_samples: int, samples: int) -> Optional[str]:
 
 
 def loudness_problems(
-    clips: Sequence[Tuple[str, float, float]], gain_db: float = VOICE_GAIN_DB
+    clips: Sequence[Tuple[str, float, float]], gain_db: float
 ) -> List[str]:
     """G10: each clip's true peak, and the clips' mean loudness, with *gain_db* applied.
 
-    *clips* holds ``(label, integrated LUFS, true peak dBTP)`` for one video.
+    *clips* holds ``(label, integrated LUFS, true peak dBTP)`` for one video;
+    *gain_db* is that video's ``voice_gain_db``.
     """
     problems: List[str] = []
     for label, _lufs, peak in clips:

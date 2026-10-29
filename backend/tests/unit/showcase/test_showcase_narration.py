@@ -616,4 +616,7 @@ def test_the_stretch_window_is_absolute(raw_ms, stretched_samples, ok):
     ],
 )
 def test_the_loudness_precheck_boundaries(clips, problems):
-    assert len(contract.loudness_problems(clips)) == problems
+    assert (
+        len(contract.loudness_problems(clips, contract.DEFAULT_VOICE_GAIN_DB))
+        == problems
+    )
