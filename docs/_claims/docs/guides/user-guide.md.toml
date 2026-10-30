@@ -1123,15 +1123,18 @@ text = "For gradual rollouts on a schedule:"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Create a rollout schedule through the API with POST /api/v1/rollout-schedules/ (the stages go in its stages list; see Rollouts for the full contract), then start it with POST /api/v1/rollout-schedules/{schedule_id}/activate."
+text = "On the flag's page, Create a rollout schedule under Rollout schedule takes a name and the stages, in order, and Activate starts it (see Rollouts)."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::sends one POST with the stages numbered from 1 in list order, and shows the draft",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::Activate, confirmed, POSTs /activate and the schedule reads Active",
+]
+
+[[unit]]
+text = "Through the API, create one with POST /api/v1/rollout-schedules/ (the stages go in its stages list; see Rollouts for the full contract), then start it with POST /api/v1/rollout-schedules/{schedule_id}/activate."
 by = [
     "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestCreateRolloutSchedule::test_created_schedule_stores_stages_and_owner",
     "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutScheduleLifecycle::test_activate_draft_schedule",
 ]
-
-[[unit]]
-text = "The flag's page in the dashboard shows the schedule, its status and its stages, read-only."
-by = ["test:frontend/src/tests/pages/feature-flag-detail.test.tsx"]
 
 [[unit]]
 text = "A schedule like this one:"
@@ -1158,8 +1161,12 @@ text = "The platform automatically advances time-based stages."
 by = ["test:backend/tests/unit/core/test_rollout_scheduler.py"]
 
 [[unit]]
-text = "A manual stage waits until you advance it with POST /api/v1/rollout-schedules/stages/{stage_id}/advance."
-by = ["test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutStages::test_advance_manual_stage_on_active_schedule"]
+text = "A manual stage waits until you advance it: Start stage or Complete stage on the flag's page, or POST /api/v1/rollout-schedules/stages/{stage_id}/advance."
+by = [
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutStages::test_advance_manual_stage_on_active_schedule",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::offers exactly one control: Complete on the manual stage in progress, naming the next stage",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::offers Start on the first pending stage only when it is manual and nothing is in progress",
+]
 
 [[unit]]
 text = "Guided examples points to a staged rollout with an automatic rollback that runs on the demo stack."

@@ -24,6 +24,33 @@ stays `active`.
 
 ---
 
+## In the Dashboard
+
+A flag's page has a **Rollout schedule** section. ADMIN and DEVELOPER create and run a
+schedule there; ANALYST and VIEWER see the schedule and its stages, and change nothing.
+
+- **Create a rollout schedule** is offered when the flag has no schedule that is a draft,
+  active or paused. It takes a name and the stages, in order: each has a name, a target
+  percentage and how it starts, when you advance it (manual) or at a set time (time-based).
+- A time-based stage's start time is optional. You pick it in your browser's time zone, the
+  form shows it back in UTC, and it is sent in UTC.
+- Before it sends anything, the form checks the whole list of stages: each has a name, each
+  target is a whole number from 0 to 100, and no target is below the one before it.
+- A new schedule is a draft: nothing changes for users until you activate it.
+- **Activate** starts a draft, **Pause** stops an active schedule and **Resume** starts it
+  again, and **Cancel schedule** ends it for good. The page asks before each of these but
+  Pause.
+- While the schedule is a draft or paused, **Edit stages** changes, adds or removes its
+  pending stages. A stage that has started cannot be changed there.
+- On an active schedule, **Start stage** starts the first pending stage when it is manual and
+  no stage is in progress, and **Complete stage** completes the manual stage in progress and
+  starts the next one at once (see [Manual Advancement](#manual-advancement)). No other stage
+  is offered.
+- A schedule made in the dashboard has no start or end date of its own, a maximum of 100% and
+  no minimum stage duration. Those are set through the API only.
+
+---
+
 ## Creating a Rollout Schedule via API
 
 Run these in one terminal, in order, against the stack from the
@@ -279,7 +306,7 @@ curl -s localhost:8000/api/v1/rollout-schedules/$SCHEDULE_ID \
 {"status":"active","stages":[{"name":"Initial Canary","target_percentage":10,"status":"in_progress"},{"name":"Expanded Rollout","target_percentage":50,"status":"pending"},{"name":"Full Rollout","target_percentage":100,"status":"pending"}]}
 ```
 
-In the dashboard, the flag's page shows the schedule read-only under **Rollout schedule**: its
+In the dashboard, the flag's page shows the schedule under **Rollout schedule**: its
 status, its name, and each stage with its trigger, target percentage and status. The
 **Rollout percentage** below it is the flag's percentage now.
 
@@ -317,7 +344,8 @@ its schedule.
 - Rollout percentages must not decrease across stages.
 - You cannot delete stages from an active schedule: cancel the schedule first.
 - Stage orders must be sequential (1, 2, 3, with no gaps), and no higher than 1000.
-- Time-based `start_date` values are in UTC.
+- Time-based `start_date` values are in UTC. The dashboard's picker takes your time zone and
+  sends UTC.
 - Manual stages must be advanced explicitly: they never start by themselves, even after the
   schedule's `end_date`.
 - A manual advance takes effect at once, whatever the earlier stages and
