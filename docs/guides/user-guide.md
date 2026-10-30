@@ -478,11 +478,12 @@ Export results through the API:
 Standard A/B tests require a fixed sample size decided upfront. Sequential testing lets you monitor results continuously and stop as soon as you have enough evidence — without inflating your false positive rate.
 
 When sequential testing is on for an experiment, its results page has a **Sequential** tab.
-The experiment's own page says whether sequential testing is on.
 The API route is:
 ```text
 GET /api/v1/results/{experiment_id}/sequential
 ```
+
+The experiment's own page says whether sequential testing is on.
 
 The platform uses **mSPRT** (mixture Sequential Probability Ratio Test). When `recommended_action` is `stop_for_effect`, it is safe to stop: there is an effect, but it may be a harm, so the sign of the confidence sequence and the metric's `lower_is_better` decide whether to ship. An experiment running well past its expected duration is flagged `at_risk`; that is advisory, not a reason to conclude there is no effect. See the [Sequential Testing Guide](../api/sequential-testing.md) for details.
 

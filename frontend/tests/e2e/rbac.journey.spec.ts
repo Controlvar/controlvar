@@ -415,12 +415,14 @@ test.describe("Journey: RBAC", () => {
           new URL(response.url()).pathname === "/api/v1/holdout" && response.request().method() === "GET",
         { timeout: 20_000 },
       );
+    let headers: Record<string, string> = {};
+    let draftId: string | null = null;
     try {
       await experiments.goto();
       await expect(experiments.experimentList).toBeVisible({ timeout: 15_000 });
       const token = await page.evaluate((key) => window.localStorage.getItem(key), TOKEN_STORAGE_KEY);
       expect(token, "the developer session has a token").toBeTruthy();
-      const headers = { Authorization: `Bearer ${token}` };
+      headers = { Authorization: `Bearer ${token}` };
 
       // The seeded msprt experiment (seed_demo_data.py: sequential testing on),
       // opened by id: a clone of it would also match its name in the list.
@@ -442,9 +444,9 @@ test.describe("Journey: RBAC", () => {
       await expect(page.getByTestId("experiment-exclusion-group")).toHaveText("None");
 
       // A draft of its own, scheduled two days ahead: "Starts", nothing due.
-      const id = await experiments.createExperiment(`E2E Scheduled ${stamp}`, `e2e_scheduled_${stamp}`);
+      draftId = await experiments.createExperiment(`E2E Scheduled ${stamp}`, `e2e_scheduled_${stamp}`);
       const day = 24 * 60 * 60 * 1000;
-      const schedule = await page.request.put(`${API_URL}/api/v1/experiments/${id}/schedule`, {
+      const schedule = await page.request.put(`${API_URL}/api/v1/experiments/${draftId}/schedule`, {
         headers,
         data: {
           start_date: new Date(Date.now() + 2 * day).toISOString(),
@@ -464,11 +466,17 @@ test.describe("Journey: RBAC", () => {
       await expect(page.getByTestId("experiment-end-date").locator("xpath=preceding-sibling::dt")).toHaveText("Ends");
       await expect(page.getByTestId("experiment-exclusion-group")).toHaveText("None");
       await expect(page.getByTestId("experiment-holdout")).toHaveText("None active");
-
-      await page.getByTestId("experiment-delete").click();
-      await page.getByTestId("manage-delete-yes").click();
-      await page.waitForURL(/\/experiments$/, { timeout: 15_000 });
     } finally {
+      // The journey database is shared, so the draft goes even when a step
+      // above failed. Only a draft can be deleted, and the route takes its id
+      // again as `experiment_key`.
+      if (draftId) {
+        const removed = await page.request.delete(
+          `${API_URL}/api/v1/experiments/${draftId}?experiment_key=${draftId}`,
+          { headers },
+        );
+        expect.soft(removed.status(), `DELETE the journey's draft ${draftId}`).toBe(204);
+      }
       await page.close();
     }
   });

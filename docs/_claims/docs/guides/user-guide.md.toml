@@ -1283,12 +1283,12 @@ by = [
 ]
 
 [[unit]]
-text = "The experiment's own page says whether sequential testing is on."
-by = ["test:frontend/src/tests/pages/experiment-detail-configuration.test.tsx::sequential_testing_enabled %s (Bayesian %s) reads %s"]
-
-[[unit]]
 text = "The API route is:"
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "The experiment's own page says whether sequential testing is on."
+by = ["test:frontend/src/tests/pages/experiment-detail-configuration.test.tsx::sequential_testing_enabled %s (Bayesian %s) reads %s"]
 
 [[unit]]
 text = "The platform uses mSPRT (mixture Sequential Probability Ratio Test)."

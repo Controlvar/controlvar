@@ -11,9 +11,16 @@ with local tokens as real users:
 * ADMIN, DEVELOPER and a superuser: 200; ANALYST and VIEWER: 403. Each role is
   a NON-superuser (a superuser passes every check, so a superuser fixture would
   prove nothing about the role); the superuser is one extra cell.
-* The fields the page reads are in the answers: the group's ``name`` and
-  ``status``; the holdout route's ``null`` or an object with ``name``,
-  ``holdout_percentage`` and ``is_active``.
+* The group's answer carries the ``name`` and ``status`` the page reads, and
+  ``status`` is ``"archived"`` for an archived group.
+* The holdout route's 200 is JSON ``null`` when no holdout is active, which the
+  page shows as "None active". No cell activates a holdout: the database is
+  shared, and an active holdout applies to every experiment. So only that
+  branch runs, and an active holdout's fields (``name``,
+  ``holdout_percentage``, ``is_active``) are not pinned here. The assertion
+  would accept an active holdout another test left behind only if it had
+  them; the page reads an answer without them as its failure state, never as
+  "None active".
 
 A route moved to ``_require_admin`` fails the DEVELOPER cell, and one opened to
 every role fails ANALYST and VIEWER: in both cases the page would be wrong.

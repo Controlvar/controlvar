@@ -1,11 +1,21 @@
 /**
  * useExperimentEligibility (#1449): only the answer for the current group id
- * is shown, an answer that arrives after unmount sets nothing, and the
- * answers are judged by their shape.
+ * is shown, an answer to a read that was cancelled never is, and the answers
+ * are judged by their shape.
+ *
+ * A cancelled read's answer is tested where it can be seen: a group id that
+ * changed, and a role that stopped and then started admitting the user. After
+ * unmount nothing can see it (React 19 no longer warns about a state update
+ * on an unmounted component), so no test claims that case.
  */
 import { act, renderHook } from '@testing-library/react';
 import { apiFetch } from '@/services/api';
-import { groupAnswer, holdoutAnswer, useExperimentEligibility } from '@/hooks/useExperimentEligibility';
+import {
+  EligibilityUser,
+  groupAnswer,
+  holdoutAnswer,
+  useExperimentEligibility,
+} from '@/hooks/useExperimentEligibility';
 
 jest.mock('@/services/api', () => ({
   ...jest.requireActual('@/services/api'),
@@ -14,7 +24,8 @@ jest.mock('@/services/api', () => ({
 
 const mockedApiFetch = apiFetch as jest.MockedFunction<typeof apiFetch>;
 
-const ADMIN = { role: 'ADMIN', is_superuser: false };
+const ADMIN: EligibilityUser = { role: 'ADMIN', is_superuser: false };
+const VIEWER: EligibilityUser = { role: 'VIEWER', is_superuser: false };
 
 /** A promise the test settles by hand. */
 function deferred<T>() {
@@ -63,20 +74,72 @@ describe('the group read', () => {
     });
   });
 
-  it('an answer that arrives after unmount sets nothing', async () => {
-    const late = deferred<unknown>();
-    mockedApiFetch.mockImplementation((() => late.promise) as unknown as typeof apiFetch);
-    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined);
-    try {
-      const { unmount } = renderHook(() => useExperimentEligibility('grp-1', ADMIN));
-      unmount();
-      await act(async () => {
-        late.resolve({ id: 'grp-1', name: 'Late', status: 'active' });
-      });
-      expect(errors).not.toHaveBeenCalled();
-    } finally {
-      errors.mockRestore();
-    }
+  it("shows loading for a new id, never the previous id's answer, until the new one comes", async () => {
+    const second = deferred<unknown>();
+    mockedApiFetch.mockImplementation(((path: string) => {
+      if (path === '/api/v1/mutual-exclusion-groups/grp-1') {
+        return Promise.resolve({ id: 'grp-1', name: 'First', status: 'active' });
+      }
+      if (path === '/api/v1/mutual-exclusion-groups/grp-2') return second.promise;
+      return Promise.resolve(null);
+    }) as unknown as typeof apiFetch);
+
+    const { result, rerender } = renderHook(({ id }) => useExperimentEligibility(id, ADMIN), {
+      initialProps: { id: 'grp-1' as string | null },
+    });
+    await act(async () => undefined);
+    expect(result.current.group).toEqual({
+      kind: 'present',
+      value: { id: 'grp-1', name: 'First', status: 'active' },
+    });
+
+    // grp-1 has answered; the experiment is now in grp-2, which has not.
+    rerender({ id: 'grp-2' });
+    expect(result.current.group).toEqual({ kind: 'loading' });
+    await act(async () => undefined);
+    expect(result.current.group).toEqual({ kind: 'loading' });
+
+    await act(async () => {
+      second.resolve({ id: 'grp-2', name: 'Second', status: 'archived' });
+    });
+    expect(result.current.group).toEqual({
+      kind: 'present',
+      value: { id: 'grp-2', name: 'Second', status: 'archived' },
+    });
+  });
+});
+
+describe('the holdout read', () => {
+  it('never shows the answer to a read that a change of role cancelled', async () => {
+    const first = deferred<unknown>();
+    const second = deferred<unknown>();
+    let reads = 0;
+    mockedApiFetch.mockImplementation(((path: string) => {
+      if (path !== '/api/v1/holdout') return Promise.resolve(null);
+      reads += 1;
+      return reads === 1 ? first.promise : second.promise;
+    }) as unknown as typeof apiFetch);
+
+    const { result, rerender } = renderHook(({ user }) => useExperimentEligibility(null, user), {
+      initialProps: { user: ADMIN },
+    });
+    // The role stops admitting the user (the first read is cancelled), then
+    // admits them again (a second read).
+    rerender({ user: VIEWER });
+    expect(result.current.holdout).toEqual({ kind: 'refused' });
+    rerender({ user: ADMIN });
+    expect(reads).toBe(2);
+
+    await act(async () => {
+      second.resolve(null);
+    });
+    expect(result.current.holdout).toEqual({ kind: 'absent' });
+
+    // The first read answers last, with an active holdout: it must not show.
+    await act(async () => {
+      first.resolve({ id: 'h-1', name: 'Stale', holdout_percentage: 5, is_active: true });
+    });
+    expect(result.current.holdout).toEqual({ kind: 'absent' });
   });
 });
 
