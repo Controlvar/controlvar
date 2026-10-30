@@ -2092,6 +2092,9 @@ class Director:
             scene.app, {"answers_400": [], "failed": [], "unanswered": []}
         )
         self.counting = scene.app
+        # A console page fetches nothing, from the moment its content is set
+        # until its last cue: any request refuses (counted from here).
+        self.console_requests = [] if scene.console is not None else None
         if scene.card is not None:
             self.card(scene.card)
         elif scene.console is not None:
@@ -2119,8 +2122,6 @@ class Director:
         self.filming = scene.app
         walls = self.scene_walls.setdefault(scene.id, {})
         walls["start"] = _now_ms()
-        # A console page fetches nothing while it is filmed; any request refuses.
-        self.console_requests = [] if scene.console is not None else None
         self.recorder.start()
         try:
             # No cursor on a card or a console: nothing on them is pointed at.

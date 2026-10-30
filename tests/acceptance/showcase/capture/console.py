@@ -10,7 +10,8 @@ makes to the take's own stack, and what each exchange must be (gate api).
 * A call (``send``): the method, the stack's own API origin and the board's
   path with its placeholders resolved, the run's admin token in a header, no
   redirect followed, and exactly the status the board declares, or refused
-  naming the status it got. The take's origin must name no reserved port.
+  naming the status it got. The origin must be plain http on 127.0.0.1, with
+  no user in it, at a port that is not reserved.
 * An exchange (``Exchange``): what was sent and what came back, and when. Its
   drawn text (``exchange_lines``) is a pure function of its record: the
   request line and the body, the status line, then each shown field of the
@@ -40,7 +41,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
 from showcase import contract
-from showcase.capture import config, guard, storyboard
+from showcase.capture import config, storyboard
 
 # ---------------------------------------------------------------------------
 # The page
@@ -215,6 +216,10 @@ class CallRefused(RuntimeError):
     """A call was not made, or was not answered as the board declares."""
 
 
+#: The only host a call goes to: the take's own stack (``guard.origin``).
+STACK_HOST = "127.0.0.1"
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     """A 3xx is the answer, never followed: urllib then raises it as HTTPError."""
 
@@ -259,10 +264,21 @@ def send(
         raise CallRefused(f"{method} {path}: a call's path is under /api/v1/")
     url = api_url.rstrip("/") + path
     origin = urlparse(url)
-    if guard.reserved_in(origin.netloc) or origin.scheme != "http":
+    try:
+        port = origin.port
+    except ValueError:
+        port = None
+    if (
+        origin.scheme != "http"
+        or origin.hostname != STACK_HOST
+        or origin.username is not None
+        or origin.password is not None
+        or port is None
+        or port in config.RESERVED_PORTS
+    ):
         raise CallRefused(
-            f"{method} {path}: the API's address {origin.netloc} names a reserved port"
-            " or is not plain http"
+            f"{method} {path}: the API's address is not plain http on {STACK_HOST},"
+            " with no user, at a port that is not reserved"
         )
     data = None if body is None else json.dumps(body).encode("utf-8")
     request = urllib.request.Request(
@@ -395,26 +411,37 @@ def raw_answer_problems(
     show: Sequence[str], answer: Mapping[str, Any], read: Mapping[str, Any]
 ) -> List[str]:
     """Each shown field's value from the raw answer, on that field's own line
-    of the response as drawn: its JSON value, or an id's first 8 hex
-    characters. Independent of ``exchange_lines``."""
+    of the response as drawn: the line is ``"<name>": `` and then exactly the
+    answer's value, read back as JSON and compared with its type (an id: its
+    first 8 hex characters and "…"). Independent of ``exchange_lines``: a
+    drawn 50 or 15 for an answer's 5 is refused, as a substring test would
+    not."""
     lines: Dict[str, List[str]] = {}
     for text, key in read.get("response", []):
         if key:
             lines.setdefault(key, []).append(text)
     problems = []
     for name in show:
-        value = answer.get(name)
         on_line = lines.get(name, [])
         if len(on_line) != 1:
             problems.append(f"{name} is drawn on {len(on_line)} lines, not 1")
             continue
-        wanted = (
-            value[:8]
-            if isinstance(value, str) and UUID.match(value)
-            else json.dumps(value, ensure_ascii=False)
-        )
-        if wanted not in on_line[0]:
-            problems.append(f"{name}'s line does not show the answer's {name}")
+        prefix = f'"{name}": '
+        if not on_line[0].startswith(prefix):
+            problems.append(f"{name}'s line does not start {prefix!r}")
+            continue
+        drawn = on_line[0][len(prefix) :]
+        wanted = cut(answer.get(name))
+        try:
+            got = json.loads(drawn)
+        except ValueError:
+            problems.append(f"{name}'s line draws {drawn[:40]!r}, which is not a value")
+            continue
+        if type(got) is not type(wanted) or got != wanted:
+            problems.append(
+                f"{name}'s line draws {drawn[:40]}; the answer's {name} is"
+                f" {json.dumps(wanted, ensure_ascii=False)[:40]}"
+            )
     return problems
 
 

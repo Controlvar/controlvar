@@ -418,11 +418,25 @@ def test_any_status_but_the_declared_one_is_refused_naming_it(status, declared, 
         )
 
 
+#: Why an origin is refused before any request.
+NOT_THE_STACK = (
+    "is not plain http on 127.0.0.1, with no user, at a port that is not reserved"
+)
+
+
 @pytest.mark.parametrize(
     "api_url, method, path, words",
     [
-        ("http://127.0.0.1:8000", "GET", "/api/v1/holdout", "names a reserved port"),
-        ("https://127.0.0.1:28400", "GET", "/api/v1/holdout", "not plain http"),
+        ("http://127.0.0.1:8000", "GET", "/api/v1/holdout", NOT_THE_STACK),
+        ("https://127.0.0.1:28400", "GET", "/api/v1/holdout", NOT_THE_STACK),
+        ("http://user@127.0.0.1:28400", "GET", "/api/v1/holdout", NOT_THE_STACK),
+        ("http://user:pw@127.0.0.1:28400", "GET", "/api/v1/holdout", NOT_THE_STACK),
+        ("http://localhost:28400", "GET", "/api/v1/holdout", NOT_THE_STACK),
+        ("http://[::1]:28400", "GET", "/api/v1/holdout", NOT_THE_STACK),
+        ("http://127.0.0.2:28400", "GET", "/api/v1/holdout", NOT_THE_STACK),
+        ("http://127.0.0.1", "GET", "/api/v1/holdout", NOT_THE_STACK),
+        ("http://127.0.0.1:5432", "GET", "/api/v1/holdout", NOT_THE_STACK),
+        ("http://127.0.0.1:08000", "GET", "/api/v1/holdout", NOT_THE_STACK),
         (
             "http://127.0.0.1:28400",
             "DELETE",
@@ -698,6 +712,91 @@ def test_an_exchange_text_that_drops_a_field_fails_the_raw_answer_check(
     )
 
 
+def drawn_as(name: str, text: str) -> Dict[str, Any]:
+    """``READ_JS``'s answer for one response line, drawing *text* for *name*."""
+    return {"request": [], "response": [[f'"{name}": {text}', name]], "note": ""}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "name, drawn, answer",
+    [
+        ("holdout_percentage", "50", 5),
+        ("holdout_percentage", "15", 5),
+        ("holdout_percentage", '"5"', 5),
+        ("holdout_percentage", "5.0", 5),
+        ("is_active", "1", True),
+        ("status", '"draft2"', "draft"),
+        ("status", '"Draft"', "draft"),
+        ("group_id", f'"{HOLDOUT[:8]}…"', GROUP),
+        ("group_id", f'"{GROUP[:7]}…"', GROUP),
+        ("group_id", f'"{GROUP}"', GROUP),
+    ],
+    ids=[
+        "5-drawn-as-50",
+        "5-drawn-as-15",
+        "5-drawn-as-a-string",
+        "5-drawn-as-5.0",
+        "true-drawn-as-1",
+        "draft-drawn-as-draft2",
+        "draft-drawn-as-Draft",
+        "another-id",
+        "an-id-cut-to-7",
+        "an-id-drawn-whole",
+    ],
+)
+def test_the_raw_answer_check_compares_the_value_drawn_exactly(name, drawn, answer):
+    """The drawn value is read back and compared with the answer's own,
+    typed: a substring test passed 50 and 15 for 5."""
+    problems = console.raw_answer_problems(
+        [name], {name: answer}, drawn_as(name, drawn)
+    )
+    assert problems and problems[0].startswith(f"{name}'s line draws {drawn[:40]}"), (
+        problems
+    )
+
+
+@pytest.mark.parametrize(
+    "name, drawn, answer",
+    [
+        ("holdout_percentage", "5", 5),
+        ("is_active", "true", True),
+        ("status", '"draft"', "draft"),
+        ("group_id", f'"{GROUP[:8]}…"', GROUP),
+        ("start_date", '"2026-10-30T09:00:00"', "2026-10-30T09:00:00"),
+        ("sequential_testing_config", "null", None),
+    ],
+)
+def test_the_raw_answer_check_passes_the_value_drawn_as_the_answer_has_it(
+    name, drawn, answer
+):
+    assert (
+        console.raw_answer_problems([name], {name: answer}, drawn_as(name, drawn)) == []
+    )
+
+
+@pytest.mark.regression
+def test_a_holdout_drawn_at_50_in_the_record_and_on_the_panel_is_refused(
+    stage, monkeypatch
+):
+    """The record and the panel agree (both draw 50) and the answer says 5:
+    only the raw answer, read back from the panel, refuses the take."""
+    line = console.field_line
+
+    def fifty(name, value):
+        return line(name, 50 if name == "holdout_percentage" else value)
+
+    monkeypatch.setattr(console, "field_line", fifty)
+    made, _page, _ = stage()
+    refused_while_filming(
+        made,
+        api_scene(board()),
+        "api",
+        "scene api beat 2: holdout_percentage's line draws 50; the answer's"
+        " holdout_percentage is 5",
+    )
+
+
 def test_the_token_cut_short_in_the_panel_is_refused_and_a_holdout_answer_passes():
     holdout = "\n".join(
         console.exchange_text(
@@ -753,6 +852,26 @@ def test_a_request_while_the_console_is_filmed_is_refused(stage):
         api_scene(board()),
         "P2",
         "the console page made 13 request(s), first /fonts/mono.woff2",
+    )
+
+
+@pytest.mark.regression
+def test_a_request_made_as_the_console_page_is_set_is_counted(stage):
+    """Counted from before the page's content is set, not only once the
+    scene is filmed: a fetch the page itself starts is seen."""
+    made, page, _ = stage()
+    set_content = page.set_content
+
+    def fetching(html):
+        set_content(html)
+        made._on_request(FontRequest())
+
+    page.set_content = fetching
+    refused_while_filming(
+        made,
+        api_scene(board()),
+        "P2",
+        "the console page made 1 request(s), first /fonts/mono.woff2 (scene api)",
     )
 
 
