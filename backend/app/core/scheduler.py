@@ -24,12 +24,22 @@ from backend.app.services.audit_service import (
     audit_changes,
     audit_snapshot,
 )
-from backend.app.services.experiment_service import stamp_rollout_rule_id
+from backend.app.services.experiment_service import (
+    ExperimentService,
+    stamp_rollout_rule_id,
+)
 from backend.app.services.notification_service import NotificationService
 
 logger = get_logger(__name__)
 
 SCHEDULER_NAME = "experiment"
+
+#: The one warning for a due draft the check below refuses. Fixed text: the id
+#: is the only value in it, never the experiment's name or anything a user typed.
+NOT_READY_TO_START = (
+    "Scheduled start skipped for experiment %s: it is not ready to start (it "
+    "needs at least two variants, a control and a metric), so it stays a draft"
+)
 
 
 class ExperimentScheduler:
@@ -99,7 +109,10 @@ class ExperimentScheduler:
 
         This checks for:
         1. Experiments to activate: DRAFT ones whose start_date has passed,
-           and PAUSED ones whose scheduled resume (``resume_at``) has passed
+           and PAUSED ones whose scheduled resume (``resume_at``) has passed.
+           A DRAFT is started only if it passes the check ``POST /start``
+           makes (two variants, a control, a metric); one that does not stays
+           a DRAFT, is logged once per tick, and is not counted as failed
         2. Experiments in ACTIVE status that should be completed (time-based)
 
         An experiment's ``bayesian_decision`` is a recommendation only: nothing
@@ -146,11 +159,22 @@ class ExperimentScheduler:
             # listener on Experiment.status). Each row is flushed inside its
             # own savepoint, so a row the database refuses is rolled back on
             # its own and the rest of the tick still activates (#489).
+            starts = ExperimentService(db)
             for experiment in experiments_to_activate:
                 experiment_id = experiment.id
                 savepoint = db.begin_nested()
                 try:
                     resumed = experiment.status == ExperimentStatus.PAUSED
+                    # A draft's scheduled first start makes the check Start
+                    # makes (#1454); a draft that fails it stays a draft, its
+                    # start_date kept, and is checked again next tick. A
+                    # scheduled resume is not checked.
+                    if not resumed and not starts._validate_experiment_for_start(
+                        experiment
+                    ):
+                        savepoint.rollback()
+                        logger.warning(NOT_READY_TO_START, experiment_id)
+                        continue
                     due = experiment.resume_at if resumed else experiment.start_date
                     before = audit_snapshot(EntityType.EXPERIMENT, experiment)
                     # A scheduled first start stamps the rule id; a scheduled

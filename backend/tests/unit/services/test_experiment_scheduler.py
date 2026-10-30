@@ -1,12 +1,23 @@
 """Unit tests for experiment scheduler."""
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
 from backend.app.core.scheduler import ExperimentScheduler
 from backend.app.models.experiment import Experiment, ExperimentStatus
+
+
+def _ready_to_start(mock_experiment):
+    """Give a mocked draft what Start requires (two variants, a control, a
+    metric): the scheduler starts only such a draft (#1454)."""
+    mock_experiment.variants = [
+        SimpleNamespace(is_control=True),
+        SimpleNamespace(is_control=False),
+    ]
+    mock_experiment.metric_definitions = [SimpleNamespace()]
 
 
 @pytest.fixture
@@ -32,6 +43,7 @@ async def test_scheduler_activate_experiments(scheduler, mock_db_session):
     mock_experiment.status = ExperimentStatus.DRAFT
     mock_experiment.start_date = datetime.now(timezone.utc) - timedelta(minutes=10)
     mock_experiment.end_date = datetime.now(timezone.utc) + timedelta(days=1)
+    _ready_to_start(mock_experiment)
 
     # Create separate query mocks for activation and completion
     activate_query = MagicMock()
@@ -134,6 +146,7 @@ async def test_scheduler_activation_with_timezone(scheduler, mock_db_session):
     mock_experiment.start_date = datetime.now(timezone.utc) - timedelta(minutes=10)
     mock_experiment.end_date = datetime.now(timezone.utc) + timedelta(days=1)
     mock_experiment.metadata = {"time_zone": "America/New_York"}
+    _ready_to_start(mock_experiment)
 
     # Create separate query mocks for activation and completion
     activate_query = MagicMock()

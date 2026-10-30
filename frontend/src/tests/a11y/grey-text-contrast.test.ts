@@ -80,6 +80,32 @@ describe("the experiment page's variants and metrics form", () => {
 });
 
 /**
+ * The flag page's rollout schedule section (#1456). The nightly audit does
+ * not open a flag's page and jsdom cannot measure contrast, so this is the
+ * only check on it: no text lighter than slate-500 on white, and slate-600
+ * inside the form's bg-slate-50 panel, where slate-500 is 4.55:1.
+ */
+describe("the flag page's rollout schedule section", () => {
+  const FILE = 'components/feature-flags/RolloutScheduleManager.tsx';
+
+  it('uses no slate-400 (or lighter) text', () => {
+    const source = fs.readFileSync(path.join(SRC, FILE), 'utf8');
+    expect(source.match(/(?<!placeholder:)\btext-slate-[1-4]00\b/g)).toBeNull();
+  });
+
+  it('uses no slate-500 text inside the form', () => {
+    const source = fs.readFileSync(path.join(SRC, FILE), 'utf8');
+    // The stage fields, and the <form> itself. Each slice must be found and
+    // long, or a renamed marker would make this pass on nothing.
+    const fields = source.slice(source.indexOf('function StageFields'), source.indexOf('function OrderNotes'));
+    const form = source.slice(source.indexOf('<form'), source.indexOf('</form>'));
+    expect(fields.length).toBeGreaterThan(1000);
+    expect(form.length).toBeGreaterThan(1000);
+    expect((fields + form).match(/\btext-slate-500\b/g)).toBeNull();
+  });
+});
+
+/**
  * The experiment page's header terms (#1449). The page has other slate-400
  * text, so it cannot join FILES; this pins its header `<dl>`, the page's only
  * one, by its `dt` tags. The nightly audit never opens this page, and jsdom

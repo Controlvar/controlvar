@@ -24,8 +24,9 @@
 #
 # An entry covers every cause of its status on its route: a second bug there
 # that answers the same status is not reported. When one route and status
-# carry two issues, the entry cites the second in its reason (a duplicate
-# holdout name, #1019, beside #957). A pull request that fixes a cited issue
+# carry two issues, the entry cites the second in its reason (as POST
+# /api/v1/holdout cited a duplicate name, #1019, beside #957 until #1019 was
+# fixed). A pull request that fixes a cited issue
 # removes its entries, unless the reason names another open issue for the
 # same key; the stale refusal then says when the last one is fixed.
 #
@@ -132,7 +133,7 @@ pass = "superuser"
 operation = "POST /api/v1/holdout"
 status = 500
 issue = 957
-reason = "A field of the wrong type reaches the handler before validation; a duplicate name (#1019) answers the same."
+reason = "A field of the wrong type reaches the handler before validation."
 
 [[known]]
 pass = "superuser"
@@ -309,7 +310,7 @@ pass = "viewer"
 operation = "POST /api/v1/holdout"
 status = 500
 issue = 957
-reason = "A field of the wrong type reaches the handler before validation; a duplicate name (#1019) answers the same."
+reason = "A field of the wrong type reaches the handler before validation."
 
 [[known]]
 pass = "viewer"

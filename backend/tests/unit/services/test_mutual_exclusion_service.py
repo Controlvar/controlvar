@@ -28,8 +28,15 @@ def service(mock_db):
 # ------------------------------------------------------------------
 
 
+def _no_other_group_has_the_name(mock_db):
+    """The name check before a write (#1019) finds no other group."""
+    mock_db.query.return_value.filter.return_value.first.return_value = None
+    mock_db.query.return_value.filter.return_value.filter.return_value.first.return_value = None
+
+
 class TestCreateGroup:
     def test_creates_group_with_defaults(self, service, mock_db):
+        _no_other_group_has_the_name(mock_db)
         result = service.create_group(name="Test Group")
         mock_db.add.assert_called_once()
         mock_db.commit.assert_called_once()
@@ -40,6 +47,7 @@ class TestCreateGroup:
         assert added.status == MutualExclusionGroupStatus.ACTIVE
 
     def test_creates_group_with_custom_fields(self, service, mock_db):
+        _no_other_group_has_the_name(mock_db)
         owner = uuid4()
         service.create_group(
             name="Custom",
@@ -94,6 +102,7 @@ class TestUpdateGroup:
 
     def test_updates_name(self, service, mock_db):
         mock_group = MagicMock(spec=MutualExclusionGroup)
+        _no_other_group_has_the_name(mock_db)
         mock_db.query.return_value.filter.return_value.first.return_value = mock_group
         service.update_group(uuid4(), name="Updated")
         assert mock_group.name == "Updated"
