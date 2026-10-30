@@ -19,7 +19,11 @@
 #   thrown away, and this one sends no traffic, so an active holdout changes
 #   no assignment and nothing in another video. The holdout is global: it
 #   keeps new users out of every experiment, this one included, and is never
-#   said to belong to this experiment.
+#   said to belong to this experiment. The Activate click ends the create
+#   beat (its exit); the next beat opens the Q4 row's Edit form and shows its
+#   size locked ("Fixed once a holdout has been active"), while "its size is
+#   fixed" is said (narration review condition 2). Each beat's focus is an
+#   element its own clicks keep on the page (gate 9).
 # * The start date is set with a `date` step: two days after the take's own
 #   day, at 09:00, in the browser's zone, which this board pins
 #   (`time_zone`, `locale`: the take is the same on any machine; D188). The
@@ -36,11 +40,20 @@
 #   targeting rule as the builder sent it (its ids aside), the analysis
 #   settings, and nothing guided setup cannot set. The Review rows and the
 #   page's analysis rows recorded below must say, in the product's own words,
-#   what was saved. What the video then sets on the draft's own pages (the
-#   start, the group, sequential testing and the holdout) is added to gate 10
-#   with the claims table, after the narration's review.
-# * The payoff beat records the note under the draft's settings
-#   (`experiment-api-settings-note`): it must read exactly "Set through the
+#   what was saved. What the video then sets on the draft's own pages is
+#   declared too, and held both ways (a field set that is not declared, or
+#   declared and not set, refuses): sequential testing on, the start the
+#   `date` step set (its instant, as the page computed it), the setup's group
+#   (its id, as the setup made it) and the one holdout, active, at its size.
+#   The groups, the group's members, every holdout and the active one are
+#   read off camera, never from the cached experiment (`eligibility_end`).
+#   The page must run in the pinned zone and locale, as it resolves them, and
+#   each date must be its value read in that zone on that day.
+# * The payoff beat records each row the narration reads back, compared with
+#   what the API holds in the product's own words (the group's name, the
+#   holdout's `holdoutLabel`, "Starts" and the start as the page drew it at
+#   the `date` step), and the note under the draft's settings
+#   (`experiment-api-settings-note`), which must read exactly "Set through the
 #   API, not on this page: a paused experiment's resume, turning sequential
 #   testing on or off after creation." (PE 1, EM-3).
 # * What each narrated claim rests on:
@@ -56,9 +69,9 @@
 #     help text, drawn while it is said ("about 5% (at 95% confidence)").
 #   - "each version's chance of being best": the Bayesian panel's "Chance to be
 #     best" for every variant.
-#   - Every other sentence: its row of CLAIMS in test_showcase_quoted_docs.py,
-#     with what is drawn while it is said and the pages of the docs that state
-#     it (added with gate 10's new fields).
+#   - Every sentence, these four included: its row of CLAIMS in
+#     test_showcase_quoted_docs.py, with what is drawn while it is said and
+#     the pages that state it.
 # * Length cuts, in order, if the voiced length runs over 143 s. Each drops
 #   whole sentences, so none needs a new clip: (1) drop the holdouts page's
 #   first beat and its sentence ("A holdout covers all your experiments, so it
@@ -99,7 +112,11 @@ end_state:
         - logical_operator: AND
           conditions:
             - {attribute: user.country, operator: in, value: "US, CA"}
-    analysis: {confidence: 0.95, correction: benjamini_hochberg, bayesian: true}
+    analysis:
+      {confidence: 0.95, correction: benjamini_hochberg, bayesian: true, sequential: true}
+    scheduled_start: scheduled-start
+    group: Checkout tests
+    holdout: {name: Q4 holdout, percentage: 5}
     shown:
       review_variants: review-variants
       review_metrics: review-metrics
@@ -107,6 +124,11 @@ end_state:
       review_analysis: review-analysis
       detail_analysis: analysis
       detail_bayesian: bayesian
+      detail_sequential: detail-sequential
+      detail_start: detail-start
+      detail_group: detail-group
+      detail_holdout: detail-holdout
+      detail_note: api-settings-note
 setup:
   exclusion_groups:
     - name: Checkout tests
@@ -320,7 +342,7 @@ scenes:
             ms: 2500
 
       - cue: "Create one, and activate it now."
-        focus: {testid: new-holdout-btn}
+        focus: {css: "#holdouts-all-heading"}
         say:
           - A global holdout keeps 5% of new users out of every experiment.
           - That includes this one.
@@ -334,16 +356,20 @@ scenes:
           - click: {testid: holdout-submit}
           - look: {testid: holdout-confirm}
             ms: 2000
+        exit:
+          - click: {testid: holdout-confirm-yes}
+          - wait_for: {testid: holdout-active-card}
 
       - cue: "Active: its size is now fixed."
-        focus: {testid: holdout-confirm}
+        focus: {testid: holdout-row}
         say:
           - "It's active now, and its size is fixed."
         steps:
-          - click: {testid: holdout-confirm-yes}
-          - wait_for: {testid: holdout-active-card}
           - look: {testid: holdout-active-card}
-            ms: 2000
+            ms: 1500
+          - click: {testid: holdout-edit}
+          - look: {testid: holdout-size-locked}
+            ms: 1500
         exit:
           - click: {role: link, name: "← Experiments"}
           - wait_for: {testid: exclusion-groups-link}
@@ -387,6 +413,10 @@ scenes:
           - It has its start date, and sequential testing is on.
           - And the holdout is active.
         record:
+          detail-sequential: {testid: experiment-sequential}
+          detail-start: {css: "div:has(> [data-testid=experiment-start-date])"}
+          detail-group: {testid: experiment-exclusion-group}
+          detail-holdout: {testid: experiment-holdout}
           api-settings-note: {testid: experiment-api-settings-note}
         steps:
           - look: {testid: experiment-status}

@@ -142,6 +142,11 @@ def test_a_date_outside_the_beats_steps_is_refused(part):
         step = date_step(data)
         b["steps"].remove(step)
         b.setdefault(part, []).insert(0, step)
+        # The end state's start is read from a date step in the beat's steps;
+        # without one, the load would refuse that first.
+        design = data["end_state"]["design"]
+        design.pop("scheduled_start")
+        design["shown"].pop("detail_start")
 
     refused(moved, rf"beat {SCHEDULE}: a date is set in the beat's steps, on camera")
 

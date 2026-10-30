@@ -37,7 +37,7 @@ from showcase.render import ocr
 
 from backend.app.services.assignment_service import AssignmentService
 from backend.app.services.rules_evaluation_service import RulesEvaluationService
-from backend.tests.unit.showcase.test_showcase_design_end import DRAWN, OWNER, saved
+from backend.tests.unit.showcase.test_showcase_design_end import DRAWN, OWNER
 
 pytestmark = [pytest.mark.unit]
 
@@ -189,6 +189,11 @@ def test_video_9_records_what_the_review_and_the_page_showed_for_gate_10():
         "review_analysis": "review-analysis",
         "detail_analysis": "analysis",
         "detail_bayesian": "bayesian",
+        "detail_sequential": "detail-sequential",
+        "detail_start": "detail-start",
+        "detail_group": "detail-group",
+        "detail_holdout": "detail-holdout",
+        "detail_note": "api-settings-note",
     }
 
 
@@ -197,29 +202,34 @@ def test_a_planted_correct_answer_passes_gate_10_for_the_loaded_board():
     API's answer for exactly the declared experiment, and the rows the product
     draws for it, pass gate 10's ``design`` end state; one changed share does
     not."""
+    from backend.tests.unit.showcase import test_showcase_design_set as set_
+
     made = board()
     end = made.end_state.design
-    answer = saved(end)
-    ok, numbers, why = gates.design_end(
-        end,
-        named=[answer],
-        total=made.seed_counts.experiments + 1,
-        seed_experiments=made.seed_counts.experiments,
-        owner_id=OWNER,
-        readings=DRAWN,
-    )
+    answer = set_.answered()
+    given = {
+        "named": [answer],
+        "total": made.seed_counts.experiments + 1,
+        "seed_experiments": made.seed_counts.experiments,
+        "owner_id": OWNER,
+        "readings": {**DRAWN, **set_.PAYOFF},
+        "moved": {
+            "sequential_testing_enabled": True,
+            "start_date": set_.DATED["scheduled-start"]["instant"],
+            "mutual_exclusion_group_id": set_.GROUP,
+        },
+        "extra": {
+            "start_shown": set_.DATED["scheduled-start"]["shown"],
+            "group_name": "Checkout tests",
+            "holdout": set_.HOLDOUT,
+        },
+    }
+    ok, numbers, why = gates.design_end(end, **given)
     assert ok, why
     assert numbers["experiments_in_api"] == 4
     answer["variants"][0]["traffic_allocation"] = 35
     answer["variants"][1]["traffic_allocation"] = 32
-    ok, _, why = gates.design_end(
-        end,
-        named=[answer],
-        total=made.seed_counts.experiments + 1,
-        seed_experiments=made.seed_counts.experiments,
-        owner_id=OWNER,
-        readings=DRAWN,
-    )
+    ok, _, why = gates.design_end(end, **given)
     assert not ok
     assert "Control" in why
 

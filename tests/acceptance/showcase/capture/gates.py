@@ -1447,6 +1447,26 @@ CORRECTION_NAMES: Dict[str, str] = {
 }
 #: The Review row's addition when Bayesian analysis is on (Wizard.tsx).
 BAYESIAN_ON = " · Bayesian analysis on"
+#: ...and when sequential testing is on (Wizard.tsx, #1463).
+SEQUENTIAL_ON = " · Sequential testing (beta) on"
+#: The experiment page's term for a start still ahead ([id].tsx scheduleLabel, #1450).
+START_TERM = "Starts"
+#: The note under the experiment page's settings, word for word (pages/experiments/
+#: [id].tsx, as 5b resolved it: EM-3 of video 9's re-plan; a unit test keeps the two
+#: equal). Read whole at the payoff: a note that still lists something the video has
+#: just set on camera would be false under it (PE 1).
+API_SETTINGS_NOTE = (
+    "Set through the API, not on this page: a paused experiment's resume, turning"
+    " sequential testing on or off after creation."
+)
+
+
+def holdout_label(name: str, percentage: Any) -> str:
+    """``holdoutLabel`` (frontend/src/utils/holdouts.ts; a unit test keeps the two
+    equal): the active holdout as the experiment page and the holdouts page draw it."""
+    return f"{name}: keeps {percentage}% of new users out of every experiment"
+
+
 #: The tolerance a saved effect is compared within.
 EFFECT_TOLERANCE = 1e-12
 
@@ -1575,11 +1595,20 @@ def _without_builder_ids(rules: Any) -> Any:
     return out
 
 
-def design_mirrors(end: Any, saved: Mapping[str, Any]) -> Dict[str, Any]:
+def design_mirrors(
+    end: Any, saved: Mapping[str, Any], extra: Optional[Mapping[str, Any]] = None
+) -> Dict[str, Any]:
     """Each reading a design end state may compare, as the product draws the
     saved experiment *saved*: list readings as lines in the storyboard's
     declared order (the order the wizard holds them), from the API's values
-    keyed by name, never in the API's own order."""
+    keyed by name, never in the API's own order.
+
+    What the video set on the draft's own pages comes in *extra*, each from
+    its own source, never formatted here: ``start_shown`` (how the page itself
+    drew the start at the ``date`` step), ``group_name`` (the group's name, read
+    from the group) and ``holdout`` (the active holdout, read from the API). A
+    reading whose source is not given has no mirror, and is refused."""
+    extra = extra or {}
     variants = {v["name"]: v for v in saved["variants"]}
     metrics = {m["name"]: m for m in saved["metrics"]}
     variant_lines = []
@@ -1611,15 +1640,30 @@ def design_mirrors(end: Any, saved: Mapping[str, Any]) -> Dict[str, Any]:
     level = float(saved["confidence_level"])
     method = str(saved["correction_method"])
     detail = "no correction" if method == "none" else correction_name(method)
-    return {
+    mirrors: Dict[str, Any] = {
         "review_variants": variant_lines,
         "review_metrics": metric_lines,
         "review_targeting": targeting,
         "review_analysis": describe_settings(level, method)
-        + (BAYESIAN_ON if saved["bayesian_enabled"] else ""),
+        + (BAYESIAN_ON if saved["bayesian_enabled"] else "")
+        + (SEQUENTIAL_ON if saved.get("sequential_testing_enabled") is True else ""),
         "detail_analysis": f"{format_confidence(level)} confidence · {detail}",
         "detail_bayesian": "On" if saved["bayesian_enabled"] else "Off",
+        "detail_sequential": "On"
+        if saved.get("sequential_testing_enabled") is True
+        else "Off",
+        "detail_note": API_SETTINGS_NOTE,
     }
+    if extra.get("start_shown"):
+        mirrors["detail_start"] = f"{START_TERM} {extra['start_shown']}"
+    if extra.get("group_name"):
+        mirrors["detail_group"] = str(extra["group_name"])
+    holdout = extra.get("holdout")
+    if isinstance(holdout, Mapping) and holdout.get("name"):
+        mirrors["detail_holdout"] = holdout_label(
+            str(holdout["name"]), holdout.get("holdout_percentage")
+        )
+    return mirrors
 
 
 def _missing(item: Mapping[str, Any], keys: Sequence[str]) -> Optional[str]:
@@ -1638,11 +1682,13 @@ def design_end(
     owner_id: Any,
     readings: Mapping[str, str],
     moved: Optional[Mapping[str, Any]] = None,
+    extra: Optional[Mapping[str, Any]] = None,
 ) -> Verdict:
     """Gate 10 "design" (``storyboard.DesignEnd``): the video made exactly the
     experiment it declares, and left it a draft. In order, the first failure
     refusing (*moved*: the ``UNTOUCHED`` fields the video set, each with the
-    value it set; ``start_date`` compared as an instant, naive as UTC):
+    value it set; ``start_date`` compared as an instant, naive as UTC; *extra*:
+    the readings' own sources for what the video set, ``design_mirrors``):
 
     1. exactly one experiment has the name, with the key, a draft, owned by the
        signed-in user (*owner_id*);
@@ -1859,7 +1905,7 @@ def design_end(
                 f"{end.name!r} has {key} {saved[key]!r}: guided setup never sets"
                 f" it, so the video did not",
             )
-    mirrors = design_mirrors(end, saved)
+    mirrors = design_mirrors(end, saved, extra)
     shown: Dict[str, Any] = {}
     for kind, record in end.shown.items():
         text = readings.get(record)
@@ -1868,6 +1914,12 @@ def design_end(
                 False,
                 numbers,
                 f"no reading {record!r} was recorded for {kind}",
+            )
+        if kind not in mirrors:
+            return (
+                False,
+                numbers,
+                f"no source was read to compare {kind} with (what the video set)",
             )
         wanted = mirrors[kind]
         if isinstance(wanted, list):
@@ -1913,3 +1965,183 @@ def _same_setting(key: str, got: Any, wanted: Any) -> bool:
         a, b = as_instant(got), as_instant(wanted)
         return a is not None and b is not None and a.replace(microsecond=0) == b
     return type(got) is type(wanted) and got == wanted
+
+
+def _member_names(group: Mapping[str, Any]) -> List[str]:
+    return sorted(str(e.get("name")) for e in group.get("experiments") or [])
+
+
+def eligibility_end(
+    end: Any,
+    setup: Any,
+    *,
+    groups: Optional[Mapping[str, Any]],
+    group: Optional[Mapping[str, Any]],
+    holdouts: Optional[Mapping[str, Any]],
+    active: Any,
+    saved: Mapping[str, Any],
+) -> Verdict:
+    """Gate 10's half for what the video set on the draft's own pages
+    (``DesignEnd.group``, ``holdout`` and ``analysis.sequential``), read from
+    the API off camera after the last scene, never from the cached experiment:
+
+    * the exclusion groups are exactly the setup's (none made on camera), and
+      the draft's group, read from the group itself, holds exactly the setup's
+      experiments and the draft;
+    * the API holds exactly one holdout, the one the video made: active, with
+      its name and percentage;
+    * sequential testing's configuration and method are still unset (null).
+
+    Nothing is read or judged for a field the end state does not declare."""
+    numbers: Dict[str, Any] = {}
+    made = setup.exclusion_groups if setup is not None else []
+    if end.group is not None:
+        listed = sorted(str(g.get("name")) for g in (groups or {}).get("items") or [])
+        numbers.update(groups=listed, groups_total=(groups or {}).get("total"))
+        if (groups or {}).get("total") != len(made) or listed != sorted(
+            g.name for g in made
+        ):
+            return (
+                False,
+                numbers,
+                f"the API holds the groups {listed} ({(groups or {}).get('total')});"
+                f" the setup made {sorted(g.name for g in made)} and the video none",
+            )
+        if group is None or group.get("name") != end.group:
+            return False, numbers, f"{end.group!r} could not be read"
+        declared = next(g for g in made if g.name == end.group)
+        numbers["members"] = _member_names(group)
+        wanted = sorted([*declared.experiments, end.name])
+        if numbers["members"] != wanted:
+            return (
+                False,
+                numbers,
+                f"{end.group!r} holds {numbers['members']}; the setup and the video"
+                f" put {wanted} in it",
+            )
+    if end.holdout is not None:
+        numbers.update(
+            holdouts_total=(holdouts or {}).get("total"),
+            active_holdout=None
+            if not isinstance(active, Mapping)
+            else {
+                k: active.get(k) for k in ("name", "holdout_percentage", "is_active")
+            },
+        )
+        if (holdouts or {}).get("total") != 1:
+            return (
+                False,
+                numbers,
+                f"the API holds {(holdouts or {}).get('total')!r} holdouts; the video"
+                " made 1",
+            )
+        if (
+            not isinstance(active, Mapping)
+            or active.get("name") != end.holdout.name
+            or active.get("holdout_percentage") != end.holdout.percentage
+            or active.get("is_active") is not True
+        ):
+            return (
+                False,
+                numbers,
+                f"the active holdout is {numbers['active_holdout']!r}; the video made"
+                f" {end.holdout.name!r}, active, at {end.holdout.percentage}",
+            )
+    if end.analysis.sequential:
+        numbers.update(
+            sequential_testing_config=saved.get("sequential_testing_config"),
+            sequential_testing_method=saved.get("sequential_testing_method"),
+        )
+        for key in ("sequential_testing_config", "sequential_testing_method"):
+            if saved.get(key) is not None:
+                return (
+                    False,
+                    numbers,
+                    f"{key} is {saved.get(key)!r}; guided setup sends none",
+                )
+    return True, numbers, ""
+
+
+def zone_end(
+    zone: str, locale: str, resolved_zone: Any, resolved_locale: Any
+) -> Verdict:
+    """QA 5a: the page runs in the zone and the locale the storyboard pins, as
+    the page itself resolves them (``Intl.DateTimeFormat().resolvedOptions()``
+    and ``navigator.language``), never as the tool asked for them."""
+    numbers = {
+        "declared": [zone, locale],
+        "resolved": [resolved_zone, resolved_locale],
+    }
+    if resolved_zone != zone:
+        return (
+            False,
+            numbers,
+            f"the page's zone is {resolved_zone}; the board declares {zone}",
+        )
+    if resolved_locale != locale:
+        return (
+            False,
+            numbers,
+            f"the page's locale is {resolved_locale}; the board declares {locale}",
+        )
+    return True, numbers, ""
+
+
+def instant_in_zone(value: str, zone: str) -> Optional[str]:
+    """A ``datetime-local`` value read in *zone*, as ``toISOString`` writes the
+    instant: the zone's offset on that day, never today's (QA 5b). None for a
+    value that is not one."""
+    try:
+        local = dt.datetime.strptime(value, "%Y-%m-%dT%H:%M")
+    except (TypeError, ValueError):
+        return None
+    import zoneinfo
+
+    when = local.replace(tzinfo=zoneinfo.ZoneInfo(zone)).astimezone(dt.timezone.utc)
+    return when.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+#: How an en-US page draws a local time (``toLocaleString``): 11/2/2026, 9:00:00 AM.
+EN_US_SHOWN = re.compile(
+    r"^(\d{1,2})/(\d{1,2})/(\d{4}),\s(\d{1,2}):(\d{2}):(\d{2})\s(AM|PM)$"
+)
+
+
+def shown_as_value(shown: str, value: str) -> bool:
+    """QA 5c: an en-US drawing of a local time names the value's own day and
+    minute (seconds zero)."""
+    found = EN_US_SHOWN.match(shown or "")
+    if found is None:
+        return False
+    month, day, year, hour, minute, second, half = found.groups()
+    hour24 = int(hour) % 12 + (12 if half == "PM" else 0)
+    drawn = f"{int(year):04d}-{int(month):02d}-{int(day):02d}T{hour24:02d}:{minute}"
+    return drawn == value and second == "00"
+
+
+def dates_in_zone(
+    dated: Mapping[str, Mapping[str, str]], zone: str, locale: str
+) -> Verdict:
+    """Each ``date`` step's reading against the pinned zone: the instant the page
+    gave is the value read in that zone on that day (5b), and the page drew it
+    as that day and minute (5c; en-US, the one locale a board pins)."""
+    numbers: Dict[str, Any] = {"dates": {k: dict(v) for k, v in dated.items()}}
+    if locale != "en-US":
+        return False, numbers, f"a date drawn in {locale} is not read here; en-US is"
+    for name, reading in dated.items():
+        wanted = instant_in_zone(reading.get("value", ""), zone)
+        if reading.get("instant") != wanted:
+            return (
+                False,
+                numbers,
+                f"the date {name!r} {reading.get('value')!r} is {reading.get('instant')!r}"
+                f" on the page; in {zone} it is {wanted!r}",
+            )
+        if not shown_as_value(reading.get("shown", ""), reading.get("value", "")):
+            return (
+                False,
+                numbers,
+                f"the page drew the date {name!r} as {reading.get('shown')!r}, not"
+                f" {reading.get('value')!r}",
+            )
+    return True, numbers, ""

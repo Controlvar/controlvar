@@ -66,8 +66,38 @@ def board_data() -> Dict[str, Any]:
     return data
 
 
-def design() -> storyboard.DesignEnd:
+#: The end state's fields for what the video sets on the draft's own pages,
+#: and the readings that compare them: judged in their own section below.
+SET_ON_PAGES = ("scheduled_start", "group", "holdout")
+SET_READINGS = (
+    "detail_sequential",
+    "detail_start",
+    "detail_group",
+    "detail_holdout",
+    "detail_note",
+)
+
+
+def full_design() -> storyboard.DesignEnd:
+    """The real board's design end state, whole."""
     return storyboard.DesignEnd.model_validate(board_data()["end_state"]["design"])
+
+
+def guided(declared: Dict[str, Any]) -> storyboard.DesignEnd:
+    """A design end state (as data) as guided setup leaves the draft: without
+    what the video then sets on its own pages, so a test judges gate 10's
+    guided-setup checks alone, as they always have been."""
+    data = copy.deepcopy(declared)
+    for key in SET_ON_PAGES:
+        data.pop(key, None)
+    data["analysis"].pop("sequential", None)
+    data["shown"] = {k: v for k, v in data["shown"].items() if k not in SET_READINGS}
+    return storyboard.DesignEnd.model_validate(data)
+
+
+def design() -> storyboard.DesignEnd:
+    """The real board's design end state as guided setup leaves the draft."""
+    return guided(board_data()["end_state"]["design"])
 
 
 def saved(end: storyboard.DesignEnd) -> Dict[str, Any]:
@@ -199,7 +229,7 @@ def test_the_real_boards_design_parses():
 
 def test_the_real_board_parses_with_its_end_state():
     board = storyboard.parse(board_data(), source="09-design-in-depth.yaml")
-    assert board.end_state.design == design()
+    assert board.end_state.design == full_design()
     assert board.traffic is None
 
 
@@ -225,7 +255,7 @@ def test_the_api_order_of_variants_and_metrics_does_not_matter():
 def test_a_configuration_is_compared_parsed():
     data = board_data()
     data["end_state"]["design"]["variants"][1]["configuration"] = {"a": 1, "b": [2]}
-    end = storyboard.DesignEnd.model_validate(data["end_state"]["design"])
+    end = guided(data["end_state"]["design"])
     answer = saved(end)
     answer["variants"][1]["configuration"] = {"b": [2], "a": 1}
     readings = dict(DRAWN)
@@ -328,7 +358,7 @@ def test_a_planned_effect_the_storyboard_did_not_type_is_refused():
 def test_a_planned_effect_is_held_to_the_typed_one():
     data = board_data()
     data["end_state"]["design"]["metrics"][0]["mde"] = 0.1
-    end = storyboard.DesignEnd.model_validate(data["end_state"]["design"])
+    end = guided(data["end_state"]["design"])
     ok, _, why = judge(saved(end), end=end)
     assert ok, why
     answer = saved(end)
@@ -362,7 +392,7 @@ def test_an_id_inside_a_condition_value_is_not_dropped():
     data = board_data()
     condition = data["end_state"]["design"]["targeting"]["groups"][0]["conditions"][0]
     condition["operator"] = "equals"
-    end = storyboard.DesignEnd.model_validate(data["end_state"]["design"])
+    end = guided(data["end_state"]["design"])
     answer = saved(end)
     answer["targeting_rules"]["groups"][0]["conditions"][0]["operator"] = "in"
     ok, _, why = judge(answer, end=end)
@@ -378,7 +408,7 @@ def test_no_targeting_when_the_storyboard_declares_some_is_refused():
 def test_targeting_when_the_storyboard_lets_everyone_join_is_refused():
     data = board_data()
     del data["end_state"]["design"]["targeting"]
-    end = storyboard.DesignEnd.model_validate(data["end_state"]["design"])
+    end = guided(data["end_state"]["design"])
     readings = dict(DRAWN, **{"review-targeting": "Targeting: everyone"})
     for empty in (None, {}, {"logical_operator": "AND", "groups": []}):
         answer = dict(saved(end), targeting_rules=empty)
@@ -715,6 +745,7 @@ def test_the_review_rows_are_drawn_as_the_mirrors_say():
         "state.rules.groups.length === 1 ? 'group' : 'groups'",
         ": 'Targeting: everyone'}",
         "{payload.bayesian_enabled ? ' · Bayesian analysis on' : ''}",
+        "{payload.sequential_testing_enabled ? ' · Sequential testing (beta) on' : ''}",
         'data-testid="review-variants"',
         'data-testid="review-metrics"',
         'data-testid="review-targeting"',
@@ -723,6 +754,7 @@ def test_the_review_rows_are_drawn_as_the_mirrors_say():
         assert piece in wizard, piece
     assert gates.CONFIGURATION_SEPARATOR == ", configuration "
     assert gates.BAYESIAN_ON == " · Bayesian analysis on"
+    assert gates.SEQUENTIAL_ON == " · Sequential testing (beta) on"
 
 
 def test_the_review_analysis_row_is_describe_settings():
@@ -919,7 +951,9 @@ def design_after(**changes) -> Tuple[bool, Dict[str, Any], str]:
         total=4,
         seed_experiments=3,
         owner_id=answer["owner_id"],
-        readings=DRAWN,
+        readings=dict(
+            DRAWN, **{"review-analysis": DRAWN["review-analysis"] + gates.SEQUENTIAL_ON}
+        ),
         moved={
             "sequential_testing_enabled": True,
             "mutual_exclusion_group_id": GROUP,

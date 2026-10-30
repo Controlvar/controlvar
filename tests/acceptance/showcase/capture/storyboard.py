@@ -836,7 +836,19 @@ DesignReading = Literal[
     "review_analysis",
     "detail_analysis",
     "detail_bayesian",
+    "detail_sequential",
+    "detail_start",
+    "detail_group",
+    "detail_holdout",
+    "detail_note",
 ]
+#: The readings that compare what the video set on the draft's own pages, each
+#: with the end state's field it needs.
+DESIGN_SET_READINGS: Dict[str, str] = {
+    "detail_start": "scheduled_start",
+    "detail_group": "group",
+    "detail_holdout": "holdout",
+}
 
 
 class DesignVariant(_Strict):
@@ -933,6 +945,8 @@ class DesignAnalysis(_Strict):
     confidence: float
     correction: str
     bayesian: bool
+    #: Sequential testing (beta), ticked on the Estimate step (#1463).
+    sequential: bool = False
 
     @model_validator(mode="after")
     def _offered(self) -> "DesignAnalysis":
@@ -949,11 +963,23 @@ class DesignAnalysis(_Strict):
         return self
 
 
+class DesignHoldout(_Strict):
+    """The global holdout the video makes and activates on its own page."""
+
+    name: str = Field(min_length=1, max_length=200)
+    #: The dashboard's range for a new holdout (HoldoutForm: 1 to 20).
+    percentage: int = Field(ge=1, le=20)
+
+
 class DesignEnd(_Strict):
     """Gate 10 for an experiment the video designs and leaves a draft
     (``gates.design_end``): it exists once, exactly as declared, with nothing
     guided setup cannot set, and the readings named in ``shown`` said what was
-    saved, in the product's words."""
+    saved, in the product's words. What the video then sets on the draft's own
+    pages is declared too (``gates.eligibility_end``): its start (the reading
+    of the ``date`` step named ``scheduled_start``), the setup's exclusion
+    group it joins (``group``), and the global holdout it makes and activates
+    (``holdout``). Absent, each is held untouched as before."""
 
     name: str = Field(min_length=1, max_length=100)
     key: str = Field(min_length=1)
@@ -968,6 +994,11 @@ class DesignEnd(_Strict):
     analysis: DesignAnalysis
     #: Each reading compared, by the ``record`` name of the beat that read it.
     shown: Dict[DesignReading, str] = Field(min_length=1)
+    #: The ``date`` step's reading the draft's start was set with.
+    scheduled_start: Optional[str] = Field(default=None, pattern=READING_NAME)
+    #: The setup's exclusion group the draft is added to, by its name.
+    group: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    holdout: Optional[DesignHoldout] = None
 
     @model_validator(mode="after")
     def _as_the_wizard_saves(self) -> "DesignEnd":
@@ -990,6 +1021,11 @@ class DesignEnd(_Strict):
             raise ValueError(
                 "a design end state compares at least one Review row (review_*)"
             )
+        for kind, needs in DESIGN_SET_READINGS.items():
+            if kind in self.shown and getattr(self, needs) is None:
+                raise ValueError(
+                    f"the design end state compares {kind}, and declares no {needs}"
+                )
         return self
 
 
@@ -1138,6 +1174,20 @@ class Storyboard(_Strict):
                 "a storyboard with a date step pins the browser's time_zone and"
                 " locale, so the take is the same on any machine"
             )
+        design = self.end_state.design
+        if design is not None and design.scheduled_start is not None:
+            if design.scheduled_start not in dated:
+                raise ValueError(
+                    f"the design's end state starts at the reading"
+                    f" {design.scheduled_start!r}, which no date step records"
+                )
+        if design is not None and design.group is not None:
+            groups = [g.name for g in self.setup.exclusion_groups] if self.setup else []
+            if design.group not in groups:
+                raise ValueError(
+                    f"the design's end state puts it in {design.group!r}, which the"
+                    " setup does not make"
+                )
         return self
 
     @model_validator(mode="after")
