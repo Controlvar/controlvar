@@ -47,9 +47,13 @@
  *     old "User Email" box) is invisible to it.
  *   - No value, type or enum checks: `status_filter: 'bogus'` passes.
  *   - Beta operations may change without a snapshot update, so an unread key
- *     on a beta operation is only warned on, never failed. The one beta
- *     target today is `GET /api/v1/auth/sso/login` (full profile); the beta
- *     target list is asserted exactly so a new one is noticed.
+ *     on a beta operation is only warned on, never failed. The beta targets
+ *     today are `GET /api/v1/holdout/{holdout_id}/results` (both profiles;
+ *     `services/holdouts.test.ts` pins its exact `query: {metric}`) and
+ *     `GET /api/v1/auth/sso/login` (full profile); the beta target list is
+ *     asserted exactly so a new one is noticed.
+ *   - One call's path matches two operations and is resolved by the exact,
+ *     one-entry `DISAMBIGUATE` table below; nothing else is.
  *   - An options object passed as a variable is refused, but an options-level
  *     spread (`{ method: 'POST', ...options }`) is not read. The one today,
  *     `ExperimentsService.create`, spreads a `CreateOptions`, whose type has
@@ -103,6 +107,7 @@ const CORE_CALLS = [
   'services/experiments.ts GET /api/v1/experiments/analysis/sample-size',
   'services/featureFlags.ts GET /api/v1/feature-flags/',
   'services/featureFlags.ts GET /api/v1/rollout-schedules/',
+  'services/holdouts.ts GET /api/v1/holdout/{holdout_id}/results',
   'services/results.ts GET /api/v1/results/{experiment_id}',
   'services/results.ts GET /api/v1/results/{experiment_id}/daily',
   'services/results.ts GET /api/v1/results/{experiment_id}/sample-size',
@@ -110,10 +115,32 @@ const CORE_CALLS = [
 ];
 const FULL_CALLS = [...CORE_CALLS, 'modules/frontend/src/services/sso.ts GET /api/v1/auth/sso/login'].sort();
 const EXPECTED_CALLS = PROFILE === 'core' ? [...CORE_CALLS].sort() : FULL_CALLS;
-const EXPECTED_COUNT = PROFILE === 'core' ? 14 : 15;
+const EXPECTED_COUNT = PROFILE === 'core' ? 15 : 16;
+
+/**
+ * Calls the matcher reads as more than one operation, and the one each means
+ * (#1455, PLAN C11, PE 8). Keyed `METHOD normalised-path`, exactly as
+ * `resolveCalls` builds it. ONE entry, written out, and nothing general: a
+ * rule that ranked candidates (literal segments over parameters, say) would
+ * also resolve the planted `/api/v1/a/${id}` self-test below and make the
+ * "operations match" check vacuous.
+ *
+ * `GET /api/v1/holdout/${id}/results` matches both `/holdout/check/{user_id}`
+ * (`check` read as the id) and `/holdout/{holdout_id}/results`; the call
+ * means the second. `resolveCalls` refuses an entry whose target is not
+ * among the operations that match, and returns how often each entry was used
+ * in THAT run, so the "used exactly once" test cannot be met by a self-test
+ * after the real call is gone.
+ */
+const DISAMBIGUATE: Record<string, string> = {
+  'GET /api/v1/holdout/{param}/results': '/api/v1/holdout/{holdout_id}/results',
+};
 
 /** Beta operations a call targets; unread keys there are warnings. */
-const EXPECTED_BETA_TARGETS = PROFILE === 'core' ? [] : ['GET /api/v1/auth/sso/login'];
+const EXPECTED_BETA_TARGETS =
+  PROFILE === 'core'
+    ? ['GET /api/v1/holdout/{holdout_id}/results']
+    : ['GET /api/v1/auth/sso/login', 'GET /api/v1/holdout/{holdout_id}/results'];
 
 /**
  * Calls whose unread keys are accepted for now, as `file METHOD path [key]`.
@@ -495,13 +522,29 @@ export interface Resolved {
 export function resolveCalls(
   doc: OpenApiDocument,
   calls: QueryCall[],
-): { resolved: Resolved[]; problems: string[] } {
+  disambiguate: Record<string, string> = {},
+): { resolved: Resolved[]; problems: string[]; used: Record<string, number> } {
   const resolved: Resolved[] = [];
   const problems: string[] = [];
+  // Per run: each entry starts at 0 here, never in a module-level counter.
+  const used: Record<string, number> = {};
+  for (const key of Object.keys(disambiguate)) used[key] = 0;
   for (const call of calls) {
     const where = `${call.file}:${call.line}`;
     const normalised = normalisePath(call.raw as string);
-    const candidates = matchingPaths(doc, normalised).filter((p) => call.method in doc.paths[p]);
+    let candidates = matchingPaths(doc, normalised).filter((p) => call.method in doc.paths[p]);
+    const key = `${call.method.toUpperCase()} ${normalised}`;
+    if (candidates.length > 1 && key in disambiguate) {
+      const target = disambiguate[key];
+      if (!candidates.includes(target)) {
+        problems.push(
+          `${where}  ${key}  →  DISAMBIGUATE names ${target}, which is not one of the ${candidates.length} operations that match: ${candidates.join(', ')}`,
+        );
+        continue;
+      }
+      used[key] += 1;
+      candidates = [target];
+    }
     if (candidates.length !== 1) {
       problems.push(
         `${where}  ${call.method.toUpperCase()} ${call.raw}  →  ${candidates.length} operations match` +
@@ -524,7 +567,7 @@ export function resolveCalls(
     const unread = (call.keys ?? []).filter((k) => !read.has(k)).sort();
     resolved.push({ call, target: `${call.method.toUpperCase()} ${p}`, beta: op['x-stability'] === 'beta', unread });
   }
-  return { resolved, problems };
+  return { resolved, problems, used };
 }
 
 function readsOf(doc: OpenApiDocument, target: string): string[] {
@@ -546,8 +589,20 @@ describe(`every query parameter the dashboard sends is one its API reads (${PROF
   const extractions = files.map((f) => extractQueryCalls(f, fs.readFileSync(f, 'utf8')));
   const calls = extractions.flatMap((e) => e.calls);
   const readProblems = extractions.flatMap((e) => e.problems);
-  const { resolved, problems: matchProblems } = resolveCalls(doc, calls);
+  const { resolved, problems: matchProblems, used } = resolveCalls(doc, calls, DISAMBIGUATE);
   const signature = (r: Resolved) => `${r.call.file} ${r.target}`;
+
+  // PE 8 (c): the table's keys, written out, so an entry added for a call
+  // that does not exist, or one quietly removed, fails here by name.
+  it('the DISAMBIGUATE table holds exactly one entry, for the holdout results call', () => {
+    expect(Object.keys(DISAMBIGUATE)).toEqual(['GET /api/v1/holdout/{param}/results']);
+    expect(DISAMBIGUATE['GET /api/v1/holdout/{param}/results']).toBe('/api/v1/holdout/{holdout_id}/results');
+  });
+
+  // PE 8 (b): counted in THIS run of resolveCalls over the dashboard's calls.
+  it('every DISAMBIGUATE entry is used by exactly one call', () => {
+    expect(used).toEqual(Object.fromEntries(Object.keys(DISAMBIGUATE).map((key) => [key, 1])));
+  });
 
   it('reads the snapshot for this profile', () => {
     expect(Object.keys(doc.paths).length).toBeGreaterThan(100);
@@ -708,6 +763,58 @@ describe(`every query parameter the dashboard sends is one its API reads (${PROF
         'f.ts:7  POST /api/v1/c  →  0 operations match',
       ]);
       expect(got.map((r) => [r.target, r.unread])).toEqual([['GET /api/v1/c', ['page']]]);
+    });
+
+    // PE 8 (a) and (b) on a document of its own: a table entry picks one of
+    // the operations the matcher found, never one it did not, and counts per
+    // run. The planted `/api/v1/a/${id}` above stays ambiguous without it.
+    describe('the DISAMBIGUATE table', () => {
+      const mini: OpenApiDocument = {
+        paths: {
+          '/api/v1/h/check/{user_id}': { get: {} },
+          '/api/v1/h/{h_id}/results': { get: { parameters: [{ in: 'query', name: 'metric' }] } },
+          '/api/v1/h/{h_id}': { put: {} },
+        },
+      };
+      const call = (raw: string): QueryCall => ({ file: 'f.ts', line: 3, fn: 'apiFetch', raw, method: 'get', keys: ['metric'] });
+
+      it('without an entry the call is ambiguous', () => {
+        const { resolved: got, problems, used } = resolveCalls(mini, [call('/api/v1/h/${id}/results')]);
+        expect(got).toEqual([]);
+        expect(problems).toEqual([
+          'f.ts:3  GET /api/v1/h/${id}/results  →  2 operations match: /api/v1/h/check/{user_id}, /api/v1/h/{h_id}/results',
+        ]);
+        expect(used).toEqual({});
+      });
+
+      it('an entry resolves it to the operation it names, and counts the use in this run only', () => {
+        const table = { 'GET /api/v1/h/{param}/results': '/api/v1/h/{h_id}/results' };
+        const first = resolveCalls(mini, [call('/api/v1/h/${id}/results')], table);
+        expect(first.problems).toEqual([]);
+        expect(first.resolved.map((r) => [r.target, r.unread])).toEqual([['GET /api/v1/h/{h_id}/results', []]]);
+        expect(first.used).toEqual({ 'GET /api/v1/h/{param}/results': 1 });
+        const second = resolveCalls(mini, [], table);
+        expect(second.used).toEqual({ 'GET /api/v1/h/{param}/results': 0 });
+      });
+
+      it('an entry naming an operation the matcher did not find is refused', () => {
+        const table = { 'GET /api/v1/h/{param}/results': '/api/v1/h/{h_id}' };
+        const { resolved: got, problems } = resolveCalls(mini, [call('/api/v1/h/${id}/results')], table);
+        expect(got).toEqual([]);
+        expect(problems).toEqual([
+          'f.ts:3  GET /api/v1/h/{param}/results  →  DISAMBIGUATE names /api/v1/h/{h_id}, which is not one of the 2 operations that match: /api/v1/h/check/{user_id}, /api/v1/h/{h_id}/results',
+        ]);
+      });
+
+      it('an entry never touches a call that is not ambiguous, nor the planted /a/${id} one', () => {
+        const table = { 'GET /api/v1/h/{param}/results': '/api/v1/h/{h_id}/results' };
+        const planted: OpenApiDocument = {
+          paths: { '/api/v1/a/{x}': { get: {} }, '/api/v1/a/b': { get: {} } },
+        };
+        const { problems, used } = resolveCalls(planted, [call('/api/v1/a/${id}')], table);
+        expect(problems).toEqual(['f.ts:3  GET /api/v1/a/${id}  →  2 operations match: /api/v1/a/{x}, /api/v1/a/b']);
+        expect(used).toEqual({ 'GET /api/v1/h/{param}/results': 0 });
+      });
     });
   });
 });

@@ -71,6 +71,15 @@ export default function ExperimentsPage() {
                   Exclusion groups
                 </Link>
               )}
+              {canManageEligibility && (
+                <Link
+                  href="/experiments/holdouts"
+                  className="text-sm font-medium text-blue-700 underline"
+                  data-testid="holdouts-link"
+                >
+                  Global holdouts
+                </Link>
+              )}
               <Link
                 href="/experiments/new"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"

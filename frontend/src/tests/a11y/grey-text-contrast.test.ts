@@ -25,10 +25,13 @@ const FILES = [
   'pages/experiments/exclusion-groups/index.tsx',
   'pages/experiments/exclusion-groups/[id].tsx',
   'components/experiments/ExclusionGroupForm.tsx',
+  'pages/experiments/holdouts.tsx',
+  'components/experiments/HoldoutForm.tsx',
+  'components/experiments/HoldoutResultsPanel.tsx',
 ];
 
 /**
- * The exclusion-group pages (#1455) sit on the slate-50 page background,
+ * The exclusion-group and global-holdout pages (#1455) sit on the slate-50 page background,
  * where slate-500 is 4.55:1, too close to 4.5. So they use no text lighter
  * than slate-600 at all (UX: slate-600 inside bg-slate-50).
  */
@@ -36,6 +39,9 @@ const SLATE_50_FILES = [
   'pages/experiments/exclusion-groups/index.tsx',
   'pages/experiments/exclusion-groups/[id].tsx',
   'components/experiments/ExclusionGroupForm.tsx',
+  'pages/experiments/holdouts.tsx',
+  'components/experiments/HoldoutForm.tsx',
+  'components/experiments/HoldoutResultsPanel.tsx',
 ];
 
 describe('slate-50 pages use slate-600 or darker text', () => {

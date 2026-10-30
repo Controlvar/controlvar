@@ -99,13 +99,12 @@ API_SCENES = ("api-intro", "api")
 #: captions, sentences, notes and card), so no dashboard beat names what the
 #: dashboard lacks.
 API_WORDS = ("holdout", "exclusion", "sequential", "schedule", "cuped")
-#: The guide's rows the API part rests on, by the start of their first cell.
-#: "Mutual exclusion groups" left with #1455's group pages: video 9's API part
-#: is withdrawn (D182) and is no longer checked against that row; video 9's
-#: re-plan retires it (EM-2).
-API_ONLY_ROWS = ("Global holdouts",)
 
 
+# Video 9's API part is withdrawn (D182) and video 9's re-plan retires it
+# (EM-2), so a row that has gained a dashboard screen is no longer checked as
+# "API only" here. The global-holdout row's "(beta)" still is, in
+# api_part_problems.
 def guide_rows(text: str) -> List[List[str]]:
     """The guide's table rows as cells."""
     return [
@@ -146,12 +145,6 @@ def api_part_problems(
     """What is wrong with video 9's API part against the pages it rests on."""
     problems: List[str] = []
     rows = guide_rows(guide)
-    for start in API_ONLY_ROWS:
-        found = [row for row in rows if row and row[0].startswith(start)]
-        if len(found) != 1:
-            problems.append(f"the guide has {len(found)} rows starting {start!r}")
-        elif len(found[0]) < 2 or found[0][1] != "API only":
-            problems.append(f"the guide's {start!r} row is not 'API only'")
     holdout = [row for row in rows if row and row[0].startswith("Global holdouts")]
     if holdout and "(beta)" not in holdout[0][0]:
         problems.append("the guide no longer marks global holdouts beta")
@@ -234,19 +227,6 @@ def test_an_api_word_in_a_dashboard_beat_is_refused(line, word):
     ]
 
 
-def test_a_row_the_dashboard_now_does_is_refused():
-    guide = DASHBOARD_AND_API.read_text(encoding="utf-8")
-    row = next(
-        line for line in guide.splitlines() if line.startswith("| Global holdouts")
-    )
-    changed = guide.replace(row, row.replace("| API only |", "| Dashboard |"))
-    assert changed != guide
-    problems = api_part_problems(
-        design_board(), changed, SEQUENTIAL_TESTING.read_text(encoding="utf-8")
-    )
-    assert problems == ["the guide's 'Global holdouts' row is not 'API only'"]
-
-
 def test_a_line_added_above_the_rows_changes_nothing():
     guide = DASHBOARD_AND_API.read_text(encoding="utf-8")
     lines = guide.splitlines()
@@ -315,11 +295,6 @@ CLAIMS: Dict[str, Claim] = {
         1,
         (Drawn("headline", "Through the API"),),
         (
-            (
-                GUIDE,
-                "| Global holdouts: create and activate; read their results (beta)"
-                " | API only |",
-            ),
             (
                 SEQUENTIAL,
                 "Sequential testing is set on the experiment, when you create it",
