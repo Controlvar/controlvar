@@ -2,6 +2,7 @@ import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'reac
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
+import { SiteHeader } from '@/components/SiteHeader';
 import { Wordmark } from '@/components/Wordmark';
 import { LOGIN_PATH, Role, UserMe, safeNextPath } from '@/services/api';
 import { isMarketingSite } from '@/utils/site-mode';
@@ -267,14 +268,14 @@ export function AppShell({ children }: AppShellProps) {
 
   const pathname = router.pathname;
   // The marketing build has no API, so every dashboard destination 404s and
-  // nobody can ever sign in. Anonymous is the ONLY state there, so without
-  // this the shell shows Experiments, Feature Flags and a Sign in button on
-  // /docs and /power-calculator -- all three dead. The homepage was fixed
-  // first and this was missed, because the button is rendered client-side
-  // after auth resolves and so does not appear in the static HTML.
+  // nobody can ever sign in. Anonymous is the ONLY state there, and this
+  // header showed Experiments, Feature Flags and a Sign in button on /docs and
+  // /power-calculator -- all three dead (the button is rendered client-side
+  // after auth resolves, so it was not in the static HTML). So the marketing
+  // build shows the public site's header instead, the homepage's own
+  // (SiteHeader, #1458), and the logo stays where it is from page to page.
   const marketing = isMarketingSite();
   const visibleNav = NAV_ITEMS.filter((item) => {
-    if (marketing) return item.href === '/docs';
     if (item.superuser) return user !== null && user.is_superuser === true;
     if (item.roles) return user !== null && item.roles.includes(user.role);
     return true;
@@ -315,14 +316,30 @@ export function AppShell({ children }: AppShellProps) {
     return next === '/' ? LOGIN_PATH : `${LOGIN_PATH}?next=${encodeURIComponent(next)}`;
   })();
 
+  const skipLink = (
+    <a
+      href="#main-content"
+      className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-white focus:px-3 focus:py-2 focus:rounded-md focus:shadow"
+    >
+      Skip to content
+    </a>
+  );
+
+  if (marketing) {
+    return (
+      <div data-testid="app-shell" className="min-h-screen bg-slate-50 flex flex-col">
+        {skipLink}
+        <SiteHeader />
+        <main id="main-content" className="flex-1 flex flex-col">
+          {children}
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div data-testid="app-shell" className="min-h-screen bg-slate-50 flex flex-col">
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-white focus:px-3 focus:py-2 focus:rounded-md focus:shadow"
-      >
-        Skip to content
-      </a>
+      {skipLink}
 
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
@@ -368,7 +385,7 @@ export function AppShell({ children }: AppShellProps) {
               <div data-testid="user-menu-loading" className="h-8 w-24 rounded-md bg-slate-100 animate-pulse" />
             )}
 
-            {status === 'anonymous' && !marketing && (
+            {status === 'anonymous' && (
               <Link
                 href={signInHref}
                 data-testid="nav-sign-in"
@@ -376,16 +393,6 @@ export function AppShell({ children }: AppShellProps) {
               >
                 Sign in
               </Link>
-            )}
-
-            {status === 'anonymous' && marketing && (
-              <a
-                href="https://github.com/Controlvar/controlvar"
-                data-testid="nav-source"
-                className="px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700"
-              >
-                Source
-              </a>
             )}
 
             {status === 'authenticated' && user && (
