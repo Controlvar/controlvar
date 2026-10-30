@@ -526,12 +526,12 @@ export default function ExperimentDetailPage() {
                 </a>
                 ,{' '}
                 <a
-                  href={docsUrl('guides/user-guide', 'creating-an-experiment')}
+                  href={docsUrl('guides/user-guide', 'pausing-and-stopping')}
                   className={NOTE_LINK}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  start and end dates
+                  a paused experiment&apos;s resume
                 </a>
                 ,{' '}
                 <a

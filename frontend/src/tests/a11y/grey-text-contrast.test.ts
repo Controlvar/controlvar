@@ -139,3 +139,36 @@ describe("the experiment page's header terms", () => {
     expect(shades[0]).toBeGreaterThanOrEqual(500);
   });
 });
+
+/**
+ * The experiment page's schedule form (#1454). Its panel is slate-50, where
+ * slate-500 is 4.55:1, too close to 4.5, so every grey in the file is
+ * slate-600 (7.58:1) or darker. The nightly audit never opens the form, and
+ * jsdom cannot measure contrast, so nothing else checks it.
+ */
+describe("the experiment page's schedule form", () => {
+  const FORM = 'components/experiments/ExperimentScheduleSection.tsx';
+
+  it('the panel is slate-50 and no text in the file is lighter than slate-600', () => {
+    const source = fs.readFileSync(path.join(SRC, FORM), 'utf8');
+    const forms = Array.from(source.matchAll(/<form\b[\s\S]*?data-testid="experiment-schedule-form"/g));
+    expect(forms).toHaveLength(1);
+    expect(forms[0][0]).toMatch(/className="[^"]*\bbg-slate-50\b/);
+    const shades = Array.from(source.matchAll(/(?<!placeholder:)\btext-slate-(\d+)\b/g)).map((m) => Number(m[1]));
+    // The pattern reads the file's greys: the hints, the labels, the heading.
+    expect(shades.length).toBeGreaterThanOrEqual(3);
+    expect(shades.filter((shade) => shade < 600)).toEqual([]);
+  });
+
+  // "Dates saved." is small text on white, outside the panel: green-700
+  // (#15803d, 5.0:1) or darker; green-600 is 3.3:1.
+  it('"Dates saved." is green-700 or darker', () => {
+    const source = fs.readFileSync(path.join(SRC, 'components/experiments/ExperimentManageSection.tsx'), 'utf8');
+    const tags = Array.from(source.matchAll(/<p\b[^>]*data-testid="schedule-saved"[^>]*>/g));
+    expect(tags).toHaveLength(1);
+    const shades = Array.from(tags[0][0].matchAll(/\btext-([a-z]+)-(\d+)\b/g)).map((m) => [m[1], Number(m[2])]);
+    expect(shades).toHaveLength(1);
+    expect(shades[0][0]).toBe('green');
+    expect(shades[0][1]).toBeGreaterThanOrEqual(700);
+  });
+});

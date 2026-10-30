@@ -498,13 +498,14 @@ describe('the note under the header', () => {
     await open();
     const note = screen.getByTestId('experiment-api-settings-note');
     expect(note).toHaveTextContent(
-      /^Set through the API, not on this page: exclusion groups, the global holdout, start and end dates, sequential testing\.$/,
+      /^Set through the API, not on this page: exclusion groups, the global holdout, a paused experiment's resume, sequential testing\.$/,
     );
     const links = Array.from(note.querySelectorAll('a'));
     expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
       ['exclusion groups', docsUrl('api/mutual-exclusion-groups', 'mutual-exclusion-groups')],
       ['the global holdout', docsUrl('api/mutual-exclusion-groups', 'global-holdout')],
-      ['start and end dates', docsUrl('guides/user-guide', 'creating-an-experiment')],
+      // A draft's dates are set on this page (#1454); a paused one's resume is not.
+      ["a paused experiment's resume", docsUrl('guides/user-guide', 'pausing-and-stopping')],
       ['sequential testing', docsUrl('api/sequential-testing', 'turning-it-on')],
     ]);
     for (const a of links) {

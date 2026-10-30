@@ -239,3 +239,27 @@ describe('ExperimentsService lifecycle actions', () => {
     );
   });
 });
+
+describe('ExperimentsService.schedule (#1454)', () => {
+  // Exactly this method and URL: url-literals would also accept a wrong
+  // method on a path some other operation shares.
+  it.each([
+    [{ start_date: '2026-11-02T17:00:00.000Z' }],
+    [{ end_date: null }],
+    [{ start_date: '2026-10-31T16:00:00.000Z', end_date: '2026-11-02T17:00:00.000Z' }],
+  ])('sends PUT /experiments/{id}/schedule with exactly %j', async (body) => {
+    mockOk({ id: 'abc', status: 'draft' });
+    const answer = await ExperimentsService.schedule('abc', body);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${BASE}/api/v1/experiments/abc/schedule`);
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body as string)).toEqual(body);
+    expect(answer.id).toBe('abc');
+  });
+
+  it('throws on error', async () => {
+    mockError(400, 'Bad Request');
+    await expect(ExperimentsService.schedule('abc', { end_date: null })).rejects.toThrow('Bad Request');
+  });
+});

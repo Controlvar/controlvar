@@ -50,7 +50,7 @@ export function canReadEligibility(
  * DEVELOPER do. Who created the experiment is not part of the question, so an
  * ANALYST or VIEWER is refused on an experiment they own as well.
  *
- * Schedule uses the same check; the dashboard does not offer it. Delete checks
+ * Schedule uses the same check; the page offers it on a draft. Delete checks
  * EXPERIMENT DELETE instead, which exactly the same roles hold, so the
  * page's "Edit details", "Edit variants and metrics" and "Delete draft" all
  * use this helper
