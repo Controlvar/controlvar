@@ -20,6 +20,7 @@ export default function PrivacyPage() {
     <>
       <PageTitle
         title="Privacy"
+        path="/privacy"
         description="What the controlvar.com website collects: no cookies, no analytics, and the hosting provider's standard access logs."
       />
       <div className="flex-1 bg-white">

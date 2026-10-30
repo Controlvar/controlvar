@@ -164,6 +164,7 @@ export default function PowerCalculatorPage() {
     <>
       <PageTitle
         title="Power Calculator"
+        path="/power-calculator"
         description="Pre-experiment statistical power calculator: compute sample size, MDE, and runtime estimates for A/B tests. No login required."
       />
 
