@@ -6,9 +6,9 @@ from being in conflicting experiments.
 
 Routes:
     GET    /api/v1/mutual-exclusion-groups                                — list groups
-    POST   /api/v1/mutual-exclusion-groups                                — create group (DEVELOPER+)
+    POST   /api/v1/mutual-exclusion-groups                                — create group (DEVELOPER+; 409: name taken)
     GET    /api/v1/mutual-exclusion-groups/{group_id}                     — get group
-    PUT    /api/v1/mutual-exclusion-groups/{group_id}                     — update group (DEVELOPER+; a status change ADMIN)
+    PUT    /api/v1/mutual-exclusion-groups/{group_id}                     — update group (DEVELOPER+; a status change ADMIN; 409: name taken)
     DELETE /api/v1/mutual-exclusion-groups/{group_id}                     — archive group (ADMIN)
     POST   /api/v1/mutual-exclusion-groups/{group_id}/experiments         — add experiment
     DELETE /api/v1/mutual-exclusion-groups/{group_id}/experiments/{eid}   — remove experiment
@@ -38,7 +38,11 @@ from backend.app.services.audit_service import (
     audit_identity,
     audit_snapshot,
 )
-from backend.app.services.mutual_exclusion_service import MutualExclusionService
+from backend.app.services.mutual_exclusion_service import (
+    GroupNameTaken,
+    MutualExclusionService,
+    group_name_taken_detail,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -133,8 +137,12 @@ def list_groups(
     response_model=MutualExclusionGroupResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a mutual exclusion group",
-    description="Create a new mutual exclusion group. Requires DEVELOPER or ADMIN role.",
+    description=(
+        "Create a new mutual exclusion group. Requires DEVELOPER or ADMIN role. "
+        "409 when another group has the name (compared exactly, case included)."
+    ),
     tags=["Mutual Exclusion Groups"],
+    responses={409: {"description": "Another mutual exclusion group has this name"}},
 )
 def create_group(
     data: MutualExclusionGroupCreate,
@@ -144,12 +152,18 @@ def create_group(
     """Create a new mutual exclusion group."""
     _require_developer(current_user)
     service = MutualExclusionService(db)
-    group = service.create_group(
-        name=data.name,
-        description=data.description,
-        traffic_allocation=data.traffic_allocation,
-        owner_id=current_user.id,
-    )
+    try:
+        group = service.create_group(
+            name=data.name,
+            description=data.description,
+            traffic_allocation=data.traffic_allocation,
+            owner_id=current_user.id,
+        )
+    except GroupNameTaken:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=group_name_taken_detail(data.name),
+        ) from None
     response = MutualExclusionGroupResponse.model_validate(group)
     _record(
         db,
@@ -205,9 +219,11 @@ def get_group(
         "allocation. Requires DEVELOPER or ADMIN role. Changing status "
         "(archiving or unarchiving) requires ADMIN role, as archiving through "
         "DELETE does; sending the group's current status is accepted from a "
-        "DEVELOPER."
+        "DEVELOPER. 409 when another group has the name (compared exactly, "
+        "case included)."
     ),
     tags=["Mutual Exclusion Groups"],
+    responses={409: {"description": "Another mutual exclusion group has this name"}},
 )
 def update_group(
     group_id: UUID,
@@ -230,13 +246,19 @@ def update_group(
     if data.status is not None and data.status.value != _status_value(existing.status):
         _require_admin(current_user)
     before = audit_snapshot(EntityType.MUTUAL_EXCLUSION_GROUP, existing)
-    group = service.update_group(
-        group_id=group_id,
-        name=data.name,
-        description=data.description,
-        traffic_allocation=data.traffic_allocation,
-        status=data.status.value if data.status else None,
-    )
+    try:
+        group = service.update_group(
+            group_id=group_id,
+            name=data.name,
+            description=data.description,
+            traffic_allocation=data.traffic_allocation,
+            status=data.status.value if data.status else None,
+        )
+    except GroupNameTaken:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=group_name_taken_detail(data.name),
+        ) from None
     if not group:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

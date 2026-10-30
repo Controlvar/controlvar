@@ -15,7 +15,10 @@ alike:
 * the percentage cannot change once the holdout has been active
   (``HoldoutPercentageLocked``); re-sending the same value is accepted;
 * two activations racing each other: the database's one-active index refuses
-  the second (``HoldoutActivationConflict``).
+  the second (``HoldoutActivationConflict``);
+* a name another holdout has is refused (``HoldoutNameTaken``), by a check
+  before the write and, for two writes that race, by the name's unique
+  constraint (#1019).
 
 Membership is one function, ``holdout_bucket(user_id, salt)``, used by
 ``/holdout/check`` and ``AssignmentService.assign_user`` alike, with the
@@ -25,8 +28,9 @@ holdout's own ``hash_salt``.
 import hashlib
 import logging
 import struct
+from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import Iterator, List, Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -75,6 +79,44 @@ class HoldoutActivationConflict(Exception):
 
     def __init__(self) -> None:
         super().__init__(ACTIVATION_CONFLICT_DETAIL)
+
+
+#: SQLSTATE ``unique_violation``.
+_UNIQUE_VIOLATION = "23505"
+
+#: The unique constraint on ``global_holdouts.name``. It is unnamed in the model
+#: and the migration, so PostgreSQL names it ``<table>_<column>_key``, the same
+#: in every schema. It compares names exactly: "Q4" and "q4" are two names.
+NAME_UNIQUE_CONSTRAINT = "global_holdouts_name_key"
+
+
+def holdout_name_taken_detail(name: str) -> str:
+    """The 409 detail for a name another holdout has (#1019)."""
+    return f"A global holdout with the name '{name}' already exists."
+
+
+class HoldoutNameTaken(Exception):
+    """Another holdout already has this name (#1019)."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(holdout_name_taken_detail(name))
+
+
+def _is_name_violation(error: IntegrityError) -> bool:
+    """True when *error* is the unique constraint on the name refusing a write.
+
+    Decided from the driver's diagnostics (SQLSTATE, table, constraint), never
+    from the message text; the one-active index and every other integrity
+    error are not this one.
+    """
+    orig = getattr(error, "orig", None)
+    if getattr(orig, "pgcode", None) != _UNIQUE_VIOLATION:
+        return False
+    diag = getattr(orig, "diag", None)
+    return (
+        getattr(diag, "table_name", None) == GlobalHoldout.__tablename__
+        and getattr(diag, "constraint_name", None) == NAME_UNIQUE_CONSTRAINT
+    )
 
 
 def holdout_bucket(user_id: str, salt: str) -> int:
@@ -139,10 +181,13 @@ class GlobalHoldoutService:
         which fixes its holdout's salt so its documented device ids stay in or
         out across re-seeds; the model's default gives every other holdout a
         fresh one.  The legacy salt is refused: a holdout with it is never
-        measurable.
+        measurable.  Raises ``HoldoutNameTaken`` when another holdout has
+        ``name``; nothing is written then.
         """
         if hash_salt == LEGACY_HOLDOUT_SALT:
             raise ValueError("a new holdout cannot use the legacy salt")
+        if self._name_taken(name):
+            raise HoldoutNameTaken(name)
         holdout = GlobalHoldout(
             name=name,
             description=description,
@@ -152,11 +197,12 @@ class GlobalHoldoutService:
         )
         if hash_salt is not None:
             holdout.hash_salt = hash_salt
-        self.db.add(holdout)
-        if is_active:
-            self.db.flush()
-            self._activate(holdout)
-        self._commit()
+        with self._name_guard(name):
+            self.db.add(holdout)
+            if is_active:
+                self.db.flush()
+                self._activate(holdout)
+            self._commit()
         self.db.refresh(holdout)
         return holdout
 
@@ -192,9 +238,9 @@ class GlobalHoldoutService:
 
         Raises ``HoldoutPercentageLocked`` for a different percentage on a
         holdout that has been active, ``HoldoutEnded`` for ``is_active=True``
-        on one that has ended, and ``HoldoutActivationConflict`` when another
-        holdout became active concurrently.  Nothing is changed when any of
-        them is raised.
+        on one that has ended, ``HoldoutNameTaken`` for a name another holdout
+        has, and ``HoldoutActivationConflict`` when another holdout became
+        active concurrently.  Nothing is changed when any of them is raised.
         """
         holdout = self.get_holdout(holdout_id)
         if not holdout:
@@ -209,19 +255,26 @@ class GlobalHoldoutService:
             raise HoldoutPercentageLocked()
         if is_active and not holdout.is_active and holdout.deactivated_at is not None:
             raise HoldoutEnded()
+        if (
+            name is not None
+            and name != holdout.name
+            and self._name_taken(name, holdout.id)
+        ):
+            raise HoldoutNameTaken(name)
 
-        if name is not None:
-            holdout.name = name
-        if description is not None:
-            holdout.description = description
-        if holdout_percentage is not None:
-            holdout.holdout_percentage = holdout_percentage
-        if is_active is True:
-            self._activate(holdout)
-        elif is_active is False:
-            self._deactivate(holdout)
+        with self._name_guard(name):
+            if name is not None:
+                holdout.name = name
+            if description is not None:
+                holdout.description = description
+            if holdout_percentage is not None:
+                holdout.holdout_percentage = holdout_percentage
+            if is_active is True:
+                self._activate(holdout)
+            elif is_active is False:
+                self._deactivate(holdout)
 
-        self._commit()
+            self._commit()
         self.db.refresh(holdout)
         return holdout
 
@@ -323,6 +376,33 @@ class GlobalHoldoutService:
             self.db.rollback()
             if _is_one_active_violation(error):
                 raise HoldoutActivationConflict() from error
+            raise
+
+    def _name_taken(self, name: str, exclude_id: Optional[UUID] = None) -> bool:
+        """Whether a holdout other than ``exclude_id`` has ``name``, compared as
+        the unique constraint compares it (exactly). A check before the write;
+        the constraint itself is the guarantee (``_name_guard``)."""
+        query = self.db.query(GlobalHoldout.id).filter(GlobalHoldout.name == name)
+        if exclude_id is not None:
+            query = query.filter(GlobalHoldout.id != exclude_id)
+        return query.first() is not None
+
+    @contextmanager
+    def _name_guard(self, name: Optional[str]) -> Iterator[None]:
+        """The name's unique constraint refusing a write inside is ``HoldoutNameTaken``.
+
+        A request that wrote the same name after this one's ``_name_taken``
+        is refused here, at whichever flush or commit reaches the database.
+        The session is rolled back first, so it stays usable; any other
+        integrity error is raised as it was (``HoldoutActivationConflict`` is
+        not an integrity error and passes through).
+        """
+        try:
+            yield
+        except IntegrityError as error:
+            self.db.rollback()
+            if name is not None and _is_name_violation(error):
+                raise HoldoutNameTaken(name) from error
             raise
 
     def _commit(self) -> None:
