@@ -25,6 +25,8 @@ The table lists each capability and where you do it today:
 | See on the experiment page whether Bayesian analysis is on | Dashboard | [Bayesian analysis](../api/bayesian.md) |
 | See on the experiment page whether sequential testing (beta) is on | Dashboard | [Sequential testing](../api/sequential-testing.md) |
 | See on the experiment page its start and end dates | Dashboard | [Running experiments](user-guide.md) |
+| See on the experiment page its exclusion group | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
+| See on the experiment page whether a global holdout is active | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md#global-holdout) |
 | Segments: list, create, and upload a list of user ids | Dashboard | [Segments](segments.md) |
 | The sample-ratio check on the results page | Dashboard | [Running experiments](user-guide.md) |
 | Bayesian results: chance to be best, expected loss and credible intervals | Dashboard | [Bayesian analysis](../api/bayesian.md) |

@@ -193,9 +193,11 @@ describe('the header rows', () => {
       'Created',
       'Started',
       'Ended',
+      'Exclusion group',
+      'Global holdout',
     ]);
     expect(Array.from(dl.children).map((item) => Array.from(item.children).map((c) => c.tagName))).toEqual(
-      Array.from({ length: 10 }, () => ['DT', 'DD']),
+      Array.from({ length: 12 }, () => ['DT', 'DD']),
     );
   });
 

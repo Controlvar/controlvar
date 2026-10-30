@@ -52,4 +52,16 @@ describe("the experiment page's header terms", () => {
       .map((tag) => `${PAGE}:${source.slice(0, tag.index).split('\n').length}: ${tag[0]}`);
     expect(light).toEqual([]);
   });
+
+  // The note under the header (#1449) is small text: one slate colour of 500
+  // or darker on its own tag. Its links are pinned as underlined in
+  // experiment-detail-eligibility.test.tsx.
+  it('the note under the header is slate-500 or darker', () => {
+    const source = fs.readFileSync(path.join(SRC, PAGE), 'utf8');
+    const tags = Array.from(source.matchAll(/<p\b[^>]*data-testid="experiment-api-settings-note"[^>]*>/g));
+    expect(tags).toHaveLength(1);
+    const shades = Array.from(tags[0][0].matchAll(/\btext-slate-(\d+)\b/g)).map((m) => Number(m[1]));
+    expect(shades).toHaveLength(1);
+    expect(shades[0]).toBeGreaterThanOrEqual(500);
+  });
 });

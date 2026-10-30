@@ -88,6 +88,13 @@ WITNESSES: Dict[str, str] = {
         "experiment-sequential"
     ),
     "See on the experiment page its start and end dates": "experiment-start-date",
+    # The second half (PR B): read-only, for ADMIN and DEVELOPER. Each witness
+    # marks only the answered state; loading, refused and error have ids of
+    # their own, so a page that only ever refused could not pass.
+    "See on the experiment page its exclusion group": "experiment-exclusion-group",
+    "See on the experiment page whether a global holdout is active": (
+        "experiment-holdout"
+    ),
     # #440's Segments page (#881).
     "Segments: list, create, and upload a list of user ids": "new-segment-btn",
     # The rest of the #442 slice: A (#887), D (#885), and C, still to come
