@@ -24,16 +24,20 @@ import {
   FeatureFlag,
   FeatureFlagsService,
   RolloutSchedule,
-  RolloutStage,
   UpdateFeatureFlagRequest,
   isFlagOn,
 } from '@/services/featureFlags';
 import type { SafetyCheckResponse } from '@/types/safety';
 import { PageTitle } from '@/components/PageTitle';
 import { FlagToggle } from '@/components/feature-flags/FlagToggle';
+import { RolloutScheduleManager } from '@/components/feature-flags/RolloutScheduleManager';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { FLAG_ROLE_NOTE, canChangeFeatureFlags } from '@/utils/experimentPermissions';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
+
+// The rollout schedule's stage summary lives with the component that draws
+// it; the page's tests read it from here.
+export { stageSummary } from '@/components/feature-flags/RolloutScheduleManager';
 
 const SCHEDULE_STATUS_COLORS: Record<string, string> = {
   draft: 'bg-slate-100 text-slate-700',
@@ -43,18 +47,12 @@ const SCHEDULE_STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-gray-100 text-gray-600',
 };
 
-const STAGE_STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-slate-100 text-slate-600',
-  in_progress: 'bg-blue-100 text-blue-800',
-  completed: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
-};
+/** The rollout schedule section's load failure, in fixed words. */
+export const SCHEDULES_LOAD_ERROR = 'Could not load the rollout schedule. Reload the page to try again.';
 
-const TRIGGER_LABELS: Record<string, string> = {
-  time_based: 'Time-based',
-  metric_based: 'Metric-based',
-  manual: 'Manual',
-};
+/** Under the slider while a schedule is active. */
+export const SLIDER_SCHEDULE_NOTE =
+  'A rollout schedule is active: the next stage that starts sets this percentage again.';
 
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return '—';
@@ -122,24 +120,6 @@ export function pickSchedule(items: RolloutSchedule[]): RolloutSchedule | null {
     if (r !== 0) return r;
     return parseApiTimestamp(b.updated_at).getTime() - parseApiTimestamp(a.updated_at).getTime();
   })[0];
-}
-
-/**
- * The schedule's stage in progress (`current`) and the one after it (`next`),
- * by `stage_order`. `next` is the first pending stage after the current one;
- * with no stage in progress it is the first pending stage, the one that starts
- * next. Either is null when there is none: no `next` on the last stage, and
- * neither once every stage is completed.
- */
-export function stageSummary(schedule: RolloutSchedule): {
-  current: RolloutStage | null;
-  next: RolloutStage | null;
-} {
-  const stages = [...schedule.stages].sort((a, b) => a.stage_order - b.stage_order);
-  const currentIndex = stages.findIndex((s) => s.status === 'in_progress');
-  const current = currentIndex >= 0 ? stages[currentIndex] : null;
-  const next = stages.slice(currentIndex + 1).find((s) => s.status === 'pending') ?? null;
-  return { current, next };
 }
 
 export default function FeatureFlagDetailPage() {
@@ -214,11 +194,33 @@ export default function FeatureFlagDetailPage() {
     try {
       const res = await FeatureFlagsService.listRolloutSchedules(flagId);
       setSchedules(res.items ?? []);
-    } catch (err) {
+    } catch {
       setSchedules([]);
-      setScheduleError(err instanceof Error ? err.message : 'Rollout schedules unavailable');
+      setScheduleError(SCHEDULES_LOAD_ERROR);
     }
   }, []);
+
+  /**
+   * After a schedule change: the schedules again and, when a stage was
+   * advanced, the flag too. An advance sets the flag's rollout percentage on
+   * the server, so the slider takes the new value; a Save with the old one
+   * would undo the stage.
+   */
+  const afterRolloutChange = useCallback(
+    async (flagId: string, { flagMoved }: { flagMoved: boolean }) => {
+      await loadSchedules(flagId);
+      if (!flagMoved) return;
+      try {
+        const data = await FeatureFlagsService.get(flagId);
+        setFlag((current) => (current ? { ...current, ...data } : data));
+        setRolloutPercentage(data.rollout_percentage ?? 0);
+      } catch {
+        // The schedule list above already shows the stage; the slider keeps
+        // its value until the page is reloaded.
+      }
+    },
+    [loadSchedules],
+  );
 
   useEffect(() => {
     if (!id) return;
@@ -351,7 +353,6 @@ export default function FeatureFlagDetailPage() {
 
   const on = isFlagOn(flag);
   const schedule = schedules ? pickSchedule(schedules) : null;
-  const summary = schedule ? stageSummary(schedule) : { current: null, next: null };
 
   return (
     <div className="flex-1 bg-slate-50" data-testid="flag-detail">
@@ -438,63 +439,36 @@ export default function FeatureFlagDetailPage() {
             </div>
 
             {schedules === null && !scheduleError && (
-              <p className="text-sm text-slate-400" data-testid="rollout-schedule-loading">
+              <p className="text-sm text-slate-500" data-testid="rollout-schedule-loading">
                 Loading…
               </p>
             )}
             {scheduleError && (
-              <p className="text-sm text-red-600" data-testid="rollout-schedule-error">
+              <p role="alert" className="text-sm text-red-700" data-testid="rollout-schedule-error">
                 {scheduleError}
               </p>
             )}
             {schedules !== null && !scheduleError && !schedule && (
               <p className="text-sm text-slate-500" data-testid="rollout-schedule-empty">
-                No rollout schedule. The rollout percentage below applies immediately; schedules
-                can be created through <code className="font-mono">/api/v1/rollout-schedules</code>.
+                {canChange ? (
+                  <>
+                    No rollout schedule. The rollout percentage below applies at once; a schedule
+                    raises it in stages. Create one here, or through{' '}
+                    <code className="font-mono">/api/v1/rollout-schedules</code>.
+                  </>
+                ) : (
+                  'No rollout schedule.'
+                )}
               </p>
             )}
-            {schedule && (
-              <div>
-                <p className="text-sm text-slate-700 font-medium" data-testid="rollout-schedule-name">
-                  {schedule.name}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5" data-testid="rollout-schedule-summary">
-                  Up to {schedule.max_percentage}%
-                  {summary.current
-                    ? ` · current: ${summary.current.name} → ${summary.current.target_percentage}%`
-                    : ''}
-                  {summary.next ? ` · next: ${summary.next.name} → ${summary.next.target_percentage}%` : ''}
-                </p>
-                <ol className="mt-3 space-y-2" data-testid="rollout-stages">
-                  {[...schedule.stages]
-                    .sort((a, b) => a.stage_order - b.stage_order)
-                    .map((stage) => (
-                      <li
-                        key={stage.id}
-                        className="flex items-center justify-between gap-3 text-sm"
-                        data-testid="rollout-stage"
-                      >
-                        <div className="min-w-0">
-                          <span className="text-slate-800">{stage.name}</span>
-                          <span className="text-xs text-slate-400 ml-2">
-                            {TRIGGER_LABELS[stage.trigger_type] ?? stage.trigger_type}
-                            {stage.start_date ? ` · ${formatDateTime(stage.start_date)}` : ''}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="tabular-nums text-slate-700">{stage.target_percentage}%</span>
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                              STAGE_STATUS_COLORS[stage.status] ?? 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {humanize(stage.status)}
-                          </span>
-                        </div>
-                      </li>
-                    ))}
-                </ol>
-              </div>
+            {schedules !== null && !scheduleError && (
+              <RolloutScheduleManager
+                flagId={flag.id}
+                flagPercentage={flag.rollout_percentage ?? 0}
+                schedule={schedule}
+                canChange={canChange}
+                onChanged={(change) => afterRolloutChange(flag.id, change)}
+              />
             )}
           </section>
 
@@ -732,6 +706,11 @@ export default function FeatureFlagDetailPage() {
                 <span>0%</span>
                 <span>100%</span>
               </div>
+              {schedule?.status === 'active' && (
+                <p className="mt-2 text-sm text-slate-600" data-testid="rollout-schedule-slider-note">
+                  {SLIDER_SCHEDULE_NOTE}
+                </p>
+              )}
             </div>
           </section>
 

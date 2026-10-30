@@ -35,8 +35,9 @@ The table lists each capability and where you do it today:
 | Edit a draft experiment's name, description and hypothesis | Dashboard | [API endpoints](../api/endpoints.md) |
 | Change a draft experiment's variants or metrics | API only | [API endpoints](../api/endpoints.md) |
 | Schedule an experiment's start and end dates | API only | [Running experiments](user-guide.md) |
-| Create or edit a rollout schedule and its stages | API only | [Gradual rollouts](../feature-flags/rollouts.md) |
-| Activate, pause or advance a rollout schedule | API only | [Gradual rollouts](../feature-flags/rollouts.md) |
+| Create or edit a rollout schedule and its stages | Dashboard | [Gradual rollouts](../feature-flags/rollouts.md#in-the-dashboard) |
+| Activate, pause, resume or cancel a rollout schedule, and advance a manual stage | Dashboard | [Gradual rollouts](../feature-flags/rollouts.md#in-the-dashboard) |
+| Set a rollout schedule's own start and end dates, maximum percentage and minimum stage duration | API only | [Gradual rollouts](../feature-flags/rollouts.md#creating-a-rollout-schedule-via-api) |
 | Delete a feature flag | API only | [API endpoints](../api/endpoints.md) |
 | Archive and unarchive a feature flag | API only | [Running experiments](user-guide.md) |
 | Create a bandit experiment | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
