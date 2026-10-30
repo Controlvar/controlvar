@@ -25,6 +25,8 @@ The table lists each capability and where you do it today:
 | See on the experiment page whether Bayesian analysis is on | Dashboard | [Bayesian analysis](../api/bayesian.md) |
 | See on the experiment page whether sequential testing (beta) is on | Dashboard | [Sequential testing](../api/sequential-testing.md) |
 | See on the experiment page its start and end dates | Dashboard | [Running experiments](user-guide.md) |
+| See on the experiment page its exclusion group | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
+| See on the experiment page whether a global holdout is active | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md#global-holdout) |
 | Segments: list, create, and upload a list of user ids | Dashboard | [Segments](segments.md) |
 | The sample-ratio check on the results page | Dashboard | [Running experiments](user-guide.md) |
 | Bayesian results: chance to be best, expected loss and credible intervals | Dashboard | [Bayesian analysis](../api/bayesian.md) |
@@ -51,4 +53,5 @@ The table lists each capability and where you do it today:
 | The effect size in the metric comparison table | API only | [Running experiments](user-guide.md) |
 | Each variant's confidence interval on the results page | API only | [Running experiments](user-guide.md) |
 | Bayesian priors, loss threshold and credible level | API only | [Bayesian analysis](../api/bayesian.md) |
-| Turn on sequential testing (beta) | API only | [Sequential testing](../api/sequential-testing.md#turning-it-on) |
+| Turn on sequential testing (beta) when creating an experiment | Dashboard | [Sequential testing](../api/sequential-testing.md#turning-it-on) |
+| Turn sequential testing (beta) on or off for an existing draft, and set its alpha | API only | [Sequential testing](../api/sequential-testing.md#turning-it-on) |

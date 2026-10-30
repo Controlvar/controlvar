@@ -88,6 +88,13 @@ WITNESSES: Dict[str, str] = {
         "experiment-sequential"
     ),
     "See on the experiment page its start and end dates": "experiment-start-date",
+    # The second half (PR B): read-only, for ADMIN and DEVELOPER. Each witness
+    # marks only the answered state; loading, refused and error have ids of
+    # their own, so a page that only ever refused could not pass.
+    "See on the experiment page its exclusion group": "experiment-exclusion-group",
+    "See on the experiment page whether a global holdout is active": (
+        "experiment-holdout"
+    ),
     # #440's Segments page (#881).
     "Segments: list, create, and upload a list of user ids": "new-segment-btn",
     # The rest of the #442 slice: A (#887), D (#885), and C, still to come
@@ -131,9 +138,13 @@ WITNESSES: Dict[str, str] = {
     "The effect size in the metric comparison table": "effect-size-column",
     "Each variant's confidence interval on the results page": "variant-interval-column",
     "Bayesian priors, loss threshold and credible level": "bayesian-config-fields",
-    # #1445: the guided setup's control, when it comes; the twin of
-    # analysis-bayesian.
-    "Turn on sequential testing (beta)": "analysis-sequential",
+    # #1454: the guided setup's control, the twin of analysis-bayesian.
+    "Turn on sequential testing (beta) when creating an experiment": (
+        "analysis-sequential"
+    ),
+    # #1454 (C13): an existing draft's switch and its alpha, when it comes.
+    "Turn sequential testing (beta) on or off for an existing draft, and set its "
+    "alpha": "experiment-sequential-settings",
 }
 
 #: Files the scans must have read. A scan rooted in the wrong place, or a

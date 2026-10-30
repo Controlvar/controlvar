@@ -32,6 +32,10 @@ experiment in five steps:
   experiment as `confidence_level` and `correction_method`, and cannot be changed once
   it leaves draft. The single-page form has them in a collapsed **Analysis settings**
   section. The Review step shows them in its **Analysis** row.
+- Below them, **Also test the primary metric sequentially (beta)** turns on
+  [sequential testing](../api/sequential-testing.md#turning-it-on) for the new experiment;
+  it is off by default. The Review step's **Analysis** row then ends **Sequential testing
+  (beta) on**, as does the single-page form's **Analysis settings** summary.
 - The rest of the step is the estimate. Its **minimum detectable effect** is saved with
   the experiment, as the primary metric's `expected_effect` (10% is saved as `0.1`), and
   the results page's **Planned sample** plans the sample for it; leave it blank and the

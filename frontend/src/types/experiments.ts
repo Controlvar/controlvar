@@ -127,6 +127,11 @@ export interface CreateExperimentRequest {
   correction_method?: CorrectionMethod;
   /** Sent only when true; the API then stores its default Bayesian settings. */
   bayesian_enabled?: boolean;
+  /**
+   * Sent only when true, and never with a `sequential_testing_config`: the
+   * sequential analysis then uses the API's defaults (beta).
+   */
+  sequential_testing_enabled?: boolean;
 }
 
 /** `ExperimentListResponse` (offset pagination: `skip`/`limit`). */

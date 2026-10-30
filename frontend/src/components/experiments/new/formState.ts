@@ -68,6 +68,12 @@ export interface ExperimentFormState {
   /** Also analyse the primary metric with Bayesian statistics (#216); saved with the experiment. */
   bayesianEnabled: boolean;
   /**
+   * Also test the primary metric sequentially (beta, #1454); saved with the
+   * experiment. Only the switch: no `sequential_testing_config` is sent, so the
+   * API's defaults apply.
+   */
+  sequentialEnabled: boolean;
+  /**
    * The minimum detectable effect typed on guided setup's Estimate step, in
    * percent and RELATIVE (10 means 5% -> 5.5%), as typed. When usable it is
    * saved as the primary metric's `expected_effect` (10 -> 0.1), and the
@@ -101,6 +107,7 @@ export function createInitialFormState(): ExperimentFormState {
     confidenceLevel: DEFAULT_CONFIDENCE_LEVEL,
     correctionMethod: DEFAULT_CORRECTION_METHOD,
     bayesianEnabled: false,
+    sequentialEnabled: false,
     plannedEffectPct: '',
   };
 }
@@ -360,6 +367,7 @@ export function buildCreatePayload(state: ExperimentFormState): CreateExperiment
     correction_method: state.correctionMethod,
   };
   if (state.bayesianEnabled) payload.bayesian_enabled = true;
+  if (state.sequentialEnabled) payload.sequential_testing_enabled = true;
   return payload;
 }
 
@@ -375,6 +383,7 @@ export type ExperimentFormAction =
   | { type: 'setConfidenceLevel'; confidenceLevel: number }
   | { type: 'setCorrectionMethod'; correctionMethod: CorrectionMethod }
   | { type: 'setBayesianEnabled'; bayesianEnabled: boolean }
+  | { type: 'setSequentialEnabled'; sequentialEnabled: boolean }
   | { type: 'setPlannedEffect'; plannedEffectPct: string }
   | { type: 'addVariant' }
   | { type: 'removeVariant'; index: number }
@@ -417,6 +426,8 @@ export function experimentFormReducer(
       return { ...state, correctionMethod: action.correctionMethod };
     case 'setBayesianEnabled':
       return { ...state, bayesianEnabled: action.bayesianEnabled };
+    case 'setSequentialEnabled':
+      return { ...state, sequentialEnabled: action.sequentialEnabled };
     case 'setPlannedEffect':
       return { ...state, plannedEffectPct: action.plannedEffectPct };
 

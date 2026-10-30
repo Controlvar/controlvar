@@ -96,6 +96,14 @@ text = "See on the experiment page its start and end dates | Dashboard | Running
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
+text = "See on the experiment page its exclusion group | Dashboard | Mutual exclusion groups and global holdout"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "See on the experiment page whether a global holdout is active | Dashboard | Mutual exclusion groups and global holdout"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
 text = "Segments: list, create, and upload a list of user ids | Dashboard | Segments"
 by = ["mechanism:dashboard-and-api"]
 
@@ -200,5 +208,9 @@ text = "Bayesian priors, loss threshold and credible level | API only | Bayesian
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Turn on sequential testing (beta) | API only | Sequential testing"
+text = "Turn on sequential testing (beta) when creating an experiment | Dashboard | Sequential testing"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Turn sequential testing (beta) on or off for an existing draft, and set its alpha | API only | Sequential testing"
 by = ["mechanism:dashboard-and-api"]

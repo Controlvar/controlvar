@@ -425,6 +425,14 @@ by = [
 ]
 
 [[unit]]
+text = "A draft that is not ready to start (it needs two variants, a control and a metric) stays a draft until it is."
+by = [
+    "test:backend/tests/integration/services/test_scheduler_draft_validation.py::test_d1_a_one_variant_draft_stays_a_draft_until_it_has_two",
+    "test:backend/tests/integration/services/test_scheduler_draft_validation.py::test_d2_a_draft_whose_metrics_were_removed_after_scheduling_stays_a_draft",
+    "test:backend/tests/integration/services/test_scheduler_draft_validation.py::test_d3_a_valid_draft_starts_in_the_same_tick_as_one_that_cannot",
+]
+
+[[unit]]
 text = "A date you leave out of the request is left as it is, and null clears it."
 by = [
     "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_draft_omitted_start_date_is_kept",
@@ -442,6 +450,15 @@ by = [
 [[unit]]
 text = "Dates are stored in UTC."
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "The experiment's page shows these dates in your browser's time zone, as \"Starts\" and \"Ends\" until the experiment has started or ended, then as \"Started\" and \"Ended\", and as \"Start date\" and \"End date\" once it is archived."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-times.test.tsx::shows Started, Ended and Created as UTC converted to local time",
+    "test:frontend/src/tests/pages/experiment-detail-times.test.tsx::a draft scheduled ahead reads Starts and Ends, never Started or Ended (#1443)",
+    "test:frontend/src/tests/pages/experiment-detail-times.test.tsx::a completed experiment reads Started and Ended, with nothing due",
+    "test:frontend/src/tests/pages/experiment-detail-times.test.tsx::an archived experiment with its dates %s reads Start date and End date",
+]
 
 [[unit]]
 text = "Clicking Start before the scheduled start starts the experiment right away: its start date becomes the time you clicked, and a scheduled end date is kept."
@@ -1283,6 +1300,10 @@ by = [
 [[unit]]
 text = "The API route is:"
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "The experiment's own page says whether sequential testing is on."
+by = ["test:frontend/src/tests/pages/experiment-detail-configuration.test.tsx::sequential_testing_enabled %s (Bayesian %s) reads %s"]
 
 [[unit]]
 text = "The platform uses mSPRT (mixture Sequential Probability Ratio Test)."
