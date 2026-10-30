@@ -148,19 +148,26 @@ test.describe("Journey: edit a draft's variants and metrics", () => {
       await page.getByTestId("design-cancel").click();
       await expect(page.getByTestId("experiment-edit-variants")).toBeFocused();
       await page.getByTestId("experiment-edit-variants").click();
-      await expect(page.getByTestId("variant-name-2")).toHaveValue("Green CTA");
+      // All three are back; found by name, as the API's order is not fixed.
+      const names = page.locator('input[data-testid^="variant-name-"]');
+      await expect(names).toHaveCount(3);
+      const values = await names.evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value));
+      expect([...values].sort()).toEqual(["Blue CTA", "Control", "Green CTA"]);
 
-      await page.getByTestId("variant-name-1").fill("Blue button");
+      await names.nth(values.indexOf("Blue CTA")).fill("Blue button");
       await page.getByTestId("design-save").click();
       await expect(page.getByTestId("design-saved")).toHaveText("Variants and metrics saved.");
       await expect(page.getByTestId("variants-table")).toContainText("Blue button");
 
-      // The one PUT: exactly both lists, every item, every field.
+      // The one PUT: exactly both lists, every item. The form keeps the order
+      // the API listed them in, which is not creation order: metrics have no
+      // ORDER BY, and variants created in one request can share a timestamp.
+      // So the items are compared as sets of names.
       expect(puts).toHaveLength(1);
       const body = puts[0] as { variants: Item[]; metrics: Item[] };
       expect(Object.keys(body)).toEqual(["variants", "metrics"]);
-      expect(body.variants.map((v) => v.name)).toEqual(["Control", "Blue button", "Green CTA"]);
-      expect(body.metrics.map((m) => m.name)).toEqual(["Revenue", "Errors"]);
+      expect(body.variants.map((v) => v.name).sort()).toEqual(["Blue button", "Control", "Green CTA"]);
+      expect(body.metrics.map((m) => m.name).sort()).toEqual(["Errors", "Revenue"]);
 
       // Read back from the API: nothing the form does not show has moved.
       const read = await page.request.get(`${API_URL}/api/v1/experiments/${draftId}`, { headers });
