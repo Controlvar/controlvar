@@ -188,6 +188,7 @@ REDIS_USERS = {
     "backend/app/core/health.py": "health: PING",
     "backend/app/middleware/rate_limiter.py": "rate limit counters",
     "backend/app/api/deps.py": "cache: the cache_control dependency",
+    "backend/app/api/experiment_cache.py": "cache: dropping an experiment's detail",
     "backend/app/api/v1/endpoints/experiments.py": "cache: experiment reads",
     "backend/app/api/v1/endpoints/admin.py": "cache: admin reads",
     "backend/app/api/v1/endpoints/results.py": "cache: results",

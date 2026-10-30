@@ -24,6 +24,11 @@ with local tokens as real users:
 
 A route moved to ``_require_admin`` fails the DEVELOPER cell, and one opened to
 every role fails ANALYST and VIEWER: in both cases the page would be wrong.
+
+The same table pins the role check on the routes that add an experiment to a
+group and remove it from one (``POST`` and ``DELETE
+/mutual-exclusion-groups/{id}/experiments``): a refused caller gets 403 and
+the experiment's group is left as it was.
 """
 
 from __future__ import annotations
@@ -39,6 +44,7 @@ from backend.app.api import deps
 from backend.app.api.v1.endpoints.auth import create_local_access_token
 from backend.app.core.config import settings
 from backend.app.main import app
+from backend.app.models.experiment import Experiment, ExperimentStatus
 from backend.app.models.mutual_exclusion_group import (
     MutualExclusionGroup,
     MutualExclusionGroupStatus,
@@ -93,10 +99,13 @@ def client(test_db):
 
 @pytest.fixture(autouse=True)
 def _cleanup(db_session):
-    """Remove every group and user this module created."""
+    """Remove every experiment, group and user this module created."""
     yield
     s = db_session
     s.rollback()
+    for experiment in s.query(Experiment).filter(Experiment.name.like(f"{P}%")):
+        s.delete(experiment)
+    s.commit()
     users = s.query(User).filter(User.username.like(f"{P}_%")).all()
     s.query(MutualExclusionGroup).filter(
         MutualExclusionGroup.name.like(f"{P}%")
@@ -172,3 +181,42 @@ def test_reading_the_holdout_by_role(client, db_session, who):
             and isinstance(body["holdout_percentage"], int)
             and body["is_active"] is True
         ), body
+
+
+# --- adding an experiment to a group, and removing it, × every role ------------
+
+
+def _group_of(db_session, experiment_id):
+    db_session.expire_all()
+    return db_session.get(Experiment, experiment_id).mutual_exclusion_group_id
+
+
+@pytest.mark.parametrize("action", ["add", "remove"])
+@pytest.mark.parametrize("who", list(USERS))
+def test_adding_or_removing_an_experiment_by_role(client, db_session, who, action):
+    user = _user(db_session, who)
+    group = _group(db_session)
+    experiment = Experiment(
+        name=f"{P} experiment {uuid.uuid4().hex[:8]}",
+        status=ExperimentStatus.DRAFT,
+        owner_id=user.id,
+        mutual_exclusion_group_id=group.id if action == "remove" else None,
+    )
+    db_session.add(experiment)
+    db_session.commit()
+    before = _group_of(db_session, experiment.id)
+
+    path = f"{V1}/mutual-exclusion-groups/{group.id}/experiments"
+    if action == "add":
+        response = client.post(
+            path, json={"experiment_id": str(experiment.id)}, headers=_auth(user)
+        )
+    else:
+        response = client.delete(f"{path}/{experiment.id}", headers=_auth(user))
+
+    expected = USERS[who][2]
+    assert response.status_code == expected, (who, action, response.text)
+    after = group.id if action == "add" else None
+    assert _group_of(db_session, experiment.id) == (
+        after if expected == 200 else before
+    ), (who, action)

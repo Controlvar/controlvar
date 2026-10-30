@@ -63,6 +63,8 @@ ROLE_CLIENT_FIXTURES = frozenset(
         "cached_client",
         "cached_superuser_client",
         "cached_unreadable_client",
+        "uncached_superuser_client",
+        "failing_redis_client",
         # test_user_email_and_username_updates.py
         "member",
         "member_as_written",

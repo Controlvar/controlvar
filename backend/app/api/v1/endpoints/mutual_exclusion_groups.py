@@ -20,7 +20,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from backend.app.api import deps
+from backend.app.api import deps, experiment_cache
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.experiment import Experiment
@@ -340,13 +340,17 @@ def archive_group(
     description="Add an experiment to a mutual exclusion group. Requires DEVELOPER or ADMIN role.",
     tags=["Mutual Exclusion Groups"],
 )
-def add_experiment_to_group(
+async def add_experiment_to_group(
     group_id: UUID,
     data: AddExperimentToGroupRequest,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ):
-    """Add an experiment to a mutual exclusion group."""
+    """Add an experiment to a mutual exclusion group.
+
+    The experiment's cached detail shows its group, so it is dropped once the
+    change is committed.
+    """
     _require_developer(current_user)
     service = MutualExclusionService(db)
     already_member = (
@@ -357,6 +361,7 @@ def add_experiment_to_group(
     )
     try:
         service.add_experiment_to_group(group_id, data.experiment_id)
+        await experiment_cache.drop_cached_experiment_details([data.experiment_id])
         if not already_member:
             _record(
                 db,
@@ -391,17 +396,22 @@ def add_experiment_to_group(
     description="Remove an experiment from a mutual exclusion group. Requires DEVELOPER or ADMIN role.",
     tags=["Mutual Exclusion Groups"],
 )
-def remove_experiment_from_group(
+async def remove_experiment_from_group(
     group_id: UUID,
     experiment_id: UUID,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ):
-    """Remove an experiment from a mutual exclusion group."""
+    """Remove an experiment from a mutual exclusion group.
+
+    The experiment's cached detail shows its group, so it is dropped once the
+    change is committed.
+    """
     _require_developer(current_user)
     service = MutualExclusionService(db)
     try:
         service.remove_experiment_from_group(group_id, experiment_id)
+        await experiment_cache.drop_cached_experiment_details([experiment_id])
         _record(
             db,
             current_user,
