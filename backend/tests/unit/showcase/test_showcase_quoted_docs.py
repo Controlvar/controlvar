@@ -320,7 +320,7 @@ CLAIMS: Dict[str, Claim] = {
             (GUIDE, "| Mutual exclusion groups | API only |"),
             (
                 GUIDE,
-                "| Global holdouts: create, activate, and read their results (beta)"
+                "| Global holdouts: create and activate; read their results (beta)"
                 " | API only |",
             ),
             (

@@ -1,6 +1,7 @@
 /**
  * The experiment page shows each variant's configuration, whether Bayesian
- * analysis is on, and an adaptive experiment's traffic algorithm (#442).
+ * analysis is on, whether sequential testing is on (#1449), and an adaptive
+ * experiment's traffic algorithm (#442).
  *
  * Everything here is read from `GET /api/v1/experiments/{id}` and shown to
  * every role that can open the page; nothing on it sends a request.
@@ -145,6 +146,59 @@ describe('the header rows', () => {
     expect(screen.queryByTestId('experiment-bayesian')).not.toBeInTheDocument();
   });
 
+  // #1449: sequential testing is turned on through the API only; the page
+  // says whether it is on. Bayesian is set the other way each time, so a row
+  // that read the wrong field fails.
+  it.each([
+    [true, false, 'On'],
+    [false, true, 'Off'],
+  ])('sequential_testing_enabled %s (Bayesian %s) reads %s', async (sequential, bayesian, text) => {
+    await show({ sequential_testing_enabled: sequential, bayesian_enabled: bayesian });
+    const row = screen.getByTestId('experiment-sequential');
+    expect(row).toHaveTextContent(text);
+    expect(row.previousElementSibling?.textContent).toBe('Sequential testing (beta)');
+  });
+
+  it('leaves the sequential row out when the API does not say', async () => {
+    await show({ sequential_testing_enabled: undefined, bayesian_enabled: true });
+    expect(screen.queryByTestId('experiment-sequential')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sequential testing (beta)')).not.toBeInTheDocument();
+  });
+
+  // plan-1449 #13: the rows keep their order, and each is one item holding a
+  // dt and then its dd (axe does not flag a dt left without its dd).
+  it('lists every term in order, each item a dt followed by its dd', async () => {
+    const page = await show({
+      status: 'completed',
+      confidence_level: 0.95,
+      correction_method: 'bonferroni',
+      bayesian_enabled: true,
+      sequential_testing_enabled: false,
+      experiment_type: 'bandit',
+      optimization_type: 'thompson_sampling',
+      start_date: '2026-09-01T10:00:00Z',
+      end_date: '2026-09-20T10:00:00Z',
+    });
+    const lists = page.querySelectorAll('dl');
+    expect(lists).toHaveLength(1);
+    const dl = lists[0];
+    expect(Array.from(dl.querySelectorAll('dt')).map((dt) => dt.textContent)).toEqual([
+      'Key',
+      'Type',
+      'Analysis',
+      'Bayesian analysis',
+      'Sequential testing (beta)',
+      'Traffic algorithm',
+      'Owner',
+      'Created',
+      'Started',
+      'Ended',
+    ]);
+    expect(Array.from(dl.children).map((item) => Array.from(item.children).map((c) => c.tagName))).toEqual(
+      Array.from({ length: 10 }, () => ['DT', 'DD']),
+    );
+  });
+
   it.each([
     ['thompson_sampling', 'Thompson sampling'],
     ['ucb1', 'UCB1'],
@@ -184,8 +238,13 @@ describe('helpers', () => {
 describe('accessibility (axe-core in jsdom; colour contrast is not computable here)', () => {
   const axeOptions: axe.RunOptions = { rules: { 'color-contrast': { enabled: false } } };
 
-  it('a page with configurations, Bayesian on and an algorithm has no axe violations', async () => {
-    const page = await show({ bayesian_enabled: true, experiment_type: 'bandit', optimization_type: 'thompson_sampling' });
+  it('a page with configurations, Bayesian and sequential on and an algorithm has no axe violations', async () => {
+    const page = await show({
+      bayesian_enabled: true,
+      sequential_testing_enabled: true,
+      experiment_type: 'bandit',
+      optimization_type: 'thompson_sampling',
+    });
     const result = await axe.run(page, axeOptions);
     expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toEqual([]);
   });

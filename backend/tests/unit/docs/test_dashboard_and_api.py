@@ -83,6 +83,11 @@ WITNESSES: Dict[str, str] = {
     ),
     "Turn on Bayesian analysis when creating an experiment": "analysis-bayesian",
     "See on the experiment page whether Bayesian analysis is on": "experiment-bayesian",
+    # #1449's read-only display on the experiment page, first half (PR A).
+    "See on the experiment page whether sequential testing (beta) is on": (
+        "experiment-sequential"
+    ),
+    "See on the experiment page its start and end dates": "experiment-start-date",
     # #440's Segments page (#881).
     "Segments: list, create, and upload a list of user ids": "new-segment-btn",
     # The rest of the #442 slice: A (#887), D (#885), and C, still to come
@@ -90,6 +95,10 @@ WITNESSES: Dict[str, str] = {
     "The sample-ratio check on the results page": "srm-notice",  # A
     "Bayesian results: chance to be best, expected loss and credible intervals": (
         "bayesian-panel"  # A
+    ),
+    # #1445: the results page's Sequential view (SequentialMonitor).
+    "Sequential results (beta): whether to stop, and the confidence sequence": (
+        "sequential-monitor"
     ),
     "See a bandit experiment's current traffic weights": "bandit-weights",  # D
     "Clone an experiment": "experiment-clone",  # C
@@ -106,7 +115,8 @@ WITNESSES: Dict[str, str] = {
     "Archive and unarchive a feature flag": "flag-archive",
     "Create a bandit experiment": "bandit-create",
     "Set a bandit's weights by hand": "bandit-weights-override",
-    "Global holdouts: create, activate, and read their results (beta)": "holdouts-page",
+    # #1446: only reading a holdout's results is beta.
+    "Global holdouts: create and activate; read their results (beta)": "holdouts-page",
     "Mutual exclusion groups": "exclusion-groups-page",
     "Split-URL experiments (full profile)": "split-url-config",
     "CUPED-adjusted results (beta)": "cuped-results",
@@ -115,6 +125,9 @@ WITNESSES: Dict[str, str] = {
     "The effect size in the metric comparison table": "effect-size-column",
     "Each variant's confidence interval on the results page": "variant-interval-column",
     "Bayesian priors, loss threshold and credible level": "bayesian-config-fields",
+    # #1445: the guided setup's control, when it comes; the twin of
+    # analysis-bayesian.
+    "Turn on sequential testing (beta)": "analysis-sequential",
 }
 
 #: Files the scans must have read. A scan rooted in the wrong place, or a

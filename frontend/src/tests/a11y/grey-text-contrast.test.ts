@@ -30,3 +30,26 @@ describe('grey text contrast', () => {
     expect(hits).toBeNull();
   });
 });
+
+/**
+ * The experiment page's header terms (#1449). The page has other slate-400
+ * text, so it cannot join FILES; this pins its header `<dl>`, the page's only
+ * one, by its `dt` tags. The nightly audit never opens this page, and jsdom
+ * cannot measure contrast, so nothing else checks it.
+ */
+describe("the experiment page's header terms", () => {
+  const PAGE = 'pages/experiments/[id].tsx';
+
+  it('no dt is slate-400 or lighter', () => {
+    const source = fs.readFileSync(path.join(SRC, PAGE), 'utf8');
+    const tags = Array.from(source.matchAll(/<dt\b[^>]*>/g));
+    // Every `<dt` is a whole tag the pattern read, and there are as many as
+    // the header has rows; a pattern that stops matching fails here.
+    expect(tags).toHaveLength((source.match(/<dt\b/g) ?? []).length);
+    expect(tags.length).toBeGreaterThanOrEqual(10);
+    const light = tags
+      .filter((tag) => /\btext-slate-[1-4]00\b/.test(tag[0]))
+      .map((tag) => `${PAGE}:${source.slice(0, tag.index).split('\n').length}: ${tag[0]}`);
+    expect(light).toEqual([]);
+  });
+});
