@@ -6,12 +6,17 @@ import { API_URL, BASE_URL, IS_EXTERNAL_BASE_URL, PORT } from "./tests/e2e/env";
 /**
  * Playwright configuration for the Controlvar dashboard.
  *
- * Four projects:
+ * Five projects:
  *   - `journeys` — the fail-hard PR journeys (`*.journey.spec.ts`), the
  *     required `browser-e2e` gate. Run them with `--project=journeys`.
  *   - `sso` — sign in with SSO from the dashboard (`*.sso.spec.ts`, C2b). It
  *     needs its own API process and the fake OIDC provider, which the
  *     `browser-e2e` job starts as steps; see tests/e2e/sso-sign-in.sso.spec.ts.
+ *   - `site` — the public site (`*.site.spec.ts`, #1459): phone width, axe
+ *     and keyboard focus over the MARKETING export, which Frontend Tests has
+ *     just built when it runs `--project=site`. Locally: `npm run
+ *     build:marketing`, then `PLAYWRIGHT_PORT=<not 3100>
+ *     PLAYWRIGHT_API_URL=http://127.0.0.1:1 npx playwright test --project=site`.
  *   - `extended` — everything else under tests/e2e (accessibility and the
  *     older specs); nightly territory, not a PR gate, but a failure there
  *     fails the night.
@@ -110,8 +115,18 @@ export default defineConfig({
       name: "extended",
       testMatch: /\.spec\.ts$/,
       // The visual spec has its own project below, until its baselines exist.
-      testIgnore: [/\.journey\.spec\.ts$/, /\.sso\.spec\.ts$/, /visual-regression\.spec\.ts$/],
+      // The site spec needs the marketing export, which nightly does not build.
+      testIgnore: [/\.journey\.spec\.ts$/, /\.sso\.spec\.ts$/, /\.site\.spec\.ts$/, /visual-regression\.spec\.ts$/],
       use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      // The public site over the MARKETING export (#1459): Frontend Tests runs
+      // it right after `npm run build:marketing`. The iPhone 13 descriptor
+      // names WebKit; CI installs only Chromium, and the phone checks were
+      // measured on Chromium, so `browserName` overrides it.
+      name: "site",
+      testMatch: /\.site\.spec\.ts$/,
+      use: { ...devices["iPhone 13"], browserName: "chromium" },
     },
     {
       // Not run by any workflow. Move it back into `extended` (delete the
