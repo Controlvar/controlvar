@@ -63,7 +63,8 @@ const GROUPS = [
     id: 'grp-2',
     name: 'Old pricing',
     description: null,
-    traffic_allocation: 1,
+    // 0.29 * 100 is 28.999…: the page must round it, not cut it, to 29%.
+    traffic_allocation: 0.29,
     status: 'archived',
     owner_id: null,
     experiments: [],
@@ -134,7 +135,7 @@ describe('a role the API admits (ADMIN, DEVELOPER, a superuser)', () => {
     );
     expect(rows).toEqual([
       ['Checkout', '50%', '2', 'Active'],
-      ['Old pricing', '100%', '0', 'Archived'],
+      ['Old pricing', '29%', '0', 'Archived'],
     ]);
     expect(screen.getAllByTestId('exclusion-group-link').map((a) => a.getAttribute('href'))).toEqual([
       '/experiments/exclusion-groups/grp-1',
@@ -285,7 +286,11 @@ describe('New group', () => {
     fill('Checkout', '50');
     fireEvent.click(screen.getByTestId('exclusion-group-submit'));
     expect(screen.getByTestId('exclusion-group-name-error')).toHaveTextContent(/^A group with this name already exists\.$/);
-    expect(screen.getByTestId('exclusion-group-form-problem')).toHaveTextContent(GROUP_COPY.nameTaken);
+    // The alert is a short summary; the problem itself is said once, by the field.
+    const summary = screen.getByTestId('exclusion-group-form-problem');
+    expect(summary).toHaveAttribute('role', 'alert');
+    expect(summary).toHaveTextContent(/^Check the highlighted field\.$/);
+    expect(screen.getAllByText(GROUP_COPY.nameTaken)).toHaveLength(1);
     const name = screen.getByTestId('exclusion-group-name');
     expect(name).toHaveAttribute('aria-invalid', 'true');
     expect(name.getAttribute('aria-describedby')).toBe(screen.getByTestId('exclusion-group-name-error').id);

@@ -15,6 +15,7 @@ export const GROUP_COPY = {
   nameRequired: 'Enter a name.',
   nameTaken: 'A group with this name already exists.',
   shareInvalid: 'Enter a whole number from 0 to 100.',
+  checkField: 'Check the highlighted field.',
   shareHelp:
     "Users outside this share get none of the group's experiments. Users inside it go to at most one, " +
     "divided evenly among the group's running experiments. Users already in an experiment keep it.",

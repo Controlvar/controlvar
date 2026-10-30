@@ -40,6 +40,8 @@ describe('the share of traffic: shown as a whole percent, sent as a fraction', (
     [1, 100],
     [0, 0],
     [0.333, 33],
+    // 0.29 * 100 is 28.999…: rounded, never cut down to 28.
+    [0.29, 29],
   ])('a stored %p shows as %p', (fraction, percent) => {
     expect(sharePercent(fraction)).toBe(percent);
   });

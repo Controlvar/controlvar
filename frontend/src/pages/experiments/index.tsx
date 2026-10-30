@@ -29,6 +29,10 @@ export default function ExperimentsPage() {
   // button; the page is otherwise identical for every role.
   const auth = useOptionalAuth();
   const canCreate = canCreateExperiment(auth?.user);
+  // Intent, not a second check: today canReadEligibility answers exactly as
+  // canCreateExperiment does, so inside `canCreate &&` this is always true. It
+  // names the group routes' own question, so the link follows them if the two
+  // ever differ.
   const canManageEligibility = canReadEligibility(auth?.user);
 
   const { data, loading: isLoading, error } = useApi<ExperimentListResponse>(

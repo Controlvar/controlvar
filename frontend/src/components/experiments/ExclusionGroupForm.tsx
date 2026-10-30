@@ -94,13 +94,11 @@ export function ExclusionGroupForm({
       <h2 id={ids.heading} className="text-base font-semibold text-slate-900">
         {heading}
       </h2>
+      {/* A short summary: the field's own message, tied to it by
+          aria-describedby, says what is wrong, so it is not announced twice. */}
       {problems.length > 0 && (
         <p role="alert" className="text-sm text-red-700" data-testid="exclusion-group-form-problem">
-          {problems[0] === 'share-invalid'
-            ? GROUP_COPY.shareInvalid
-            : problems[0] === 'name-taken'
-              ? GROUP_COPY.nameTaken
-              : GROUP_COPY.nameRequired}
+          {GROUP_COPY.checkField}
         </p>
       )}
       <div>

@@ -573,6 +573,8 @@ describe('archiving', () => {
     expect(dialog).toHaveTextContent(
       'Archive “Checkout”? Its experiments are no longer kept apart: new users can join more than one. They stay listed here, and an ADMIN can unarchive it.',
     );
+    expect(dialog).toHaveAttribute('role', 'dialog');
+    expect(document.activeElement).toBe(dialog);
     expect(writes()).toEqual([]);
     fireEvent.click(screen.getByTestId('exclusion-group-archive-yes'));
     await waitFor(() => expect(screen.getByTestId('exclusion-group-status')).toHaveTextContent(/^Archived$/));
