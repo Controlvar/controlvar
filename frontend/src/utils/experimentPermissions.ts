@@ -24,6 +24,24 @@ export function canCreateExperiment(
 }
 
 /**
+ * Whether the API would let this user read an experiment's exclusion group
+ * and the global holdout (#1449): `GET /api/v1/mutual-exclusion-groups/{id}`
+ * and `GET /api/v1/holdout`.
+ *
+ * Both routes check exactly EXPERIMENT CREATE (`_require_developer`), so this
+ * is `canCreateExperiment`, and its role list is the one
+ * `test_dashboard_experiment_roles.py` already holds equal to `permissions.py`.
+ * Like it, a null user (no session yet) answers true: a caller that must not
+ * send a request before the session resolves checks for a user first
+ * (`useExperimentEligibility` does).
+ */
+export function canReadEligibility(
+  user: { role?: string; is_superuser?: boolean } | null | undefined,
+): boolean {
+  return canCreateExperiment(user);
+}
+
+/**
  * Whether the API would accept a lifecycle change (start, pause, complete,
  * archive) from this user.
  *

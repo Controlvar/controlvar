@@ -159,6 +159,9 @@ on a `DRAFT` experiment, with an ADMIN or DEVELOPER token. The experiment activa
 leave out of the request is left as it is, and `null` clears it. A date written without a
 UTC offset is read in `time_zone`, an IANA name such as `America/Los_Angeles` (default
 `UTC`); a date with an offset, like the ones below, keeps it. Dates are stored in UTC.
+The experiment's page shows these dates in your browser's time zone, as "Starts" and "Ends"
+until the experiment has started or ended, then as "Started" and "Ended", and as "Start date"
+and "End date" once it is archived.
 Clicking **Start** before the scheduled start starts the experiment right away: its start date
 becomes the time you clicked, and a scheduled end date is kept.
 
@@ -479,6 +482,8 @@ The API route is:
 ```text
 GET /api/v1/results/{experiment_id}/sequential
 ```
+
+The experiment's own page says whether sequential testing is on.
 
 The platform uses **mSPRT** (mixture Sequential Probability Ratio Test). When `recommended_action` is `stop_for_effect`, it is safe to stop: there is an effect, but it may be a harm, so the sign of the confidence sequence and the metric's `lower_is_better` decide whether to ship. An experiment running well past its expected duration is flagged `at_risk`; that is advisory, not a reason to conclude there is no effect. See the [Sequential Testing Guide](../api/sequential-testing.md) for details.
 

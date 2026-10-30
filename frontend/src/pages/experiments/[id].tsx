@@ -8,8 +8,11 @@ import { TargetingSection } from '@/components/experiments/TargetingSection';
 import { ApiKeyRouteHint } from '@/components/experiments/ApiKeyRouteHint';
 import WarehouseAnalysisSection from '@modules/components/warehouse/runs/WarehouseAnalysisSection';
 import { useAuth } from '@/contexts/AuthContext';
+import { EligibilityUser, useExperimentEligibility } from '@/hooks/useExperimentEligibility';
 import { isApiError } from '@/services/api';
+import { docsUrl } from '@/services/docs';
 import { ExperimentsService } from '@/services/experiments';
+import { GlobalHoldout, MutualExclusionGroup } from '@/types/eligibility';
 import {
   Experiment,
   ExperimentStatus,
@@ -129,6 +132,89 @@ const DUE_NOTE: Record<'start' | 'end', string> = {
   start: ' (due, not started yet)',
   end: ' (due, not ended yet)',
 };
+
+/**
+ * The words of the "Exclusion group" and "Global holdout" rows (#1449). Fixed
+ * copy: nothing the server sends in an error is shown, nor the group's
+ * description or its experiments, nor the holdout's id.
+ */
+export const ELIGIBILITY_COPY = {
+  loading: 'Loading…',
+  groupNone: 'None',
+  groupArchived: ' (archived; it no longer applies)',
+  groupRefused: 'In a group. Seeing its name requires the ADMIN or DEVELOPER role.',
+  groupError: 'In a group. Its name could not be loaded; reload the page to try again.',
+  holdoutNone: 'None active',
+  holdoutRefused: 'Seeing this requires the ADMIN or DEVELOPER role.',
+  holdoutError: 'Could not be loaded; reload the page to try again.',
+} as const;
+
+/** An exclusion group as its row shows it: the name, marked when archived. */
+export function groupLabel(group: MutualExclusionGroup): string {
+  return group.status === 'archived' ? `${group.name}${ELIGIBILITY_COPY.groupArchived}` : group.name;
+}
+
+/** The active global holdout as its row shows it. It applies to every experiment, not this one. */
+export function holdoutLabel(holdout: GlobalHoldout): string {
+  return `${holdout.name}: keeps ${holdout.holdout_percentage}% of new users out of every experiment`;
+}
+
+/**
+ * The header's "Exclusion group" and "Global holdout" items. A component of
+ * its own so that its reads start only once the experiment has loaded (the
+ * page renders the header only then), and in this file so that the header's
+ * term pin (a11y/grey-text-contrast.test.ts) reads its dt's too.
+ *
+ * Each state has its own test id; `experiment-exclusion-group` and
+ * `experiment-holdout`, the capability table's witnesses, mark only the
+ * answered state, never loading, refused or error.
+ */
+function EligibilityRows({
+  groupId,
+  user,
+}: {
+  groupId: string | null | undefined;
+  user: EligibilityUser | null;
+}) {
+  const { group, holdout } = useExperimentEligibility(groupId, user);
+  return (
+    <>
+      <div className="flex items-baseline gap-1.5">
+        <dt className="text-slate-500">Exclusion group</dt>
+        {group.kind === 'absent' && <dd data-testid="experiment-exclusion-group">{ELIGIBILITY_COPY.groupNone}</dd>}
+        {group.kind === 'present' && (
+          <dd data-testid="experiment-exclusion-group">{groupLabel(group.value)}</dd>
+        )}
+        {group.kind === 'loading' && (
+          <dd data-testid="experiment-exclusion-group-loading">{ELIGIBILITY_COPY.loading}</dd>
+        )}
+        {group.kind === 'refused' && (
+          <dd data-testid="experiment-exclusion-group-refused">{ELIGIBILITY_COPY.groupRefused}</dd>
+        )}
+        {group.kind === 'error' && (
+          <dd data-testid="experiment-exclusion-group-error">{ELIGIBILITY_COPY.groupError}</dd>
+        )}
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <dt className="text-slate-500">Global holdout</dt>
+        {holdout.kind === 'absent' && <dd data-testid="experiment-holdout">{ELIGIBILITY_COPY.holdoutNone}</dd>}
+        {holdout.kind === 'present' && <dd data-testid="experiment-holdout">{holdoutLabel(holdout.value)}</dd>}
+        {holdout.kind === 'loading' && (
+          <dd data-testid="experiment-holdout-loading">{ELIGIBILITY_COPY.loading}</dd>
+        )}
+        {holdout.kind === 'refused' && (
+          <dd data-testid="experiment-holdout-refused">{ELIGIBILITY_COPY.holdoutRefused}</dd>
+        )}
+        {holdout.kind === 'error' && (
+          <dd data-testid="experiment-holdout-error">{ELIGIBILITY_COPY.holdoutError}</dd>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** A link in the note under the header: always underlined, never on hover only (WCAG 1.4.1). */
+const NOTE_LINK = 'text-blue-700 underline';
 
 /**
  * A variant's configuration as the page shows it: indented JSON, rendered as
@@ -414,7 +500,47 @@ export default function ExperimentDetailPage() {
                     </dd>
                   </div>
                 )}
+                <EligibilityRows groupId={experiment.mutual_exclusion_group_id} user={user} />
               </dl>
+              <p className="mt-2 text-xs text-slate-600" data-testid="experiment-api-settings-note">
+                Set through the API, not on this page:{' '}
+                <a
+                  href={docsUrl('api/mutual-exclusion-groups', 'mutual-exclusion-groups')}
+                  className={NOTE_LINK}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  exclusion groups
+                </a>
+                ,{' '}
+                <a
+                  href={docsUrl('api/mutual-exclusion-groups', 'global-holdout')}
+                  className={NOTE_LINK}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  the global holdout
+                </a>
+                ,{' '}
+                <a
+                  href={docsUrl('guides/user-guide', 'creating-an-experiment')}
+                  className={NOTE_LINK}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  start and end dates
+                </a>
+                ,{' '}
+                <a
+                  href={docsUrl('api/sequential-testing', 'turning-it-on')}
+                  className={NOTE_LINK}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  sequential testing
+                </a>
+                .
+              </p>
             </div>
 
             {/* Actions */}
