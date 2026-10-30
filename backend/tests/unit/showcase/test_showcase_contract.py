@@ -7,11 +7,14 @@ read the refusal it gives.
 
 from __future__ import annotations
 
+import ast
 import json
 import os
+from pathlib import Path
 
 import pytest
 from showcase import contract
+from showcase.capture import config
 
 from backend.tests.unit.showcase.capture_dirs import (
     NEEDLES,
@@ -365,3 +368,134 @@ def test_cues_json_is_what_the_fixture_writes(tmp_path):
     data = json.loads((root / "cues.json").read_text(encoding="utf-8"))
     assert set(data) == contract.CUES_KEYS
     assert all(set(cue) == contract.CUE_KEYS for cue in data["cues"])
+
+
+# --- A video's own length cap ----------------------------------------------------
+
+SHOWCASE = Path(__file__).resolve().parents[4] / "tests" / "acceptance" / "showcase"
+V9 = "09-design-in-depth"
+
+
+def test_the_length_cap_table_is_exact():
+    """Video 9 alone may run longer, to 150 s, and nothing above that: a new
+    entry or a longer cap is a plan change, not an edit."""
+    assert contract.MAX_VIDEO_MS_BY_VIDEO == {V9: 150_000}
+    assert contract.MAX_VIDEO_MS == 90_000
+
+
+def test_every_video_given_its_own_cap_is_a_registered_video():
+    """A misspelt slug would leave its video on the default cap without a word."""
+    assert set(contract.MAX_VIDEO_MS_BY_VIDEO) <= set(config.VIDEOS)
+
+
+@pytest.mark.parametrize("slug", list(config.VIDEOS))
+def test_each_registered_video_has_its_cap(slug):
+    """Every video but video 9 keeps 90 s."""
+    expected = 150_000 if slug == V9 else 90_000
+    assert contract.max_video_ms(slug) == expected
+
+
+@pytest.mark.parametrize("slug", ["01-synthetic", "90-app-probe", "v", ""])
+def test_a_slug_the_table_does_not_name_gets_the_default_and_never_raises(slug):
+    """A probe, a synthetic capture or a test's own slug is held to 90 s."""
+    assert contract.max_video_ms(slug) == 90_000
+
+
+def test_the_cap_is_read_at_each_call(monkeypatch):
+    """Not bound when the module loads: a changed default or table applies."""
+    monkeypatch.setattr(contract, "MAX_VIDEO_MS", 60_000)
+    assert contract.max_video_ms("01-getting-started") == 60_000
+    assert contract.max_video_ms(V9) == 150_000
+    monkeypatch.setitem(contract.MAX_VIDEO_MS_BY_VIDEO, "01-getting-started", 70_000)
+    assert contract.max_video_ms("01-getting-started") == 70_000
+
+
+def test_video_9s_projection_cap_is_145_5_s():
+    share = contract.PROJECTION_SHARE
+    assert round(contract.max_video_ms(V9) * share) == 145_500
+    assert round(contract.max_video_ms("01-getting-started") * share) == 87_300
+
+
+def end_to_end_cues(recording_ms: int):
+    """Short captions end to end, 4 s each, over *recording_ms* of recording."""
+    return [
+        contract.Cue(
+            start_ms=at, end_ms=at + 4000, text="Open the experiment.", focus=None
+        )
+        for at in range(0, recording_ms, 4000)
+    ]
+
+
+@pytest.mark.parametrize(
+    "slug, recording_ms, refused",
+    [
+        (V9, 124_000, None),
+        (
+            "01-getting-started",
+            124_000,
+            "the video would be 131.000 s with its cards; a showcase is 55-90 s",
+        ),
+        (
+            V9,
+            144_000,
+            "the video would be 151.000 s with its cards; a showcase is 55-150 s",
+        ),
+        ("01-getting-started", 80_000, None),
+    ],
+)
+def test_the_cue_sheet_holds_each_video_to_its_own_cap(slug, recording_ms, refused):
+    problems = contract.cue_timing_problems(
+        end_to_end_cues(recording_ms), recording_ms, slug
+    )
+    assert problems == ([] if refused is None else [refused])
+
+
+def test_a_capture_directory_is_held_to_its_videos_cap(tmp_path):
+    """The render's reading of cues.json passes the slug on: the same sheet
+    passes as video 9 and is refused as video 1."""
+    cues = [
+        {"start_ms": c.start_ms, "end_ms": c.end_ms, "text": c.text, "focus": None}
+        for c in end_to_end_cues(124_000)
+    ]
+    root = make_capture(tmp_path / "v1", cues=cues, duration_ms=124_000)
+    assert "a showcase is 55-90 s" in refusal(root)
+    root = make_capture(tmp_path / "v9", cues=cues, duration_ms=124_000)
+    edit_json(root / "cues.json", lambda sheet: sheet.update(slug=V9))
+    problems = []
+    contract._read_cues(root, problems)
+    assert problems == []
+
+
+def test_only_max_video_ms_reads_the_caps_and_every_reader_asks_it():
+    """The partial wiring this guards against: the voice step projecting video
+    9 against 150 s and gate 1 refusing it at 90 s, after the sitting and the
+    take. Read from the source, as the gain's wiring is."""
+    names = ("MAX_VIDEO_MS", "MAX_VIDEO_MS_BY_VIDEO")
+    lookups, reads = [], []
+    for path in sorted(SHOWCASE.rglob("*.py")):
+        where = path.relative_to(SHOWCASE).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        inside = {
+            id(node)
+            for function in ast.walk(tree)
+            if isinstance(function, ast.FunctionDef) and function.name == "max_video_ms"
+            for node in ast.walk(function)
+        }
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and ast.unparse(node.func).endswith(
+                "max_video_ms"
+            ):
+                lookups.append((where, ast.unparse(node)))
+            if isinstance(node, ast.alias) and node.name in names:
+                reads.append((where, f"imports {node.name}"))
+            loaded = isinstance(getattr(node, "ctx", None), ast.Load)
+            name = getattr(node, "attr", None) or getattr(node, "id", None)
+            if loaded and name in names and id(node) not in inside:
+                reads.append((where, node.lineno))
+    assert sorted(lookups) == [
+        ("capture/run.py", "contract.max_video_ms(board.slug)"),
+        ("contract.py", "max_video_ms(slug)"),
+        ("render/probe.py", "contract.max_video_ms(slug)"),
+        ("voice/step.py", "contract.max_video_ms(slug)"),
+    ]
+    assert reads == []

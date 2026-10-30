@@ -51,16 +51,20 @@ def ffprobe(path: Path) -> Dict[str, Any]:
 
 
 def length_problems(
-    info: Dict[str, Any], name: str, expected_frames: int
+    info: Dict[str, Any], slug: str, expected_frames: int
 ) -> Tuple[List[str], Dict[str, Any]]:
-    """Gate 1: the finished file is 55-90 s, and exactly as long as its frames."""
+    """Gate 1: video *slug*'s finished file is 55 s to its cap
+    (``contract.max_video_ms``: 90 s unless the video has its own), and exactly
+    as long as its frames."""
+    name = f"{slug}.mp4"
+    longest = contract.max_video_ms(slug)
     duration = float(info.get("format", {}).get("duration", "nan"))
     numbers = {"duration_s": duration, "expected_s": expected_frames / contract.FPS}
     problems: List[str] = []
-    if not contract.MIN_VIDEO_MS / 1000 <= duration <= contract.MAX_VIDEO_MS / 1000:
+    if not contract.MIN_VIDEO_MS / 1000 <= duration <= longest / 1000:
         problems.append(
             f"{name} is {duration:.1f} s; a showcase is "
-            f"{contract.MIN_VIDEO_MS // 1000}-{contract.MAX_VIDEO_MS // 1000} s"
+            f"{contract.MIN_VIDEO_MS // 1000}-{longest // 1000} s"
         )
     if not abs(duration - expected_frames / contract.FPS) < 0.5 / contract.FPS:
         problems.append(
